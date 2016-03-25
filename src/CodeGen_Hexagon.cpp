@@ -288,6 +288,121 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     return llvm_module;
 }
 
+void CodeGen_Hexagon::init_module() {
+    CodeGen_Posix::init_module();
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+
+    // Define some confusingly named vectors that are 1x and 2x the
+    // Hexagon HVX width.
+    Type i8x1 = Int(8).with_lanes(B128 ? 128 : 64);
+    Type i16x1 = Int(16).with_lanes(B128 ? 64 : 32);
+    Type i32x1 = Int(32).with_lanes(B128 ? 32 : 16);
+    Type u8x1 = i8x1.with_code(Type::UInt);
+    Type u16x1 = i16x1.with_code(Type::UInt);
+    Type u32x1 = i32x1.with_code(Type::UInt);
+
+    // LLVM's HVX vector intrinsics don't include the type of the
+    // operands, they all operate on 32 bit integer vectors. To make
+    // it easier to generate code, we define wrapper intrinsics with
+    // the correct type (plus the necessary bitcasts).
+    struct HvxIntrinsic {
+        Intrinsic::ID id;
+        Type ret_type;
+        const char *name;
+        std::vector<Type> arg_types;
+    };
+    HvxIntrinsic intrinsic_wrappers[] = {
+        { IPICK(Intrinsic::hexagon_V6_vmux), u8x1,  "vmux.ub", {u8x1,  u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmux), u16x1, "vmux.uh", {u16x1, u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmux), u32x1, "vmux.uw", {u32x1, u32x1, u32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmux), i8x1,  "vmux.b",  {i8x1,  i8x1,  i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmux), i16x1, "vmux.h",  {i16x1, i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmux), i32x1, "vmux.w",  {i32x1, i32x1, i32x1} },
+
+        // Note veq and vgt always returns unsigned, even for signed
+        // inputs.
+        { IPICK(Intrinsic::hexagon_V6_veqb), u8x1,  "veq.b", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_veqh), u16x1, "veq.h", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_veqw), u32x1, "veq.w", {u32x1, u32x1} },
+
+        { IPICK(Intrinsic::hexagon_V6_vgtub), u8x1,  "vgt.ub", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vgtuh), u16x1, "vgt.uh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vgtuw), u32x1, "vgt.uw", {u32x1, u32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vgtb),  u8x1,  "vgt.b",  {i8x1,  i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vgth),  u16x1, "vgt.h",  {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vgtw),  u32x1, "vgt.w",  {i32x1, i32x1} },
+
+        // TODO: Need to handle uw and b variants somehow (runtime
+        // module implementation?)
+        { IPICK(Intrinsic::hexagon_V6_vmaxub), u8x1,  "vmax.ub", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmaxuh), u16x1, "vmax.uh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmaxh),  i16x1, "vmax.h",  {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmaxw),  i32x1, "vmax.w",  {i32x1, i32x1} },
+
+        { IPICK(Intrinsic::hexagon_V6_vminub), u8x1,  "vmin.ub", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vminuh), u16x1, "vmin.uh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vminh),  i16x1, "vmin.h",  {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vminw),  i32x1, "vmin.w",  {i32x1, i32x1} },
+    };
+
+    for (HvxIntrinsic &i : intrinsic_wrappers) {
+        define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
+    }
+}
+
+llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret_ty, const std::string &name,
+                                                      const std::vector<Type> &arg_types) {
+    internal_assert(id != Intrinsic::not_intrinsic);
+    // Get the real intrinsic.
+    llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
+    llvm::FunctionType *intrin_ty = intrin->getFunctionType();
+
+    // Get the types of the arguments we want to pass.
+    std::vector<llvm::Type *> llvm_arg_types;
+    llvm_arg_types.reserve(arg_types.size());
+    for (Type i : arg_types) {
+        llvm_arg_types.push_back(llvm_type_of(i));
+    }
+
+    // Make a wrapper intrinsic.
+    llvm::FunctionType *wrapper_ty =
+        llvm::FunctionType::get(llvm_type_of(ret_ty), llvm_arg_types, false);
+    llvm::Function *wrapper =
+        llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage,
+                               "halide.hexagon." + name, module.get());
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
+    llvm::IRBuilder<> builder(module->getContext());
+    builder.SetInsertPoint(block);
+
+    std::vector<llvm::Value *> args;
+    for (llvm::Value &arg : wrapper->args()) {
+        args.push_back(&arg);
+    }
+
+    // Replace args with bitcasts if necessary.
+    for (size_t i = 0; i < wrapper_ty->getNumParams(); i++) {
+        llvm::Type *arg_ty = intrin_ty->getParamType(i);
+        if (args[i]->getType() != arg_ty) {
+            args[i] = builder.CreateBitCast(args[i], arg_ty);
+        }
+    }
+
+    // Call the real intrinsic.
+    llvm::Value *ret = builder.CreateCall(intrin, args);
+
+    // Cast the result, if necessary.
+    if (ret->getType() != wrapper_ty->getReturnType()) {
+        ret = builder.CreateBitCast(ret, wrapper_ty->getReturnType());
+    }
+
+    builder.CreateRet(ret);
+
+    llvm::verifyFunction(*wrapper);
+    return wrapper;
+
+}
+
+
 llvm::Value *CodeGen_Hexagon::callLLVMIntrinsic(llvm::Function *F,
                                                 std::vector<Value *> Ops) {
   unsigned I;
@@ -324,6 +439,24 @@ Intrinsic::ID select_intrinsic(Type type,
                                Intrinsic::ID b, Intrinsic::ID h, Intrinsic::ID w) {
     return select_intrinsic(type, b, h, w, b, h, w);
 }
+
+std::string type_suffix(Type type, bool signed_variants = true) {
+    if (type.is_int() || !signed_variants) {
+        switch (type.bits()) {
+        case 8: return "b";
+        case 16: return "h";
+        case 32: return "w";
+        }
+    } else if (type.is_uint()) {
+        switch (type.bits()) {
+        case 8: return "ub";
+        case 16: return "uh";
+        case 32: return "uw";
+        }
+    }
+    internal_error << "Unsupported HVX type: " << type << "\n";
+    return "";
+}
 }  // namespace
 
 llvm::Value *CodeGen_Hexagon::call_intrin(Type t, int intrin_lanes,
@@ -337,6 +470,18 @@ llvm::Value *CodeGen_Hexagon::call_intrin(Type t, int intrin_lanes,
     }
 
     return call_intrin(llvm_type_of(t), intrin_lanes, id, ops_lanes, values);
+}
+
+Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name, vector<Expr> args) {
+    llvm::Function *fn = module->getFunction(name);
+    internal_assert(fn) << "Function '" << name << "' not found\n";
+    return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(), name, args);
+}
+
+Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name, vector<llvm::Value *> args) {
+    llvm::Function *fn = module->getFunction(name);
+    internal_assert(fn) << "Function '" << name << "' not found\n";
+    return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(), name, args);
 }
 
 llvm::Value *CodeGen_Hexagon::call_intrin(llvm::Type *t, int intrin_lanes,
@@ -363,6 +508,47 @@ llvm::Value *CodeGen_Hexagon::call_intrin(llvm::Type *t, int intrin_lanes,
 
     return CodeGen_LLVM::call_intrin(t, intrin_lanes, fn->getName(), ops);
 }
+
+namespace {
+
+bool is_boolean_vector(llvm::Type *ty) {
+    return ty->isVectorTy() &&
+        ty->getVectorElementType()->isIntegerTy();
+}
+
+}  // namespace
+
+llvm::Type *CodeGen_Hexagon::select_boolean_type(llvm::Type *a, llvm::Type *b) {
+    internal_assert(is_boolean_vector(a));
+    internal_assert(is_boolean_vector(b));
+    internal_assert(a->getVectorNumElements() == b->getVectorNumElements());
+    if (cast<VectorType>(a)->getBitWidth() > cast<VectorType>(b)->getBitWidth()) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+llvm::Value *CodeGen_Hexagon::cast_boolean_vector(llvm::Value *boolean, llvm::Type *type) {
+    llvm::Type *boolean_ty = boolean->getType();
+    internal_assert(is_boolean_vector(type));
+    internal_assert(is_boolean_vector(boolean_ty));
+    internal_assert(type->getVectorNumElements() == boolean_ty->getVectorNumElements());
+    int boolean_size = boolean_ty->getVectorElementType()->getIntegerBitWidth();
+    int type_size = type->getVectorElementType()->getIntegerBitWidth();
+    if (boolean_size < type_size) {
+        // TODO: We need to widen, with sign extension.
+        internal_error << "Boolean widening not implemented\n";
+        return nullptr;
+    } else if (boolean_size > type_size) {
+        // TODO: We need to narrow.
+        internal_error << "Boolean narrowing not implemented\n";
+        return nullptr;
+    } else {
+        return boolean;
+    }
+}
+
 
 llvm::Value *
 CodeGen_Hexagon::convertValueType(llvm::Value *V, llvm::Type *T) {
@@ -2242,51 +2428,34 @@ void CodeGen_Hexagon::visit(const Load *op) {
 
 void CodeGen_Hexagon::visit(const Max *op) {
     if (op->type.is_vector()) {
-        bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Intrinsic::ID id = select_intrinsic(op->type,
-                                            Intrinsic::not_intrinsic,
-                                            IPICK(Intrinsic::hexagon_V6_vmaxh),
-                                            IPICK(Intrinsic::hexagon_V6_vmaxw),
-                                            IPICK(Intrinsic::hexagon_V6_vmaxub),
-                                            IPICK(Intrinsic::hexagon_V6_vmaxuh),
-                                            Intrinsic::not_intrinsic);
-        if (id != Intrinsic::not_intrinsic) {
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            value = call_intrin(op->type, intrin_lanes, id, op->type.lanes(), {op->a, op->b});
-            return;
-        }
+        value = call_intrin(op->type,
+                            "halide.hexagon.vmax." + type_suffix(op->type),
+                            {op->a, op->b});
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Min *op) {
     if (op->type.is_vector()) {
-        bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Intrinsic::ID id = select_intrinsic(op->type,
-                                            Intrinsic::not_intrinsic,
-                                            IPICK(Intrinsic::hexagon_V6_vminh),
-                                            IPICK(Intrinsic::hexagon_V6_vminw),
-                                            IPICK(Intrinsic::hexagon_V6_vminub),
-                                            IPICK(Intrinsic::hexagon_V6_vminuh),
-                                            Intrinsic::not_intrinsic);
-        if (id != Intrinsic::not_intrinsic) {
-            int intrin_lanes = native_vector_bits() / op->type.bits();
-            value = call_intrin(op->type, intrin_lanes, id, op->type.lanes(), {op->a, op->b});
-            return;
-        }
+        value = call_intrin(op->type,
+                            "halide.hexagon.vmin." + type_suffix(op->type),
+                            {op->a, op->b});
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    if (op->type.is_vector()) {
-        bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Type type = op->true_value.type();
-        int intrin_lanes = native_vector_bits() / type.bits();
-        value = call_intrin(op->type, intrin_lanes,
-                            IPICK(Intrinsic::hexagon_V6_vmux),
-                            type.lanes(),
-                            {op->condition, op->true_value, op->false_value});
+    if (op->type.is_vector() && op->condition.type().is_vector()) {
+        Value *condition = codegen(op->condition);
+        Value *true_value = codegen(op->true_value);
+        Value *false_value = codegen(op->false_value);
+        internal_assert(true_value->getType() == false_value->getType());
+        condition = cast_boolean_vector(condition, true_value->getType());
+        value = call_intrin(llvm_type_of(op->type),
+                            "halide.hexagon.vmux." + type_suffix(op->type),
+                            {condition, true_value, false_value});
     } else {
         CodeGen_Posix::visit(op);
     }
@@ -2294,39 +2463,22 @@ void CodeGen_Hexagon::visit(const Select *op) {
 
 void CodeGen_Hexagon::visit(const GT *op) {
     if (op->type.is_vector()) {
-        bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Type type = op->a.type();
-        Intrinsic::ID id = select_intrinsic(type,
-                                            IPICK(Intrinsic::hexagon_V6_vgtb),
-                                            IPICK(Intrinsic::hexagon_V6_vgth),
-                                            IPICK(Intrinsic::hexagon_V6_vgtw),
-                                            IPICK(Intrinsic::hexagon_V6_vgtub),
-                                            IPICK(Intrinsic::hexagon_V6_vgtuh),
-                                            IPICK(Intrinsic::hexagon_V6_vgtuw));
-        if (id != Intrinsic::not_intrinsic) {
-            int intrin_lanes = native_vector_bits() / type.bits();
-            value = call_intrin(op->type, intrin_lanes, id, type.lanes(), {op->a, op->b});
-            return;
-        }
+        value = call_intrin(op->type,
+                            "halide.hexagon.vgt." + type_suffix(op->a.type()),
+                            {op->a, op->b});
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const EQ *op) {
     if (op->type.is_vector()) {
-        bool B128 = target.has_feature(Halide::Target::HVX_128);
-        Type type = op->a.type();
-        Intrinsic::ID id = select_intrinsic(type,
-                                            IPICK(Intrinsic::hexagon_V6_veqb),
-                                            IPICK(Intrinsic::hexagon_V6_veqh),
-                                            IPICK(Intrinsic::hexagon_V6_veqw));
-        if (id != Intrinsic::not_intrinsic) {
-            int intrin_lanes = native_vector_bits() / type.bits();
-            value = call_intrin(op->type, intrin_lanes, id, type.lanes(), {op->a, op->b});
-            return;
-        }
+        value = call_intrin(op->type,
+                            "halide.hexagon.veq." + type_suffix(op->a.type(), false),
+                            {op->a, op->b});
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const GE *op) {

@@ -30,6 +30,9 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
+    void init_module();
+    llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty, const std::string &name, const std::vector<Type> &arg_types);
+
     /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
     /* // @{ */
     void visit(const Add *);
@@ -85,12 +88,27 @@ protected:
 
     /** Define overloads of CodeGen_LLVM::call_intrin that use Intrinsic::ID. */
     ///@{
+    using CodeGen_LLVM::call_intrin;
+    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
     llvm::Value *call_intrin(Type t, int intrin_lanes,
                              llvm::Intrinsic::ID id,
                              int ops_lanes, std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
                              llvm::Intrinsic::ID id,
                              int ops_lanes, std::vector<llvm::Value *>);
+    ///@}
+
+    /** Hexagon represents conditionals with vectors of integers that
+     * are the same size as the comparison types that generated
+     * them. When doing boolean logic with these vectors, we need to
+     * widen/narrow them to match. select_boolean_type picks a type to
+     * represent the result of a logical operation of two boolean
+     * vectors, and cast_boolean_vector casts a vector of booleans to
+     * the specified type. */
+    ///@{
+    llvm::Type *select_boolean_type(llvm::Type *a, llvm::Type *b);
+    llvm::Value *cast_boolean_vector(llvm::Value *boolean, llvm::Type *type);
     ///@}
 
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
