@@ -91,10 +91,6 @@ Expr sat_add(Expr A, Expr B) {
                                 max_v), min_v));
 }
 #ifdef THESE_ARE_UNUSED
-Expr bitwiseNot(Expr A) {
-  return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
-                              Internal::Call::Intrinsic);
-}
 Expr shiftLeft(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_left, {A, B},
                               Internal::Call::Intrinsic);
