@@ -12,9 +12,9 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::vector;
 using std::string;
-using std::set;
 
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
@@ -266,14 +266,17 @@ class ExtractSharedAllocations : public IRMutator {
         string name;
         Type type;
         Expr size;
+        Interval liveness;
     };
     vector<SharedAllocation> allocations;
 
     Scope<Interval> scope;
 
-    set<string> shared;
+    map<string, Interval> shared;
 
     bool in_threads;
+
+    int barrier_stage;
 
     const DeviceAPI device_api;
 
@@ -293,6 +296,52 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
+
+    void visit(const ProducerConsumer *op) {
+        if (!in_threads) {
+            Stmt produce = mutate(op->produce);
+            if (!is_no_op(produce)) {
+                barrier_stage++;
+            }
+            Stmt update;
+            if (op->update.defined()) {
+                update = mutate(op->update);
+                if (!is_no_op(update)) {
+                    barrier_stage++;
+                }
+            }
+            Stmt consume = mutate(op->consume);
+
+            if (produce.same_as(op->produce) &&
+                update.same_as(op->update) &&
+                consume.same_as(op->consume)) {
+                stmt = op;
+            } else {
+                stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Block *op) {
+        if (!in_threads && op->rest.defined()) {
+            Stmt first = mutate(op->first);
+            Stmt rest = mutate(op->rest);
+
+            if (first.same_as(op->first) &&
+                rest.same_as(op->rest)) {
+                stmt = op;
+            } else {
+                stmt = Block::make(first, rest);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+
+
     void visit(const Allocate *op) {
         user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
@@ -302,15 +351,16 @@ class ExtractSharedAllocations : public IRMutator {
             return;
         }
 
-        shared.insert(op->name);
+        shared.emplace(op->name, Interval(barrier_stage, barrier_stage));
         IRMutator::visit(op);
-        shared.erase(op->name);
+
         op = stmt.as<Allocate>();
         internal_assert(op);
 
         SharedAllocation alloc;
         alloc.name = op->name;
         alloc.type = op->type;
+        alloc.liveness = shared[op->name];
         alloc.size = 1;
         for (size_t i = 0; i < op->extents.size(); i++) {
             alloc.size *= op->extents[i];
@@ -319,11 +369,13 @@ class ExtractSharedAllocations : public IRMutator {
         allocations.push_back(alloc);
         stmt = op->body;
 
+        shared.erase(op->name);
     }
 
     void visit(const Load *op) {
         Expr index = mutate(op->index);
         if (shared.count(op->name)) {
+            shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
                 expr = Load::make(op->type, shared_mem_name + "_" + op->name, index, op->image, op->param);
             } else {
@@ -338,6 +390,7 @@ class ExtractSharedAllocations : public IRMutator {
 
     void visit(const Store *op) {
         if (shared.count(op->name)) {
+            shared[op->name].max = barrier_stage;
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
@@ -433,7 +486,14 @@ public:
         return s;
     }
 
-    ExtractSharedAllocations(DeviceAPI d) : in_threads(false), device_api(d) {}
+    void print_alloc() {
+        for (const auto &iter : allocations) {
+            debug(0) << "\tAlloc: " << iter.name << "; type: " << iter.type //<< "; size: " << iter.size
+                     << "; liveness: [" << iter.liveness.min << ", " << iter.liveness.max << "]\n";
+        }
+    }
+
+    ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0), device_api(d) {}
 };
 
 class FuseGPUThreadLoops : public IRMutator {
@@ -479,6 +539,7 @@ class FuseGPUThreadLoops : public IRMutator {
 
             ExtractSharedAllocations h(op->device_api);
             body = h.mutate(body);
+            h.print_alloc();
 
             debug(3) << "Pulled out shared allocations:\n" << body << "\n\n";
 
