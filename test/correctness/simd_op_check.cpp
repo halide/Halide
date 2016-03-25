@@ -1444,6 +1444,22 @@ void check_hvx_all() {
     check("vmux(q*,v*,v*)", hvx_width/2, select(i16_1 == i16_2, i16_1, i16_2));
     check("vmux(q*,v*,v*)", hvx_width/4, select(i32_1 == i32_2, i32_1, i32_2));
 
+    check("vmpy(v*.ub,v*.ub)", hvx_width, u16(u8_1 * u8_1));
+    check("vmpy(v*.b,v*.b)", hvx_width, i16(i8_1 * i8_2));
+    check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1 * u16_2));
+    check("vmpy(v*.h,v*.h)", hvx_width/2, i32(i16_1 * i16_2));
+    check("vmpyi(v*.h,v*.h)", hvx_width/2, i16_1 * i16_1);
+    check("vmpy(v*.ub,r*.b)", hvx_width, i16(u8_1) * 3);
+    check("vmpy(v*.h,r*.h)", hvx_width/2, i32(i16_1) * 10);
+    check("vmpy(v*.ub,r*.ub)", hvx_width, u16(u8_1) * 3);
+    check("vmpy(v*.uh,r*.uh)", hvx_width/2, u32(u16_1) * 10);
+
+    // Curiously, these work only for double vectors. Should fix
+    // for single vectors.
+    check("vmpyi(v*.w,r*.h)", hvx_width/2, i32_1 * 252);
+    check("vmpyi(v*.w,r*.b)", hvx_width/2, i32_1 * 9);
+    check("vmpyi(v*.h,r*.b)", hvx_width, i16_1 * 10);
+
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
@@ -1486,15 +1502,15 @@ void check_hvx_all() {
     check("vasr(v*.w,v*.w,r*):sat", hvx_width/1, i32c((i64(i32_1) + i64(i32_2)) >> 4));
     // Todo: Move the following tests from test/hexagon/codegen into simd_op_check
     // 1. vminmax.cpp <DONE>
-    // 2. vsat.cpp
+    // 2. vsat.cpp    <DEPRECATED>
     // 3. vselect.cpp <DONE>
-    // 4. vshuff.cpp
+    // 4. vshuff.cpp  <DONE>
     // 5. vsplat.cpp
     // 6. vzero.cpp
-    // 7. vmpyi.cpp
-    // 8. vmpyi-vector-by-scalar.cpp
+    // 7. vmpyi.cpp   <DONE>
+    // 8. vmpyi-vector-by-scalar.cpp <DONE, handle single vector>
     // 9. vmpa.cpp
-    // 10. vmpy.cpp
+    // 10. vmpy.cpp   <DONE>
     // 11. valign.cpp
     // 12. vbitwise.cpp
     // 13. varith.cpp
