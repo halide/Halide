@@ -8,7 +8,7 @@
 
 namespace llvm {
 namespace Intrinsic {
-enum ID;
+    enum ID : unsigned;
 }
 }
 

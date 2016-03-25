@@ -1,0 +1,90 @@
+#include <map>
+#include <cstring>
+#include <string>
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+
+#include "HalideRuntime.h"
+#include "halide_image.h"
+#include "memory_profiler_mandelbrot.h"
+
+using namespace Halide::Tools;
+using std::map;
+using std::string;
+
+const int num_launcher_tasks = 1000;
+
+const int width = 100;
+const int height = 30;
+const int iters = 20;
+
+// Mandelbrot tiles by 8x8 and vectorizes x by 4
+const int tile_x = 8, tile_y = 8, vectorize = 4;
+
+// Expected stack size for argmin
+const int argmin_stack_peak = vectorize*sizeof(uint8_t) + vectorize*sizeof(int32_t);
+
+// Expected heap size for mandelbrot
+const int y_niters = (height + tile_y - 1)/tile_y;
+const int x_niters = (width + tile_x - 1)/tile_x;
+const int mandelbrot_n_mallocs = 2 * y_niters * x_niters * num_launcher_tasks;
+const int mandelbrot_heap_per_iter = 2*tile_x*tile_y*4*(iters+1); // Heap per iter for one task
+const int mandelbrot_heap_total = mandelbrot_heap_per_iter * y_niters * x_niters * num_launcher_tasks;
+
+int stack_size = vectorize*sizeof(uint8_t) + vectorize*sizeof(int32_t);
+
+void validate(halide_profiler_state *s) {
+    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
+         p = (halide_profiler_pipeline_stats *)(p->next)) {
+        assert(p->num_allocs == mandelbrot_n_mallocs);
+        assert(p->memory_total == mandelbrot_heap_total);
+
+        assert(mandelbrot_heap_per_iter <= p->memory_peak);
+        assert(p->memory_peak <= mandelbrot_heap_total);
+
+        for (int i = 0; i < p->num_funcs; i++) {
+            halide_profiler_func_stats *fs = p->funcs + i;
+            if (strncmp(fs->name, "argmin", 6) == 0) {
+                assert(fs->stack_peak == argmin_stack_peak);
+            } else if (strncmp(fs->name, "mandelbrot", 10) == 0) {
+                assert(mandelbrot_heap_per_iter <= fs->memory_peak);
+                assert(fs->memory_peak <= mandelbrot_heap_total);
+
+                assert(fs->num_allocs == mandelbrot_n_mallocs);
+                assert(fs->memory_total == mandelbrot_heap_total);
+            }
+        }
+    }
+}
+
+
+int launcher_task(void *user_context, int index, uint8_t *closure) {
+    Image<float> output(width, height);
+    float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
+    memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
+                               output.width(), output.height(), output);
+
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    // Hijack halide's runtime to run a bunch of instances of this function
+    // in parallel.
+    printf("Running memory profiler comparison test\n");
+    printf("mandelbrot expected value\n  nmalocs (all tasks): %d, heap/iter "
+           "(per task): %d, heap total (all tasks): %d\n",
+           mandelbrot_n_mallocs, mandelbrot_heap_per_iter, mandelbrot_heap_total);
+    printf("argmin expected value\n  stack peak: %d\n", argmin_stack_peak);
+    printf("\n");
+
+    halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+
+    halide_profiler_state *state = halide_profiler_get_state();
+    assert(state != NULL);
+
+    validate(state);
+
+    printf("Success!\n");
+    return 0;
+}

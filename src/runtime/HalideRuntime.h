@@ -151,9 +151,8 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
  * Cannot be replaced in JITted code at present.
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                    uint8_t *data, int32_t s0, int32_t s1, int32_t s2,
-                                    int32_t s3, int32_t type_code,
-                                    int32_t bytes_per_element);
+                                    int32_t type_code,
+                                    struct buffer_t *buf);
 
 
 enum halide_trace_event_code {halide_trace_load = 0,
@@ -739,6 +738,21 @@ struct halide_profiler_func_stats {
 
     /** The name of this Func. A global constant string. */
     const char *name;
+
+    /** The current memory allocation of this Func. */
+    int memory_current;
+
+    /** The peak memory allocation of this Func. */
+    int memory_peak;
+
+    /** The total memory allocation of this Func. */
+    int memory_total;
+
+    /** The total number of memory allocation of this Func. */
+    int num_allocs;
+
+    /** The peak stack allocation of this Func threads. */
+    int stack_peak;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -768,6 +782,18 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;
+
+    /** The current memory allocation of funcs in this pipeline. */
+    int memory_current;
+
+    /** The peak memory allocation of funcs in this pipeline. */
+    int memory_peak;
+
+    /** The total memory allocation of funcs in this pipeline. */
+    int memory_total;
+
+    /** The total number of memory allocation of funcs in this pipeline. */
+    int num_allocs;
 };
 
 /** The global state of the profiler. */
@@ -809,7 +835,15 @@ enum {
  * inspection. Lock it before using to pause the profiler. */
 extern halide_profiler_state *halide_profiler_get_state();
 
-/** Reset all profiler state. */
+/** Get a pointer to the pipeline state associated with pipeline_name.
+ * This function grabs the global profiler state's lock on entry. */
+extern halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
+
+/** Reset all profiler state.
+ * WARNING: Do NOT call this method while any halide pipeline is
+ * running; halide_profiler_memory_allocate/free and
+ * halide_profiler_stack_peak_update update the profiler pipeline's
+ * state without grabbing the global profiler state's lock. */
 extern void halide_profiler_reset();
 
 /** Print out timing statistics for everything run since the last
