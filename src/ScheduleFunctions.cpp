@@ -147,13 +147,16 @@ Stmt build_provide_loop_nest(Function f,
             Expr old_var = Variable::make(Int(32), old_var_name);
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+
             if ((iter != known_size_dims.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
-
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base or add an if
                 // statement.
                 known_size_dims[split.outer] = iter->second / split.factor;
+            } else if (is_one(split.factor)) {
+                // The split factor trivially divides the old extent,
+                // but we know nothing new about the outer dimension.
             } else if (split.exact || is_update) {
                 // It's an exact split but we failed to prove that the
                 // extent divides the factor. Use predication.
