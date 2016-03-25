@@ -45,17 +45,17 @@ void testVAVG_u16(Target& target) {
   COMPILE(vavg_u16, "vavg_u16");
 }
 // CHECK: vnavg(v{{[0-9]+}}.h,v{{[0-9]+}}.h)
-void testVNAVG_u16(Target& target) {
+void testVNAVG_i16(Target& target) {
   Halide::Var x("x"), y("y");
   std::vector<Argument> args(2);
-  Halide::Func vnavg_u16;
-  ImageParam i1 (type_of<uint16_t>(), 1);
-  ImageParam i2 (type_of<uint16_t>(), 1);
-  vnavg_u16(x) = navg(i1(x), i2(x));
-  vnavg_u16.vectorize(x, 32);
+  Halide::Func vnavg_i16;
+  ImageParam i1 (type_of<int16_t>(), 1);
+  ImageParam i2 (type_of<int16_t>(), 1);
+  vnavg_i16(x) = navg(i1(x), i2(x));
+  vnavg_i16.vectorize(x, 32);
   args[0]  = i1;
   args[1] = i2;
-  COMPILE(vnavg_u16, "vnavg_u16");
+  COMPILE(vnavg_i16, "vnavg_i16");
 }
 
 int main(int argc, char **argv) {
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   commonTestSetup(target);
   testVAVG_u8(target);
   testVAVG_u16(target);
-  testVNAVG_u16(target);
+  testVNAVG_i16(target);
   printf ("Done\n");
   return 0;
 }

@@ -30,6 +30,30 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
+    void compile_func(const LoweredFunc &f);
+
+    void init_module();
+
+    llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty,
+                                         const std::string &name,
+                                         const std::vector<Type> &arg_types);
+
+    /** Various patterns to peephole match against */
+    struct GeneralPattern {
+        std::string intrin;   ///< Name of the intrinsic
+        Expr pattern;         ///< The pattern to match against
+        enum PatternType {Simple = 0, ///< Just match the pattern
+                          LeftShift,  ///< Match the pattern if the RHS is a const power of two
+                          RightShift, ///< Match the pattern if the RHS is a const power of two
+                          NarrowArgs  ///< Match the pattern if the args can be losslessly narrowed
+        };
+        PatternType type;
+        GeneralPattern() {}
+        GeneralPattern(const std::string &intrin, Expr p, PatternType t = Simple)
+            : intrin(intrin), pattern(p), type(t) {}
+    };
+    std::vector<GeneralPattern> casts, adds, subs;
+
     /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
     /* // @{ */
     void visit(const Add *);
@@ -42,6 +66,7 @@ protected:
     void visit(const Call *);
     void visit(const Mul *);
     void visit(const Load *);
+    void visit(const GE *);
     void visit(const LE *);
     void visit(const LT *);
     void visit(const NE *);
@@ -82,35 +107,30 @@ protected:
     Expr wild_u16x4W, wild_i16x4W;
     Expr wild_u32x4W, wild_i32x4W;
 
+    /** Define overloads of CodeGen_LLVM::call_intrin that use Intrinsic::ID. */
+    ///@{
+    using CodeGen_LLVM::call_intrin;
+    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
+    llvm::Value *call_intrin(Type t, int intrin_lanes,
+                             llvm::Intrinsic::ID id,
+                             int ops_lanes, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
+                             llvm::Intrinsic::ID id,
+                             int ops_lanes, std::vector<llvm::Value *>);
+    ///@}
 
     llvm::Value *getHiVectorFromPair(llvm::Value *Vec);
     llvm::Value *getLoVectorFromPair(llvm::Value *Vec);
     std::vector<Expr> slice_into_halves(Expr);
     llvm::Value *handleLargeVectors(const Add *);
     llvm::Value *handleLargeVectors(const Sub *);
-    llvm::Value *handleLargeVectors(const Min *);
-    llvm::Value *handleLargeVectors(const Max *);
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Div *);
-    llvm::Value *handleLargeVectors_absd(const Call *);
     llvm::Value *handleLargeVectors(const Cast *);
-    /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
-     as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed
-     to be included here. However, CodeGen_Hexagon.h is used to create Halide.h
-     which is needed by the user. All of this would mean that the user would
-     need all LLVM Headers. So, we use llvm::Function *F instead, much in the
-     same way we do for CallLLVMIntrinsic. */
-    llvm::Value *compare(llvm::Value *a, llvm::Value *b,
-                         llvm::Function *F);
-    llvm::Value *negate(llvm::Value *a);
-    llvm::Value *generate_vector_comparison(const BaseExprNode *,
-                                            std::vector<Pattern> &,
-                                            std::vector<Pattern> &, bool, bool);
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
     bool possiblyCodeGenNarrowerType(const Select *);
-    bool possiblyCodeGenVavg(const Cast *);
-    bool possiblyCodeGenSaturatingArith(const Cast *);
     llvm::Value *possiblyCodeGenWideningMultiplySatRndSat(const Div *);
 };
 
