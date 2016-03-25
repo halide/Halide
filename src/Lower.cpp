@@ -90,12 +90,6 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
-    if (t.has_feature(Target::Profile)) {
-        debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
-    }
-
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);
     debug(2) << "Lowering after injecting parameter checks:\n" << s << '\n';
@@ -224,13 +218,20 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
+#ifdef STORE_FORWARDING
     debug(1) << "Forwarding stores across loop iterations...\n";
     s = store_forwarding(s);
     debug(2) << "Lowering after forwarding stores:\n" << s << "\n\n";
-
+#endif
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
+
+    if (t.has_feature(Target::Profile)) {
+        debug(1) << "Injecting profiling...\n";
+        s = inject_profiling(s, pipeline_name);
+        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+    }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
