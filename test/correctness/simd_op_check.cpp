@@ -1335,7 +1335,6 @@ void check_hvx_all() {
     check("vsxt(v*.b)", hvx_width, i16(i8_1));
     check("vsxt(v*.h)", hvx_width, i32(i16_1));
 
-    // TODO: Verify that the intermediate result of vavg does not overflow.
     check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
     check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
     check("vavg(v*.uh,v*.uh)", hvx_width/2, u16((u32(u16_1) + u32(u16_2))/2));
@@ -1346,6 +1345,7 @@ void check_hvx_all() {
     check("vavg(v*.w,v*.w):rnd", hvx_width/4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
     check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) - u16(u8_2))/2));
     check("vnavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) - i32(i16_2))/2));
+    check("vnavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) - i64(i32_2))/2));
 
     check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
@@ -1467,6 +1467,9 @@ void check_hvx_all() {
     check("vd0", hvx_width/1, cast<uint8_t>(0));
     check("vd0", hvx_width/2, cast<uint16_t>(0));
     check("vd0", hvx_width/4, cast<uint32_t>(0));
+
+    // This one seems to be missing.
+    check("vnavg(v*.uh,v*.uh)", hvx_width/2, u16((u32(u16_1) - u32(u16_2))/2));
 
     check("vlsr(v*.ub,v*.ub)", hvx_width/1, u8_1 >> in_u8_2(0));
     check("vlsr(v*.uh,v*.uh)", hvx_width/2, u16_1 >> in_u16_2(0));

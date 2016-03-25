@@ -31,7 +31,25 @@ protected:
     using CodeGen_Posix::visit;
 
     void init_module();
-    llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty, const std::string &name, const std::vector<Type> &arg_types);
+    llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty,
+                                         const std::string &name,
+                                         const std::vector<Type> &arg_types);
+
+    /** Various patterns to peephole match against */
+    struct GeneralPattern {
+        std::string intrin;   ///< Name of the intrinsic
+        Expr pattern;         ///< The pattern to match against
+        enum PatternType {Simple = 0, ///< Just match the pattern
+                          LeftShift,  ///< Match the pattern if the RHS is a const power of two
+                          RightShift, ///< Match the pattern if the RHS is a const power of two
+                          NarrowArgs  ///< Match the pattern if the args can be losslessly narrowed
+        };
+        PatternType type;
+        GeneralPattern() {}
+        GeneralPattern(const std::string &intrin, Expr p, PatternType t = Simple)
+            : intrin(intrin), pattern(p), type(t) {}
+    };
+    std::vector<GeneralPattern> casts;
 
     /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
     /* // @{ */
