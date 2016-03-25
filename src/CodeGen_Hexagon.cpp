@@ -148,8 +148,34 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
     wild_u16(Variable::make(UInt(16), "*")),
     wild_i8(Variable::make(Int(8), "*")),
     wild_u8(Variable::make(UInt(8), "*")) {
-  bool B128 = t.has_feature(Halide::Target::HVX_128);
 
+    // Define wildcards matching any vector width.
+    Expr wild_u8x = Variable::make(Type(Type::UInt, 8, 0), "*");
+    Expr wild_u16x = Variable::make(Type(Type::UInt, 16, 0), "*");
+    Expr wild_u32x = Variable::make(Type(Type::UInt, 32, 0), "*");
+    Expr wild_i8x = Variable::make(Type(Type::Int, 8, 0), "*");
+    Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
+    Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
+
+    casts.emplace_back("halide.hexagon.vavg.ub", vavg(wild_u8x, wild_u8x));
+    casts.emplace_back("halide.hexagon.vavg.uh", vavg(wild_u16x, wild_u16x));
+    casts.emplace_back("halide.hexagon.vavg.h", vavg(wild_i16x, wild_i16x));
+    casts.emplace_back("halide.hexagon.vavg.w", vavg(wild_i32x, wild_i32x));
+
+    casts.emplace_back("halide.hexagon.vavgrnd.ub", vavg_round(wild_u8x, wild_u8x));
+    casts.emplace_back("halide.hexagon.vavgrnd.uh", vavg_round(wild_u16x, wild_u16x));
+    casts.emplace_back("halide.hexagon.vavgrnd.h", vavg_round(wild_i16x, wild_i16x));
+    casts.emplace_back("halide.hexagon.vavgrnd.w", vavg_round(wild_i32x, wild_i32x));
+
+    casts.emplace_back("halide.hexagon.vnavg.ub", vnavg(wild_u8x, wild_u8x));
+    casts.emplace_back("halide.hexagon.vnavg.h", vnavg(wild_i16x, wild_i16x));
+    casts.emplace_back("halide.hexagon.vnavg.w", vnavg(wild_i32x, wild_i32x));
+    // The corresponding intrinsic for this one seems to be missing.
+    //casts.emplace_back("halide.hexagon.vnavg.uh", vnavg(wild_u16x, wild_u16x));
+
+  // Define a bunch of patterns that use fixed vector widths.
+  // TODO: Remove these in favor of general patterns.
+  bool B128 = t.has_feature(Halide::Target::HVX_128);
   wild_u8xW = B128 ? wild_u8x128 : wild_u8x64;
   wild_i8xW = B128 ? wild_i8x128 : wild_i8x64;
   wild_u16xW = B128 ? wild_u16x64 : wild_u16x32;
@@ -356,27 +382,6 @@ void CodeGen_Hexagon::init_module() {
     for (HvxIntrinsic &i : intrinsic_wrappers) {
         define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
     }
-
-    // Define wildcards matching any vector width.
-    Expr wild_u8xW = Variable::make(Type(Type::UInt, 8, 0), "*");
-    Expr wild_u16xW = Variable::make(Type(Type::UInt, 16, 0), "*");
-    Expr wild_u32xW = Variable::make(Type(Type::UInt, 32, 0), "*");
-    Expr wild_i8xW = Variable::make(Type(Type::Int, 8, 0), "*");
-    Expr wild_i16xW = Variable::make(Type(Type::Int, 16, 0), "*");
-    Expr wild_i32xW = Variable::make(Type(Type::Int, 32, 0), "*");
-
-    casts.emplace_back("halide.hexagon.vavg.ub", vavg(wild_u8xW, wild_u8xW));
-    casts.emplace_back("halide.hexagon.vavg.uh", vavg(wild_u16xW, wild_u16xW));
-    casts.emplace_back("halide.hexagon.vavg.h", vavg(wild_i16xW, wild_i16xW));
-    casts.emplace_back("halide.hexagon.vavg.w", vavg(wild_i32xW, wild_i32xW));
-    casts.emplace_back("halide.hexagon.vavgrnd.ub", vavg_round(wild_u8xW, wild_u8xW));
-    casts.emplace_back("halide.hexagon.vavgrnd.uh", vavg_round(wild_u16xW, wild_u16xW));
-    casts.emplace_back("halide.hexagon.vavgrnd.h", vavg_round(wild_i16xW, wild_i16xW));
-    casts.emplace_back("halide.hexagon.vavgrnd.w", vavg_round(wild_i32xW, wild_i32xW));
-    casts.emplace_back("halide.hexagon.vnavg.ub", vnavg(wild_u8xW, wild_u8xW));
-    casts.emplace_back("halide.hexagon.vnavg.uh", vnavg(wild_u16xW, wild_u16xW));
-    casts.emplace_back("halide.hexagon.vnavg.h", vnavg(wild_i16xW, wild_i16xW));
-    casts.emplace_back("halide.hexagon.vnavg.w", vnavg(wild_i32xW, wild_i32xW));
 }
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret_ty, const std::string &name,
