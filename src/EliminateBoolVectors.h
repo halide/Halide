@@ -20,7 +20,16 @@ namespace Internal {
  * (with sign extension), using bitwise instead of logical operators,
  * and replacing the conditions of select with a not equals zero
  * expression. */
-Stmt eliminate_bool_vectors(Stmt s);
+EXPORT Stmt eliminate_bool_vectors(Stmt s);
+
+/** If a type is a boolean vector, find the type that it has been
+ * changed to by eliminate_bool_vectors. */
+EXPORT inline Type eliminated_bool_type(Type bool_type, Type other_type) {
+    if (bool_type.is_vector() && bool_type.bits() == 1) {
+        bool_type = bool_type.with_code(Type::Int).with_bits(other_type.bits());
+    }
+    return bool_type;
+}
 
 }  // namespace Internal
 }  // namespace Halide
