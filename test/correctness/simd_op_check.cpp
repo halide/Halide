@@ -1330,10 +1330,59 @@ void check_hvx_all() {
         hvx_width = 128;
     }
 
-    check("vzxt(v*.ub)", hvx_width, u16(u8_1));
-    check("vzxt(v*.uh)", hvx_width, u32(u16_1));
-    check("vsxt(v*.b)", hvx_width, i16(i8_1));
-    check("vsxt(v*.h)", hvx_width, i32(i16_1));
+    check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
+    check("vadd(v*.h,v*.h)", hvx_width/2, u16_1 + u16_2);
+    check("vadd(v*.w,v*.w)", hvx_width/4, u32_1 + u32_2);
+    check("vadd(v*.b,v*.b)", hvx_width/1, i8_1 + i8_2);
+    check("vadd(v*.h,v*.h)", hvx_width/2, i16_1 + i16_2);
+    check("vadd(v*.w,v*.w)", hvx_width/4, i32_1 + i32_2);
+    check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8c(i16(u8_1 + i16(u8_2))));
+    check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16c(i32(u16_1 + i32(u16_2))));
+    check("vadd(v*.h,v*.h):sat", hvx_width/2, i16c(i32(i16_1 + i32(i16_2))));
+    check("vadd(v*.w,v*.w):sat", hvx_width/4, i32c(i64(i32_1 + i64(i32_2))));
+
+    check("vsub(v*.b,v*.b)", hvx_width/1, u8_1 - u8_2);
+    check("vsub(v*.h,v*.h)", hvx_width/2, u16_1 - u16_2);
+    check("vsub(v*.w,v*.w)", hvx_width/4, u32_1 - u32_2);
+    check("vsub(v*.b,v*.b)", hvx_width/1, i8_1 - i8_2);
+    check("vsub(v*.h,v*.h)", hvx_width/2, i16_1 - i16_2);
+    check("vsub(v*.w,v*.w)", hvx_width/4, i32_1 - i32_2);
+    check("vsub(v*.ub,v*.ub):sat", hvx_width/1, u8c(i16(u8_1 - i16(u8_2))));
+    check("vsub(v*.uh,v*.uh):sat", hvx_width/2, u16c(i32(u16_1 - i32(u16_2))));
+    check("vsub(v*.h,v*.h):sat", hvx_width/2, i16c(i32(i16_1 - i32(i16_2))));
+    check("vsub(v*.w,v*.w):sat", hvx_width/4, i32c(i64(i32_1 - i64(i32_2))));
+
+    // Double vector versions of the above
+#if 0
+    // These don't generate because handleLargeVectors in
+    // CodeGen_Hexagon eats them first.
+    check("vadd(v*:*.b,v*:*.b)", hvx_width*2, u8_1 + u8_2);
+    check("vadd(v*:*.h,v*:*.h)", hvx_width/1, u16_1 + u16_2);
+    check("vadd(v*:*.w,v*:*.w)", hvx_width/2, u32_1 + u32_2);
+    check("vadd(v*:*.b,v*:*.b)", hvx_width*2, i8_1 + i8_2);
+    check("vadd(v*:*.h,v*:*.h)", hvx_width/1, i16_1 + i16_2);
+    check("vadd(v*:*.w,v*:*.w)", hvx_width/2, i32_1 + i32_2);
+    check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8c(i16(u8_1 + i16(u8_2))));
+    check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(i32(u16_1 + i32(u16_2))));
+    check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16c(i32(i16_1 + i32(i16_2))));
+    check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32c(i64(i32_1 + i64(i32_2))));
+#endif
+
+    check("vsub(v*:*.b,v*:*.b)", hvx_width*2, u8_1 - u8_2);
+    check("vsub(v*:*.h,v*:*.h)", hvx_width/1, u16_1 - u16_2);
+    check("vsub(v*:*.w,v*:*.w)", hvx_width/2, u32_1 - u32_2);
+    check("vsub(v*:*.b,v*:*.b)", hvx_width*2, i8_1 - i8_2);
+    check("vsub(v*:*.h,v*:*.h)", hvx_width/1, i16_1 - i16_2);
+    check("vsub(v*:*.w,v*:*.w)", hvx_width/2, i32_1 - i32_2);
+    check("vsub(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8c(i16(u8_1 - i16(u8_2))));
+    check("vsub(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(i32(u16_1 - i32(u16_2))));
+    check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16c(i32(i16_1 - i32(i16_2))));
+    check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32c(i64(i32_1 - i64(i32_2))));
+
+    check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
+    check("vzxt(v*.uh)", hvx_width/1, u32(u16_1));
+    check("vsxt(v*.b)", hvx_width/1, i16(i8_1));
+    check("vsxt(v*.h)", hvx_width/1, i32(i16_1));
 
     check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
     check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
@@ -1366,53 +1415,53 @@ void check_hvx_all() {
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_u32(x/2), in_u32((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_i32(x/2), in_i32((x+16)/2)));
 
-    check("vmax(v*.ub,v*.ub)", hvx_width, max(u8_1, u8_2));
+    check("vmax(v*.ub,v*.ub)", hvx_width/1, max(u8_1, u8_2));
     check("vmax(v*.uh,v*.uh)", hvx_width/2, max(u16_1, u16_2));
     check("vmax(v*.h,v*.h)", hvx_width/2, max(i16_1, i16_2));
     check("vmax(v*.w,v*.w)", hvx_width/4, max(i32_1, i32_2));
 
-    check("vmin(v*.ub,v*.ub)", hvx_width, min(u8_1, u8_2));
+    check("vmin(v*.ub,v*.ub)", hvx_width/1, min(u8_1, u8_2));
     check("vmin(v*.uh,v*.uh)", hvx_width/2, min(u16_1, u16_2));
     check("vmin(v*.h,v*.h)", hvx_width/2, min(i16_1, i16_2));
     check("vmin(v*.w,v*.w)", hvx_width/4, min(i32_1, i32_2));
 
-    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 < i8_2, i8_1, i8_2));
-    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 < u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 < i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 < u8_2, u8_1, u8_2));
     check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 < i16_2, i16_1, i16_2));
     check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 < u16_2, u16_1, u16_2));
     check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 < i32_2, i32_1, i32_2));
     check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 < u32_2, u32_1, u32_2));
 
-    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 > i8_2, i8_1, i8_2));
-    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 > u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 > i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 > u8_2, u8_1, u8_2));
     check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 > i16_2, i16_1, i16_2));
     check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 > u16_2, u16_1, u16_2));
     check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 > i32_2, i32_1, i32_2));
     check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 > u32_2, u32_1, u32_2));
 
-    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 <= i8_2, i8_1, i8_2));
-    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 <= u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 <= i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 <= u8_2, u8_1, u8_2));
     check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 <= i16_2, i16_1, i16_2));
     check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 <= u16_2, u16_1, u16_2));
     check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 <= i32_2, i32_1, i32_2));
     check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 <= u32_2, u32_1, u32_2));
 
-    check("vcmp.gt(v*.b,v*.b)", hvx_width, select(i8_1 >= i8_2, i8_1, i8_2));
-    check("vcmp.gt(v*.ub,v*.ub)", hvx_width, select(u8_1 >= u8_2, u8_1, u8_2));
+    check("vcmp.gt(v*.b,v*.b)", hvx_width/1, select(i8_1 >= i8_2, i8_1, i8_2));
+    check("vcmp.gt(v*.ub,v*.ub)", hvx_width/1, select(u8_1 >= u8_2, u8_1, u8_2));
     check("vcmp.gt(v*.h,v*.h)", hvx_width/2, select(i16_1 >= i16_2, i16_1, i16_2));
     check("vcmp.gt(v*.uh,v*.uh)", hvx_width/2, select(u16_1 >= u16_2, u16_1, u16_2));
     check("vcmp.gt(v*.w,v*.w)", hvx_width/4, select(i32_1 >= i32_2, i32_1, i32_2));
     check("vcmp.gt(v*.uw,v*.uw)", hvx_width/4, select(u32_1 >= u32_2, u32_1, u32_2));
 
-    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(i8_1 == i8_2, i8_1, i8_2));
-    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(u8_1 == u8_2, u8_1, u8_2));
+    check("vcmp.eq(v*.b,v*.b)", hvx_width/1, select(i8_1 == i8_2, i8_1, i8_2));
+    check("vcmp.eq(v*.b,v*.b)", hvx_width/1, select(u8_1 == u8_2, u8_1, u8_2));
     check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(i16_1 == i16_2, i16_1, i16_2));
     check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(u16_1 == u16_2, u16_1, u16_2));
     check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(i32_1 == i32_2, i32_1, i32_2));
     check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(u32_1 == u32_2, u32_1, u32_2));
 
-    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(i8_1 != i8_2, i8_1, i8_2));
-    check("vcmp.eq(v*.b,v*.b)", hvx_width, select(u8_1 != u8_2, u8_1, u8_2));
+    check("vcmp.eq(v*.b,v*.b)", hvx_width/1, select(i8_1 != i8_2, i8_1, i8_2));
+    check("vcmp.eq(v*.b,v*.b)", hvx_width/1, select(u8_1 != u8_2, u8_1, u8_2));
     check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(i16_1 != i16_2, i16_1, i16_2));
     check("vcmp.eq(v*.h,v*.h)", hvx_width/2, select(u16_1 != u16_2, u16_1, u16_2));
     check("vcmp.eq(v*.w,v*.w)", hvx_width/4, select(i32_1 != i32_2, i32_1, i32_2));
@@ -1444,21 +1493,21 @@ void check_hvx_all() {
     check("vmux(q*,v*,v*)", hvx_width/2, select(i16_1 == i16_2, i16_1, i16_2));
     check("vmux(q*,v*,v*)", hvx_width/4, select(i32_1 == i32_2, i32_1, i32_2));
 
-    check("vmpy(v*.ub,v*.ub)", hvx_width, u16(u8_1 * u8_1));
-    check("vmpy(v*.b,v*.b)", hvx_width, i16(i8_1 * i8_2));
+    check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1 * u8_1));
+    check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1 * i8_2));
     check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1 * u16_2));
     check("vmpy(v*.h,v*.h)", hvx_width/2, i32(i16_1 * i16_2));
     check("vmpyi(v*.h,v*.h)", hvx_width/2, i16_1 * i16_1);
-    check("vmpy(v*.ub,r*.b)", hvx_width, i16(u8_1) * 3);
+    check("vmpy(v*.ub,r*.b)", hvx_width/1, i16(u8_1) * 3);
     check("vmpy(v*.h,r*.h)", hvx_width/2, i32(i16_1) * 10);
-    check("vmpy(v*.ub,r*.ub)", hvx_width, u16(u8_1) * 3);
+    check("vmpy(v*.ub,r*.ub)", hvx_width/1, u16(u8_1) * 3);
     check("vmpy(v*.uh,r*.uh)", hvx_width/2, u32(u16_1) * 10);
 
     // Curiously, these work only for double vectors. Should fix
     // for single vectors.
     check("vmpyi(v*.w,r*.h)", hvx_width/2, i32_1 * 252);
     check("vmpyi(v*.w,r*.b)", hvx_width/2, i32_1 * 9);
-    check("vmpyi(v*.h,r*.b)", hvx_width, i16_1 * 10);
+    check("vmpyi(v*.h,r*.b)", hvx_width/1, i16_1 * 10);
 
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
@@ -1508,15 +1557,15 @@ void check_hvx_all() {
     // 2. vsat.cpp    <DEPRECATED>
     // 3. vselect.cpp <DONE>
     // 4. vshuff.cpp  <DONE>
-    // 5. vsplat.cpp
-    // 6. vzero.cpp
+    // 5. vsplat.cpp  <DONE>
+    // 6. vzero.cpp   <DONE>
     // 7. vmpyi.cpp   <DONE>
     // 8. vmpyi-vector-by-scalar.cpp <DONE, handle single vector>
     // 9. vmpa.cpp
     // 10. vmpy.cpp   <DONE>
     // 11. valign.cpp
-    // 12. vbitwise.cpp
-    // 13. varith.cpp
+    // 12. vbitwise.cpp <DONE>
+    // 13. varith.cpp   <DONE>
     // 14. vmpa-accumulate.cpp
     // 15. vdmpy.cpp
 #endif
