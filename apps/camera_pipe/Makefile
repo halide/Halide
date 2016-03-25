@@ -46,20 +46,8 @@ out.ppm: process
 
 out_%.ppm: process
 	${HEX_TOOLS}/bin/hexagon-sim ./process ${TIMING} -- ../images/bayer_$*.pgm 3700 2.0 50 1 out_$*.ppm
-	- if [ -r ref_$*_LV$(LOG2VLEN)/fcam_c.ppm ]; then \
-	    echo "cmp fcam_c.ppm ref_$*_LV$(LOG2VLEN)/fcam_c.ppm"; \
-	    cmp fcam_c.ppm ref_$*_LV$(LOG2VLEN)/fcam_c.ppm; \
-	else \
-	    echo "cmp fcam_c.ppm ref_$*/fcam_c.ppm"; \
-	    cmp fcam_c.ppm ref_$*/fcam_c.ppm; \
-	fi
-	if [ -r ref_$*_LV$(LOG2VLEN)/out_$*.ppm ]; then \
-	    echo "cmp out_$*.ppm ref_$*_LV$(LOG2VLEN)/out_$*.ppm"; \
-	    cmp out_$*.ppm ref_$*_LV$(LOG2VLEN)/out_$*.ppm; \
-	else \
-	    echo "cmp out_$*.ppm ref_$*/out_$*.ppm"; \
-	    cmp out_$*.ppm ref_$*/out_$*.ppm; \
-	fi
+	- cmp fcam_c.ppm ref_$*/fcam_c.ppm
+	cmp out_$*.ppm ref_$*/out_$*.ppm
 endif
 
 ../../bin/HalideTraceViz:
