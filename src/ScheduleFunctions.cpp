@@ -314,7 +314,7 @@ Stmt build_provide_loop_nest(Function f,
     {
         string o = prefix + Var::outermost().name();
         stmt = LetStmt::make(o + ".loop_min", 0, stmt);
-        stmt = LetStmt::make(o + ".loop_max", 1, stmt);
+        stmt = LetStmt::make(o + ".loop_max", 0, stmt);
         stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
     }
 
@@ -1089,22 +1089,10 @@ class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (ends_with(op->name, ".__outermost")) {
-            stmt = mutate(op->body);
+        if (ends_with(op->name, ".__outermost") && is_one(simplify(op->extent))) {
+            stmt = mutate(substitute(op->name, op->min, op->body));
         } else {
             IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Variable *op) {
-        if (ends_with(op->name, ".__outermost.loop_extent")) {
-            expr = 1;
-        } else if (ends_with(op->name, ".__outermost.loop_min")) {
-            expr = 0;
-        } else if (ends_with(op->name, ".__outermost.loop_max")) {
-            expr = 1;
-        } else {
-            expr = op;
         }
     }
 
@@ -1112,7 +1100,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
         if (ends_with(op->name, ".__outermost.loop_extent") ||
             ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {
-            stmt = mutate(op->body);
+            stmt = mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
             IRMutator::visit(op);
         }
