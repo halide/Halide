@@ -10,8 +10,8 @@
 #include "Debug.h"
 #include "Util.h"
 #include "Simplify.h"
-#include "IntegerDivisionTable.h"
 #include "IRPrinter.h"
+#include "EliminateBoolVectors.h"
 
 #define HEXAGON_SINGLE_MODE_VECTOR_SIZE 64
 #define HEXAGON_SINGLE_MODE_VECTOR_SIZE_IN_BITS 64 * 8
@@ -306,6 +306,23 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     return llvm_module;
 }
 
+void CodeGen_Hexagon::compile_func(const LoweredFunc &f) {
+    // Generate the function declaration and argument unpacking code.
+    begin_func(f.linkage, f.name, f.args);
+
+    // We can't deal with bool vectors, convert them to integer vectors.
+    debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
+    Stmt body = eliminate_bool_vectors(f.body);
+    debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
+
+    // Generate the function body.
+    debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
+    body.accept(this);
+
+    // Clean up and return.
+    end_func(f.args);
+}
+
 void CodeGen_Hexagon::init_module() {
     CodeGen_Posix::init_module();
     bool B128 = target.has_feature(Halide::Target::HVX_128);
@@ -542,47 +559,6 @@ llvm::Value *CodeGen_Hexagon::call_intrin(llvm::Type *t, int intrin_lanes,
 
     return CodeGen_LLVM::call_intrin(t, intrin_lanes, fn->getName(), ops);
 }
-
-namespace {
-
-bool is_boolean_vector(llvm::Type *ty) {
-    return ty->isVectorTy() &&
-        ty->getVectorElementType()->isIntegerTy();
-}
-
-}  // namespace
-
-llvm::Type *CodeGen_Hexagon::select_boolean_type(llvm::Type *a, llvm::Type *b) {
-    internal_assert(is_boolean_vector(a));
-    internal_assert(is_boolean_vector(b));
-    internal_assert(a->getVectorNumElements() == b->getVectorNumElements());
-    if (cast<VectorType>(a)->getBitWidth() > cast<VectorType>(b)->getBitWidth()) {
-        return a;
-    } else {
-        return b;
-    }
-}
-
-llvm::Value *CodeGen_Hexagon::cast_boolean_vector(llvm::Value *boolean, llvm::Type *type) {
-    llvm::Type *boolean_ty = boolean->getType();
-    internal_assert(is_boolean_vector(type));
-    internal_assert(is_boolean_vector(boolean_ty));
-    internal_assert(type->getVectorNumElements() == boolean_ty->getVectorNumElements());
-    int boolean_size = boolean_ty->getVectorElementType()->getIntegerBitWidth();
-    int type_size = type->getVectorElementType()->getIntegerBitWidth();
-    if (boolean_size < type_size) {
-        // TODO: We need to widen, with sign extension.
-        internal_error << "Boolean widening not implemented\n";
-        return nullptr;
-    } else if (boolean_size > type_size) {
-        // TODO: We need to narrow.
-        internal_error << "Boolean narrowing not implemented\n";
-        return nullptr;
-    } else {
-        return boolean;
-    }
-}
-
 
 llvm::Value *
 CodeGen_Hexagon::convertValueType(llvm::Value *V, llvm::Type *T) {
@@ -2455,11 +2431,16 @@ void CodeGen_Hexagon::visit(const Min *op) {
 
 void CodeGen_Hexagon::visit(const Select *op) {
     if (op->type.is_vector() && op->condition.type().is_vector()) {
-        Value *condition = codegen(op->condition);
+        // eliminate_bool_vectors has replaced all boolean vectors
+        // with integer vectors of the appropriate size, and this
+        // condition is of the form 'cond != 0'. We just need to grab
+        // cond and use that as the operand for vmux.
+        const NE *cond_ne_0 = op->condition.as<NE>();
+        internal_assert(cond_ne_0);
+        internal_assert(is_zero(cond_ne_0->b));
+        Value *condition = codegen(cond_ne_0->a);
         Value *true_value = codegen(op->true_value);
         Value *false_value = codegen(op->false_value);
-        internal_assert(true_value->getType() == false_value->getType());
-        condition = cast_boolean_vector(condition, true_value->getType());
         value = call_intrin(llvm_type_of(op->type),
                             "halide.hexagon.vmux." + type_suffix(op->type),
                             {condition, true_value, false_value});
@@ -2470,7 +2451,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
 
 void CodeGen_Hexagon::visit(const GT *op) {
     if (op->type.is_vector()) {
-        value = call_intrin(op->type,
+        value = call_intrin(eliminated_bool_type(op->type, op->a.type()),
                             "halide.hexagon.vgt." + type_suffix(op->a.type()),
                             {op->a, op->b});
     } else {
@@ -2480,7 +2461,7 @@ void CodeGen_Hexagon::visit(const GT *op) {
 
 void CodeGen_Hexagon::visit(const EQ *op) {
     if (op->type.is_vector()) {
-        value = call_intrin(op->type,
+        value = call_intrin(eliminated_bool_type(op->type, op->a.type()),
                             "halide.hexagon.veq." + type_suffix(op->a.type(), false),
                             {op->a, op->b});
     } else {
