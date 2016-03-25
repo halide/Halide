@@ -52,7 +52,7 @@ protected:
         GeneralPattern(const std::string &intrin, Expr p, PatternType t = Simple)
             : intrin(intrin), pattern(p), type(t) {}
     };
-    std::vector<GeneralPattern> casts;
+    std::vector<GeneralPattern> casts, adds, subs;
 
     /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
     /* // @{ */
@@ -131,8 +131,6 @@ protected:
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
     bool possiblyCodeGenNarrowerType(const Select *);
-    bool possiblyCodeGenVavg(const Cast *);
-    bool possiblyCodeGenSaturatingArith(const Cast *);
     llvm::Value *possiblyCodeGenWideningMultiplySatRndSat(const Div *);
 };
 
