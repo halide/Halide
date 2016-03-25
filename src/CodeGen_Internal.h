@@ -40,14 +40,13 @@ void unpack_closure(const Closure& closure, Scope<llvm::Value *> &dst,
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 
-/** A routine to check if a list of extents are all constants, and if so
- * verify the total size is less than 2^31 - 1. If the result is constant,
- * but overflows, this routine asserts. The name parameter is used in the
- * assertion message. */
-bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size);
-
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
+
+/** Given a size (in bytes), return True if the allocation size can fit
+ * on the stack; otherwise, return False. This routine asserts if size is
+ * non-positive. */
+bool can_allocation_fit_on_stack(int32_t size);
 
 }}
 
