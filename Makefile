@@ -298,7 +298,6 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
-  HexagonIRChecker.cpp \
   HexagonOffload.cpp \
   Image.cpp \
   InjectHostDevBufferCopies.cpp \
@@ -424,7 +423,6 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
-  HexagonIRChecker.h \
   HexagonOffload.h \
   runtime/HalideRuntime.h \
   Image.h \

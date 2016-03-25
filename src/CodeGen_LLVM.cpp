@@ -341,7 +341,7 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
     } else if (target.arch == Target::PNaCl) {
         return make_codegen<CodeGen_PNaCl>(target, context);
     } else if (target.arch == Target::Hexagon) {
-      return make_codegen<CodeGen_Hexagon>(target, context);
+        return make_codegen<CodeGen_Hexagon>(target, context);
     }
 
     user_error << "Unknown target architecture: "
