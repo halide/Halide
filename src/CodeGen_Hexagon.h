@@ -137,18 +137,6 @@ protected:
     llvm::Value *handleLargeVectors(const Mul *);
     llvm::Value *handleLargeVectors(const Div *);
     llvm::Value *handleLargeVectors(const Cast *);
-    /* Ideally, we'd have liked to call compare with llvm::Intrinsic::ID
-     as the last argument, but that means "llvm/IR/Intrinsics.h" would be needed
-     to be included here. However, CodeGen_Hexagon.h is used to create Halide.h
-     which is needed by the user. All of this would mean that the user would
-     need all LLVM Headers. So, we use llvm::Function *F instead, much in the
-     same way we do for CallLLVMIntrinsic. */
-    llvm::Value *compare(llvm::Value *a, llvm::Value *b,
-                         llvm::Function *F);
-    llvm::Value *negate(llvm::Value *a);
-    llvm::Value *generate_vector_comparison(const BaseExprNode *,
-                                            std::vector<Pattern> &,
-                                            std::vector<Pattern> &, bool, bool);
     bool possiblyCodeGenWideningMultiply(const Mul *);
     bool possiblyGenerateVMPAAccumulate(const Add *);
     bool possiblyCodeGenNarrowerType(const Select *);
