@@ -199,23 +199,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t)
   typecasts.emplace_back(cast(UInt(16, CPICK(64,32)), wild_i16xW), IPICK(Intrinsic::hexagon_V6_vassign));
   typecasts.emplace_back(cast(UInt(8, CPICK(128,64)), wild_i8xW), IPICK(Intrinsic::hexagon_V6_vassign));
 
-  // "shift_left (x, 8)" is converted to x*256 by Simplify.cpp
-  combiners.push_back(
-    Pattern(bitwiseOr(sat_h_ub(wild_i16xW), (sat_h_ub(wild_i16xW) * 256)),
-                      IPICK(Intrinsic::hexagon_V6_vsathub), Pattern::Simple,
-                      true));
-  combiners.push_back(
-    Pattern(bitwiseOr((sat_h_ub(wild_i16xW) * 256), sat_h_ub(wild_i16xW)),
-                       IPICK(Intrinsic::hexagon_V6_vsathub), Pattern::Simple,
-                       false));
-  combiners.push_back(
-    Pattern(bitwiseOr(sat_w_h(wild_i32xW), (sat_w_h(wild_i32xW) * 65536)),
-                     IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
-                     true));
-  combiners.push_back(
-    Pattern(bitwiseOr((sat_w_h(wild_i32xW) * 65536), sat_w_h(wild_i32xW)),
-                       IPICK(Intrinsic::hexagon_V6_vsatwh), Pattern::Simple,
-                       false));
   combiners.emplace_back(absd(wild_u8xW, wild_u8xW), IPICK(Intrinsic::hexagon_V6_vabsdiffub));
   combiners.emplace_back(absd(wild_u16xW, wild_u16xW), IPICK(Intrinsic::hexagon_V6_vabsdiffuh));
   combiners.emplace_back(absd(wild_i16xW, wild_i16xW), IPICK(Intrinsic::hexagon_V6_vabsdiffh));
