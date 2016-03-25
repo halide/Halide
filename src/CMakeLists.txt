@@ -234,6 +234,7 @@ set(HEADER_FILES
   DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
+  EliminateBoolVectors.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -381,6 +382,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
+  EliminateBoolVectors.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
