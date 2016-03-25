@@ -3,7 +3,7 @@
 
 #ifdef HEXAGON
 #define VLEN    (1<<LOG2VLEN)
-#define BLOCK   (VLEN/2)
+#define BLOCK   64
 #include "halide-hexagon-setup.h"
 #else
 #define BLOCK   32

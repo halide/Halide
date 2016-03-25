@@ -14,7 +14,7 @@
 
 #if defined(__hexagon__)
 #define VLEN    (1<<LOG2VLEN)
-#define BLOCK   (VLEN/2)
+#define BLOCK   64
 #include "hexagon_standalone.h"
 #include "io.h"
 #define IMGEXT_IN ".pgm"
