@@ -44,8 +44,8 @@ T clamp(T x, T min, T max) {
 }
 
 int main(int argc, char **argv) {
-    const int W = 128*16;
-    const int H = 128*16;
+    const int W = 128;
+    const int H = 128;
 
     printf("Hello\n");
 

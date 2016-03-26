@@ -10,7 +10,6 @@ extern "C" {
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#define FARF_LOW 1
 #include "HAP_farf.h"
 #include "HAP_power.h"
 
@@ -20,49 +19,6 @@ extern "C" {
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
-
-
-void halide_print(void *user_context, const char *str) {
-    FARF(LOW, "%s", str);
-}
-
-void halide_error(void *user_context, const char *str) {
-    halide_print(user_context, str);
-}
-
-void *halide_malloc(void *user_context, size_t x) {
-    // Allocate enough space for aligning the pointer we return.
-    const size_t alignment = 128;
-    void *orig = malloc(x + alignment);
-    if (orig == NULL) {
-        // Will result in a failed assertion and a call to halide_error
-        return NULL;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
-    return ptr;
-}
-
-void halide_free(void *user_context, void *ptr) {
-    free(((void**)ptr)[-1]);
-}
-
-int halide_do_task(void *user_context, halide_task_t f, int idx,
-                   uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
-int halide_do_par_for(void *user_context, halide_task_t f,
-                      int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
-        if (result) {
-            return result;
-        }
-    }
-    return 0;
-}
 
 extern "C" {
 
@@ -85,7 +41,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     const char *filename = "/data/halide_kernels.so";
     FILE* fd = fopen(filename, "w");
     if (!fd) {
-        FARF(LOW, "fopen failed");
+        halide_print(NULL, "fopen failed");
         return -1;
     }
 
@@ -94,7 +50,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 #endif
     void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
     if (!lib) {
-        FARF(LOW, "dlopen failed");
+        halide_print(NULL, "dlopen failed");
         return -1;
     }
 
@@ -105,7 +61,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
         dlclose(lib);
-        FARF(LOW, "halide_noos_set_runtime not found in shared object");
+        halide_print(NULL, "halide_noos_set_runtime not found in shared object");
         return -1;
     }
 
@@ -117,20 +73,20 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
                              halide_do_task);
     if (result != 0) {
         dlclose(lib);
-        FARF(LOW, "set_runtime failed %d", result);
+        halide_print(NULL, "set_runtime failed");
         return result;
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
 
     if (context_count == 0) {
-        FARF(LOW, "Requesting power for HVX...");
+        halide_print(NULL, "Requesting power for HVX...");
 
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = TRUE;
         int retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
-            FARF(ERROR,"dspCV unable to power on HVX, status %d!", retval);
+            halide_print(NULL, "dspCV unable to power on HVX!");
             return -1;
         }
     }
