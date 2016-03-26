@@ -323,7 +323,7 @@ private:
 
     void visit(const Call *op) {
         // Ignore likely intrinsics
-        if (op->name == Call::likely && op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::likely)) {
             expr = mutate(op->args[0]);
         } else {
             IRMutator::visit(op);

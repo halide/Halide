@@ -438,43 +438,42 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
 }
 
 void CodeGen_Renderscript_Dev::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::image_load || op->name == Call::image_store) {
-            //
-            // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
-            // <y-extent>, <c>, <c-extent>)
-            // or
-            // image_store(<image name>, <buffer>, <x>, <y>, <c>, <value>)
-            //
-            const int index_name = 0;
-            const int index_x = op->name == Call::image_load ? 2 : 2;
-            const int index_y = op->name == Call::image_load ? 4 : 3;
-            const int index_c = op->name == Call::image_load ? 6 : 4;
-            vector<Value *> args =
-                add_x_y_c_args(op->args[index_name], op->args[index_x],
-                               op->args[index_y], op->args[index_c]);
+    if (op->is_intrinsic(Call::image_load) ||
+        op->is_intrinsic(Call::image_store)) {
+        //
+        // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
+        // <y-extent>, <c>, <c-extent>)
+        // or
+        // image_store(<image name>, <buffer>, <x>, <y>, <c>, <value>)
+        //
+        const int index_name = 0;
+        const int index_x = op->name == Call::image_load ? 2 : 2;
+        const int index_y = op->name == Call::image_load ? 4 : 3;
+        const int index_c = op->name == Call::image_load ? 6 : 4;
+        vector<Value *> args =
+            add_x_y_c_args(op->args[index_name], op->args[index_x],
+                           op->args[index_y], op->args[index_c]);
 
-            if (op->name == Call::image_store) {
-                args.insert(args.begin() + 1, codegen(op->args[5]));
-            }
-
-            debug(2) << "Generating " << op->type.lanes()
-                     << "byte-wide call with " << args.size() << " args:\n";
-            if (debug::debug_level >= 2) {
-                int i = 1;
-                for (Value *arg : args) {
-                    debug(2) << " #" << i++ << ":";
-                    arg->getType()->dump();
-                    arg->dump();
-                }
-            }
-
-            llvm::Function *func = op->name == Call::image_load
-                                       ? fetch_GetElement_func(op->type)
-                                       : fetch_SetElement_func(op->type);
-            value = builder->CreateCall(func, args);
-            return;
+        if (op->name == Call::image_store) {
+            args.insert(args.begin() + 1, codegen(op->args[5]));
         }
+
+        debug(2) << "Generating " << op->type.lanes()
+                 << "byte-wide call with " << args.size() << " args:\n";
+        if (debug::debug_level >= 2) {
+            int i = 1;
+            for (Value *arg : args) {
+                debug(2) << " #" << i++ << ":";
+                arg->getType()->dump();
+                arg->dump();
+            }
+        }
+
+        llvm::Function *func = op->name == Call::image_load
+            ? fetch_GetElement_func(op->type)
+            : fetch_SetElement_func(op->type);
+        value = builder->CreateCall(func, args);
+        return;
     }
     CodeGen_LLVM::visit(op);
 }
