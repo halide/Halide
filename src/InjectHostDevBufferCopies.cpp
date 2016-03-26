@@ -384,7 +384,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Call *op) {
-        if (op->name == Call::address_of && op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::address_of)) {
             // We're after storage flattening, so the sole arg should be a load.
             internal_assert(op->args.size() == 1);
             const Load *l = op->args[0].as<Load>();
@@ -396,7 +396,7 @@ class InjectBufferCopies : public IRMutator {
                 Expr new_load = Load::make(l->type, l->name, new_index, Buffer(), Parameter());
                 expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
             }
-        } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
+        } else if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
@@ -406,7 +406,7 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "Adding image read via image_load for " << buffer_var->name << "\n";
             state[buf_name].devices_reading.insert(device_api);
             IRMutator::visit(op);
-        } else if (op->name == Call::image_store && op->call_type == Call::Intrinsic) {
+        } else if (op->is_intrinsic(Call::image_store)) {
             // counts as a device store
             internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);

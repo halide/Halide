@@ -442,20 +442,18 @@ void IRPrinter::visit(const Broadcast *op) {
 
 void IRPrinter::visit(const Call *op) {
     // Special-case some intrinsics for readability
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::extract_buffer_host) {
-            print(op->args[0]);
-            stream << ".host";
-            return;
-        } else if (op->name == Call::extract_buffer_min) {
-            print(op->args[0]);
-            stream << ".min[" << op->args[1] << "]";
-            return;
-        } else if (op->name == Call::extract_buffer_max) {
-            print(op->args[0]);
-            stream << ".max[" << op->args[1] << "]";
-            return;
-        }
+    if (op->is_intrinsic(Call::extract_buffer_host)) {
+        print(op->args[0]);
+        stream << ".host";
+        return;
+    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+        print(op->args[0]);
+        stream << ".min[" << op->args[1] << "]";
+        return;
+    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+        print(op->args[0]);
+        stream << ".max[" << op->args[1] << "]";
+        return;
     }
 
     stream << op->name << "(";

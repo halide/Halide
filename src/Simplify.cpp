@@ -1693,14 +1693,12 @@ private:
                 expr = mutate(max(mul_a->a, ratio) * factor);
             }
         } else if (call_a &&
-                   call_a->name == Call::likely &&
-                   call_a->call_type == Call::Intrinsic &&
+                   call_a->is_intrinsic(Call::likely) &&
                    equal(call_a->args[0], b)) {
             // min(likely(b), b) -> likely(b)
             expr = a;
         } else if (call_b &&
-                   call_b->name == Call::likely &&
-                   call_b->call_type == Call::Intrinsic &&
+                   call_b->is_intrinsic(Call::likely) &&
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
@@ -2002,14 +2000,12 @@ private:
                 expr = mutate(min(mul_a->a, ratio) * factor);
             }
         } else if (call_a &&
-                   call_a->name == Call::likely &&
-                   call_a->call_type == Call::Intrinsic &&
+                   call_a->is_intrinsic(Call::likely) &&
                    equal(call_a->args[0], b)) {
             // max(likely(b), b) -> likely(b)
             expr = a;
         } else if (call_b &&
-                   call_b->name == Call::likely &&
-                   call_b->call_type == Call::Intrinsic &&
+                   call_b->is_intrinsic(Call::likely) &&
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
@@ -2586,13 +2582,12 @@ private:
         } else if (const LE *le = condition.as<LE>()) {
             // Normalize select(a <= b, c, d) to select(b < a, d, c)
             expr = mutate(Select::make(le->b < le->a, false_value, true_value));
-        } else if (ct && ct->name == Call::likely && ct->call_type == Call::Intrinsic &&
+        } else if (ct && ct->is_intrinsic(Call::likely) &&
                    equal(ct->args[0], false_value)) {
             // select(cond, likely(a), a) -> likely(a)
             expr = true_value;
         } else if (cf &&
-                   cf->name == Call::likely &&
-                   cf->call_type == Call::Intrinsic &&
+                   cf->is_intrinsic(Call::likely) &&
                    equal(cf->args[0], true_value)) {
             // select(cond, a, likely(a)) -> likely(a)
             expr = false_value;
@@ -2760,16 +2755,15 @@ private:
             }
         }
 
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::shift_left ||
-             op->name == Call::shift_right)) {
+        if (op->is_intrinsic(Call::shift_left) ||
+            op->is_intrinsic(Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
 
             int64_t ib = 0;
             if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
                 Type t = op->type;
 
-                bool shift_left = op->name == Call::shift_left;
+                bool shift_left = op->is_intrinsic(Call::shift_left);
                 if (t.is_int() && ib < 0) {
                     shift_left = !shift_left;
                     ib = -ib;
@@ -2793,13 +2787,12 @@ private:
 
             if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
-            } else if (op->name == Call::shift_left) {
+            } else if (op->is_intrinsic(Call::shift_left)) {
                 expr = a << b;
             } else {
                 expr = a >> b;
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::bitwise_and) {
+        } else if (op->is_intrinsic(Call::bitwise_and)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             int64_t ib = 0;
             uint64_t ub = 0;
@@ -2820,8 +2813,7 @@ private:
             } else {
                 expr = a & b;
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::abs) {
+        } else if (op->is_intrinsic(Call::abs)) {
             // Constant evaluate abs(x).
             Expr a = mutate(op->args[0]);
             Type ta = a.type();
@@ -2845,7 +2837,7 @@ private:
             } else {
                 expr = abs(a);
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
             double f = 0.0;
@@ -2856,8 +2848,7 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::interleave_vectors) {
+        } else if (op->is_intrinsic(Call::interleave_vectors)) {
             // Mutate the args
             vector<Expr> new_args;
             bool changed = false;
@@ -2909,7 +2900,7 @@ private:
 
                 if ((int)load_indices.size() == terms) {
                     Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
-                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::Intrinsic);
+                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
                     interleaved_index = mutate(interleaved_index);
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
@@ -2925,8 +2916,7 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, new_args, op->call_type);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::stringify) {
+        } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
             vector<Expr> new_args;
@@ -2976,7 +2966,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -2986,7 +2976,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "exp_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -2996,7 +2986,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    (op->name == "floor_f32" || op->name == "ceil_f32" ||
                     op->name == "round_f32" || op->name == "trunc_f32")) {
             internal_assert(op->args.size() == 1);
@@ -3012,7 +3002,7 @@ private:
                 } else if (op->name == "trunc_f32") {
                     expr = FloatImm::make(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
                 }
-            } else if (call && call->call_type == Call::Extern &&
+            } else if (call && call->call_type == Call::PureExtern &&
                        (call->name == "floor_f32" || call->name == "ceil_f32" ||
                         call->name == "round_f32" || call->name == "trunc_f32")) {
                 // For any combination of these integer-valued functions, we can
@@ -3439,7 +3429,7 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
     Type t = e[0].type().with_lanes(e[0].type().lanes() * e.size());
-    return Call::make(t, Call::interleave_vectors, e, Call::Intrinsic);
+    return Call::make(t, Call::interleave_vectors, e, Call::PureIntrinsic);
 }
 
 Expr ramp(Expr base, Expr stride, int w) {
