@@ -86,6 +86,7 @@ DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
+DECLARE_CPP_INITMOD(linux_mman)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(opencl)
@@ -650,8 +651,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_linux_mman(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
+                modules.push_back(get_initmod_android_ion(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));

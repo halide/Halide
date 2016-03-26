@@ -38,6 +38,7 @@ set(RUNTIME_CPP
   ios_io
   linux_clock
   linux_host_cpu_count
+  linux_mman
   linux_opengl_context
   matlab
   metadata

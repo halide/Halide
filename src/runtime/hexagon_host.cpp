@@ -62,12 +62,22 @@ WEAK int init_hexagon_runtime(void *user_context) {
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Load the library.
-    const char *host_lib_name = "libhalide_hexagon_host.so";
-    debug(user_context) << "    halide_load_library('" << host_lib_name << "') -> \n";
-    void *host_lib = halide_load_library(host_lib_name);
-    debug(user_context) << "        " << host_lib << "\n";
+    void *host_lib = NULL;
+    const char *lib_names[] = {
+        "libhalide_hexagon_host.so",    // real device
+        "libhalide_simulator_host.so",  // simulator
+    };
+    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
+        const char *lib_name = lib_names[i];
+        host_lib = halide_load_library(lib_name);
+        if (host_lib) {
+            debug(user_context) << "    Loaded hexagon runtime library: " << lib_name << "\n";
+            break;
+        }
+    }
+
     if (!host_lib) {
-        error(user_context) << host_lib_name << " not found.\n";
+        error(user_context) << "Hexagon remote runtime library not found.\n";
         return -1;
     }
 
@@ -168,7 +178,8 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
-        const char *filename = "/data/local/tmp/halide_kernels.so";
+
+        const char *filename = "/tmp/halide_kernels.so";
         debug(user_context) << "    open " << filename << " -> ";
         int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0);
         debug(user_context) << "        " << so_fd << "\n";

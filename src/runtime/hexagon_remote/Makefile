@@ -4,6 +4,9 @@ COMMON_FLAGS = -I ${HEX_SDK_ROOT}inc/stddef
 COMMON_CCFLAGS = ${COMMON_FLAGS} -fPIC -O3 -I ${HEX_SDK_ROOT}lib/common/remote/ship/android_Release
 QAICFLAGS = ${COMMON_FLAGS}
 
+CC-host = ${CXX}
+CXX-host = ${CXX}
+
 CC-v60 = ${HEX_TOOLS_ROOT}Tools/bin/hexagon-clang
 CXX-v60 = ${HEX_TOOLS_ROOT}Tools/bin/hexagon-clang++
 
@@ -16,6 +19,9 @@ CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/pre
 #CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 #CXXFLAGS-arm-32-android=
+
+CCFLAGS-host := ${CCFLAGS} -I ${HEX_TOOLS_ROOT}Tools/include/iss/ -fPIC \
+	-L${HEX_TOOLS_ROOT}Tools/lib/iss/ -Wl,-rpath,${HEX_TOOLS_ROOT}Tools/lib/iss -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEX_SDK_ROOT}inc
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
@@ -46,6 +52,7 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $*
 	$(CXX-$*) $(CCFLAGS-$*) -c runtime.cpp -o $@
 
+# Build rules for the hexagon implementation.
 %/libhalide_hexagon_remote_skel.so: %/halide_hexagon_remote.o %/halide_hexagon_remote_skel.o %/runtime.o
 	mkdir -p $*
 	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/halide_hexagon_remote.o $*/halide_hexagon_remote_skel.o $*/runtime.o -Wl,--end-group
@@ -54,8 +61,26 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $*
 	$(CC-$*) $(CCFLAGS-$*) $^ -shared -o $@
 
+# Build rules for the simulator implementation.
+%/rpc_remote.o: rpc_remote.cpp rpc_protocol.h
+	mkdir -p $*
+	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c rpc_remote.cpp -o $@
+
+%/rpc_host.o: rpc_host.cpp rpc_protocol.h
+	mkdir -p $*
+	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c rpc_host.cpp -o $@
+
+%/libhalide_simulator_remote.so: %/halide_hexagon_remote.o %/rpc_remote.o %/runtime.o
+	mkdir -p $*
+	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_simulator_remote.so.map -Wl,-soname=libhalide_simulator_remote_skel.so   -o $*/libhalide_simulator_remote.so -Wl,--start-group  $*/halide_hexagon_remote.o $*/rpc_remote.o $*/runtime.o -Wl,--end-group
+
+%/libhalide_simulator_host.so: %/rpc_host.o
+	mkdir -p $*
+	$(CC-$*) $^ $(CCFLAGS-$*) -shared -o $@
+
 clean:
 	rm -rf halide_hexagon_remote.h halide_hexagon_remote_skel.c halide_hexagon_remote_stub.c
 	rm -rf arm-32-android/
 	rm -rf arm-64-android/
 	rm -rf v60/
+	rm -rf host/
