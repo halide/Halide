@@ -42,9 +42,13 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $*
 	$(CXX-$*) $(CCFLAGS-$*) -c halide_hexagon_remote.cpp -o $@
 
-%/libhalide_hexagon_remote_skel.so: %/halide_hexagon_remote.o %/halide_hexagon_remote_skel.o
+%/runtime.o: runtime.cpp
 	mkdir -p $*
-	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/halide_hexagon_remote.o $*/halide_hexagon_remote_skel.o -Wl,--end-group
+	$(CXX-$*) $(CCFLAGS-$*) -c runtime.cpp -o $@
+
+%/libhalide_hexagon_remote_skel.so: %/halide_hexagon_remote.o %/halide_hexagon_remote_skel.o %/runtime.o
+	mkdir -p $*
+	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/halide_hexagon_remote.o $*/halide_hexagon_remote_skel.o $*/runtime.o -Wl,--end-group
 
 %/libhalide_hexagon_host.so: halide_hexagon_remote_stub.c
 	mkdir -p $*
