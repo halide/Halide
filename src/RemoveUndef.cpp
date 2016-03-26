@@ -146,8 +146,7 @@ private:
     }
 
     void visit(const Call *op) {
-        if (op->name == Call::undef &&
-            op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::undef)) {
             expr = Expr();
             return;
         }

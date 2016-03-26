@@ -220,7 +220,7 @@ private:
                 for (int i = 0; i < new_lanes; i++) {
                     args.push_back(starting_lane + lane_stride * i);
                 }
-                expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
+                expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
             }
         }
     }
@@ -240,8 +240,7 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             expr = op;
-        } else if (op->name == Call::interleave_vectors &&
-                   op->call_type == Call::Intrinsic) {
+        } else if (op->is_intrinsic(Call::interleave_vectors)) {
             internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
             if ((int)op->args.size() == lane_stride) {
                 expr = op->args[starting_lane];
@@ -251,7 +250,7 @@ private:
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = op->args[i*lane_stride + starting_lane];
                 }
-                expr = Call::make(t, Call::interleave_vectors, new_args, Call::Intrinsic);
+                expr = Call::make(t, Call::interleave_vectors, new_args, Call::PureIntrinsic);
             } else {
                 // Interleave some vectors then deinterleave by some other factor...
                 // Brute force!
@@ -260,10 +259,9 @@ private:
                 for (int i = 0; i < new_lanes; i++) {
                     args.push_back(i*lane_stride + starting_lane);
                 }
-                expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
+                expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
             }
-        } else if (op->name == Call::shuffle_vector &&
-                   op->call_type == Call::Intrinsic) {
+        } else if (op->is_intrinsic(Call::shuffle_vector)) {
             // Extract every nth numeric arg to the shuffle.
             std::vector<Expr> args;
             args.push_back(op->args[0]);
@@ -272,9 +270,8 @@ private:
                 internal_assert(idx >= 0 && idx < int(op->args.size()));
                 args.push_back(op->args[idx]);
             }
-            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
-        } else if (op->name == Call::glsl_texture_load &&
-                   op->call_type == Call::Intrinsic) {
+            expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
+        } else if (op->is_intrinsic(Call::glsl_texture_load)) {
             // glsl_texture_load returns a <uint x 4> result. Deinterleave by
             // wrapping the call in a shuffle_vector
             std::vector<Expr> args;
@@ -282,7 +279,7 @@ private:
             for (int i = 0; i < new_lanes; i++) {
                 args.push_back(i*lane_stride + starting_lane);
             }
-            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
+            expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -393,13 +390,13 @@ class Interleaver : public IRMutator {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              {a, b}, Call::Intrinsic);
+                              {a, b}, Call::PureIntrinsic);
         } else if (num_lanes == 3) {
             Expr a = extract_mod3_lanes(e, 0, vector_lets);
             Expr b = extract_mod3_lanes(e, 1, vector_lets);
             Expr c = extract_mod3_lanes(e, 2, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              {a, b, c}, Call::Intrinsic);
+                              {a, b, c}, Call::PureIntrinsic);
         } else if (num_lanes == 4) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
@@ -408,7 +405,7 @@ class Interleaver : public IRMutator {
             Expr ba = extract_even_lanes(b, vector_lets);
             Expr bb = extract_odd_lanes(b, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
-                              {aa, ba, ab, bb}, Call::Intrinsic);
+                              {aa, ba, ab, bb}, Call::PureIntrinsic);
         } else {
             // Give up and don't do anything clever for >4
             return e;
@@ -656,7 +653,7 @@ class Interleaver : public IRMutator {
             // Generate a single interleaving store.
             t = t.with_lanes(lanes*stores.size());
             Expr index = Ramp::make(base, make_one(Int(32)), t.lanes());
-            Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
+            Expr value = Call::make(t, Call::interleave_vectors, args, Call::PureIntrinsic);
             Stmt new_store = Store::make(store->name, value, index);
 
             // Continue recursively into the stuff that

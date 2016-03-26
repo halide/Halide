@@ -401,13 +401,8 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
-    if (op->call_type != Call::Intrinsic) {
-        CodeGen_GLSLBase::visit(op);
-        return;
-    }
-
     ostringstream rhs;
-    if (op->name == Call::glsl_texture_load) {
+    if (op->is_intrinsic(Call::glsl_texture_load)) {
         // This intrinsic takes four arguments
         // glsl_texture_load(<tex name>, <buffer>, <x>, <y>)
         internal_assert(op->args.size() == 4);
@@ -438,7 +433,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             rhs << " * " << print_expr(cast<float>(op->type.max()));
         }
 
-    } else if (op->name == Call::glsl_texture_store) {
+    } else if (op->is_intrinsic(Call::glsl_texture_store)) {
         internal_assert(op->args.size() == 6);
         std::string sval = print_expr(op->args[5]);
         do_indent();
@@ -452,7 +447,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         // no return value.
         id = "";
         return;
-    } else if (op->name == Call::glsl_varying) {
+    } else if (op->is_intrinsic(Call::glsl_varying)) {
         // Varying attributes should be substituted out by this point in
         // codegen.
         debug(2) << "Found skipped varying attribute: " << op->args[0] << "\n";
@@ -461,7 +456,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         print_expr(op->args[1]);
         return;
 
-    } else if (op->name == Call::shuffle_vector) {
+    } else if (op->is_intrinsic(Call::shuffle_vector)) {
         // The halide intrinisc shuffle_vector represents the llvm intrinisc
         // shufflevector, however, for GLSL its use is limited to swizzling
         // up to a four channel vec type.
@@ -525,7 +520,7 @@ void CodeGen_GLSL::visit(const Call *op) {
                 return;
             }
         }
-    } else if (op->name == Call::lerp) {
+    } else if (op->is_intrinsic(Call::lerp)) {
         // Implement lerp using GLSL's mix() function, which always uses
         // floating point arithmetic.
         Expr zero_val = op->args[0];
@@ -555,16 +550,16 @@ void CodeGen_GLSL::visit(const Call *op) {
         print_expr(e);
 
         return;
-    } else if (op->name == Call::abs) {
+    } else if (op->is_intrinsic(Call::abs)) {
         print_expr(call_builtin(op->type, op->name, op->args));
         return;
-    } else if (op->name == Call::return_second) {
+    } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
         // Simply discard the first argument, which is generally a call to
         // 'halide_printf'.
         rhs << print_expr(op->args[1]);
     } else {
-        user_error << "GLSL: intrinsic '" << op->name << "' isn't supported.\n";
+        CodeGen_GLSLBase::visit(op);
         return;
     }
     print_assignment(op->type, rhs.str());
