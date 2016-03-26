@@ -14,8 +14,7 @@ public:
     using IRVisitor::visit;
 
     void visit(const Call *op) {
-        if (op->name == Call::interleave_vectors &&
-            op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::interleave_vectors)) {
             result++;
         }
         IRVisitor::visit(op);
