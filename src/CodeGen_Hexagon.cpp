@@ -65,15 +65,15 @@ Expr sat_w_h(Expr A) {
 
 Expr bitwiseOr(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_or, {A, B},
-                              Internal::Call::Intrinsic);
+                              Internal::Call::PureIntrinsic);
 }
 Expr bitwiseAnd(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_and, {A, B},
-                              Internal::Call::Intrinsic);
+                              Internal::Call::PureIntrinsic);
 }
 Expr bitwiseXor(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_xor, {A, B},
-                              Internal::Call::Intrinsic);
+                              Internal::Call::PureIntrinsic);
 }
 Expr vavg_round(Expr A, Expr B) {
   Type wider = A.type().with_bits(A.type().bits() * 2);
@@ -105,16 +105,16 @@ Expr sat_add(Expr A, Expr B) {
 #ifdef THESE_ARE_UNUSED
 Expr bitwiseNot(Expr A) {
   return Internal::Call::make(A.type(), Internal::Call::bitwise_not, {A},
-                              Internal::Call::Intrinsic);
+                              Internal::Call::PureIntrinsic);
 }
 Expr shiftLeft(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_left, {A, B},
-                              Internal::Call::Intrinsic);
+                              Internal::Call::PureIntrinsic);
 }
 
 Expr shiftRight(Expr A, Expr B) {
   return Internal::Call::make(A.type(), Internal::Call::shift_right, {A, B},
-                              Internal::Call::Intrinsic);
+                              Internal::Call::PureIntrinsic);
 }
 #endif
 
@@ -387,9 +387,9 @@ CodeGen_Hexagon::getHighAndLowVectors(Expr DoubleVec) {
     Lo = Broadcast::make(B->value, NumElements);
   } else {
     Hi = Call::make(NewT, Call::get_high_register, {DoubleVec},
-                    Call::Intrinsic);
+                    Call::PureIntrinsic);
     Lo = Call::make(NewT, Call::get_low_register, {DoubleVec},
-                    Call::Intrinsic);
+                    Call::PureIntrinsic);
   }
   return {Hi, Lo};
 }
@@ -438,9 +438,9 @@ CodeGen_Hexagon::slice_into_halves(Expr a) {
       ShuffleArgsAHigh.push_back(i + NumElements);
     }
     A_low = Call::make(NewT, Call::shuffle_vector, ShuffleArgsALow,
-                       Call::Intrinsic);
+                       Call::PureIntrinsic);
     A_high = Call::make(NewT, Call::shuffle_vector, ShuffleArgsAHigh,
-                        Call::Intrinsic);
+                        Call::PureIntrinsic);
   }
 
   // use high/low ordering to match getHighAndLowVectors
@@ -1767,14 +1767,14 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
   value = emitBinaryOp(op, vbitwise);
   if (!value) {
-    if (op->name == Call::bitwise_not) {
+    if (op->is_intrinsic(Call::bitwise_not)) {
       if (op->type.is_vector() &&
           ((op->type.bytes() * op->type.lanes()) == VecSize)) {
         Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_vnot), {codegen(op->args[0])});
         value = convertValueType(Call, llvm_type_of(op->type));
         return;
       }
-    } else if (op->name == Call::absd) {
+    } else if (op->is_intrinsic(Call::absd)) {
       if (isLargerThanVector(op->type, native_vector_bits())) {
         value = handleLargeVectors_absd(op);
         if (value)
@@ -1782,19 +1782,19 @@ void CodeGen_Hexagon::visit(const Call *op) {
       }
       // vector sized absdiff should have been covered by the look up table
       // "combiners".
-    } else if (op->name == Call::get_high_register) {
+    } else if (op->is_intrinsic(Call::get_high_register)) {
       internal_assert(op->type.is_vector());
       internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
       Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_hi), {codegen(op->args[0])});
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
-    } else if (op->name == Call::get_low_register) {
+    } else if (op->is_intrinsic(Call::get_low_register)) {
       internal_assert(op->type.is_vector());
       internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
       Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_lo), {codegen(op->args[0])});
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
-    } else if (op->name == Call::interleave_vectors) {
+    } else if (op->is_intrinsic(Call::interleave_vectors)) {
       if (isDblVector(op->type, native_vector_bits()) &&
                       op->args.size() == 2) {
         Expr arg0 = op->args[0];
@@ -1814,8 +1814,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
     int chk_call = show_chk;
     // Only check these calls at higher levels
     if ((chk_call < 2) &&
-        ((op->name == Call::interleave_vectors) ||
-         (op->name == Call::shuffle_vector))) {
+        ((op->is_intrinsic(Call::interleave_vectors)) ||
+         (op->is_intrinsic(Call::shuffle_vector)))) {
       chk_call = 0;
     }
     if (chk_call > 0) {
