@@ -97,8 +97,7 @@ class LowerRandom : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic &&
-            op->name == Call::random) {
+        if (op->is_intrinsic(Call::random)) {
             vector<Expr> args = op->args;
             args.insert(args.end(), extra_args.begin(), extra_args.end());
             if (op->type == Float(32)) {

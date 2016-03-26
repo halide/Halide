@@ -31,7 +31,7 @@ private:
 
         // Calls inside of an address_of don't count, but we want to
         // visit the args of the inner call.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
             const Load *l = op->args[0].as<Load>();
