@@ -697,9 +697,9 @@ CodeGen_Hexagon::getHighAndLowVectors(Expr DoubleVec) {
     Lo = Broadcast::make(B->value, NumElements);
   } else {
     Hi = Call::make(NewT, Call::get_high_register, {DoubleVec},
-                    Call::Intrinsic);
+                    Call::PureIntrinsic);
     Lo = Call::make(NewT, Call::get_low_register, {DoubleVec},
-                    Call::Intrinsic);
+                    Call::PureIntrinsic);
   }
   return {Hi, Lo};
 }
@@ -748,9 +748,9 @@ CodeGen_Hexagon::slice_into_halves(Expr a) {
       ShuffleArgsAHigh.push_back(i + NumElements);
     }
     A_low = Call::make(NewT, Call::shuffle_vector, ShuffleArgsALow,
-                       Call::Intrinsic);
+                       Call::PureIntrinsic);
     A_high = Call::make(NewT, Call::shuffle_vector, ShuffleArgsAHigh,
-                        Call::Intrinsic);
+                        Call::PureIntrinsic);
   }
 
   // use high/low ordering to match getHighAndLowVectors
@@ -1906,27 +1906,30 @@ void CodeGen_Hexagon::visit(const Cast *op) {
   return;
 }
 void CodeGen_Hexagon::visit(const Call *op) {
-    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+    internal_assert(op->call_type == Call::Extern ||
+                    op->call_type == Call::Intrinsic ||
+                    op->call_type == Call::PureExtern ||
+                    op->call_type == Call::PureIntrinsic)
         << "Can only codegen extern calls and intrinsics\n";
 
     bool B128 = target.has_feature(Halide::Target::HVX_128);
 
-    if (op->call_type == Call::Intrinsic && op->type.is_vector()) {
+    if (op->type.is_vector()) {
         Intrinsic::ID intrin = Intrinsic::not_intrinsic;
         int intrin_lanes = native_vector_bits() / op->type.bits();
-        if (op->name == Call::bitwise_and) {
+        if (op->is_intrinsic(Call::bitwise_and)) {
             internal_assert(op->args.size() == 2);
             intrin = IPICK(Intrinsic::hexagon_V6_vand);
-        } else if (op->name == Call::bitwise_xor) {
+        } else if (op->is_intrinsic(Call::bitwise_xor)) {
             internal_assert(op->args.size() == 2);
             intrin = IPICK(Intrinsic::hexagon_V6_vxor);
-        } else if (op->name == Call::bitwise_or) {
+        } else if (op->is_intrinsic(Call::bitwise_or)) {
             internal_assert(op->args.size() == 2);
             intrin = IPICK(Intrinsic::hexagon_V6_vor);
-        } else if (op->name == Call::bitwise_not) {
+        } else if (op->is_intrinsic(Call::bitwise_not)) {
             internal_assert(op->args.size() == 1);
             intrin = IPICK(Intrinsic::hexagon_V6_vnot);
-        } else if (op->name == Call::absd) {
+        } else if (op->is_intrinsic(Call::absd)) {
             internal_assert(op->args.size() == 2);
             intrin = select_intrinsic(op->args[0].type(),
                                                 Intrinsic::not_intrinsic,
@@ -1946,19 +1949,19 @@ void CodeGen_Hexagon::visit(const Call *op) {
   if (B128) VecSize *= 2;
 
   if (!value) {
-    if (op->name == Call::get_high_register) {
+    if (op->is_intrinsic(Call::get_high_register)) {
       internal_assert(op->type.is_vector());
       internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
       Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_hi), {codegen(op->args[0])});
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
-    } else if (op->name == Call::get_low_register) {
+    } else if (op->is_intrinsic(Call::get_low_register)) {
       internal_assert(op->type.is_vector());
       internal_assert((op->type.bytes() * op->type.lanes()) == VecSize);
       Value *Call = callLLVMIntrinsic(IPICK(Intrinsic::hexagon_V6_lo), {codegen(op->args[0])});
       value = convertValueType(Call, llvm_type_of(op->type));
       return;
-    } else if (op->name == Call::interleave_vectors) {
+    } else if (op->is_intrinsic(Call::interleave_vectors)) {
       if (isDblVector(op->type, native_vector_bits()) &&
                       op->args.size() == 2) {
         Expr arg0 = op->args[0];
@@ -1978,8 +1981,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
     int chk_call = show_chk;
     // Only check these calls at higher levels
     if ((chk_call < 2) &&
-        ((op->name == Call::interleave_vectors) ||
-         (op->name == Call::shuffle_vector))) {
+        ((op->is_intrinsic(Call::interleave_vectors)) ||
+         (op->is_intrinsic(Call::shuffle_vector)))) {
       chk_call = 0;
     }
     if (chk_call > 0) {
