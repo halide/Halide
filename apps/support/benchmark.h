@@ -39,6 +39,11 @@ double benchmark(int samples, int iterations, F op) {
 #ifndef NOCHRONO
 #include <chrono>
 #endif
+#ifdef PCYCLES
+#if defined(__hexagon__)
+#include "io.h"
+#endif
+#endif
 
 template <typename F>
 double benchmark(int samples, int iterations, F op) {
@@ -46,6 +51,12 @@ double benchmark(int samples, int iterations, F op) {
     for (int i = 0; i < samples; i++) {
 #ifndef NOCHRONO
         auto t1 = std::chrono::high_resolution_clock::now();
+#endif
+#ifdef PCYCLES
+#if defined(__hexagon__)
+        RESET_PMU();
+        long long start_cycles = READ_PCYCLES();
+#endif
 #endif
         for (int j = 0; j < iterations; j++) {
             op();
@@ -55,6 +66,13 @@ double benchmark(int samples, int iterations, F op) {
         double dt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
 #else
         double dt = 0;
+#endif
+#ifdef PCYCLES
+#if defined(__hexagon__)
+        long long total_cycles = READ_PCYCLES() - start_cycles;
+        DUMP_PMU();
+        dt = total_cycles;
+#endif
 #endif
         if (dt < best) best = dt;
     }
