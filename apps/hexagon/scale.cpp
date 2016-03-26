@@ -9,6 +9,8 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
 
+    std::cout << "Target: " << target.to_string() << "\n";
+
     Var x("x"), y("y"), c("c");
 
     // Takes an 8-bit input
