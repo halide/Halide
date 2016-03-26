@@ -271,7 +271,7 @@ Expr make_bool(bool val, int w) {
 
 Expr make_zero(Type t) {
     if (t.is_handle()) {
-        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
     } else {
         return make_const(t, 0);
     }
@@ -441,8 +441,8 @@ Expr halide_log(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
-    Expr nan = Call::make(type, "nan_f32", {}, Call::Extern);
-    Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::Extern);
+    Expr nan = Call::make(type, "nan_f32", {}, Call::PureExtern);
+    Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::PureExtern);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
@@ -511,7 +511,7 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = Call::make(type, "inf_f32", {}, Call::Extern);
+    Expr inf = Call::make(type, "inf_f32", {}, Call::PureExtern);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
@@ -665,7 +665,7 @@ Expr print(const std::vector<Expr> &args) {
     // Return the first argument.
     Expr result =
         Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                             {print_call, args[0]}, Internal::Call::Intrinsic);
+                             {print_call, args[0]}, Internal::Call::PureIntrinsic);
     return result;
 }
 
@@ -674,7 +674,7 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
                                 {condition, p, args[0]},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
@@ -682,7 +682,7 @@ Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
     args.push_back(result);
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
     return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
-                                args, Internal::Call::Intrinsic);
+                                args, Internal::Call::PureIntrinsic);
 }
 
 }

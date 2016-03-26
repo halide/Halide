@@ -766,295 +766,297 @@ void CodeGen_C::visit(const FloatImm *op) {
 
 void CodeGen_C::visit(const Call *op) {
 
-    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+    internal_assert(op->call_type == Call::Extern ||
+                    op->call_type == Call::PureExtern ||
+                    op->call_type == Call::Intrinsic ||
+                    op->call_type == Call::PureIntrinsic)
         << "Can only codegen extern calls and intrinsics\n";
 
     ostringstream rhs;
 
     // Handle intrinsics first
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::debug_to_file) {
-            internal_assert(op->args.size() == 3);
-            const StringImm *string_imm = op->args[0].as<StringImm>();
-            internal_assert(string_imm);
-            string filename = string_imm->value;
-            string typecode = print_expr(op->args[1]);
-            string buffer = print_name(print_expr(op->args[2]));
+    if (op->is_intrinsic(Call::debug_to_file)) {
+        internal_assert(op->args.size() == 3);
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        internal_assert(string_imm);
+        string filename = string_imm->value;
+        string typecode = print_expr(op->args[1]);
+        string buffer = print_name(print_expr(op->args[2]));
 
-            rhs << "halide_debug_to_file(";
-            rhs << (have_user_context ? "__user_context_" : "nullptr");
-            rhs << ", \"" + filename + "\", " + typecode;
-            rhs << ", (struct buffer_t *)" << buffer;
-            rhs << ")";
-        } else if (op->name == Call::bitwise_and) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " & " << a1;
-        } else if (op->name == Call::bitwise_xor) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " ^ " << a1;
-        } else if (op->name == Call::bitwise_or) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " | " << a1;
-        } else if (op->name == Call::bitwise_not) {
-            internal_assert(op->args.size() == 1);
-            rhs << "~" << print_expr(op->args[0]);
-        } else if (op->name == Call::reinterpret) {
-            internal_assert(op->args.size() == 1);
-            rhs << print_reinterpret(op->type, op->args[0]);
-        } else if (op->name == Call::shift_left) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " << " << a1;
-        } else if (op->name == Call::shift_right) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " >> " << a1;
-        } else if (op->name == Call::rewrite_buffer) {
-            int dims = ((int)(op->args.size())-2)/3;
-            (void)dims; // In case internal_assert is ifdef'd to do nothing
-            internal_assert((int)(op->args.size()) == dims*3 + 2);
-            internal_assert(dims <= 4);
-            vector<string> args(op->args.size());
-            const Variable *v = op->args[0].as<Variable>();
-            internal_assert(v);
-            args[0] = print_name(v->name);
-            for (size_t i = 1; i < op->args.size(); i++) {
-                args[i] = print_expr(op->args[i]);
-            }
-            rhs << "halide_rewrite_buffer(";
-            for (size_t i = 0; i < 14; i++) {
-                if (i > 0) rhs << ", ";
-                if (i < args.size()) {
-                    rhs << args[i];
-                } else {
-                    rhs << '0';
-                }
-            }
-            rhs << ")";
-        } else if (op->name == Call::lerp) {
-            internal_assert(op->args.size() == 3);
-            Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-            rhs << print_expr(e);
-        } else if (op->name == Call::absd) {
-            internal_assert(op->args.size() == 2);
-            Expr a = op->args[0];
-            Expr b = op->args[1];
-            Expr e = select(a < b, b - a, a - b);
-            rhs << print_expr(e);
-        } else if (op->name == Call::null_handle) {
-            rhs << "nullptr";
-        } else if (op->name == Call::address_of) {
-            const Load *l = op->args[0].as<Load>();
-            internal_assert(op->args.size() == 1 && l);
-            rhs << "(("
-                << print_type(l->type.element_of()) // index is in elements, not vectors.
-                << " *)"
-                << print_name(l->name)
-                << " + "
-                << print_expr(l->index)
-                << ")";
-        } else if (op->name == Call::return_second) {
-            internal_assert(op->args.size() == 2);
-            string arg0 = print_expr(op->args[0]);
-            string arg1 = print_expr(op->args[1]);
-            rhs << "(" << arg0 << ", " << arg1 << ")";
-        } else if (op->name == Call::if_then_else) {
-            internal_assert(op->args.size() == 3);
-
-            string result_id = unique_name('_');
-
-            do_indent();
-            stream << print_type(op->args[1].type())
-                   << " " << result_id << ";\n";
-
-            string cond_id = print_expr(op->args[0]);
-
-            do_indent();
-            stream << "if (" << cond_id << ")\n";
-            open_scope();
-            string true_case = print_expr(op->args[1]);
-            do_indent();
-            stream << result_id << " = " << true_case << ";\n";
-            close_scope("if " + cond_id);
-            do_indent();
-            stream << "else\n";
-            open_scope();
-            string false_case = print_expr(op->args[2]);
-            do_indent();
-            stream << result_id << " = " << false_case << ";\n";
-            close_scope("if " + cond_id + " else");
-
-            rhs << result_id;
-        } else if (op->name == Call::copy_buffer_t) {
-            internal_assert(op->args.size() == 1);
-            string arg = print_expr(op->args[0]);
-            string buf_id = unique_name('B');
-            stream << "buffer_t " << buf_id << " = *((buffer_t *)(" << arg << "))\n";
-            rhs << "(&" << buf_id << ")";
-        } else if (op->name == Call::create_buffer_t) {
-            internal_assert(op->args.size() >= 2);
-            vector<string> args;
-            args.push_back(print_expr(op->args[0]));
-            args.push_back(print_expr(op->args[1].type().bytes()));
-            for (size_t i = 2; i < op->args.size(); i++) {
-                args.push_back(print_expr(op->args[i]));
-            }
-            string buf_id = unique_name('B');
-            do_indent();
-            stream << "buffer_t " << buf_id << " = {0};\n";
-            do_indent();
-            stream << buf_id << ".host = (uint8_t *)(" << args[0] << ");\n";
-            do_indent();
-            stream << buf_id << ".elem_size = " << args[1] << ";\n";
-            int dims = ((int)op->args.size() - 2)/3;
-            for (int i = 0; i < dims; i++) {
-                do_indent();
-                stream << buf_id << ".min[" << i << "] = " << args[i*3+2] << ";\n";
-                do_indent();
-                stream << buf_id << ".extent[" << i << "] = " << args[i*3+3] << ";\n";
-                do_indent();
-                stream << buf_id << ".stride[" << i << "] = " << args[i*3+4] << ";\n";
-            }
-            rhs << "(&" + buf_id + ")";
-        } else if (op->name == Call::extract_buffer_max) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << "(((buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
-                "((buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
-        } else if (op->name == Call::extract_buffer_min) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
-        } else if (op->name == Call::extract_buffer_host) {
-            internal_assert(op->args.size() == 1);
-            string a0 = print_expr(op->args[0]);
-            rhs << "((buffer_t *)(" << a0 << "))->host";
-        } else if (op->name == Call::set_host_dirty) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            do_indent();
-            stream << "((buffer_t *)(" << a0 << "))->host_dirty = " << a1 << ";\n";
-            rhs << "0";
-        } else if (op->name == Call::set_dev_dirty) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            do_indent();
-            stream << "((buffer_t *)(" << a0 << "))->dev_dirty = " << a1 << ";\n";
-            rhs << "0";
-        } else if (op->name == Call::abs) {
-            internal_assert(op->args.size() == 1);
-            Expr a0 = op->args[0];
-            rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
-        } else if (op->name == Call::memoize_expr) {
-            internal_assert(op->args.size() >= 1);
-            string arg = print_expr(op->args[0]);
-            rhs << "(" << arg << ")";
-        } else if (op->name == Call::copy_memory) {
-            internal_assert(op->args.size() == 3);
-            string dest = print_expr(op->args[0]);
-            string src = print_expr(op->args[1]);
-            string size = print_expr(op->args[2]);
-            rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
-        } else if (op->name == Call::make_struct) {
-            // Emit a line something like:
-            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
-
-            // Get the args
-            vector<string> values;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                values.push_back(print_expr(op->args[i]));
-            }
-            do_indent();
-            stream << "struct {";
-            // List the types.
-            for (size_t i = 0; i < op->args.size(); i++) {
-                stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
-            }
-            string struct_name = unique_name('s');
-            stream << "}  " << struct_name << " = {";
-            // List the values.
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) stream << ", ";
-                stream << values[i];
-            }
-            stream << "};\n";
-            // Return a pointer to it.
-            rhs << "(&" << struct_name << ")";
-        } else if (op->name == Call::stringify) {
-            // Rewrite to an snprintf
-            vector<string> printf_args;
-            string format_string = "";
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Type t = op->args[i].type();
-                printf_args.push_back(print_expr(op->args[i]));
-                if (t.is_int()) {
-                    format_string += "%lld";
-                    printf_args[i] = "(long long)(" + printf_args[i] + ")";
-                } else if (t.is_uint()) {
-                    format_string += "%llu";
-                    printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
-                } else if (t.is_float()) {
-                    if (t.bits() == 32) {
-                        format_string += "%f";
-                    } else {
-                        format_string += "%e";
-                    }
-                } else if (op->args[i].as<StringImm>()) {
-                    format_string += "%s";
-                } else {
-                    internal_assert(t.is_handle());
-                    format_string += "%p";
-                }
-
-            }
-            string buf_name = unique_name('b');
-            do_indent();
-            stream << "char " << buf_name << "[1024];\n";
-            do_indent();
-            stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\"";
-            for (size_t i = 0; i < printf_args.size(); i++) {
-                stream << ", " << printf_args[i];
-            }
-            stream << ");\n";
-            rhs << buf_name;
-
-        } else if (op->name == Call::register_destructor) {
-            internal_assert(op->args.size() == 2);
-            const StringImm *fn = op->args[0].as<StringImm>();
-            internal_assert(fn);
-            string arg = print_expr(op->args[1]);
-
-            string call =
-                fn->value + "(" +
-                (have_user_context ? "__user_context_, " : "nullptr, ")
-                + "arg);";
-
-            do_indent();
-            // Make a struct on the stack that calls the given function as a destructor
-            string struct_name = unique_name('s');
-            string instance_name = unique_name('d');
-            stream << "struct " << struct_name << "{ "
-                   << "void *arg; "
-                   << struct_name << "(void *a) : arg((void *)a) {} "
-                   << "~" << struct_name << "() {" << call << "}"
-                   << "} " << instance_name << "(" << arg << ");\n";
-            rhs << print_expr(0);
-        } else {
-            // TODO: other intrinsics
-            internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
+        rhs << "halide_debug_to_file(";
+        rhs << (have_user_context ? "__user_context_" : "nullptr");
+        rhs << ", \"" + filename + "\", " + typecode;
+        rhs << ", (struct buffer_t *)" << buffer;
+        rhs << ")";
+    } else if (op->is_intrinsic(Call::bitwise_and)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " & " << a1;
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " ^ " << a1;
+    } else if (op->is_intrinsic(Call::bitwise_or)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " | " << a1;
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        internal_assert(op->args.size() == 1);
+        rhs << "~" << print_expr(op->args[0]);
+    } else if (op->is_intrinsic(Call::reinterpret)) {
+        internal_assert(op->args.size() == 1);
+        rhs << print_reinterpret(op->type, op->args[0]);
+    } else if (op->is_intrinsic(Call::shift_left)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " << " << a1;
+    } else if (op->is_intrinsic(Call::shift_right)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " >> " << a1;
+    } else if (op->is_intrinsic(Call::rewrite_buffer)) {
+        int dims = ((int)(op->args.size())-2)/3;
+        (void)dims; // In case internal_assert is ifdef'd to do nothing
+        internal_assert((int)(op->args.size()) == dims*3 + 2);
+        internal_assert(dims <= 4);
+        vector<string> args(op->args.size());
+        const Variable *v = op->args[0].as<Variable>();
+        internal_assert(v);
+        args[0] = print_name(v->name);
+        for (size_t i = 1; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
         }
+        rhs << "halide_rewrite_buffer(";
+        for (size_t i = 0; i < 14; i++) {
+            if (i > 0) rhs << ", ";
+            if (i < args.size()) {
+                rhs << args[i];
+            } else {
+                rhs << '0';
+            }
+        }
+        rhs << ")";
+    } else if (op->is_intrinsic(Call::lerp)) {
+        internal_assert(op->args.size() == 3);
+        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        rhs << print_expr(e);
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+        Expr e = select(a < b, b - a, a - b);
+        rhs << print_expr(e);
+    } else if (op->is_intrinsic(Call::null_handle)) {
+        rhs << "nullptr";
+    } else if (op->is_intrinsic(Call::address_of)) {
+        const Load *l = op->args[0].as<Load>();
+        internal_assert(op->args.size() == 1 && l);
+        rhs << "(("
+            << print_type(l->type.element_of()) // index is in elements, not vectors.
+            << " *)"
+            << print_name(l->name)
+            << " + "
+            << print_expr(l->index)
+            << ")";
+    } else if (op->is_intrinsic(Call::return_second)) {
+        internal_assert(op->args.size() == 2);
+        string arg0 = print_expr(op->args[0]);
+        string arg1 = print_expr(op->args[1]);
+        rhs << "(" << arg0 << ", " << arg1 << ")";
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        internal_assert(op->args.size() == 3);
+
+        string result_id = unique_name('_');
+
+        do_indent();
+        stream << print_type(op->args[1].type())
+               << " " << result_id << ";\n";
+
+        string cond_id = print_expr(op->args[0]);
+
+        do_indent();
+        stream << "if (" << cond_id << ")\n";
+        open_scope();
+        string true_case = print_expr(op->args[1]);
+        do_indent();
+        stream << result_id << " = " << true_case << ";\n";
+        close_scope("if " + cond_id);
+        do_indent();
+        stream << "else\n";
+        open_scope();
+        string false_case = print_expr(op->args[2]);
+        do_indent();
+        stream << result_id << " = " << false_case << ";\n";
+        close_scope("if " + cond_id + " else");
+
+        rhs << result_id;
+    } else if (op->is_intrinsic(Call::copy_buffer_t)) {
+        internal_assert(op->args.size() == 1);
+        string arg = print_expr(op->args[0]);
+        string buf_id = unique_name('B');
+        stream << "buffer_t " << buf_id << " = *((buffer_t *)(" << arg << "))\n";
+        rhs << "(&" << buf_id << ")";
+    } else if (op->is_intrinsic(Call::create_buffer_t)) {
+        internal_assert(op->args.size() >= 2);
+        vector<string> args;
+        args.push_back(print_expr(op->args[0]));
+        args.push_back(print_expr(op->args[1].type().bytes()));
+        for (size_t i = 2; i < op->args.size(); i++) {
+            args.push_back(print_expr(op->args[i]));
+        }
+        string buf_id = unique_name('B');
+        do_indent();
+        stream << "buffer_t " << buf_id << " = {0};\n";
+        do_indent();
+        stream << buf_id << ".host = (uint8_t *)(" << args[0] << ");\n";
+        do_indent();
+        stream << buf_id << ".elem_size = " << args[1] << ";\n";
+        int dims = ((int)op->args.size() - 2)/3;
+        for (int i = 0; i < dims; i++) {
+            do_indent();
+            stream << buf_id << ".min[" << i << "] = " << args[i*3+2] << ";\n";
+            do_indent();
+            stream << buf_id << ".extent[" << i << "] = " << args[i*3+3] << ";\n";
+            do_indent();
+            stream << buf_id << ".stride[" << i << "] = " << args[i*3+4] << ";\n";
+        }
+        rhs << "(&" + buf_id + ")";
+    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << "(((buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
+            "((buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
+    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+    } else if (op->is_intrinsic(Call::extract_buffer_host)) {
+        internal_assert(op->args.size() == 1);
+        string a0 = print_expr(op->args[0]);
+        rhs << "((buffer_t *)(" << a0 << "))->host";
+    } else if (op->is_intrinsic(Call::set_host_dirty)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        do_indent();
+        stream << "((buffer_t *)(" << a0 << "))->host_dirty = " << a1 << ";\n";
+        rhs << "0";
+    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        do_indent();
+        stream << "((buffer_t *)(" << a0 << "))->dev_dirty = " << a1 << ";\n";
+        rhs << "0";
+    } else if (op->is_intrinsic(Call::abs)) {
+        internal_assert(op->args.size() == 1);
+        Expr a0 = op->args[0];
+        rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
+    } else if (op->is_intrinsic(Call::memoize_expr)) {
+        internal_assert(op->args.size() >= 1);
+        string arg = print_expr(op->args[0]);
+        rhs << "(" << arg << ")";
+    } else if (op->is_intrinsic(Call::copy_memory)) {
+        internal_assert(op->args.size() == 3);
+        string dest = print_expr(op->args[0]);
+        string src = print_expr(op->args[1]);
+        string size = print_expr(op->args[2]);
+        rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
+    } else if (op->is_intrinsic(Call::make_struct)) {
+        // Emit a line something like:
+        // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+
+        // Get the args
+        vector<string> values;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            values.push_back(print_expr(op->args[i]));
+        }
+        do_indent();
+        stream << "struct {";
+        // List the types.
+        for (size_t i = 0; i < op->args.size(); i++) {
+            stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
+        }
+        string struct_name = unique_name('s');
+        stream << "}  " << struct_name << " = {";
+        // List the values.
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) stream << ", ";
+            stream << values[i];
+        }
+        stream << "};\n";
+        // Return a pointer to it.
+        rhs << "(&" << struct_name << ")";
+    } else if (op->is_intrinsic(Call::stringify)) {
+        // Rewrite to an snprintf
+        vector<string> printf_args;
+        string format_string = "";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            Type t = op->args[i].type();
+            printf_args.push_back(print_expr(op->args[i]));
+            if (t.is_int()) {
+                format_string += "%lld";
+                printf_args[i] = "(long long)(" + printf_args[i] + ")";
+            } else if (t.is_uint()) {
+                format_string += "%llu";
+                printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
+            } else if (t.is_float()) {
+                if (t.bits() == 32) {
+                    format_string += "%f";
+                } else {
+                    format_string += "%e";
+                }
+            } else if (op->args[i].as<StringImm>()) {
+                format_string += "%s";
+            } else {
+                internal_assert(t.is_handle());
+                format_string += "%p";
+            }
+
+        }
+        string buf_name = unique_name('b');
+        do_indent();
+        stream << "char " << buf_name << "[1024];\n";
+        do_indent();
+        stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\"";
+        for (size_t i = 0; i < printf_args.size(); i++) {
+            stream << ", " << printf_args[i];
+        }
+        stream << ");\n";
+        rhs << buf_name;
+
+    } else if (op->is_intrinsic(Call::register_destructor)) {
+        internal_assert(op->args.size() == 2);
+        const StringImm *fn = op->args[0].as<StringImm>();
+        internal_assert(fn);
+        string arg = print_expr(op->args[1]);
+
+        string call =
+            fn->value + "(" +
+            (have_user_context ? "__user_context_, " : "nullptr, ")
+            + "arg);";
+
+        do_indent();
+        // Make a struct on the stack that calls the given function as a destructor
+        string struct_name = unique_name('s');
+        string instance_name = unique_name('d');
+        stream << "struct " << struct_name << "{ "
+               << "void *arg; "
+               << struct_name << "(void *a) : arg((void *)a) {} "
+               << "~" << struct_name << "() {" << call << "}"
+               << "} " << instance_name << "(" << arg << ");\n";
+        rhs << print_expr(0);
+    } else if (op->call_type == Call::Intrinsic ||
+               op->call_type == Call::PureIntrinsic) {
+        // TODO: other intrinsics
+        internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
 
     } else {
         // Generic calls

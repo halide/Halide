@@ -1,5 +1,7 @@
 #include "Halide.h"
+#ifdef HEXAGON
 #include "halide-hexagon-setup.h"
+#endif
 
 using namespace Halide;
 
@@ -27,10 +29,13 @@ Func upsample(Func f) {
 }
 
 int main(int argc, char **argv) {
-
+#ifdef HEXAGON
     Target target;// = get_target_from_environment();
     setupHexagonTarget(target, LOG2VLEN==7 ? Target::HVX_128 : Target::HVX_64);
     commonPerfSetup(target);
+#else
+    Target target = get_target_from_environment();
+#endif
     
     /* THE ALGORITHM */
 
@@ -126,7 +131,7 @@ int main(int argc, char **argv) {
 
     /* THE SCHEDULE */
     remap.compute_root();
-#if 0
+
     if (target.has_gpu_feature()) {
         // gpu schedule
         output.compute_root().gpu_tile(x, y, 16, 8, DeviceAPI::Default_GPU);
@@ -142,10 +147,61 @@ int main(int argc, char **argv) {
             }
             outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
         }
-    } else
+    } else {
+#ifndef SCHEDULE
+#error "Schedule not defined."
 #endif
-    {
+#if (SCHEDULE == 0)
         // cpu schedule
+        Var yi;
+        output.parallel(y, 32).vectorize(x, 8);
+        gray.compute_root().parallel(y, 32).vectorize(x, 8);
+        for (int j = 0; j < 4; j++) {
+            if (j > 0) {
+                inGPyramid[j]
+                    .compute_root().parallel(y, 32).vectorize(x, 8);
+                gPyramid[j]
+                    .compute_root().reorder_storage(x, k, y)
+                    .reorder(k, y).parallel(y, 8).vectorize(x, 8);
+            }
+            outGPyramid[j].compute_root().parallel(y, 32).vectorize(x, 8);
+        }
+        for (int j = 4; j < J; j++) {
+            inGPyramid[j].compute_root();
+            gPyramid[j].compute_root().parallel(k);
+            outGPyramid[j].compute_root();
+        }
+#elif (SCHEDULE == 1)
+        // Scalar schedule
+        gray.compute_root();
+        for (int j = 0; j < J; j++) {
+            if (j > 0) {
+                inGPyramid[j].compute_root();
+                gPyramid[j].compute_root();
+            }
+            outGPyramid[j].compute_root();
+        }
+#elif (SCHEDULE == 2)
+        // Non-vector parallel schedule
+        output.parallel(y, 32);
+        gray.compute_root().parallel(y, 32);
+        for (int j = 0; j < 4; j++) {
+            if (j > 0) {
+                inGPyramid[j]
+                    .compute_root().parallel(y, 32);
+                gPyramid[j]
+                    .compute_root().reorder_storage(x, k, y)
+                    .reorder(k, y).parallel(y, 8);
+            }
+            outGPyramid[j].compute_root().parallel(y, 32);
+        }
+        for (int j = 4; j < J; j++) {
+            inGPyramid[j].compute_root();
+            gPyramid[j].compute_root().parallel(k);
+            outGPyramid[j].compute_root();
+        }
+#elif (SCHEDULE == 3)
+        // HVX vector schedule
         Var yi;
         int vec_lanes_16 = target.natural_vector_size<uint16_t>();
         int vec_lanes_8  = target.natural_vector_size<uint8_t>();
@@ -166,9 +222,12 @@ int main(int argc, char **argv) {
             gPyramid[j].compute_root().parallel(k);
             outGPyramid[j].compute_root();
         }
+#else
+#error "Schedule out of range."
+#endif
     }
 
-//  output.compile_to_bitcode("x.bc",  {levels, alpha, beta, input}, target);
+//  output.compile_to_bitcode("ll.bc",  {levels, alpha, beta, input}, target);
 
     output.compile_to_file("local_laplacian", {levels, alpha, beta, input}, target);
 
