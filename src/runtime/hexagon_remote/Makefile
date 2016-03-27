@@ -69,7 +69,7 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 
 %/hexagon_sim_remote: %/sim_remote.o
 	mkdir -p $*
-	$(CXX-$*) $^ $(CCFLAGS-$*) -o $@ -lhexagon
+	$(CXX-$*) -mv60 -G0 -mG0lib $^ $(CCFLAGS-$*) -o $@ -lhexagon -ldl
 
 host/libhalide_hexagon_host.so: host/sim_host.o
 	mkdir -p host

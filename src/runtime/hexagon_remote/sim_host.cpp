@@ -93,21 +93,19 @@ int send_message(int msg, const std::vector<int> &arguments) {
 
     HEXAPI_Status status;
 
-    HEX_4u_t remote_msg, remote_args, remote_ret;
-
+    HEX_4u_t remote_msg = 0;
     status = sim->ReadSymbolValue("rpc_call", &remote_msg);
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
+    if (0 != write_memory(remote_msg, &msg, 4)) { return -1; }
+
+#if 0
+    HEX_4u_t remote_args = 0;
     status = sim->ReadSymbolValue("rpc_args", &remote_args);
     if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
-        return -1;
-    }
-    status = sim->ReadSymbolValue("rpc_ret", &remote_ret);
-    if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
+        printf("HexagonWrapper::ReadSymbolValue(rpc_args) failed: %d\n", status);
         return -1;
     }
 
@@ -115,8 +113,27 @@ int send_message(int msg, const std::vector<int> &arguments) {
     //read_memory(&remote_args, remote_args, 4);
 
     // Set the message and arguments.
-    if (0 != write_memory(remote_msg, &msg, 4)) { return -1; }
     if (0 != write_memory(remote_args, &arguments[0], arguments.size() * 4)) { return -1; }
+#else
+    // Can't seem to write to an array. Pass arguments to individual variables.
+    for (size_t i = 0; i < arguments.size(); i++) {
+        HEX_4u_t remote_arg = 0;
+        std::string rpc_arg = "rpc_arg" + std::to_string(i);
+        status = sim->ReadSymbolValue(rpc_arg.c_str(), &remote_arg);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ReadSymbolValue(%s) failed: %d\n", rpc_arg.c_str(), status);
+            return -1;
+        }
+        if (0 != write_memory(remote_arg, &arguments[i], 4)) { return -1; }
+    }
+#endif
+
+    HEX_4u_t remote_ret = 0;
+    status = sim->ReadSymbolValue("rpc_ret", &remote_ret);
+    if (status != HEX_STAT_SUCCESS) {
+        printf("HexagonWrapper::ReadSymbolValue(rpc_ret) failed: %d\n", status);
+        return -1;
+    }
 
     HEXAPI_CoreState state;
     if (msg == Message::Break) {
