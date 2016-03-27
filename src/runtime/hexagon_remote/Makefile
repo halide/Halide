@@ -52,7 +52,7 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 # Build rules for the hexagon implementation.
 %/libhalide_hexagon_remote_skel.so: %/remote.o %/halide_hexagon_remote_skel.o
 	mkdir -p $*
-	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/remote.o $*/halide_hexagon_remote_skel.o -Wl,--end-group
+	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/remote.o $*/halide_hexagon_remote_skel.o -Wl,--end-group
 
 %/libhalide_hexagon_host.so: halide_hexagon_remote_stub.c
 	mkdir -p $*
@@ -69,7 +69,7 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 
 %/hexagon_sim_remote: %/sim_remote.o
 	mkdir -p $*
-	$(CXX-$*) -mv60 -G0 -mG0lib $^ $(CCFLAGS-$*) -o $@ -lhexagon -ldl
+	$(CXX-$*) -m$* -G0 -mG0lib $^ $(CCFLAGS-$*) -o $@ -lhexagon -ldl
 
 host/libhalide_hexagon_host.so: host/sim_host.o
 	mkdir -p host
