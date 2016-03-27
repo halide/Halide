@@ -1,8 +1,9 @@
 #include "../HalideRuntime.h"
 #include "HexagonWrapper.h"
-#include "rpc_protocol.h"
+#include "sim_protocol.h"
 
 #include <vector>
+#include <sstream>
 #include <cassert>
 
 typedef unsigned int handle_t;
@@ -14,15 +15,24 @@ int init_sim() {
 
     sim = new HexagonWrapper(HEX_CPU_V60);
 
-    HEXAPI_Status status = sim->ConfigureExecutableBinary("libhalide_simulator_remote.so");
+    printf("HexagonWrapper::ConfigureExecutableBinary\n");
+    HEXAPI_Status status = sim->ConfigureExecutableBinary("halide_simulator_remote");
     if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ConfigureExecutableBinary failed: %d", status);
+        printf("HexagonWrapper::ConfigureExecutableBinary failed: %d\n", status);
         return -1;
     }
 
+    printf("HexagonWrapper::EndOfConfiguration\n");
     status = sim->EndOfConfiguration();
     if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::EndOfConfiguration failed: %d", status);
+        printf("HexagonWrapper::EndOfConfiguration failed: %d\n", status);
+        return -1;
+    }
+
+    printf("HexagonWrapper::LoadExecutableBinary\n");
+    status = sim->LoadExecutableBinary();
+    if (status != HEX_STAT_SUCCESS) {
+        printf("HexagonWrapper::LoadExecutableBinary failed: %d\n", status);
         return -1;
     }
 
@@ -34,10 +44,11 @@ int write_memory(int dest, const void *src, int size) {
 
     while (size > 0) {
         int next = std::min(size, 8);
-        HEXAPI_Status status = sim->WriteVirtual(dest, 0xFFFFFFFF, next,
-                                                 *reinterpret_cast<const HEX_8u_t*>(src));
+        // WriteMemory only works with powers of 2, so align down.
+        next = (next + (next / 2 - 1)) & ~(next / 2 - 1);
+        HEXAPI_Status status = sim->WriteMemory(dest, next, *reinterpret_cast<const HEX_8u_t*>(src));
         if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::WriteVirtual failed: %d", status);
+            printf("HexagonWrapper::WriteMemory failed: %d\n", status);
             return -1;
         }
 
@@ -53,9 +64,11 @@ int read_memory(void *dest, int src, int size) {
 
     while (size > 0) {
         int next = std::min(size, 8);
-        HEXAPI_Status status = sim->ReadVirtual(src, 0xFFFFFFFF, next, dest);
+        // WriteMemory only works with powers of 2, so align down.
+        next = (next + (next / 2 - 1)) & ~(next / 2 - 1);
+        HEXAPI_Status status = sim->ReadMemory(src, next, dest);
         if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::WriteVirtual failed: %d", status);
+            printf("HexagonWrapper::WriteMemory failed: %d\n", status);
             return -1;
         }
 
@@ -69,25 +82,36 @@ int read_memory(void *dest, int src, int size) {
 int send_message(int msg, const std::vector<int> &arguments) {
     assert(sim);
 
+    printf("send_message: %d", msg);
+    for (int i : arguments)
+        printf(" %d", i);
+    printf("\n");
+
     HEXAPI_Status status;
 
     HEX_4u_t remote_msg, remote_args, remote_ret;
 
     status = sim->ReadSymbolValue("rpc_call", &remote_msg);
     if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d", status);
+        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
     status = sim->ReadSymbolValue("rpc_args", &remote_args);
     if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d", status);
+        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
     status = sim->ReadSymbolValue("rpc_ret", &remote_ret);
     if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d", status);
+        printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
+
+    int remote_msg_value;
+    read_memory(&remote_msg_value, remote_msg, 4);
+
+    // remote_args is a pointer? Dereference?
+    //read_memory(&remote_args, remote_args, 4);
 
     // Set the message and arguments.
     if (0 != write_memory(remote_msg, &msg, 4)) { return -1; }
@@ -98,22 +122,23 @@ int send_message(int msg, const std::vector<int> &arguments) {
         HEX_4u_t result;
         state = sim->Run(&result);
         if (state != HEX_CORE_FINISHED) {
-            printf("HexagonWrapper::Run failed: %d", state);
+            printf("HexagonWrapper::Run failed: %d\n", state);
             return -1;
         }
         return 0;
     } else {
         do {
             HEX_4u_t cycles;
-            state = sim->StepTime(100, HEX_MILLISEC, &cycles);
+            state = sim->StepTime(100, HEX_MICROSEC, &cycles);
             read_memory(&msg, remote_msg, 4);
             if (msg == Message::None) {
                 HEX_4u_t ret = 0;
                 read_memory(&ret, remote_ret, 4);
+                printf("send_message result: %d\n", ret);
                 return ret;
             }
         } while (state == HEX_CORE_SUCCESS);
-        printf("HexagonWrapper::StepTime failed: %d", state);
+        printf("HexagonWrapper::StepTime failed: %d\n", state);
         return -1;
     }
 }
@@ -219,6 +244,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
          remote_input_buffersPtrs.data, input_buffersLen,
          remote_input_scalarsPtrs.data, input_scalarsLen,
          remote_output_buffersPtrs.data, output_buffersLen});
+
+    // Copy the outputs back.
+    for (int i = 0; i < output_buffersLen; i++)
+        read_memory(output_buffersPtrs[i].data, remote_output_buffers[i].data, output_buffersPtrs[i].dataLen);
 
     return ret;
 }

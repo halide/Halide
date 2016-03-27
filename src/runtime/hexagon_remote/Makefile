@@ -1,7 +1,7 @@
 .PHONY: clean
 
 COMMON_FLAGS = -I ${HEX_SDK_ROOT}inc/stddef
-COMMON_CCFLAGS = ${COMMON_FLAGS} -fPIC -O3 -I ${HEX_SDK_ROOT}lib/common/remote/ship/android_Release
+COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEX_SDK_ROOT}lib/common/remote/ship/android_Release
 QAICFLAGS = ${COMMON_FLAGS}
 
 CC-host = ${CXX}
@@ -24,6 +24,7 @@ CCFLAGS-host := ${CCFLAGS} -I ${HEX_TOOLS_ROOT}Tools/include/iss/ -fPIC \
 	-L${HEX_TOOLS_ROOT}Tools/lib/iss/ -Wl,-rpath,${HEX_TOOLS_ROOT}Tools/lib/iss -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEX_SDK_ROOT}inc
+
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
 	-L${HEX_SDK_ROOT}lib/common/remote/ship/android_Release_aarch64/ -ladsprpc \
 	${HEX_SDK_ROOT}lib/common/adspmsgd/ship/android_Release_aarch64/adspmsgd.a
@@ -42,39 +43,35 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 
 %/halide_hexagon_remote_skel.o: halide_hexagon_remote_skel.c
 	mkdir -p $*
-	$(CC-$*) $(CCFLAGS-$*) -c $^ -o $@
+	$(CC-$*) $(CCFLAGS-$*) -fPIC -c $^ -o $@
 
-%/halide_hexagon_remote.o: halide_hexagon_remote.cpp
+%/remote.o: remote.cpp
 	mkdir -p $*
-	$(CXX-$*) $(CCFLAGS-$*) -c halide_hexagon_remote.cpp -o $@
-
-%/runtime.o: runtime.cpp
-	mkdir -p $*
-	$(CXX-$*) $(CCFLAGS-$*) -c runtime.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c remote.cpp -o $@
 
 # Build rules for the hexagon implementation.
-%/libhalide_hexagon_remote_skel.so: %/halide_hexagon_remote.o %/halide_hexagon_remote_skel.o %/runtime.o
+%/libhalide_hexagon_remote_skel.so: %/remote.o %/halide_hexagon_remote_skel.o
 	mkdir -p $*
-	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/halide_hexagon_remote.o $*/halide_hexagon_remote_skel.o $*/runtime.o -Wl,--end-group
+	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so   -o $*/libhalide_hexagon_remote_skel.so -Wl,--start-group  $*/remote.o $*/halide_hexagon_remote_skel.o -Wl,--end-group
 
 %/libhalide_hexagon_host.so: halide_hexagon_remote_stub.c
 	mkdir -p $*
 	$(CC-$*) $(CCFLAGS-$*) $^ -shared -o $@
 
 # Build rules for the simulator implementation.
-%/rpc_remote.o: rpc_remote.cpp rpc_protocol.h
+%/sim_remote.o: sim_remote.cpp sim_protocol.h
 	mkdir -p $*
-	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c rpc_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -c sim_remote.cpp -o $@
 
-%/rpc_host.o: rpc_host.cpp rpc_protocol.h
+%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $*
-	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c rpc_host.cpp -o $@
+	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
-%/libhalide_simulator_remote.so: %/halide_hexagon_remote.o %/rpc_remote.o %/runtime.o
+%/hexagon_sim_remote: %/sim_remote.o
 	mkdir -p $*
-	$(CC-$*) -mv5 -O0 -mG0lib -G0 -fpic -shared -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -lc -Wl,-Map=halide_simulator_remote.so.map -Wl,-soname=libhalide_simulator_remote_skel.so   -o $*/libhalide_simulator_remote.so -Wl,--start-group  $*/halide_hexagon_remote.o $*/rpc_remote.o $*/runtime.o -Wl,--end-group
+	$(CXX-$*) $^ $(CCFLAGS-$*) -o $@ -lhexagon
 
-%/libhalide_simulator_host.so: %/rpc_host.o
+%/libhexagon_sim_host.so: %/sim_host.o
 	mkdir -p $*
 	$(CC-$*) $^ $(CCFLAGS-$*) -shared -o $@
 
