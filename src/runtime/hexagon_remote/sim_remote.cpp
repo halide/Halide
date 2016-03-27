@@ -69,19 +69,23 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     const char *filename = "/data/halide_kernels.so";
     FILE* fd = fopen(filename, "w");
     if (!fd) {
-        halide_print(NULL, "fopen failed");
+        halide_print(NULL, "fopen failed\n");
         return -1;
     }
 
     fwrite(code, codeLen, 1, fd);
     fclose(fd);
 #endif
+    halide_print(NULL, "dlopen ");
+    halide_print(NULL, filename);
+    halide_print(NULL, "\n");
     void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
     if (!lib) {
-        halide_print(NULL, "dlopen failed");
+        halide_print(NULL, "dlopen failed\n");
         halide_print(NULL, dlerror());
         return -1;
     }
+    halide_print(NULL, "dlopen succeeded!\n");
 
     // Initialize the runtime. The Hexagon runtime can't call any
     // system functions (because we can't link them), so we put all
@@ -90,7 +94,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
         dlclose(lib);
-        halide_print(NULL, "halide_noos_set_runtime not found in shared object");
+        halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
 
@@ -102,7 +106,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_do_task);
     if (result != 0) {
         dlclose(lib);
-        halide_print(NULL, "set_runtime failed");
+        halide_print(NULL, "set_runtime failed\n");
         return result;
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
@@ -168,7 +172,22 @@ void halide_print(void *user_context, const char *str) {
 
 // The global symbols with which we pass RPC commands and results.
 volatile int rpc_call = Message::Break;
+
+#if 0
 volatile int rpc_args[16];
+#define RPC_ARG(i) rpc_args[i]
+#else
+volatile int rpc_arg0;
+volatile int rpc_arg1;
+volatile int rpc_arg2;
+volatile int rpc_arg3;
+volatile int rpc_arg4;
+volatile int rpc_arg5;
+volatile int rpc_arg6;
+volatile int rpc_arg7;
+#define RPC_ARG(i) rpc_arg##i
+#endif
+
 volatile int rpc_ret = 0;
 
 }
@@ -181,38 +200,38 @@ int main(int argc, const char **argv) {
         case Message::None:
             break;
         case Message::Alloc:
-            printf("Alloc(%d)\n", rpc_args[0]);
-            rpc_ret = reinterpret_cast<int>(halide_malloc(NULL, rpc_args[0]));
+            printf("Alloc(%d)\n", RPC_ARG(0));
+            rpc_ret = reinterpret_cast<int>(halide_malloc(NULL, RPC_ARG(0)));
             break;
         case Message::Free:
             printf("Free\n");
-            halide_free(NULL, reinterpret_cast<void*>(rpc_args[0]));
+            halide_free(NULL, reinterpret_cast<void*>(RPC_ARG(0)));
             rpc_ret = 0;
             break;
         case Message::InitKernels:
             printf("InitKernels\n");
             rpc_ret = initialize_kernels(
-                reinterpret_cast<unsigned char*>(rpc_args[0]),
-                rpc_args[1],
-                reinterpret_cast<handle_t*>(rpc_args[2]));
+                reinterpret_cast<unsigned char*>(RPC_ARG(0)),
+                RPC_ARG(1),
+                reinterpret_cast<handle_t*>(RPC_ARG(2)));
             break;
         case Message::Run:
             printf("Run\n");
             rpc_ret = run(
-                static_cast<handle_t>(rpc_args[0]),
-                static_cast<handle_t>(rpc_args[1]),
-                reinterpret_cast<const buffer*>(rpc_args[2]),
-                rpc_args[3],
-                reinterpret_cast<const buffer*>(rpc_args[4]),
-                rpc_args[5],
-                reinterpret_cast<buffer*>(rpc_args[6]),
-                rpc_args[7]);
+                static_cast<handle_t>(RPC_ARG(0)),
+                static_cast<handle_t>(RPC_ARG(1)),
+                reinterpret_cast<const buffer*>(RPC_ARG(2)),
+                RPC_ARG(3),
+                reinterpret_cast<const buffer*>(RPC_ARG(4)),
+                RPC_ARG(5),
+                reinterpret_cast<buffer*>(RPC_ARG(6)),
+                RPC_ARG(7));
             break;
         case Message::ReleaseKernels:
             printf("ReleaseKernels\n");
             rpc_ret = release_kernels(
-                static_cast<handle_t>(rpc_args[0]),
-                rpc_args[1]);
+                static_cast<handle_t>(RPC_ARG(0)),
+                RPC_ARG(1));
             break;
         case Message::Break:
             printf("Break\n");
