@@ -187,6 +187,7 @@ int main(int argc, const char **argv) {
         case Message::Free:
             printf("Free\n");
             halide_free(NULL, reinterpret_cast<void*>(rpc_args[0]));
+            rpc_ret = 0;
             break;
         case Message::InitKernels:
             printf("InitKernels\n");

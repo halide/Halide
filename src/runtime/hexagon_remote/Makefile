@@ -71,9 +71,9 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $*
 	$(CXX-$*) $^ $(CCFLAGS-$*) -o $@ -lhexagon
 
-%/libhexagon_sim_host.so: %/sim_host.o
-	mkdir -p $*
-	$(CC-$*) $^ $(CCFLAGS-$*) -shared -o $@
+host/libhalide_hexagon_host.so: host/sim_host.o
+	mkdir -p host
+	$(CC-host) $^ $(CCFLAGS-host) -shared -o $@
 
 clean:
 	rm -rf halide_hexagon_remote.h halide_hexagon_remote_skel.c halide_hexagon_remote_stub.c
