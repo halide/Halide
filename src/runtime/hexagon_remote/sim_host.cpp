@@ -16,7 +16,7 @@ int init_sim() {
     sim = new HexagonWrapper(HEX_CPU_V60);
 
     printf("HexagonWrapper::ConfigureExecutableBinary\n");
-    HEXAPI_Status status = sim->ConfigureExecutableBinary("halide_simulator_remote");
+    HEXAPI_Status status = sim->ConfigureExecutableBinary("hexagon_sim_remote");
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::ConfigureExecutableBinary failed: %d\n", status);
         return -1;
@@ -43,9 +43,11 @@ int write_memory(int dest, const void *src, int size) {
     assert(sim);
 
     while (size > 0) {
-        int next = std::min(size, 8);
         // WriteMemory only works with powers of 2, so align down.
-        next = (next + (next / 2 - 1)) & ~(next / 2 - 1);
+        int next = 1;
+        if (size >= 8) next = 8;
+        else if (size >= 4) next = 4;
+        else if (size >= 2) next = 2;
         HEXAPI_Status status = sim->WriteMemory(dest, next, *reinterpret_cast<const HEX_8u_t*>(src));
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::WriteMemory failed: %d\n", status);
@@ -63,9 +65,11 @@ int read_memory(void *dest, int src, int size) {
     assert(sim);
 
     while (size > 0) {
-        int next = std::min(size, 8);
         // WriteMemory only works with powers of 2, so align down.
-        next = (next + (next / 2 - 1)) & ~(next / 2 - 1);
+        int next = 1;
+        if (size >= 8) next = 8;
+        else if (size >= 4) next = 4;
+        else if (size >= 2) next = 2;
         HEXAPI_Status status = sim->ReadMemory(src, next, dest);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::WriteMemory failed: %d\n", status);
@@ -107,10 +111,7 @@ int send_message(int msg, const std::vector<int> &arguments) {
         return -1;
     }
 
-    int remote_msg_value;
-    read_memory(&remote_msg_value, remote_msg, 4);
-
-    // remote_args is a pointer? Dereference?
+    // remote_args maybe is a pointer? Dereference?
     //read_memory(&remote_args, remote_args, 4);
 
     // Set the message and arguments.

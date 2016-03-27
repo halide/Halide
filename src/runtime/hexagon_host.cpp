@@ -62,22 +62,12 @@ WEAK int init_hexagon_runtime(void *user_context) {
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Load the library.
-    void *host_lib = NULL;
-    const char *lib_names[] = {
-        "libhalide_hexagon_host.so",    // real device
-        "libhalide_simulator_host.so",  // simulator
-    };
-    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
-        const char *lib_name = lib_names[i];
-        host_lib = halide_load_library(lib_name);
-        if (host_lib) {
-            debug(user_context) << "    Loaded hexagon runtime library: " << lib_name << "\n";
-            break;
-        }
-    }
-
+    const char *host_lib_name = "libhalide_hexagon_host.so";
+    debug(user_context) << "    halide_load_library('" << host_lib_name << "') -> \n";
+    void *host_lib = halide_load_library(host_lib_name);
+    debug(user_context) << "        " << host_lib << "\n";
     if (!host_lib) {
-        error(user_context) << "Hexagon remote runtime library not found.\n";
+        error(user_context) << host_lib_name << " not found.\n";
         return -1;
     }
 
@@ -144,6 +134,35 @@ WEAK int halide_hexagon_get_descriptor(void *user_context, int *fd, bool create 
     }
 }
 
+namespace {
+
+// This function writes the given data to a shared object file, returning the filename.
+// TODO: Try writing this in a way that doesn't actually touch the file system (named pipe?)
+WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
+                             char *filename, size_t filename_size) {
+    const char *filenames[] = {
+        "/data/local/tmp/halide_kernels.so",
+        "/tmp/halide_kernels.so"
+    };
+    for (size_t i = 0; i < sizeof(filenames)/sizeof(filenames[0]); i++) {
+        int so_fd = open(filenames[i], O_RDWR | O_TRUNC | O_CREAT, 0);
+        if (so_fd == -1) continue;
+        ssize_t written = write(so_fd, data, size);
+        close(so_fd);
+        if (written < (ssize_t)size) {
+            error(user_context) << "Failed to write shared object file " << filenames[i] << "\n";
+            return -1;
+        }
+        strncpy(filename, filenames[i], filename_size);
+        debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
+        return 0;
+    }
+    error(user_context) << "Unable to write temporary shared object file.\n";
+    return -1;
+}
+
+}  // namespace
+
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, size_t code_size) {
     init_hexagon_runtime(user_context);
@@ -178,17 +197,11 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
-
-        const char *filename = "/data/local/tmp/halide_kernels.so";
-        debug(user_context) << "    open " << filename << " -> ";
-        int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0);
-        debug(user_context) << "        " << so_fd << "\n";
-        if (so_fd == -1) {
-            error(user_context) << "open failed.\n";
-            return -1;
+        char filename[200];
+        result = write_shared_object(user_context, code, code_size, filename, sizeof(filename));
+        if (result != 0) {
+            return result;
         }
-        write(so_fd, code, code_size);
-        close(so_fd);
 
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
