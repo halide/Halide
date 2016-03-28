@@ -144,6 +144,25 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vsb), i16x2,  "vsxt.b",  {i8x1} },
         { IPICK(Intrinsic::hexagon_V6_vsh), i32x2,  "vsxt.h",  {i16x1} },
 
+        // Truncation:
+        // (Yes, there really are two fs in the b versions, and 1 f in
+        // the h versions.)
+        { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunchi.b",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunchi.h",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.b",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.h",  {i32x2} },
+
+        // Downcast with saturation:
+        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "vsat.ub.h",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsatuwuh), u16x1, "vsat.uh.uw", {u32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "vsat.h.w",   {i32x2} },
+
+        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.sat.ub", {i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.sat.uh", {i32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.sat.b",  {i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sat.h",  {i32x1} },
+
+
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
         // operands, because it works with two's complement arithmetic.
@@ -204,7 +223,6 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vavgwrnd),  i32x1, "vavgrnd.w",  {i32x1, i32x1} },
 
         { IPICK(Intrinsic::hexagon_V6_vnavgub), u8x1,  "vnavg.ub", {u8x1,  u8x1} },
-        //{ IPICK(Intrinsic::hexagon_V6_vnavguh), u16x1, "vnavg.uh", {u16x1, u16x1} },
         { IPICK(Intrinsic::hexagon_V6_vnavgh),  i16x1, "vnavg.h",  {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vnavgw),  i32x1, "vnavg.w",  {i32x1, i32x1} },
 
@@ -213,6 +231,7 @@ void CodeGen_Hexagon::init_module() {
         // vavg.b
         // vavgrnd.uw
         // vavgrnd.b
+        // vnavg.uh
         // vnavg.uw
         // vnavg.b
 
@@ -290,38 +309,52 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
         llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage,
                                "halide.hexagon." + name, module.get());
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    llvm::IRBuilder<> builder(module->getContext());
-    builder.SetInsertPoint(block);
+    IRBuilderBase::InsertPoint here = builder->saveIP();
+    builder->SetInsertPoint(block);
 
     std::vector<Value *> args;
     for (Value &arg : wrapper->args()) {
         args.push_back(&arg);
     }
 
+    if (args.size() + 1 == intrin_ty->getNumParams()) {
+        // This intrinsic needs the first argument split into the high and low vectors.
+        Value *dv = args[0];
+        int vec_lanes = native_vector_bits()/arg_types[0].bits();
+        Value *low = slice_vector(dv, 0, vec_lanes);
+        Value *high = slice_vector(dv, vec_lanes, vec_lanes);
+
+        args[0] = high;
+        args.insert(args.begin() + 1, low);
+    }
+
     // Replace args with bitcasts if necessary.
-    for (size_t i = 0; i < wrapper_ty->getNumParams(); i++) {
+    internal_assert(args.size() == intrin_ty->getNumParams());
+    for (size_t i = 0; i < args.size(); i++) {
         llvm::Type *arg_ty = intrin_ty->getParamType(i);
         if (args[i]->getType() != arg_ty) {
             if (arg_ty->isVectorTy()) {
-                args[i] = builder.CreateBitCast(args[i], arg_ty);
+                args[i] = builder->CreateBitCast(args[i], arg_ty);
             } else {
-                args[i] = builder.CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
+                args[i] = builder->CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
             }
         }
     }
 
     // Call the real intrinsic.
-    Value *ret = builder.CreateCall(intrin, args);
+    Value *ret = builder->CreateCall(intrin, args);
 
     // Cast the result, if necessary.
     if (ret->getType() != wrapper_ty->getReturnType()) {
-        ret = builder.CreateBitCast(ret, wrapper_ty->getReturnType());
+        ret = builder->CreateBitCast(ret, wrapper_ty->getReturnType());
     }
 
-    builder.CreateRet(ret);
+    builder->CreateRet(ret);
 
     // Always inline these wrappers.
     wrapper->addFnAttr(llvm::Attribute::AlwaysInline);
+
+    builder->restoreIP(here);
 
     llvm::verifyFunction(*wrapper);
     return wrapper;
