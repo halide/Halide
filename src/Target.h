@@ -257,10 +257,8 @@ struct Target {
 
         // HVX is either 64 or 128 byte vector size.
         if (has_feature(Halide::Target::HVX_128)) {
-            user_warning << "128 Mode: natural vector size is " << 128/data_size << "\n";
             return 128 / data_size;
         } else if (has_feature(Halide::Target::HVX_64)) {
-            user_warning << "64 Mode: natural vector size is " << 64/data_size << "\n";
             return 64 / data_size;
         }
 

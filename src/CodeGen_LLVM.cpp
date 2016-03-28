@@ -2258,18 +2258,36 @@ void CodeGen_LLVM::visit(const Call *op) {
     // types are handled here.
     if (op->is_intrinsic(Call::shuffle_vector)) {
         internal_assert((int) op->args.size() == 1 + op->type.lanes());
-        vector<Constant *> indices(op->type.lanes());
+        vector<int> indices(op->type.lanes());
         for (size_t i = 0; i < indices.size(); i++) {
             const IntImm *idx = op->args[i+1].as<IntImm>();
             internal_assert(idx);
             internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().lanes());
-            indices[i] = ConstantInt::get(i32, idx->value);
+            indices[i] = idx->value;
         }
-        Value *arg = codegen(op->args[0]);
 
-        // Make a size 1 vector of undef at the end to mix in undef values.
-        Value *undefs = UndefValue::get(arg->getType());
-        value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
+        // If the indices are a contiguous ramp, generate a call to slice_vector instead.
+        bool is_ramp = true;
+        for (size_t i = 0; i + 1 < indices.size(); i++) {
+            if (indices[i] + 1 != indices[i + 1]) {
+                is_ramp = false;
+                break;
+            }
+        }
+        if (is_ramp) {
+            debug(0) << "Using slice_vector for shuffle_vector " << Expr(op) << "\n";
+            value = slice_vector(codegen(op->args[0]), indices[0], op->type.lanes());
+        } else {
+            vector<Constant *> indices_values(op->type.lanes());
+            for (size_t i = 0; i < indices_values.size(); i++) {
+                indices_values[i] = ConstantInt::get(i32, indices[i]);
+            }
+            Value *arg = codegen(op->args[0]);
+
+            // Make a size 1 vector of undef at the end to mix in undef values.
+            Value *undefs = UndefValue::get(arg->getType());
+            value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices_values));
+        }
 
         if (op->type.is_scalar()) {
             value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
