@@ -157,10 +157,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vsatuwuh), u16x1, "vsat.uh.uw", {u32x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "vsat.h.w",   {i32x2} },
 
-        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.sat.ub", {i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.sat.uh", {i32x1} },
-        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.sat.b",  {i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sat.h",  {i32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.sat.ub", {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.sat.uh", {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.sat.b",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sat.h",  {i32x2} },
 
 
         // Adds/subtracts:
