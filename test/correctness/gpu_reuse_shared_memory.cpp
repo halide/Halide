@@ -23,5 +23,17 @@ int main(int argc, char **argv) {
 
     f4.realize(64, 64, 4);
 
+    Image<int> out = f4.realize(64, 64, 4);
+    for (int x = 0; x < 100; x++) {
+        int correct = 3*x;
+        if (out(x) != correct) {
+            printf("out(%d) = %d instead of %d\n",
+                   x, out(x), correct);
+            return -1;
+        }
+    }
+
+    printf("Success!\n");
+
     return 0;
 }
