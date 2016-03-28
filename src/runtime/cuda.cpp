@@ -896,6 +896,9 @@ WEAK const char *get_error_name(CUresult error) {
     case CUDA_ERROR_LAUNCH_TIMEOUT: return "CUDA_ERROR_LAUNCH_TIMEOUT";
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING: return "CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING";
     case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
+    // A trap instruction produces the below error, which is how we codegen asserts on GPU
+    case CUDA_ERROR_ILLEGAL_INSTRUCTION:
+        return "Illegal instruction or Halide assertion failure inside kernel";
     default: return "<Unknown error>";
     }
 }

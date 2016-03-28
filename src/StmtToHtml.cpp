@@ -279,32 +279,30 @@ private:
     }
     void visit(const Call *op) {
         stream << open_span("Call");
-        if (op->call_type == Call::Intrinsic) {
-            if (op->name == Call::extract_buffer_host) {
-                stream << open_span("Matched");
-                print(op->args[0]);
-                stream << ".host";
-                stream << close_span();
-                return;
-            } else if (op->name == Call::extract_buffer_min) {
-                stream << open_span("Matched");
-                print(op->args[0]);
-                stream << ".min[";
-                stream << close_span();
-                print(op->args[1]);
-                stream << matched("]");
-                stream << close_span();
-                return;
-            } else if (op->name == Call::extract_buffer_max) {
-                stream << open_span("Matched");
-                print(op->args[0]);
-                stream << ".max[";
-                stream << close_span();
-                print(op->args[1]);
-                stream << matched("]");
-                stream << close_span();
-                return;
-            }
+        if (op->is_intrinsic(Call::extract_buffer_host)) {
+            stream << open_span("Matched");
+            print(op->args[0]);
+            stream << ".host";
+            stream << close_span();
+            return;
+        } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+            stream << open_span("Matched");
+            print(op->args[0]);
+            stream << ".min[";
+            stream << close_span();
+            print(op->args[1]);
+            stream << matched("]");
+            stream << close_span();
+            return;
+        } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+            stream << open_span("Matched");
+            print(op->args[0]);
+            stream << ".max[";
+            stream << close_span();
+            print(op->args[1]);
+            stream << matched("]");
+            stream << close_span();
+            return;
         }
         print_list(symbol(op->name) + "(", op->args, ")");
         stream << close_span();
