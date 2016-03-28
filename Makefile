@@ -593,7 +593,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(BUILD_DIR)/llvm_objects
 	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_CLANG_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM|libclang" | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
 	# Extract the necessary object files from the llvm archives.
-	cd $(BUILD_DIR)/llvm_objects; cat list; xargs -n2 ar x < list
+	cd $(BUILD_DIR)/llvm_objects; xargs -n2 ar x < list
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(LIB_DIR)
 	@rm -f $(LIB_DIR)/libHalide.a

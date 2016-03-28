@@ -81,16 +81,19 @@ struct halide_handle_cplusplus_type {
     std::vector<std::string> namespaces;
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
+    /// One set of modifiers on a type.
+    /// The const/volatile/restrict propertises are "inside" the pointer property.
     enum Modifier : uint8_t {
         Const = 1 << 0,    ///< Bitmask flag for "const"
         Volatile = 1 << 1, ///< Bitmask flag for "volatile"
-        Restrict = 1 << 3, ///< Bitmask flag for "restrict"
-        Pointer = 1 << 4,  ///< Bitmask flag for a pointer (*)
+        Restrict = 1 << 2, ///< Bitmask flag for "restrict"
+        Pointer = 1 << 3,  ///< Bitmask flag for a pointer "*"
     };
 
+    /// Qualifiers and indirections on type. Allows up to 8 levels. 0 is innermost.
     struct CPPTypeModifiers {
         uint8_t data[8];
-        CPPTypeModifiers(std::initializer_list<uint8_t> vals) {
+      CPPTypeModifiers(const std::vector<uint8_t> &vals) {
             user_assert(vals.size() <= sizeof(data)) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
             std::copy(vals.begin(), vals.end(), &data[0]);
             std::fill(&data[vals.size()], &data[sizeof(data)], 0);
@@ -101,19 +104,24 @@ struct halide_handle_cplusplus_type {
         }
         const uint8_t *begin() const { return &data[0]; }
         const uint8_t *end() const { return &data[sizeof(data)]; }
-    } cpp_type_modifiers; /// Qualifiers and indirections on type. Allows up to 8 levels. 0 is innermost.
+    } cpp_type_modifiers;
 
+    /// References are separate because they only occur at the outermost level.
+    /// No modifiers are needed for references as they are not allowed to apply
+    /// to the reference itself. (This isn't true for restrict, but that is a C++
+    /// extension anyway.) If modifiers are needed, the last entry in the above
+    /// array would be the modifers for the reference.
     enum ReferenceType : uint8_t {
         NotReference = 0,
-        LValueReference = 1,
-        RValueReference = 2,
+        LValueReference = 1, // "&"
+        RValueReference = 2, // "&&"
     };
     ReferenceType reference_type;
 
     halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
-                                 const std::vector<std::string> &namespaces = std::vector<std::string>(),
-                                 const std::vector<halide_cplusplus_type_name> &enclosing_types = std::vector<halide_cplusplus_type_name>(),
-                                 const std::initializer_list<uint8_t> &modifiers = {},
+                                 const std::vector<std::string> &namespaces = { },
+                                 const std::vector<halide_cplusplus_type_name> &enclosing_types = { },
+                                 const std::vector<uint8_t> &modifiers = { },
                                  ReferenceType reference_type = NotReference)
     : inner_name(inner_name), namespaces(namespaces), enclosing_types(enclosing_types), cpp_type_modifiers(modifiers), reference_type(reference_type) {
     }
