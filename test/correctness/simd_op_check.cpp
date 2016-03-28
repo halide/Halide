@@ -1317,6 +1317,7 @@ void check_hvx_all() {
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
     Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+    Expr u8_even = in_u8(2*x), u8_odd = in_u8(2*x+1);
     Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
     Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
     Expr i32_1 = in_i32(x), i32_2 = in_i32(x+16), i32_3 = in_i32(x+32);
@@ -1548,23 +1549,20 @@ void check_hvx_all() {
     check("vmpyi(v*.w,r*.b)", hvx_width/2, i32_1 * 9);
     check("vmpyi(v*.h,r*.b)", hvx_width/1, i16_1 * 10);
 
+    // Todo: We don't generate vmpa(vdouble.ub, vdouble.b) yet.
+    check("vmpa(v*:*.ub,v*:*.ub)", hvx_width, ((i16(u8_even) *5) + (i16(u8_odd) * 3)));
+
+    // We don't test for rounding versions for vasr. At most generate an extra add.
+    check("vasr(v*.h,r*)", hvx_width/2, i16_1 >> 8);
+    check("vasr(v*.w,r*)", hvx_width/2, i32_1 >> 16);
+    check("v*.ub = vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8c((i16(u8_1) + i16(u8_2)) >> 4));
+    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(i16_1) + i32(i16_2)) >> 8));
+    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(u16_1) + i32(u16_2)) >> 8));
+    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(i16_1) + i32(i16_2)) >> 8));
+    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(u16_1) + i32(u16_2)) >> 8));
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
-    // I think the optimizer is just being too clever with these.
-    check("vd0", hvx_width/1, cast<uint8_t>(0));
-    check("vd0", hvx_width/2, cast<uint16_t>(0));
-    check("vd0", hvx_width/4, cast<uint32_t>(0));
-
-    // This one seems to be missing.
-    check("vnavg(v*.uh,v*.uh)", hvx_width/2, u16((u32(u16_1) - u32(u16_2))/2));
-
-    check("vasr(v*.ub,v*.ub,r*):sat", hvx_width/1, u8c((u16(u8_1) + u16(u8_2)) >> 4));
-    check("vasr(v*.uh,v*.uh,r*):sat", hvx_width/1, u16c((u32(u16_1) + u32(u16_2)) >> 4));
-    check("vasr(v*.uw,v*.uw,r*):sat", hvx_width/1, u32c((u64(u32_1) + u64(u32_2)) >> 4));
-    check("vasr(v*.b,v*.b,r*):sat", hvx_width/1, i8c((i16(i8_1) + i16(i8_2)) >> 4));
-    check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, i16c((i32(i16_1) + i32(i16_2)) >> 4));
-    check("vasr(v*.w,v*.w,r*):sat", hvx_width/1, i32c((i64(i32_1) + i64(i32_2)) >> 4));
     // Todo: Move the following tests from test/hexagon/codegen into simd_op_check
     // 1. vminmax.cpp <DONE>
     // 2. vsat.cpp    <DEPRECATED>
@@ -1574,13 +1572,14 @@ void check_hvx_all() {
     // 6. vzero.cpp   <DONE>
     // 7. vmpyi.cpp   <DONE>
     // 8. vmpyi-vector-by-scalar.cpp <DONE, handle single vector>
-    // 9. vmpa.cpp
+    // 9. vmpa.cpp    <DONE>
     // 10. vmpy.cpp   <DONE>
-    // 11. valign.cpp
-    // 12. vbitwise.cpp <DONE>
-    // 13. varith.cpp   <DONE>
+    // 11. valign.cpp <Cannot test until ImageParam::set_host_alignment is implemented>
+    // 12. vbitwise.cpp
+    // 13. varith.cpp
     // 14. vmpa-accumulate.cpp
     // 15. vdmpy.cpp
+    // 16. vasr.cpp  <DONE>
 #endif
 }
 

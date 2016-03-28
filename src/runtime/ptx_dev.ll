@@ -338,3 +338,10 @@ define weak_odr i32 @halide_gpu_thread_barrier() nounwind uwtable alwaysinline {
        call void @llvm.nvvm.barrier0() nounwind
        ret i32 0
 }
+
+define weak_odr i32 @halide_ptx_trap() nounwind uwtable alwaysinline {
+       tail call void asm sideeffect "
+       trap;
+       ", ""() nounwind
+       ret i32 0
+}
