@@ -940,7 +940,8 @@ void CodeGen_ARM::visit(const Load *op) {
         }
 
         int alignment = op->type.bytes();
-        alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 16);
+        alignment *= gcd(mod_rem.modulus, mod_rem.remainder);
+        alignment = gcd(alignment, 16);
         internal_assert(alignment > 0);
 
         Value *align = ConstantInt::get(i32, alignment);
