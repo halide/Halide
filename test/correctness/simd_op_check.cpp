@@ -1398,6 +1398,10 @@ void check_hvx_all() {
 
     check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
+    check("vsat(v*.h,v*.h)", hvx_width/1, u8c(i16_1));
+    check("vpack(v*.w,v*.w)", hvx_width/2, u16c(i32_1));
+    check("vpack(v*.h,v*.h)", hvx_width/1, i8c(i16_1));
+    check("vsat(v*.w,v*.w)", hvx_width/2, i16c(i32_1));
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
 

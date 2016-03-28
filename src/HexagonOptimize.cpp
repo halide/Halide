@@ -147,6 +147,17 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.trunchi.h", u16(wild_u32x), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.b", i8(wild_i16x), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.h", i16(wild_i32x), Pattern::DeinterleaveOperands },
+
+    // Saturating narrowing casts
+    { "halide.hexagon.vsat.ub.h", u8c(wild_i16x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.vsat.uh.uw", u16c(wild_u32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.vsat.h.w", i16c(wild_i32x), Pattern::DeinterleaveOperands },
+    // Note the absence of deinterleaving the operands. This is a
+    // problem because we can't simplify away the interleaving
+    // resulting from widening if this is the later narrowing op.
+    { "halide.hexagon.trunchi.sat.ub", u8c(wild_i16x) },
+    { "halide.hexagon.trunchi.sat.uh", u16c(wild_i32x) },
+    { "halide.hexagon.trunchi.sat.b", i8c(wild_i16x) },
 };
 
 std::vector<Pattern> muls = {
