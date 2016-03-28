@@ -388,7 +388,7 @@ private:
     void visit(const Call *op) {
         // These calls can have interleaves moved from operands to the
         // result.
-        static set<string> associative = {
+        static set<string> interleavable = {
             Call::bitwise_and,
             Call::bitwise_not,
             Call::bitwise_xor,
@@ -414,7 +414,7 @@ private:
             }
             // TODO: Need to change interleave(deinterleave(x)) ?
         } else if (starts_with(op->name, "halide.hexagon.") ||
-                   associative.count(op->name)) {
+                   interleavable.count(op->name)) {
             // This function can move interleaves.
             vector<Expr> args(op->args);
 
