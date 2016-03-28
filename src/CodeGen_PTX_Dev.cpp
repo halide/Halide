@@ -219,6 +219,12 @@ void CodeGen_PTX_Dev::visit(const Free *f) {
     sym_pop(f->name + ".host");
 }
 
+void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
+    // Discard the error message for now.
+    Expr trap = Call::make(Int(32), "halide_ptx_trap", {}, Call::Extern);
+    codegen(IfThenElse::make(!op->condition, Evaluate::make(trap)));
+}
+
 string CodeGen_PTX_Dev::march() const {
     return "nvptx64";
 }
