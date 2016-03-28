@@ -418,7 +418,7 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+    virtual llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -437,10 +437,10 @@ protected:
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
      * if you ask for more lanes than the vector has. */
-    llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
+    virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
-    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+    virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:

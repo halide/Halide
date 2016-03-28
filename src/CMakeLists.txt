@@ -85,7 +85,8 @@ set (RUNTIME_LL
   aarch64
   arm
   arm_no_neon
-  hexagon
+  hvx_64
+  hvx_128
   mips
   pnacl_math
   posix_math
@@ -251,7 +252,8 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
-  HexagonIRChecker.h
+  HexagonOffload.h
+  HexagonOptimize.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -397,7 +399,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
-  HexagonIRChecker.cpp
+  HexagonOffload.cpp
+  HexagonOptimize.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -517,8 +520,6 @@ endif()
 if (TARGET_HEXAGON)
   target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON")
   list(APPEND LLVM_COMPONENTS hexagon)
-  include_directories(${Halide_SOURCE_DIR}/src/hvx_arch_dev)
-  include_directories(${Halide_SOURCE_DIR}/src/hvx_arch_stubs)
 endif()
 
 if (TARGET_PTX)

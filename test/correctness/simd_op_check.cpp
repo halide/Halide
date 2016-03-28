@@ -35,7 +35,7 @@ Target target;
 
 ImageParam in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64;
 
-int num_processes = 16;
+int num_processes = 1;
 int my_process_id = 0;
 
 // width and height of test images
@@ -109,6 +109,8 @@ void check(string op, int vector_width, Expr e) {
     if (!wildcard_match(filter, op)) return;
     if (counter % num_processes != my_process_id) return;
 
+    std::cout << op << std::endl;
+
     // Define a vectorized Func that uses the pattern.
     Func f(name);
     f(x, y) = e;
@@ -160,7 +162,7 @@ void check(string op, int vector_width, Expr e) {
     }
 
     // Also compile the error checking Func
-    error.compile_to_file("test_" + name, arg_types, target);
+    //error.compile_to_file("test_" + name, arg_types, target);
 
     bool can_run_the_code = can_run_code();
     if (can_run_the_code) {
@@ -1330,14 +1332,19 @@ void check_hvx_all() {
         hvx_width = 128;
     }
 
+    check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
+    check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
+    check("vsxt(v*.b)", hvx_width/1, i16(i8_1));
+    check("vsxt(v*.h)", hvx_width/2, i32(i16_1));
+
     check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
     check("vadd(v*.h,v*.h)", hvx_width/2, u16_1 + u16_2);
     check("vadd(v*.w,v*.w)", hvx_width/4, u32_1 + u32_2);
     check("vadd(v*.b,v*.b)", hvx_width/1, i8_1 + i8_2);
     check("vadd(v*.h,v*.h)", hvx_width/2, i16_1 + i16_2);
     check("vadd(v*.w,v*.w)", hvx_width/4, i32_1 + i32_2);
-    check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8c(i16(u8_1 + i16(u8_2))));
-    check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16c(i32(u16_1 + i32(u16_2))));
+    check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8c(u16(u8_1 + u16(u8_2))));
+    check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16c(u32(u16_1 + u32(u16_2))));
     check("vadd(v*.h,v*.h):sat", hvx_width/2, i16c(i32(i16_1 + i32(i16_2))));
     check("vadd(v*.w,v*.w):sat", hvx_width/4, i32c(i64(i32_1 + i64(i32_2))));
 
@@ -1354,19 +1361,16 @@ void check_hvx_all() {
 
     // Double vector versions of the above
 #if 0
-    // These don't generate because handleLargeVectors in
-    // CodeGen_Hexagon eats them first.
     check("vadd(v*:*.b,v*:*.b)", hvx_width*2, u8_1 + u8_2);
     check("vadd(v*:*.h,v*:*.h)", hvx_width/1, u16_1 + u16_2);
     check("vadd(v*:*.w,v*:*.w)", hvx_width/2, u32_1 + u32_2);
     check("vadd(v*:*.b,v*:*.b)", hvx_width*2, i8_1 + i8_2);
     check("vadd(v*:*.h,v*:*.h)", hvx_width/1, i16_1 + i16_2);
     check("vadd(v*:*.w,v*:*.w)", hvx_width/2, i32_1 + i32_2);
-    check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8c(i16(u8_1 + i16(u8_2))));
-    check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(i32(u16_1 + i32(u16_2))));
+    check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8c(u16(u8_1 + u16(u8_2))));
+    check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(u32(u16_1 + u32(u16_2))));
     check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16c(i32(i16_1 + i32(i16_2))));
     check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32c(i64(i32_1 + i64(i32_2))));
-#endif
 
     check("vsub(v*:*.b,v*:*.b)", hvx_width*2, u8_1 - u8_2);
     check("vsub(v*:*.h,v*:*.h)", hvx_width/1, u16_1 - u16_2);
@@ -1378,11 +1382,7 @@ void check_hvx_all() {
     check("vsub(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(i32(u16_1 - i32(u16_2))));
     check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16c(i32(i16_1 - i32(i16_2))));
     check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32c(i64(i32_1 - i64(i32_2))));
-
-    check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
-    check("vzxt(v*.uh)", hvx_width/1, u32(u16_1));
-    check("vsxt(v*.b)", hvx_width/1, i16(i8_1));
-    check("vsxt(v*.h)", hvx_width/1, i32(i16_1));
+#endif
 
     check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
     check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
@@ -1392,21 +1392,14 @@ void check_hvx_all() {
     check("vavg(v*.h,v*.h):rnd", hvx_width/2, i16((i32(i16_1) + i32(i16_2) + 1)/2));
     check("vavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) + i64(i32_2))/2));
     check("vavg(v*.w,v*.w):rnd", hvx_width/4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
-    check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) - u16(u8_2))/2));
-    check("vnavg(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) - i32(i16_2))/2));
-    check("vnavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) - i64(i32_2))/2));
+    check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8c((i16(u8_1) - i16(u8_2))/2));
+    check("vnavg(v*.h,v*.h)", hvx_width/2, i16c((i32(i16_1) - i32(i16_2))/2));
+    check("vnavg(v*.w,v*.w)", hvx_width/4, i32c((i64(i32_1) - i64(i32_2))/2));
 
     check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
-
-    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, u8(x/2), u8(x/2)));
-    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, i8(x/2), i8(x/2)));
-    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, u16(x/2), u16(x/2)));
-    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, i16(x/2), i16(x/2)));
-    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
-    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
 
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_u8(x/2), in_u8((x+16)/2)));
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_i8(x/2), in_i8((x+16)/2)));
@@ -1414,6 +1407,13 @@ void check_hvx_all() {
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, in_i16(x/2), in_i16((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_u32(x/2), in_u32((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_i32(x/2), in_i32((x+16)/2)));
+
+    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, u8(x/2), u8(x/2)));
+    check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, i8(x/2), i8(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, u16(x/2), u16(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, i16(x/2), i16(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
+    check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
 
     check("vmax(v*.ub,v*.ub)", hvx_width/1, max(u8_1, u8_2));
     check("vmax(v*.uh,v*.uh)", hvx_width/2, max(u16_1, u16_2));
@@ -1493,10 +1493,10 @@ void check_hvx_all() {
     check("vmux(q*,v*,v*)", hvx_width/2, select(i16_1 == i16_2, i16_1, i16_2));
     check("vmux(q*,v*,v*)", hvx_width/4, select(i32_1 == i32_2, i32_1, i32_2));
 
-    check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1 * u8_1));
-    check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1 * i8_2));
-    check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1 * u16_2));
-    check("vmpy(v*.h,v*.h)", hvx_width/2, i32(i16_1 * i16_2));
+    check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_1));
+    check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));
+    check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) * u32(u16_2));
+    check("vmpy(v*.h,v*.h)", hvx_width/2, i32(i16_1) * i32(i16_2));
     check("vmpyi(v*.h,v*.h)", hvx_width/2, i16_1 * i16_1);
     check("vmpy(v*.ub,r*.b)", hvx_width/1, i16(u8_1) * 3);
     check("vmpy(v*.h,r*.h)", hvx_width/2, i32(i16_1) * 10);
