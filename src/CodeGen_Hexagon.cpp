@@ -277,6 +277,28 @@ void CodeGen_Hexagon::init_module() {
         // vmax.b
         // vmin.uw
         // vmin.b
+
+        // Shifts
+        // We map arithmetic and logical shifts to just "vshr", depending on type.
+        { IPICK(Intrinsic::hexagon_V6_vlsrhv), u16x1, "vshr.v.uh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vlsrwv), u32x1, "vshr.v.uw", {u32x1, u32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vasrhv), i16x1, "vshr.v.h",  {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwv), i32x1, "vshr.v.w",  {i32x1, i32x1} },
+
+        { IPICK(Intrinsic::hexagon_V6_vaslhv), u16x1, "vshl.v.uh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vaslwv), u32x1, "vshl.v.uw", {u32x1, u32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vaslhv), i16x1, "vshl.v.h",  {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vaslwv), i32x1, "vshl.v.w",  {i32x1, i32x1} },
+
+        { IPICK(Intrinsic::hexagon_V6_vlsrh),  u16x1, "vshr.s.uh", {u16x1, u16} },
+        { IPICK(Intrinsic::hexagon_V6_vlsrw),  u32x1, "vshr.s.uw", {u32x1, u32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrh),  i16x1, "vshr.s.h",  {i16x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vasrw),  i32x1, "vshr.s.w",  {i32x1, i32} },
+
+        { IPICK(Intrinsic::hexagon_V6_vaslh),  u16x1, "vshl.s.uh", {u16x1, u16} },
+        { IPICK(Intrinsic::hexagon_V6_vaslw),  u32x1, "vshl.s.uw", {u32x1, u32} },
+        { IPICK(Intrinsic::hexagon_V6_vaslh),  i16x1, "vshl.s.h",  {i16x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vaslw),  i32x1, "vshl.s.w",  {i32x1, i32} },
     };
     for (HvxIntrinsic &i : intrinsic_wrappers) {
         define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
@@ -622,6 +644,7 @@ void CodeGen_Hexagon::visit(const Div *op) {
 }
 
 void CodeGen_Hexagon::visit(const Cast *op) {
+    // TODO: Do we need to handle same-sized vector casts before LLVM sees them?
     CodeGen_Posix::visit(op);
 }
 
@@ -633,8 +656,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
         << "Can only codegen extern calls and intrinsics\n";
 
     if (starts_with(op->name, "halide.hexagon.")) {
-        // I'm not sure why this is different than letting it fall
-        // through to CodeGen_LLVM.
+        // Handle all of the intrinsics we generated in
+        // hexagon_optimize.  I'm not sure why this is different than
+        // letting it fall through to CodeGen_LLVM.
         value = call_intrin(op->type, op->name, op->args);
         return;
     }
@@ -668,6 +692,24 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
         if (intrin != Intrinsic::not_intrinsic) {
             value = call_intrin(op->type, intrin_lanes, intrin, op->type.lanes(), op->args);
+            return;
+        }
+        if (op->type.bits() > 8 &&  // Don't have 8 bit shifts on Hexagon.
+            (op->is_intrinsic(Call::shift_left) ||
+             op->is_intrinsic(Call::shift_right))) {
+
+            internal_assert(op->args.size() == 2);
+            string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.vshl" : "halide.hexagon.vshr";
+            const Broadcast *b = op->args[1].as<Broadcast>();
+            if (b) {
+                value = call_intrin(op->type,
+                                    instr + ".s." + type_suffix(op->type),
+                                    {op->args[0], b->value});
+            } else {
+                value = call_intrin(op->type,
+                                    instr + ".v." + type_suffix(op->type),
+                                    op->args);
+            }
             return;
         }
     }
