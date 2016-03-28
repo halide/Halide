@@ -441,6 +441,18 @@ class FuseGPUThreadLoops : public IRMutator {
 
     Scope<Interval> scope;
 
+    bool in_gpu_loop = false;
+
+    void visit(const LetStmt *op) {
+        if (in_gpu_loop) {
+            scope.push(op->name, bounds_of_expr_in_scope(op->value, scope));
+            IRMutator::visit(op);
+            scope.pop(op->name);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const For *op) {
          if (op->device_api == DeviceAPI::GLSL) {
             stmt = op;
@@ -455,11 +467,13 @@ class FuseGPUThreadLoops : public IRMutator {
             << "thread variables.\n";
 
         bool should_pop = false;
+        bool old_in_gpu_loop = in_gpu_loop;
         if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
             Interval im = bounds_of_expr_in_scope(op->min, scope);
             Interval ie = bounds_of_expr_in_scope(op->extent, scope);
             scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
             should_pop = true;
+            in_gpu_loop = true;
         }
 
         if (ends_with(op->name, ".__block_id_x")) {
@@ -521,6 +535,7 @@ class FuseGPUThreadLoops : public IRMutator {
         if (should_pop) {
             scope.pop(op->name);
         }
+        in_gpu_loop = old_in_gpu_loop;
     }
 };
 

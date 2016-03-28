@@ -353,16 +353,22 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
-/** A function call. This can represent a call to some extern
- * function (like sin), but it's also our multi-dimensional
- * version of a Load, so it can be a load from an input image, or
- * a call to another halide function. The latter two types of call
- * nodes don't survive all the way down to code generation - the
- * lowering process converts them to Load nodes. */
+/** A function call. This can represent a call to some extern function
+ * (like sin), but it's also our multi-dimensional version of a Load,
+ * so it can be a load from an input image, or a call to another
+ * halide function. These two types of call nodes don't survive all
+ * the way down to code generation - the lowering process converts
+ * them to Load nodes. */
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, PureExtern, Halide, Intrinsic, PureIntrinsic} CallType;
+    typedef enum {Image,        //< A load from an input image
+                  Extern,       //< A call to an external C-ABI function, possibly with side-effects
+                  PureExtern,   //< A call to a guaranteed-side-effect-free external function
+                  Halide,       //< A call to a Func
+                  Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                  PureIntrinsic //< A side-effect-free version of the above.
+    } CallType;
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
