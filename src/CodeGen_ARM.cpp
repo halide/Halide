@@ -941,6 +941,8 @@ void CodeGen_ARM::visit(const Load *op) {
 
         int alignment = op->type.bytes();
         alignment *= gcd(mod_rem.modulus, mod_rem.remainder);
+        // Maximum stack alignment on arm is 16 bytes, so we should
+        // never claim alignment greater than that.
         alignment = gcd(alignment, 16);
         internal_assert(alignment > 0);
 
