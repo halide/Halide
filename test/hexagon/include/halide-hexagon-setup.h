@@ -44,7 +44,7 @@ void setupHVXSize(Target &target, Target::Feature F)  {
 }
 
 void setupHexagonTarget(Target &target, Target::Feature F=Target::HVX_128) {
-        target.os = Target::HexagonStandalone; // The operating system
+        target.os = Target::QuRT; // The operating system
         target.arch = Target::Hexagon;   // The CPU architecture
         target.bits = 32;            // The bit-width of the architecture
         setupHVXSize(target, F);
