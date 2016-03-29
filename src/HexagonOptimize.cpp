@@ -2,6 +2,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRMatch.h"
+#include "ExprUsesVar.h"
 #include "Scope.h"
 #include "Target.h"
 
@@ -137,8 +138,7 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.navg.vub.vub", u8c((i16(wild_u8x) - i16(wild_u8x))/2) },
     { "halide.hexagon.navg.vh.vh", i16c((i32(wild_i16x) - i32(wild_i16x))/2) },
     { "halide.hexagon.navg.vw.vw", i32c((i64(wild_i32x) - i64(wild_i32x))/2) },
-    // The corresponding intrinsic for this one seems to be missing.
-    //{ "halide.hexagon.navg.vuh.vuh", u16((i32(wild_u16x) - i32(wild_i16x))/2) },
+    // vnavg.uw doesn't exist.
 
     // Widening casts
     { "halide.hexagon.zxt.vub", u16(wild_u8x), Pattern::InterleaveResult },
@@ -244,7 +244,7 @@ public:
 // program, using the fact that interleaves can pass through pointwise
 // IR operations. When an interleave collides with a deinterleave,
 // they cancel out.
-class CancelInterleaves : public IRMutator {
+class EliminateInterleaves : public IRMutator {
 private:
     Target target;
 
@@ -270,6 +270,20 @@ private:
         return false;
     }
 
+    // Check that at least one of exprs is an interleave, and that all
+    // of the exprs can yield an interleave.
+    bool yields_removable_interleave(const std::vector<Expr> &exprs) {
+        bool any_is_interleave = false;
+        for (const Expr &i : exprs) {
+            if (is_interleave(i)) {
+                any_is_interleave = true;
+            } else if (!yields_interleave(i)) {
+                return false;
+            }
+        }
+        return any_is_interleave;
+    }
+
     // Asserting that x is an expression that can yield an interleave
     // operation, return the expression being interleaved.
     Expr remove_interleave(Expr x) {
@@ -293,8 +307,7 @@ private:
         Expr b = mutate(op->b);
         // We only want to pull out an interleave if at least one of
         // the operands is an actual interleave.
-        if ((is_interleave(a) && yields_interleave(b)) ||
-            (is_interleave(b) && yields_interleave(a))) {
+        if (yields_removable_interleave({a, b})) {
             a = remove_interleave(a);
             b = remove_interleave(b);
             expr = interleave(T::make(a, b));
@@ -337,13 +350,7 @@ private:
         Expr cond = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
-        if ((is_interleave(cond) ||
-             is_interleave(true_value) ||
-             is_interleave(false_value)) &&
-            (yields_interleave(cond) &&
-             yields_interleave(true_value) &&
-             yields_interleave(false_value))) {
-
+        if (yields_removable_interleave({cond, true_value, false_value})) {
             cond = remove_interleave(cond);
             true_value = remove_interleave(true_value);
             false_value = remove_interleave(false_value);
@@ -357,16 +364,26 @@ private:
         }
     }
 
+    // Make overloads of stmt/expr uses var so we can use it in a template.
+    static bool uses_var(Stmt s, const std::string &var) {
+        return stmt_uses_var(s, var);
+    }
+    static bool uses_var(Expr e, const std::string &var) {
+        return expr_uses_var(e, var);
+    }
+
     template <typename NodeType, typename LetType>
     void visit_let(NodeType &result, const LetType *op) {
         Expr value = mutate(op->value);
         string deinterleaved_name = op->name + ".deinterleaved";
+        NodeType body;
         if (is_interleave(value)) {
+            // We can provide a deinterleaved version of this let value.
             vars.push(deinterleaved_name, true);
-        }
-        auto body = mutate(op->body);
-        if (is_interleave(value)) {
+            body = mutate(op->body);
             vars.pop(deinterleaved_name);
+        } else {
+            body = mutate(op->body);
         }
         if (value.same_as(op->value) && body.same_as(op->body)) {
             result = op;
@@ -374,10 +391,26 @@ private:
             // If the body didn't change, we must not have used the deinterleaved value.
             result = LetType::make(op->name, value, body);
         } else {
-            // We might have used the deinterleaved value, make a new let.
             result = body;
-            result = LetType::make(deinterleaved_name, remove_interleave(value), result);
-            result = LetType::make(op->name, interleave(deinterleaved_name), result);
+            bool deinterleaved_used = uses_var(result, deinterleaved_name);
+            bool interleaved_used = uses_var(result, op->name);
+            if (deinterleaved_used && interleaved_used) {
+                // The body uses both the interleaved and
+                // deinterleaved version of this let. Generate both
+                // lets, using the deinterleaved one to generate the
+                // interleaved one.
+                result = LetType::make(op->name, interleave(deinterleaved_name), result);
+                result = LetType::make(deinterleaved_name, remove_interleave(value), result);
+            } else if (deinterleaved_used) {
+                // Only the deinterleaved value is used, we can eliminate the interleave.
+                result = LetType::make(deinterleaved_name, remove_interleave(value), result);
+            } else if (interleaved_used) {
+                // Only the original value is used, regenerate the let.
+                result = LetType::make(op->name, value, result);
+            } else {
+                // This is probably a bug? We killed the usage of the let?
+                internal_error << "EliminateInterleaves eliminated use of '" << op->name << "'\n";
+            }
         }
     }
 
@@ -413,9 +446,6 @@ private:
             Call::shift_right,
             Call::abs,
             Call::absd,
-            Call::rewrite_buffer,
-            Call::random,
-            Call::lerp,
         };
 
         if (is_deinterleave(op)) {
@@ -434,22 +464,15 @@ private:
             // This function can move interleaves.
             vector<Expr> args(op->args);
 
-            // mutate all the args, and find out if they yield interleaves.
-            bool any_is_interleave = false;
-            bool all_yield_interleave = true;
+            // mutate all the args.
             bool changed = false;
             for (Expr &i : args) {
                 Expr new_i = mutate(i);
                 changed = changed || !new_i.same_as(i);
                 i = new_i;
-                if (is_interleave(i)) {
-                    any_is_interleave = true;
-                } else if (!yields_interleave(i)) {
-                    all_yield_interleave = false;
-                }
             }
 
-            if (any_is_interleave && all_yield_interleave) {
+            if (yields_removable_interleave(args)) {
                 // All the arguments yield interleaves (and one of
                 // them is an interleave), create a new call with the
                 // interleave removed from the arguments.
@@ -476,22 +499,23 @@ private:
     using IRMutator::visit;
 
 public:
-    CancelInterleaves(const Target &target) : target(target) {}
+    EliminateInterleaves(const Target &target) : target(target) {}
 };
 
 }  // namespace
 
 Stmt optimize_hexagon(Stmt s, const Target &target) {
-    // Peephole optimize for Hexagon instructions.
+    // Peephole optimize for Hexagon instructions. These can generate
+    // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(target).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = CancelInterleaves(target).mutate(s);
+    s = EliminateInterleaves(target).mutate(s);
 
     // TODO: If all of the stores to a buffer are interleaved, and all
     // of the loads are immediately deinterleaved, then we can remove
     // all of the interleave/deinterleaves, and just let the storage
-    // be interleaved.
+    // be deinterleaved.
 
     return s;
 }

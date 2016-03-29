@@ -313,8 +313,10 @@ void CodeGen_Hexagon::init_module() {
 
         // Broadcasts
         { IPICK(Intrinsic::hexagon_V6_lvsplatw), u32x1,  "splat.w", {u32} },
-        // The rest are in the runtime module.
     };
+    // TODO: Many variants of the above functions are missing. They
+    // need to be implemented in the runtime module, or via
+    // fall-through to CodeGen_LLVM.
     for (HvxIntrinsic &i : intrinsic_wrappers) {
         define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
     }
@@ -395,7 +397,6 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
 
     llvm::verifyFunction(*wrapper);
     return wrapper;
-
 }
 
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
@@ -674,9 +675,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
                 i->second.first + type_suffix(op->args, i->second.second);
             value = call_intrin(op->type, intrin, op->args);
             return;
-        } else if (op->type.bits() > 8 &&  // Don't have 8 bit shifts on Hexagon.
-            (op->is_intrinsic(Call::shift_left) ||
-             op->is_intrinsic(Call::shift_right))) {
+        } else if (op->is_intrinsic(Call::shift_left) ||
+                   op->is_intrinsic(Call::shift_right)) {
 
             internal_assert(op->args.size() == 2);
             string instr = op->is_intrinsic(Call::shift_left) ? "halide.hexagon.shl" : "halide.hexagon.shr";
@@ -685,26 +685,29 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
+        } else if (is_interleave(op, target)) {
+            value = call_intrin(op->type,
+                                "halide.hexagon.interleave" + type_suffix(op->args[0], false),
+                                {op->args[0]});
+            return;
+        } else if (is_deinterleave(op, target)) {
+            value = call_intrin(op->type,
+                                "halide.hexagon.deinterleave" + type_suffix(op->args[0], false),
+                                {op->args[0]});
+            return;
+        } else if (op->is_intrinsic(Call::get_high_register)) {
+            // TODO: This implementation should probably be in CodeGen_LLVM.
+            internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
+            value = slice_vector(codegen(op->args[0]), op->type.lanes(), op->type.lanes());
+            return;
+        } else if (op->is_intrinsic(Call::get_low_register)) {
+            // TODO: This implementation should probably be in CodeGen_LLVM.
+            internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
+            value = slice_vector(codegen(op->args[0]), 0, op->type.lanes());
+            return;
         }
     }
-
-    if (is_interleave(op, target)) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.interleave" + type_suffix(op->args[0], false),
-                            {op->args[0]});
-    } else if (is_deinterleave(op, target)) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.deinterleave" + type_suffix(op->args[0], false),
-                            {op->args[0]});
-    } else if (op->is_intrinsic(Call::get_high_register)) {
-        internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
-        value = slice_vector(codegen(op->args[0]), op->type.lanes(), op->type.lanes());
-    } else if (op->is_intrinsic(Call::get_low_register)) {
-        internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
-        value = slice_vector(codegen(op->args[0]), 0, op->type.lanes());
-    } else {
-        CodeGen_Posix::visit(op);
-    }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Broadcast *op) {
