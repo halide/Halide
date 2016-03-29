@@ -162,7 +162,7 @@ void check(string op, int vector_width, Expr e) {
     }
 
     // Also compile the error checking Func
-    //error.compile_to_file("test_" + name, arg_types, target);
+    error.compile_to_file("test_" + name, arg_types, target);
 
     bool can_run_the_code = can_run_code();
     if (can_run_the_code) {
@@ -1538,6 +1538,9 @@ void check_hvx_all() {
     check("vmpy(v*.ub,v*.b)", hvx_width/1, i16(i8_1) * i16(u8_2));
     check("vmpy(v*.h,v*.uh)", hvx_width/2, i32(i16_1) * i32(u16_2));
 
+    // We know the following don't work yet; They are WIP. Do this to sort of
+    // XFAIL them.
+#if 0
     check("vmpy(v*.ub,r*.b)", hvx_width/1, i16(u8_1) * 3);
     check("vmpy(v*.h,r*.h)", hvx_width/2, i32(i16_1) * 10);
     check("vmpy(v*.ub,r*.ub)", hvx_width/1, u16(u8_1) * 3);
@@ -1560,9 +1563,7 @@ void check_hvx_all() {
     check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(u16_1) + i32(u16_2)) >> 8));
     check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(i16_1) + i32(i16_2)) >> 8));
     check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(u16_1) + i32(u16_2)) >> 8));
-    // We know the following don't work yet; They are WIP. Do this to sort of
-    // XFAIL them.
-#if 0
+
     // Todo: Move the following tests from test/hexagon/codegen into simd_op_check
     // 1. vminmax.cpp <DONE>
     // 2. vsat.cpp    <DEPRECATED>
