@@ -30,6 +30,7 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
+  fake_ion
   fake_thread_pool
   float16_t
   gcd_thread_pool

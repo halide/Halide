@@ -16,11 +16,14 @@
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
-extern WEAK halide_device_interface hexagon_device_interface;
+struct ion_device_handle {
+    void *buffer;
+    size_t size;
+};
 
-// A ion fd defined in this module with weak linkage
-WEAK int ion_fd = -1;
 WEAK halide_mutex thread_lock = { { 0 } };
+
+extern WEAK halide_device_interface hexagon_device_interface;
 
 // Define dynamic version of hexagon_remote/halide_hexagon_remote.h
 typedef struct _remote_buffer__seq_octet _remote_buffer__seq_octet;
@@ -102,37 +105,6 @@ using namespace Halide::Runtime::Internal::Ion;
 using namespace Halide::Runtime::Internal::Hexagon;
 
 extern "C" {
-
-// The default implementation of halide_hexagon_get_descriptor uses the global
-// pointers above, and serializes access with a spin lock.
-// Overriding implementations of get_descriptor must implement the following
-// behavior:
-// - halide_hexagon_get_descriptor should always store a valid file descriptor to
-//   /dev/ion in fd, or return an error code.
-WEAK int halide_hexagon_get_descriptor(void *user_context, int *fd, bool create = true) {
-    // TODO: Should we use a more "assertive" assert? these asserts do
-    // not block execution on failure.
-    halide_assert(user_context, fd != NULL);
-
-    ScopedMutexLock lock(&thread_lock);
-
-    // If the context has not been initialized, initialize it now.
-    if (ion_fd == -1 && create) {
-        debug(user_context) << "    open /dev/ion -> ";
-        ion_fd = ion_open();
-        debug(user_context) << "        " << ion_fd << "\n";
-        if (ion_fd == -1) {
-            error(user_context) << "Failed to open /dev/ion.\n";
-        }
-    }
-
-    *fd = ion_fd;
-    if (ion_fd == -1) {
-        return -1;
-    } else {
-        return 0;
-    }
-}
 
 namespace {
 
@@ -222,27 +194,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
 namespace {
 
-// Use ION_IOC_MAP to get a file descriptor for a buffer.
-WEAK int get_buffer_descriptor(void *user_context, ion_user_handle_t handle) {
-    // Get ion file descriptor.
-    int fd = -1;
-    int err = halide_hexagon_get_descriptor(user_context, &fd);
-    if (err != 0) return -1;
-
-    // Get the descriptor associated with the ion buffer.
-    int buf_fd = ion_map(fd, handle);
-    debug(user_context) << "    ion_map handle=" << handle << " -> ";
-    if (buf_fd == -1) {
-        debug(user_context) << "        failed\n";
-        error(user_context) << "ion_map failed\n";
-        return -1;
-    } else {
-        debug(user_context) << "        " << buf_fd << "\n";
-    }
-
-    return buf_fd;
-}
-
 // Prepare an array of remote_buffer arguments, mapping buffers if
 // necessary. Only arguments with flags&flag_mask == flag_value are
 // added to the mapped_args array. Returns the number of arguments
@@ -258,29 +209,10 @@ WEAK int map_arguments(void *user_context, size_t arg_count,
             // the result.
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
 
-            int prot = 0;
-            if (arg_flags[i] & 1) prot |= MapProtocol::Read;
-            if (arg_flags[i] & 2) prot |= MapProtocol::Write;
-
             uint64_t device_handle = halide_get_device_handle(*(uint64_t *)args[i]);
-            ion_user_handle_t handle = reinterpret<ion_user_handle_t>(static_cast<uint32_t>(device_handle >> 32));
-            int buf_fd = get_buffer_descriptor(user_context, handle);
-            size_t map_size = static_cast<uint32_t>(device_handle & 0xFFFFFFFF);
-
-            map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-            debug(user_context) << "    mmap map_size=" << (uint64_t)map_size
-                                << " prot=" << prot
-                                << " Shared "
-                                << "fd=" << buf_fd << " -> ";
-            mapped_args[mapped_count].data = (uint8_t*)mmap(NULL, map_size, prot, MapFlags::Shared, buf_fd, 0);
-            if (mapped_args[mapped_count].data == MAP_FAILED) {
-                debug(user_context) << "        MAP_FAILED\n";
-                error(user_context) << "mmap failed\n";
-                return -1;
-            } else {
-                debug(user_context) << "        " << mapped_args[mapped_count].data << "\n";
-            }
-            mapped_args[mapped_count].dataLen = map_size;
+            ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
+            mapped_args[mapped_count].data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
+            mapped_args[mapped_count].dataLen = ion_handle->size;
         } else {
             // This is a scalar, just put the pointer/size in the result.
             mapped_args[mapped_count].data = (uint8_t*)args[i];
@@ -289,21 +221,6 @@ WEAK int map_arguments(void *user_context, size_t arg_count,
         mapped_count++;
     }
     return mapped_count;
-}
-
-// Unmap an array of arguments previously mapped with map_arguments.
-WEAK void unmap_arguments(void *user_context, size_t count, int arg_flags[],
-                          int flags_mask, int flag_value, remote_buffer *mapped_args) {
-    for (size_t i = 0; i < count; i++) {
-        if ((arg_flags[i] & flags_mask) == flag_value) {
-            halide_assert(user_context, arg_flags[i] != 0);
-            // This is a buffer, we need to unmap it.
-            debug(user_context) << "    munmap " << mapped_args->data << " " << mapped_args->dataLen << " -> \n";
-            int result = munmap(mapped_args->data, mapped_args->dataLen);
-            debug(user_context) << "        " << result << "\n";
-            mapped_args++;
-        }
-    }
 }
 
 }  // namespace
@@ -322,8 +239,8 @@ WEAK int halide_hexagon_run(void *user_context,
     halide_hexagon_handle_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
                         << "user_context: " << user_context << ", "
-                        << "state_ptr: " << state_ptr << " (" << module << ") "
-                        << "name: " << name
+                        << "state_ptr: " << state_ptr << " (" << module << "), "
+                        << "name: " << name << ", "
                         << "function: " << function << ")\n";
 
     int result = -1;
@@ -385,10 +302,6 @@ WEAK int halide_hexagon_run(void *user_context,
     debug(user_context) << "    remote time: " << (t_after_run - t_before_run) / 1.0e6 << " ms\n";
     #endif
 
-    // Unmap the arguments. Scalars don't need to be unmapped.
-    unmap_arguments(user_context, arg_count, arg_flags, 0x3, 0x1, input_buffers);
-    unmap_arguments(user_context, arg_count, arg_flags, 0x2, 0x2, output_buffers);
-
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    total time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -401,33 +314,20 @@ WEAK int halide_hexagon_device_release(void *user_context) {
     debug(user_context)
         << "Ion: halide_hexagon_device_release (user_context: " <<  user_context << ")\n";
 
-    int fd = -1;
-    int err = halide_hexagon_get_descriptor(user_context, &fd, false);
-    if (err != 0) return err;
-
     ScopedMutexLock lock(&thread_lock);
 
-    if (fd != -1) {
-        // Release all of the remote side modules.
-        module_state *state = state_list;
-        while (state) {
-            if (state->module) {
-                debug(user_context) << "    halide_hexagon_remote_release_kernels " << state
-                                    << " (" << state->module << ") -> ";
-                int result = remote_release_kernels(state->module, state->size);
-                debug(user_context) << "        " << result << "\n";
-                state->module = 0;
-                state->size = 0;
-            }
-            state = state->next;
+    // Release all of the remote side modules.
+    module_state *state = state_list;
+    while (state) {
+        if (state->module) {
+            debug(user_context) << "    halide_hexagon_remote_release_kernels " << state
+                                << " (" << state->module << ") -> ";
+            int result = remote_release_kernels(state->module, state->size);
+            debug(user_context) << "        " << result << "\n";
+            state->module = 0;
+            state->size = 0;
         }
-
-        // Only destroy the context if we own it
-        if (fd == ion_fd) {
-            debug(user_context) << "    close " << ion_fd << "\n";
-            ion_close(ion_fd);
-            ion_fd = -1;
-        }
+        state = state->next;
     }
 
     return 0;
@@ -443,17 +343,10 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    int fd = -1;
-    int err = halide_hexagon_get_descriptor(user_context, &fd);
-    if (err != 0) return err;
-
     // System heap... should we be using a different heap for Hexagon?
     unsigned int heap_id = 25;
 
     size_t size = buf_size(user_context, buf);
-    size_t align = 4096;
-    unsigned int heap_id_mask = 1 << heap_id;
-    unsigned int flags = 0;
 
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
@@ -475,23 +368,17 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    debug(user_context)
-        << "    ion_alloc len=" << (uint64_t)size
-        << ", align=" << (uint64_t)align
-        << ", heap_id_mask=" << heap_id_mask
-        << ", flags=" << flags << " -> ";
-    ion_user_handle_t handle = ion_alloc(fd, size, align, heap_id_mask, flags);
-    if (handle == -1) {
-        debug(user_context) << "        error\n";
+    debug(user_context) << "    ion_alloc len=" << (uint64_t)size << ", heap_id=" << heap_id << " -> ";
+    void *ion = ion_alloc(user_context, size, heap_id);
+    debug(user_context) << "        " << ion << "\n";
+    if (!ion) {
         error(user_context) << "ion_alloc failed\n";
         return -1;
-    } else {
-        debug(user_context) << "        " << handle << "\n";
     }
 
-    err = halide_hexagon_wrap_device_handle(user_context, buf, handle, size);
+    int err = halide_hexagon_wrap_device_handle(user_context, buf, ion, size);
     if (err != 0) {
-        ion_free(fd, handle);
+        ion_free(user_context, ion);
         return err;
     }
 
@@ -508,18 +395,12 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
         << "Ion: halide_hexagon_device_free (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-    int fd = -1;
-    int err = halide_hexagon_get_descriptor(user_context, &fd);
-    if (err != 0) return err;
-
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    ion_user_handle_t handle = halide_hexagon_detach_device_handle(user_context, buf);
-
-    debug(user_context) << "    ion_free handle=" << handle << "\n";
-    ion_free(fd, handle);
+    void *ion = halide_hexagon_detach_device_handle(user_context, buf);
+    ion_free(user_context, ion);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -532,7 +413,7 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
 namespace {
 
 // Implement a device copy using memcpy.
-WEAK void do_memcpy(void *user_context, device_copy c) {
+WEAK void device_memcpy(void *user_context, device_copy c) {
     // TODO: Is this 32-bit or 64-bit? Leaving signed for now
     // in case negative strides.
     for (int w = 0; w < (int)c.extent[3]; w++) {
@@ -571,27 +452,8 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
     device_copy c = make_host_to_device_copy(buf);
 
     // Get the descriptor associated with the ion buffer.
-    ion_user_handle_t handle = halide_hexagon_get_device_handle(user_context, buf);
-    int buf_fd = get_buffer_descriptor(user_context, handle);
-    if (buf_fd == -1) return -1;
-
-    // Map the descriptor.
-    size_t map_size = buf_size(user_context, buf);
-    map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " Write Shared fd=" << buf_fd << " -> ";
-    void *c_dst = mmap(NULL, map_size, MapProtocol::Write, MapFlags::Shared, buf_fd, 0);
-    if (c_dst == MAP_FAILED) {
-        debug(user_context) << "        MAP_FAILED\n";
-        error(user_context) << "mmap failed\n";
-        return -1;
-    } else {
-        debug(user_context) << "        " << c_dst << "\n";
-    }
-    c.dst = (uintptr_t)c_dst;
-
-    do_memcpy(user_context, c);
-
-    munmap(c_dst, map_size);
+    c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
+    device_memcpy(user_context, c);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -614,27 +476,8 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, buffer_t* buf) {
     device_copy c = make_device_to_host_copy(buf);
 
     // Get the descriptor associated with the ion buffer.
-    ion_user_handle_t handle = halide_hexagon_get_device_handle(user_context, buf);
-    int buf_fd = get_buffer_descriptor(user_context, handle);
-    if (buf_fd == -1) return -1;
-
-    // Map the descriptor.
-    size_t map_size = buf_size(user_context, buf);
-    map_size = (map_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1);
-    debug(user_context) << "    mmap map_size=" << (uint64_t)map_size << " Read Shared fd=" << buf_fd << " -> ";
-    void *c_src = mmap(NULL, map_size, MapProtocol::Read, MapFlags::Shared, buf_fd, 0);
-    if (c_src == MAP_FAILED) {
-        debug(user_context) << "        MAP_FAILED\n";
-        error(user_context) << "mmap failed\n";
-        return -1;
-    } else {
-        debug(user_context) << "        " << c_src << "\n";
-    }
-    c.src = (uintptr_t)c_src;
-
-    do_memcpy(user_context, c);
-
-    munmap(c_src, map_size);
+    c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
+    device_memcpy(user_context, c);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -652,47 +495,47 @@ WEAK int halide_hexagon_device_sync(void *user_context, struct buffer_t *) {
 }
 
 WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *buf,
-                                                ion_user_handle_t handle, size_t size) {
+                                           void *ion_buf, size_t size) {
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
         return -2;
     }
 
-    size_t max_size = 0xFFFFFFFF;
-    halide_assert(user_context, size <= max_size);
-    if (size > max_size) {
-        return halide_error_buffer_allocation_too_large(user_context, "", size, max_size);
+    ion_device_handle *handle = new ion_device_handle();
+    if (!handle) {
+        return -1;
     }
-
-    // We store the size in the lower 32 bits, and the handle in the upper 32 bits.
-    uint64_t device_handle = static_cast<uint64_t>(reinterpret<uint32_t>(handle)) << 32 | size;
-
-    buf->dev = halide_new_device_wrapper(device_handle, &hexagon_device_interface);
+    handle->buffer = ion_buf;
+    handle->size = size;
+    buf->dev = halide_new_device_wrapper(reinterpret<uint64_t>(handle), &hexagon_device_interface);
     if (buf->dev == 0) {
+        delete handle;
         return -1;
     }
     return 0;
 }
 
-WEAK ion_user_handle_t halide_hexagon_detach_device_handle(void *user_context, struct buffer_t *buf) {
+WEAK void *halide_hexagon_detach_device_handle(void *user_context, struct buffer_t *buf) {
     if (buf->dev == NULL) {
-        return -1;
+        return NULL;
     }
     halide_assert(user_context, halide_get_device_interface(buf->dev) == &hexagon_device_interface);
-    uint64_t device_handle = halide_get_device_handle(buf->dev);
+    ion_device_handle *handle = reinterpret<ion_device_handle *>(halide_get_device_handle(buf->dev));
+    void *ion_buf = handle->buffer;
+    delete handle;
 
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
-    return reinterpret<ion_user_handle_t>(device_handle >> 32);
+    return ion_buf;
 }
 
-WEAK ion_user_handle_t halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf) {
+WEAK void *halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf) {
     if (buf->dev == NULL) {
-        return -1;
+        return NULL;
     }
     halide_assert(user_context, halide_get_device_interface(buf->dev) == &hexagon_device_interface);
-    uint64_t device_handle = halide_get_device_handle(buf->dev);
-    return reinterpret<ion_user_handle_t>(static_cast<uint32_t>(device_handle >> 32));
+    ion_device_handle *handle = reinterpret<ion_device_handle *>(halide_get_device_handle(buf->dev));
+    return handle->buffer;
 }
 
 WEAK size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf) {
@@ -700,8 +543,8 @@ WEAK size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *
         return 0;
     }
     halide_assert(user_context, halide_get_device_interface(buf->dev) == &hexagon_device_interface);
-    uint64_t device_handle = halide_get_device_handle(buf->dev);
-    return static_cast<size_t>(device_handle & 0xFFFFFFFF);
+    ion_device_handle *handle = reinterpret<ion_device_handle *>(halide_get_device_handle(buf->dev));
+    return handle->size;
 }
 
 WEAK const halide_device_interface *halide_hexagon_device_interface() {
