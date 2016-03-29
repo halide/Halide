@@ -38,6 +38,8 @@ int multi_type_test() {
             }
         }
     }
+
+    printf("Success!\n");
     return 0;
 }
 
@@ -72,6 +74,8 @@ int pyramid_test() {
             }
         }
     }
+
+    printf("Success!\n");
     return 0;
 }
 
@@ -107,6 +111,43 @@ int inverted_pyramid_test() {
             }
         }
     }
+
+    printf("Success!\n");
+    return 0;
+}
+
+int dynamic_shared_test() {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Not running test because no gpu target enabled\n");
+        return 0;
+    }
+
+    Func f1, f2, f3, f4;
+    Var x, xo, xi;
+
+    f1(x) = x;
+    f2(x) = f1(x) + f1(2*x);
+    f3(x) = f2(x) + f2(2*x);
+    f4(x) = f3(x) + f3(2*x);
+
+    f4.split(x, xo, xi, 16).gpu_tile(xo, 16);
+    f3.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xo);
+    f2.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xo);
+    f1.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xo);
+
+    // The amount of shared memory required varies with x
+
+    Image<int> out = f4.realize(1000);
+    for (int x = 0; x < 100; x++) {
+        int correct = 27*x;
+        if (out(x) != correct) {
+            printf("out(%d) = %d instead of %d\n",
+                   x, out(x), correct);
+            return -1;
+        }
+    }
+
+    printf("Success!\n");
     return 0;
 }
 
@@ -116,19 +157,25 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    printf("Running multi type test!\n");
     if (multi_type_test() != 0) {
         return -1;
     }
 
+    printf("Running pyramid test!\n");
     if (pyramid_test() != 0) {
         return -1;
     }
 
+    printf("Running inverted pyramid test!\n");
     if (inverted_pyramid_test() != 0) {
         return -1;
     }
 
-    printf("Success!\n");
+    printf("Running dynamic shared test!\n");
+    if (dynamic_shared_test() != 0) {
+        return -1;
+    }
 
     return 0;
 }
