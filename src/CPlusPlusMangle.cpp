@@ -1,12 +1,7 @@
 #include "CPlusPlusMangle.h"
 
-#include "LLVM_Headers.h"
-#include <clang/AST/ASTContext.h>
-#include <clang/AST/DeclCXX.h>
-#include <clang/AST/Mangle.h>
-#include <clang/Basic/Builtins.h>
-#include <clang/Basic/TargetInfo.h>
-#include <clang/Frontend/CompilerInstance.h>
+#include <map>
+
 #include "IR.h"
 #include "IROperator.h"
 #include "Type.h"
@@ -23,297 +18,7 @@ namespace Halide {
 
 namespace Internal {
 
-// TODO: Remove all clang based support and use internal implementation.
-// (It turns out to be very diffuclt to have clang as a library dependency.)
-
 namespace {
-
-clang::TagDecl::TagKind map_tag_decl_kind(halide_cplusplus_type_name::CPPTypeType halide_val) {
-    switch (halide_val) {
-    case halide_cplusplus_type_name::Simple:
-        internal_error << "Simple types should have already been handled.\n";
-        return clang::TTK_Struct; // Have to return here to avoid unknown case below.
-    case halide_cplusplus_type_name::Struct:
-        return clang::TTK_Struct;
-    case halide_cplusplus_type_name::Class:
-        return clang::TTK_Class;
-    case halide_cplusplus_type_name::Union:
-        return clang::TTK_Union;
-    case halide_cplusplus_type_name::Enum:
-        return clang::TTK_Enum;
-    }
-    internal_error << "Unknown halide_cplusplus_type_name::CPPTypeType.\n";
-    return clang::TTK_Struct; // Avoid control flow analysis error.
-}
-
-struct ScopedName {
-    clang::DeclContext *decl_context;
-    std::string name;
-
-    bool operator<(const ScopedName &rhs) const {
-      if (decl_context < rhs.decl_context) {
-          return true;
-      } else if (decl_context == rhs.decl_context) {
-          return name < rhs.name;
-      }
-      return false;
-    }
-
-    ScopedName(clang::DeclContext *decl_context, const std::string &name)
-        : decl_context(decl_context), name(name) {
-    }
-};
-
-struct PreviousDeclarations {
-    std::map<ScopedName, clang::DeclContext *> prev_namespaces;
-    struct class_or_struct {
-        halide_cplusplus_type_name::CPPTypeType cpp_type_type;
-        clang::CXXRecordDecl *decl{nullptr};
-    };
-    std::map<ScopedName, class_or_struct> classes_and_structs;
-
-    std::map<ScopedName, clang::EnumDecl *> enums;
-
-    clang::DeclContext *NamespacedDeclScope(clang::ASTContext &context, const std::vector<std::string> &namespaces) {
-        clang::DeclContext *decl_context = context.getTranslationUnitDecl();
-
-        for (const auto &namespace_name : namespaces) {
-            clang::DeclContext *&decl(prev_namespaces[ScopedName(decl_context, namespace_name)]);
-            if (decl == nullptr) {
-                decl = clang::NamespaceDecl::Create(context, decl_context, false, clang::SourceLocation(), clang::SourceLocation(),
-                                                    &context.Idents.get(namespace_name), NULL);
-            }
-            decl_context = decl;
-        }
-        return decl_context;
-    }
-
-    clang::CXXRecordDecl *DeclareRecord(clang::ASTContext &context, clang::DeclContext *decl_context,
-                                        const halide_cplusplus_type_name &inner_name) {
-        class_or_struct &entry(classes_and_structs[ScopedName(decl_context, inner_name.name)]);
-        if (entry.decl != nullptr) {
-            const char *map_to_name[] { "simple (unexpected", "struct", "class", "union", "enum (unexpected)" };
-            user_assert(entry.cpp_type_type == inner_name.cpp_type_type) << "C++ type info for " << inner_name.name << " originally declared as " <<
-                map_to_name[entry.cpp_type_type] << " and redeclared as " << map_to_name[inner_name.cpp_type_type] << ".\n";
-        } else {
-            entry.decl = clang::CXXRecordDecl::Create(context, map_tag_decl_kind(inner_name.cpp_type_type),
-                                                      decl_context, clang::SourceLocation(), clang::SourceLocation(),
-                                                      &context.Idents.get(inner_name.name))->getCanonicalDecl();
-            entry.cpp_type_type = inner_name.cpp_type_type;
-      }
-      return entry.decl;
-    }
-
-    clang::EnumDecl *DeclareEnum(clang::ASTContext &context, clang::DeclContext *decl_context,
-                                 const halide_cplusplus_type_name &inner_name) {
-        clang::EnumDecl *&entry(enums[ScopedName(decl_context, inner_name.name)]);
-        if (entry == nullptr) {
-            entry = clang::EnumDecl::Create(context, decl_context,
-                                            clang::SourceLocation(), clang::SourceLocation(),
-                                            &context.Idents.get(inner_name.name),
-                                            NULL, false, false, false)->getCanonicalDecl();
-        }
-        return entry;
-    }
-};
-
-clang::QualType halide_type_to_clang_type(clang::ASTContext &context, PreviousDeclarations &prev_decls, Type type) {
-    if (type.is_int()) {
-        // TODO: Figure out how to resolve whether platform dependent 64-bit type is long or long long.
-#if 0
-        if (type.bits() == 64) {
-            return context.LongLongTy;
-        } else {
-#endif
-            return context.getIntTypeForBitwidth(type.bits(), true);
-            //        }
-    } else if (type.is_uint()) {
-        if (type.bits() == 1) {
-            return context.BoolTy;
-        } /* else if (type.bits() == 64) {
-            return context.UnsignedLongLongTy;
-            } else { */
-          return context.getIntTypeForBitwidth(type.bits(), false);
-          //    }
-    } else if (type.is_float()) {
-        return context.getRealTypeForBitwidth(type.bits());
-    } else {
-        internal_assert(type.is_handle()) << "New type of Type that isn't handled.\n";
-
-        clang::QualType base_type;
-        if (type.handle_type != NULL) {
-            if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-                user_assert(type.handle_type->namespaces.empty() && type.handle_type->enclosing_types.empty()) <<
-                    "Simple handle type cannot be inside any namespace or type scopes.\n";
-
-                // Only handle explicitly sized types per Halide convention.
-                if (type.handle_type->inner_name.name == "void") {
-                    base_type = context.VoidTy;
-                } else if (type.handle_type->inner_name.name == "bool") {
-                    base_type = context.BoolTy;
-                } else if (type.handle_type->inner_name.name == "int8_t") {
-                    base_type = context.getIntTypeForBitwidth(8, true);
-                } else if (type.handle_type->inner_name.name == "int16_t") {
-                    base_type = context.getIntTypeForBitwidth(16, true);
-                } else if (type.handle_type->inner_name.name == "int32_t") {
-                    base_type = context.getIntTypeForBitwidth(32, true);
-                } else if (type.handle_type->inner_name.name == "int64_t") {
-                    base_type = context.LongLongTy;
-                } else if (type.handle_type->inner_name.name == "uint8_t") {
-                    base_type = context.getIntTypeForBitwidth(8, false);
-                } else if (type.handle_type->inner_name.name == "uint16_t") {
-                    base_type = context.getIntTypeForBitwidth(16, false);
-                } else if (type.handle_type->inner_name.name == "uint32_t") {
-                    base_type = context.getIntTypeForBitwidth(32, false);
-                } else if (type.handle_type->inner_name.name == "uint64_t") {
-                    base_type = context.UnsignedLongLongTy;
-                } else if (type.handle_type->inner_name.name == "half") { // TODO: decide if this is a good idea
-                    base_type = context.getRealTypeForBitwidth(16);
-                } else if (type.handle_type->inner_name.name == "float") {
-                    base_type = context.getRealTypeForBitwidth(32);
-                } else if (type.handle_type->inner_name.name == "double") {
-                    base_type = context.getRealTypeForBitwidth(64);
-                } else {
-                    user_error << "Unknown simple handle type " << type.handle_type->inner_name.name << "\n";
-                }
-            } else {
-                clang::DeclContext *decl_context = prev_decls.NamespacedDeclScope(context, type.handle_type->namespaces);
-                for (auto &scope_inner_name : type.handle_type->enclosing_types) {
-                    user_assert(scope_inner_name.cpp_type_type != halide_cplusplus_type_name::Enum) <<
-                        "Enums canot scope other types. (Enum name is " << scope_inner_name.name << ")\n";
-                    decl_context = prev_decls.DeclareRecord(context, decl_context, scope_inner_name);
-                }
-
-                if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Enum) {
-                    base_type = context.getEnumType(prev_decls.DeclareEnum(context, decl_context, type.handle_type->inner_name));
-                } else {
-                    base_type = context.getRecordType(prev_decls.DeclareRecord(context, decl_context, type.handle_type->inner_name));
-                }
-            }
-
-            for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
-                if (modifier & halide_handle_cplusplus_type::Const) {
-                    base_type.addConst();
-                }
-                if (modifier & halide_handle_cplusplus_type::Volatile) {
-                    base_type.addVolatile();
-                }
-                if (modifier & halide_handle_cplusplus_type::Restrict) {
-                    base_type.addRestrict();
-                }
-                if (modifier & halide_handle_cplusplus_type::Pointer) {
-                    base_type = context.getPointerType(base_type);
-                } else {
-                    break;
-                }
-            }
- 
-            if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-                    base_type = context.getLValueReferenceType(base_type);
-            } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
-                    base_type = context.getRValueReferenceType(base_type);
-            }
-
-            return base_type;
-        }
-        // Otherwise return void *
-    }
-    return context.VoidPtrTy;
-}
-
-}
-
-namespace clang_mangling {
-
-std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
-                                            Type return_type, const std::vector<ExternFuncArgument> &args,
-                                            const Target &target) {
-    clang::CompilerInstance compiler_instance;
-
-    compiler_instance.createDiagnostics();
-    std::shared_ptr<clang::TargetOptions> target_options(new clang::TargetOptions);
-
-    // Not sure this is necessary given the MangleContext creation
-    // below, but just in case. Note handling of mapping of integer
-    // types is likely platform dependent. E.g. int64_t could map to
-    // long or to long long depending on the platform and these mangle
-    // differently.
-    if (target.os == Target::Windows) {
-        if (target.bits == 32) {
-            target_options->Triple = "i386-unknown-win32-msvc";
-        } else {
-            target_options->Triple = "x86_64-unknown-win32-msvc";
-        }
-    } else if (target.os == Target::OSX) {
-        if (target.bits == 32) {
-            target_options->Triple = "i386-apple-darwin-unknown";
-        } else {
-            target_options->Triple = "x86_64-apple-darwin-unknown";
-        }
-    } else {
-        if (target.bits == 32) {
-            target_options->Triple = "i386-unknown-unknown-unknown";
-        } else {
-            target_options->Triple = "x86_64-unknown-unknown-unknown";
-        }
-    }
-    compiler_instance.setTarget(clang::TargetInfo::CreateTargetInfo(compiler_instance.getDiagnostics(), target_options));
-    compiler_instance.createFileManager();
-    compiler_instance.createSourceManager(compiler_instance.getFileManager());
-    compiler_instance.getLangOpts().CPlusPlus = true;
-    compiler_instance.getLangOpts().CPlusPlus11 = true;
-    compiler_instance.createPreprocessor(clang::TU_Complete);
-    compiler_instance.createASTContext();
-
-    clang::DiagnosticsEngine &diags(compiler_instance.getDiagnostics());
-    clang::ASTContext &context(compiler_instance.getASTContext());
-
-    std::unique_ptr<clang::MangleContext> mangle_context;
-    if (target.os == Target::Windows) {
-        mangle_context.reset(clang::MicrosoftMangleContext::create(context, diags));
-    } else {
-        mangle_context.reset(clang::ItaniumMangleContext::create(context, diags));
-    }
-
-    PreviousDeclarations prev_decls;
-    clang::DeclContext *decl_context = prev_decls.NamespacedDeclScope(context, namespaces);
-
-    std::vector<clang::QualType> clang_args;
-    for (auto &arg : args) {
-        clang_args.push_back(halide_type_to_clang_type(context, prev_decls,
-                                                       arg.is_expr() ? arg.expr.type()
-                                                                     : type_of<struct buffer_t *>()));
-    }
-
-    clang::QualType clang_return_type = halide_type_to_clang_type(context, prev_decls, return_type);
-    clang::QualType function_type = context.getFunctionType(clang_return_type, clang_args,
-                                                            clang::FunctionProtoType::ExtProtoInfo());
-    clang::FunctionDecl *decl = clang::FunctionDecl::Create(context, decl_context,
-                                                            clang::SourceLocation(), clang::SourceLocation(),
-                                                            &context.Idents.get(name), function_type, NULL, clang::SC_None);
-    std::vector<clang::ParmVarDecl *> param_var_decls;
-    for (auto &qual_type : clang_args) {
-        param_var_decls.push_back(clang::ParmVarDecl::Create(context, decl, 
-                                                             clang::SourceLocation(), clang::SourceLocation(),
-                                                             NULL, qual_type, NULL, clang::SC_None, NULL));
-    }
-    decl->setParams(param_var_decls);
- 
-    const clang::FunctionType *ft = decl->getType()->getAs<clang::FunctionType>();
-    const clang::FunctionProtoType *proto = clang::cast<clang::FunctionProtoType>(ft);
-    internal_assert(proto != NULL) << "proto is null\n";
-
-    std::string result;
-    llvm::raw_string_ostream out_str(result);
-    mangle_context->mangleName(decl, out_str);
-
-    return out_str.str();
-}
-
-}
-
-namespace internal {
-
 // Used in both Windows and Itanium manglers to track pieces of a type name
 // in both their final form in the output and their canonical substituted form.
 struct MangledNamePart {
@@ -325,7 +30,9 @@ struct MangledNamePart {
     MangledNamePart(const char *mangled) : full_name(mangled), with_substitutions(mangled) { }
 };
 
-namespace windows_abi {
+}
+
+namespace WindowsMangling {
 
 struct PreviousDeclarations {
     std::map<std::string, int> prev_types;
@@ -574,7 +281,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
 }
 
-namespace itanium_abi {
+namespace ItaniumABIMangling {
 
 std::string itanium_mangle_id(std::string id) {
     std::ostringstream oss;
@@ -602,13 +309,13 @@ std::string simple_type_to_mangle_char(const std::string type_name, const Target
     } else if (type_name == "uint32_t") {
         return "j";
     } else if (type_name == "int64_t") {
-        if (target.bits == 32) {
+        if (target.os == Target::OSX || target.bits == 32) {
             return "x";
         } else {
             return "l";
         }
     } else if (type_name == "uint64_t") {
-        if (target.bits == 32) {
+        if (target.os == Target::OSX || target.bits == 32) {
             return "y";
         } else {
             return "m";
@@ -787,7 +494,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
           case 32:
             return "i";
           case 64:
-            if (target.bits == 32) {
+            if (target.os == Target::OSX || target.bits == 32) {
                 return "x";
             } else {
                 return "l";
@@ -806,7 +513,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
           case 32:
             return "j";
           case 64:
-            if (target.bits == 32) {
+            if (target.os == Target::OSX || target.bits == 32) {
                 return "y";
             } else {
                 return "m";
@@ -852,31 +559,19 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
     return result;
 }
 
-} // namespace itanium_abi
+} // namespace ItaniumABIMangling
 
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
   if (target.os == Target::Windows) {
-    return windows_abi::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
+    return WindowsMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
   } else {
-    return itanium_abi::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
+    return ItaniumABIMangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
   }
 }
 
-}
-
-std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
-                                            Type return_type, const std::vector<ExternFuncArgument> &args,
-                                            const Target &target) {
-  std::string clang_name = clang_mangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
-  std::string internal_name = internal::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
-
-  // debug(0) << "clang_name: " << clang_name << " internal_name: " << internal_name << "\n";
-  internal_assert(clang_name == internal_name);
-
-  return internal_name;
-}
+// All code below is for tests.
 
 namespace {
 
@@ -885,7 +580,7 @@ struct MangleResult {
   const char *label;
 };
 
-MangleResult itanium_abi_main[] = {
+MangleResult ItaniumABIMangling_main[] = {
   { "_Z13test_functionv", "int32_t test_function(void)" },
   { "_ZN3foo13test_functionEv", "int32_t foo::test_function(void)" },
   { "_ZN3foo3bar13test_functionEv", "int32_t foo::bar::test_function(void)" },
@@ -940,7 +635,7 @@ MangleResult all_types_by_target[] = {
   { "_Z13test_functionbahstijxyfd", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long long, unsigned long long, float, double)" },
   { "_Z13test_functionbahstijlmfd", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long, unsigned long, float, double)" },
   { "_Z13test_functionbahstijxyfd", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long long, unsigned long long, float, double)" },
-  { "_Z13test_functionbahstijlmfd", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long, unsigned long, float, double)" },
+  { "_Z13test_functionbahstijxyfd", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long, unsigned long, float, double)" },
   { "\001?test_function@@YAH_NCEFGHI_J_KMN@Z", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long long, unsigned long long, float, double)" },
   { "\001?test_function@@YAH_NCEFGHI_J_KMN@Z", "test_function(bool, signed char, unsigned char, short, unsigned short, int, unsigned int, long long, unsigned long long, float, double)" },
 };
@@ -1123,8 +818,8 @@ void cplusplus_mangle_test() {
                                  Target(Target::OSX, Target::X86, 64),
                                  Target(Target::Windows, Target::X86, 32),
                                  Target(Target::Windows, Target::X86, 64) };
-    MangleResult *expecteds[]{ itanium_abi_main, itanium_abi_main, itanium_abi_main,
-                               itanium_abi_main, win32_expecteds, win64_expecteds };
+    MangleResult *expecteds[]{ ItaniumABIMangling_main, ItaniumABIMangling_main, ItaniumABIMangling_main,
+                               ItaniumABIMangling_main, win32_expecteds, win64_expecteds };
     size_t i = 0;
     for (const auto &target : targets) {
         main_tests(expecteds[i++], target);
@@ -1250,4 +945,3 @@ void cplusplus_mangle_test() {
 } // namespace Internal
 
 } // namespace Halide
-
