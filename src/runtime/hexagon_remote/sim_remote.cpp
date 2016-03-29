@@ -54,6 +54,12 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void init() {
+    // The simulator needs this call to enable dlopen to work...
+    const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
+    dlinit(3, const_cast<char**>(builtin));
+}
+
 typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_free_t custom_free,
                              halide_print_t print,
@@ -63,6 +69,8 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
+    init();
+
 #if 1  // Use shared object from file
     const char *filename = (const char *)code;
 #else
@@ -76,16 +84,12 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     fwrite(code, codeLen, 1, fd);
     fclose(fd);
 #endif
-    halide_print(NULL, "dlopen ");
-    halide_print(NULL, filename);
-    halide_print(NULL, "\n");
     void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
     if (!lib) {
         halide_print(NULL, "dlopen failed\n");
         halide_print(NULL, dlerror());
         return -1;
     }
-    halide_print(NULL, "dlopen succeeded!\n");
 
     // Initialize the runtime. The Hexagon runtime can't call any
     // system functions (because we can't link them), so we put all
