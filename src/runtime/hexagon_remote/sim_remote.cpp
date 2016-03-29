@@ -219,6 +219,13 @@ int main(int argc, const char **argv) {
                 RPC_ARG(1),
                 reinterpret_cast<handle_t*>(RPC_ARG(2)));
             break;
+        case Message::GetSymbol:
+            printf("GetSymbol\n");
+            rpc_ret = get_symbol(
+                static_cast<handle_t>(RPC_ARG(0)),
+                reinterpret_cast<const char *>(RPC_ARG(1)),
+                RPC_ARG(2));
+            break;
         case Message::Run:
             printf("Run\n");
             rpc_ret = run(
@@ -241,7 +248,7 @@ int main(int argc, const char **argv) {
             printf("Break\n");
             return 0;
         default:
-            printf("Unknown message!\n");
+            printf("Unknown message: %d\n", rpc_call);
             return -1;
         }
         // Setting the message to zero indicates to the caller that
