@@ -623,8 +623,8 @@ Stmt zero_gpu_loop_mins(Stmt s) {
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;
     s.accept(&validate);
-    //s = ZeroGPULoopMins().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
+    s = ZeroGPULoopMins().mutate(s);
     return s;
 }
 
