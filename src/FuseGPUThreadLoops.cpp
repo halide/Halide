@@ -280,26 +280,28 @@ class ExtractSharedAllocations : public IRMutator {
         IntInterval liveness; // Start and end of the barrier stage at which this allocation is used.
     };
 
-    struct AllocPairs {
-        AllocPairs() {}
-        AllocPairs(const SharedAllocation &alloc) : max_type_bytes(alloc.type.bytes()) {
+    struct AllocGroups {
+        AllocGroups() {}
+        AllocGroups(const SharedAllocation &alloc) : max_type_bytes(alloc.type.bytes()) {
             max_size_bytes = simplify(alloc.type.bytes() * alloc.size);
-            pairs.push_back(alloc);
+            groups.push_back(alloc);
         }
 
         void insert(const SharedAllocation &alloc) {
             max_type_bytes = std::max(max_type_bytes, alloc.type.bytes());
             max_size_bytes = simplify(max(max_size_bytes, simplify(alloc.size * alloc.type.bytes())));
-            pairs.push_back(alloc);
+            groups.push_back(alloc);
         }
 
+        // Only need to check the back of the vector since we always insert
+        // the most recent allocation at the back.
         bool is_free(int stage) const {
-            return pairs.back().liveness.max < stage;
+            return groups.back().liveness.max < stage;
         }
 
         int max_type_bytes;
         Expr max_size_bytes; // In bytes
-        vector<SharedAllocation> pairs; // Groups of allocs that should be coalesced together
+        vector<SharedAllocation> groups; // Groups of allocs that should be coalesced together
     };
 
     vector<SharedAllocation> allocations;
@@ -361,6 +363,7 @@ class ExtractSharedAllocations : public IRMutator {
     void visit(const Block *op) {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
+            barrier_stage++;
             Stmt rest = mutate(op->rest);
 
             if (first.same_as(op->first) &&
@@ -373,8 +376,6 @@ class ExtractSharedAllocations : public IRMutator {
             IRMutator::visit(op);
         }
     }
-
-
 
     void visit(const Allocate *op) {
         user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
@@ -460,7 +461,7 @@ class ExtractSharedAllocations : public IRMutator {
 
     // Return index to free_spaces where 'alloc' should be coalesced. Return -1
     // if there isn't any.
-    int find_best_fit(const vector<AllocPairs>& mem_allocs,
+    int find_best_fit(const vector<AllocGroups>& mem_allocs,
                       const vector<int>& free_spaces,
                       const SharedAllocation& alloc, int stage) {
         int free_idx = -1;
@@ -479,8 +480,6 @@ class ExtractSharedAllocations : public IRMutator {
 
         if (!is_const(alloc_size)) { // dynamic-sized alloc
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
-                // Only need to check the back of the vector since we always insert
-                // the most recent allocation at the back.
                 internal_assert(free_spaces[i] >= 0 && free_spaces[i] < (int)mem_allocs.size());
                 internal_assert(mem_allocs[free_spaces[i]].is_free(stage));
 
@@ -493,18 +492,17 @@ class ExtractSharedAllocations : public IRMutator {
         } else { // constant-sized alloc
             int64_t diff = -1;
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
-                // Only need to check the back of the vector since we always insert
-                // the most recent allocation at the back.
                 internal_assert(free_spaces[i] >= 0 && free_spaces[i] < (int)mem_allocs.size());
                 internal_assert(mem_allocs[free_spaces[i]].is_free(stage));
 
                 if (is_const(mem_allocs[free_spaces[i]].max_size_bytes)) {
                     Expr size = alloc_size * alloc.type.bytes();
                     Expr dist = mem_allocs[free_spaces[i]].max_size_bytes - size;
-                    const int64_t *current_diff = as_const_int(simplify(dist * dist));
+                    const int64_t *current_diff = as_const_int(simplify(dist));
                     internal_assert(current_diff != nullptr);
-                    if ((free_idx == -1) || (*current_diff < diff)) {
-                        diff = (*current_diff);
+                    int64_t abs_diff = std::abs(*current_diff);
+                    if ((free_idx == -1) || (abs_diff < diff)) {
+                        diff = abs_diff;
                         free_idx = i;
                     }
                 } else if (free_idx == -1) {
@@ -516,10 +514,10 @@ class ExtractSharedAllocations : public IRMutator {
         return free_idx;
     }
 
-    // Given some allocations, return a vector of allocation pairs where each pair
+    // Given some allocations, return a vector of allocation groups where each group
     // consists of a number of allocations which should be coalesced together
     // in the shared memory.
-    vector<AllocPairs> allocate_funcs(vector<SharedAllocation> &allocations) {
+    vector<AllocGroups> allocate_funcs(vector<SharedAllocation> &allocations) {
         // Sort based on the ascending order of the min liveness stage; if equal,
         // sort based on the ascending order of the max liveness stage.
         sort(allocations.begin(), allocations.end(),
@@ -533,7 +531,7 @@ class ExtractSharedAllocations : public IRMutator {
             }
         );
 
-        vector<AllocPairs> mem_allocs;
+        vector<AllocGroups> mem_allocs;
         vector<int> free_spaces; // Contains index to free spaces in mem_allocs
         int start_idx = 0;
 
@@ -547,12 +545,12 @@ class ExtractSharedAllocations : public IRMutator {
                         mem_allocs[free_spaces[free_idx]].insert(allocations[i]);
                         free_spaces.erase(free_spaces.begin() + free_idx);
                     } else {
-                        mem_allocs.push_back(AllocPairs(allocations[i]));
+                        mem_allocs.push_back(AllocGroups(allocations[i]));
                     }
                 } else if (allocations[i].liveness.max == stage - 1) { // Free
                     int free_idx = -1;
                     for (int j = 0; j < (int)mem_allocs.size(); ++j) { // Find the index of the space to free
-                        if (mem_allocs[j].pairs.back().name == allocations[i].name) {
+                        if (mem_allocs[j].groups.back().name == allocations[i].name) {
                             free_idx = j;
                             break;
                         }
@@ -580,15 +578,15 @@ public:
         } else {
             // One big combined shared allocation.
 
-            vector<AllocPairs> mem_allocs = allocate_funcs(allocations);
+            vector<AllocGroups> mem_allocs = allocate_funcs(allocations);
 
             // Sort the allocations by the max size in bytes of the primitive
-            // types in the pair. Because the type sizes are then decreasing powers of
+            // types in the group. Because the type sizes are then decreasing powers of
             // two, doing this guarantees that all allocations are aligned
             // to then element type as long as the original one is aligned
             // to the widest type.
             sort(mem_allocs.begin(), mem_allocs.end(),
-                [](const AllocPairs &lhs, const AllocPairs &rhs){
+                [](const AllocGroups &lhs, const AllocGroups &rhs){
                     return lhs.max_type_bytes > rhs.max_type_bytes;
                 }
             );
@@ -597,31 +595,31 @@ public:
             sentinel.name = "sentinel";
             sentinel.type = UInt(8);
             sentinel.size = 0;
-            mem_allocs.push_back(AllocPairs(sentinel));
+            mem_allocs.push_back(AllocGroups(sentinel));
 
             // Add a dummy allocation at the end to get the total size
-            Expr total_size = Variable::make(Int(32), "pair_" + std::to_string(mem_allocs.size()-1) + ".shared_offset");
+            Expr total_size = Variable::make(Int(32), "group_" + std::to_string(mem_allocs.size()-1) + ".shared_offset");
             s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
 
             // Define an offset for each allocation. The offsets are in
             // elements, not bytes, so that the stores and loads can use
             // them directly.
             for (int i = (int)(mem_allocs.size()) - 1; i >= 0; i--) {
-                Expr pair_offset = Variable::make(Int(32), "pair_" + std::to_string(i) + ".shared_offset");
+                Expr group_offset = Variable::make(Int(32), "group_" + std::to_string(i) + ".shared_offset");
 
-                for (SharedAllocation &alloc : mem_allocs[i].pairs) {
+                for (SharedAllocation &alloc : mem_allocs[i].groups) {
                     int new_elem_size = alloc.type.bytes();
-                    Expr offset = (pair_offset / new_elem_size);
+                    Expr offset = (group_offset / new_elem_size);
                     s = LetStmt::make(alloc.name + ".shared_offset", simplify(offset), s);
                 }
 
                 Expr offset = 0;
                 if (i > 0) {
-                    offset = Variable::make(Int(32), "pair_" + std::to_string(i-1) + ".shared_offset");
+                    offset = Variable::make(Int(32), "group_" + std::to_string(i-1) + ".shared_offset");
                     int new_elem_size = mem_allocs[i].max_type_bytes;
                     offset += (((mem_allocs[i-1].max_size_bytes + new_elem_size - 1)/new_elem_size)*new_elem_size);
                 }
-                s = LetStmt::make("pair_" + std::to_string(i) + ".shared_offset", simplify(offset), s);
+                s = LetStmt::make("group_" + std::to_string(i) + ".shared_offset", simplify(offset), s);
             }
         }
 
