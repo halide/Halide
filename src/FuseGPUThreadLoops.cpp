@@ -86,8 +86,6 @@ public:
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4];
 
-    Scope<Interval> scope;
-
     using IRVisitor::visit;
 
     void found_for(int dim, Expr extent) {
@@ -108,10 +106,10 @@ class ExtractBlockSize : public IRVisitor {
 
         IRVisitor::visit(op);
 
-        Scope<Interval> s;
-        s.push(op->name,
-               Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                        Variable::make(Int(32), op->name + ".loop_max")));
+        Scope<Interval> scope;
+        scope.push(op->name,
+                   Interval(Variable::make(Int(32), op->name + ".loop_min"),
+                            Variable::make(Int(32), op->name + ".loop_max")));
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
