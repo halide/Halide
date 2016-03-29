@@ -75,19 +75,14 @@ protected:
                                   std::vector<llvm::Value *> Ops);
     ///@}
 
-    /** Define overloads of CodeGen_LLVM::call_intrin that use Intrinsic::ID. */
+    /** Define overloads of CodeGen_LLVM::call_intrin that determine
+     * the intrin_lanes from the type. */
     ///@{
     using CodeGen_LLVM::call_intrin;
     llvm::Value *call_intrin(Type t, const std::string &name,
                              std::vector<Expr>);
     llvm::Value *call_intrin(llvm::Type *t, const std::string &name,
                              std::vector<llvm::Value *>);
-    llvm::Value *call_intrin(Type t, int intrin_lanes,
-                             llvm::Intrinsic::ID id,
-                             int ops_lanes, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
-                             llvm::Intrinsic::ID id,
-                             int ops_lanes, std::vector<llvm::Value *>);
     ///@}
 
     /** Override CodeGen_LLVM to use hexagon intrinics when possible. */

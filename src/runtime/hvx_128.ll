@@ -63,3 +63,40 @@ define weak_odr <256 x i8> @halide.hexagon.deinterleave.vb(<256 x i8> %arg) noun
   %r = bitcast <64 x i32> %r_32 to <256 x i8>
   ret <256 x i8> %r
 }
+
+
+declare <32 x i32> @llvm.hexagon.V6.lvsplatw_128B(i32)
+
+define internal i16 @dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %arg_i16 = zext i8 %arg to i16
+  %arg_i16_s = shl i16 %arg_i16, 8
+  %r = or i16 %arg_i16, %arg_i16_s
+  ret i16 %r
+}
+
+define internal i32 @dup2.h(i16 %arg) nounwind uwtable readnone alwaysinline {
+  %arg_i32 = zext i16 %arg to i32
+  %arg_i32_s = shl i32 %arg_i32, 8
+  %r = or i32 %arg_i32, %arg_i32_s
+  ret i32 %r
+}
+
+define internal i32 @dup4.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %dup2 = call i16 @dup2.b(i8 %arg)
+  %dup4 = call i32 @dup2.h(i16 %dup2)
+  ret i32 %dup4
+}
+
+define weak_odr <128 x i8> @halide.hexagon.splat.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %dup4 = call i32 @dup4.b(i8 %arg)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw_128B(i32 %dup4)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
+}
+
+define weak_odr <64 x i16> @halide.hexagon.splat.h(i16 %arg) nounwind uwtable readnone alwaysinline {
+  %dup2 = call i32 @dup2.h(i16 %arg)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw_128B(i32 %dup2)
+  %r = bitcast <32 x i32> %r_32 to <64 x i16>
+  ret <64 x i16> %r
+}
