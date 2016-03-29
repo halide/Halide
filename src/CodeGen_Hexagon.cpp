@@ -431,6 +431,7 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
                                     IPICK(Intrinsic::hexagon_V6_hi),
                                     {vec});
         }
+        // TODO: Could maybe use valign to implement this?
     }
     return CodeGen_Posix::slice_vector(vec, start, size);
 }
