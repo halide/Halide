@@ -1404,7 +1404,8 @@ void check_hvx_all() {
     check("vasl(v*.h,v*.h)", hvx_width/2, i16_1 << i16_2);
     check("vasl(v*.w,v*.w)", hvx_width/4, i32_1 << i32_2);
 
-    // The scalar lsr generates uh/uw, while the vector version just generates h/w.
+    // The scalar lsr generates uh/uw arguments, while the vector
+    // version just generates h/w.
     check("vlsr(v*.uh,r*)", hvx_width/2, u16_1 >> in_u16(0));
     check("vlsr(v*.uw,r*)", hvx_width/4, u32_1 >> in_u32(0));
     check("vasr(v*.h,r*)", hvx_width/2, i16_1 >> in_i16(0));
@@ -1413,18 +1414,6 @@ void check_hvx_all() {
     check("vasl(v*.w,r*)", hvx_width/4, u32_1 << in_u32(0));
     check("vasl(v*.h,r*)", hvx_width/2, i16_1 << in_i16(0));
     check("vasl(v*.w,r*)", hvx_width/4, i32_1 << in_i32(0));
-
-    // Don't have 8 bit shifts on hexagon.
-#if 0
-    check("vlsr(v*.b,v*.b)", hvx_width/1, u8_1 >> u8_2);
-    check("vasr(v*.b,v*.b)", hvx_width/1, i8_1 >> i8_2);
-    check("vasl(v*.b,v*.b)", hvx_width/1, u8_1 << u8_2);
-    check("vasl(v*.b,v*.b)", hvx_width/1, i8_1 << i8_2);
-    check("vlsr(v*.ub,v*.ub)", hvx_width/1, u8_1 >> in_u8_2(0));
-    check("vasr(v*.b,v*.b)", hvx_width/1, i8_1 >> in_i8_2(0));
-    check("vasl(v*.ub,v*.ub)", hvx_width/1, u8_1 << in_u8_2(0));
-    check("vasl(v*.b,v*.b)", hvx_width/1, i8_1 << in_i8_2(0));
-#endif
 
     check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
@@ -1541,8 +1530,8 @@ void check_hvx_all() {
     check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) * u32(u16_2));
     check("vmpy(v*.h,v*.h)", hvx_width/2, i32(i16_1) * i32(i16_2));
     check("vmpyi(v*.h,v*.h)", hvx_width/2, i16_1 * i16_2);
-    // The inconsistency in the expected resulting instructions here
-    // is correct. For bytes, the unsigned value is first, for half
+    // The inconsistency in the expected instructions here is
+    // correct. For bytes, the unsigned value is first, for half
     // words, the signed value is first.
     check("vmpy(v*.ub,v*.b)", hvx_width/1, i16(u8_1) * i16(i8_2));
     check("vmpy(v*.h,v*.uh)", hvx_width/2, i32(u16_1) * i32(i16_2));
