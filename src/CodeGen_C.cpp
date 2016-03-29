@@ -1070,7 +1070,7 @@ void CodeGen_C::visit(const Call *op) {
         do_indent();
         stream << "buffer_t " << buf_id << " = {0};\n";
         do_indent();
-        stream << buf_id << ".host = (uint8_t *)(" << args[0] << ");\n";
+        stream << buf_id << ".host = const_cast<uint8_t *>((const uint8_t *)(" << args[0] << "));\n";
         do_indent();
         stream << buf_id << ".elem_size = " << args[1] << ";\n";
         int dims = ((int)op->args.size() - 2)/3;
