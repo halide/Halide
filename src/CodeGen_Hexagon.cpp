@@ -981,14 +981,11 @@ void CodeGen_Hexagon::visit(const Select *op) {
         const NE *cond_ne_0 = op->condition.as<NE>();
         internal_assert(cond_ne_0);
         internal_assert(is_zero(cond_ne_0->b));
-        std::vector<Value *> ops = {
-            codegen(cond_ne_0->a),
-            codegen(op->true_value),
-            codegen(op->false_value),
-        };
-        value = call_intrin(llvm_type_of(op->type),
-                            "halide.hexagon.mux" + type_suffix(op->true_value, op->false_value, false),
-                            ops);
+        Expr t = op->true_value;
+        Expr f = op->false_value;
+        value = call_intrin(op->type,
+                            "halide.hexagon.mux" + type_suffix(t, f, false),
+                            {cond_ne_0->a, t, f});
     } else {
         CodeGen_Posix::visit(op);
     }
