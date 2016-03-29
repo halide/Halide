@@ -463,7 +463,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
    if (WIN32)
      if (MSVC)
-	   # empty
+           # empty
      else()
        set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
      endif()
@@ -583,33 +583,6 @@ if (NOT MSVC)
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
-endif()
-
-if (WITH_C_PLUS_PLUS_NAME_MANGLING)
-  message(STATUS "Adding clang includes and libs.")
-  if(MSVC)
-    set(LLVM_LIB_DIR "${LLVM_LIB}")
-  else()
-    execute_process(COMMAND "${LLVM_CONFIG}" --libdir OUTPUT_VARIABLE LLVM_LIB_DIR_UNSTRIPPED)
-    string(STRIP "${LLVM_LIB_DIR_UNSTRIPPED}" LLVM_LIB_DIR)
-    execute_process(COMMAND "${LLVM_CONFIG}" --src-root OUTPUT_VARIABLE LLVM_SRC_ROOT_UNSTRIPPED)
-    string(STRIP "${LLVM_SRC_ROOT_UNSTRIPPED}" LLVM_SRC_ROOT)
-    execute_process(COMMAND "${LLVM_CONFIG}" --obj-root OUTPUT_VARIABLE LLVM_OBJ_ROOT_UNSTRIPPED)
-    string(STRIP "${LLVM_OBJ_ROOT_UNSTRIPPED}" LLVM_OBJ_ROOT)
-  endif()
-
-  foreach (CLANG_LIB clangAST clangBasic clangFrontend clangLex clangSema clangSerialization clangDriver clangEdit clangAnalysis clangParse LLVMOption)
-    # Because cmake: The first argument to find_library is sort of a
-    # var name but is used as directly as a cache key thus if we don't
-    # ensure to get a unique var name each time find_library is
-    # called, it reuses the first one it encountered.
-    find_library(RESOLVED_${CLANG_LIB} NAME "${CLANG_LIB}" PATHS ${LLVM_LIB_DIR} NO_DEFAULT_PATH)
-    message(STATUS "Adding clang library ${RESOLVED_${CLANG_LIB}}.")
-    target_link_libraries(Halide PRIVATE "${RESOLVED_${CLANG_LIB}}")    
-  endforeach()
-  # 
-  target_include_directories(Halide PRIVATE "${LLVM_SRC_ROOT}/tools/clang/include" "${LLVM_OBJ_ROOT}/tools/clang/include/" "${LLVM_INCLUDE}/tools/clang/include")
-  message(STATUS "Clang include directories for C++ name mangling: " "${LLVM_SRC_ROOT}/tools/clang/include" " " "${LLVM_OBJ_ROOT}/tools/clang/include/" "${LLVM_INCLUDE}/tools/clang/include")
 endif()
 
 add_dependencies(Halide
