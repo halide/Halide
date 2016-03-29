@@ -26,9 +26,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::extract_buffer_min ||
-             op->name == Call::extract_buffer_max)) {
+        if (op->is_intrinsic(Call::extract_buffer_min) ||
+            op->is_intrinsic(Call::extract_buffer_max)) {
             result = true;
         } else {
             IRVisitor::visit(op);
@@ -211,14 +210,14 @@ public:
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    {outer_query, i}, Call::Intrinsic);
+                                                    {outer_query, i}, Call::PureIntrinsic);
                         Expr outer_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    {outer_query, i}, Call::Intrinsic);
+                                                    {outer_query, i}, Call::PureIntrinsic);
 
                         Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    {inner_query, i}, Call::Intrinsic);
+                                                    {inner_query, i}, Call::PureIntrinsic);
                         Expr inner_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    {inner_query, i}, Call::Intrinsic);
+                                                    {inner_query, i}, Call::PureIntrinsic);
                         Expr inner_extent = inner_max - inner_min + 1;
 
                         // Push 'inner' inside of 'outer'
@@ -250,9 +249,9 @@ public:
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  {inner_query, i}, Call::Intrinsic);
+                                                  {inner_query, i}, Call::PureIntrinsic);
                         Expr new_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  {inner_query, i}, Call::Intrinsic);
+                                                  {inner_query, i}, Call::PureIntrinsic);
 
                         s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
                         s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".min", new_min, s);
@@ -323,7 +322,7 @@ public:
             // extern function call.  We need a query buffer_t per
             // producer and a query buffer_t for the output
 
-            Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+            Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::PureIntrinsic);
 
             for (size_t j = 0; j < args.size(); j++) {
                 if (args[j].is_expr()) {
@@ -541,9 +540,9 @@ public:
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  {buf, d}, Call::Intrinsic);
+                                                  {buf, d}, Call::PureIntrinsic);
                             Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  {buf, d}, Call::Intrinsic);
+                                                  {buf, d}, Call::PureIntrinsic);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);

@@ -199,9 +199,8 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = 0;
-        bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
-        user_assert(is_constant)
+        int32_t size = alloc->constant_allocation_size();
+        user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
@@ -218,6 +217,12 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
     sym_pop(f->name + ".host");
+}
+
+void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
+    // Discard the error message for now.
+    Expr trap = Call::make(Int(32), "halide_ptx_trap", {}, Call::Extern);
+    codegen(IfThenElse::make(!op->condition, Evaluate::make(trap)));
 }
 
 string CodeGen_PTX_Dev::march() const {

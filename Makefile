@@ -291,6 +291,7 @@ SOURCE_FILES = \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
+  EliminateBoolVectors.cpp \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -412,6 +413,7 @@ HEADER_FILES = \
   DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
+  EliminateBoolVectors.h \
   Error.h \
   Expr.h \
   ExprUsesVar.h \
@@ -591,14 +593,15 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# symbols. We only care about the libLLVM ones.
 	@rm -rf $(BUILD_DIR)/llvm_objects
 	@mkdir -p $(BUILD_DIR)/llvm_objects
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_CLANG_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM|libclang" | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-whatsloaded $(LLVM_STATIC_LIBS) $(LLVM_CLANG_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM|libclang" > $(BUILD_DIR)/llvm_objects/list
+	cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/\([0-9]*\)\n(\([^ ]*\))\([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh
 	# Extract the necessary object files from the llvm archives.
-	cd $(BUILD_DIR)/llvm_objects; xargs -n2 ar x < list
+	cd $(BUILD_DIR)/llvm_objects; bash ./extract.sh
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(LIB_DIR)
 	@rm -f $(LIB_DIR)/libHalide.a
 	# ar breaks on MinGW with all objects at the same time.
-	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
+	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
 	ranlib $(LIB_DIR)/libHalide.a
 else
 $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)

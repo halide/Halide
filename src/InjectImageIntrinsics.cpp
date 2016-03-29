@@ -49,9 +49,9 @@ private:
     }
 
     void visit(const Call *call) {
-        if (!inside_kernel_loop || call->call_type == Call::Intrinsic ||
-            call->call_type == Call::Extern ||
-            call->call_type == Call::ExternCPlusPlus) {
+        if (!inside_kernel_loop ||
+            (call->call_type != Call::Halide &&
+             call->call_type != Call::Image)) {
             IRMutator::visit(call);
             return;
         }
@@ -106,17 +106,17 @@ private:
         Type load_type = call->type;
         // load_type = load_type.with_lanes(4);
 
-        Expr load_call = Call::make(load_type,
-                          Call::image_load,
-                          args,
-                          Call::Intrinsic,
-                          Function(),
-                          0,
-                          call->image,
-                          call->param);
+        Expr load_call =
+            Call::make(load_type,
+                       Call::image_load,
+                       args,
+                       Call::PureIntrinsic,
+                       Function(),
+                       0,
+                       call->image,
+                       call->param);
+
         expr = load_call;
-        // expr = Call::make(call->type, Call::shuffle_vector,
-        //                   vec(load_call, args[4]), Call::Intrinsic);
     }
 
     void visit(const LetStmt *let) {

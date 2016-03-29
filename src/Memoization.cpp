@@ -45,7 +45,7 @@ public:
             record(call->param);
         }
 
-        if (call->call_type == Call::Intrinsic && call->name == Call::memoize_expr) {
+        if (call->is_intrinsic(Call::memoize_expr)) {
             internal_assert(call->args.size() > 0);
             if (call->args.size() == 1) {
                 record(call->args[0]);
@@ -180,7 +180,7 @@ class KeyInfo {
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
                                {Load::make(UInt(8), key_name, index, Buffer(), Parameter())},
-                               Call::Intrinsic);
+                               Call::PureIntrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
 
@@ -308,7 +308,7 @@ public:
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
                                   {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
-                                  Call::Intrinsic));
+                                  Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -331,7 +331,7 @@ public:
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
                                   {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())},
-                                  Call::Intrinsic));
+                                  Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -425,7 +425,7 @@ private:
                                               cache_lookup_check);
 
             std::vector<Expr> computed_bounds_args;
-            Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+            Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(make_zero(f.output_types()[0]));
             std::string max_stage_num = std::to_string(f.updates().size());
@@ -508,12 +508,11 @@ private:
 
     void visit(const Call *call) {
         if (!innermost_realization_name.empty() &&
-            call->call_type == Call::Intrinsic &&
-            call->name == Call::create_buffer_t) {
+            call->is_intrinsic(Call::create_buffer_t)) {
             internal_assert(call->args.size() > 0) << "RewriteMemoizedAllocations: create_buffer_t call with zero args.\n";
 
             const Call *arg0 = call->args[0].as<Call>();
-            if (arg0 != nullptr && arg0->call_type == Call::Intrinsic && arg0->name == Call::address_of) {
+            if (arg0 != nullptr && arg0->is_intrinsic(Call::address_of)) {
                 internal_assert(arg0->args.size() > 0) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
                 const Load *load = arg0->args[0].as<Load>();
                 if (load != nullptr) {
@@ -523,7 +522,7 @@ private:
                         get_realization_name(load->name) == innermost_realization_name) {
                         // Everything matches, rewrite create_buffer_t to use a nullptr handle for address.
                         std::vector<Expr> args = call->args;
-                        args[0] = Call::make(Handle(), Call::null_handle, {}, Call::Intrinsic);
+                        args[0] = Call::make(Handle(), Call::null_handle, {}, Call::PureIntrinsic);
                         expr = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
                         return;
                     }

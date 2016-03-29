@@ -35,7 +35,7 @@ protected:
     using IRMutator::visit;
 
     virtual void visit(const Call *call) {
-        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+        if (in_pipeline && call->is_intrinsic(Call::image_store)) {
             assert(for_nest_level == 4);
 
             std::map<std::string, Expr> matches;
@@ -78,7 +78,7 @@ protected:
                         Variable::make(Int(32), "result.s0.c"),
                         channels
                     },
-                    Call::CallType::Intrinsic),
+                    Call::CallType::PureIntrinsic),
                 call->args[5],
                 matches));
         }
@@ -123,7 +123,7 @@ class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline 
     using ValidateInterleavedPipeline::visit;
 
     virtual void visit(const Call *call) {
-        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+        if (in_pipeline && call->is_intrinsic(Call::image_store)) {
             assert(for_nest_level == 3); // Should be three nested for-loops before we get to the first call.
 
             std::map<std::string, Expr> matches;
@@ -170,7 +170,7 @@ class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline 
                         Ramp::make(0, 1, channels),
                         Broadcast::make(channels, channels)
                     },
-                    Call::CallType::Intrinsic),
+                    Call::CallType::PureIntrinsic),
                 call->args[5],
                 matches));
         }
