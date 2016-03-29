@@ -145,7 +145,7 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
         "/tmp/halide_kernels.so"
     };
     for (size_t i = 0; i < sizeof(filenames)/sizeof(filenames[0]); i++) {
-        int so_fd = open(filenames[i], O_RDWR | O_TRUNC | O_CREAT, 0);
+        int so_fd = open(filenames[i], O_RDWR | O_TRUNC | O_CREAT, 0755);
         if (so_fd == -1) continue;
         ssize_t written = write(so_fd, data, size);
         close(so_fd);
