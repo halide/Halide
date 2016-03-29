@@ -468,14 +468,14 @@ class ExtractSharedAllocations : public IRMutator {
         Expr alloc_size = simplify(alloc.size);
 
         // We prefer to coalesce dynamic-sized allocation with a dynamic-sized one and
-        // constant-sized alloc with a constant-sized one. We pick free space which
-        // size differs the least with 'alloc' (can be smaller or larger; it
-        // does not really matter since we take the max of the two as the new
-        // size). If we can't find any free space with a matching type, we pick
-        // the most-recently freed space of the other type (e.g. pick constant-
-        // sized free space for a dynamic-sized allocation and vice versa).
-        // We prefer the most-recently freed space as stages that are close
-        // together usually have relatively similar allocation size.
+        // constant-sized alloc with a constant-sized one. If we can't find any free
+        // space with a matching type, we pick the most-recently freed space of the
+        // other type (e.g. pick constant-sized free space for a dynamic-sized allocation
+        // and vice versa). We prefer the most-recently freed space as stages that are
+        // close together usually have relatively similar allocation size. For
+        // constant-sized allocation, we prioritize free space which size differs
+        // the least with 'alloc' (can be smaller or larger; it does not really
+        // matter since we take the max of the two as the new size).
 
         if (!is_const(alloc_size)) { // dynamic-sized alloc
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
