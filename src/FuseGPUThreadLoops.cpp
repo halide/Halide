@@ -277,7 +277,7 @@ class ExtractSharedAllocations : public IRMutator {
         string name;
         Type type;
         Expr size;
-        IntInterval liveness;
+        IntInterval liveness; // Start and end of the barrier stage at which this allocation is used.
     };
 
     struct AllocPairs {
@@ -299,7 +299,7 @@ class ExtractSharedAllocations : public IRMutator {
 
         int max_type_bytes;
         Expr max_size_bytes; // In bytes
-        vector<SharedAllocation> pairs;
+        vector<SharedAllocation> pairs; // Groups of allocs that should be coalesced together
     };
 
     vector<SharedAllocation> allocations;
@@ -311,8 +311,6 @@ class ExtractSharedAllocations : public IRMutator {
     bool in_threads;
 
     int barrier_stage;
-
-    int max_byte_size;
 
     const DeviceAPI device_api;
 
@@ -392,8 +390,6 @@ class ExtractSharedAllocations : public IRMutator {
         op = stmt.as<Allocate>();
         internal_assert(op);
 
-        max_byte_size = std::max(max_byte_size, op->type.bytes());
-
         SharedAllocation alloc;
         alloc.name = op->name;
         alloc.type = op->type;
@@ -462,7 +458,7 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
-    // Return index to free_spaces where 'alloc' should go. Return -1
+    // Return index to free_spaces where 'alloc' should be coalesced. Return -1
     // if there isn't any.
     int find_best_fit(const vector<AllocPairs>& mem_allocs,
                       const vector<int>& free_spaces,
@@ -471,10 +467,17 @@ class ExtractSharedAllocations : public IRMutator {
 
         Expr alloc_size = simplify(alloc.size);
 
-        if (!is_const(alloc_size)) {
-            // Start search from the most-recently freed space. Prioritize non-const
-            // free space over the constant one. If we can't find any non-const free
-            // space, return index to the most-recently freed constant space.
+        // We prefer to coalesce dynamic-sized allocation with a dynamic-sized one and
+        // constant-sized alloc with a constant-sized one. We pick free space which
+        // size differs the least with 'alloc' (can be smaller or larger; it
+        // does not really matter since we take the max of the two as the new
+        // size). If we can't find any free space with a matching type, we pick
+        // the most-recently freed space of the other type (e.g. pick constant-
+        // sized free space for a dynamic-sized allocation and vice versa).
+        // We prefer the most-recently freed space as stages that are close
+        // together usually have relatively similar allocation size.
+
+        if (!is_const(alloc_size)) { // dynamic-sized alloc
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
                 // Only need to check the back of the vector since we always insert
                 // the most recent allocation at the back.
@@ -487,12 +490,7 @@ class ExtractSharedAllocations : public IRMutator {
                     free_idx = i;
                 }
             }
-        } else {
-            // Start search from the most-recently freed space. Prioritize constant
-            // free space over the non-constant one. If we can't find any const free
-            // space, return index to the most-recently freed non-constant space;
-            // otherwise, return index to the smallest const free space that fits the
-            // allocation size.
+        } else { // constant-sized alloc
             int64_t diff = -1;
             for (int i = free_spaces.size() - 1; i >= 0; --i) {
                 // Only need to check the back of the vector since we always insert
@@ -518,9 +516,12 @@ class ExtractSharedAllocations : public IRMutator {
         return free_idx;
     }
 
-    // Sort based on the ascending order of the min liveness stage; if equal,
-    // sort based on the ascending order of the max liveness stage.
+    // Given some allocations, return a vector of allocation pairs where each pair
+    // consists of a number of allocations which should be coalesced together
+    // in the shared memory.
     vector<AllocPairs> allocate_funcs(vector<SharedAllocation> &allocations) {
+        // Sort based on the ascending order of the min liveness stage; if equal,
+        // sort based on the ascending order of the max liveness stage.
         sort(allocations.begin(), allocations.end(),
             [](const SharedAllocation &lhs, const SharedAllocation &rhs){
                 if (lhs.liveness.min < rhs.liveness.min) {
@@ -550,7 +551,7 @@ class ExtractSharedAllocations : public IRMutator {
                     }
                 } else if (allocations[i].liveness.max == stage - 1) { // Free
                     int free_idx = -1;
-                    for (int j = 0; j < (int)mem_allocs.size(); ++j) { // Find the index to the space to free
+                    for (int j = 0; j < (int)mem_allocs.size(); ++j) { // Find the index of the space to free
                         if (mem_allocs[j].pairs.back().name == allocations[i].name) {
                             free_idx = j;
                             break;
@@ -627,8 +628,7 @@ public:
         return s;
     }
 
-    ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0)
-                                            , max_byte_size(0), device_api(d) {}
+    ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0), device_api(d) {}
 };
 
 class FuseGPUThreadLoops : public IRMutator {
