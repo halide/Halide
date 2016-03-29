@@ -88,8 +88,6 @@ struct PreviousDeclarations {
         return decl_context;
     }
 
-
-
     clang::CXXRecordDecl *DeclareRecord(clang::ASTContext &context, clang::DeclContext *decl_context,
                                         const halide_cplusplus_type_name &inner_name) {
         class_or_struct &entry(classes_and_structs[ScopedName(decl_context, inner_name.name)]);
@@ -404,13 +402,8 @@ std::string one_qualifier_set(bool is_const, bool is_volatile, bool is_restrict,
         return (is_pointer_target ? ("Q" + base_mode) : "B");
     } else if (is_volatile) {
         return (is_pointer_target ? ("R" + base_mode) : "C");
-#if 0
-    } else if (is_restrict) {
-        return (is_pointer_target ? ("P" + base_mode + "I") : "I");
-#else
     } else if (is_restrict && is_pointer_target) {
         return  ("P" + base_mode + "I");
-#endif
     } else {
         return (is_pointer_target ? ("P" + base_mode) : "A");
     }
@@ -430,12 +423,15 @@ std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &tar
         last_is_volatile = modifier & halide_handle_cplusplus_type::Volatile;
         last_is_restrict = modifier & halide_handle_cplusplus_type::Restrict;
 
-	if (!is_pointer &&
-	    type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference) {
-	    break;
-	}
+        if (!is_pointer && !last_is_pointer &&
+            type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference) {
+            break;
+        }
 
         result = one_qualifier_set(last_is_const, last_is_volatile, last_is_restrict, last_is_pointer, base_mode) + result;
+        if (last_is_pointer && (is_pointer || type.handle_type->reference_type != halide_handle_cplusplus_type::NotReference)) {
+            result = one_qualifier_set(last_is_const, last_is_volatile, last_is_restrict, false, base_mode) + result;
+        }
 
         last_is_pointer = is_pointer;
         if (!is_pointer) {
@@ -443,21 +439,14 @@ std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &tar
         }
     }
 
-    // This happens when there 
-#if 0
-    if (last_is_const || last_is_volatile || last_is_restrict || last_is_pointer) {
-        result = one_qualifier_set(last_is_const, last_is_volatile, last_is_restrict, last_is_pointer, base_mode) + result;
-    }
-#else
     if (last_is_pointer) {
-        result = one_qualifier_set(false, false, false, true, base_mode) + result;
+        result = one_qualifier_set(false, false, false, last_is_pointer, base_mode) + result;
     }
-#endif
 
     if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-        result = "A" + result; // Or is it "R"?
+        result = "A" + base_mode + result; // Or is it "R"?
     } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
-        result = "$$Q" + result;
+        result = "$$Q" + base_mode + result;
     }
 
     return result;
@@ -665,38 +654,38 @@ struct PrevPrefixes {
 
     bool extend_name_part(MangledNamePart &name_part, const std::string mangled) {
         std::string substitute;
-	bool found = check_and_enter(name_part.with_substitutions + mangled, substitute);
-	if (found) {
-	    name_part.full_name = substitute;
-	} else {
-	    name_part.full_name = name_part.full_name + mangled;
-	}
+        bool found = check_and_enter(name_part.with_substitutions + mangled, substitute);
+        if (found) {
+            name_part.full_name = substitute;
+        } else {
+            name_part.full_name = name_part.full_name + mangled;
+        }
         name_part.with_substitutions = substitute;
-	return found;
+        return found;
     }
 
     bool prepend_name_part(const std::string mangled, MangledNamePart &name_part) {
         std::string substitute;
-	bool found = check_and_enter(mangled + name_part.with_substitutions, substitute);
-	if (found) {
-	    name_part.full_name = substitute;
-	} else {
-	    name_part.full_name = mangled + name_part.full_name;
-	}
+        bool found = check_and_enter(mangled + name_part.with_substitutions, substitute);
+        if (found) {
+            name_part.full_name = substitute;
+        } else {
+            name_part.full_name = mangled + name_part.full_name;
+        }
         name_part.with_substitutions = substitute;
-	return found;
+        return found;
     }
 };
 
 MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePart &name_part,
-						PrevPrefixes &prevs) {
+                                                PrevPrefixes &prevs) {
     for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
         // Qualifiers on a value type are simply not encoded.
         // E.g. "int f(const int)" mangles the same as "int f(int)".
-	if (!(modifier & halide_handle_cplusplus_type::Pointer) &&
-	    type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference) {
-	    break;
-	}
+        if (!(modifier & halide_handle_cplusplus_type::Pointer) &&
+            type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference) {
+            break;
+        }
 
         std::string quals;
 
@@ -710,9 +699,9 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
             quals += "K";
         } 
 
-	if (!quals.empty()) {
-	    prevs.prepend_name_part(quals, name_part);
-	}
+        if (!quals.empty()) {
+            prevs.prepend_name_part(quals, name_part);
+        }
 
         if (modifier & halide_handle_cplusplus_type::Pointer) {
             prevs.prepend_name_part("P", name_part);
@@ -731,8 +720,8 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
 }
 
 MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::string> &namespaces,
-				      const std::vector<halide_cplusplus_type_name> &enclosing_types,
-				      bool can_substitute, PrevPrefixes &prevs) {
+                                      const std::vector<halide_cplusplus_type_name> &enclosing_types,
+                                      bool can_substitute, PrevPrefixes &prevs) {
     MangledNamePart result;
 
     // Nested names start with N and then have the enclosing scope names.
@@ -746,7 +735,7 @@ MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::s
         } else if (name == "string") { // Not correct, but it does the right thing
           return "Ss";
         }
-	result.full_name += "St";
+        result.full_name += "St";
         result.with_substitutions += "St";
     } else if (not_simple) {
         for (const auto &ns : namespaces) {
@@ -754,11 +743,11 @@ MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::s
                 result.full_name += "St";
                 result.with_substitutions += "St";
             } else {
-		prevs.extend_name_part(result, itanium_mangle_id(ns));
+                prevs.extend_name_part(result, itanium_mangle_id(ns));
             }
         }
         for (const auto &et : enclosing_types) {
-	    prevs.extend_name_part(result, itanium_mangle_id(et.name));
+            prevs.extend_name_part(result, itanium_mangle_id(et.name));
         }
     }
 
@@ -780,11 +769,11 @@ MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::s
 std::string mangle_inner_name(const Type &type, const Target &target, PrevPrefixes &prevs) {
     if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
         MangledNamePart result = simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
-	return apply_indirection_and_cvr_quals(type, result, prevs).full_name;
+        return apply_indirection_and_cvr_quals(type, result, prevs).full_name;
     } else {
         MangledNamePart mangled = mangle_qualified_name(type.handle_type->inner_name.name, type.handle_type->namespaces,
-							type.handle_type->enclosing_types, true, prevs);
-	return apply_indirection_and_cvr_quals(type, mangled, prevs).full_name;
+                                                        type.handle_type->enclosing_types, true, prevs);
+        return apply_indirection_and_cvr_quals(type, mangled, prevs).full_name;
     }
 }
 
@@ -883,7 +872,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
   std::string clang_name = clang_mangling::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
   std::string internal_name = internal::cplusplus_function_mangled_name(name, namespaces, return_type, args, target);
 
-  debug(0) << "clang_name: " << clang_name << " internal_name: " << internal_name << "\n";
+  // debug(0) << "clang_name: " << clang_name << " internal_name: " << internal_name << "\n";
   internal_assert(clang_name == internal_name);
 
   return internal_name;
@@ -985,6 +974,69 @@ MangleResult many_name_subs[] = {
   { many_name_subs_itanium, many_name_subs_proto },
   { many_name_subs_win32, many_name_subs_proto },
   { many_name_subs_win64, many_name_subs_proto } };
+
+MangleResult stacked_indirections[] = {
+  { "_Z13test_functionPKiPKS0_PKS2_PKS4_PKS6_PKS8_PKSA_PKSC_", "" },
+  { "_Z13test_functionPKiPKS0_PKS2_PKS4_PKS6_PKS8_PKSA_PKSC_", "" },
+  { "_Z13test_functionPKiPKS0_PKS2_PKS4_PKS6_PKS8_PKSA_PKSC_", "" },
+  { "_Z13test_functionPKiPKS0_PKS2_PKS4_PKS6_PKS8_PKSA_PKSC_", "" },
+  { "\001?test_function@@YAHPBHPBQBHPBQBQBHPBQBQBQBHPBQBQBQBQBHPBQBQBQBQBQBHPBQBQBQBQBQBQBHPBQBQBQBQBQBQBQBH@Z", "" },
+  { "\001?test_function@@YAHPEBHPEBQEBHPEBQEBQEBHPEBQEBQEBQEBHPEBQEBQEBQEBQEBHPEBQEBQEBQEBQEBQEBHPEBQEBQEBQEBQEBQEBQEBHPEBQEBQEBQEBQEBQEBQEBQEBH@Z", "" } };
+
+MangleResult all_mods_itanium[] = {
+  { "_Z13test_function1sRS_OS_", "test_function(s, s&, s&&)" },
+  { "_Z13test_function1sRKS_OS0_", "test_function(s, s const&, s const&&)" },
+  { "_Z13test_function1sRVS_OS0_", "test_function(s, s volatile&, s volatile&&)" },
+  { "_Z13test_function1sRVKS_OS0_", "test_function(s, s const volatile&, s const volatile&&)" },
+  { "_Z13test_function1sRrS_OS0_", "test_function(s, s restrict&, s restrict&&)" },
+  { "_Z13test_function1sRrKS_OS0_", "test_function(s, s const restrict&, s const restrict&&)" },
+  { "_Z13test_function1sRrVS_OS0_", "test_function(s, s volatile restrict&, s volatile restrict&&)" },
+  { "_Z13test_function1sRrVKS_OS0_", "test_function(s, s const volatile restrict&, s const volatile restrict&&)" },
+  { "_Z13test_functionP1sRS0_OS0_", "test_function(s*, s*&, s*&&)" },
+  { "_Z13test_functionPK1sRS1_OS1_", "test_function(s const*, s const*&, s const*&&)" },
+  { "_Z13test_functionPV1sRS1_OS1_", "test_function(s volatile*, s volatile*&, s volatile*&&)" },
+  { "_Z13test_functionPVK1sRS1_OS1_", "test_function(s const volatile*, s const volatile*&, s const volatile*&&)" },
+  { "_Z13test_functionPr1sRS1_OS1_", "test_function(s restrict*, s restrict*&, s restrict*&&)" },
+  { "_Z13test_functionPrK1sRS1_OS1_", "test_function(s const restrict*, s const restrict*&, s const restrict*&&)" },
+  { "_Z13test_functionPrV1sRS1_OS1_", "test_function(s volatile restrict*, s volatile restrict*&, s volatile restrict*&&)" },
+  { "_Z13test_functionPrVK1sRS1_OS1_", "test_function(s const volatile restrict*, s const volatile restrict*&, s const volatile restrict*&&)" } };
+
+MangleResult all_mods_win32[] = {
+  { "\001?test_function@@YAHUs@@AAU1@$$QAU1@@Z", "test_function(s, s&, s&&)" },
+  { "\001?test_function@@YAHUs@@ABU1@$$QBU1@@Z", "test_function(s, s const&, s const&&)" },
+  { "\001?test_function@@YAHUs@@ACU1@$$QCU1@@Z", "test_function(s, s volatile&, s volatile&&)" },
+  { "\001?test_function@@YAHUs@@ADU1@$$QDU1@@Z", "test_function(s, s const volatile&, s const volatile&&)" },
+  { "\001?test_function@@YAHUs@@AAU1@$$QAU1@@Z", "test_function(s, s restrict&, s restrict&&)" },
+  { "\001?test_function@@YAHUs@@ABU1@$$QBU1@@Z", "test_function(s, s const restrict&, s const restrict&&)" },
+  { "\001?test_function@@YAHUs@@ACU1@$$QCU1@@Z", "test_function(s, s volatile restrict&, s volatile restrict&&)" },
+  { "\001?test_function@@YAHUs@@ADU1@$$QDU1@@Z", "test_function(s, s const volatile restrict&, s const volatile restrict&&)" },
+  { "\001?test_function@@YAHPAUs@@AAPAU1@$$QAPAU1@@Z", "test_function(s*, s*&, s*&&)" },
+  { "\001?test_function@@YAHPBUs@@AAPBU1@$$QAPBU1@@Z", "test_function(s const*, s const*&, s const*&&)" },
+  { "\001?test_function@@YAHPCUs@@AAPCU1@$$QAPCU1@@Z", "test_function(s volatile*, s volatile*&, s volatile*&&)" },
+  { "\001?test_function@@YAHPDUs@@AAPDU1@$$QAPDU1@@Z", "test_function(s const volatile*, s const volatile*&, s const volatile*&&)" },
+  { "\001?test_function@@YAHPAUs@@AAPAU1@$$QAPAU1@@Z", "test_function(s restrict*, s restrict*&, s restrict*&&)" },
+  { "\001?test_function@@YAHPBUs@@AAPBU1@$$QAPBU1@@Z", "test_function(s const restrict*, s const restrict*&, s const restrict*&&)" },
+  { "\001?test_function@@YAHPCUs@@AAPCU1@$$QAPCU1@@Z", "test_function(s volatile restrict*, s volatile restrict*&, s volatile restrict*&&)" },
+  { "\001?test_function@@YAHPDUs@@AAPDU1@$$QAPDU1@@Z", "test_function(s const volatile restrict*, s const volatile restrict*&, s const volatile restrict*&&)" } };
+
+MangleResult all_mods_win64[] = {
+  { "\001?test_function@@YAHUs@@AEAU1@$$QEAU1@@Z", "test_function(s, s&, s&&)" },
+  { "\001?test_function@@YAHUs@@AEBU1@$$QEBU1@@Z", "test_function(s, s const&, s const&&)" },
+  { "\001?test_function@@YAHUs@@AECU1@$$QECU1@@Z", "test_function(s, s volatile&, s volatile&&)" },
+  { "\001?test_function@@YAHUs@@AEDU1@$$QEDU1@@Z", "test_function(s, s const volatile&, s const volatile&&)" },
+  { "\001?test_function@@YAHUs@@AEAU1@$$QEAU1@@Z", "test_function(s, s restrict&, s restrict&&)" },
+  { "\001?test_function@@YAHUs@@AEBU1@$$QEBU1@@Z", "test_function(s, s const restrict&, s const restrict&&)" },
+  { "\001?test_function@@YAHUs@@AECU1@$$QECU1@@Z", "test_function(s, s volatile restrict&, s volatile restrict&&)" },
+  { "\001?test_function@@YAHUs@@AEDU1@$$QEDU1@@Z", "test_function(s, s const volatile restrict&, s const volatile restrict&&)" },
+  { "\001?test_function@@YAHPEAUs@@AEAPEAU1@$$QEAPEAU1@@Z", "test_function(s*, s*&, s*&&)" },
+  { "\001?test_function@@YAHPEBUs@@AEAPEBU1@$$QEAPEBU1@@Z", "test_function(s const*, s const*&, s const*&&)" },
+  { "\001?test_function@@YAHPECUs@@AEAPECU1@$$QEAPECU1@@Z", "test_function(s volatile*, s volatile*&, s volatile*&&)" },
+  { "\001?test_function@@YAHPEDUs@@AEAPEDU1@$$QEAPEDU1@@Z", "test_function(s const volatile*, s const volatile*&, s const volatile*&&)" },
+  { "\001?test_function@@YAHPEAUs@@AEAPEAU1@$$QEAPEAU1@@Z", "test_function(s restrict*, s restrict*&, s restrict*&&)" },
+  { "\001?test_function@@YAHPEBUs@@AEAPEBU1@$$QEAPEBU1@@Z", "test_function(s const restrict*, s const restrict*&, s const restrict*&&)" },
+  { "\001?test_function@@YAHPECUs@@AEAPECU1@$$QEAPECU1@@Z", "test_function(s volatile restrict*, s volatile restrict*&, s volatile restrict*&&)" },
+  { "\001?test_function@@YAHPEDUs@@AEAPEDU1@$$QEAPEDU1@@Z", "test_function(s const volatile restrict*, s const volatile restrict*&, s const volatile restrict*&&)" },
+};
 
 void check_result(const MangleResult *expecteds, size_t &expected_index,
                   const Target &target, const std::string &mangled_name) {
@@ -1151,33 +1203,30 @@ void cplusplus_mangle_test() {
         // int test_function(int * const, int *const*const, int *const*const*const*, ...);
         std::vector<halide_handle_cplusplus_type> type_info;
         std::vector<ExternFuncArgument> args;
-	for (size_t i = 1; i <= 8; i++) {
-	  std::vector<uint8_t> mods;
-	  for (size_t j = 0; j < i; j++) {
-	    mods.push_back(halide_handle_cplusplus_type::Pointer | halide_handle_cplusplus_type::Const);
-	  }
+        for (size_t i = 1; i <= 8; i++) {
+          std::vector<uint8_t> mods;
+          for (size_t j = 0; j < i; j++) {
+            mods.push_back(halide_handle_cplusplus_type::Pointer | halide_handle_cplusplus_type::Const);
+          }
           halide_handle_cplusplus_type t(halide_handle_cplusplus_type(
                halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "int32_t"),
                { }, { }, mods));
           type_info.push_back(t);
-	}
-	for (const auto &ti : type_info) {
-	  args.push_back(ExternFuncArgument(make_zero(Handle(1, &ti))));
-	}
-	//        size_t expecteds_index = 0;
+        }
+        for (const auto &ti : type_info) {
+          args.push_back(ExternFuncArgument(make_zero(Handle(1, &ti))));
+        }
+        size_t expecteds_index = 0;
         for (const auto &target : targets) {
-#if 0
-            check_result(many_name_subs, expecteds_index, target,
+            check_result(stacked_indirections, expecteds_index, target,
                          cplusplus_function_mangled_name("test_function", { }, Int(32), args, target));
-#else
-	    debug(0) << cplusplus_function_mangled_name("test_function", { }, Int(32), args, target) << " for " << target.to_string() << "\n";
-#endif
         }
     }
 
     {
         // Test all qualifiers and all ref arguments
         for (const auto &target : targets) {
+            size_t expecteds_index = 0;
             for (uint8_t mods = 0; mods < 16; mods++) {
                 halide_handle_cplusplus_type t1(halide_handle_cplusplus_type(
                     halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "s"), { }, { }, { mods }));
@@ -1189,7 +1238,10 @@ void cplusplus_mangle_test() {
                 args.push_back(make_zero(Handle(1, &t1)));
                 args.push_back(make_zero(Handle(1, &t2)));
                 args.push_back(make_zero(Handle(1, &t3)));
-                debug(0) << cplusplus_function_mangled_name("test_function", { }, Int(32), args, target) << " for mods " << mods << " for " << target.to_string() << "\n";
+
+                MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? all_mods_win64 : all_mods_win32) : all_mods_itanium;
+                check_result(expecteds, expecteds_index, target,
+                         cplusplus_function_mangled_name("test_function", { }, Int(32), args, target));
             }
         }
     }
