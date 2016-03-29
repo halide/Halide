@@ -1,21 +1,15 @@
 #ifndef HALIDE_RUNTIME_ION_H
 #define HALIDE_RUNTIME_ION_H
 
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Ion {
 
-typedef int ion_user_handle_t;
+// Allocate an ION buffer, and map it, returning the mapped pointer.
+void *ion_alloc(void *user_context, size_t len, int heap_id);
 
-int ion_open();
-void ion_close(int ion_fd);
-
-// Use ION_IOC_ALLOC to allocate a buffer.
-ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags);
-// Use ION_IOC_FREE to release a buffer.
-void ion_free(int ion_fd, ion_user_handle_t ion_buffer);
-// Use ION_IOC_MAP to map a buffer to a file descriptor.
-int ion_map(int ion_fd, ion_user_handle_t ion_buffer);
+// Free a previously allocated ION buffer.
+void ion_free(void *user_context, void *ion);
 
 }}}}  // namespace Halide::Runtime::Internal::Ion
 
