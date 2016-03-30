@@ -302,7 +302,6 @@ class ExtractSharedAllocations : public IRMutator {
     };
 
     vector<SharedAllocation> allocations;
-
     map<string, IntInterval> shared;
 
     bool in_threads;
@@ -423,8 +422,8 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     void visit(const Load *op) {
-        Expr index = mutate(op->index);
         if (shared.count(op->name)) {
+            Expr index = mutate(op->index);
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
                 expr = Load::make(op->type, shared_mem_name + "_" + op->name, index, op->image, op->param);
@@ -460,8 +459,8 @@ class ExtractSharedAllocations : public IRMutator {
             return;
         }
 
-        Stmt body = mutate(op->body);
         Expr value = mutate(op->value);
+        Stmt body = mutate(op->body);
 
         for (SharedAllocation &s : allocations) {
             if (expr_uses_var(s.size, op->name)) {
