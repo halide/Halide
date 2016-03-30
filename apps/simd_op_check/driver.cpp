@@ -29,7 +29,6 @@ extern "C" void halide_print(void *, const char *msg) {
 
 template<typename T>
 buffer_t make_buffer(int w, int h) {
-    printf("make_buffer %d %d", w, h);
     T *mem = new T[w*h];
     buffer_t buf = {0};
     buf.host = (uint8_t *)mem;
@@ -39,7 +38,6 @@ buffer_t make_buffer(int w, int h) {
     buf.stride[0] = 1;
     buf.stride[1] = w;
 
-    printf("filling buffer...");
     for (int i = 0; i < w*h; i++) {
         mem[i] = rand_value<T>();
     }
@@ -50,8 +48,7 @@ buffer_t make_buffer(int w, int h) {
 #include "filters.h"
 
 int main(int argc, char **argv) {
-    printf("Hello!\n");
-    const int W = 4096, H = 512;
+    const int W = 512, H = 128;
     // Make some input buffers
     buffer_t bufs[] = {
         make_buffer<float>(W, H),
