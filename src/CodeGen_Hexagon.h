@@ -76,13 +76,15 @@ protected:
     ///@}
 
     /** Define overloads of CodeGen_LLVM::call_intrin that determine
-     * the intrin_lanes from the type. */
+     * the intrin_lanes from the type, and allows the function to
+     * return null if the maybe option is true and the intrinsic is
+     * not found. */
     ///@{
     using CodeGen_LLVM::call_intrin;
     llvm::Value *call_intrin(Type t, const std::string &name,
-                             std::vector<Expr>);
+                             std::vector<Expr>, bool maybe = false);
     llvm::Value *call_intrin(llvm::Type *t, const std::string &name,
-                             std::vector<llvm::Value *>);
+                             std::vector<llvm::Value *>, bool maybe = false);
     ///@}
 
     /** Override CodeGen_LLVM to use hexagon intrinics when possible. */

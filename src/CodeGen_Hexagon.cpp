@@ -475,7 +475,7 @@ Value *CodeGen_Hexagon::concat_vectors(const vector<Value *> &v) {
         if (vec_elements*element_bits == native_vector_bits()) {
             return call_intrin_cast(llvm::VectorType::get(v_ty->getVectorElementType(), vec_elements*2),
                                     IPICK(Intrinsic::hexagon_V6_vcombine),
-                                    v);
+                                    {v[1], v[0]});
         }
     }
     return CodeGen_Posix::concat_vectors(v);
@@ -517,8 +517,10 @@ std::string type_suffix(const std::vector<Expr> &ops, bool signed_variants = tru
 }
 }  // namespace
 
-Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name, vector<Expr> args) {
+Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
+                                    vector<Expr> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
+    if (maybe && !fn) return nullptr;
     internal_assert(fn) << "Function '" << name << "' not found\n";
     if (fn->getReturnType()->getVectorNumElements()*2 <= static_cast<unsigned>(result_type.lanes())) {
         // We have fewer than half as many lanes in our intrinsic as
@@ -529,11 +531,16 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name, vector
             fn = fn2;
         }
     }
-    return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(), fn->getName(), args);
+    return call_intrin(result_type,
+                       fn->getReturnType()->getVectorNumElements(),
+                       fn->getName(),
+                       args);
 }
 
-Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name, vector<Value *> args) {
+Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
+                                    vector<Value *> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
+    if (maybe && !fn) return nullptr;
     internal_assert(fn) << "Function '" << name << "' not found\n";
     if (fn->getReturnType()->getVectorNumElements()*2 <= result_type->getVectorNumElements()) {
         // We have fewer than half as many lanes in our intrinsic as
@@ -544,7 +551,10 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, fn->getReturnType()->getVectorNumElements(), fn->getName(), args);
+    return call_intrin(result_type,
+                       fn->getReturnType()->getVectorNumElements(),
+                       fn->getName(),
+                       args);
 }
 
 string CodeGen_Hexagon::mcpu() const {
@@ -673,8 +683,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
         if (i != functions.end()) {
             string intrin =
                 i->second.first + type_suffix(op->args, i->second.second);
-            value = call_intrin(op->type, intrin, op->args);
-            return;
+            value = call_intrin(op->type, intrin, op->args, true /*maybe*/);
+            if (value) return;
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right)) {
 
@@ -903,20 +913,22 @@ void CodeGen_Hexagon::visit(const Max *op) {
     if (op->type.is_vector()) {
         value = call_intrin(op->type,
                             "halide.hexagon.max" + type_suffix(op->a, op->b),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
+                            {op->a, op->b},
+                            true /*maybe*/);
+        if (value) return;
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Min *op) {
     if (op->type.is_vector()) {
         value = call_intrin(op->type,
                             "halide.hexagon.min" + type_suffix(op->a, op->b),
-                            {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
+                            {op->a, op->b},
+                            true /*maybe*/);
+        if (value) return;
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
@@ -925,14 +937,17 @@ void CodeGen_Hexagon::visit(const Select *op) {
         // with integer vectors of the appropriate size, and this
         // condition is of the form 'cond != 0'. We just need to grab
         // cond and use that as the operand for vmux.
-        const NE *cond_ne_0 = op->condition.as<NE>();
-        internal_assert(cond_ne_0);
-        internal_assert(is_zero(cond_ne_0->b));
+        Expr cond = op->condition;
+        const NE *cond_ne_0 = cond.as<NE>();
+        if (cond_ne_0) {
+            internal_assert(is_zero(cond_ne_0->b));
+            cond = cond_ne_0->a;
+        }
         Expr t = op->true_value;
         Expr f = op->false_value;
         value = call_intrin(op->type,
                             "halide.hexagon.mux" + type_suffix(t, f, false),
-                            {cond_ne_0->a, t, f});
+                            {cond, t, f});
     } else {
         CodeGen_Posix::visit(op);
     }
