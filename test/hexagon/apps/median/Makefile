@@ -29,7 +29,7 @@ median_run.o: median.o median.h median_run.cpp
 	${HEXAGON_CLANG} -c median_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 median.out: median_run.o median.o median.h
-	${HEXAGON_CLANG} -mv60 -o median.out  median_run.o median.o  -lhexagon
+	${HEXAGON_CLANG} -mv60 -o median.out  median_run.o median.o  -lhexagon -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 all: median.out
 
@@ -39,13 +39,13 @@ clean:
 .PHONY: assembly
 
 assembly: median.cpp
-	${CXX}  median.cpp -g  -o median.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
+	${CXX}  median.cpp -g  -o median.generate.out -O0 -DASSEMBLY --std=c++11 ${INCLUDES} ${LDFLAGS} -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: bitcode
 
 bitcode: median.cpp
-	${CXX}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS} ${EXTRA_FLAGS}; \
+	${CXX}  median.cpp -g  -lHalide -lpthread -ldl -o median.generate.out -O0 -DBITCODE --std=c++11 ${INCLUDES} ${LDFLAGS}  -DLOG2VLEN=${LOG2VLEN} ${EXTRA_FLAGS}; \
 	export LD_LIBRARY_PATH=${HALIDE_TOP}/bin:${LD_LIBRARY_PATH}; ./median.generate.out ${B128_MODE}
 
 .PHONY: all run bmark-report
