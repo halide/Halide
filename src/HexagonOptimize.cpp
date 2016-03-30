@@ -391,6 +391,7 @@ private:
             // If the body didn't change, we must not have used the deinterleaved value.
             result = LetType::make(op->name, value, body);
         } else {
+            // We need to rewrap the body with new lets.
             result = body;
             bool deinterleaved_used = uses_var(result, deinterleaved_name);
             bool interleaved_used = uses_var(result, op->name);
@@ -450,7 +451,7 @@ private:
 
         if (is_deinterleave(op)) {
             expr = mutate(op->args[0]);
-            if (is_interleave(expr)) {
+            if (yields_interleave(expr)) {
                 // This is a deinterleave of an interleave! Remove them both.
                 expr = remove_interleave(expr);
             } else if (!expr.same_as(op->args[0])) {
