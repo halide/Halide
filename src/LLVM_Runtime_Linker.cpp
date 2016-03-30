@@ -858,6 +858,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                    (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128))) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
+            if (t.os == Target::Android) {
+                modules.push_back(get_initmod_android_ion(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_fake_ion(c, bits_64, debug));
+            }
         }
     }
 
