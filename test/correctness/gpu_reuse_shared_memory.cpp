@@ -137,8 +137,8 @@ int dynamic_shared_test() {
 
     // The amount of shared memory required varies with x
 
-    Image<int> out = f4.realize(1000);
-    for (int x = 0; x < 100; x++) {
+    Image<int> out = f4.realize(500);
+    for (int x = 0; x < out.width(); x++) {
         int correct = 27*x;
         if (out(x) != correct) {
             printf("out(%d) = %d instead of %d\n",
