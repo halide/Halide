@@ -279,21 +279,26 @@ class ExtractSharedAllocations : public IRMutator {
             IRMutator::visit(op);
             in_threads = old;
         } else {
+            // Set aside the allocations we've found so far.
             vector<SharedAllocation> old;
             old.swap(allocations);
 
+            // Find allocations inside the loop body
             Stmt body = mutate(op->body);
 
             // Expand any new shared allocations found in the body using the loop bounds.
             Scope<Interval> scope;
             scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
                                           Variable::make(Int(32), op->name + ".loop_max")));
+
+            // Expand the inner allocations using the loop bounds.
             for (SharedAllocation &s : allocations) {
                 if (expr_uses_var(s.size, op->name)) {
                     s.size = bounds_of_expr_in_scope(s.size, scope).max;
                 }
             }
 
+            // Add back on the allocations we set aside.
             if (!allocations.empty()) {
                 allocations.insert(allocations.end(), old.begin(), old.end());
             } else {
