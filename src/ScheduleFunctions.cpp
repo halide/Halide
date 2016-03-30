@@ -148,6 +148,32 @@ Stmt build_provide_loop_nest(Function f,
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
 
+            if (is_update) {
+                user_assert(split.tail != TailStrategy::ShiftInwards)
+                    << "When splitting Var " << split.old_var
+                    << " ShiftInwards is not a legal tail strategy for update definitions, as"
+                    << " it may change the meaning of the algorithm\n";
+            }
+
+            if (split.exact) {
+                user_assert(split.tail == TailStrategy::Auto ||
+                            split.tail == TailStrategy::GuardWithIf)
+                    << "When splitting Var " << split.old_var
+                    << " the tail strategy must be GuardWithIf or Auto. "
+                    << "Anything else may change the meaning of the algorithm\n";
+            }
+
+            TailStrategy tail = split.tail;
+            if (tail == TailStrategy::Auto) {
+                if (split.exact) {
+                    tail = TailStrategy::GuardWithIf;
+                } else if (is_update) {
+                    tail = TailStrategy::RoundUp;
+                } else {
+                    tail = TailStrategy::ShiftInwards;
+                }
+            }
+
             if ((iter != known_size_dims.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
                 // We have proved that the split factor divides the
@@ -157,7 +183,7 @@ Stmt build_provide_loop_nest(Function f,
             } else if (is_one(split.factor)) {
                 // The split factor trivially divides the old extent,
                 // but we know nothing new about the outer dimension.
-            } else if (split.exact || is_update) {
+            } else if (tail == TailStrategy::GuardWithIf) {
                 // It's an exact split but we failed to prove that the
                 // extent divides the factor. Use predication.
 
@@ -177,7 +203,7 @@ Stmt build_provide_loop_nest(Function f,
                 stmt = IfThenElse::make(cond, stmt, Stmt());
                 stmt = LetStmt::make(rebased_var_name, rebased, stmt);
 
-            } else {
+            } else if (tail == TailStrategy::ShiftInwards) {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
@@ -191,6 +217,8 @@ Stmt build_provide_loop_nest(Function f,
                 }
 
                 base = Min::make(base, old_max + (1 - split.factor));
+            } else {
+                internal_assert(tail == TailStrategy::RoundUp);
             }
 
             // Substitute in the new expression for the split variable ...

@@ -7,12 +7,12 @@ int main(int argc, char **argv) {
     Var x;
 
     {
-        // Check splitting an update definition and then realizing it
+        // Check splitting an RVar in an update definition and then realizing it
         // over an extent that is not a multiple of the factor.
         Func f;
         f(x) = 0;
         f(x) += x;
-        f.update().unroll(x, 2);
+        f.update().unroll(x, 2, TailStrategy::GuardWithIf);
         Image<int> result = f.realize(3);
         for (int i = 0; i < result.width(); i++) {
             if (result(i) != i) {
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
         RDom r(0, sum_size);
         f(0) += f(r);
 
-        f.update(0).vectorize(x, 8);
+        f.update(0).vectorize(x, 8, TailStrategy::GuardWithIf);
         f.update(1).unroll(r, 4);
 
         // Just make sure that you can realize over any size
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         f(x) = 0;
         f(x) += g(x) + h(x);
         Var xo, xi;
-        f.update().split(x, xo, xi, 7);
+        f.update().split(x, xo, xi, 7, TailStrategy::GuardWithIf);
         g.compute_at(f, xo);
         h.compute_at(f, xi);
         Image<int> result = f.realize(15);
