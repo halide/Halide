@@ -8,6 +8,7 @@
 #include "IREquality.h"
 #include "Simplify.h"
 #include "IRPrinter.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -85,8 +86,6 @@ public:
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4];
 
-    Scope<Interval> scope;
-
     using IRVisitor::visit;
 
     void found_for(int dim, Expr extent) {
@@ -99,25 +98,34 @@ class ExtractBlockSize : public IRVisitor {
     }
 
     void visit(const For *op) {
-        Interval ie = bounds_of_expr_in_scope(op->extent, scope);
-        Interval im = bounds_of_expr_in_scope(op->min, scope);
-
         for (int i = 0; i < 4; i++) {
             if (ends_with(op->name, thread_names[i])) {
-                found_for(i, ie.max);
+                found_for(i, op->extent);
             }
         }
 
-        scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
         IRVisitor::visit(op);
-        scope.pop(op->name);
+
+        Scope<Interval> scope;
+        scope.push(op->name,
+                   Interval(Variable::make(Int(32), op->name + ".loop_min"),
+                            Variable::make(Int(32), op->name + ".loop_max")));
+        for (int i = 0; i < 4; i++) {
+            if (block_extent[i].defined() &&
+                expr_uses_var(block_extent[i], op->name)) {
+                block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
+            }
+        }
     }
 
     void visit(const LetStmt *op) {
-        Interval i = bounds_of_expr_in_scope(op->value, scope);
-        scope.push(op->name, i);
-        op->body.accept(this);
-        scope.pop(op->name);
+        IRVisitor::visit(op);
+        for (int i = 0; i < 4; i++) {
+            if (block_extent[i].defined() &&
+                expr_uses_var(block_extent[i], op->name)) {
+                block_extent[i] = simplify(Let::make(op->name, op->value, block_extent[i]));
+            }
+        }
     }
 
 public:
@@ -133,16 +141,6 @@ public:
     Expr extent(int d) const {
         return block_extent[d];
     }
-
-    void max_over_blocks(const Scope<Interval> &scope) {
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined()) {
-                block_extent[i] = simplify(block_extent[i]);
-                block_extent[i] = bounds_of_expr_in_scope(block_extent[i], scope).max;
-            }
-        }
-    }
-
 };
 
 class NormalizeDimensionality : public IRMutator {
@@ -238,11 +236,10 @@ class ReplaceForWithIf : public IRMutator {
 
             internal_assert(dim >= 0 && dim < block_size.dimensions());
 
-            Expr var = Variable::make(Int(32), "." + thread_names[dim]);
-            internal_assert(is_zero(op->min));
             Stmt body = mutate(op->body);
 
-            body = substitute(op->name, var, body);
+            Expr var = Variable::make(Int(32), "." + thread_names[dim]);
+            body = substitute(op->name, var + op->min, body);
 
             if (equal(op->extent, block_size.extent(dim))) {
                 stmt = body;
@@ -269,8 +266,6 @@ class ExtractSharedAllocations : public IRMutator {
     };
     vector<SharedAllocation> allocations;
 
-    Scope<Interval> scope;
-
     set<string> shared;
 
     bool in_threads;
@@ -284,12 +279,33 @@ class ExtractSharedAllocations : public IRMutator {
             IRMutator::visit(op);
             in_threads = old;
         } else {
-            Interval min_bounds = bounds_of_expr_in_scope(op->min, scope);
-            Interval extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
-            Interval bounds(min_bounds.min, min_bounds.max + extent_bounds.max - 1);
-            scope.push(op->name, bounds);
-            IRMutator::visit(op);
-            scope.pop(op->name);
+            // Set aside the allocations we've found so far.
+            vector<SharedAllocation> old;
+            old.swap(allocations);
+
+            // Find allocations inside the loop body
+            Stmt body = mutate(op->body);
+
+            // Expand any new shared allocations found in the body using the loop bounds.
+            Scope<Interval> scope;
+            scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
+                                          Variable::make(Int(32), op->name + ".loop_max")));
+
+            // Expand the inner allocations using the loop bounds.
+            for (SharedAllocation &s : allocations) {
+                if (expr_uses_var(s.size, op->name)) {
+                    s.size = bounds_of_expr_in_scope(s.size, scope).max;
+                }
+            }
+
+            // Add back on the allocations we set aside.
+            if (!allocations.empty()) {
+                allocations.insert(allocations.end(), old.begin(), old.end());
+            } else {
+                allocations.swap(old);
+            }
+
+            stmt = For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
         }
     }
 
@@ -315,7 +331,7 @@ class ExtractSharedAllocations : public IRMutator {
         for (size_t i = 0; i < op->extents.size(); i++) {
             alloc.size *= op->extents[i];
         }
-        alloc.size = bounds_of_expr_in_scope(simplify(alloc.size), scope).max;
+        alloc.size = simplify(alloc.size);
         allocations.push_back(alloc);
         stmt = op->body;
 
@@ -357,15 +373,16 @@ class ExtractSharedAllocations : public IRMutator {
             return;
         }
 
-        Expr value = mutate(op->value);
-        Interval bounds = bounds_of_expr_in_scope(value, scope);
-        bounds.min = simplify(bounds.min);
-        bounds.max = simplify(bounds.max);
-        scope.push(op->name, bounds);
         Stmt body = mutate(op->body);
-        scope.pop(op->name);
+        Expr value = mutate(op->value);
 
-        if (op->body.same_as(body) && op->value.same_as(value)) {
+        for (SharedAllocation &s : allocations) {
+            if (expr_uses_var(s.size, op->name)) {
+                s.size = simplify(Let::make(op->name, op->value, s.size));
+            }
+        }
+
+        if (op->body.same_as(body) && value.same_as(op->value)) {
             stmt = op;
         } else {
             stmt = LetStmt::make(op->name, value, body);
@@ -436,91 +453,47 @@ public:
     ExtractSharedAllocations(DeviceAPI d) : in_threads(false), device_api(d) {}
 };
 
-class FuseGPUThreadLoops : public IRMutator {
+class FuseGPUThreadLoopsSingleKernel : public IRMutator {
     using IRMutator::visit;
-
-    Scope<Interval> scope;
-
-    bool in_gpu_loop = false;
-
-    void visit(const LetStmt *op) {
-        if (in_gpu_loop) {
-            scope.push(op->name, bounds_of_expr_in_scope(op->value, scope));
-            IRMutator::visit(op);
-            scope.pop(op->name);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
+    const ExtractBlockSize &block_size;
+    ExtractSharedAllocations &shared_mem;
 
     void visit(const For *op) {
-         if (op->device_api == DeviceAPI::GLSL) {
-            stmt = op;
-            return;
-        }
-
-        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
-            << "Loops over GPU thread variable: \"" << op->name
-            << "\" is outside of any loop over a GPU block variable. "
-            << "This schedule is malformed. There must be a GPU block "
-            << "variable, and it must reordered to be outside all GPU "
-            << "thread variables.\n";
-
-        bool should_pop = false;
-        bool old_in_gpu_loop = in_gpu_loop;
-        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
-            Interval im = bounds_of_expr_in_scope(op->min, scope);
-            Interval ie = bounds_of_expr_in_scope(op->extent, scope);
-            scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
-            should_pop = true;
-            in_gpu_loop = true;
-        }
-
         if (ends_with(op->name, ".__block_id_x")) {
-
             Stmt body = op->body;
 
-            ExtractBlockSize e;
-            body.accept(&e);
-            e.max_over_blocks(scope);
-
+            // This is the innermost loop over blocks.
             debug(3) << "Fusing thread block:\n" << body << "\n\n";
 
-            NormalizeDimensionality n(e, op->device_api);
+            NormalizeDimensionality n(block_size, op->device_api);
             body = n.mutate(body);
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
-
-            ExtractSharedAllocations h(op->device_api);
-            body = h.mutate(body);
-
-            debug(3) << "Pulled out shared allocations:\n" << body << "\n\n";
 
             InjectThreadBarriers i;
             body = i.mutate(body);
 
             debug(3) << "Injected synchronization:\n" << body << "\n\n";
 
-            ReplaceForWithIf f(e);
+            ReplaceForWithIf f(block_size);
             body = f.mutate(body);
 
             debug(3) << "Replaced for with if:\n" << body << "\n\n";
 
             // Rewrap the whole thing in the loop over threads
-            for (int i = 0; i < e.dimensions(); i++) {
-                body = For::make("." + thread_names[i], 0, e.extent(i), ForType::Parallel, op->device_api, body);
+            for (int i = 0; i < block_size.dimensions(); i++) {
+                body = For::make("." + thread_names[i], 0, block_size.extent(i), ForType::Parallel, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen
-            if (e.dimensions() == 0) {
+            if (block_size.dimensions() == 0) {
                 body = For::make(".__thread_id_x", 0, 1, ForType::Parallel, op->device_api, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
 
             // Add back in the shared allocations
-            body = h.rewrap(body);
-
+            body = shared_mem.rewrap(body);
             debug(3) << "Add back in shared allocations:\n" << body << "\n\n";
 
             if (body.same_as(op->body)) {
@@ -532,10 +505,48 @@ class FuseGPUThreadLoops : public IRMutator {
             IRMutator::visit(op);
         }
 
-        if (should_pop) {
-            scope.pop(op->name);
+    }
+
+public:
+    FuseGPUThreadLoopsSingleKernel(const ExtractBlockSize &bs,
+                                   ExtractSharedAllocations &sm) :
+        block_size(bs), shared_mem(sm) {}
+
+};
+
+class FuseGPUThreadLoops : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        if (op->device_api == DeviceAPI::GLSL) {
+            stmt = op;
+            return;
         }
-        in_gpu_loop = old_in_gpu_loop;
+
+        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
+            << "Loops over GPU thread variable: \"" << op->name
+            << "\" is outside of any loop over a GPU block variable. "
+            << "This schedule is malformed. There must be a GPU block "
+            << "variable, and it must reordered to be outside all GPU "
+            << "thread variables.\n";
+
+        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+            // Do the analysis of thread block size and shared memory
+            // usage.
+            ExtractBlockSize block_size;
+            Stmt loop = Stmt(op);
+            loop.accept(&block_size);
+
+            ExtractSharedAllocations shared_mem(op->device_api);
+            loop = shared_mem.mutate(loop);
+
+            debug(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
+
+            // Mutate the inside of the kernel
+            stmt = FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
+        } else {
+            IRMutator::visit(op);
+        }
     }
 };
 
@@ -617,8 +628,8 @@ Stmt zero_gpu_loop_mins(Stmt s) {
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;
     s.accept(&validate);
-    s = ZeroGPULoopMins().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
+    s = ZeroGPULoopMins().mutate(s);
     return s;
 }
 
