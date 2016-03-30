@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <dlfcn.h>
 
+#include "hexagon_standalone.h"
+
 typedef struct _buffer__seq_octet _buffer__seq_octet;
 typedef _buffer__seq_octet buffer;
 struct _buffer__seq_octet {
@@ -14,6 +16,27 @@ struct _buffer__seq_octet {
 typedef unsigned int handle_t;
 
 typedef handle_t handle_t;
+
+// Provide an implementation of qurt to redirect to the appropriate
+// simulator calls.
+extern "C" {
+
+int qurt_hvx_lock(int mode) {
+    SIM_ACQUIRE_HVX;
+    if (mode == 0) {
+        SIM_CLEAR_HVX_DOUBLE_MODE;
+    } else {
+        SIM_SET_HVX_DOUBLE_MODE;
+    }
+    return 0;
+}
+
+int qurt_hvx_unlock() {
+    SIM_RELEASE_HVX;
+    return 0;
+}
+
+}  // extern "C"
 
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_error(void *user_context, const char *str) {
@@ -54,6 +77,18 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void *halide_get_symbol(const char *name) {
+    return dlsym(RTLD_DEFAULT, name);
+}
+
+void *halide_load_library(const char *name) {
+    return dlopen(name, RTLD_LAZY);
+}
+
+void *halide_get_library_symbol(void *lib, const char *name) {
+    return dlsym(lib, name);
+}
+
 void init() {
     // The simulator needs this call to enable dlopen to work...
     const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
@@ -65,7 +100,10 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_print_t print,
                              halide_error_handler_t error_handler,
                              halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task);
+                             halide_do_task_t do_task,
+                             void *(*)(const char *),
+                             void *(*)(const char *),
+                             void *(*)(void *, const char *));
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
@@ -107,7 +145,10 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_print,
                              halide_error,
                              halide_do_par_for,
-                             halide_do_task);
+                             halide_do_task,
+                             halide_get_symbol,
+                             halide_load_library,
+                             halide_get_library_symbol);
     if (result != 0) {
         dlclose(lib);
         halide_print(NULL, "set_runtime failed\n");
@@ -171,7 +212,7 @@ int release_kernels(handle_t module_ptr, int codeLen) {
 extern "C" {
 
 void halide_print(void *user_context, const char *str) {
-    printf("%s", str);
+    fprintf(stderr, "%s", str);
 }
 
 // The global symbols with which we pass RPC commands and results.
