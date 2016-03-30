@@ -238,37 +238,31 @@ volatile int rpc_ret = 0;
 }
 
 int main(int argc, const char **argv) {
-    printf("Simulator loop running...\n");
     while(true) {
         fflush(stdout);
         switch (rpc_call) {
         case Message::None:
             break;
         case Message::Alloc:
-            printf("Alloc(%d)\n", RPC_ARG(0));
             rpc_ret = reinterpret_cast<int>(halide_malloc(NULL, RPC_ARG(0)));
             break;
         case Message::Free:
-            printf("Free\n");
             halide_free(NULL, reinterpret_cast<void*>(RPC_ARG(0)));
             rpc_ret = 0;
             break;
         case Message::InitKernels:
-            printf("InitKernels\n");
             rpc_ret = initialize_kernels(
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
                 reinterpret_cast<handle_t*>(RPC_ARG(2)));
             break;
         case Message::GetSymbol:
-            printf("GetSymbol\n");
             rpc_ret = get_symbol(
                 static_cast<handle_t>(RPC_ARG(0)),
                 reinterpret_cast<const char *>(RPC_ARG(1)),
                 RPC_ARG(2));
             break;
         case Message::Run:
-            printf("Run\n");
             rpc_ret = run(
                 static_cast<handle_t>(RPC_ARG(0)),
                 static_cast<handle_t>(RPC_ARG(1)),
@@ -280,13 +274,11 @@ int main(int argc, const char **argv) {
                 RPC_ARG(7));
             break;
         case Message::ReleaseKernels:
-            printf("ReleaseKernels\n");
             rpc_ret = release_kernels(
                 static_cast<handle_t>(RPC_ARG(0)),
                 RPC_ARG(1));
             break;
         case Message::Break:
-            printf("Break\n");
             return 0;
         default:
             printf("Unknown message: %d\n", rpc_call);

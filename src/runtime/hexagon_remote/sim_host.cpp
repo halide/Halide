@@ -86,11 +86,6 @@ int read_memory(void *dest, int src, int size) {
 int send_message(int msg, const std::vector<int> &arguments) {
     assert(sim);
 
-    printf("send_message: %d", msg);
-    for (int i : arguments)
-        printf(" %d", i);
-    printf("\n");
-
     HEXAPI_Status status;
 
     HEX_4u_t remote_msg = 0;
@@ -152,7 +147,6 @@ int send_message(int msg, const std::vector<int> &arguments) {
             if (msg == Message::None) {
                 HEX_4u_t ret = 0;
                 read_memory(&ret, remote_ret, 4);
-                printf("send_message result: %d\n", ret);
                 return ret;
             }
         } while (state == HEX_CORE_SUCCESS);
