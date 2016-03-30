@@ -1,12 +1,15 @@
-CXX-hexagon-32-qurt-hvx_64 ?= $(HEX_TOOLS)/bin/hexagon-clang++
 CXX-host ?= c++
 CXX-arm-64-android ?= $(ANDROID_NDK_HOME)/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_NDK_HOME)/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-c++
+CXX-hexagon-32-qurt-hvx_64 ?= $(HEX_TOOLS)/bin/hexagon-clang++
 
-CXXFLAGS-hexagon-32-qurt-hvx_64 ?= -m$* -G0 -mG0lib
-CXXFLAGS-host ?= -lpthread
 CXXFLAGS-arm-64-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm64 -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm -llog -fPIE -pie
+CXXFLAGS-hexagon-32-qurt-hvx_64 ?= -m$* -G0 -mG0lib
+
+LDFLAGS-host ?= -lpthread
+LDFLAGS-hexagon-32-qurt-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt
+
 
 all: driver-host driver-arm-64-android driver-arm-32-android
 
@@ -20,7 +23,7 @@ all: driver-host driver-arm-64-android driver-arm-32-android
 	echo '{NULL, NULL}};' >> $*/filters.h
 
 driver-%: driver.cpp %/filters.h
-	$(CXX-$*) $(CXXFLAGS-$*) -O3 -I $* driver.cpp $*/test_*.o $*/simd_op_check_runtime.o -o driver-$* -ldl
+	$(CXX-$*) $(CXXFLAGS-$*) -O3 -I $* driver.cpp $*/test_*.o $*/simd_op_check_runtime.o -o driver-$* $(LDFLAGS-$*)
 
 clean:
 	rm -rf test_*.h check_*.s test_*.o filters.h filter_headers.h driver-* arm-32-android arm-64-android host
