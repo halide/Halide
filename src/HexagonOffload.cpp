@@ -79,9 +79,9 @@ public:
         if (loop->device_api == DeviceAPI::Hexagon) {
             // Unrolling or loop partitioning might generate multiple
             // loops with the same name, so we need to unique them.
-            std::string hex_name = unique_name("hex_" + loop->name);
+            std::string hex_name = "hex_" + loop->name;
 
-            Stmt body = remove_trivial_for_loops(loop);
+            Stmt body = remove_trivial_for_loops(loop, true /*device_loops*/);
 
             // Build a closure for the device code.
             // TODO: Should this move the body of the loop to Hexagon,
