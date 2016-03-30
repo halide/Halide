@@ -353,16 +353,22 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
-/** A function call. This can represent a call to some extern
- * function (like sin), but it's also our multi-dimensional
- * version of a Load, so it can be a load from an input image, or
- * a call to another halide function. The latter two types of call
- * nodes don't survive all the way down to code generation - the
- * lowering process converts them to Load nodes. */
+/** A function call. This can represent a call to some extern function
+ * (like sin), but it's also our multi-dimensional version of a Load,
+ * so it can be a load from an input image, or a call to another
+ * halide function. These two types of call nodes don't survive all
+ * the way down to code generation - the lowering process converts
+ * them to Load nodes. */
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide, Intrinsic} CallType;
+    typedef enum {Image,        //< A load from an input image
+                  Extern,       //< A call to an external C-ABI function, possibly with side-effects
+                  PureExtern,   //< A call to a guaranteed-side-effect-free external function
+                  Halide,       //< A call to a Func
+                  Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                  PureIntrinsic //< A side-effect-free version of the above.
+    } CallType;
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
@@ -458,6 +464,24 @@ struct Call : public ExprNode<Call> {
         return make(param.type(), param.name(), args, Image, Function(), 0, Buffer(), param);
     }
 
+    /** Check if a call node is pure within a pipeline, meaning that
+     * the same args always give the same result, and the calls can be
+     * reordered, duplicated, unified, etc without changing the
+     * meaning of anything. Not transitive - doesn't guarantee the
+     * args themselves are pure. An example of a pure Call node is
+     * sqrt. If in doubt, don't mark a Call node as pure. */
+    bool is_pure() const {
+        return (call_type == PureExtern ||
+                call_type == Image ||
+                call_type == PureIntrinsic);
+    }
+
+    bool is_intrinsic(ConstString intrin_name) const {
+        return
+            ((call_type == Intrinsic ||
+              call_type == PureIntrinsic) &&
+             name == intrin_name);
+    }
 };
 
 /** A named variable. Might be a loop variable, function argument,
