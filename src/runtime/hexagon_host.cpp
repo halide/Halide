@@ -116,9 +116,10 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
         "/data/local/tmp/",
         "/tmp/"
     };
+    Printer<BasicPrinter> path(user_context);
     for (int i = 0; i < 1000; i++) {
         for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
-            Printer<BasicPrinter> path(user_context);
+            path.clear();
             path << tmp_paths[j] << "halide_kernels" << i << ".so";
             strncpy(filename, path.str(), filename_size);
 
@@ -306,6 +307,10 @@ WEAK int halide_hexagon_run(void *user_context,
                         input_scalars, input_scalar_count,
                         output_buffers, output_buffer_count);
     debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "Hexagon pipeline failed.\n";
+        return result;
+    }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after_run = halide_current_time_ns(user_context);
