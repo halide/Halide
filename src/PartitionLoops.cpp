@@ -81,7 +81,7 @@ class RemoveLikelyTags : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Call *op) {
-        if (op->name == Call::likely && op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::likely)) {
             internal_assert(op->args.size() == 1);
             expr = mutate(op->args[0]);
         } else {
@@ -94,8 +94,7 @@ class RemoveLikelyTags : public IRMutator {
 class HasLikelyTag : public IRVisitor {
     using IRVisitor::visit;
     void visit(const Call *op) {
-        if (op->name == Call::likely &&
-            op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::likely)) {
             result = true;
         } else {
             IRVisitor::visit(op);
