@@ -206,8 +206,10 @@ public:
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     Target target = hexagon_remote_target;
-    if (host_target.has_feature(Target::Debug)) {
-        target = target.with_feature(Target::Debug);
+    for (Target::Feature i : {Target::Debug, Target::HVX_64, Target::HVX_128}) {
+        if (host_target.has_feature(i)) {
+            target = target.with_feature(i);
+        }
     }
     InjectHexagonRpc injector(target);
     s = injector.inject(s);
