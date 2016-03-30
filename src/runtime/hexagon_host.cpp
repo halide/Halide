@@ -112,22 +112,31 @@ namespace {
 // TODO: Try writing this in a way that doesn't actually touch the file system (named pipe?)
 WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
                              char *filename, size_t filename_size) {
-    const char *filenames[] = {
-        "/data/local/tmp/halide_kernels.so",
-        "/tmp/halide_kernels.so"
+    const char *tmp_paths[] = {
+        "/data/local/tmp/",
+        "/tmp/"
     };
-    for (size_t i = 0; i < sizeof(filenames)/sizeof(filenames[0]); i++) {
-        int so_fd = open(filenames[i], O_RDWR | O_TRUNC | O_CREAT, 0755);
-        if (so_fd == -1) continue;
-        ssize_t written = write(so_fd, data, size);
-        close(so_fd);
-        if (written < (ssize_t)size) {
-            error(user_context) << "Failed to write shared object file " << filenames[i] << "\n";
-            return -1;
+    for (int i = 0; i < 1000; i++) {
+        for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
+            Printer<BasicPrinter> path(user_context);
+            path << tmp_paths[j] << "halide_kernels" << i << ".so";
+            strncpy(filename, path.str(), filename_size);
+
+            // Make sure the file doesn't already exist.
+            int so_fd = open(filename, O_RDONLY, 0);
+            if (so_fd != -1) continue;
+
+            so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0755);
+            if (so_fd == -1) continue;
+            ssize_t written = write(so_fd, data, size);
+            close(so_fd);
+            if (written < (ssize_t)size) {
+                error(user_context) << "Failed to write shared object file " << filename << "\n";
+                return -1;
+            }
+            debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
+            return 0;
         }
-        strncpy(filename, filenames[i], filename_size);
-        debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
-        return 0;
     }
     error(user_context) << "Unable to write temporary shared object file.\n";
     return -1;
@@ -184,6 +193,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
             (*state)->size = code_size;
         } else {
             debug(user_context) << "        " << result << "\n";
+            error(user_context) << "Initialization of Hexagon kernels failed\n";
         }
     } else {
         debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
