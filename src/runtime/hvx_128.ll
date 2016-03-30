@@ -46,8 +46,8 @@ define weak_odr <128 x i16> @halide.hexagon.deinterleave.vh(<128 x i16> %arg) no
   %arg_32 = bitcast <128 x i16> %arg to <64 x i32>
   %e = call <32 x i32> @llvm.hexagon.V6.lo_128B(<64 x i32> %arg_32)
   %o = call <32 x i32> @llvm.hexagon.V6.hi_128B(<64 x i32> %arg_32)
-  %re = call <32 x i32> @llvm.hexagon.V6.vpackeh_128B(<32 x i32> %e, <32 x i32> %o)
-  %ro = call <32 x i32> @llvm.hexagon.V6.vpackoh_128B(<32 x i32> %e, <32 x i32> %o)
+  %re = call <32 x i32> @llvm.hexagon.V6.vpackeh_128B(<32 x i32> %o, <32 x i32> %e)
+  %ro = call <32 x i32> @llvm.hexagon.V6.vpackoh_128B(<32 x i32> %o, <32 x i32> %e)
   %r_32 = tail call <64 x i32> @llvm.hexagon.V6.vcombine_128B(<32 x i32> %ro, <32 x i32> %re)
   %r = bitcast <64 x i32> %r_32 to <128 x i16>
   ret <128 x i16> %r
@@ -57,8 +57,8 @@ define weak_odr <256 x i8> @halide.hexagon.deinterleave.vb(<256 x i8> %arg) noun
   %arg_32 = bitcast <256 x i8> %arg to <64 x i32>
   %e = call <32 x i32> @llvm.hexagon.V6.lo_128B(<64 x i32> %arg_32)
   %o = call <32 x i32> @llvm.hexagon.V6.hi_128B(<64 x i32> %arg_32)
-  %re = call <32 x i32> @llvm.hexagon.V6.vpackeb_128B(<32 x i32> %e, <32 x i32> %o)
-  %ro = call <32 x i32> @llvm.hexagon.V6.vpackob_128B(<32 x i32> %e, <32 x i32> %o)
+  %re = call <32 x i32> @llvm.hexagon.V6.vpackeb_128B(<32 x i32> %o, <32 x i32> %e)
+  %ro = call <32 x i32> @llvm.hexagon.V6.vpackob_128B(<32 x i32> %o, <32 x i32> %e)
   %r_32 = tail call <64 x i32> @llvm.hexagon.V6.vcombine_128B(<32 x i32> %ro, <32 x i32> %re)
   %r = bitcast <64 x i32> %r_32 to <256 x i8>
   ret <256 x i8> %r
@@ -76,7 +76,7 @@ define internal i16 @dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
 
 define internal i32 @dup2.h(i16 %arg) nounwind uwtable readnone alwaysinline {
   %arg_i32 = zext i16 %arg to i32
-  %arg_i32_s = shl i32 %arg_i32, 8
+  %arg_i32_s = shl i32 %arg_i32, 16
   %r = or i32 %arg_i32, %arg_i32_s
   ret i32 %r
 }
