@@ -7,7 +7,7 @@ declare <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32>, <16 x i32>, i32)
 define weak_odr <32 x i32> @halide.hexagon.interleave.vw(<32 x i32> %arg) nounwind uwtable readnone alwaysinline {
   %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg)
   %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg)
-  %r = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %e, <16 x i32> %o, i32 -4)
+  %r = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %o, <16 x i32> %e, i32 -4)
   ret <32 x i32> %r
 }
 
@@ -15,7 +15,7 @@ define weak_odr <64 x i16> @halide.hexagon.interleave.vh(<64 x i16> %arg) nounwi
   %arg_32 = bitcast <64 x i16> %arg to <32 x i32>
   %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg_32)
   %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg_32)
-  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %e, <16 x i32> %o, i32 -2)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %o, <16 x i32> %e, i32 -2)
   %r = bitcast <32 x i32> %r_32 to <64 x i16>
   ret <64 x i16> %r
 }
@@ -24,7 +24,7 @@ define weak_odr <128 x i8> @halide.hexagon.interleave.vb(<128 x i8> %arg) nounwi
   %arg_32 = bitcast <128 x i8> %arg to <32 x i32>
   %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg_32)
   %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg_32)
-  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %e, <16 x i32> %o, i32 -1)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %o, <16 x i32> %e, i32 -1)
   %r = bitcast <32 x i32> %r_32 to <128 x i8>
   ret <128 x i8> %r
 }
