@@ -62,25 +62,42 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     return llvm_module;
 }
 
+namespace {
+
+// A piece of IR uses HVX if it contains any vector type producing IR
+// nodes.
+class UsesHvx : public IRVisitor {
+private:
+    using IRVisitor::visit;
+    void visit(const Variable *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+    }
+    void visit(const Ramp *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+    }
+    void visit(const Broadcast *op) {
+        uses_hvx = uses_hvx || op->lanes > 1;
+    }
+    void visit(const Call *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+    }
+
+public:
+    bool uses_hvx = false;
+};
+
+bool uses_hvx(Stmt s) {
+    UsesHvx uses;
+    s.accept(&uses);
+    return uses.uses_hvx;
+}
+
+}  // namespace
+
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f) {
     CodeGen_Posix::begin_func(f.linkage, f.name, f.args);
 
-    // Modify the body to add a call to halide_qurt_hvx_lock, and
-    // register a destructor to call halide_qurt_hvx_unlock.
-    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
-    Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
-    string hvx_lock_result_name = unique_name("hvx_lock_result");
-    Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
-    Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
-                                        AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
-
-    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-    Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
-                                 {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
-
     Stmt body = f.body;
-    body = Block::make(Evaluate::make(hvx_unlock), body);
-    body = Block::make(check_hvx_lock, body);
 
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
@@ -90,6 +107,25 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f) {
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon code...\n";
     body = optimize_hexagon(body, target);
+
+    if (uses_hvx(body)) {
+        debug(1) << "Adding calls to qurt_hvx_lock...\n";
+        // Modify the body to add a call to halide_qurt_hvx_lock, and
+        // register a destructor to call halide_qurt_hvx_unlock.
+        Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
+        Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
+        string hvx_lock_result_name = unique_name("hvx_lock_result");
+        Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
+        Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
+                                            AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
+
+        Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+        Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
+                                     {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
+
+        body = Block::make(Evaluate::make(hvx_unlock), body);
+        body = Block::make(check_hvx_lock, body);
+    }
 
     debug(1) << "Hexagon function body:\n";
     debug(1) << body << "\n";
