@@ -66,6 +66,18 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void *halide_get_symbol(const char *name) {
+    return dlsym(RTLD_DEFAULT, name);
+}
+
+void *halide_load_library(const char *name) {
+    return dlopen(name, RTLD_LAZY);
+}
+
+void *halide_get_library_symbol(void *lib, const char *name) {
+    return dlsym(lib, name);
+}
+
 const int map_alignment = 4096;
 
 typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
@@ -73,7 +85,10 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_print_t print,
                              halide_error_handler_t error_handler,
                              halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task);
+                             halide_do_task_t do_task,
+                             void *(*)(const char *),
+                             void *(*)(const char *),
+                             void *(*)(void *, const char *));
 
 int context_count = 0;
 
@@ -114,7 +129,10 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
                              halide_print,
                              halide_error,
                              halide_do_par_for,
-                             halide_do_task);
+                             halide_do_task,
+                             halide_get_symbol,
+                             halide_load_library,
+                             halide_get_library_symbol);
     if (result != 0) {
         dlclose(lib);
         halide_print(NULL, "set_runtime failed");
