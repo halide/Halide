@@ -1237,7 +1237,7 @@ private:
                 // of conditions for now.
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
-                if (call && call->call_type == Call::Intrinsic && call->name == Call::likely) {
+                if (call && call->is_intrinsic(Call::likely)) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
