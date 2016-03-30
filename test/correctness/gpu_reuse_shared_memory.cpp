@@ -44,7 +44,7 @@ int multi_type_test() {
 }
 
 int pyramid_test() {
-    const int levels = 15;
+    const int levels = 10;
     const int size_x = 100;
     const int size_y = 100;
 
@@ -54,10 +54,10 @@ int pyramid_test() {
 
     funcs[0](x, y) = 1;
     for (int i = 1; i < levels; ++i) {
-        funcs[i](x, y) = funcs[i-1](x+1, y);
+        funcs[i](x, y) = funcs[i-1](2*x, y);
     }
 
-    funcs[levels-1].compute_root().split(x, xo, xi, 4).split(y, yo, yi, 4).gpu_tile(xo, yo, 8, 8);
+    funcs[levels-1].compute_root().split(x, xo, xi, 4).split(y, yo, yi, 4).gpu_tile(xo, yo, 1, 1);
     for (int i = levels-2; i >= 0; --i) {
         funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks()).split(x, xo, xi, 4).split(y, yo, yi, 4).gpu_threads(xo, yo);
     }
