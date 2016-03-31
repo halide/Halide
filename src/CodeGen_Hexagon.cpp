@@ -716,7 +716,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 
 Expr CodeGen_Hexagon::mulhi_shr(Expr a, Expr b, int shr) {
     Type ty = a.type();
-    if (ty.is_vector()) {
+    if (ty.is_vector() && (ty.bits() == 8 || ty.bits() == 16)) {
         Type wide_ty = ty.with_bits(ty.bits() * 2);
 
         // Generate a widening multiply.
@@ -735,7 +735,18 @@ Expr CodeGen_Hexagon::mulhi_shr(Expr a, Expr b, int shr) {
 
         return p;
     } else {
-        CodeGen_Posix::mulhi_shr(a, b, shr);
+        return CodeGen_Posix::mulhi_shr(a, b, shr);
+    }
+}
+
+Expr CodeGen_Hexagon::sorted_avg(Expr a, Expr b) {
+    Type ty = a.type();
+    if (ty.is_vector() && ((ty.is_uint() && (ty.bits() == 8 || ty.bits() == 16)) ||
+                           (ty.is_int() && (ty.bits() == 16 || ty.bits() == 32)))) {
+        return Call::make(ty, "halide.hexagon.avg" + type_suffix(a, b),
+                          {a, b}, Call::PureExtern);
+    } else {
+        return CodeGen_Posix::sorted_avg(a, b);
     }
 }
 

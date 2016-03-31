@@ -29,6 +29,7 @@ protected:
     void init_module();
 
     Expr mulhi_shr(Expr a, Expr b, int shr);
+    Expr sorted_avg(Expr a, Expr b);
 
     std::string mcpu() const;
     std::string mattrs() const;
