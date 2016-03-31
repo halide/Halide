@@ -58,7 +58,7 @@ int pyramid_test() {
     }
 
     funcs[levels-1].compute_root()
-        .gpu_tile(x, y, 4, 4);
+        .gpu_tile(x, y, 3, 4);
     for (int i = levels-2; i >= 0; --i) {
         funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks())
             .split(x, xo, xi, 1 << (levels - i - 1))
@@ -84,10 +84,10 @@ int pyramid_test() {
 
 int inverted_pyramid_test() {
     const int levels = 6;
-    const int size_x = 8*16;
-    const int size_y = 8*16;
+    const int size_x = 8*16*4;
+    const int size_y = 8*16*4;
 
-    Var x, y, z, yo, yi, xo, xi;
+    Var x, y, z, yo, yi, yii, xo, xi, xii;
 
     std::vector<Func> funcs(levels);
 
@@ -97,13 +97,17 @@ int inverted_pyramid_test() {
     }
 
     funcs[levels-1].compute_root()
-        .tile(x, y, xo, yo, xi, yi, 16, 16)
-        .gpu_tile(xo, yo, 8, 8);
+        .tile(x, y, xi, yi, 64, 64)
+        .gpu_blocks(x, y)
+        .tile(xi, yi, xii, yii, 16, 16)
+        .gpu_threads(xi, yi);
     for (int i = levels-2; i >= 0; --i) {
         funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks())
-            .tile(x, y, xo, yo, xi, yi, 16, 16)
-            .gpu_threads(xo, yo);
+            .tile(x, y, xi, yi, 4, 4)
+            .gpu_threads(xi, yi);
     }
+
+    funcs[levels-1].bound(x, 0, size_x).bound(y, 0, size_y);
 
     Image<int> out = funcs[levels-1].realize(size_x, size_y);
 
