@@ -22,6 +22,9 @@ using namespace Halide::BoundaryConditions;
 
 namespace {
 
+#ifndef M_PI
+#define M_PI 3.14159265358979310000
+#endif
 const float kPi = static_cast<float>(M_PI);
 
 // This variable is used throughout the FFT code. It represents groups of
@@ -145,6 +148,42 @@ ComplexFunc dft4(ComplexFunc f, int sign, const string& prefix) {
     return F;
 }
 
+ComplexFunc dft6(ComplexFunc f, int sign, const string& prefix) {
+    const float re_W1_3 = -0.5f;
+    const float im_W1_3 = sign*0.866025404;
+
+    ComplexExpr W1_3(re_W1_3, im_W1_3);
+    ComplexExpr W2_3(re_W1_3, -im_W1_3);
+    ComplexExpr W4_3 = W1_3;
+
+    Type type = f.output_types()[0];
+
+    ComplexFunc F(prefix + "X8");
+    F(f.args()) = undef_z(type);
+
+    vector<ComplexFuncRefExpr> x = get_func_refs(f, 6);
+    vector<ComplexFuncRefExpr> X = get_func_refs(F, 6);
+    vector<ComplexFuncRefExpr> T = get_func_refs(F, 6, true);
+
+    // Prime factor FFT, N=2*3, no twiddle factors!
+    T[0] = (x[0] + x[3]);
+    T[3] = (x[0] - x[3]);
+    T[1] = (x[1] + x[4]);
+    T[4] = (x[1] - x[4]);
+    T[2] = (x[2] + x[5]);
+    T[5] = (x[2] - x[5]);
+
+    X[0] = T[0] + T[2] + T[1];
+    X[4] = T[0] + T[2]*W1_3 + T[1]*W2_3;
+    X[2] = T[0] + T[2]*W2_3 + T[1]*W4_3;
+
+    X[3] = T[3] + T[5] - T[4];
+    X[1] = T[3] + T[5]*W1_3 - T[4]*W2_3;
+    X[5] = T[3] + T[5]*W2_3 - T[4]*W4_3;
+
+    return F;
+}
+
 ComplexFunc dft8(ComplexFunc f, int sign, const string& prefix) {
     const float sqrt2_2 = 0.70710678f;
 
@@ -218,6 +257,7 @@ ComplexFunc dft1d_c2c(ComplexFunc x, int N, int sign,
     case 1: return x;
     case 2: return dft2(x, prefix);
     case 4: return dft4(x, sign, prefix);
+    case 6: return dft6(x, sign, prefix);
     case 8: return dft8(x, sign, prefix);
     default: return dftN(x, N, sign, prefix);
     }
@@ -876,12 +916,12 @@ Func fft2d_c2r(ComplexFunc c,
     // Unzip the DC and Nyquist DFTs.
     ComplexFunc dft0_unzipped("dft0_unzipped"); {
         dft0_unzipped(A({n0, n1}, args)) =
-                select(n1 == 0,      re(dft0(A({n0, 0}, args))),
-                       n1 == N1 / 2, im(dft0(A({n0, 0}, args))),
+                select(n1 <= 0,      re(dft0(A({n0, 0}, args))),
+                       n1 >= N1 / 2, im(dft0(A({n0, 0}, args))),
                                      likely(dft0(A({n0, min(n1, (N1 / 2) - 1)}, args))));
     }
 
-    ComplexFunc dft0_bounded = 
+    ComplexFunc dft0_bounded =
         ComplexFunc(repeat_edge((Func)dft0_unzipped, Expr(0), Expr(N0), Expr(0), Expr((N1 + 1) / 2 + 1)));
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j Y. For more
@@ -936,9 +976,6 @@ Func fft2d_c2r(ComplexFunc c,
     // Schedule the transpose step.
     if (cT_tiled.defined()) {
         cT_tiled.compute_at(dft0T, group);
-    } else {
-        c_zipped.compute_at(dft, outer)
-            .vectorize(n0);
     }
     dft0_tiled.compute_at(dft, outer);
 
@@ -951,17 +988,6 @@ Func fft2d_c2r(ComplexFunc c,
     }
 
     dft0T.compute_at(dft, outer);
-
-    // The zip operation simplifies around n1 = N1 / 2 (due to the conjugate
-    // symmetry property), and in each zip group, so we unroll around these two
-    // points.
-    Var n1o("n1o"), n1i("n1i");
-    zipped.compute_at(dft, outer)
-        .split(n1, n1o, n1i, N1 / 2)
-        .reorder(n0, n1o, n1i)
-        .unroll(n1o)
-        .vectorize(n0, zip_width)
-        .unroll(n0, 2);
 
     dft.compute_at(unzipped, outer);
 
@@ -991,7 +1017,7 @@ vector<int> radix_factor(int N) {
     }
 
     // Factor N into factors found in the 'radices' set.
-    static const int radices[] = { 8, 4, 2 };
+    static const int radices[] = { 8, 6, 4, 2 };
     vector<int> R;
     for (int r : radices) {
         while (N % r == 0) {

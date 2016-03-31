@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeOpenGL.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "mini_opengl.h"
 
@@ -565,6 +564,10 @@ WEAK int halide_opengl_init(void *user_context) {
     if (global_state.initialized) {
         return 0;
     }
+
+#ifdef DEBUG_RUNTIME
+    halide_start_clock(user_context);
+#endif
 
     global_state.init();
 

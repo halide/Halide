@@ -134,7 +134,7 @@ private:
             stride.same_as(op->stride)) {
             expr = op;
         } else {
-            expr = Ramp::make(base, stride, op->width);
+            expr = Ramp::make(base, stride, op->lanes);
         }
     }
 
@@ -142,12 +142,11 @@ private:
         Expr value = mutate(op->value);
         if (!expr.defined()) return;
         if (value.same_as(op->value)) expr = op;
-        else expr = Broadcast::make(value, op->width);
+        else expr = Broadcast::make(value, op->lanes);
     }
 
     void visit(const Call *op) {
-        if (op->name == Call::undef &&
-            op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::undef)) {
             expr = Expr();
             return;
         }

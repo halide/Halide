@@ -5,7 +5,6 @@
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
-#include "runtime_internal.h"
 
 // This runtime module will contain extern declarations of the Halide
 // API and the types it uses. It's useful for compiling modules that
@@ -63,6 +62,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_int64_to_string,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
+    (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_release,
@@ -105,13 +105,18 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
     (void *)&halide_profiler_get_state,
+    (void *)&halide_profiler_get_pipeline_state,
+    (void *)&halide_profiler_memory_allocate,
+    (void *)&halide_profiler_memory_free,
     (void *)&halide_profiler_pipeline_start,
     (void *)&halide_profiler_report,
     (void *)&halide_profiler_reset,
+    (void *)&halide_profiler_stack_peak_update,
     (void *)&halide_release_jit_module,
     (void *)&halide_renderscript_device_interface,
     (void *)&halide_renderscript_initialize_kernels,
     (void *)&halide_renderscript_run,
+    (void *)&halide_runtime_internal_register_metadata,
     (void *)&halide_set_gpu_device,
     (void *)&halide_set_num_threads,
     (void *)&halide_set_trace_file,

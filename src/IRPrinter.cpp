@@ -13,7 +13,7 @@ using std::string;
 using std::ostringstream;
 
 ostream &operator<<(ostream &out, const Type &type) {
-    switch (type.code) {
+    switch (type.code()) {
     case Type::Int:
         out << "int";
         break;
@@ -27,8 +27,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "handle";
         break;
     }
-    out << type.bits;
-    if (type.width > 1) out << 'x' << type.width;
+    out << type.bits();
+    if (type.lanes() > 1) out << 'x' << type.lanes();
     return out;
 }
 
@@ -222,7 +222,7 @@ void IRPrinter::visit(const UIntImm *op) {
 }
 
 void IRPrinter::visit(const FloatImm *op) {
-    switch (op->type.bits) {
+  switch (op->type.bits()) {
     case 64:
         stream << op->value;
         break;
@@ -428,31 +428,29 @@ void IRPrinter::visit(const Ramp *op) {
     print(op->base);
     stream << ", ";
     print(op->stride);
-    stream << ", " << op->width << ")";
+    stream << ", " << op->lanes << ")";
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << "x" << op->width << "(";
+    stream << "x" << op->lanes << "(";
     print(op->value);
     stream << ")";
 }
 
 void IRPrinter::visit(const Call *op) {
     // Special-case some intrinsics for readability
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::extract_buffer_host) {
-            print(op->args[0]);
-            stream << ".host";
-            return;
-        } else if (op->name == Call::extract_buffer_min) {
-            print(op->args[0]);
-            stream << ".min[" << op->args[1] << "]";
-            return;
-        } else if (op->name == Call::extract_buffer_max) {
-            print(op->args[0]);
-            stream << ".max[" << op->args[1] << "]";
-            return;
-        }
+    if (op->is_intrinsic(Call::extract_buffer_host)) {
+        print(op->args[0]);
+        stream << ".host";
+        return;
+    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+        print(op->args[0]);
+        stream << ".min[" << op->args[1] << "]";
+        return;
+    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+        print(op->args[0]);
+        stream << ".max[" << op->args[1] << "]";
+        return;
     }
 
     stream << op->name << "(";

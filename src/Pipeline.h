@@ -139,6 +139,15 @@ public:
                                    const std::string &fn_name,
                                    const Target &target = get_target_from_environment());
 
+    /** Statically compile a pipeline to llvm assembly, with the given
+     * filename (which should probably end in .ll), type signature,
+     * and C function name. If you're compiling a pipeline with a
+     * single output Func, see also Func::compile_to_llvm_assembly. */
+    EXPORT void compile_to_llvm_assembly(const std::string &filename,
+                                   const std::vector<Argument> &args,
+                                   const std::string &fn_name,
+                                   const Target &target = get_target_from_environment());
+
     /** Statically compile a pipeline with multiple output functions to an
      * object file, with the given filename (which should probably end in
      * .o or .obj), type signature, and C function name (which defaults to
@@ -352,7 +361,7 @@ public:
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
-     * it to NULL if you wish to retain ownership of the object. */
+     * it to nullptr if you wish to retain ownership of the object. */
     EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass,
                                          void (*deleter)(Internal::IRMutator *));
 
@@ -478,7 +487,7 @@ void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
 }
 
 struct JITExtern {
-    // assert pipeline.defined() == (c_function == NULL) -- strictly one or the other
+    // assert pipeline.defined() == (c_function == nullptr) -- strictly one or the other
     // which should be enforced by the constructors.
     Pipeline pipeline;
 

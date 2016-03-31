@@ -1,5 +1,6 @@
 #ifndef HALIDE_FLOAT16_H
 #define HALIDE_FLOAT16_H
+#include "runtime/HalideRuntime.h"
 #include <stdint.h>
 #include <string>
 #include "RoundingMode.h"
@@ -198,4 +199,14 @@ private:
     uint16_t data;
 };
 }  // namespace Halide
+
+namespace {
+
+template<>
+struct halide_type_of_helper<Halide::float16_t> {
+    operator halide_type_t() { return halide_type_t(halide_type_float, 16); }
+};
+
+}
+
 #endif

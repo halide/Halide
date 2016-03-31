@@ -7,20 +7,26 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#if defined(__powerpc__) && defined(__linux__)
+// This uses elf.h and must be included after "LLVM_Headers.h", which
+// uses llvm/support/Elf.h.
+#include <sys/auxv.h>
+#endif
+
 namespace Halide {
 
 using std::string;
 using std::vector;
 
 namespace {
-#ifndef __arm__
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
-
 #else
+
+#if defined(__x86_64__) || defined(__i386__)
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
@@ -48,28 +54,45 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 Target get_host_target() {
     Target::OS os = Target::OSUnknown;
-    #ifdef __linux__
+#ifdef __linux__
     os = Target::Linux;
-    #endif
-    #ifdef _MSC_VER
+#endif
+#ifdef _WIN32
     os = Target::Windows;
-    #endif
-    #ifdef __APPLE__
+#endif
+#ifdef __APPLE__
     os = Target::OSX;
-    #endif
+#endif
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
 
-    #if __mips__ || __mips || __MIPS__
+#if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
     return Target(os, arch, bits);
-    #else
-    #ifdef __arm__
+#else
+#if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
-    #else
+#else
+#if defined(__powerpc__) && defined(__linux__)
+    Target::Arch arch = Target::POWERPC;
 
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
+    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+
+    user_assert(have_altivec)
+        << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
+
+    std::vector<Target::Feature> initial_features;
+    if (have_vsx)     initial_features.push_back(Target::VSX);
+    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+
+    return Target(os, arch, bits, initial_features);
+#else
     Target::Arch arch = Target::X86;
 
     int info[4];
@@ -106,15 +129,21 @@ Target get_host_target() {
             initial_features.push_back(Target::AVX2);
         }
     }
+#ifdef _WIN32
+#ifndef _MSC_VER
+    initial_features.push_back(Target::MinGW);
+#endif
+#endif
 
     return Target(os, arch, bits, initial_features);
+#endif
 #endif
 #endif
 }
 
 namespace {
 string get_env(const char *name) {
-#ifdef _WIN32
+#ifdef _MSC_VER
     char buf[128];
     size_t read = 0;
     getenv_s(&read, buf, name);
@@ -158,6 +187,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arm", Target::ARM},
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
+    {"powerpc", Target::POWERPC},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -182,6 +212,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"f16c", Target::F16C},
     {"armv7s", Target::ARMv7s},
     {"no_neon", Target::NoNEON},
+    {"vsx", Target::VSX},
+    {"power_arch_2_07", Target::POWER_ARCH_2_07},
     {"cuda", Target::CUDA},
     {"cuda_capability_30", Target::CUDACapability30},
     {"cuda_capability_32", Target::CUDACapability32},
@@ -198,6 +230,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
+    {"mingw", Target::MinGW},
     {"javascript", Target::JavaScript},
     {"v8", Target::JavaScript_V8},
     {"spidermonkey", Target::JavaScript_SpiderMonkey},
@@ -244,11 +277,13 @@ Target parse_target_string(const std::string &target) {
     Target host = get_host_target();
 
     if (target.empty()) {
-        // If nothing is specified, use the host target.
+        // If nothing is specified, use the full host target.
         return host;
     }
 
-    // Default to the host OS and architecture.
+    // Default to the host OS and architecture in case of partially
+    // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
+    // use the host OS).
     Target t;
     t.os = host.os;
     t.arch = host.arch;
@@ -382,7 +417,67 @@ std::string Target::to_string() const {
     return result;
 }
 
-namespace Internal{ 
+/** Was libHalide compiled with support for this target? */
+bool Target::supported() const {
+    bool bad = false;
+#if !(WITH_NATIVE_CLIENT)
+    bad |= (arch == Target::PNaCl || os == Target::NaCl);
+#endif
+#if !(WITH_ARM)
+    bad |= arch == Target::ARM && bits == 32;
+#endif
+#if !(WITH_AARCH64) || WITH_NATIVE_CLIENT // In pnacl llvm, the aarch64 backend is crashy.
+    bad |= arch == Target::ARM && bits == 64;
+#endif
+#if !(WITH_X86)
+    bad |= arch == Target::X86;
+#endif
+#if !(WITH_MIPS)
+    bad |= arch == Target::MIPS;
+#endif
+#if !(WITH_POWERPC)
+    bad |= arch == Target::POWERPC;
+#endif
+#if !(WITH_PTX)
+    bad |= has_feature(Target::CUDA);
+#endif
+#if !(WITH_OPENCL)
+    bad |= has_feature(Target::OpenCL);
+#endif
+#if !(WITH_METAL)
+    bad |= has_feature(Target::Metal);
+#endif
+#if !(WITH_RENDERSCRIPT)
+    bad |= has_feature(Target::Renderscript);
+#endif
+#if !(WITH_OPENGL)
+    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#endif
+    return !bad;
+}
+
+bool Target::supports_device_api(DeviceAPI api) const {
+    switch (api) {
+    case DeviceAPI::Parent:      return true;
+    case DeviceAPI::Host:        return true;
+    case DeviceAPI::Default_GPU: return has_gpu_feature();
+    default:                     return has_feature(target_feature_for_device_api(api));
+    }
+}
+
+Target::Feature target_feature_for_device_api(DeviceAPI api) {
+    switch (api) {
+    case DeviceAPI::CUDA:          return Target::CUDA;
+    case DeviceAPI::OpenCL:        return Target::OpenCL;
+    case DeviceAPI::GLSL:          return Target::OpenGL;
+    case DeviceAPI::Renderscript:  return Target::Renderscript;
+    case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
+    case DeviceAPI::Metal:         return Target::Metal;
+    default:                       return Target::FeatureEnd;
+    }
+}
+
+namespace Internal {
 
 EXPORT void target_test() {
     Target t;

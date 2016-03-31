@@ -24,11 +24,7 @@ private:
     using IRMutator::visit;
 
     void visit(const Call *call) {
-        if (call->call_type != Call::Intrinsic) {
-            IRMutator::visit(call);
-            return;
-        }
-        if (call->name == Call::image_load) {
+        if (call->is_intrinsic(Call::image_load)) {
             vector<Expr> call_args = call->args;
             //
             // Create
@@ -73,8 +69,7 @@ private:
             Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
             args[4] = c_coordinate;
 
-            Type load_type = call->type;
-            load_type.width = 4;
+            Type load_type = call->type.with_lanes(4);
 
             Expr load_call = Call::make(load_type, Call::glsl_texture_load,
                                         vector<Expr>(&args[0], &args[4]),
@@ -87,7 +82,7 @@ private:
             // during vectorization.
             expr = Call::make(call->type, Call::shuffle_vector,
                               {load_call, c_coordinate}, Call::Intrinsic);
-        } else if (call->name == Call::image_store) {
+        } else if (call->is_intrinsic(Call::image_store)) {
             user_assert(call->args.size() == 6)
                 << "GLSL stores require three coordinates.\n";
 

@@ -152,14 +152,13 @@ private:
             }
 
             // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx];
-            t.bits = t.bytes() * 8;
+            Type t = realize->types[idx].with_bits(realize->types[idx].bytes() * 8);
 
             // Create a buffer_t object for this allocation.
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
             args[1] = make_zero(realize->types[idx]);
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
@@ -208,9 +207,8 @@ private:
             Expr value = mutate(provide->values[i]);
 
             // Promote the type to be a multiple of 8 bits
-            Type t = value.type();
-            t.bits = t.bytes() * 8;
-            if (t.bits != value.type().bits) {
+            Type t = value.type().with_bits(value.type().bytes() * 8);
+            if (t.bits() != value.type().bits()) {
                 value = Cast::make(t, value);
             }
 
@@ -316,19 +314,8 @@ private:
 
     void visit(const Call *call) {
 
-        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
-            vector<Expr> args(call->args.size());
-            bool changed = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(call->args[i]);
-                if (!args[i].same_as(call->args[i])) changed = true;
-            }
-            if (!changed) {
-                expr = call;
-            } else {
-                expr = Call::make(call->type, call->name, args, call->call_type);
-            }
-        } else {
+        if (call->call_type == Call::Halide ||
+            call->call_type == Call::Image) {
             string name = call->name;
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
@@ -343,14 +330,25 @@ private:
             bool is_input = env.find(call->name) == env.end();
 
             // Promote the type to be a multiple of 8 bits
-            Type t = call->type;
-            t.bits = t.bytes() * 8;
+            Type t = call->type.with_bits(call->type.bytes() * 8);
 
             Expr idx = mutate(flatten_args(name, call->args, !(is_output || is_input)));
             expr = Load::make(t, name, idx, call->image, call->param);
 
-            if (call->type.bits != t.bits) {
+            if (call->type.bits() != t.bits()) {
                 expr = Cast::make(call->type, expr);
+            }
+        } else {
+            vector<Expr> args(call->args.size());
+            bool changed = false;
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(call->args[i]);
+                if (!args[i].same_as(call->args[i])) changed = true;
+            }
+            if (!changed) {
+                expr = call;
+            } else {
+                expr = Call::make(call->type, call->name, args, call->call_type);
             }
         }
     }

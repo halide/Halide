@@ -89,37 +89,37 @@ bool is_no_op(Stmt s) {
 
 const int64_t *as_const_int(Expr e) {
     if (!e.defined()) {
-        return NULL;
+        return nullptr;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_int(b->value);
     } else if (const IntImm *i = e.as<IntImm>()) {
         return &(i->value);
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
 const uint64_t *as_const_uint(Expr e) {
     if (!e.defined()) {
-        return NULL;
+        return nullptr;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_uint(b->value);
     } else if (const UIntImm *i = e.as<UIntImm>()) {
         return &(i->value);
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
 const double *as_const_float(Expr e) {
     if (!e.defined()) {
-        return NULL;
+        return nullptr;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_float(b->value);
     } else if (const FloatImm *f = e.as<FloatImm>()) {
         return &(f->value);
     } else {
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -238,7 +238,7 @@ namespace {
 template<typename T>
 Expr make_const_helper(Type t, T val) {
     if (t.is_vector()) {
-        return Broadcast::make(make_const(t.element_of(), val), t.width);
+        return Broadcast::make(make_const(t.element_of(), val), t.lanes());
     } else if (t.is_int()) {
         return IntImm::make(t, (int64_t)val);
     } else if (t.is_uint()) {
@@ -271,7 +271,7 @@ Expr make_bool(bool val, int w) {
 
 Expr make_zero(Type t) {
     if (t.is_handle()) {
-        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
     } else {
         return make_const(t, 0);
     }
@@ -312,7 +312,7 @@ Expr lossless_cast(Type t, Expr e) {
     if (const Broadcast *b = e.as<Broadcast>()) {
         Expr v = lossless_cast(t.element_of(), b->value);
         if (v.defined()) {
-            return Broadcast::make(v, b->width);
+            return Broadcast::make(v, b->lanes);
         } else {
             return Expr();
         }
@@ -368,11 +368,11 @@ void match_types(Expr &a, Expr &b) {
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
-        a = Broadcast::make(a, b.type().width);
+        a = Broadcast::make(a, b.type().lanes());
     } else if (a.type().is_vector() && b.type().is_scalar()) {
-        b = Broadcast::make(b, a.type().width);
+        b = Broadcast::make(b, a.type().lanes());
     } else {
-        internal_assert(a.type().width == b.type().width) << "Can't match types of differing widths";
+        internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
     }
 
     Type ta = a.type(), tb = b.type();
@@ -388,17 +388,18 @@ void match_types(Expr &a, Expr &b) {
         b = cast(ta, b);
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
-        if (ta.bits > tb.bits) b = cast(ta, b);
+        if (ta.bits() > tb.bits()) b = cast(ta, b);
         else a = cast(tb, a);
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
-        if (ta.bits > tb.bits) b = cast(ta, b);
+        if (ta.bits() > tb.bits()) b = cast(ta, b);
         else a = cast(tb, a);
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
-        int bits = std::max(ta.bits, tb.bits);
-        a = cast(Int(bits), a);
-        b = cast(Int(bits), b);
+        int bits = std::max(ta.bits(), tb.bits());
+        int lanes = a.type().lanes();
+        a = cast(Int(bits, lanes), a);
+        b = cast(Int(bits, lanes), b);
     } else {
         internal_error << "Could not match types: " << ta << ", " << tb << "\n";
     }
@@ -409,7 +410,7 @@ void match_types(Expr &a, Expr &b) {
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
-    Type int_type = Int(32, type.width);
+    Type int_type = Int(32, type.lanes());
     Expr int_version = reinterpret(int_type, input);
 
     // single precision = SEEE EEEE EMMM MMMM MMMM MMMM MMMM MMMM
@@ -440,8 +441,8 @@ Expr halide_log(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
-    Expr nan = Call::make(type, "nan_f32", {}, Call::Extern);
-    Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::Extern);
+    Expr nan = Call::make(type, "nan_f32", {}, Call::PureExtern);
+    Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::PureExtern);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
@@ -490,7 +491,7 @@ Expr halide_exp(Expr x_full) {
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
-    Expr k = cast(Int(32, type.width), k_real);
+    Expr k = cast(Int(32, type.lanes()), k_real);
 
     Expr x = x_full - k_real * ln2_part1;
     x -= k_real * ln2_part2;
@@ -510,7 +511,7 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = Call::make(type, "inf_f32", {}, Call::Extern);
+    Expr inf = Call::make(type, "inf_f32", {}, Call::PureExtern);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
@@ -567,7 +568,7 @@ Expr halide_erf(Expr x_full) {
     return result;
 }
 
-Expr raise_to_integer_power(Expr e, int p) {
+Expr raise_to_integer_power(Expr e, int64_t p) {
     Expr result;
     if (p == 0) {
         result = make_one(e.type());
@@ -664,7 +665,7 @@ Expr print(const std::vector<Expr> &args) {
     // Return the first argument.
     Expr result =
         Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                             {print_call, args[0]}, Internal::Call::Intrinsic);
+                             {print_call, args[0]}, Internal::Call::PureIntrinsic);
     return result;
 }
 
@@ -673,7 +674,7 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
                                 {condition, p, args[0]},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
@@ -681,7 +682,7 @@ Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
     args.push_back(result);
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
     return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
-                                args, Internal::Call::Intrinsic);
+                                args, Internal::Call::PureIntrinsic);
 }
 
 }

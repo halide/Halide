@@ -32,13 +32,13 @@ private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
 public:
-    Buffer() : contents(NULL) {}
+    Buffer() : contents(nullptr) {}
 
     EXPORT Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-                  uint8_t* data = NULL, const std::string &name = "");
+                  uint8_t* data = nullptr, const std::string &name = "");
 
     EXPORT Buffer(Type t, const std::vector<int32_t> &sizes,
-                  uint8_t* data = NULL, const std::string &name = "");
+                  uint8_t* data = nullptr, const std::string &name = "");
 
     EXPORT Buffer(Type t, const buffer_t *buf, const std::string &name = "");
 
@@ -127,6 +127,10 @@ public:
      * you. Casting the Buffer to an Image sets the dirty bit for
      * you. */
     EXPORT int copy_to_device();
+
+    /** If this buffer exists on a GPU, then finish any currently
+     * running computation on that GPU. Useful for benchmarking. */
+    EXPORT int device_sync();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then free the device-side

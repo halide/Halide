@@ -63,11 +63,19 @@ CodeGen_Renderscript_Dev::CodeGen_Renderscript_Dev(Target host) : CodeGen_LLVM(h
     context = new llvm::LLVMContext();
 }
 
-CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() { delete context; }
+CodeGen_Renderscript_Dev::~CodeGen_Renderscript_Dev() {
+    // This is required as destroying the context before the module
+    // results in a crash. Really, reponsbility for destruction
+    // should be entirely in the parent class.
+    // TODO: Figure out how to better manage the context -- e.g. allow using
+    // same one as the host.
+    module.reset();
+    delete context;
+}
 
 void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_name,
-                                const std::vector<GPU_Argument> &args) {
-    internal_assert(module != NULL);
+                                const std::vector<DeviceArgument> &args) {
+    internal_assert(module != nullptr);
 
     // Use [kernel_name] as the function name.
     debug(2) << "In CodeGen_Renderscript_Dev::add_kernel name=" << kernel_name << "\n";
@@ -90,13 +98,14 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types_1(args.size());
-    llvm::Type *argument_type = NULL;
+    llvm::Type *output_type = nullptr;
     for (size_t i = 0; i < args.size(); i++) {
         string arg_name = args[i].name;
         debug(1) << "CodeGen_Renderscript_Dev arg[" << i << "].name=" << arg_name << "\n";
         if (args[i].is_buffer && args[i].write) {
             // Remember actual type of buffer argument - will use it for kernel output buffer type.
-            argument_type = llvm_type_of(args[i].type);
+            internal_assert(output_type == nullptr) << "Already found an output buffer for kernel.\n";
+            output_type = llvm_type_of(args[i].type);
             debug(1) << "  this is our output buffer type\n";
         }
 
@@ -149,7 +158,8 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
     // Make our function with arguments for kernel defined per Renderscript
     // convention: (in_type in, i32 x, i32 y)
     vector<llvm::Type *> arg_types;
-    arg_types.push_back(argument_type);  // "in"
+    internal_assert(output_type != nullptr) << "Did not find an output buffer for kernel.\n";
+    arg_types.push_back(output_type);  // "in"
     for (int i = 0; i < 4; i++) {
         debug(2) << "  adding argument type at " << i << ": "
                  << bounds_names.names[i] << "\n";
@@ -160,7 +170,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
-                                      kernel_name, module);
+                                      kernel_name, module.get());
 
     vector<string> arg_sym_names;
 
@@ -201,7 +211,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         // Buffer symbols are bit-casted to rs_allocation*.
         Value *value = std::get<1>(name_and_value);
         llvm::PointerType *p = llvm::cast<llvm::PointerType>(value->getType());
-        if (p != NULL) {
+        if (p != nullptr) {
             if (p->getElementType() == StructTy_struct_rs_allocation) {
                 value = builder->CreateBitCast(
                     value,
@@ -255,7 +265,6 @@ void CodeGen_Renderscript_Dev::init_module() {
     debug(2) << "CodeGen_Renderscript_Dev::init_module\n";
     init_context();
 #ifdef WITH_RENDERSCRIPT
-    delete module;
     module = get_initial_module_for_renderscript_device(target, context);
 
     // Add Renderscript standard set of metadata.
@@ -349,23 +358,23 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_GetElement_func(Type type) {
     // The symbols will be resolved once the code compiles on the target
     // Android device.
     std::string func_name;
-    debug(2) << "fetch_GetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
-    switch (type.code) {
-        case Type::TypeCode::UInt:
-            switch (type.width) {
+    debug(2) << "fetch_GetElement_func type.code()=" << type.code() << " type.lanes()=" << type.lanes() << "\n";
+    switch (type.code()) {
+        case Type::UInt:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsGetElementAt_uchar13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_uchar413rs_allocationjj"; break;
             }
             break;
-        case Type::TypeCode::Float:
-            switch (type.width) {
+        case Type::Float:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsGetElementAt_float13rs_allocationjjj"; break;
                 case 4: func_name = "_Z21rsGetElementAt_float413rs_allocationjj"; break;
             }
             break;
         default: break;
     }
-    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
+    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code()=" << type.code() << ", type.lanes()=" << type.lanes() << "\n";
     llvm::Function *func = module->getFunction(func_name);
     internal_assert(func) << "Cant' find " << func_name << "function\n";
     return func;
@@ -376,23 +385,23 @@ llvm::Function *CodeGen_Renderscript_Dev::fetch_SetElement_func(Type type) {
     // The symbols will be resolved once the code compiles on the target
     // Android device.
     std::string func_name;
-    debug(2) << "fetch_SetElement_func type.code=" << type.code << " type.width=" << type.width << "\n";
-    switch (type.code) {
-        case Type::TypeCode::UInt:
-            switch (type.width) {
+    debug(2) << "fetch_SetElement_func type.code()=" << type.code() << " type.lanes()=" << type.lanes() << "\n";
+    switch (type.code()) {
+        case Type::UInt:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsSetElementAt_uchar13rs_allocationhjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_uchar413rs_allocationDv4_hjj"; break;
             }
             break;
-        case Type::TypeCode::Float:
-            switch (type.width) {
+        case Type::Float:
+            switch (type.lanes()) {
                 case 1: func_name = "_Z20rsSetElementAt_float13rs_allocationfjjj"; break;
                 case 4: func_name = "_Z21rsSetElementAt_float413rs_allocationDv4_fjj"; break;
             }
             break;
         default: break;
     }
-    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code=" << type.code << ", type.width=" << type.width << "\n";
+    internal_assert(func_name != "") << "Renderscript does not support type " << type << ", type.code()=" << type.code() << ", type.lanes()=" << type.lanes() << "\n";
     llvm::Function *func = module->getFunction(func_name);
     internal_assert(func) << "Cant' find " << func_name << "function\n";
     return func;
@@ -405,21 +414,21 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
     const Broadcast *b_x = x.as<Broadcast>();
     const Broadcast *b_y = y.as<Broadcast>();
     const Ramp *ramp_c = c.as<Ramp>();
-    if (b_name != NULL && b_x != NULL && b_y != NULL && ramp_c != NULL) {
+    if (b_name != nullptr && b_x != nullptr && b_y != nullptr && ramp_c != nullptr) {
         // vectorized over c, use x and y to retrieve 4-byte RGBA chunk.
         const IntImm *stride = ramp_c->stride.IRHandle::as<IntImm>();
-        user_assert(stride->value == 1 && ramp_c->width == 4)
+        user_assert(stride->value == 1 && ramp_c->lanes == 4)
             << "Only vectorized RGBA format is supported at present.\n";
-        user_assert(b_x->value.type().width == 1)
+        user_assert(b_x->value.type().lanes() == 1)
             << "image_load/store x coordinate is not scalar.\n";
-        user_assert(b_y->value.type().width == 1)
+        user_assert(b_y->value.type().lanes() == 1)
             << "image_load/store y coordinate is not scalar.\n";
         args.push_back(sym_get(b_name->value.as<StringImm>()->value));
         args.push_back(codegen(b_x->value));
         args.push_back(codegen(b_y->value));
     } else {
         // Use all three coordinates to retrieve single byte.
-        user_assert(b_name == NULL && b_x == NULL && b_y == NULL && ramp_c == NULL);
+        user_assert(b_name == nullptr && b_x == nullptr && b_y == nullptr && ramp_c == nullptr);
         args.push_back(sym_get(name.as<StringImm>()->value));
         args.push_back(codegen(x));
         args.push_back(codegen(y));
@@ -429,43 +438,42 @@ vector<Value *> CodeGen_Renderscript_Dev::add_x_y_c_args(Expr name, Expr x, Expr
 }
 
 void CodeGen_Renderscript_Dev::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::image_load || op->name == Call::image_store) {
-            //
-            // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
-            // <y-extent>, <c>, <c-extent>)
-            // or
-            // image_store(<image name>, <buffer>, <x>, <y>, <c>, <value>)
-            //
-            const int index_name = 0;
-            const int index_x = op->name == Call::image_load ? 2 : 2;
-            const int index_y = op->name == Call::image_load ? 4 : 3;
-            const int index_c = op->name == Call::image_load ? 6 : 4;
-            vector<Value *> args =
-                add_x_y_c_args(op->args[index_name], op->args[index_x],
-                               op->args[index_y], op->args[index_c]);
+    if (op->is_intrinsic(Call::image_load) ||
+        op->is_intrinsic(Call::image_store)) {
+        //
+        // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
+        // <y-extent>, <c>, <c-extent>)
+        // or
+        // image_store(<image name>, <buffer>, <x>, <y>, <c>, <value>)
+        //
+        const int index_name = 0;
+        const int index_x = op->name == Call::image_load ? 2 : 2;
+        const int index_y = op->name == Call::image_load ? 4 : 3;
+        const int index_c = op->name == Call::image_load ? 6 : 4;
+        vector<Value *> args =
+            add_x_y_c_args(op->args[index_name], op->args[index_x],
+                           op->args[index_y], op->args[index_c]);
 
-            if (op->name == Call::image_store) {
-                args.insert(args.begin() + 1, codegen(op->args[5]));
-            }
-
-            debug(2) << "Generating " << op->type.width
-                     << "byte-wide call with " << args.size() << " args:\n";
-            if (debug::debug_level >= 2) {
-                int i = 1;
-                for (Value *arg : args) {
-                    debug(2) << " #" << i++ << ":";
-                    arg->getType()->dump();
-                    arg->dump();
-                }
-            }
-
-            llvm::Function *func = op->name == Call::image_load
-                                       ? fetch_GetElement_func(op->type)
-                                       : fetch_SetElement_func(op->type);
-            value = builder->CreateCall(func, args);
-            return;
+        if (op->name == Call::image_store) {
+            args.insert(args.begin() + 1, codegen(op->args[5]));
         }
+
+        debug(2) << "Generating " << op->type.lanes()
+                 << "byte-wide call with " << args.size() << " args:\n";
+        if (debug::debug_level >= 2) {
+            int i = 1;
+            for (Value *arg : args) {
+                debug(2) << " #" << i++ << ":";
+                arg->getType()->dump();
+                arg->dump();
+            }
+        }
+
+        llvm::Function *func = op->name == Call::image_load
+            ? fetch_GetElement_func(op->type)
+            : fetch_SetElement_func(op->type);
+        value = builder->CreateCall(func, args);
+        return;
     }
     CodeGen_LLVM::visit(op);
 }
@@ -562,7 +570,7 @@ vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
 
     std::string str;
     llvm::raw_string_ostream OS(str);
-    llvm_3_2::WriteBitcodeToFile(module, OS);
+    llvm_3_2::WriteBitcodeToFile(module.get(), OS);
 
     OS.flush();
 

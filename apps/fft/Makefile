@@ -4,8 +4,13 @@ CXXFLAGS += -g -Wall
 
 .PHONY: clean
 
+ifeq ($(WITH_FFTW),1)
+CXXFLAGS += -DWITH_FFTW
+LDFLAGS += -lfftw3f
+endif
+
 bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
-	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o bench_fft -lpthread -ldl -lz \
+	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o bench_fft \
 	$(LDFLAGS) $(LLVM_SHARED_LIBS)
 
 bench_16x16: bench_fft

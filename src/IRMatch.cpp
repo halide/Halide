@@ -32,9 +32,10 @@ void expr_match_test() {
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
                                (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
+                    matches.size() == 3 &&
                     equal(matches[0], 81.0f * fy) &&
                     equal(matches[1], x/2) &&
-                    equal(matches[2], x + 4.5f)) << matches[0] << ", " << matches[1] << ", " << matches[2] << "\n";
+                    equal(matches[2], x + 4.5f));
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
@@ -55,18 +56,18 @@ public:
     map<string, Expr> *var_matches;
     Expr expr;
 
-    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(NULL), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(nullptr), expr(e) {
     }
-    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(NULL), var_matches(&m), expr(e) {
+    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(nullptr), var_matches(&m), expr(e) {
     }
 
     using IRVisitor::visit;
 
     bool types_match(Type pattern_type, Type expr_type) {
-        bool bits_matches  = (pattern_type.bits  == -1) || (pattern_type.bits  == expr_type.bits);
-        bool width_matches = (pattern_type.width == -1) || (pattern_type.width == expr_type.width);
-        bool code_matches  = (pattern_type.code  == expr_type.code);
-        return bits_matches && width_matches && code_matches;
+        bool bits_matches  = (pattern_type.bits()  == 0) || (pattern_type.bits()  == expr_type.bits());
+        bool lanes_matches = (pattern_type.lanes() == 0) || (pattern_type.lanes() == expr_type.lanes());
+        bool code_matches  = (pattern_type.code()  == expr_type.code());
+        return bits_matches && lanes_matches && code_matches;
     }
 
     void visit(const IntImm *op) {
@@ -198,7 +199,7 @@ public:
 
     void visit(const Ramp *op) {
         const Ramp *e = expr.as<Ramp>();
-        if (result && e && e->width == op->width) {
+        if (result && e && e->lanes == op->lanes) {
             expr = e->base;
             op->base.accept(this);
             expr = e->stride;

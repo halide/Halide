@@ -109,7 +109,7 @@ public:
     /** Tests if this handle is the same as another handle */
     EXPORT bool same_as(const Parameter &other) const;
 
-    /** Tests if this handle is non-NULL */
+    /** Tests if this handle is non-nullptr */
     EXPORT bool defined() const;
 
     /** Get and set constraints for the min, extent, and stride (see

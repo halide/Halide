@@ -30,10 +30,10 @@ Type map_type(const Type &type) {
     Type result = type;
     if (type.is_scalar()) {
         if (type.is_float()) {
-            user_assert(type.bits <= 32)
-                << "GLSL: Can't represent a float with " << type.bits << " bits.\n";
+            user_assert(type.bits() <= 32)
+                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
             result = Float(32);
-        } else if (type.bits == 1) {
+        } else if (type.bits() == 1) {
             result = Bool();
         } else if (type == Int(32) || type == UInt(32)) {
             // Keep unchanged
@@ -41,14 +41,12 @@ Type map_type(const Type &type) {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
     } else {
-        user_assert(type.width <= 4)
+        user_assert(type.lanes() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
             << "GLSL: Can't represent vector type '"<< type << "'.\n";
-        Type scalar_type = type;
-        scalar_type.width = 1;
-        result = map_type(scalar_type);
-        result.width = type.width;
+        Type scalar_type = type.element_of();
+        result = map_type(scalar_type).with_lanes(type.lanes());
     }
     return result;
 }
@@ -57,7 +55,7 @@ Type map_type(const Type &type) {
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
-        return mapped_type.is_scalar()? "uint": "uvec"  + std::to_string(mapped_type.width);
+        return mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.lanes());
     } else {
         return CodeGen_GLSLBase::print_type(type);
     }
@@ -130,7 +128,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         int index = thread_loop_workgroup_index(loop->name);
         if (index >= 0) {
             const IntImm *int_limit = loop->extent.as<IntImm>();
-            user_assert(int_limit != NULL) << "For OpenGLCompute workgroup size must be a constant integer.\n";
+            user_assert(int_limit != nullptr) << "For OpenGLCompute workgroup size must be a constant integer.\n";
             int new_workgroup_size = int_limit->value;
             user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) <<
                 "OpenGLCompute requires all gpu kernels have same workgroup size, "
@@ -156,12 +154,12 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
-    if (op->width > 4)
-        internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
+    if (op->lanes > 4)
+        internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
 
     rhs << print_expr(op->base);
 
-    for (int i = 1; i < op->width; ++i) {
+    for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
     }
 
@@ -172,20 +170,20 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     ostringstream oss;
-    oss << print_type(op->type.vector_of(op->width)) << "(" << id_value << ")";
-    print_assignment(op->type.vector_of(op->width), oss.str());
+    oss << print_type(op->type.with_lanes(op->lanes)) << "(" << id_value << ")";
+    print_assignment(op->type.with_lanes(op->lanes), oss.str());
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-        user_assert(stride && stride->value == 1 && ramp->width == 4) <<
-            "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute.";
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
+        user_assert(stride && stride->value == 1 && ramp->lanes == 4) <<
+            "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute.";
 
-        // Buffer type is 4-elements wide, that's why we divide by ramp->width.
-        id_index = print_expr(Div::make(ramp->base, ramp->width));
+        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
+        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
     } else {
         id_index = print_expr(op->index);
     }
@@ -203,15 +201,15 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-        user_assert(stride && stride->value == 1 && ramp->width == 4)
-            << "Only trivial packed 4x vectors(stride==1, width==4) are supported by OpenGLCompute."
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
+        user_assert(stride && stride->value == 1 && ramp->lanes == 4)
+            << "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute."
             << " Got integer stride "
             << (stride ? std::to_string(stride->value): "undefined")
-            << " and width " << ramp->width << " instead.";
+            << " and lanes " << ramp->lanes << " instead.";
 
-        // Buffer type is 4-elements wide, that's why we divide by ramp->width.
-        id_index = print_expr(Div::make(ramp->base, ramp->width));
+        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
+        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
     } else {
         id_index = print_expr(op->index);
     }
@@ -245,7 +243,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op)
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
                                            const string &name,
-                                           const vector<GPU_Argument> &args) {
+                                           const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenGLCompute_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -272,7 +270,7 @@ public:
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     Target target,
                                                                     const string &name,
-                                                                    const vector<GPU_Argument> &args) {
+                                                                    const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
     cache.clear();

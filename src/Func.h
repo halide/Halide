@@ -456,6 +456,17 @@ public:
                                    const Target &target = get_target_from_environment());
     // @}
 
+    /** Statically compile this function to llvm assembly, with the
+     * given filename (which should probably end in .ll), type
+     * signature, and C function name (which defaults to the same name
+     * as this halide function */
+    //@{
+    EXPORT void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
+                                         const Target &target = get_target_from_environment());
+    EXPORT void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &,
+                                         const Target &target = get_target_from_environment());
+    // @}
+
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
@@ -669,7 +680,7 @@ public:
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
-     * it to NULL if you wish to retain ownership of the object. */
+     * it to nullptr if you wish to retain ownership of the object. */
     EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass, void (*deleter)(Internal::IRMutator *));
 
     /** Remove all previously-set custom lowering passes */

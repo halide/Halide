@@ -24,23 +24,23 @@ static string print_type_maybe_storage(Type type, bool storage) {
     ostringstream oss;
 
     // Storage uses packed vector types.
-    if (storage && type.width != 1) {
+    if (storage && type.lanes() != 1) {
         oss << "packed_";
     }
     if (type.is_float()) {
-        if (type.bits == 16) {
+        if (type.bits() == 16) {
             oss << "half";
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
             oss << "float";
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             oss << "double";
         } else {
             user_error << "Can't represent a float with this many bits in Metal C: " << type << "\n";
         }
 
     } else {
-        if (type.is_uint() && type.bits > 1) oss << 'u';
-        switch (type.bits) {
+        if (type.is_uint() && type.bits() > 1) oss << 'u';
+        switch (type.bits()) {
         case 1:
             oss << "bool";
             break;
@@ -60,14 +60,14 @@ static string print_type_maybe_storage(Type type, bool storage) {
             user_error << "Can't represent an integer with this many bits in Metal C: " << type << "\n";
         }
     }
-    if (type.width != 1) {
-        switch (type.width) {
+    if (type.lanes() != 1) {
+        switch (type.lanes()) {
         case 2:
         case 3:
         case 4:
         case 8:
         case 16:
-            oss << type.width;
+            oss << type.lanes();
             break;
         default:
             user_error <<  "Unsupported vector width in Metal C: " << type << "\n";
@@ -160,22 +160,22 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * "
-        << print_type(op->type.vector_of(op->width)) << "(0";
+        << print_type(op->type.with_lanes(op->lanes)) << "(0";
     // Note 0 written above.
-    for (int i = 1; i < op->width; ++i) {
+    for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << i;
     }
     rhs << ")";
-    print_assignment(op->type.vector_of(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
 
     ostringstream rhs;
-    rhs << print_type(op->type.vector_of(op->width)) << "(" << id_value << ")";
+    rhs << print_type(op->type.with_lanes(op->lanes)) << "(" << id_value << ")";
 
-    print_assignment(op->type.vector_of(op->width), rhs.str());
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
 namespace {
@@ -183,7 +183,7 @@ namespace {
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp_one(Expr e) {
     const Ramp *r = e.as<Ramp>();
-    if (r == NULL) {
+    if (r == nullptr) {
         return Expr();
     }
 
@@ -252,7 +252,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         stream << print_type(op->type)
                << " " << id << ";\n";
 
-        for (int i = 0; i < op->type.width; ++i) {
+        for (int i = 0; i < op->type.lanes(); ++i) {
             do_indent();
             stream
               << id << "[" << i << "]"
@@ -286,7 +286,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
 
         string id_index = print_expr(op->index);
 
-        for (int i = 0; i < t.width; ++i) {
+        for (int i = 0; i < t.lanes(); ++i) {
             do_indent();
             stream << "((" << get_memory_space(op->name) << " "
                    << print_storage_type(t.element_of()) << " *)"
@@ -347,9 +347,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 
         // Allocation is not a shared memory allocation, just make a local declaration.
         // It must have a constant size.
-        int32_t size;
-        bool is_constant = constant_allocation_size(op->extents, op->name, size);
-        user_assert(is_constant)
+        int32_t size = op->constant_allocation_size();
+        user_assert(size > 0)
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
@@ -391,7 +390,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
-                                   const vector<GPU_Argument> &args) {
+                                   const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -415,7 +414,7 @@ struct BufferSize {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
                                                     const string &name,
-                                                    const vector<GPU_Argument> &args) {
+                                                    const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding Metal kernel " << name << "\n";
 

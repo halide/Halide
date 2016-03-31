@@ -103,10 +103,40 @@ WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 
+// The pipeline_state is declared as void* type since halide_profiler_pipeline_stats
+// is defined inside HalideRuntime.h which includes this header file.
+WEAK void halide_profiler_stack_peak_update(void *user_context,
+                                            void *pipeline_state,
+                                            int *f_values);
+WEAK void halide_profiler_memory_allocate(void *user_context,
+                                          void *pipeline_state,
+                                          int func_id,
+                                          int incr);
+WEAK void halide_profiler_memory_free(void *user_context,
+                                      void *pipeline_state,
+                                      int func_id,
+                                      int incr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const uint64_t *func_names);
+
+struct halide_filter_metadata_t;
+struct _halide_runtime_internal_registered_filter_t {
+    // This is a _halide_runtime_internal_registered_filter_t, but
+    // recursive types currently break our method that copies types from
+    // llvm module to llvm module
+    void *next;
+    const halide_filter_metadata_t* metadata;
+    int (*argv_func)(void **args);
+};
+WEAK void halide_runtime_internal_register_metadata(_halide_runtime_internal_registered_filter_t *info);
+
+struct mxArray;
+WEAK int halide_matlab_call_pipeline(void *user_context,
+                                     int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
+                                     int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
+
 }
 
 /** A macro that calls halide_print if the supplied condition is

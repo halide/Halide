@@ -1,7 +1,6 @@
-#include "runtime_internal.h"
+#include "HalideRuntimeOpenCL.h"
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
-#include "HalideRuntimeOpenCL.h"
 #include "printer.h"
 
 #include "mini_cl.h"
@@ -36,7 +35,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
     };
-    for (int i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
+    for (size_t i = 0; i < sizeof(lib_names)/sizeof(lib_names[0]); i++) {
         lib_opencl = halide_load_library(lib_names[i]);
         if (lib_opencl) {
             debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
@@ -337,13 +336,32 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     // If the user indicated a specific device index to use, use
     // that. Note that this is an index within the set of devices
-    // specified by the device type. -1 means the last device.
+    // specified by the device type. -1 means select a device
+    // automatically based on core count.
     int device = halide_get_gpu_device(user_context);
-    if (device == -1) {
-        device = deviceCount - 1;
+    if (device == -1 && deviceCount == 1) {
+        device = 0;
+    } else if (device == -1) {
+        debug(user_context) << "    Multiple CL devices detected. Selecting the one with the most cores.\n";
+        cl_uint best_core_count = 0;
+        for (cl_uint i = 0; i < deviceCount; i++) {
+            cl_device_id dev = devices[i];
+            cl_uint core_count = 0;
+            err = clGetDeviceInfo(dev, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &core_count, NULL);
+            if (err != CL_SUCCESS) {
+                debug(user_context) << "      Failed to get info on device " << i << "\n";
+                continue;
+            }
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
+            if (core_count >= best_core_count) {
+                device = i;
+                best_core_count = core_count;
+            }
+        }
+        debug(user_context) << "    Selected device " << device << "\n";
     }
 
-    if (device < 0 || device >= deviceCount) {
+    if (device < 0 || device >= (int)deviceCount) {
         error(user_context) << "CL: Failed to get device: " << device;
         return CL_DEVICE_NOT_FOUND;
     }
@@ -761,8 +779,10 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
 
     device_copy c = make_host_to_device_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
             // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
             // can deal with the 2 innermost strides with OpenCL.
@@ -790,8 +810,8 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
                 return err;
             }
 #else
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
@@ -851,8 +871,10 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    for (int w = 0; w < c.extent[3]; w++) {
-        for (int z = 0; z < c.extent[2]; z++) {
+    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+    // in case negative strides.
+    for (int w = 0; w < (int)c.extent[3]; w++) {
+        for (int z = 0; z < (int)c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
             // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
             // can deal with the 2 innermost strides with OpenCL.
@@ -880,8 +902,8 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
                 return err;
             }
 #else
-            for (int y = 0; y < c.extent[1]; y++) {
-                for (int x = 0; x < c.extent[0]; x++) {
+            for (int y = 0; y < (int)c.extent[1]; y++) {
+                for (int x = 0; x < (int)c.extent[0]; x++) {
                     uint64_t off = (x * c.stride_bytes[0] +
                                     y * c.stride_bytes[1] +
                                     z * c.stride_bytes[2] +
