@@ -32,11 +32,7 @@ int main(int argc, char **argv) {
     Func g("g");
     g(x, y, c) = f(x, y, c);
 
-#if 1
-    f.compute_root().hexagon(c); //.vectorize(x, 64);
-#else
-    f.compute_root().vectorize(x, target.natural_vector_size<uint8_t>());
-#endif
+    f.compute_root().hexagon(c).vectorize(x, 64);
 
     g.output_buffer().set_min(0, 0).set_extent(0, (g.output_buffer().extent(0)/128)*128);
 

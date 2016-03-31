@@ -714,6 +714,31 @@ void CodeGen_Hexagon::visit(const Mul *op) {
     }
 }
 
+Expr CodeGen_Hexagon::mulhi_shr(Expr a, Expr b, int shr) {
+    Type ty = a.type();
+    if (ty.is_vector()) {
+        Type wide_ty = ty.with_bits(ty.bits() * 2);
+
+        // Generate a widening multiply.
+        Expr p_wide = Call::make(wide_ty, "halide.hexagon.mpy" + type_suffix(a, b),
+                                 {a, b}, Call::PureExtern);
+
+        // Keep the high half (truncate the low half). This also
+        // re-interleaves after mpy deinterleaved.
+        Expr p = Call::make(ty, "halide.hexagon.trunclo" + type_suffix(p_wide, false),
+                            {p_wide}, Call::PureExtern);
+
+        // Apply the remaining shift.
+        if (shr != 0) {
+            p = p >> shr;
+        }
+
+        return p;
+    } else {
+        CodeGen_Posix::mulhi_shr(a, b, shr);
+    }
+}
+
 void CodeGen_Hexagon::visit(const Div *op) {
     CodeGen_Posix::visit(op);
 }
