@@ -468,31 +468,11 @@ void CodeGen_ARM::visit(const Mul *op) {
     CodeGen_Posix::visit(op);
 }
 
-Value *CodeGen_ARM::sorted_avg(Value *a, Value *b) {
-    internal_assert(a->getType() == b->getType());
-    llvm::Type *ty = a->getType();
-    if (!neon_intrinsics_disabled() && ty->isVectorTy()) {
-        if (ty->getScalarSizeInBits() == 32) {
-            if (target.bits == 32) {
-                return call_intrin(ty, 2, "llvm.arm.neon.vhaddu.v2i32", {a, b});
-            } else {
-                return call_intrin(ty, 2, "llvm.aarch64.neon.uhadd.v2i32", {a, b});
-            }
-        } else if (ty->getScalarSizeInBits() == 16) {
-            if (target.bits == 32) {
-                return call_intrin(ty, 4, "llvm.arm.neon.vhaddu.v4i16", {a, b});
-            } else {
-                return call_intrin(ty, 4, "llvm.aarch64.neon.uhadd.v4i16", {a, b});
-            }
-        } else if (ty->getScalarSizeInBits() == 8) {
-            if (target.bits == 32) {
-                return call_intrin(ty, 8, "llvm.arm.neon.vhaddu.v8i8", {a, b});
-            } else {
-                return call_intrin(ty, 8, "llvm.aarch64.neon.uhadd.v8i8", {a, b});
-            }
-        }
-    }
-    return CodeGen_Posix::sorted_avg(a, b);
+Expr CodeGen_ARM::sorted_avg(Expr a, Expr b) {
+    Type ty = a.type();
+    Type wide_ty = ty.with_bits(ty.bits() * 2);
+    // This will codegen to vhaddu (arm32) or uhadd (arm64).
+    return cast(ty, (cast(wide_ty, a) + cast(wide_ty, b))/2);
 }
 
 void CodeGen_ARM::visit(const Div *op) {
