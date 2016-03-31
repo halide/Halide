@@ -6,6 +6,7 @@
 #include "Image.h"
 #include "Output.h"
 #include "LLVM_Headers.h"
+#include "RemoveTrivialForLoops.h"
 
 #include <iostream>
 #include <fstream>
@@ -46,11 +47,11 @@ class InjectHexagonRpc : public IRMutator {
     }
 
     Expr module_state() {
-        return state_var("module_state", type_of<void*>());
+        return state_var("hexagon_module_state", type_of<void*>());
     }
 
     Expr module_state_ptr() {
-        return state_var_ptr("module_state", type_of<void*>());
+        return state_var_ptr("hexagon_module_state", type_of<void*>());
     }
 
     // Create a Buffer containing the given buffer/size, and return an
@@ -78,12 +79,14 @@ public:
         if (loop->device_api == DeviceAPI::Hexagon) {
             // Unrolling or loop partitioning might generate multiple
             // loops with the same name, so we need to unique them.
-            std::string hex_name = unique_name("hex_" + loop->name);
+            std::string hex_name = "hex_" + loop->name;
+
+            Stmt body = remove_trivial_for_loops(loop, true /*device_loops*/);
 
             // Build a closure for the device code.
             // TODO: Should this move the body of the loop to Hexagon,
             // or the loop itself? Currently, this moves the loop itself.
-            Closure c(loop);
+            Closure c(body);
 
             // Make an argument list, and generate a function in the
             // device_code module. The hexagon runtime code expects
@@ -106,7 +109,7 @@ public:
                     args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
                 }
             }
-            device_code.append(LoweredFunc(hex_name, args, loop, LoweredFunc::External));
+            device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::External));
 
             // Generate a call to hexagon_device_run.
             std::vector<Expr> arg_sizes;
@@ -183,7 +186,7 @@ public:
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         compile_module_to_llvm_bitcode(device_code, "hex.bc");
-        system("$HEX_CLANG hex.bc -fPIC -shared -o hex.so");
+        system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -shared -o hex.so");
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
         object.resize(so.tellg());
@@ -206,8 +209,10 @@ public:
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     Target target = hexagon_remote_target;
-    if (host_target.has_feature(Target::Debug)) {
-        target = target.with_feature(Target::Debug);
+    for (Target::Feature i : {Target::Debug, Target::HVX_64, Target::HVX_128}) {
+        if (host_target.has_feature(i)) {
+            target = target.with_feature(i);
+        }
     }
     InjectHexagonRpc injector(target);
     s = injector.inject(s);
