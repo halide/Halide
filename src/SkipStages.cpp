@@ -18,14 +18,12 @@ using std::map;
 namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
-   if (op->call_type == Call::Extern) {
-     for (size_t i = 0; i < op->args.size(); i++) {
+    if (op->call_type == Call::Extern) {
+        for (size_t i = 0; i < op->args.size(); i++) {
             const Variable *var = op->args[i].as<Variable>();
-            if (var &&
-                starts_with(var->name, func + ".") &&
-                ends_with(var->name, ".buffer")) {
+            if (var && (var->name == func + ".buffer")) {
                return true;
-           }
+            }
         }
     }
     return false;
@@ -206,16 +204,57 @@ private:
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr p): buffer(b), predicate(p) {}
+    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
+        buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
 private:
     string buffer;
-    Expr predicate;
+    Expr compute_predicate;
+    Expr alloc_predicate;
 
     using IRMutator::visit;
 
+    void visit(const LetStmt *op) {
+        IRMutator::visit(op);
+
+        op = stmt.as<LetStmt>();
+        internal_assert(op);
+
+        const Call *c = op->value.as<Call>();
+        // We need to guard call to halide_memoization_cache_lookup to only be executed
+        // if the corresponding buffer is allocated.
+        if (c && (c->name == "halide_memoization_cache_lookup")) {
+            Expr guarded_lookup = Call::make(c->type, Call::if_then_else,
+                                             {alloc_predicate, c, 0}, Call::PureIntrinsic);
+            stmt = LetStmt::make(op->name, guarded_lookup, op->body);
+        }
+    }
+
+    void visit(const IfThenElse *op) {
+        IRMutator::visit(op);
+
+        op = stmt.as<IfThenElse>();
+        internal_assert(op);
+
+        const Evaluate *eval = op->then_case.as<Evaluate>();
+        if (eval) {
+            // We need to guard call call to halide_memoization_cache_store
+            // with the compute_predicate, since it is only valid if the producer of
+            // the buffer is executed.
+            const Call *c = eval->value.as<Call>();
+            if (c && (c->name == "halide_memoization_cache_store")) {
+                internal_assert(!op->else_case.defined());
+                stmt = IfThenElse::make(compute_predicate, stmt);
+            }
+        }
+    }
+
     void visit(const ProducerConsumer *op) {
-        // If the predicate at this stage depends on something
+        // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
+        IRMutator::visit(op);
+
+        op = stmt.as<ProducerConsumer>();
+        internal_assert(op);
         if (op->name == buffer) {
             Stmt produce = op->produce, update = op->update;
             if (update.defined()) {
@@ -223,14 +262,12 @@ private:
                 Stmt produce = IfThenElse::make(predicate_var, op->produce);
                 Stmt update = IfThenElse::make(predicate_var, op->update);
                 stmt = ProducerConsumer::make(op->name, produce, update, op->consume);
-                stmt = LetStmt::make(buffer + ".needed", predicate, stmt);
+                stmt = LetStmt::make(buffer + ".needed", compute_predicate, stmt);
             } else {
-                Stmt produce = IfThenElse::make(predicate, op->produce);
+                Stmt produce = IfThenElse::make(compute_predicate, op->produce);
                 stmt = ProducerConsumer::make(op->name, produce, Stmt(), op->consume);
             }
 
-        } else {
-            IRMutator::visit(op);
         }
     }
 };
@@ -297,7 +334,7 @@ private:
                 op->body.accept(&find_alloc);
                 Expr alloc_predicate = simplify(find_alloc.predicate);
 
-                ProductionGuarder g(op->name, compute_predicate);
+                ProductionGuarder g(op->name, compute_predicate, alloc_predicate);
                 Stmt body = g.mutate(op->body);
 
                 stmt = Realize::make(op->name, op->types, op->bounds,
