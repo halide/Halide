@@ -57,9 +57,12 @@ int pyramid_test() {
         funcs[i](x, y) = funcs[i-1](2*x, y);
     }
 
-    funcs[levels-1].compute_root().split(x, xo, xi, 4).split(y, yo, yi, 4).gpu_tile(xo, yo, 1, 1);
+    funcs[levels-1].compute_root()
+        .gpu_tile(x, y, 4, 4);
     for (int i = levels-2; i >= 0; --i) {
-        funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks()).split(x, xo, xi, 4).split(y, yo, yi, 4).gpu_threads(xo, yo);
+        funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks())
+            .split(x, xo, xi, 1 << (levels - i - 1))
+            .gpu_threads(xo, y);
     }
 
     Image<int> out = funcs[levels-1].realize(size_x, size_y);
@@ -81,22 +84,25 @@ int pyramid_test() {
 
 int inverted_pyramid_test() {
     const int levels = 6;
-    const int size_x = 100;
-    const int size_y = 400;
+    const int size_x = 8*16;
+    const int size_y = 8*16;
 
-    Var x, y, z, yo, yi;
+    Var x, y, z, yo, yi, xo, xi;
 
     std::vector<Func> funcs(levels);
 
     funcs[0](x, y) = 1;
     for (int i = 1; i < levels; ++i) {
-        int max_size = size_x/std::pow(2, levels-i) + 1;
-        funcs[i](x, y) = funcs[i-1](x%max_size, y);
+        funcs[i](x, y) = funcs[i-1](x/2, y);
     }
 
-    funcs[levels-1].compute_root().split(y, yo, yi, 19).gpu_tile(x, yo, 8, 8);
+    funcs[levels-1].compute_root()
+        .tile(x, y, xo, yo, xi, yi, 16, 16)
+        .gpu_tile(xo, yo, 8, 8);
     for (int i = levels-2; i >= 0; --i) {
-        funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks()).split(y, yo, yi, 19).gpu_threads(x, yo);
+        funcs[i].compute_at(funcs[levels-1], Var::gpu_blocks())
+            .tile(x, y, xo, yo, xi, yi, 16, 16)
+            .gpu_threads(xo, yo);
     }
 
     Image<int> out = funcs[levels-1].realize(size_x, size_y);
@@ -131,9 +137,9 @@ int dynamic_shared_test() {
     f4(x) = f3(x) + f3(2*x);
 
     f4.split(x, xo, xi, 16).gpu_tile(xo, 16);
-    f3.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xo);
-    f2.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xo);
-    f1.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xo);
+    f3.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xi);
+    f2.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xi);
+    f1.compute_at(f4, Var::gpu_blocks()).split(x, xo, xi, 16).gpu_threads(xi);
 
     // The amount of shared memory required varies with x
 
