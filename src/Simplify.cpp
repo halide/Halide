@@ -702,6 +702,13 @@ private:
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
 
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
+        if (div_a) add_a_a = div_a->a.as<Add>();
+        if (div_b) add_b_a = div_b->a.as<Add>();
+        const Sub *sub_a_a = div_a ? div_a->a.as<Sub>() : nullptr;
+        const Sub *sub_b_a = div_b ? div_b->a.as<Sub>() : nullptr;
+
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
@@ -1004,6 +1011,101 @@ private:
                    is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b_a &&
+                   equal(add_a_a->a, add_b_a->a) &&
+                   (is_simple_const(add_a_a->b) ||
+                    is_simple_const(add_b_a->b))) {
+            // This pattern comes up in bounds inference on upsampling code:
+            // (x + a)/c - (x + b)/c ->
+            //    ((c + a - 1 - b) - (x + a)%c)/c (duplicates a)
+            // or ((x + b)%c + (a - b))/c         (duplicates b)
+            Expr x = add_a_a->a, a = add_a_a->b, b = add_b_a->b, c = div_a->b;
+            if (is_simple_const(b)) {
+                // Use the version that injects two copies of b
+                expr = mutate((((x + (b % c)) % c) + (a - b))/c);
+            } else {
+                // Use the version that injects two copies of a
+                expr = mutate((((c + a - 1) - b) - ((x + (a % c)) % c))/c);
+            }
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_b_a &&
+                   equal(div_a->a, add_b_a->a)) {
+            // Same as above, where a == 0
+            Expr x = div_a->a, b = add_b_a->b, c = div_a->b;
+            expr = mutate(((c - 1 - b) - (x % c))/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   equal(add_a_a->a, div_b->a)) {
+            // Same as above, where b == 0
+            Expr x = add_a_a->a, a = add_a_a->b, c = div_a->b;
+            expr = mutate(((x % c) + a)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_b_a &&
+                   equal(div_a->a, sub_b_a->a)) {
+            // Same as above, where a == 0 and b is subtracted
+            Expr x = div_a->a, b = sub_b_a->b, c = div_a->b;
+            expr = mutate(((c - 1 + b) - (x % c))/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_a_a &&
+                   equal(sub_a_a->a, div_b->a)) {
+            // Same as above, where b == 0, and a is subtracted
+            Expr x = sub_a_a->a, a = sub_a_a->b, c = div_a->b;
+            expr = mutate(((x % c) - a)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_a_a &&
+                   add_b_a &&
+                   equal(sub_a_a->a, add_b_a->a) &&
+                   is_simple_const(add_b_a->b)) {
+            // Same as above, where a is subtracted and b is a constant
+            // (x - a)/c - (x + b)/c -> ((x + b)%c - a - b)/c
+            Expr x = sub_a_a->a, a = sub_a_a->b, b = add_b_a->b, c = div_a->b;
+            expr = mutate((((x + (b % c)) % c) - a - b)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   sub_b_a &&
+                   equal(add_a_a->a, sub_b_a->a) &&
+                   is_simple_const(add_a_a->b)) {
+            // Same as above, where b is subtracted and a is a constant
+            // (x + a)/c - (x - b)/c -> (b - (x + a)%c + (a + c - 1))/c
+            Expr x = add_a_a->a, a = add_a_a->b, b = sub_b_a->b, c = div_a->b;
+            expr = mutate((b - (x + (a % c))%c + (a + c - 1))/c);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -3600,6 +3702,22 @@ void check_algebra() {
 
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
+
+    // Almost-cancellations through integer divisions. These rules all
+    // deduplicate x and wrap it in a modulo operator, neutering it
+    // for the purposes of bounds inference. Patterns below look
+    // confusing, but were brute-force tested.
+    check((x + 17)/3 - (x + 7)/3, ((x+1)%3 + 10)/3);
+    check((x + 17)/3 - (x + y)/3, (19 - y - (x+2)%3)/3);
+    check((x + y )/3 - (x + 7)/3, ((x+1)%3 + y + -7)/3);
+    check( x      /3 - (x + y)/3, (2 - y - x % 3)/3);
+    check((x + y )/3 -  x     /3, (x%3 + y)/3);
+    check( x      /3 - (x + 7)/3, (-5 - x%3)/3);
+    check((x + 17)/3 -  x     /3, (x%3 + 17)/3);
+    check((x + 17)/3 - (x - y)/3, (y - (x+2)%3 + 19)/3);
+    check((x - y )/3 - (x + 7)/3, ((x+1)%3 - y + (-7))/3);
+    check( x      /3 - (x - y)/3, (y - x%3 + 2)/3);
+    check((x - y )/3 -  x     /3, (x%3 - y)/3);
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));

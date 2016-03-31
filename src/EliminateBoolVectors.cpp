@@ -1,5 +1,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
+#include <algorithm>
 
 namespace Halide {
 namespace Internal {
