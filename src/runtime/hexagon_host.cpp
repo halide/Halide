@@ -13,6 +13,7 @@
 
 #define O_TRUNC 00001000
 #define O_CREAT 00000100
+#define O_EXCL  00000200
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
@@ -123,11 +124,7 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
             path << tmp_paths[j] << "halide_kernels" << i << ".so";
             strncpy(filename, path.str(), filename_size);
 
-            // Make sure the file doesn't already exist.
-            int so_fd = open(filename, O_RDONLY, 0);
-            if (so_fd != -1) continue;
-
-            so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT, 0755);
+            int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT | O_EXCL, 0755);
             if (so_fd == -1) continue;
             ssize_t written = write(so_fd, data, size);
             close(so_fd);
