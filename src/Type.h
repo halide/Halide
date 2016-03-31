@@ -41,8 +41,8 @@ struct halide_cplusplus_type_name {
         Simple, ///< "int"
         Struct, ///< "struct Foo"
         Class,  ///< "class Foo"
-        Union,  ///< "union Foo" TODO: Do we need unions
-        Enum,   ///< "enum Foo" TODO: Do we need enums
+        Union,  ///< "union Foo"
+        Enum,   ///< "enum Foo"
     } cpp_type_type;  // Note: order is reflected in map_to_name table in CPlusPlusMangle.cpp
 
     std::string name;
@@ -73,8 +73,6 @@ struct halide_cplusplus_type_name {
  * This is intended to be a constexpr usable type, but we don't depend
  * on C++11 yet. In C++14, it is possible this will be replaced with
  * introspection/reflection facilities.
- *
- * TODO(zalman): Decide if this needs a field to indicate const/non-const.
  */
 struct halide_handle_cplusplus_type {
     halide_cplusplus_type_name inner_name;
@@ -166,7 +164,6 @@ struct halide_internal_handle_traits<T, true> {
  * value from a C++ type.
  *
  * Note the type represented is implicitly a pointer.
- * TODO(zalman): Figure out if we need to represent refs
  *
  * A NULL pointer of type halide_handle_traits represents "void *".
  * This is chosen for compactness or representation as Type is a very

@@ -4,7 +4,6 @@ class CPlusPlusNameManglingDefineExternGenerator :
     public Halide::Generator<CPlusPlusNameManglingDefineExternGenerator> {
 public:
     // Use all the parameter types to make sure mangling works for each of them.
-    // TODO: verify this provides full coverage.
     ImageParam input{UInt(8), 1, "input"};
     Param<int32_t *> ptr{"ptr", 0};
     Param<int32_t const *> const_ptr{"const_ptr", 0};
