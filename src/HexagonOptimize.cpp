@@ -155,19 +155,19 @@ std::vector<Pattern> casts = {
     // problem because we can't simplify away the interleaving
     // resulting from widening if this is the later narrowing op. But,
     // we don't have vsat variants for all of the types we need.
-    { "halide.hexagon.trunchi.sat.vub", u8c(wild_i16x) },
-    { "halide.hexagon.trunchi.sat.vuh", u16c(wild_i32x) },
-    { "halide.hexagon.trunchi.sat.vb", i8c(wild_i16x) },
+    { "halide.hexagon.trunchi.sat.vuh", u8c(wild_i16x) },
+    { "halide.hexagon.trunchi.sat.vuw", u16c(wild_i32x) },
+    { "halide.hexagon.trunchi.sat.vh", i8c(wild_i16x) },
 
     // Narrowing casts
-    { "halide.hexagon.trunclo.vb", u8(wild_u16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vh", u16(wild_u32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vb", i8(wild_i16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vh", i16(wild_i32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vb", u8(wild_u16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vh", u16(wild_u32x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vb", i8(wild_i16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vh", i16(wild_i32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vh", u8(wild_u16x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vw", u16(wild_u32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vh", i8(wild_i16x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vw", i16(wild_i32x), Pattern::DeinterleaveOperands },
 };
 
 std::vector<Pattern> muls = {
