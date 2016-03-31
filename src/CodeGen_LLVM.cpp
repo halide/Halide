@@ -1449,11 +1449,23 @@ void CodeGen_LLVM::visit(const Mod *op) {
 }
 
 void CodeGen_LLVM::visit(const Min *op) {
-    value = codegen(select(op->a < op->b, op->a, op->b));
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a < b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const Max *op) {
-    value = codegen(select(op->a > op->b, op->a, op->b));
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a > b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const EQ *op) {
@@ -2230,8 +2242,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
             // Generate select(x >= 0, x, -x) instead
-            Expr x = op->args[0];
-            value = codegen(select(x >= 0, x, -x));
+            string x_name = unique_name('x');
+            Expr x = Variable::make(op->args[0].type(), x_name);
+            value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
         }
     } else if (op->is_intrinsic(Call::absd)) {
 
@@ -2259,7 +2272,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
             // Use a select instead
-            codegen(Select::make(a < b, b - a, a - b));
+            string a_name = unique_name('a');
+            string b_name = unique_name('b');
+            Expr a_var = Variable::make(op->args[0].type(), a_name);
+            Expr b_var = Variable::make(op->args[1].type(), b_name);
+            codegen(Let::make(a_name, op->args[0],
+                              Let::make(b_name, op->args[1],
+                                        Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
         // Make some memory for this buffer_t
