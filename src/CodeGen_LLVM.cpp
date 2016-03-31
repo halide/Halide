@@ -1355,17 +1355,20 @@ void CodeGen_LLVM::visit(const Div *op) {
             shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
         Expr num = op->a;
+
         // Make an all-ones mask if the numerator is negative
         Expr sign = num >> make_const(op->type, op->type.bits() - 1);
-        // Take the absolute value.
+
+        // Flip the numerator bits if the mask is high.
         num = cast(num.type().with_code(Type::UInt), num);
         num = num ^ sign;
+
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
         num = mulhi_shr(num, mult, shift);
-        // If we negated when computing the absolute value, take the
-        // negative of the result.
+
+        // Maybe flip the bits back again.
         num = num ^ sign;
 
         value = codegen(num);
