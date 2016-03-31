@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     //int W = 64*3, H = 64*3;
-    const int W = 16, H = 16;
+    const int W = 1024, H = 256;
 
     Image<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
@@ -76,6 +76,15 @@ int main(int argc, char **argv) {
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.gpu_tile(x, y, 16, 16);
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // Take this opportunity to test scheduling the pure dimensions in a reduction
+        Var xi("xi"), yi("yi");
+        blur1.hexagon().tile(x, y, xi, yi, 6, 6);
+        // TODO: Add parallel to the schedule.
+        blur1.update().hexagon().tile(x, y, xi, yi, 32, 4).vectorize(xi);
+
+        // TODO: Add parallel to the schedule.
+        blur2.hexagon().vectorize(x, 32);
     } else {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");

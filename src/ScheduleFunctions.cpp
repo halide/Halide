@@ -1071,7 +1071,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (ends_with(op->name, ".__outermost")) {
+        if (ends_with(op->name, ".__outermost") && op->device_api != DeviceAPI::Hexagon) {
             stmt = mutate(op->body);
         } else {
             IRMutator::visit(op);

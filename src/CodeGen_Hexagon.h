@@ -23,12 +23,15 @@ public:
 
     std::unique_ptr<llvm::Module> compile(const Module &module);
 
-    static void test();
-
 protected:
     void compile_func(const LoweredFunc &f);
 
     void init_module();
+
+    std::string mcpu() const;
+    std::string mattrs() const;
+    bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 
     llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty,
                                          const std::string &name,
@@ -59,12 +62,6 @@ protected:
     void visit(const EQ *);
     void visit(const Select *);
     /* // @} */
-
-    std::string mcpu() const;
-    std::string mattrs() const;
-    bool use_soft_float_abi() const;
-    int native_vector_bits() const;
-    int bytes_in_vector() const;
 
     /** Call an LLVM intrinsic, potentially casting the operands to
      * match the type of the function. */

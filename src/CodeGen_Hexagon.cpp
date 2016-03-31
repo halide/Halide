@@ -62,25 +62,42 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     return llvm_module;
 }
 
+namespace {
+
+// A piece of IR uses HVX if it contains any vector type producing IR
+// nodes.
+class UsesHvx : public IRVisitor {
+private:
+    using IRVisitor::visit;
+    void visit(const Variable *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+    }
+    void visit(const Ramp *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+    }
+    void visit(const Broadcast *op) {
+        uses_hvx = uses_hvx || op->lanes > 1;
+    }
+    void visit(const Call *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+    }
+
+public:
+    bool uses_hvx = false;
+};
+
+bool uses_hvx(Stmt s) {
+    UsesHvx uses;
+    s.accept(&uses);
+    return uses.uses_hvx;
+}
+
+}  // namespace
+
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f) {
     CodeGen_Posix::begin_func(f.linkage, f.name, f.args);
 
-    // Modify the body to add a call to halide_qurt_hvx_lock, and
-    // register a destructor to call halide_qurt_hvx_unlock.
-    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
-    Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
-    string hvx_lock_result_name = unique_name("hvx_lock_result");
-    Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
-    Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
-                                        AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
-
-    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-    Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
-                                 {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
-
     Stmt body = f.body;
-    body = Block::make(Evaluate::make(hvx_unlock), body);
-    body = Block::make(check_hvx_lock, body);
 
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
@@ -90,6 +107,25 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f) {
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon code...\n";
     body = optimize_hexagon(body, target);
+
+    if (uses_hvx(body)) {
+        debug(1) << "Adding calls to qurt_hvx_lock...\n";
+        // Modify the body to add a call to halide_qurt_hvx_lock, and
+        // register a destructor to call halide_qurt_hvx_unlock.
+        Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
+        Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
+        string hvx_lock_result_name = unique_name("hvx_lock_result");
+        Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
+        Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
+                                            AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
+
+        Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+        Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
+                                     {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
+
+        body = Block::make(Evaluate::make(hvx_unlock), body);
+        body = Block::make(check_hvx_lock, body);
+    }
 
     debug(1) << "Hexagon function body:\n";
     debug(1) << body << "\n";
@@ -147,20 +183,20 @@ void CodeGen_Hexagon::init_module() {
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
-        { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunchi.vb",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunchi.vh",  {i32x2} },
-        { IPICK(Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.vb",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vh",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunchi.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunchi.vw",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
         { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "sat.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatuwuh), u16x1, "sat.vuw", {u32x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sat.vw",   {i32x2} },
 
-        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.sat.vub", {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.sat.vuh", {i32x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.sat.vb",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sat.vh",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.sat.vuh", {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.sat.vuw", {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.sat.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sat.vw",  {i32x2} },
 
 
         // Adds/subtracts:
@@ -447,16 +483,16 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
 
     llvm::Type *vec_ty = vec->getType();
     int vec_elements = vec_ty->getVectorNumElements();
-    int element_bits = vec_ty->getPrimitiveSizeInBits() / vec_elements;
+    int element_bits = vec_ty->getScalarSizeInBits();
     // If we're getting a native vector bits worth of data from half
     // of the argument, we might be able to use lo/hi if the start is appropriate.
     if (size*2 == vec_elements && element_bits*size == native_vector_bits()) {
         if (start == 0) {
-            return call_intrin_cast(llvm::VectorType::get(vec_ty->getVectorElementType(), size),
+            return call_intrin_cast(llvm::VectorType::get(vec_ty->getScalarType(), size),
                                     IPICK(Intrinsic::hexagon_V6_lo),
                                     {vec});
         } else if (start == vec_elements/2) {
-            return call_intrin_cast(llvm::VectorType::get(vec_ty->getVectorElementType(), size),
+            return call_intrin_cast(llvm::VectorType::get(vec_ty->getScalarType(), size),
                                     IPICK(Intrinsic::hexagon_V6_hi),
                                     {vec});
         }
@@ -471,9 +507,9 @@ Value *CodeGen_Hexagon::concat_vectors(const vector<Value *> &v) {
     if (v.size() == 2 && v[0]->getType() == v[1]->getType()) {
         llvm::Type *v_ty = v[0]->getType();
         int vec_elements = v_ty->getVectorNumElements();
-        int element_bits = v_ty->getPrimitiveSizeInBits() / vec_elements;
+        int element_bits = v_ty->getScalarSizeInBits();
         if (vec_elements*element_bits == native_vector_bits()) {
-            return call_intrin_cast(llvm::VectorType::get(v_ty->getVectorElementType(), vec_elements*2),
+            return call_intrin_cast(llvm::VectorType::get(v_ty->getScalarType(), vec_elements*2),
                                     IPICK(Intrinsic::hexagon_V6_vcombine),
                                     {v[1], v[0]});
         }
@@ -483,8 +519,7 @@ Value *CodeGen_Hexagon::concat_vectors(const vector<Value *> &v) {
 
 
 namespace {
-std::string type_suffix(Expr a, bool signed_variants = true) {
-    Type type = a.type();
+std::string type_suffix(Type type, bool signed_variants = true) {
     string prefix = type.is_vector() ? ".v" : ".";
     if (type.is_int() || !signed_variants) {
         switch (type.bits()) {
@@ -501,6 +536,10 @@ std::string type_suffix(Expr a, bool signed_variants = true) {
     }
     internal_error << "Unsupported HVX type: " << type << "\n";
     return "";
+}
+
+std::string type_suffix(Expr a, bool signed_variants = true) {
+    return type_suffix(a.type(), signed_variants);
 }
 
 std::string type_suffix(Expr a, Expr b, bool signed_variants = true) {
@@ -588,10 +627,6 @@ int CodeGen_Hexagon::native_vector_bits() const {
   }
 }
 
-int CodeGen_Hexagon::bytes_in_vector() const {
-  return native_vector_bits() / 8;
-}
-
 void CodeGen_Hexagon::visit(const Add *op) {
     if (op->type.is_vector()) {
         value = call_intrin(op->type,
@@ -627,17 +662,53 @@ Expr maybe_scalar(Expr x) {
 
 void CodeGen_Hexagon::visit(const Mul *op) {
     if (op->type.is_vector()) {
-        if (op->type.code() == Type::Int && op->type.bits() == 16) {
-            Expr a = maybe_scalar(op->a);
-            Expr b = maybe_scalar(op->b);
-            if (a.type().is_scalar()) std::swap(a, b);
+        // Figure out if one of the operands is a scalar, and commute
+        // if it isn't the second operand.
+        Expr a = maybe_scalar(op->a);
+        Expr b = maybe_scalar(op->b);
+        if (a.type().is_scalar())
+            std::swap(a, b);
+
+        // Try to find an intrinsic for one of the operands being a scalar.
+        value = call_intrin(op->type,
+                            "halide.hexagon.mpyi" + type_suffix(a, b),
+                            {a, b},
+                            true /*maybe*/);
+        if (value) return;
+
+        // We didn't find an intrinsic for this type. Try again
+        // without the scalar operand.
+        value = call_intrin(op->type,
+                            "halide.hexagon.mpyi" + type_suffix(op->a, op->b),
+                            {op->a, op->b},
+                            true /*maybe*/);
+        if (value) return;
+
+        // Hexagon has mostly widening multiplies. Try to find a
+        // widening multiply we can use.
+        value = call_intrin(op->type,
+                            "halide.hexagon.mpy" + type_suffix(a, b),
+                            {a, b},
+                            true /*maybe*/);
+        if (!value) {
+            // Try again without the scalar operand.
             value = call_intrin(op->type,
-                                "halide.hexagon.mpyi" + type_suffix(a, b),
-                                {a, b});
+                                "halide.hexagon.mpy" + type_suffix(op->a, op->b),
+                                {op->a, op->b},
+                                true /*maybe*/);
+        }
+        if (value) {
+            // We found a widening op, we need to narrow back
+            // down. The widening multiply deinterleaved the result,
+            // but the trunc operation reinterleaves.
+            Type wide = op->type.with_bits(op->type.bits()*2);
+            value = call_intrin(llvm_type_of(op->type),
+                                "halide.hexagon.trunchi" + type_suffix(wide, false),
+                                {value});
             return;
         }
 
-        internal_error << "Unhandled HVX multiply " << op << "\n";
+        internal_error << "Unhandled HVX multiply " << Expr(op) << "\n";
     } else {
         CodeGen_Posix::visit(op);
     }
