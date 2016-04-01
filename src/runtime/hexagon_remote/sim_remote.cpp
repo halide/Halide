@@ -38,6 +38,10 @@ int qurt_hvx_unlock() {
 
 }  // extern "C"
 
+void halide_print(void *user_context, const char *str) {
+    fprintf(stderr, "%s", str);
+}
+
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
@@ -89,12 +93,6 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-void init() {
-    // The simulator needs this call to enable dlopen to work...
-    const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
-    dlinit(3, const_cast<char**>(builtin));
-}
-
 typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_free_t custom_free,
                              halide_print_t print,
@@ -107,8 +105,6 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
-    init();
-
 #if 1  // Use shared object from file
     const char *filename = (const char *)code;
 #else
@@ -211,10 +207,6 @@ int release_kernels(handle_t module_ptr, int codeLen) {
 
 extern "C" {
 
-void halide_print(void *user_context, const char *str) {
-    fprintf(stderr, "%s", str);
-}
-
 // The global symbols with which we pass RPC commands and results.
 volatile int rpc_call = Message::Break;
 
@@ -238,8 +230,14 @@ volatile int rpc_ret = 0;
 }
 
 int main(int argc, const char **argv) {
+    // The simulator needs this call to enable dlopen to work...
+    char libgcc[] = "libgcc.so";
+    char libc[] = "libc.so";
+    char libstdcpp[] = "libstdc++.so";
+    char *builtin[] = {libgcc, libc, libstdcpp};
+    dlinit(3, builtin);
+
     while(true) {
-        fflush(stdout);
         switch (rpc_call) {
         case Message::None:
             break;
