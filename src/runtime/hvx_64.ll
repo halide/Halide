@@ -67,36 +67,36 @@ define weak_odr <128 x i8> @halide.hexagon.deinterleave.vb(<128 x i8> %arg) noun
 
 declare <16 x i32> @llvm.hexagon.V6.lvsplatw(i32)
 
-define internal i16 @dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+define weak_odr i16 @halide.hexagon.dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
   %arg_i16 = zext i8 %arg to i16
   %arg_i16_s = shl i16 %arg_i16, 8
   %r = or i16 %arg_i16, %arg_i16_s
   ret i16 %r
 }
 
-define internal i32 @dup2.h(i16 %arg) nounwind uwtable readnone alwaysinline {
+define weak_odr i32 @halide.hexagon.dup2.h(i16 %arg) nounwind uwtable readnone alwaysinline {
   %arg_i32 = zext i16 %arg to i32
   %arg_i32_s = shl i32 %arg_i32, 16
   %r = or i32 %arg_i32, %arg_i32_s
   ret i32 %r
 }
 
-define internal i32 @dup4.b(i8 %arg) nounwind uwtable readnone alwaysinline {
-  %dup2 = call i16 @dup2.b(i8 %arg)
-  %dup4 = call i32 @dup2.h(i16 %dup2)
-  ret i32 %dup4
+define weak_odr i32 @halide.hexagon.dup4.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %halide.hexagon.dup2 = call i16 @halide.hexagon.dup2.b(i8 %arg)
+  %halide.hexagon.dup4 = call i32 @halide.hexagon.dup2.h(i16 %halide.hexagon.dup2)
+  ret i32 %halide.hexagon.dup4
 }
 
 define weak_odr <64 x i8> @halide.hexagon.splat.b(i8 %arg) nounwind uwtable readnone alwaysinline {
-  %dup4 = call i32 @dup4.b(i8 %arg)
-  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 %dup4)
+  %halide.hexagon.dup4 = call i32 @halide.hexagon.dup4.b(i8 %arg)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 %halide.hexagon.dup4)
   %r = bitcast <16 x i32> %r_32 to <64 x i8>
   ret <64 x i8> %r
 }
 
 define weak_odr <32 x i16> @halide.hexagon.splat.h(i16 %arg) nounwind uwtable readnone alwaysinline {
-  %dup2 = call i32 @dup2.h(i16 %arg)
-  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 %dup2)
+  %halide.hexagon.dup2 = call i32 @halide.hexagon.dup2.h(i16 %arg)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 %halide.hexagon.dup2)
   %r = bitcast <16 x i32> %r_32 to <32 x i16>
   ret <32 x i16> %r
 }

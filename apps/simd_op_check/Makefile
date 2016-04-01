@@ -26,4 +26,7 @@ driver-%: driver.cpp %/filters.h
 	$(CXX-$*) $(CXXFLAGS-$*) -O3 -I $* driver.cpp $*/test_*.o $*/simd_op_check_runtime.o -o driver-$* $(LDFLAGS-$*)
 
 clean:
-	rm -rf test_*.h check_*.s test_*.o filters.h filter_headers.h driver-* arm-32-android arm-64-android host
+	rm -rf filters.h filter_headers.h driver-* arm-32-android arm-64-android host
+	find . -iname "test_*.h" -type f -exec rm {} +
+	find . -iname "check_*.s" -type f -exec rm {} +
+	find . -iname "test_*.o" -type f -exec rm {} +
