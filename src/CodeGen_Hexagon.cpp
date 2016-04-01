@@ -190,7 +190,6 @@ void CodeGen_Hexagon::init_module() {
 
         // Downcast with saturation:
         { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "sat.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "sat.vuh",  {u16x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatuwuh), u16x1, "sat.vuw", {u32x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sat.vw",   {i32x2} },
 
@@ -371,9 +370,6 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret
     llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
     return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar);
 }
-llvm::Value *CodeGen_Hexagon::shl_or(llvm::Value *v, unsigned u) {
-    return builder->CreateOr(builder->CreateShl(v, u), v);
- }
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const std::string &name,
                                                       const std::vector<Type> &arg_types, bool broadcast_scalar) {
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
@@ -419,14 +415,23 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
             if (arg_ty->isVectorTy()) {
                 args[i] = builder->CreateBitCast(args[i], arg_ty);
             } else {
-                args[i] = builder->CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
                 if (broadcast_scalar) {
+                    llvm::Function *fn = nullptr;
                     // We know it is a scalar type. We can have 8 bit, 16 bit or 32 bit types only.
                     unsigned bits = arg_types[i].bits();
-                    while (bits != 32) {
-                        args[i] = shl_or(args[i], bits);
-                        bits *= 2;
+                    switch(bits) {
+                    case 8:
+                        fn = module->getFunction("halide.hexagon.dup4.b");
+                        break;
+                    case 16:
+                        fn = module->getFunction("halide.hexagon.dup2.h");
+                        break;
+                    default:
+                        internal_error << "unhandled broadcast_scalar in define_hvx_intrinsic";
                     }
+                    args[i] = builder->CreateCall(fn, { args[i] });
+                } else {
+                    args[i] = builder->CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
                 }
             }
         }
