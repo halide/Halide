@@ -94,8 +94,9 @@ bool uses_hvx(Stmt s) {
 
 }  // namespace
 
-void CodeGen_Hexagon::compile_func(const LoweredFunc &f) {
-    CodeGen_Posix::begin_func(f.linkage, f.name, f.args);
+void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
+                                   const std::string &simple_name, const std::string &extern_name) {
+    CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
 

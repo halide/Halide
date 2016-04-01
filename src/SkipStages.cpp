@@ -18,7 +18,8 @@ using std::map;
 namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
-   if (op->call_type == Call::Extern) {
+  if (op->call_type == Call::Extern ||
+      op->call_type == Call::ExternCPlusPlus) {
      for (size_t i = 0; i < op->args.size(); i++) {
             const Variable *var = op->args[i].as<Variable>();
             if (var &&

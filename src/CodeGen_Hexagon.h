@@ -24,7 +24,8 @@ public:
     std::unique_ptr<llvm::Module> compile(const Module &module);
 
 protected:
-    void compile_func(const LoweredFunc &f);
+    void compile_func(const LoweredFunc &f,
+                      const std::string &simple_name, const std::string &extern_name);
 
     void init_module();
 
