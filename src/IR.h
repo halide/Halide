@@ -364,6 +364,7 @@ struct Call : public ExprNode<Call> {
     std::vector<Expr> args;
     typedef enum {Image,        //< A load from an input image
                   Extern,       //< A call to an external C-ABI function, possibly with side-effects
+                  ExternCPlusPlus, //< A call to an external C-ABI function, possibly with side-effects
                   PureExtern,   //< A call to a guaranteed-side-effect-free external function
                   Halide,       //< A call to a Func
                   Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen

@@ -135,7 +135,6 @@ struct ErrorReport {
 #else
     ~ErrorReport() {
 #endif
-
         if (condition) return;
         explode();
     }

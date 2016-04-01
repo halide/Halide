@@ -192,7 +192,7 @@ void CodeGen_GLSLBase::visit(const Call *op) {
     print_assignment(op->type, rhs.str());
 }
 
-string CodeGen_GLSLBase::print_type(Type type) {
+string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option) {
     ostringstream oss;
     type = map_type(type);
     if (type.is_scalar()) {
@@ -217,6 +217,11 @@ string CodeGen_GLSLBase::print_type(Type type) {
         }
         oss << "vec" << type.lanes();
     }
+
+    if (space_option == AppendSpace) {
+        oss << " ";
+    }
+
     return oss.str();
 }
 

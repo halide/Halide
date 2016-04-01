@@ -20,7 +20,7 @@ CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
     clc(src_stream), target(t) {
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded) {
     ostringstream oss;
     if (type.is_float()) {
         if (type.bits() == 16) {
@@ -41,7 +41,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             oss << "bool";
             break;
         case 8:
-            oss << "char";
+          oss << "char";
             break;
         case 16:
             oss << "short";
