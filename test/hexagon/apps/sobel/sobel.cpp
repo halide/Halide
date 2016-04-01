@@ -45,7 +45,6 @@ void test_sobel(Target &target) {
 
   // Halide:: Function
   Halide::Func input_16("input_16");
-  // input_16(x, y) = cast<int16_t>(input(x, y));
   input_16(x, y) = cast<uint16_t>(input(x, y));
 #ifdef TRACING
   input_16.trace_stores();
@@ -54,21 +53,18 @@ void test_sobel(Target &target) {
   Expr a = usat16_a(input_16(x-1, y), input_16(x+1, y));
   Expr b = 2*input_16(x, y);
   sobel_x_avg(x,y) = usat16_a(a, b);
-  // sobel_x_avg(x,y) = input_16(x-1, y) + 2*input_16(x, y)  + input_16(x+1, y);
   Halide::Func sobel_x("sobel_x");
-  sobel_x(x, y) = absd(sobel_x_avg(x, y-1), sobel_x_avg(x, y+1));
+  sobel_x(x, y) = cast<int16_t>(absd(sobel_x_avg(x, y-1), sobel_x_avg(x, y+1)));
 
   Halide::Func sobel_y_avg("sobel_y_avg");
   Expr c = usat16_a(input_16(x, y-1), input_16(x, y+1));
   Expr d = 2*input_16(x, y);
   sobel_y_avg(x, y) = usat16_a(c, d);
-  // sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y)  + input_16(x, y+1);
   Halide::Func sobel_y("sobel_y");
-  sobel_y(x, y) = absd(sobel_y_avg(x-1, y),  sobel_y_avg(x+1, y));
+  sobel_y(x, y) = cast<int16_t>(absd(sobel_y_avg(x-1, y),  sobel_y_avg(x+1, y)));
 
   Halide::Func Sobel("Sobel");
-  Sobel(x, y) = usat8(usat16_a(sobel_y(x, y), sobel_x(x, y)));
-  // Sobel(x, y) = usat8(sobel_x(x, y) + sobel_y(x, y));
+  Sobel(x, y) = usat8(sobel_x(x, y) + sobel_y(x, y));
   set_output_buffer_min(Sobel, 0, 0);
   set_output_buffer_min(Sobel, 1, 0);
   set_stride_multiple(Sobel, 1, 1 << LOG2VLEN);

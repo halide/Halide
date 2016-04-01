@@ -1534,13 +1534,18 @@ void check_hvx_all() {
     check("vmpy(v*.ub,v*.b)", hvx_width/1, i16(i8_1) * i16(u8_2));
     check("vmpy(v*.h,v*.uh)", hvx_width/2, i32(i16_1) * i32(u16_2));
 
-    // We know the following don't work yet; They are WIP. Do this to sort of
-    // XFAIL them.
     check("vmpy(v*.ub,r*.b)", hvx_width/1, i16(u8_1) * 3);
     check("vmpy(v*.h,r*.h)", hvx_width/2, i32(i16_1) * 10);
     check("vmpy(v*.ub,r*.ub)", hvx_width/1, u16(u8_1) * 3);
     check("vmpy(v*.uh,r*.uh)", hvx_width/2, u32(u16_1) * 10);
 
+    check("vmpy(v*.ub,r*.b)", hvx_width/1, 3*i16(u8_1));
+    check("vmpy(v*.h,r*.h)", hvx_width/2, 10*i32(i16_1));
+    check("vmpy(v*.ub,r*.ub)", hvx_width/1, 3*u16(u8_1));
+    check("vmpy(v*.uh,r*.uh)", hvx_width/2, 10*u32(u16_1));
+
+    // We know the following don't work yet; They are WIP. Do this to sort of
+    // XFAIL them.
 #if 0
     // Curiously, these work only for double vectors. Should fix
     // for single vectors.
