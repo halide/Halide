@@ -208,7 +208,7 @@ int release_kernels(handle_t module_ptr, int codeLen) {
 extern "C" {
 
 // The global symbols with which we pass RPC commands and results.
-volatile int rpc_call = Message::Break;
+volatile int rpc_call = Message::None;
 
 #if 0
 volatile int rpc_args[16];
@@ -227,6 +227,11 @@ volatile int rpc_arg7;
 
 volatile int rpc_ret = 0;
 
+void set_rpc_return(int value) {
+    rpc_ret = value;
+    rpc_call = Message::None;
+}
+
 }
 
 int main(int argc, const char **argv) {
@@ -242,26 +247,26 @@ int main(int argc, const char **argv) {
         case Message::None:
             break;
         case Message::Alloc:
-            rpc_ret = reinterpret_cast<int>(halide_malloc(NULL, RPC_ARG(0)));
+            set_rpc_return(reinterpret_cast<int>(halide_malloc(NULL, RPC_ARG(0))));
             break;
         case Message::Free:
             halide_free(NULL, reinterpret_cast<void*>(RPC_ARG(0)));
-            rpc_ret = 0;
+            set_rpc_return(0);
             break;
         case Message::InitKernels:
-            rpc_ret = initialize_kernels(
+            set_rpc_return(initialize_kernels(
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
-                reinterpret_cast<handle_t*>(RPC_ARG(2)));
+                reinterpret_cast<handle_t*>(RPC_ARG(2))));
             break;
         case Message::GetSymbol:
-            rpc_ret = get_symbol(
+            set_rpc_return(get_symbol(
                 static_cast<handle_t>(RPC_ARG(0)),
                 reinterpret_cast<const char *>(RPC_ARG(1)),
-                RPC_ARG(2));
+                RPC_ARG(2)));
             break;
         case Message::Run:
-            rpc_ret = run(
+            set_rpc_return(run(
                 static_cast<handle_t>(RPC_ARG(0)),
                 static_cast<handle_t>(RPC_ARG(1)),
                 reinterpret_cast<const buffer*>(RPC_ARG(2)),
@@ -269,23 +274,20 @@ int main(int argc, const char **argv) {
                 reinterpret_cast<const buffer*>(RPC_ARG(4)),
                 RPC_ARG(5),
                 reinterpret_cast<buffer*>(RPC_ARG(6)),
-                RPC_ARG(7));
+                RPC_ARG(7)));
             break;
         case Message::ReleaseKernels:
-            rpc_ret = release_kernels(
+            set_rpc_return(release_kernels(
                 static_cast<handle_t>(RPC_ARG(0)),
-                RPC_ARG(1));
+                RPC_ARG(1)));
             break;
         case Message::Break:
             return 0;
         default:
-            printf("Unknown message: %d\n", rpc_call);
+            fprintf(stderr, "Unknown message: %d\n", rpc_call);
             return -1;
         }
-        // Setting the message to zero indicates to the caller that
-        // we're done processing the message.
-        rpc_call = Message::None;
     }
-    printf("Unreachable!\n");
+    fprintf(stderr, "Unreachable!\n");
     return 0;
 }
