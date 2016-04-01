@@ -234,14 +234,24 @@ private:
     }
 
     void visit(const Call *op) {
-        // We need to guard call to halide_memoization_cache_lookup to only be executed
-        // if the corresponding buffer is allocated. We also need to guard call to
-        // halide_memoization_cache_store with the compute_predicate, since the data is
-        // only valid if the producer of the buffer is executed.
-        if ((op->name == "halide_memoization_cache_lookup") && memoize_call_uses_buffer(op)) {
+
+        if ((op->name == "halide_memoization_cache_lookup") &&
+             memoize_call_uses_buffer(op)) {
+            // We need to guard call to halide_memoization_cache_lookup to only
+            // be executed if the corresponding buffer is allocated. We ignore
+            // the compute_predicate since in the case that alloc_predicate is
+            // true but compute_predicate is false, the consumer would still load
+            // data from the buffer even if it won't actually use the result,
+            // hence, we need to allocate some scratch memory for the consumer
+            // to load from. For memoized func, the memory might already be in
+            // the cache, so we perform the lookup instead of allocating a new one.
             expr = Call::make(op->type, Call::if_then_else,
                               {alloc_predicate, op, 0}, Call::PureIntrinsic);
-        } else if ((op->name == "halide_memoization_cache_store") && memoize_call_uses_buffer(op)) {
+        } else if ((op->name == "halide_memoization_cache_store") &&
+                    memoize_call_uses_buffer(op)) {
+            // We need to wrap the halide_memoization_cache_store with the
+            // compute_predicate, since the data to be written is only valid if
+            // the producer of the buffer is executed.
             expr = Call::make(op->type, Call::if_then_else,
                               {compute_predicate, op, 0}, Call::PureIntrinsic);
         } else {
