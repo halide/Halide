@@ -29,7 +29,7 @@ dilate3x3_run.o: dilate3x3.o dilate3x3.h dilate3x3_run.cpp
 	${HEXAGON_CLANG} -c dilate3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 dilate3x3.out: dilate3x3_run.o dilate3x3.o dilate3x3.h
-	${HEXAGON_CLANG} -mv60 -o dilate3x3.out dilate3x3_run.o dilate3x3.o -lhexagon
+	${HEXAGON_CLANG} -mv60 -o dilate3x3.out dilate3x3_run.o dilate3x3.o -lhexagon -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 all: dilate3x3.out
 
