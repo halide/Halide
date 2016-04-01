@@ -1302,34 +1302,19 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
-Value *CodeGen_LLVM::unsigned_mulhi_shr(Value *a, Value *b, int shr) {
-    llvm::Type *ty = a->getType();
-    llvm::VectorType *vty = dyn_cast<VectorType>(ty);
-    llvm::Type *element_ty = vty ? vty->getElementType() : ty;
-    llvm::Type *wide_ty = llvm::IntegerType::get(ty->getContext(), element_ty->getIntegerBitWidth() * 2);
-    if (vty) {
-        wide_ty = llvm::VectorType::get(wide_ty, vty->getNumElements());
-    }
+Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
+    Type ty = a.type();
+    Type wide_ty = ty.with_bits(ty.bits() * 2);
 
-    // We assume the inputs are unsigned, so we zero extend.
-    Value *a_wide = builder->CreateIntCast(a, wide_ty, false);
-    Value *b_wide = builder->CreateIntCast(b, wide_ty, false);
-    Value *p_wide = builder->CreateMul(a_wide, b_wide);
-
-    // Do the shift (add 8 or 16 or 32 to narrow back down)
-    Constant *shift_amount = ConstantInt::get(wide_ty, shr + element_ty->getIntegerBitWidth());
-    Value *p = builder->CreateLShr(p_wide, shift_amount);
-    return builder->CreateIntCast(p, ty, true);
+    Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
+    return cast(ty, p_wide >> (shr + ty.bits()));
 }
 
-Value *CodeGen_LLVM::sorted_avg(Value *a, Value *b) {
+Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
     // b > a, so the following works without widening:
     // a + (b - a)/2
-    Value *diff = builder->CreateSub(b, a);
-    diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
-    return builder->CreateAdd(a, diff);
+    return a + (b - a)/2;
 }
-
 
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
@@ -1369,22 +1354,24 @@ void CodeGen_LLVM::visit(const Div *op) {
             multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
             shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
-
-        Value *val = codegen(op->a);
+        Expr num = op->a;
 
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
+        Expr sign = num >> make_const(op->type, op->type.bits() - 1);
+
         // Flip the numerator bits if the mask is high.
-        Value *flipped = builder->CreateXor(sign, val);
+        num = cast(num.type().with_code(Type::UInt), num);
+        num = num ^ sign;
 
-        // Grab the multiplier.
-        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
+        // Multiply and keep the high half of the
+        // result, and then apply the shift.
+        Expr mult = make_const(num.type(), multiplier);
+        num = mulhi_shr(num, mult, shift);
 
-        // Widening multiply, keep high half, shift
-        val = unsigned_mulhi_shr(flipped, mult, shift);
+        // Maybe flip the bits back again.
+        num = num ^ sign;
 
-        // Maybe flip the bits again
-        value = builder->CreateXor(val, sign);
+        value = codegen(num);
 
     } else if (const_uint_divisor &&
                op->type.is_uint() &&
@@ -1408,12 +1395,11 @@ void CodeGen_LLVM::visit(const Div *op) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-
-        Value *num = codegen(op->a);
+        Expr num = op->a;
 
         // Widen, multiply, narrow
-        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
-        Value *val = unsigned_mulhi_shr(num, mult, method == 1 ? shift : 0);
+        Expr mult = make_const(num.type(), multiplier);
+        Expr val = mulhi_shr(num, mult, method == 1 ? shift : 0);
 
         if (method == 2) {
             // Average with original numerator.
@@ -1421,11 +1407,11 @@ void CodeGen_LLVM::visit(const Div *op) {
 
             // Do the final shift
             if (shift) {
-                val = builder->CreateLShr(val, ConstantInt::get(llvm_type_of(op->type), shift));
+                val = val >> make_const(op->type, shift);
             }
         }
 
-        value = val;
+        value = codegen(val);
     } else if (op->type.is_uint()) {
         value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
@@ -1508,11 +1494,23 @@ void CodeGen_LLVM::visit(const Mod *op) {
 }
 
 void CodeGen_LLVM::visit(const Min *op) {
-    value = codegen(select(op->a < op->b, op->a, op->b));
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a < b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const Max *op) {
-    value = codegen(select(op->a > op->b, op->a, op->b));
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a > b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const EQ *op) {
@@ -2363,18 +2361,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
             // Generate select(x >= 0, x, -x) instead
-            Value *arg = codegen(op->args[0]);
-            Value *zero = Constant::getNullValue(arg->getType());
-            Value *cmp, *neg;
-            if (t.is_float()) {
-                cmp = builder->CreateFCmpOGE(arg, zero);
-                neg = builder->CreateFSub(zero, arg);
-            } else {
-                internal_assert(t.is_int());
-                cmp = builder->CreateICmpSGE(arg, zero);
-                neg = builder->CreateSub(zero, arg);
-            }
-            value = builder->CreateSelect(cmp, arg, neg);
+            string x_name = unique_name('x');
+            Expr x = Variable::make(op->args[0].type(), x_name);
+            value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
         }
     } else if (op->is_intrinsic(Call::absd)) {
 
@@ -2402,7 +2391,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
             // Use a select instead
-            codegen(Select::make(a < b, b - a, a - b));
+            string a_name = unique_name('a');
+            string b_name = unique_name('b');
+            Expr a_var = Variable::make(op->args[0].type(), a_name);
+            Expr b_var = Variable::make(op->args[1].type(), b_name);
+            codegen(Let::make(a_name, op->args[0],
+                              Let::make(b_name, op->args[1],
+                                        Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
         // Make some memory for this buffer_t

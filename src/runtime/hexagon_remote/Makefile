@@ -10,6 +10,8 @@ CXX-host = ${CXX}
 CC-v60 = ${HEX_TOOLS_ROOT}Tools/bin/hexagon-clang
 CXX-v60 = ${HEX_TOOLS_ROOT}Tools/bin/hexagon-clang++
 
+LD-v60 = $(HEX_TOOLS_ROOT)Tools/bin/hexagon-link
+
 CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
 #CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
 CCFLAGS-arm-64-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64
@@ -67,9 +69,23 @@ halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $*
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
+
+CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
+CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
+INIT           =$(shell $(CXX-v60) -G0 -print-file-name=init.o)
+LIB_STANDALONE =$(shell $(CXX-v60) -G0 -print-file-name=libstandalone.a)
+LIB_C          =$(shell $(CXX-v60) -G0 -print-file-name=libc.a)
+LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
+FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
+LIBDL          =$(HEX_TOOLS_ROOT)Tools/target/hexagon/lib/v60/G0/libdl.a
+
 %/hexagon_sim_remote: %/sim_remote.o
 	mkdir -p $*
-	$(CXX-$*) -m$* -G0 -mG0lib $^ $(CCFLAGS-$*) -o $@ -lhexagon -ldl
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) $*/sim_remote.o $(LIBDL) --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) --dynamic-linker= -E --force-dynamic
+
+#%/hexagon_sim_remote: %/sim_remote.o
+#	mkdir -p $*
+#	$(CXX-$*) -m$* -G0 -mG0lib $^ $(CCFLAGS-$*) -o $@ -lhexagon -ldl
 
 host/libhalide_hexagon_host.so: host/sim_host.o
 	mkdir -p host
