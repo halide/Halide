@@ -257,9 +257,9 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
     } else if (target.arch == Target::PNaCl) {
         return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
     } else if (target.arch == Target::Hexagon) {
-      return llvm::DataLayout(
-         "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
-         "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
+        return llvm::DataLayout(
+            "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
+            "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
         return llvm::DataLayout("unreachable");
@@ -397,10 +397,10 @@ llvm::Triple get_triple_for_target(Target target) {
         user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
     } else if (target.arch == Target::Hexagon) {
-      triple.setVendor(llvm::Triple::UnknownVendor);
-      triple.setArch(llvm::Triple::hexagon);
-      triple.setObjectFormat(llvm::Triple::ELF);
- } else {
+        triple.setVendor(llvm::Triple::UnknownVendor);
+        triple.setArch(llvm::Triple::hexagon);
+        triple.setObjectFormat(llvm::Triple::ELF);
+    } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
     }
 
