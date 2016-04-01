@@ -89,7 +89,8 @@ struct Pattern {
         DeinterleaveOperands = 1 << 0,  ///< Prior to evaluating the pattern, deinterleave native vectors of the operands.
         InterleaveResult = 1 << 1,  ///< After evaluating the pattern, interleave native vectors of the result.
         SwapOperands = 1 << 2,  ///< Swap operands prior to substitution.
-        LosslessCastOp1 = 1 << 3  // Proceed only if lossless_cast on second operand succeeds with the type of the first operand.
+        LosslessCastOp0 = 1 << 3, // Proceed only if lossless_cast on the first operand succeeds with the type of the first operand.
+        LosslessCastOp1 = 1 << 4,  // Proceed only if lossless_cast on second operand succeeds with the type of the first operand.
     };
     string intrin;        ///< Name of the intrinsic
     Expr pattern;         ///< The pattern to match against
@@ -191,10 +192,10 @@ std::vector<Pattern> muls = {
     { "halide.hexagon.mpy.vuh.uh", u32(wild_u16x)*bc(wild_u32), Pattern::InterleaveResult | Pattern::LosslessCastOp1 },
     { "halide.hexagon.mpy.vh.h",  i32(wild_i16x)*bc(wild_i32), Pattern::InterleaveResult | Pattern::LosslessCastOp1 },
     // Commute the four above.
-    { "halide.hexagon.mpy.vub.ub", bc(wild_u16)*u16(wild_u8x), Pattern::InterleaveResult | Pattern::SwapOperands | Pattern::LosslessCastOp1 },
-    { "halide.hexagon.mpy.vub.b", bc(wild_i16)*i16(wild_u8x), Pattern::InterleaveResult | Pattern::SwapOperands | Pattern::LosslessCastOp1 },
-    { "halide.hexagon.mpy.vuh.uh", bc(wild_u32)*u32(wild_u16x), Pattern::InterleaveResult | Pattern::SwapOperands | Pattern::LosslessCastOp1 },
-    { "halide.hexagon.mpy.vh.h",  bc(wild_i32)*i32(wild_i16x), Pattern::InterleaveResult | Pattern::SwapOperands | Pattern::LosslessCastOp1 },
+    { "halide.hexagon.mpy.vub.ub", bc(wild_u16)*u16(wild_u8x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
+    { "halide.hexagon.mpy.vub.b", bc(wild_i16)*i16(wild_u8x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
+    { "halide.hexagon.mpy.vuh.uh", bc(wild_u32)*u32(wild_u16x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
+    { "halide.hexagon.mpy.vh.h",  bc(wild_i32)*i32(wild_i16x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
 };
 
 Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_mutator,
@@ -219,12 +220,17 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                 if (p.flags & Pattern::SwapOperands) {
                     std::swap(matches[0], matches[1]);
                 }
-                if (p.flags & Pattern::LosslessCastOp1) {
+                if ((p.flags & Pattern::LosslessCastOp1) ||
+                    (p.flags & Pattern::LosslessCastOp0)) {
                     internal_assert(matches.size() == 2);
-                    Type t = Type(matches[1].type().code(), matches[1].type().bits()/2, 1);
-                    Expr b = lossless_cast(t, matches[1]);
+                    // LosslessCastOpx is a way of knowing that operand x is a broadcast.
+                    // Therefore, both *_should_not_* be set in the pattern flags because
+                    // that'll mean we are operating on two broadcasts.
+                    int op_num = (p.flags & Pattern::LosslessCastOp0) ? 0 : 1;
+                    Type t = Type(matches[op_num].type().code(), matches[op_num].type().bits()/2, 1);
+                    Expr b = lossless_cast(t, matches[op_num]);
                     if (!b.defined())  continue;
-                    else matches[1] = b;
+                    else matches[op_num] = b;
                 }
                 x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
                 if (p.flags & Pattern::InterleaveResult) {
