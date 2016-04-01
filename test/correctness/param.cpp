@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
         if (out_17(i) != 17 || out_123(i) != 123) {
             printf("Failed!\n");
             for (int i = 0; i < 1024; i++) {
-                printf("%f %f\n", out_17(i), out_123(i));
+                printf("%d %d\n", out_17(i), out_123(i));
             }
             return -1;
         }
