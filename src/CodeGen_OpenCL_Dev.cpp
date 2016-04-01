@@ -20,7 +20,7 @@ CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
     clc(src_stream), target(t) {
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded) {
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded space) {
     ostringstream oss;
     if (type.is_float()) {
         if (type.bits() == 16) {
@@ -68,6 +68,9 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
         default:
             user_error <<  "Unsupported vector width in OpenCL C: " << type << "\n";
         }
+    }
+    if (space == AppendSpace) {
+        oss << ' ';
     }
     return oss.str();
 }
