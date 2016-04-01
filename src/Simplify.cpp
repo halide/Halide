@@ -702,6 +702,13 @@ private:
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
 
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
+        if (div_a) add_a_a = div_a->a.as<Add>();
+        if (div_b) add_b_a = div_b->a.as<Add>();
+        const Sub *sub_a_a = div_a ? div_a->a.as<Sub>() : nullptr;
+        const Sub *sub_b_a = div_b ? div_b->a.as<Sub>() : nullptr;
+
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
@@ -1004,6 +1011,101 @@ private:
                    is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b_a &&
+                   equal(add_a_a->a, add_b_a->a) &&
+                   (is_simple_const(add_a_a->b) ||
+                    is_simple_const(add_b_a->b))) {
+            // This pattern comes up in bounds inference on upsampling code:
+            // (x + a)/c - (x + b)/c ->
+            //    ((c + a - 1 - b) - (x + a)%c)/c (duplicates a)
+            // or ((x + b)%c + (a - b))/c         (duplicates b)
+            Expr x = add_a_a->a, a = add_a_a->b, b = add_b_a->b, c = div_a->b;
+            if (is_simple_const(b)) {
+                // Use the version that injects two copies of b
+                expr = mutate((((x + (b % c)) % c) + (a - b))/c);
+            } else {
+                // Use the version that injects two copies of a
+                expr = mutate((((c + a - 1) - b) - ((x + (a % c)) % c))/c);
+            }
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_b_a &&
+                   equal(div_a->a, add_b_a->a)) {
+            // Same as above, where a == 0
+            Expr x = div_a->a, b = add_b_a->b, c = div_a->b;
+            expr = mutate(((c - 1 - b) - (x % c))/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   equal(add_a_a->a, div_b->a)) {
+            // Same as above, where b == 0
+            Expr x = add_a_a->a, a = add_a_a->b, c = div_a->b;
+            expr = mutate(((x % c) + a)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_b_a &&
+                   equal(div_a->a, sub_b_a->a)) {
+            // Same as above, where a == 0 and b is subtracted
+            Expr x = div_a->a, b = sub_b_a->b, c = div_a->b;
+            expr = mutate(((c - 1 + b) - (x % c))/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_a_a &&
+                   equal(sub_a_a->a, div_b->a)) {
+            // Same as above, where b == 0, and a is subtracted
+            Expr x = sub_a_a->a, a = sub_a_a->b, c = div_a->b;
+            expr = mutate(((x % c) - a)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_a_a &&
+                   add_b_a &&
+                   equal(sub_a_a->a, add_b_a->a) &&
+                   is_simple_const(add_b_a->b)) {
+            // Same as above, where a is subtracted and b is a constant
+            // (x - a)/c - (x + b)/c -> ((x + b)%c - a - b)/c
+            Expr x = sub_a_a->a, a = sub_a_a->b, b = add_b_a->b, c = div_a->b;
+            expr = mutate((((x + (b % c)) % c) - a - b)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   sub_b_a &&
+                   equal(add_a_a->a, sub_b_a->a) &&
+                   is_simple_const(add_a_a->b)) {
+            // Same as above, where b is subtracted and a is a constant
+            // (x + a)/c - (x - b)/c -> (b - (x + a)%c + (a + c - 1))/c
+            Expr x = add_a_a->a, a = add_a_a->b, b = sub_b_a->b, c = div_a->b;
+            expr = mutate((b - (x + (a % c))%c + (a + c - 1))/c);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1693,14 +1795,12 @@ private:
                 expr = mutate(max(mul_a->a, ratio) * factor);
             }
         } else if (call_a &&
-                   call_a->name == Call::likely &&
-                   call_a->call_type == Call::Intrinsic &&
+                   call_a->is_intrinsic(Call::likely) &&
                    equal(call_a->args[0], b)) {
             // min(likely(b), b) -> likely(b)
             expr = a;
         } else if (call_b &&
-                   call_b->name == Call::likely &&
-                   call_b->call_type == Call::Intrinsic &&
+                   call_b->is_intrinsic(Call::likely) &&
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
@@ -2002,14 +2102,12 @@ private:
                 expr = mutate(min(mul_a->a, ratio) * factor);
             }
         } else if (call_a &&
-                   call_a->name == Call::likely &&
-                   call_a->call_type == Call::Intrinsic &&
+                   call_a->is_intrinsic(Call::likely) &&
                    equal(call_a->args[0], b)) {
             // max(likely(b), b) -> likely(b)
             expr = a;
         } else if (call_b &&
-                   call_b->name == Call::likely &&
-                   call_b->call_type == Call::Intrinsic &&
+                   call_b->is_intrinsic(Call::likely) &&
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
@@ -2586,13 +2684,12 @@ private:
         } else if (const LE *le = condition.as<LE>()) {
             // Normalize select(a <= b, c, d) to select(b < a, d, c)
             expr = mutate(Select::make(le->b < le->a, false_value, true_value));
-        } else if (ct && ct->name == Call::likely && ct->call_type == Call::Intrinsic &&
+        } else if (ct && ct->is_intrinsic(Call::likely) &&
                    equal(ct->args[0], false_value)) {
             // select(cond, likely(a), a) -> likely(a)
             expr = true_value;
         } else if (cf &&
-                   cf->name == Call::likely &&
-                   cf->call_type == Call::Intrinsic &&
+                   cf->is_intrinsic(Call::likely) &&
                    equal(cf->args[0], true_value)) {
             // select(cond, a, likely(a)) -> likely(a)
             expr = false_value;
@@ -2760,16 +2857,15 @@ private:
             }
         }
 
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::shift_left ||
-             op->name == Call::shift_right)) {
+        if (op->is_intrinsic(Call::shift_left) ||
+            op->is_intrinsic(Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
 
             int64_t ib = 0;
             if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
                 Type t = op->type;
 
-                bool shift_left = op->name == Call::shift_left;
+                bool shift_left = op->is_intrinsic(Call::shift_left);
                 if (t.is_int() && ib < 0) {
                     shift_left = !shift_left;
                     ib = -ib;
@@ -2793,13 +2889,12 @@ private:
 
             if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
-            } else if (op->name == Call::shift_left) {
+            } else if (op->is_intrinsic(Call::shift_left)) {
                 expr = a << b;
             } else {
                 expr = a >> b;
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::bitwise_and) {
+        } else if (op->is_intrinsic(Call::bitwise_and)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             int64_t ib = 0;
             uint64_t ub = 0;
@@ -2820,8 +2915,7 @@ private:
             } else {
                 expr = a & b;
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::abs) {
+        } else if (op->is_intrinsic(Call::abs)) {
             // Constant evaluate abs(x).
             Expr a = mutate(op->args[0]);
             Type ta = a.type();
@@ -2845,7 +2939,7 @@ private:
             } else {
                 expr = abs(a);
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
             double f = 0.0;
@@ -2856,8 +2950,7 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::interleave_vectors) {
+        } else if (op->is_intrinsic(Call::interleave_vectors)) {
             // Mutate the args
             vector<Expr> new_args;
             bool changed = false;
@@ -2909,7 +3002,7 @@ private:
 
                 if ((int)load_indices.size() == terms) {
                     Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
-                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::Intrinsic);
+                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
                     interleaved_index = mutate(interleaved_index);
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
@@ -2925,8 +3018,7 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, new_args, op->call_type);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::stringify) {
+        } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
             vector<Expr> new_args;
@@ -2976,7 +3068,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -2986,7 +3078,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "exp_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -2996,7 +3088,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    (op->name == "floor_f32" || op->name == "ceil_f32" ||
                     op->name == "round_f32" || op->name == "trunc_f32")) {
             internal_assert(op->args.size() == 1);
@@ -3012,7 +3104,7 @@ private:
                 } else if (op->name == "trunc_f32") {
                     expr = FloatImm::make(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
                 }
-            } else if (call && call->call_type == Call::Extern &&
+            } else if (call && call->call_type == Call::PureExtern &&
                        (call->name == "floor_f32" || call->name == "ceil_f32" ||
                         call->name == "round_f32" || call->name == "trunc_f32")) {
                 // For any combination of these integer-valued functions, we can
@@ -3439,7 +3531,7 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
     Type t = e[0].type().with_lanes(e[0].type().lanes() * e.size());
-    return Call::make(t, Call::interleave_vectors, e, Call::Intrinsic);
+    return Call::make(t, Call::interleave_vectors, e, Call::PureIntrinsic);
 }
 
 Expr ramp(Expr base, Expr stride, int w) {
@@ -3610,6 +3702,22 @@ void check_algebra() {
 
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
+
+    // Almost-cancellations through integer divisions. These rules all
+    // deduplicate x and wrap it in a modulo operator, neutering it
+    // for the purposes of bounds inference. Patterns below look
+    // confusing, but were brute-force tested.
+    check((x + 17)/3 - (x + 7)/3, ((x+1)%3 + 10)/3);
+    check((x + 17)/3 - (x + y)/3, (19 - y - (x+2)%3)/3);
+    check((x + y )/3 - (x + 7)/3, ((x+1)%3 + y + -7)/3);
+    check( x      /3 - (x + y)/3, (2 - y - x % 3)/3);
+    check((x + y )/3 -  x     /3, (x%3 + y)/3);
+    check( x      /3 - (x + 7)/3, (-5 - x%3)/3);
+    check((x + 17)/3 -  x     /3, (x%3 + 17)/3);
+    check((x + 17)/3 - (x - y)/3, (y - (x+2)%3 + 19)/3);
+    check((x - y )/3 - (x + 7)/3, ((x+1)%3 - y + (-7))/3);
+    check( x      /3 - (x - y)/3, (y - x%3 + 2)/3);
+    check((x - y )/3 -  x     /3, (x%3 - y)/3);
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
@@ -4115,11 +4223,11 @@ void simplify_test() {
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     // Check that constant args to a stringify get combined
-    check(Call::make(Handle(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
           string("3 4"));
 
-    check(Call::make(Handle(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
-          Call::make(Handle(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
+          Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;

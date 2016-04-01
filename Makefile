@@ -274,6 +274,7 @@ SOURCE_FILES = \
   CodeGen_PTX_Dev.cpp \
   CodeGen_Renderscript_Dev.cpp \
   CodeGen_X86.cpp \
+  CPlusPlusMangle.cpp \
   CSE.cpp \
   Debug.cpp \
   DebugToFile.cpp \
@@ -282,6 +283,7 @@ SOURCE_FILES = \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
+  EliminateBoolVectors.cpp \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
@@ -394,6 +396,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_Renderscript_Dev.h \
   CodeGen_X86.h \
+  CPlusPlusMangle.h \
   CSE.h \
   Debug.h \
   DebugToFile.h \
@@ -402,6 +405,7 @@ HEADER_FILES = \
   DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
+  EliminateBoolVectors.h \
   Error.h \
   Expr.h \
   ExprUsesVar.h \
@@ -581,14 +585,15 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# symbols. We only care about the libLLVM ones.
 	@rm -rf $(BUILD_DIR)/llvm_objects
 	@mkdir -p $(BUILD_DIR)/llvm_objects
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) -lz -lpthread | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list
+	cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh
 	# Extract the necessary object files from the llvm archives.
-	cd $(BUILD_DIR)/llvm_objects; xargs -n2 ar x < list
+	cd $(BUILD_DIR)/llvm_objects; bash ./extract.sh
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(LIB_DIR)
 	@rm -f $(LIB_DIR)/libHalide.a
 	# ar breaks on MinGW with all objects at the same time.
-	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
+	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
 	ranlib $(LIB_DIR)/libHalide.a
 else
 $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
@@ -809,11 +814,26 @@ $(FILTERS_DIR)/%.generator: $(ROOT_DIR)/test/generator/%_generator.cpp $(GENGEN_
 	@mkdir -p $(FILTERS_DIR)
 	$(CXX) -std=c++11 -g $(CXX_WARNING_FLAGS) -fno-rtti -I$(INCLUDE_DIR) $(filter %_generator.cpp,$^) $(ROOT_DIR)/tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread $(LIBDL) -o $@
 
+NON_EMPTY_TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
+NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
+
 # By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+
+# By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
+$(FILTERS_DIR)/c_plus_plus_name_mangling.o $(FILTERS_DIR)/c_plus_plus_name_mangling.h: $(FILTERS_DIR)/c_plus_plus_name_mangling.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::c_plus_plus_name_mangling"
+
+# By default, %.o/.h are produced by executing %.generator. Runtimes are not included in these.
+$(FILTERS_DIR)/c_plus_plus_name_mangling_define_extern.o $(FILTERS_DIR)/c_plus_plus_name_mangling_define_extern.h: $(FILTERS_DIR)/c_plus_plus_name_mangling_define_extern.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::c_plus_plus_name_mangling_define_extern"
 
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
@@ -857,6 +877,7 @@ $(FILTERS_DIR)/tiled_blur.generator: $(ROOT_DIR)/test/generator/tiled_blur_blur_
 # is there a way to specify that in Make?
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
 $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
+$(BIN_DIR)/generator_aot_c_plus_plus_name_mangling_define_extern: $(FILTERS_DIR)/c_plus_plus_name_mangling.o
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;

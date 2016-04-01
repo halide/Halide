@@ -203,7 +203,7 @@ struct StringImm : public ExprNode<StringImm> {
 
     static const StringImm *make(const std::string &val) {
         StringImm *node = new StringImm;
-        node->type = Handle();
+        node->type = type_of<const char *>();
         node->value = val;
         return node;
     }

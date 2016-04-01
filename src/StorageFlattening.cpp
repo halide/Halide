@@ -158,14 +158,14 @@ private:
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
             args[1] = make_zero(realize->types[idx]);
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
                 args[3*i+3] = extent_var[i];
                 args[3*i+4] = stride_var[i];
             }
-            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                   args, Call::Intrinsic);
             stmt = LetStmt::make(buffer_name + ".buffer",
                                  buf,
@@ -313,20 +313,8 @@ private:
     }
 
     void visit(const Call *call) {
-
-        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
-            vector<Expr> args(call->args.size());
-            bool changed = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(call->args[i]);
-                if (!args[i].same_as(call->args[i])) changed = true;
-            }
-            if (!changed) {
-                expr = call;
-            } else {
-                expr = Call::make(call->type, call->name, args, call->call_type);
-            }
-        } else {
+        if (call->call_type == Call::Halide ||
+            call->call_type == Call::Image) {
             string name = call->name;
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
@@ -348,6 +336,18 @@ private:
 
             if (call->type.bits() != t.bits()) {
                 expr = Cast::make(call->type, expr);
+            }
+        } else {
+            vector<Expr> args(call->args.size());
+            bool changed = false;
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(call->args[i]);
+                if (!args[i].same_as(call->args[i])) changed = true;
+            }
+            if (!changed) {
+                expr = call;
+            } else {
+                expr = Call::make(call->type, call->name, args, call->call_type);
             }
         }
     }
