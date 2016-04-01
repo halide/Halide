@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-bool validate(const Image<float> &im, int add)
+bool validate(const Image<int> &im, int add)
 {
     // Check the result was what we expected
     for (int i = 0; i < im.width(); i++) {
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     {
         printf("Realizing function f...\n");
 
-        Image<float> imf = f.realize(32, 32, target);
+        Image<int> imf = f.realize(32, 32, target);
         if (!validate(imf, 1)) {
             return -1;
         }
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
         printf("Realizing function g...\n");
 
-        Image<float> img = g.realize(32, 32, target);
+        Image<int> img = g.realize(32, 32, target);
         if (!validate(img, 2)) {
             return -1;
         }
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     // Try using f again to ensure it is still valid (after g's destruction).
     printf("Realizing function f again...\n");
 
-    Image<float> imf2 = f.realize(32, 32, target);
+    Image<int> imf2 = f.realize(32, 32, target);
     if (!validate(imf2, 1)) {
         return -1;
     }
