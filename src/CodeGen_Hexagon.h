@@ -95,7 +95,6 @@ protected:
     llvm::Value *slice_vector(llvm::Value *vec, int start, int size);
     llvm::Value *concat_vectors(const std::vector<llvm::Value *> &v);
     ///@}
-    llvm::Value *shl_or(llvm::Value *v, unsigned u);
 };
 
 }}
