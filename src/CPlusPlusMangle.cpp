@@ -595,23 +595,9 @@ MangleResult ItaniumABIMangling_main[] = {
   { "_ZSt13test_functionv", "std::test_function()" },
   { "_ZNSt3foo13test_functionEv", "std::foo::test_function()" },
   { "_ZSt13test_functionNSt15enclosing_class11test_structE", "std::test_function(std::enclosing_class::test_struct)" },
-};
-
-MangleResult win64_expecteds[] = {
-  { "\001?test_function@@YAHXZ", "int32_t test_function(void)" },
-  { "\001?test_function@foo@@YAHXZ", "int32_t foo::test_function(void)" },
-  { "\001?test_function@bar@foo@@YAHXZ", "int32_t foo::bar::test_function(void)" },
-  { "\001?test_function@bar@foo@@YAHH@Z", "int32_t foo::test_function(int32_t)" },
-  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@@Z", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
-  { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@@Z",
-    "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@0@Z", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
-  { "\001?test_function@test_namespace@1@YAHPEAUtest_struct@1@PEBU21@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
-  { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@0@Z",
-    "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "\001?test_function@std@@YAHXZ", "std::test_function()" },
-  { "\001?test_function@foo@std@@YAHXZ", "std::foo::test_function()" },
-  { "\001?test_function@std@@YAHUtest_struct@enclosing_class@1@@Z", "std::test_function(std::enclosing_class::test_struct)" },
+  { "_ZN14test_namespace14test_namespace13test_functionEPNS_10test_classE", "test_namespace::test_namespace::test_function(test_namespace::test_class*)" },
+  { "_ZN14test_namespace14test_namespace13test_functionEPNS_10test_unionE", "test_namespace::test_namespace::test_function(test_namespace::test_union*)" },
+  { "_ZN14test_namespace14test_namespace13test_functionEPNS_9test_enumE", "test_namespace::test_namespace::test_function(test_namespace::test_enum*)" },
 };
 
 MangleResult win32_expecteds[] = {
@@ -629,6 +615,29 @@ MangleResult win32_expecteds[] = {
   { "\001?test_function@std@@YAHXZ", "std::test_function()" },
   { "\001?test_function@foo@std@@YAHXZ", "std::foo::test_function()" },
   { "\001?test_function@std@@YAHUtest_struct@enclosing_class@1@@Z", "std::test_function(std::enclosing_class::test_struct)" },
+  { "\001?test_function@test_namespace@1@YAHPAVtest_class@1@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_class*)" },
+  { "\001?test_function@test_namespace@1@YAHPATtest_union@1@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_union*)" },
+  { "\001?test_function@test_namespace@1@YAHPAVtest_enum@1@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_enum*)" },
+};
+
+MangleResult win64_expecteds[] = {
+  { "\001?test_function@@YAHXZ", "int32_t test_function(void)" },
+  { "\001?test_function@foo@@YAHXZ", "int32_t foo::test_function(void)" },
+  { "\001?test_function@bar@foo@@YAHXZ", "int32_t foo::bar::test_function(void)" },
+  { "\001?test_function@bar@foo@@YAHH@Z", "int32_t foo::test_function(int32_t)" },
+  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@@Z", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@@Z",
+    "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
+  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@0@Z", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "\001?test_function@test_namespace@1@YAHPEAUtest_struct@1@PEBU21@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
+  { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@0@Z",
+    "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
+  { "\001?test_function@std@@YAHXZ", "std::test_function()" },
+  { "\001?test_function@foo@std@@YAHXZ", "std::foo::test_function()" },
+  { "\001?test_function@std@@YAHUtest_struct@enclosing_class@1@@Z", "std::test_function(std::enclosing_class::test_struct)" },
+  { "\001?test_function@test_namespace@1@YAHPEAVtest_class@1@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_class*)" },
+  { "\001?test_function@test_namespace@1@YAHPEATtest_union@1@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_union*)" },
+  { "\001?test_function@test_namespace@1@YAHPEAVtest_enum@1@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_enum*)" },
 };
 
 MangleResult all_types_by_target[] = {
@@ -807,6 +816,30 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
      check_result(expecteds, expecteds_index, target,
                   cplusplus_function_mangled_name("test_function", { "std" }, Int(32),
                                                   { ExternFuncArgument(make_zero(std_test_type)) }, target));
+
+    halide_handle_cplusplus_type class_type_info(halide_handle_cplusplus_type(
+        halide_cplusplus_type_name(halide_cplusplus_type_name::Class, "test_class"),
+        { "test_namespace", }, { }, { halide_handle_cplusplus_type::Pointer }));
+    Type class_type(Handle(1, &class_type_info));
+    check_result(expecteds, expecteds_index, target,
+                 cplusplus_function_mangled_name("test_function", { "test_namespace", "test_namespace" }, Int(32),
+                                                 { ExternFuncArgument(make_zero(class_type)), }, target));
+
+    halide_handle_cplusplus_type union_type_info(halide_handle_cplusplus_type(
+        halide_cplusplus_type_name(halide_cplusplus_type_name::Union, "test_union"),
+        { "test_namespace", }, { }, { halide_handle_cplusplus_type::Pointer }));
+    Type union_type(Handle(1, &union_type_info));
+    check_result(expecteds, expecteds_index, target,
+                 cplusplus_function_mangled_name("test_function", { "test_namespace", "test_namespace" }, Int(32),
+                                                 { ExternFuncArgument(make_zero(union_type)), }, target));
+
+    halide_handle_cplusplus_type enum_type_info(halide_handle_cplusplus_type(
+        halide_cplusplus_type_name(halide_cplusplus_type_name::Class, "test_enum"),
+        { "test_namespace", }, { }, { halide_handle_cplusplus_type::Pointer }));
+    Type enum_type(Handle(1, &enum_type_info));
+    check_result(expecteds, expecteds_index, target,
+                 cplusplus_function_mangled_name("test_function", { "test_namespace", "test_namespace" }, Int(32),
+                                                 { ExternFuncArgument(make_zero(enum_type)), }, target));
 }
 
 }
