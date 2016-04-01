@@ -65,6 +65,7 @@ typedef enum {
     CUDA_ERROR_PEER_ACCESS_NOT_ENABLED    = 705,
     CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE         = 708,
     CUDA_ERROR_CONTEXT_IS_DESTROYED           = 709,
+    CUDA_ERROR_ILLEGAL_INSTRUCTION            = 715,
     CUDA_ERROR_UNKNOWN                        = 999
 } CUresult;
 

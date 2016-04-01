@@ -48,7 +48,7 @@ protected:
                         const std::vector<DeviceArgument> &args);
     protected:
 
-        std::string print_type(Type type);
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
         using CodeGen_C::visit;
         void visit(const For *);

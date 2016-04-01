@@ -18,7 +18,7 @@ public:
 
 protected:
 
-    llvm::Value *sorted_avg(llvm::Value *a, llvm::Value *b);
+    Expr sorted_avg(Expr a, Expr b);
 
     using CodeGen_Posix::visit;
 

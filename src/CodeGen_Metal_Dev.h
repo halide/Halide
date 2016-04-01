@@ -51,7 +51,7 @@ protected:
 
     protected:
         using CodeGen_C::visit;
-        std::string print_type(Type type);
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
         // Vectors in Metal come in two varieties, regular and packed.
         // For storage allocations and pointers used in address arithmetic,
         // packed types must be used. For temporaries, constructors, etc.

@@ -18,7 +18,8 @@ using std::map;
 namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
-   if (op->call_type == Call::Extern) {
+  if (op->call_type == Call::Extern ||
+      op->call_type == Call::ExternCPlusPlus) {
      for (size_t i = 0; i < op->args.size(); i++) {
             const Variable *var = op->args[i].as<Variable>();
             if (var &&
@@ -162,7 +163,7 @@ private:
     void visit(const Call *op) {
         // Calls inside of an address_of aren't considered, because no
         // actuall call to the Func happens.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             // Visit the args of the inner call
             const Call *c = op->args[0].as<Call>();
             if (c) {
@@ -320,7 +321,7 @@ class MightBeSkippable : public IRVisitor {
     void visit(const Call *op) {
         // Calls inside of an address_of aren't considered, because no
         // actuall call to the Func happens.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             // Visit the args of the inner call
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
