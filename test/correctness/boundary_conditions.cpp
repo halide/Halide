@@ -141,8 +141,8 @@ void check_mirror_interior(const Image<T> &input, Func f,
 
 int main(int argc, char **argv) {
 
-    const int W = 16;
-    const int H = 16;
+    const int W = 32;
+    const int H = 32;
     Image<uint8_t> input(W, H);
 
     for (int32_t y = 0; y < H; y++) {
