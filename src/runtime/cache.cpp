@@ -91,9 +91,9 @@ WEAK bool bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
     return true;
 }
 
-// Each host block has extra space to store a header just before the contents.  
+// Each host block has extra space to store a header just before the contents.
 // 16 is chosen to keep that alignment.
-// The header holds the cache key hash and pointer to the hash entry. 
+// The header holds the cache key hash and pointer to the hash entry.
 //
 // This is an optimization the number of cycles it takes for the cache
 // to operate.
@@ -121,8 +121,8 @@ struct CacheEntry {
 };
 
 struct CacheBlockHeader {
-    uint32_t hash;
     CacheEntry *entry;
+    uint32_t hash;
 };
 
 WEAK CacheBlockHeader *get_pointer_to_header(uint8_t * host) {

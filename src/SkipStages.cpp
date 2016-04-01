@@ -19,10 +19,15 @@ namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
     if (op->call_type == Call::Extern) {
+        if (starts_with(op->name, "halide_memoization")) {
+            return false;
+        }
         for (size_t i = 0; i < op->args.size(); i++) {
             const Variable *var = op->args[i].as<Variable>();
-            if (var && (var->name == func + ".buffer")) {
-               return true;
+            if (var &&
+                starts_with(var->name, func + ".") &&
+                ends_with(var->name, ".buffer")) {
+                return true;
             }
         }
     }
@@ -218,8 +223,8 @@ private:
         internal_assert(starts_with(op->name, "halide_memoization"));
         for (size_t i = 0; i < op->args.size(); i++) {
             const Variable *var = op->args[i].as<Variable>();
-            if (var && 
-                starts_with(var->name, buffer + ".") && 
+            if (var &&
+                starts_with(var->name, buffer + ".") &&
                 ends_with(var->name, ".buffer")) {
                 return true;
             }
@@ -229,8 +234,8 @@ private:
 
     void visit(const Call *op) {
         // We need to guard call to halide_memoization_cache_lookup to only be executed
-        // if the corresponding buffer is allocated. We also need to guard call to 
-        // halide_memoization_cache_store with the compute_predicate, since the data is 
+        // if the corresponding buffer is allocated. We also need to guard call to
+        // halide_memoization_cache_store with the compute_predicate, since the data is
         // only valid if the producer of the buffer is executed.
         if ((op->name == "halide_memoization_cache_lookup") && memoize_call_uses_buffer(op)) {
             expr = Call::make(op->type, Call::if_then_else,
