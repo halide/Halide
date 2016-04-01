@@ -227,8 +227,8 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                     // Therefore, both *_should_not_* be set in the pattern flags because
                     // that'll mean we are operating on two broadcasts.
                     int op_num = (p.flags & Pattern::LosslessCastOp0) ? 0 : 1;
-                    Type t = Type(matches[op_num].type().code(), matches[op_num].type().bits()/2, 1);
-                    Expr b = lossless_cast(t, matches[op_num]);
+                    Type t = matches[op_num].type();
+                    Expr b = lossless_cast(t.with_bits(t.bits()/2).with_lanes(1), matches[op_num]);
                     if (!b.defined())  continue;
                     else matches[op_num] = b;
                 }
