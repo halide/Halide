@@ -377,18 +377,18 @@ Stmt build_produce(Function f) {
                         buf_name += "." + std::to_string(k);
                     }
                     buf_name += ".buffer";
-                    Expr buffer = Variable::make(Handle(), buf_name);
+                    Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
                 Buffer b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
@@ -407,7 +407,7 @@ Stmt build_produce(Function f) {
                     buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
-                Expr buffer = Variable::make(Handle(), buf_name);
+                Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
             }
         } else {
@@ -442,18 +442,19 @@ Stmt build_produce(Function f) {
                     buffer_args.push_back(stride);
                 }
 
-                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                                   buffer_args, Call::Intrinsic);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(Handle(), buf_name));
+                extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
         }
 
         // Make the extern call
-        Expr e = Call::make(Int(32), extern_name,
-                            extern_call_args, Call::Extern);
+        Expr e = Call::make(Int(32), extern_name, extern_call_args,
+                            f.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus
+                                                                 : Call::Extern);
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
@@ -585,7 +586,7 @@ class IsUsedInStmt : public IRVisitor {
 
     // A reference to the function's buffers counts as a use
     void visit(const Variable *op) {
-        if (op->type == Handle() &&
+        if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
             result = true;
@@ -819,7 +820,7 @@ private:
     }
 
     void visit(const Variable *v) {
-        if (v->type == Handle() &&
+        if (v->type.is_handle() &&
             starts_with(v->name, func.name() + ".") &&
             ends_with(v->name, ".buffer")) {
             register_use();

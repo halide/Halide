@@ -15,14 +15,18 @@ struct ParameterContents {
     const bool is_explicit_name;
     const bool is_registered;
     std::string name;
+    std::string handle_type;
     Buffer buffer;
+    bool initialized;
     uint64_t data;
+    uint64_t default_val;
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r),
+          name(n), buffer(Buffer()), data(0), default_val(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -179,6 +183,12 @@ void *Parameter::get_scalar_address() const {
     check_is_scalar();
     return &contents.ptr->data;
 }
+
+void *Parameter::get_default_address() const {
+    check_is_scalar();
+    return &contents.ptr->default_val;
+}
+
 
 /** Tests if this handle is the same as another handle */
 bool Parameter::same_as(const Parameter &other) const {

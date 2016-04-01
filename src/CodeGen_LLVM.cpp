@@ -5,6 +5,7 @@
 
 #include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
 #include "IROperator.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -458,6 +459,36 @@ bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
 namespace {
 
+void mangled_names(const LoweredFunc &f, const Target &target, std::string &simple_name,
+                   std::string &extern_name, std::string &argv_name, std::string &metadata_name) {
+    std::vector<std::string> namespaces;
+    simple_name = extract_namespaces(f.name, namespaces);
+    argv_name = simple_name + "_argv";
+    metadata_name = simple_name + "_metadata";
+    const std::vector<Argument> &args = f.args;
+
+    if (f.linkage == LoweredFunc::External &&
+        target.has_feature(Target::CPlusPlusMangling) &&
+        !target.has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
+        std::vector<ExternFuncArgument> mangle_args;
+        for (const auto &arg : args) {
+            if (arg.kind == Argument::InputScalar) {
+                mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
+            } else if (arg.kind == Argument::InputBuffer ||
+                       arg.kind == Argument::OutputBuffer) {
+                mangle_args.push_back(ExternFuncArgument(Buffer()));
+            }
+        }
+        extern_name = cplusplus_function_mangled_name(simple_name, namespaces, type_of<int>(), mangle_args, target);
+        halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
+                                                { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
+        Type void_star_star(Handle(1, &inner_type));
+        argv_name = cplusplus_function_mangled_name(argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+    } else {
+        extern_name = simple_name;
+    }
+}
+
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
@@ -538,19 +569,27 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
         const LoweredFunc &f = input.functions[i];
-        compile_func(f);
+
+        std::string simple_name;
+        std::string extern_name;
+        std::string argv_name;
+        std::string metadata_name;
+
+        mangled_names(f, get_target(), simple_name, extern_name, argv_name, metadata_name);
+
+        compile_func(f, simple_name, extern_name);
 
         // If the Func is externally visible, also create the argv wrapper
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
-            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, f.name + "_argv");
-            llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
+            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, argv_name);
+            llvm::Constant *metadata = embed_metadata(metadata_name, simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(f.name, metadata, wrapper);
+                register_metadata(simple_name, metadata, wrapper);
             }
 
             if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), f.name);
+                define_matlab_wrapper(module.get(), wrapper, metadata);
             }
         }
     }
@@ -570,8 +609,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     return std::move(module);
 }
 
+
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
-                              const std::vector<Argument>& args) {
+                              const std::string& extern_name, const std::vector<Argument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -584,7 +624,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(linkage), name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -630,9 +670,10 @@ void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
     internal_assert(!verifyFunction(*function));
 }
 
-void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
+  void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
+                                  const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
-    begin_func(f.linkage, f.name, f.args);
+    begin_func(f.linkage, simple_name, extern_name, f.args);
 
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
@@ -787,7 +828,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type() == Handle()) {
+    if (!e.defined() || e.type().is_handle()) {
         // Handle is always emitted into metadata "undefined", regardless of
         // what sort of Expr is provided.
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
@@ -2219,6 +2260,7 @@ void CodeGen_LLVM::scalarize(Expr e) {
 
 void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->call_type == Call::Extern ||
+                    op->call_type == Call::ExternCPlusPlus ||
                     op->call_type == Call::Intrinsic ||
                     op->call_type == Call::PureExtern ||
                     op->call_type == Call::PureIntrinsic)
@@ -2511,11 +2553,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = ConstantInt::get(i32, 0);
     } else if (op->is_intrinsic(Call::null_handle)) {
         internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
-        internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
+        internal_assert(op->type.is_handle()) << "null_handle must return a Handle type\n";
         value = ConstantPointerNull::get(i8->getPointerTo());
     } else if (op->is_intrinsic(Call::address_of)) {
         internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
-        internal_assert(op->type == Handle()) << "address_of must return a Handle type\n";
+        internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
         const Load *load = op->args[0].as<Load>();
         internal_assert(load) << "The sole argument to address_of must be a Load node\n";
         internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
@@ -2801,7 +2843,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         const StringImm *fn = op->args[0].as<StringImm>();
         internal_assert(fn);
         Expr arg = op->args[1];
-        internal_assert(arg.type() == Handle());
+        internal_assert(arg.type().is_handle());
         llvm::Function *f = module->getFunction(fn->value);
         if (!f) {
             llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
@@ -2835,13 +2877,30 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else {
         // It's an extern call.
 
+        std::string name;
+        if (op->call_type == Call::ExternCPlusPlus) {
+            user_assert(get_target().has_feature(Target::CPlusPlusMangling)) <<
+                "Target must specify C++ name mangling (\"c_plus_plus_name_mangling\") in order to call C++ externs. (" <<
+                op->name << ")\n";
+
+            std::vector<std::string> namespaces;
+            name = extract_namespaces(op->name, namespaces);
+            std::vector<ExternFuncArgument> mangle_args;
+            for (const auto &arg : op->args) {
+                mangle_args.push_back(ExternFuncArgument(arg));
+            }
+            name = cplusplus_function_mangled_name(name, namespaces, op->type, mangle_args, get_target());
+        } else {
+            name = op->name;
+        }
+
         // Codegen the args
         vector<Value *> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = codegen(op->args[i]);
         }
 
-        llvm::Function *fn = module->getFunction(op->name);
+        llvm::Function *fn = module->getFunction(name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
 
@@ -2872,12 +2931,16 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
 
-            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module.get());
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
             fn->setCallingConv(CallingConv::C);
             debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
             debug(4) << "Found " << op->name << "\n";
 
+            // TODO: Say something more accurate here as there is now
+            // partial information in the handle_type field, but it is
+            // not clear it can be matched to the LLVM types and it is
+            // not always there.
             // Halide's type system doesn't preserve pointer types
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
@@ -2907,7 +2970,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
 
-
         if (op->type.is_scalar()) {
             CallInst *call = builder->CreateCall(fn, args);
             if (op->is_pure()) {
@@ -2920,7 +2982,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             // Check if a vector version of the function already
             // exists at some useful width.
             pair<llvm::Function *, int> vec =
-                find_vector_runtime_function(op->name, op->type.lanes());
+                find_vector_runtime_function(name, op->type.lanes());
             llvm::Function *vec_fn = vec.first;
             int w = vec.second;
 
