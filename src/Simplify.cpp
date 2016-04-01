@@ -725,10 +725,6 @@ private:
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
 
-        const Div *div_a = a.as<Div>();
-        const Div *div_b = b.as<Div>();
-        if (div_a) add_a_a = div_a->a.as<Add>();
-        if (div_b) add_b_a = div_b->a.as<Add>();
         const Sub *sub_a_a = div_a ? div_a->a.as<Sub>() : nullptr;
         const Sub *sub_b_a = div_b ? div_b->a.as<Sub>() : nullptr;
 
