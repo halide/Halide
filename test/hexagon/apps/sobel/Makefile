@@ -29,7 +29,7 @@ sobel_run.o: sobel.o sobel.h sobel_run.cpp
 	${HEXAGON_CLANG} -c sobel_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 sobel.out: sobel_run.o sobel.o sobel.h
-	${HEXAGON_CLANG} -mv60 -o sobel.out sobel_run.o sobel.o -lhexagon
+	${HEXAGON_CLANG} -mv60 -o sobel.out sobel_run.o sobel.o -lhexagon  -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 clean:
 	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0

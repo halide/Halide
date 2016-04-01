@@ -19,7 +19,21 @@ IRPrinter irp(std::cerr);
  * Convolve image with each, and add results together.
  * Clamp back to 8 bits
  */
-
+Expr u32(Expr a) {
+    return cast(UInt(32), a);
+}
+Expr u16(Expr a) {
+    return cast(UInt(16), a);
+}
+Expr u8(Expr a) {
+    return cast(UInt(8), a);
+}
+Expr usat8(Expr a) {
+    return u8(clamp(a, 0, 255));
+}
+Expr usat16_a(Expr a, Expr b) {
+    return u16(clamp(u32(a) + u32(b), 0, 65535));
+}
 void test_sobel(Target &target) {
 
   Halide::Var x("x"), y("y");
@@ -31,22 +45,30 @@ void test_sobel(Target &target) {
 
   // Halide:: Function
   Halide::Func input_16("input_16");
+  // input_16(x, y) = cast<int16_t>(input(x, y));
   input_16(x, y) = cast<uint16_t>(input(x, y));
 #ifdef TRACING
   input_16.trace_stores();
 #endif
   Halide::Func sobel_x_avg("sobel_x_avg");
-  sobel_x_avg(x,y) = input_16(x-1, y)  + input_16(x+1,y) + 2*input_16(x, y);
+  Expr a = usat16_a(input_16(x-1, y), input_16(x+1, y));
+  Expr b = 2*input_16(x, y);
+  sobel_x_avg(x,y) = usat16_a(a, b);
+  // sobel_x_avg(x,y) = input_16(x-1, y) + 2*input_16(x, y)  + input_16(x+1, y);
   Halide::Func sobel_x("sobel_x");
   sobel_x(x, y) = absd(sobel_x_avg(x, y-1), sobel_x_avg(x, y+1));
 
   Halide::Func sobel_y_avg("sobel_y_avg");
-  sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y)  + input_16(x, y+1);
+  Expr c = usat16_a(input_16(x, y-1), input_16(x, y+1));
+  Expr d = 2*input_16(x, y);
+  sobel_y_avg(x, y) = usat16_a(c, d);
+  // sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y)  + input_16(x, y+1);
   Halide::Func sobel_y("sobel_y");
   sobel_y(x, y) = absd(sobel_y_avg(x-1, y),  sobel_y_avg(x+1, y));
 
   Halide::Func Sobel("Sobel");
-  Sobel(x, y) = cast<uint8_t>(clamp(sobel_y(x, y) + sobel_x(x, y), 0, 255));
+  Sobel(x, y) = usat8(usat16_a(sobel_y(x, y), sobel_x(x, y)));
+  // Sobel(x, y) = usat8(sobel_x(x, y) + sobel_y(x, y));
   set_output_buffer_min(Sobel, 0, 0);
   set_output_buffer_min(Sobel, 1, 0);
   set_stride_multiple(Sobel, 1, 1 << LOG2VLEN);
