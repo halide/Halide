@@ -21,6 +21,10 @@ int main(int argc, char **argv) {
         f.gpu_tile(x, y, 8, 8);
         g.gpu_tile(x, y, 8, 8);
         h.gpu_tile(x, y, 8, 8);
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.hexagon().vectorize(x, 32);
+        g.hexagon().vectorize(x, 32);
+        h.hexagon().vectorize(x, 32);
     }
 
     printf("Realizing function...\n");
