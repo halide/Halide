@@ -4,10 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
-        return 0;
-    }
+    Target target = get_jit_target_from_environment();
 
     if (1) {
         // Test a tuple reduction on the gpu
@@ -20,8 +17,13 @@ int main(int argc, char **argv) {
         f(x, y) = Tuple(f(x, y)[1]*2, f(x, y)[0]*2);
         // now equals ((x - y)*2, (x + y)*2)
 
-        f.gpu_tile(x, y, 16, 16);
-        f.update().gpu_tile(x, y, 16, 16);
+        if (target.has_gpu_feature()) {
+            f.gpu_tile(x, y, 16, 16);
+            f.update().gpu_tile(x, y, 16, 16);
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon(y).vectorize(x, 32);
+            f.update().hexagon(y).vectorize(x, 32);
+        }
 
         Realization result = f.realize(1024, 1024);
 
@@ -53,10 +55,18 @@ int main(int argc, char **argv) {
         }
 
         // Schedule the pure step and the odd update steps on the gpu
-        f.gpu_tile(x, y, 16, 16);
+        if (target.has_gpu_feature()) {
+            f.gpu_tile(x, y, 16, 16);
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon(y).vectorize(x, 32);
+        }
         for (int i = 0; i < 10; i ++) {
 	    if (i & 1) {
-		f.update(i).gpu_tile(x, y, 16, 16);
+                if (target.has_gpu_feature()) {
+                    f.update(i).gpu_tile(x, y, 16, 16);
+                } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+                    f.update(i).hexagon(y).vectorize(x, 32);
+                }
 	    } else {
 		f.update(i);
 	    }
@@ -95,7 +105,11 @@ int main(int argc, char **argv) {
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i ++) {
             if (i & 1) {
-                f.update(i).gpu_tile(x, y, 16, 16);
+                if (target.has_gpu_feature()) {
+                    f.update(i).gpu_tile(x, y, 16, 16);
+                } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+                    f.update(i).hexagon(y).vectorize(x, 32);
+                }
             } else {
                 f.update(i);
             }
@@ -137,7 +151,11 @@ int main(int argc, char **argv) {
             if (i & 1) {
                 f.update(i);
             } else {
-                f.update(i).gpu_tile(x, y, 16, 16);
+                if (target.has_gpu_feature()) {
+                    f.update(i).gpu_tile(x, y, 16, 16);
+                } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+                    f.update(i).hexagon(y).vectorize(x, 32);
+                }
             }
         }
 
