@@ -213,38 +213,33 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const LetStmt *op) {
-        IRMutator::visit(op);
-
-        op = stmt.as<LetStmt>();
-        internal_assert(op);
-
-        const Call *c = op->value.as<Call>();
-        // We need to guard call to halide_memoization_cache_lookup to only be executed
-        // if the corresponding buffer is allocated.
-        if (c && (c->name == "halide_memoization_cache_lookup")) {
-            Expr guarded_lookup = Call::make(c->type, Call::if_then_else,
-                                             {alloc_predicate, c, 0}, Call::PureIntrinsic);
-            stmt = LetStmt::make(op->name, guarded_lookup, op->body);
+    bool memoize_call_uses_buffer(const Call *op) {
+        internal_assert(op->call_type == Call::Extern);
+        internal_assert(starts_with(op->name, "halide_memoization"));
+        for (size_t i = 0; i < op->args.size(); i++) {
+            const Variable *var = op->args[i].as<Variable>();
+            if (var && 
+                starts_with(var->name, buffer + ".") && 
+                ends_with(var->name, ".buffer")) {
+                return true;
+            }
         }
+        return false;
     }
 
-    void visit(const IfThenElse *op) {
-        IRMutator::visit(op);
-
-        op = stmt.as<IfThenElse>();
-        internal_assert(op);
-
-        const Evaluate *eval = op->then_case.as<Evaluate>();
-        if (eval) {
-            // We need to guard call call to halide_memoization_cache_store
-            // with the compute_predicate, since it is only valid if the producer of
-            // the buffer is executed.
-            const Call *c = eval->value.as<Call>();
-            if (c && (c->name == "halide_memoization_cache_store")) {
-                internal_assert(!op->else_case.defined());
-                stmt = IfThenElse::make(compute_predicate, stmt);
-            }
+    void visit(const Call *op) {
+        // We need to guard call to halide_memoization_cache_lookup to only be executed
+        // if the corresponding buffer is allocated. We also need to guard call to 
+        // halide_memoization_cache_store with the compute_predicate, since the data is 
+        // only valid if the producer of the buffer is executed.
+        if ((op->name == "halide_memoization_cache_lookup") && memoize_call_uses_buffer(op)) {
+            expr = Call::make(op->type, Call::if_then_else,
+                              {alloc_predicate, op, 0}, Call::PureIntrinsic);
+        } else if ((op->name == "halide_memoization_cache_store") && memoize_call_uses_buffer(op)) {
+            expr = Call::make(op->type, Call::if_then_else,
+                              {compute_predicate, op, 0}, Call::PureIntrinsic);
+        } else {
+            IRMutator::visit(op);
         }
     }
 
