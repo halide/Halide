@@ -702,7 +702,7 @@ private:
 
         Type t = op->type.element_of();
 
-        if (t == Handle()) {
+        if (t.is_handle()) {
             min = max = Expr();
             return;
         }
@@ -1143,7 +1143,6 @@ private:
 
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
-
             Box b(op->args.size());
             b.used = const_true();
             for (size_t i = 0; i < op->args.size(); i++) {

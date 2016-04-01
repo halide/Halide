@@ -9,6 +9,12 @@
 #endif
 
 #ifdef __cplusplus
+// Forward declare type to allow naming typed handles.
+// See Type.h for documentation.
+template<typename T> struct halide_handle_traits;
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -884,6 +890,23 @@ struct halide_type_of_helper<T *> {
         return halide_type_t(halide_type_handle, 64);
     }
 };
+
+template<typename T>
+struct halide_type_of_helper<T &> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+
+// Halide runtime does not require C++11
+#if __cplusplus > 199711L
+template<typename T>
+struct halide_type_of_helper<T &&> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+#endif
 
 template<>
 struct halide_type_of_helper<float> {

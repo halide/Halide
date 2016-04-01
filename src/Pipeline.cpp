@@ -503,7 +503,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         private_body = lower(contents.ptr->outputs, fn_name, target, custom_passes);
     }
 
-    string private_name = "__" + new_fn_name;
+    std::vector<std::string> namespaces;
+    std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
+    string private_name = "__" + simple_new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = args;
@@ -534,7 +536,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     }
 
     // Create a module with all the global images in it.
-    Module module(new_fn_name, target);
+    Module module(simple_new_fn_name, target);
 
     // Add all the global images to the module, and add the global
     // images used to the private argument list.

@@ -161,6 +161,9 @@ struct meta_and<T1, Args...> : std::integral_constant<bool, T1::value && meta_an
 template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
+/** Returns base name and fills in namespaces, outermost one first in vector. */
+std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+
 }
 }
 
