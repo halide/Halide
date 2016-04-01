@@ -271,7 +271,7 @@ Expr make_bool(bool val, int w) {
 
 Expr make_zero(Type t) {
     if (t.is_handle()) {
-        return Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
+        return Call::make(t, Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
     } else {
         return make_const(t, 0);
     }
@@ -654,7 +654,7 @@ Expr print(const std::vector<Expr> &args) {
 
     // Concat all the args at runtime using stringify.
     Expr combined_string =
-        Internal::Call::make(Handle(), Internal::Call::stringify,
+        Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
                              print_args, Internal::Call::Intrinsic);
 
     // Call halide_print.
