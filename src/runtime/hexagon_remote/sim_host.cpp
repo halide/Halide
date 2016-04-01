@@ -17,7 +17,6 @@ int init_sim() {
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
-    printf("HexagonWrapper::ConfigureExecutableBinary\n");
     status = sim->ConfigureExecutableBinary("hexagon_sim_remote");
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::ConfigureExecutableBinary failed: %d\n", status);
@@ -30,14 +29,12 @@ int init_sim() {
         return -1;
     }
 
-    printf("HexagonWrapper::EndOfConfiguration\n");
     status = sim->EndOfConfiguration();
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::EndOfConfiguration failed: %d\n", status);
         return -1;
     }
 
-    printf("HexagonWrapper::LoadExecutableBinary\n");
     status = sim->LoadExecutableBinary();
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::LoadExecutableBinary failed: %d\n", status);
