@@ -43,7 +43,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         ../
 
   # Build and run internal tests
-  make -j ${NUM_JOBS}
+  make -j ${NUM_JOBS} VERBOSE=1
   # Build docs
   make doc
 
