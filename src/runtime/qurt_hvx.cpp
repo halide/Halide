@@ -27,7 +27,7 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
 
     debug(user_context) << "QuRT: qurt_hvx_lock(" << mode << ") ->\n";
     int result = qurt_hvx_lock(mode);
-    debug(user_context) << "        " << result;
+    debug(user_context) << "        " << result << "\n";
     if (result != QURT_EOK) {
         error(user_context) << "qurt_hvx_lock failed\n";
         return -1;
@@ -39,7 +39,7 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
 WEAK int halide_qurt_hvx_unlock(void *user_context) {
     debug(user_context) << "QuRT: qurt_hvx_unlock ->\n";
     int result = qurt_hvx_unlock();
-    debug(user_context) << "        " << result;
+    debug(user_context) << "        " << result << "\n";
     if (result != QURT_EOK) {
         error(user_context) << "qurt_hvx_unlock failed\n";
         return -1;
