@@ -55,6 +55,7 @@ public:
     CodeGen_GLSLBase(std::ostream &s);
 
     std::string print_name(const std::string &name);
+    std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
 protected:
     using CodeGen_C::visit;
@@ -64,7 +65,6 @@ protected:
     void visit(const Mod *op);
     void visit(const Call *op);
 
-    std::string print_type(Type type);
 private:
     std::map<std::string, std::string> builtin;
 };

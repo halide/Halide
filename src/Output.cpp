@@ -98,7 +98,10 @@ void compile_module_to_c_header(const Module &module, std::string filename) {
     if (filename.empty()) filename = module.name() + ".h";
 
     std::ofstream file(filename.c_str());
-    Internal::CodeGen_C cg(file, true, filename);
+    Internal::CodeGen_C cg(file,
+                           module.target().has_feature(Target::CPlusPlusMangling) ?
+                           Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
+                           filename);
     cg.compile(module);
 }
 
@@ -106,7 +109,9 @@ void compile_module_to_c_source(const Module &module, std::string filename) {
     if (filename.empty()) filename = module.name() + ".c";
 
     std::ofstream file(filename.c_str());
-    Internal::CodeGen_C cg(file, false);
+    Internal::CodeGen_C cg(file,
+                           module.target().has_feature(Target::CPlusPlusMangling) ?
+                           Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
     cg.compile(module);
 }
 

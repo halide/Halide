@@ -197,7 +197,8 @@ Stmt add_image_checks(Stmt s,
             for (size_t i = 0; i < extern_users.size(); i++) {
                 const string &extern_user = extern_users[i];
                 Box query_box;
-                Expr query_buf = Variable::make(Handle(), param.name() + ".bounds_query." + extern_user);
+                Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
+                                                param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::extract_buffer_min,
                                           {query_buf, j}, Call::Intrinsic);
@@ -335,7 +336,7 @@ Stmt add_image_checks(Stmt s,
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
+        Expr buffer_name_expr = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
         vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
