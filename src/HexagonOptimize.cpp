@@ -192,10 +192,10 @@ std::vector<Pattern> muls = {
     { "halide.hexagon.mpy.vuh.uh", u32(wild_u16x)*bc(wild_u32), Pattern::InterleaveResult | Pattern::LosslessCastOp1 },
     { "halide.hexagon.mpy.vh.h",  i32(wild_i16x)*bc(wild_i32), Pattern::InterleaveResult | Pattern::LosslessCastOp1 },
     // Commute the four above.
-    { "halide.hexagon.mpy.vub.ub", bc(wild_u16)*u16(wild_u8x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
-    { "halide.hexagon.mpy.vub.b", bc(wild_i16)*i16(wild_u8x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
-    { "halide.hexagon.mpy.vuh.uh", bc(wild_u32)*u32(wild_u16x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
-    { "halide.hexagon.mpy.vh.h",  bc(wild_i32)*i32(wild_i16x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 },
+    { "halide.hexagon.mpy.vub.ub", bc(wild_u16)*u16(wild_u8x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 | Pattern::SwapOperands },
+    { "halide.hexagon.mpy.vub.b", bc(wild_i16)*i16(wild_u8x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 | Pattern::SwapOperands },
+    { "halide.hexagon.mpy.vuh.uh", bc(wild_u32)*u32(wild_u16x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 | Pattern::SwapOperands },
+    { "halide.hexagon.mpy.vh.h",  bc(wild_i32)*i32(wild_i16x), Pattern::InterleaveResult | Pattern::LosslessCastOp0 | Pattern::SwapOperands },
 };
 
 Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_mutator,
@@ -217,9 +217,6 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                         }
                     }
                 }
-                if (p.flags & Pattern::SwapOperands) {
-                    std::swap(matches[0], matches[1]);
-                }
                 if ((p.flags & Pattern::LosslessCastOp1) ||
                     (p.flags & Pattern::LosslessCastOp0)) {
                     internal_assert(matches.size() == 2);
@@ -231,6 +228,9 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                     Expr b = lossless_cast(t.with_bits(t.bits()/2).with_lanes(1), matches[op_num]);
                     if (!b.defined())  continue;
                     else matches[op_num] = b;
+                }
+                if (p.flags & Pattern::SwapOperands) {
+                    std::swap(matches[0], matches[1]);
                 }
                 x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
                 if (p.flags & Pattern::InterleaveResult) {
