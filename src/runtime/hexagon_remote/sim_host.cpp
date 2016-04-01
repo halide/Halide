@@ -15,10 +15,18 @@ int init_sim() {
 
     sim = new HexagonWrapper(HEX_CPU_V60);
 
+    HEXAPI_Status status = HEX_STAT_SUCCESS;
+
     printf("HexagonWrapper::ConfigureExecutableBinary\n");
-    HEXAPI_Status status = sim->ConfigureExecutableBinary("hexagon_sim_remote");
+    status = sim->ConfigureExecutableBinary("hexagon_sim_remote");
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::ConfigureExecutableBinary failed: %d\n", status);
+        return -1;
+    }
+
+    status = sim->ConfigureNULLPointerBehavior(HEX_NULLPTR_FATAL);
+    if (status != HEX_STAT_SUCCESS) {
+        printf("HexagonWrapper::ConfigureNULLPointerBehavior failed: %d\n", status);
         return -1;
     }
 

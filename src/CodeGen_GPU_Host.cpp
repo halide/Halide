@@ -12,7 +12,7 @@
 #include "Debug.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
-#include "Bounds.h"
+#include "ExprUsesVar.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 
@@ -45,7 +45,6 @@ public:
 private:
 
     bool found_shared;
-    Scope<Interval> scope;
 
     using IRVisitor::visit;
 
@@ -72,15 +71,14 @@ private:
             num_blocks[3] = op->extent;
         }
 
-        if (!found_shared) {
-            Interval ie = bounds_of_expr_in_scope(op->extent, scope);
-            Interval im = bounds_of_expr_in_scope(op->min, scope);
-            scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
-            op->body.accept(this);
-            scope.pop(op->name);
-        } else {
-            op->body.accept(this);
+        op->body.accept(this);
+    }
+
+    void visit(const LetStmt *op) {
+        if (expr_uses_var(shared_mem_size, op->name)) {
+            shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
         }
+        op->body.accept(this);
     }
 
     void visit(const Allocate *allocate) {
@@ -89,21 +87,10 @@ private:
 
         if (allocate->name == "__shared") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
-            shared_mem_size = bounds_of_expr_in_scope(allocate->extents[0], scope).max;
+            shared_mem_size = allocate->extents[0];
             found_shared = true;
         }
         allocate->body.accept(this);
-    }
-
-    void visit(const LetStmt *op) {
-        if (!found_shared) {
-            Interval i = bounds_of_expr_in_scope(op->value, scope);
-            scope.push(op->name, i);
-            op->body.accept(this);
-            scope.pop(op->name);
-        } else {
-            op->body.accept(this);
-        }
     }
 };
 
@@ -476,6 +463,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
+        debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
+        debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
+        debug(3) << "bounds.num_blocks[2] = " << bounds.num_blocks[2] << "\n";
+        debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
+        debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
+        debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
