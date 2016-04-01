@@ -158,22 +158,36 @@ int main(int argc, char **argv) {
         // Some gpus don't have enough memory to process the entire
         // image, so we process the image in tiles.
         Var yo, yi, xo, xi;
-        final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4);
-        final.tile(x, y, xo, yo, xi, yi, input.width()/8, input.height()/8);
-        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16).unroll(c);
+        final
+            .reorder(c, x, y)
+            .bound(c, 0, 3)
+            .vectorize(x, 4)
+            .tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4);
+
+        normalize
+            .compute_at(final, xo)
+            .reorder(c, x, y)
+            .gpu_tile(x, y, 16, 16)
+            .unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
         for (int l = 1; l < levels; ++l) {
             int tile_size = 32 >> l;
             if (tile_size < 1) tile_size = 1;
             if (tile_size > 8) tile_size = 8;
-            downsampled[l].compute_root();
-            if (false) {
-                // Outer loop on CPU for the larger ones.
-                downsampled[l].tile(x, y, xo, yo, x, y, 256, 256);
+            downsampled[l]
+                .compute_root()
+                .gpu_tile(x, y, c, tile_size, tile_size, 4);
+            if (l == 1 || l == 4) {
+                interpolated[l]
+                    .compute_at(final, xo)
+                    .gpu_tile(x, y, c, 8, 8, 4);
+            } else {
+                int parent = l > 4 ? 4 : 1;
+                interpolated[l]
+                    .compute_at(interpolated[parent], Var::gpu_blocks())
+                    .gpu_threads(x, y, c);
             }
-            downsampled[l].gpu_tile(x, y, c, tile_size, tile_size, 4);
-            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4);
         }
         break;
     }
