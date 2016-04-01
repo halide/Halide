@@ -405,7 +405,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
     return 1;
 }
 
-WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                         buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
     debug(user_context) << "halide_memoization_cache_store\n";
 
@@ -454,7 +454,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
                     get_pointer_to_header(tuple_buffers[i]->host)->entry = NULL;
 
                 }
-                return;
+                return 0;
             }
         }
         entry = entry->next;
@@ -479,7 +479,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
         for (int32_t i = 0; i < tuple_count; i++) {
             get_pointer_to_header(tuple_buffers[i]->host)->entry = NULL;
         }
-        return;
+        return 0;
     }
 
     CacheEntry *new_entry = (CacheEntry *)entry_storage;
@@ -494,7 +494,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
         }
 
         halide_free(user_context, new_entry);
-        return;
+        return 0;
     }
 
     new_entry->next = cache_entries[index];
@@ -518,6 +518,8 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     validate_cache();
 #endif
     debug(user_context) << "Exiting halide_memoization_cache_store\n";
+
+    return 0;
 }
 
 WEAK void halide_memoization_cache_release(void *user_context, void *host) {
