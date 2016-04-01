@@ -117,7 +117,7 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
         "/data/local/tmp/",
         "/tmp/"
     };
-    Printer<BasicPrinter> path(user_context);
+    Printer<StringStreamPrinter> path(user_context);
     for (int i = 0; i < 1000; i++) {
         for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
             path.clear();
