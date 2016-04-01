@@ -35,10 +35,12 @@ protected:
 
     llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty,
                                          const std::string &name,
-                                         const std::vector<Type> &arg_types);
+                                         const std::vector<Type> &arg_types,
+                                         bool broadcast_scalar = false);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
-                                         const std::vector<Type> &arg_types);
+                                         const std::vector<Type> &arg_types,
+                                         bool broadcast_scalar = false);
 
     using CodeGen_Posix::visit;
 
@@ -90,6 +92,7 @@ protected:
     llvm::Value *slice_vector(llvm::Value *vec, int start, int size);
     llvm::Value *concat_vectors(const std::vector<llvm::Value *> &v);
     ///@}
+    llvm::Value *shl_or(llvm::Value *v, unsigned u);
 };
 
 }}

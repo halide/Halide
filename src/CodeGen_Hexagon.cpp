@@ -190,6 +190,7 @@ void CodeGen_Hexagon::init_module() {
 
         // Downcast with saturation:
         { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "sat.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "sat.vuh",  {u16x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatuwuh), u16x1, "sat.vuw", {u32x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sat.vw",   {i32x2} },
 
@@ -354,20 +355,27 @@ void CodeGen_Hexagon::init_module() {
     // need to be implemented in the runtime module, or via
     // fall-through to CodeGen_LLVM.
     for (HvxIntrinsic &i : intrinsic_wrappers) {
-        define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
+        if (starts_with(i.name, "mpy")) {
+            define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types, true /*broadcast_scalar*/);
+        }
+        else {
+            define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
+        }
     }
 }
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret_ty, const std::string &name,
-                                                      const std::vector<Type> &arg_types) {
+                                                      const std::vector<Type> &arg_types, bool broadcast_scalar) {
     internal_assert(id != Intrinsic::not_intrinsic);
     // Get the real intrinsic.
     llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
-    return define_hvx_intrinsic(intrin, ret_ty, name, arg_types);
+    return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar);
 }
-
+llvm::Value *CodeGen_Hexagon::shl_or(llvm::Value *v, unsigned u) {
+    return builder->CreateOr(builder->CreateShl(v, u), v);
+ }
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const std::string &name,
-                                                      const std::vector<Type> &arg_types) {
+                                                      const std::vector<Type> &arg_types, bool broadcast_scalar) {
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
 
     // Get the types of the arguments we want to pass.
@@ -412,6 +420,14 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
                 args[i] = builder->CreateBitCast(args[i], arg_ty);
             } else {
                 args[i] = builder->CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
+                if (broadcast_scalar) {
+                    // We know it is a scalar type. We can have 8 bit, 16 bit or 32 bit types only.
+                    unsigned bits = arg_types[i].bits();
+                    while (bits != 32) {
+                        args[i] = shl_or(args[i], bits);
+                        bits *= 2;
+                    }
+                }
             }
         }
     }
