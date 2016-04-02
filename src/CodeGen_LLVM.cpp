@@ -1471,7 +1471,12 @@ void CodeGen_LLVM::visit(const Mod *op) {
         int bits;
         if (is_const_power_of_two_integer(op->b, &bits)) {
             Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
+            const Variable *v = op->a.as<Variable>();
+            if (v && ends_with(v->name, ".host"))
+                value = builder->CreateAnd(builder->CreatePtrToInt(codegen(op->a), llvm_type_of(op->b.type())),
+                                           codegen(op->b - one));
+            else
+                value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
         } else {
             Value *a = codegen(op->a);
             Value *b = codegen(op->b);
