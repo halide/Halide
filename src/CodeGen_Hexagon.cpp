@@ -190,14 +190,13 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
-        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "sat.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsatuwuh), u16x1, "sat.vuw", {u32x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sat.vw",   {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "satub.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sath.vw",   {i32x2} },
 
-        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.sat.vuh", {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.sat.vuw", {i32x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.sat.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sat.vw",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.satub.vh", {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.satuh.vw", {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.satb.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sath.vw",  {i32x2} },
 
 
         // Adds/subtracts:

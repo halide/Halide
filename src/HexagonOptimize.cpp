@@ -150,18 +150,21 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
 
     // Saturating narrowing casts
-    { "halide.hexagon.sat.vh", u8c(wild_i16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.sat.vuh", u8c(wild_u16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.sat.vuw", u16c(wild_u32x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.sat.vw", i16c(wild_i32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.satub.vh", u8c(wild_i16x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.sath.vw", i16c(wild_i32x), Pattern::DeinterleaveOperands },
 
     // Note the absence of deinterleaving the operands. This is a
     // problem because we can't simplify away the interleaving
     // resulting from widening if this is the later narrowing op. But,
     // we don't have vsat variants for all of the types we need.
-    { "halide.hexagon.trunchi.sat.vuh", u8c(wild_i16x) },
-    { "halide.hexagon.trunchi.sat.vuw", u16c(wild_i32x) },
-    { "halide.hexagon.trunchi.sat.vh", i8c(wild_i16x) },
+    { "halide.hexagon.trunchi.satuh.vw", u16c(wild_i32x) },
+    { "halide.hexagon.trunchi.satb.vh", i8c(wild_i16x) },
+
+    // We don't pattern match these two, because we prefer the sat
+    // instructions above for the same pattern, due to not requiring
+    // an extra deinterleave.
+    //{ "halide.hexagon.trunchi.satub.vh", u8c(wild_i16x) },
+    //{ "halide.hexagon.trunchi.sath.vw", i16c(wild_i32x) },
 
     // Narrowing casts
     { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOperands },
