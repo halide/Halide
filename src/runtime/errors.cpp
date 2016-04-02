@@ -170,7 +170,7 @@ WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
                                          int alignment) {
     error(user_context)
         << "The host pointer of " << func
-        << " is not aligned to an " << alignment
+        << " is not aligned to a " << alignment
         << " bytes boundary.";
     return halide_error_code_unaligned_host_ptr;
 }
