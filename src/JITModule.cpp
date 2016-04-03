@@ -23,15 +23,19 @@ using std::string;
 #ifdef _WIN32
 #include <windows.h>
 
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
+void *get_symbol_address(const char *s) {
+    return GetProcAddress(GetModuleHandle(nullptr), s);
 }
 #else
 #include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(nullptr, s) != nullptr;
+void *get_symbol_address(const char *s) {
+    return dlsym(nullptr, s);
 }
 #endif
+
+static bool have_symbol(const char *s) {
+    return get_symbol_address(s) != nullptr;
+}
 
 #if 0
 llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {

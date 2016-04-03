@@ -81,6 +81,8 @@ struct Target {
 
         MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
 
+        CPlusPlusMangling, ///< Generate C++ mangled names for result function, et al
+
         JavaScript, ///< Compile to JavaScript and execute immediately. Requires JIT and only works with realize. (For testing mainly.)
         JavaScript_V8, ///< Use the V8 JavaScript engine.
         JavaScript_SpiderMonkey, ///< Use the SpiderMonkey JavaScript engine.

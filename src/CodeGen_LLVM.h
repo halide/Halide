@@ -109,7 +109,7 @@ protected:
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
-    virtual void compile_func(const LoweredFunc &func);
+    virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
     virtual void compile_buffer(const Buffer &buffer);
     // @}
 
@@ -120,8 +120,8 @@ protected:
      * call to end_func with the same arguments, to generate the
      * appropriate cleanup code. */
     // @{
-    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &name,
-                            const std::vector<Argument> &args);
+    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
+                            const std::string &extern_name, const std::vector<Argument> &args);
     virtual void end_func(const std::vector<Argument> &args);
     // @}
 
@@ -340,9 +340,9 @@ protected:
     // Compute high_half(a*b) >> shr. Note that this is a shift in
     // addition to the implicit shift due to taking the upper half of
     // the multiply result.
-    virtual llvm::Value *unsigned_mulhi_shr(llvm::Value *a, llvm::Value *b, int shr);
+    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
     // Compute (a+b)/2, assuming a < b.
-    virtual llvm::Value *sorted_avg(llvm::Value *a, llvm::Value *b);
+    virtual Expr sorted_avg(Expr a, Expr b);
     // @}
 
 

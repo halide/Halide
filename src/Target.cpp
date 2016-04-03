@@ -231,6 +231,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
     {"mingw", Target::MinGW},
+    {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"javascript", Target::JavaScript},
     {"v8", Target::JavaScript_V8},
     {"spidermonkey", Target::JavaScript_SpiderMonkey},

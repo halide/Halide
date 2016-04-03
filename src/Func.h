@@ -769,14 +769,15 @@ public:
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
-                              int dimensionality) {
-        define_extern(function_name, params, std::vector<Type>{t}, dimensionality);
+                              int dimensionality,
+                              bool is_c_plus_plus = false) {
+        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, is_c_plus_plus);
     }
 
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               const std::vector<Type> &types,
-                              int dimensionality);
+                              int dimensionality, bool is_c_plus_plus = false);
     // @}
 
     /** Get the types of the outputs of this Func. */

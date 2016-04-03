@@ -5,6 +5,7 @@
 
 #include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
 #include "IROperator.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -416,6 +417,40 @@ bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
+namespace {
+
+void mangled_names(const LoweredFunc &f, const Target &target, std::string &simple_name,
+                   std::string &extern_name, std::string &argv_name, std::string &metadata_name) {
+    std::vector<std::string> namespaces;
+    simple_name = extract_namespaces(f.name, namespaces);
+    argv_name = simple_name + "_argv";
+    metadata_name = simple_name + "_metadata";
+    const std::vector<Argument> &args = f.args;
+
+    if (f.linkage == LoweredFunc::External &&
+        target.has_feature(Target::CPlusPlusMangling) &&
+        !target.has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
+        std::vector<ExternFuncArgument> mangle_args;
+        for (const auto &arg : args) {
+            if (arg.kind == Argument::InputScalar) {
+                mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
+            } else if (arg.kind == Argument::InputBuffer ||
+                       arg.kind == Argument::OutputBuffer) {
+                mangle_args.push_back(ExternFuncArgument(Buffer()));
+            }
+        }
+        extern_name = cplusplus_function_mangled_name(simple_name, namespaces, type_of<int>(), mangle_args, target);
+        halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
+                                                { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
+        Type void_star_star(Handle(1, &inner_type));
+        argv_name = cplusplus_function_mangled_name(argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+    } else {
+        extern_name = simple_name;
+    }
+}
+
+}
+
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
@@ -463,6 +498,24 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::FunctionType *fn_type,
     return add_argv_wrapper(callee, wrapper_name, result_kind);
 }
 
+void CodeGen_LLVM::init_for_codegen(const std::string &name) {
+    init_module();
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+    module->setModuleIdentifier(name);
+
+    // Add some target specific info to the module as metadata.
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+    #if LLVM_VERSION < 36
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
+    #else
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    #endif
+}
+
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finalize_module() {
     // Verify the module is ok
     verifyModule(*module);
@@ -482,21 +535,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::finalize_module() {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    init_module();
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    module->setModuleIdentifier(input.name());
-
-    // Add some target specific info to the module as metadata.
-    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-    #if LLVM_VERSION < 36
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
-    #else
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    #endif
+    init_for_codegen(input.name());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -521,19 +560,27 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
         const LoweredFunc &f = input.functions[i];
-        compile_func(f);
+
+        std::string simple_name;
+        std::string extern_name;
+        std::string argv_name;
+        std::string metadata_name;
+
+        mangled_names(f, get_target(), simple_name, extern_name, argv_name, metadata_name);
+
+        compile_func(f, simple_name, extern_name);
 
         // If the Func is externally visible, also create the argv wrapper
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
-            llvm::Function *wrapper = add_argv_wrapper(function, f.name + "_argv", IntFunctionResult);
-            llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
+	    llvm::Function *wrapper = add_argv_wrapper(function, argv_name, IntFunctionResult);
+            llvm::Constant *metadata = embed_metadata(metadata_name, simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(f.name, metadata, wrapper);
+                register_metadata(simple_name, metadata, wrapper);
             }
 
             if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), f.name);
+                define_matlab_wrapper(module.get(), wrapper, metadata);
             }
         }
     }
@@ -542,7 +589,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
-                              const std::vector<Argument>& args) {
+                              const std::string& extern_name, const std::vector<Argument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -555,7 +602,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(linkage), name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -601,9 +648,10 @@ void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
     internal_assert(!verifyFunction(*function));
 }
 
-void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
+void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
+                                const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
-    begin_func(f.linkage, f.name, f.args);
+    begin_func(f.linkage, simple_name, extern_name, f.args);
 
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
@@ -758,7 +806,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type() == Handle()) {
+    if (!e.defined() || e.type().is_handle()) {
         // Handle is always emitted into metadata "undefined", regardless of
         // what sort of Expr is provided.
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
@@ -1272,34 +1320,19 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
-Value *CodeGen_LLVM::unsigned_mulhi_shr(Value *a, Value *b, int shr) {
-    llvm::Type *ty = a->getType();
-    llvm::VectorType *vty = dyn_cast<VectorType>(ty);
-    llvm::Type *element_ty = vty ? vty->getElementType() : ty;
-    llvm::Type *wide_ty = llvm::IntegerType::get(ty->getContext(), element_ty->getIntegerBitWidth() * 2);
-    if (vty) {
-        wide_ty = llvm::VectorType::get(wide_ty, vty->getNumElements());
-    }
+Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
+    Type ty = a.type();
+    Type wide_ty = ty.with_bits(ty.bits() * 2);
 
-    // We assume the inputs are unsigned, so we zero extend.
-    Value *a_wide = builder->CreateIntCast(a, wide_ty, false);
-    Value *b_wide = builder->CreateIntCast(b, wide_ty, false);
-    Value *p_wide = builder->CreateMul(a_wide, b_wide);
-
-    // Do the shift (add 8 or 16 or 32 to narrow back down)
-    Constant *shift_amount = ConstantInt::get(wide_ty, shr + element_ty->getIntegerBitWidth());
-    Value *p = builder->CreateLShr(p_wide, shift_amount);
-    return builder->CreateIntCast(p, ty, true);
+    Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
+    return cast(ty, p_wide >> (shr + ty.bits()));
 }
 
-Value *CodeGen_LLVM::sorted_avg(Value *a, Value *b) {
+Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
     // b > a, so the following works without widening:
     // a + (b - a)/2
-    Value *diff = builder->CreateSub(b, a);
-    diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
-    return builder->CreateAdd(a, diff);
+    return a + (b - a)/2;
 }
-
 
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
@@ -1339,22 +1372,24 @@ void CodeGen_LLVM::visit(const Div *op) {
             multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
             shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
-
-        Value *val = codegen(op->a);
+        Expr num = op->a;
 
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
+        Expr sign = num >> make_const(op->type, op->type.bits() - 1);
+
         // Flip the numerator bits if the mask is high.
-        Value *flipped = builder->CreateXor(sign, val);
+        num = cast(num.type().with_code(Type::UInt), num);
+        num = num ^ sign;
 
-        // Grab the multiplier.
-        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
+        // Multiply and keep the high half of the
+        // result, and then apply the shift.
+        Expr mult = make_const(num.type(), multiplier);
+        num = mulhi_shr(num, mult, shift);
 
-        // Widening multiply, keep high half, shift
-        val = unsigned_mulhi_shr(flipped, mult, shift);
+        // Maybe flip the bits back again.
+        num = num ^ sign;
 
-        // Maybe flip the bits again
-        value = builder->CreateXor(val, sign);
+        value = codegen(num);
 
     } else if (const_uint_divisor &&
                op->type.is_uint() &&
@@ -1378,12 +1413,11 @@ void CodeGen_LLVM::visit(const Div *op) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-
-        Value *num = codegen(op->a);
+        Expr num = op->a;
 
         // Widen, multiply, narrow
-        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
-        Value *val = unsigned_mulhi_shr(num, mult, method == 1 ? shift : 0);
+        Expr mult = make_const(num.type(), multiplier);
+        Expr val = mulhi_shr(num, mult, method == 1 ? shift : 0);
 
         if (method == 2) {
             // Average with original numerator.
@@ -1391,11 +1425,11 @@ void CodeGen_LLVM::visit(const Div *op) {
 
             // Do the final shift
             if (shift) {
-                val = builder->CreateLShr(val, ConstantInt::get(llvm_type_of(op->type), shift));
+                val = val >> make_const(op->type, shift);
             }
         }
 
-        value = val;
+        value = codegen(val);
     } else if (op->type.is_uint()) {
         value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
@@ -1478,37 +1512,23 @@ void CodeGen_LLVM::visit(const Mod *op) {
 }
 
 void CodeGen_LLVM::visit(const Min *op) {
-    Value *a = codegen(op->a);
-    Value *b = codegen(op->b);
-    Value *cmp;
-
-    Halide::Type t = op->a.type();
-    if (t.is_float()) {
-        cmp = builder->CreateFCmpOLT(a, b);
-    } else if (t.is_int()) {
-        cmp = builder->CreateICmpSLT(a, b);
-    } else {
-        cmp = builder->CreateICmpULT(a, b);
-    }
-
-    value = builder->CreateSelect(cmp, a, b);
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a < b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const Max *op) {
-    Value *a = codegen(op->a);
-    Value *b = codegen(op->b);
-    Value *cmp;
-
-    Halide::Type t = op->a.type();
-    if (t.is_float()) {
-        cmp = builder->CreateFCmpOLT(a, b);
-    } else if (t.is_int()) {
-        cmp = builder->CreateICmpSLT(a, b);
-    } else {
-        cmp = builder->CreateICmpULT(a, b);
-    }
-
-    value = builder->CreateSelect(cmp, b, a);
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a > b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const EQ *op) {
@@ -2159,6 +2179,7 @@ void CodeGen_LLVM::scalarize(Expr e) {
 
 void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->call_type == Call::Extern ||
+                    op->call_type == Call::ExternCPlusPlus ||
                     op->call_type == Call::Intrinsic ||
                     op->call_type == Call::PureExtern ||
                     op->call_type == Call::PureIntrinsic)
@@ -2285,18 +2306,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
             // Generate select(x >= 0, x, -x) instead
-            Value *arg = codegen(op->args[0]);
-            Value *zero = Constant::getNullValue(arg->getType());
-            Value *cmp, *neg;
-            if (t.is_float()) {
-                cmp = builder->CreateFCmpOGE(arg, zero);
-                neg = builder->CreateFSub(zero, arg);
-            } else {
-                internal_assert(t.is_int());
-                cmp = builder->CreateICmpSGE(arg, zero);
-                neg = builder->CreateSub(zero, arg);
-            }
-            value = builder->CreateSelect(cmp, arg, neg);
+            string x_name = unique_name('x');
+            Expr x = Variable::make(op->args[0].type(), x_name);
+            value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
         }
     } else if (op->is_intrinsic(Call::absd)) {
 
@@ -2324,7 +2336,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Call::make(op->type, name, op->args, Call::Extern));
         } else {
             // Use a select instead
-            codegen(Select::make(a < b, b - a, a - b));
+            string a_name = unique_name('a');
+            string b_name = unique_name('b');
+            Expr a_var = Variable::make(op->args[0].type(), a_name);
+            Expr b_var = Variable::make(op->args[1].type(), b_name);
+            codegen(Let::make(a_name, op->args[0],
+                              Let::make(b_name, op->args[1],
+                                        Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
         // Make some memory for this buffer_t
@@ -2438,11 +2456,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = ConstantInt::get(i32, 0);
     } else if (op->is_intrinsic(Call::null_handle)) {
         internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
-        internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
+        internal_assert(op->type.is_handle()) << "null_handle must return a Handle type\n";
         value = ConstantPointerNull::get(i8->getPointerTo());
     } else if (op->is_intrinsic(Call::address_of)) {
         internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
-        internal_assert(op->type == Handle()) << "address_of must return a Handle type\n";
+        internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
         const Load *load = op->args[0].as<Load>();
         internal_assert(load) << "The sole argument to address_of must be a Load node\n";
         internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
@@ -2728,7 +2746,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         const StringImm *fn = op->args[0].as<StringImm>();
         internal_assert(fn);
         Expr arg = op->args[1];
-        internal_assert(arg.type() == Handle());
+        internal_assert(arg.type().is_handle());
         llvm::Function *f = module->getFunction(fn->value);
         if (!f) {
             llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
@@ -2762,13 +2780,30 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else {
         // It's an extern call.
 
+        std::string name;
+        if (op->call_type == Call::ExternCPlusPlus) {
+            user_assert(get_target().has_feature(Target::CPlusPlusMangling)) <<
+                "Target must specify C++ name mangling (\"c_plus_plus_name_mangling\") in order to call C++ externs. (" <<
+                op->name << ")\n";
+
+            std::vector<std::string> namespaces;
+            name = extract_namespaces(op->name, namespaces);
+            std::vector<ExternFuncArgument> mangle_args;
+            for (const auto &arg : op->args) {
+                mangle_args.push_back(ExternFuncArgument(arg));
+            }
+            name = cplusplus_function_mangled_name(name, namespaces, op->type, mangle_args, get_target());
+        } else {
+            name = op->name;
+        }
+
         // Codegen the args
         vector<Value *> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = codegen(op->args[i]);
         }
 
-        llvm::Function *fn = module->getFunction(op->name);
+        llvm::Function *fn = module->getFunction(name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
 
@@ -2799,12 +2834,16 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
 
-            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module.get());
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
             fn->setCallingConv(CallingConv::C);
             debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
             debug(4) << "Found " << op->name << "\n";
 
+            // TODO: Say something more accurate here as there is now
+            // partial information in the handle_type field, but it is
+            // not clear it can be matched to the LLVM types and it is
+            // not always there.
             // Halide's type system doesn't preserve pointer types
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
@@ -2834,7 +2873,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
 
-
         if (op->type.is_scalar()) {
             CallInst *call = builder->CreateCall(fn, args);
             if (op->is_pure()) {
@@ -2847,7 +2885,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             // Check if a vector version of the function already
             // exists at some useful width.
             pair<llvm::Function *, int> vec =
-                find_vector_runtime_function(op->name, op->type.lanes());
+                find_vector_runtime_function(name, op->type.lanes());
             llvm::Function *vec_fn = vec.first;
             int w = vec.second;
 
@@ -3492,4 +3530,7 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     return std::make_pair<llvm::Function *, int>(nullptr, 0);
 }
 
-}}
+}
+
+}
+

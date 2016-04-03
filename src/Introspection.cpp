@@ -310,6 +310,9 @@ public:
         // Check the address is indeed inside the object found
         uint64_t end_ptr = global_variables[idx].addr;
         TypeInfo *t = global_variables[idx].type;
+        if (t == nullptr) {
+            return -1;
+        }
         uint64_t size = t->size;
         while (t->type == TypeInfo::Array) {
             t = t->members[0].type;
