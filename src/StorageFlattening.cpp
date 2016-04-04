@@ -233,17 +233,18 @@ private:
             is_output |= f.name() == provide->name;
             if (is_output) {
                 output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
                 break;
             }
         }
-        internal_assert(output_buffers.size() == values.size());
+
         Stmt result;
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
-            Stmt store = Store::make(cv.name, var, idx, output_buffers[i]);
+            Stmt store = Store::make(cv.name, var, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -270,16 +271,17 @@ private:
             is_output |= f.name() == provide->name;
             if (is_output) {
                 output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
                 break;
             }
         }
-        internal_assert(output_buffers.size() == values.size());
+
         Stmt result;
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Stmt store = Store::make(cv.name, cv.value, idx, output_buffers[i]);
+            Stmt store = Store::make(cv.name, cv.value, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
