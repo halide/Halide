@@ -138,7 +138,7 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.avgrnd.vh.vh", i16((i32(wild_i16x) + i32(wild_i16x) + 1)/2) },
     { "halide.hexagon.avgrnd.vw.vw", i32((i64(wild_i32x) + i64(wild_i32x) + 1)/2) },
 
-    { "halide.hexagon.navg.vub.vub", u8c((i16(wild_u8x) - i16(wild_u8x))/2) },
+    { "halide.hexagon.navg.vub.vub", i8c((i16(wild_u8x) - i16(wild_u8x))/2) },
     { "halide.hexagon.navg.vh.vh", i16c((i32(wild_i16x) - i32(wild_i16x))/2) },
     { "halide.hexagon.navg.vw.vw", i32c((i64(wild_i32x) - i64(wild_i32x))/2) },
     // vnavg.uw doesn't exist.
