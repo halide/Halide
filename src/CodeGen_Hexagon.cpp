@@ -508,14 +508,25 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
     // If we're getting a native vector bits worth of data from half
     // of the argument, we might be able to use lo/hi if the start is appropriate.
     if (size*2 == vec_elements && element_bits*size == native_vector_bits()) {
-        if (start == 0) {
-            return call_intrin_cast(llvm::VectorType::get(vec_ty->getScalarType(), size),
-                                    IPICK(Intrinsic::hexagon_V6_lo),
-                                    {vec});
-        } else if (start == vec_elements/2) {
-            return call_intrin_cast(llvm::VectorType::get(vec_ty->getScalarType(), size),
-                                    IPICK(Intrinsic::hexagon_V6_hi),
-                                    {vec});
+        CallInst *call = dyn_cast<CallInst>(vec);
+        llvm::Function *combine_fn =
+            Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vcombine));
+        if (call && call->getCalledFunction() == combine_fn) {
+            if (start == 0) {
+                return call->getArgOperand(1);
+            } else if (start == vec_elements/2) {
+                return call->getArgOperand(0);
+            }
+        } else {
+            if (start == 0) {
+                return call_intrin_cast(llvm::VectorType::get(vec_ty->getScalarType(), size),
+                                        IPICK(Intrinsic::hexagon_V6_lo),
+                                        {vec});
+            } else if (start == vec_elements/2) {
+                return call_intrin_cast(llvm::VectorType::get(vec_ty->getScalarType(), size),
+                                        IPICK(Intrinsic::hexagon_V6_hi),
+                                        {vec});
+            }
         }
         // TODO: Could maybe use valign to implement this?
     }
