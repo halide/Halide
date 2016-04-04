@@ -17,6 +17,8 @@ typedef unsigned int handle_t;
 
 typedef handle_t handle_t;
 
+const int hvx_alignment = 128;
+
 // Provide an implementation of qurt to redirect to the appropriate
 // simulator calls.
 extern "C" {
@@ -48,7 +50,7 @@ void halide_error(void *user_context, const char *str) {
 }
 
 void *halide_malloc(void *user_context, size_t x) {
-    return memalign(128, x);
+    return memalign(hvx_alignment, x);
 }
 
 void halide_free(void *user_context, void *ptr) {
@@ -237,10 +239,10 @@ int main(int argc, const char **argv) {
         case Message::None:
             break;
         case Message::Alloc:
-            set_rpc_return(reinterpret_cast<int>(halide_malloc(NULL, RPC_ARG(0))));
+            set_rpc_return(reinterpret_cast<int>(memalign(hvx_alignment, RPC_ARG(0))));
             break;
         case Message::Free:
-            halide_free(NULL, reinterpret_cast<void*>(RPC_ARG(0)));
+            free(reinterpret_cast<void*>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
         case Message::InitKernels:
