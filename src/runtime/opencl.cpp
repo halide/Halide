@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeOpenCL.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 #include "cuda_opencl_shared.h"

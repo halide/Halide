@@ -7,6 +7,8 @@
  * it more pleasant to work with Halide expressions.
  */
 
+#include <atomic>
+
 #include "IR.h"
 
 namespace Halide {
@@ -22,15 +24,15 @@ EXPORT bool is_const(Expr e);
 EXPORT bool is_const(Expr e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
- * a pointer to its value. Otherwise returns NULL. */
+ * a pointer to its value. Otherwise returns nullptr. */
 EXPORT const int64_t *as_const_int(Expr e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
- * a pointer to its value. Otherwise returns NULL. */
+ * a pointer to its value. Otherwise returns nullptr. */
 EXPORT const uint64_t *as_const_uint(Expr e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
- * return a pointer to its value. Otherwise returns NULL. */
+ * return a pointer to its value. Otherwise returns nullptr. */
 EXPORT const double *as_const_float(Expr e);
 
 /** Is the expression a constant integer power of two. Also returns
@@ -741,7 +743,7 @@ inline Expr abs(Expr a) {
         return a;
     }
     return Internal::Call::make(t.with_code(t.is_int() ? Type::UInt : t.code()),
-                                Internal::Call::abs, {a}, Internal::Call::Intrinsic);
+                                Internal::Call::abs, {a}, Internal::Call::PureIntrinsic);
 }
 
 /** Return the absolute difference between two values. Vectorizes
@@ -762,7 +764,7 @@ inline Expr absd(Expr a, Expr b) {
     // The argument may be signed, but the return type is unsigned.
     return Internal::Call::make(t.with_code(t.is_int() ? Type::UInt : t.code()),
                                 Internal::Call::absd, {a, b},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 /** Returns an expression similar to the ternary operator in C, except
@@ -938,13 +940,13 @@ inline Expr select(Expr c1, Expr v1,
 inline Expr sin(Expr x) {
     user_assert(x.defined()) << "sin of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "sin_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "sin_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "sin_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "sin_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "sin_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "sin_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -954,13 +956,13 @@ inline Expr sin(Expr x) {
 inline Expr asin(Expr x) {
     user_assert(x.defined()) << "asin of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "asin_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "asin_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "asin_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "asin_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "asin_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "asin_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -970,13 +972,13 @@ inline Expr asin(Expr x) {
 inline Expr cos(Expr x) {
     user_assert(x.defined()) << "cos of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "cos_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "cos_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "cos_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "cos_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "cos_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "cos_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -986,13 +988,13 @@ inline Expr cos(Expr x) {
 inline Expr acos(Expr x) {
     user_assert(x.defined()) << "acos of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "acos_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "acos_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "acos_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "acos_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "acos_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "acos_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1002,13 +1004,13 @@ inline Expr acos(Expr x) {
 inline Expr tan(Expr x) {
     user_assert(x.defined()) << "tan of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "tan_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "tan_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "tan_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "tan_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "tan_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "tan_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1018,13 +1020,13 @@ inline Expr tan(Expr x) {
 inline Expr atan(Expr x) {
     user_assert(x.defined()) << "atan of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "atan_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "atan_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "atan_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "atan_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "atan_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "atan_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1036,16 +1038,16 @@ inline Expr atan2(Expr y, Expr x) {
 
     if (y.type() == Float(64)) {
         x = cast<double>(x);
-        return Internal::Call::make(Float(64), "atan2_f64", {y, x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "atan2_f64", {y, x}, Internal::Call::PureExtern);
     }
     else if (y.type() == Float(16)) {
         x = cast<float16_t>(x);
-        return Internal::Call::make(Float(16), "atan2_f16", {y, x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "atan2_f16", {y, x}, Internal::Call::PureExtern);
     }
     else {
         y = cast<float>(y);
         x = cast<float>(x);
-        return Internal::Call::make(Float(32), "atan2_f32", {y, x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "atan2_f32", {y, x}, Internal::Call::PureExtern);
     }
 }
 
@@ -1055,13 +1057,13 @@ inline Expr atan2(Expr y, Expr x) {
 inline Expr sinh(Expr x) {
     user_assert(x.defined()) << "sinh of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "sinh_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "sinh_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "sinh_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "sinh_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "sinh_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "sinh_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1071,13 +1073,13 @@ inline Expr sinh(Expr x) {
 inline Expr asinh(Expr x) {
     user_assert(x.defined()) << "asinh of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "asinh_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "asinh_f64", {x}, Internal::Call::PureExtern);
     }
     else if(x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "asinh_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "asinh_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "asinh_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "asinh_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1087,13 +1089,13 @@ inline Expr asinh(Expr x) {
 inline Expr cosh(Expr x) {
     user_assert(x.defined()) << "cosh of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "cosh_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "cosh_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "cosh_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "cosh_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "cosh_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "cosh_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1103,13 +1105,13 @@ inline Expr cosh(Expr x) {
 inline Expr acosh(Expr x) {
     user_assert(x.defined()) << "acosh of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "acosh_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "acosh_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "acosh_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "acosh_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "acosh_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "acosh_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1119,13 +1121,13 @@ inline Expr acosh(Expr x) {
 inline Expr tanh(Expr x) {
     user_assert(x.defined()) << "tanh of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "tanh_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "tanh_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "tanh_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "tanh_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "tanh_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "tanh_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1135,13 +1137,13 @@ inline Expr tanh(Expr x) {
 inline Expr atanh(Expr x) {
     user_assert(x.defined()) << "atanh of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "atanh_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "atanh_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "atanh_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "atanh_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "atanh_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "atanh_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1151,13 +1153,13 @@ inline Expr atanh(Expr x) {
 inline Expr sqrt(Expr x) {
     user_assert(x.defined()) << "sqrt of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "sqrt_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "sqrt_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "sqrt_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "sqrt_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "sqrt_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "sqrt_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1178,13 +1180,13 @@ inline Expr hypot(Expr x, Expr y) {
 inline Expr exp(Expr x) {
     user_assert(x.defined()) << "exp of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "exp_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "exp_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "exp_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "exp_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "exp_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "exp_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1198,13 +1200,13 @@ inline Expr exp(Expr x) {
 inline Expr log(Expr x) {
     user_assert(x.defined()) << "log of undefined Expr\n";
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "log_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "log_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
-        return Internal::Call::make(Float(16), "log_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "log_f16", {x}, Internal::Call::PureExtern);
     }
     else {
-        return Internal::Call::make(Float(32), "log_f32", {cast<float>(x)}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "log_f32", {cast<float>(x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1223,16 +1225,16 @@ inline Expr pow(Expr x, Expr y) {
 
     if (x.type() == Float(64)) {
         y = cast<double>(y);
-        return Internal::Call::make(Float(64), "pow_f64", {x, y}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "pow_f64", {x, y}, Internal::Call::PureExtern);
     }
     else if (x.type() == Float(16)) {
          y = cast<float16_t>(y);
-        return Internal::Call::make(Float(16), "pow_f16", {x, y}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "pow_f16", {x, y}, Internal::Call::PureExtern);
     }
     else {
         x = cast<float>(x);
         y = cast<float>(y);
-        return Internal::Call::make(Float(32), "pow_f32", {x, y}, Internal::Call::Extern);
+        return Internal::Call::make(Float(32), "pow_f32", {x, y}, Internal::Call::PureExtern);
     }
 }
 
@@ -1275,7 +1277,7 @@ inline Expr fast_pow(Expr x, Expr y) {
  * cleanly. */
 inline Expr fast_inverse(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
-    return Internal::Call::make(x.type(), "fast_inverse_f32", {x}, Internal::Call::Extern);
+    return Internal::Call::make(x.type(), "fast_inverse_f32", {x}, Internal::Call::PureExtern);
 }
 
 /** Fast approximate inverse square root for Float(32). Corresponds to
@@ -1283,7 +1285,7 @@ inline Expr fast_inverse(Expr x) {
  * ARM. Vectorizes cleanly. */
 inline Expr fast_inverse_sqrt(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
-    return Internal::Call::make(x.type(), "fast_inverse_sqrt_f32", {x}, Internal::Call::Extern);
+    return Internal::Call::make(x.type(), "fast_inverse_sqrt_f32", {x}, Internal::Call::PureExtern);
 }
 
 /** Return the greatest whole number less than or equal to a
@@ -1293,14 +1295,14 @@ inline Expr fast_inverse_sqrt(Expr x) {
 inline Expr floor(Expr x) {
     user_assert(x.defined()) << "floor of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(x.type(), "floor_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(x.type(), "floor_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "floor_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "floor_f16", {x}, Internal::Call::PureExtern);
     }
     else {
         Type t = Float(32, x.type().lanes());
-        return Internal::Call::make(t, "floor_f32", {cast(t, x)}, Internal::Call::Extern);
+        return Internal::Call::make(t, "floor_f32", {cast(t, x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1311,14 +1313,14 @@ inline Expr floor(Expr x) {
 inline Expr ceil(Expr x) {
     user_assert(x.defined()) << "ceil of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(x.type(), "ceil_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(x.type(), "ceil_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "ceil_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "ceil_f16", {x}, Internal::Call::PureExtern);
     }
     else {
         Type t = Float(32, x.type().lanes());
-        return Internal::Call::make(t, "ceil_f32", {cast(t, x)}, Internal::Call::Extern);
+        return Internal::Call::make(t, "ceil_f32", {cast(t, x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1330,14 +1332,14 @@ inline Expr ceil(Expr x) {
 inline Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(Float(64), "round_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "round_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "round_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "round_f16", {x}, Internal::Call::PureExtern);
     }
     else {
         Type t = Float(32, x.type().lanes());
-        return Internal::Call::make(t, "round_f32", {cast(t, x)}, Internal::Call::Extern);
+        return Internal::Call::make(t, "round_f32", {cast(t, x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1347,14 +1349,14 @@ inline Expr round(Expr x) {
 inline Expr trunc(Expr x) {
     user_assert(x.defined()) << "trunc of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(Float(64), "trunc_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(64), "trunc_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "trunc_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(Float(16), "trunc_f16", {x}, Internal::Call::PureExtern);
     }
     else {
         Type t = Float(32, x.type().lanes());
-        return Internal::Call::make(t, "trunc_f32", {cast(t, x)}, Internal::Call::Extern);
+        return Internal::Call::make(t, "trunc_f32", {cast(t, x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1365,14 +1367,14 @@ inline Expr is_nan(Expr x) {
     user_assert(x.type().is_float()) << "is_nan only works for float";
     Type t = Bool(x.type().lanes());
     if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(t, "is_nan_f64", {x}, Internal::Call::Extern);
+        return Internal::Call::make(t, "is_nan_f64", {x}, Internal::Call::PureExtern);
     }
     else if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(t, "is_nan_f16", {x}, Internal::Call::Extern);
+        return Internal::Call::make(t, "is_nan_f16", {x}, Internal::Call::PureExtern);
     }
     else {
         Type ft = Float(32, x.type().lanes());
-        return Internal::Call::make(t, "is_nan_f32", {cast(ft, x)}, Internal::Call::Extern);
+        return Internal::Call::make(t, "is_nan_f32", {cast(ft, x)}, Internal::Call::PureExtern);
     }
 }
 
@@ -1394,7 +1396,7 @@ inline Expr reinterpret(Type t, Expr e) {
         << " which has " << from_bits
         << " bits, to type " << t
         << " which has " << to_bits << " bits\n";
-    return Internal::Call::make(t, Internal::Call::reinterpret, {e}, Internal::Call::Intrinsic);
+    return Internal::Call::make(t, Internal::Call::reinterpret, {e}, Internal::Call::PureIntrinsic);
 }
 
 template<typename T>
@@ -1414,7 +1416,7 @@ inline Expr operator&(Expr x, Expr y) {
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
-    return Internal::Call::make(x.type(), Internal::Call::bitwise_and, {x, y}, Internal::Call::Intrinsic);
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_and, {x, y}, Internal::Call::PureIntrinsic);
 }
 
 /** Return the bitwise or of two expressions (which need not have the
@@ -1429,7 +1431,7 @@ inline Expr operator|(Expr x, Expr y) {
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
-    return Internal::Call::make(x.type(), Internal::Call::bitwise_or, {x, y}, Internal::Call::Intrinsic);
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_or, {x, y}, Internal::Call::PureIntrinsic);
 }
 
 /** Return the bitwise exclusive or of two expressions (which need not
@@ -1444,13 +1446,13 @@ inline Expr operator^(Expr x, Expr y) {
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
-    return Internal::Call::make(x.type(), Internal::Call::bitwise_xor, {x, y}, Internal::Call::Intrinsic);
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_xor, {x, y}, Internal::Call::PureIntrinsic);
 }
 
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
     user_assert(x.defined()) << "bitwise or of undefined Expr\n";
-    return Internal::Call::make(x.type(), Internal::Call::bitwise_not, {x}, Internal::Call::Intrinsic);
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_not, {x}, Internal::Call::PureIntrinsic);
 }
 
 /** Shift the bits of an integer value left. This is actually less
@@ -1466,7 +1468,7 @@ inline Expr operator<<(Expr x, Expr y) {
     user_assert(!x.type().is_float()) << "First argument to shift left is a float: " << x << "\n";
     user_assert(!y.type().is_float()) << "Second argument to shift left is a float: " << y << "\n";
     Internal::match_types(x, y);
-    return Internal::Call::make(x.type(), Internal::Call::shift_left, {x, y}, Internal::Call::Intrinsic);
+    return Internal::Call::make(x.type(), Internal::Call::shift_left, {x, y}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator<<(Expr x, int y) {
     Internal::check_representable(x.type(), y);
@@ -1492,7 +1494,7 @@ inline Expr operator>>(Expr x, Expr y) {
     user_assert(!x.type().is_float()) << "First argument to shift right is a float: " << x << "\n";
     user_assert(!y.type().is_float()) << "Second argument to shift right is a float: " << y << "\n";
     Internal::match_types(x, y);
-    return Internal::Call::make(x.type(), Internal::Call::shift_right, {x, y}, Internal::Call::Intrinsic);
+    return Internal::Call::make(x.type(), Internal::Call::shift_right, {x, y}, Internal::Call::PureIntrinsic);
 }
 inline Expr operator>>(Expr x, int y) {
     Internal::check_representable(x.type(), y);
@@ -1608,14 +1610,14 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     }
     return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
                                 {zero_val, one_val, weight},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 /** Count the number of set bits in an expression. */
 inline Expr popcount(Expr x) {
     user_assert(x.defined()) << "popcount of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::popcount,
-                                {x}, Internal::Call::Intrinsic);
+                                {x}, Internal::Call::PureIntrinsic);
 }
 
 /** Count the number of leading zero bits in an expression. The result is
@@ -1623,7 +1625,7 @@ inline Expr popcount(Expr x) {
 inline Expr count_leading_zeros(Expr x) {
     user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::count_leading_zeros,
-                                {x}, Internal::Call::Intrinsic);
+                                {x}, Internal::Call::PureIntrinsic);
 }
 
 /** Count the number of trailing zero bits in an expression. The result is
@@ -1631,7 +1633,7 @@ inline Expr count_leading_zeros(Expr x) {
 inline Expr count_trailing_zeros(Expr x) {
     user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
-                                {x}, Internal::Call::Intrinsic);
+                                {x}, Internal::Call::PureIntrinsic);
 }
 
 /** Return a random variable representing a uniformly distributed
@@ -1665,8 +1667,8 @@ inline Expr count_trailing_zeros(Expr x) {
  */
 inline Expr random_float(Expr seed = Expr()) {
     // Random floats get even IDs
-    static int counter = -2;
-    counter += 2;
+    static std::atomic<int> counter;
+    int id = (counter++)*2;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -1675,18 +1677,20 @@ inline Expr random_float(Expr seed = Expr()) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
-    args.push_back(counter);
+    args.push_back(id);
 
+    // This is (surprisingly) pure - it's a fixed psuedo-random
+    // function of its inputs.
     return Internal::Call::make(Float(32), Internal::Call::random,
-                                args, Internal::Call::Intrinsic);
+                                args, Internal::Call::PureIntrinsic);
 }
 
 /** Return a random variable representing a uniformly distributed
  * unsigned 32-bit integer. See \ref random_float. Vectorizes cleanly. */
 inline Expr random_uint(Expr seed = Expr()) {
     // Random ints get odd IDs
-    static int counter = -1;
-    counter += 2;
+    static std::atomic<int> counter;
+    int id = (counter++)*2 + 1;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -1695,10 +1699,10 @@ inline Expr random_uint(Expr seed = Expr()) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
-    args.push_back(counter);
+    args.push_back(id);
 
     return Internal::Call::make(UInt(32), Internal::Call::random,
-                                args, Internal::Call::Intrinsic);
+                                args, Internal::Call::PureIntrinsic);
 }
 
 /** Return a random variable representing a uniformly distributed
@@ -1776,7 +1780,7 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args... args) {
 inline Expr undef(Type t) {
     return Internal::Call::make(t, Internal::Call::undef,
                                 std::vector<Expr>(),
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 template<typename T>
@@ -1836,7 +1840,7 @@ inline NO_INLINE Expr memoize_tag(Expr result, Args... args) {
  */
 inline Expr likely(Expr e) {
     return Internal::Call::make(e.type(), Internal::Call::likely,
-                                {e}, Internal::Call::Intrinsic);
+                                {e}, Internal::Call::PureIntrinsic);
 }
 
 }

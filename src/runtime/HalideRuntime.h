@@ -9,6 +9,12 @@
 #endif
 
 #ifdef __cplusplus
+// Forward declare type to allow naming typed handles.
+// See Type.h for documentation.
+template<typename T> struct halide_handle_traits;
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -41,6 +47,7 @@ extern "C" {
  *
  */
 
+
 /** Print a message to stderr. Main use is to support HL_TRACE
  * functionality, print, and print_when calls. Also called by the default
  * halide_error.  This function can be replaced in JITed code by using
@@ -49,7 +56,8 @@ extern "C" {
  */
 // @{
 extern void halide_print(void *user_context, const char *);
-extern void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
+typedef void (*halide_print_t)(void *, const char *);
+extern halide_print_t halide_set_custom_print(halide_print_t print);
 // @}
 
 /** Halide calls this function on runtime errors (for example bounds
@@ -61,7 +69,8 @@ extern void (*halide_set_custom_print(void (*print)(void *, const char *)))(void
  */
 // @{
 extern void halide_error(void *user_context, const char *);
-extern void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
+typedef void (*halide_error_handler_t)(void *, const char *);
+extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
 /** These are allocated statically inside the runtime, hence the fixed
@@ -104,11 +113,13 @@ extern void halide_shutdown_thread_pool();
 
 /** Set a custom method for performing a parallel for loop. Returns
  * the old do_par_for handler. */
-extern int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task_t, int, int, uint8_t *)))(void *, halide_task_t, int, int, uint8_t *);
+typedef int (*halide_do_par_for_t)(void *, halide_task_t, int, int, uint8_t*);
+extern halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t do_par_for);
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
-extern int (*halide_set_custom_do_task(int (*f)(void *, halide_task_t, int, uint8_t *)))(void *, halide_task_t, int, uint8_t *);
+typedef int (*halide_do_task_t)(void *, halide_task_t, int, uint8_t *);
+extern halide_do_task_t halide_set_custom_do_task(halide_do_task_t do_task);
 
 /** Spawn a thread, independent of halide's thread pool. */
 extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
@@ -134,8 +145,10 @@ extern void halide_set_num_threads(int n);
 //@{
 extern void *halide_malloc(void *user_context, size_t x);
 extern void halide_free(void *user_context, void *ptr);
-extern void *(*halide_set_custom_malloc(void *(*user_malloc)(void *, size_t)))(void *, size_t);
-extern void (*halide_set_custom_free(void (*user_free)(void *, void *)))(void *, void *);
+typedef void *(*halide_malloc_t)(void *, size_t);
+typedef void (*halide_free_t)(void *, void *);
+extern halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc);
+extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 //@}
 
 /** Called when debug_to_file is used inside %Halide code.  See
@@ -144,9 +157,8 @@ extern void (*halide_set_custom_free(void (*user_free)(void *, void *)))(void *,
  * Cannot be replaced in JITted code at present.
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                    uint8_t *data, int32_t s0, int32_t s1, int32_t s2,
-                                    int32_t s3, int32_t type_code,
-                                    int32_t bytes_per_element);
+                                    int32_t type_code,
+                                    struct buffer_t *buf);
 
 
 enum halide_trace_event_code {halide_trace_load = 0,
@@ -208,7 +220,8 @@ struct halide_trace_event {
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event *event);
-extern int32_t (*halide_set_custom_trace(int32_t (*halide_trace)(void *, const struct halide_trace_event *)))(void *, const struct halide_trace_event *);
+typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event *);
+extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 
 /** Set the file descriptor that Halide should write binary trace
@@ -731,6 +744,21 @@ struct halide_profiler_func_stats {
 
     /** The name of this Func. A global constant string. */
     const char *name;
+
+    /** The current memory allocation of this Func. */
+    int memory_current;
+
+    /** The peak memory allocation of this Func. */
+    int memory_peak;
+
+    /** The total memory allocation of this Func. */
+    int memory_total;
+
+    /** The total number of memory allocation of this Func. */
+    int num_allocs;
+
+    /** The peak stack allocation of this Func threads. */
+    int stack_peak;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -760,6 +788,18 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;
+
+    /** The current memory allocation of funcs in this pipeline. */
+    int memory_current;
+
+    /** The peak memory allocation of funcs in this pipeline. */
+    int memory_peak;
+
+    /** The total memory allocation of funcs in this pipeline. */
+    int memory_total;
+
+    /** The total number of memory allocation of funcs in this pipeline. */
+    int num_allocs;
 };
 
 /** The global state of the profiler. */
@@ -801,7 +841,15 @@ enum {
  * inspection. Lock it before using to pause the profiler. */
 extern halide_profiler_state *halide_profiler_get_state();
 
-/** Reset all profiler state. */
+/** Get a pointer to the pipeline state associated with pipeline_name.
+ * This function grabs the global profiler state's lock on entry. */
+extern halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
+
+/** Reset all profiler state.
+ * WARNING: Do NOT call this method while any halide pipeline is
+ * running; halide_profiler_memory_allocate/free and
+ * halide_profiler_stack_peak_update update the profiler pipeline's
+ * state without grabbing the global profiler state's lock. */
 extern void halide_profiler_reset();
 
 /** Print out timing statistics for everything run since the last
@@ -842,6 +890,23 @@ struct halide_type_of_helper<T *> {
         return halide_type_t(halide_type_handle, 64);
     }
 };
+
+template<typename T>
+struct halide_type_of_helper<T &> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+
+// Halide runtime does not require C++11
+#if __cplusplus > 199711L
+template<typename T>
+struct halide_type_of_helper<T &&> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+#endif
 
 template<>
 struct halide_type_of_helper<float> {

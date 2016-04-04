@@ -89,12 +89,6 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
-    if (t.has_feature(Target::Profile)) {
-        debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
-    }
-
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);
     debug(2) << "Lowering after injecting parameter checks:\n" << s << '\n';
@@ -227,6 +221,12 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
 
+    if (t.has_feature(Target::Profile)) {
+        debug(1) << "Injecting profiling...\n";
+        s = inject_profiling(s, pipeline_name);
+        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+    }
+
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
 
@@ -240,6 +240,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
 
+    s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";

@@ -685,10 +685,10 @@ private:
 
     void visit(const Call *op) {
         // If the args are const we can return the call of those args
-        // for pure functions (extern and image). For other types of
-        // functions, the same call in two different places might
-        // produce different results (e.g. during the update step of a
-        // reduction), so we can't move around call nodes.
+        // for pure functions. For other types of functions, the same
+        // call in two different places might produce different
+        // results (e.g. during the update step of a reduction), so we
+        // can't move around call nodes.
         std::vector<Expr> new_args(op->args.size());
         bool const_args = true;
         for (size_t i = 0; i < op->args.size() && const_args; i++) {
@@ -702,27 +702,29 @@ private:
 
         Type t = op->type.element_of();
 
-        if (t == Handle()) {
+        if (t.is_handle()) {
             min = max = Expr();
             return;
         }
 
-        if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
+        if (const_args &&
+            (op->call_type == Call::PureExtern ||
+             op->call_type == Call::Image)) {
             min = max = Call::make(t, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::abs) {
+        } else if (op->is_intrinsic(Call::abs)) {
             Expr min_a = min, max_a = max;
             min = make_zero(t);
             if (min_a.defined() && max_a.defined()) {
                 if (equal(min_a, max_a)) {
-                    min = max = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
+                    min = max = Call::make(t, Call::abs, {max_a}, Call::PureIntrinsic);
                 } else {
                     min = make_zero(t);
                     if (op->args[0].type().is_int() && op->args[0].type().bits() == 32) {
                         max = Max::make(Cast::make(t, -min_a), Cast::make(t, max_a));
                     } else {
-                        min_a = Call::make(t, Call::abs, {min_a}, Call::Intrinsic);
-                        max_a = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
+                        min_a = Call::make(t, Call::abs, {min_a}, Call::PureIntrinsic);
+                        max_a = Call::make(t, Call::abs, {max_a}, Call::PureIntrinsic);
                         max = Max::make(min_a, max_a);
                     }
                 }
@@ -730,21 +732,22 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::likely) {
+        } else if (op->is_intrinsic(Call::likely)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::return_second) {
+        } else if (op->is_intrinsic(Call::return_second)) {
             assert(op->args.size() == 2);
             op->args[1].accept(this);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::if_then_else) {
+        } else if (op->is_intrinsic(Call::if_then_else)) {
             assert(op->args.size() == 3);
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
-        } else if (op->call_type == Call::Intrinsic &&
-                   (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
+        } else if (op->is_intrinsic(Call::shift_left) ||
+                   op->is_intrinsic(Call::shift_right) ||
+                   op->is_intrinsic(Call::bitwise_and)) {
             Expr simplified = simplify(op);
-            if (!simplified.same_as(op)) {
+            if (!equal(simplified, op)) {
                 simplified.accept(this);
             } else {
                 // Just use the bounds of the type
@@ -764,11 +767,8 @@ private:
             max = Call::make(t, op->name, {max_a}, op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
-        } else if (op->call_type == Call::Intrinsic &&
-                   (op->name == Call::extract_buffer_min ||
-                    op->name == Call::extract_buffer_max) &&
-                   !op->args.empty() &&
-                   op->args[0].as<Variable>()) {
+        } else if (op->is_intrinsic(Call::extract_buffer_min) ||
+                   op->is_intrinsic(Call::extract_buffer_max)) {
             // Bounds query results should have perfect nesting. Their
             // max over a loop is just the same bounds query call at
             // an outer loop level. This requires that the query is
@@ -777,12 +777,12 @@ private:
             //
             // TODO: There should be an assert injected in the inner
             // loop to check perfect nesting.
-            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
-            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::memoize_expr) {
+            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::PureIntrinsic);
+            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::PureIntrinsic);
+        } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::trace_expr) {
+        } else if (op->is_intrinsic(Call::trace_expr)) {
             // trace_expr returns argument 4
             internal_assert(op->args.size() >= 5);
             op->args[4].accept(this);
@@ -933,7 +933,7 @@ Expr simple_min(Expr a, Expr b) {
     const IntImm *ia = a.as<IntImm>();
     const IntImm *ib = b.as<IntImm>();
     const Min *ma = a.as<Min>();
-    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : nullptr;
     if (ia && ib) {
         if (ia->value < ib->value) {
             // min(3, 4) -> 3
@@ -967,7 +967,7 @@ Expr simple_max(Expr a, Expr b) {
     const IntImm *ia = a.as<IntImm>();
     const IntImm *ib = b.as<IntImm>();
     const Max *ma = a.as<Max>();
-    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : nullptr;
     if (ia && ib) {
         if (ia->value > ib->value) {
             // max(4, 3) -> 4
@@ -1120,7 +1120,7 @@ private:
 
         // Calls inside of an address_of aren't touched, because no
         // actual memory access takes place.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             // Visit the args of the inner call
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
@@ -1141,18 +1141,16 @@ private:
 
         IRVisitor::visit(op);
 
-        if (op->call_type == Call::Intrinsic ||
-            op->call_type == Call::Extern) {
-            return;
+        if (op->call_type == Call::Halide ||
+            op->call_type == Call::Image) {
+            Box b(op->args.size());
+            b.used = const_true();
+            for (size_t i = 0; i < op->args.size(); i++) {
+                op->args[i].accept(this);
+                b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+            }
+            merge_boxes(boxes[op->name], b);
         }
-
-        Box b(op->args.size());
-        b.used = const_true();
-        for (size_t i = 0; i < op->args.size(); i++) {
-            op->args[i].accept(this);
-            b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
-        }
-        merge_boxes(boxes[op->name], b);
     }
 
     class CountVars : public IRVisitor {
@@ -1547,7 +1545,7 @@ void bounds_test() {
     vector<Expr> input_site_2 = {2*x+1};
     vector<Expr> output_site = {x+1};
 
-    Buffer in(Int(32), {10}, NULL, "input");
+    Buffer in(Int(32), {10}, nullptr, "input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",

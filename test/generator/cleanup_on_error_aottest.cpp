@@ -20,7 +20,7 @@ int successful_mallocs = 0, failed_mallocs = 0, frees = 0, errors = 0, device_ma
     // Only the first malloc succeeds
     if (successful_mallocs) {
         failed_mallocs++;
-        return NULL;
+        return nullptr;
     }
     successful_mallocs++;
 

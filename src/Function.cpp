@@ -1,5 +1,6 @@
 #include <set>
 #include <stdlib.h>
+#include <atomic>
 
 #include "IR.h"
 #include "Function.h"
@@ -35,12 +36,15 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
+    bool extern_is_c_plus_plus;
 
     bool trace_loads, trace_stores, trace_realizations;
 
     bool frozen;
 
-    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
+    FunctionContents() : extern_is_c_plus_plus(false), trace_loads(false),
+                         trace_stores(false), trace_realizations(false),
+                         frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
         for (Expr i : values) {
@@ -208,7 +212,7 @@ public:
 
 // A counter to use in tagging random variables
 namespace {
-static int rand_counter = 0;
+static std::atomic<int> rand_counter;
 }
 
 Function::Function() : contents(new FunctionContents) {
@@ -461,8 +465,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     for (int i = 0; i < counter.count; i++) {
-        contents.ptr->ref_count.decrement();
-        internal_assert(!contents.ptr->ref_count.is_zero());
+        int count = contents.ptr->ref_count.decrement();
+        internal_assert(count != 0);
     }
 
     // First add any reduction domain
@@ -516,7 +520,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
-                             int dimensionality) {
+                             int dimensionality,
+                             bool is_c_plus_plus) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -529,6 +534,7 @@ void Function::define_extern(const std::string &function_name,
     contents.ptr->extern_function_name = function_name;
     contents.ptr->extern_arguments = args;
     contents.ptr->output_types = types;
+    contents.ptr->extern_is_c_plus_plus = is_c_plus_plus;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -594,6 +600,10 @@ bool Function::has_update_definition() const {
 
 bool Function::has_extern_definition() const {
     return !contents.ptr->extern_function_name.empty();
+}
+
+bool Function::extern_definition_is_c_plus_plus() const {
+    return contents.ptr->extern_is_c_plus_plus;
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {

@@ -15,14 +15,18 @@ struct ParameterContents {
     const bool is_explicit_name;
     const bool is_registered;
     std::string name;
+    std::string handle_type;
     Buffer buffer;
+    bool initialized;
     uint64_t data;
+    uint64_t default_val;
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r),
+          name(n), buffer(Buffer()), data(0), default_val(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -55,7 +59,7 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter() : contents(NULL) {
+Parameter::Parameter() : contents(nullptr) {
     // Undefined Parameters are never registered.
 }
 
@@ -64,7 +68,7 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     }
 }
 
@@ -72,13 +76,13 @@ Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, boo
     contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     }
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     }
 }
 
@@ -90,7 +94,7 @@ Parameter& Parameter::operator=(const Parameter& that) {
         // This can happen if you do:
         // Parameter p; // undefined
         // p = make_interesting_parameter();
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     } else if (!should_be_registered && was_registered) {
         // This can happen if you do:
         // Parameter p = make_interesting_parameter();
@@ -180,12 +184,18 @@ void *Parameter::get_scalar_address() const {
     return &contents.ptr->data;
 }
 
+void *Parameter::get_default_address() const {
+    check_is_scalar();
+    return &contents.ptr->default_val;
+}
+
+
 /** Tests if this handle is the same as another handle */
 bool Parameter::same_as(const Parameter &other) const {
     return contents.ptr == other.contents.ptr;
 }
 
-/** Tests if this handle is non-NULL */
+/** Tests if this handle is non-nullptr */
 bool Parameter::defined() const {
     return contents.defined();
 }
