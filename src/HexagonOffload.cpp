@@ -21,9 +21,6 @@ namespace {
 
 Target hexagon_remote_target(Target::NoOS, Target::Hexagon, 32);
 
-}
-
-/////////////////////////////////////////////////////////////////////////////
 class InjectHexagonRpc : public IRMutator {
     using IRMutator::visit;
 
@@ -152,24 +149,6 @@ public:
         }
     }
 
-    template <typename ObjFileType>
-    static int get_symbol_offset(const ObjFileType& obj_file, const std::string& symbol) {
-        for (const llvm::object::SymbolRef& i : obj_file.symbols()) {
-            llvm::ErrorOr<llvm::StringRef> name_ref = i.getName();
-            if (!name_ref || name_ref.get() != symbol) continue;
-
-            int section_offset = 0;
-            llvm::ErrorOr<llvm::object::section_iterator> sec_i = i.getSection();
-            if (sec_i) {
-                const llvm::object::SectionRef& sec = *sec_i.get();
-                section_offset = static_cast<int>(obj_file.getSection(sec.getRawDataRefImpl())->sh_offset);
-            }
-
-            return section_offset + static_cast<int>(i.getValue());
-        }
-        return -1;
-    }
-
     Stmt inject(Stmt s) {
         s = mutate(s);
 
@@ -207,6 +186,8 @@ public:
         return s;
     }
 };
+
+}
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     Target target = hexagon_remote_target;
