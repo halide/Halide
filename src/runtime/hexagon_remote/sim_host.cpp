@@ -172,7 +172,11 @@ public:
 
     remote_buffer() : data(0), dataLen(0) {}
     remote_buffer(int dataLen) : dataLen(dataLen) {
-        data = send_message(Message::Alloc, {dataLen});
+        if (dataLen > 0) {
+            data = send_message(Message::Alloc, {dataLen});
+        } else {
+            data = 0;
+        }
     }
     remote_buffer(const void *data, int dataLen) : remote_buffer(dataLen) {
         write_memory(this->data, data, dataLen);
