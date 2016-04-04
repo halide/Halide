@@ -257,7 +257,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vavghrnd),  i16x1, "avgrnd.vh.vh",   {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vavgwrnd),  i32x1, "avgrnd.vw.vw",   {i32x1, i32x1} },
 
-        { IPICK(Intrinsic::hexagon_V6_vnavgub), u8x1,  "navg.vub.vub", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vnavgub), i8x1,  "navg.vub.vub", {u8x1,  u8x1} },
         { IPICK(Intrinsic::hexagon_V6_vnavgh),  i16x1, "navg.vh.vh",   {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vnavgw),  i32x1, "navg.vw.vw",   {i32x1, i32x1} },
 
