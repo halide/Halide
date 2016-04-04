@@ -452,6 +452,11 @@ WEAK void device_memcpy(void *user_context, device_copy c) {
 }  // namespace
 
 WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
+    int err = halide_hexagon_device_malloc(user_context, buf);
+    if (err) {
+        return err;
+    }
+
     debug(user_context)
         <<  "Ion: halide_hexagon_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
