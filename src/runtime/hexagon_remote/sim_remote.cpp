@@ -48,21 +48,11 @@ void halide_error(void *user_context, const char *str) {
 }
 
 void *halide_malloc(void *user_context, size_t x) {
-    // Allocate enough space for aligning the pointer we return.
-    const size_t alignment = 128;
-    void *orig = malloc(x + alignment);
-    if (orig == NULL) {
-        // Will result in a failed assertion and a call to halide_error
-        return NULL;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
-    return ptr;
+    return memalign(128, x);
 }
 
 void halide_free(void *user_context, void *ptr) {
-    free(((void**)ptr)[-1]);
+    free(ptr);
 }
 
 int halide_do_task(void *user_context, halide_task_t f, int idx,
