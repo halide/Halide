@@ -3198,7 +3198,7 @@ void CodeGen_LLVM::visit(const Store *op) {
 
     Halide::Type value_type = op->value.type();
     Value *val = codegen(op->value);
-    bool possibly_misaligned = (external_buffer.find(op->name) != external_buffer.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -3214,14 +3214,20 @@ void CodeGen_LLVM::visit(const Store *op) {
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
+            while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
                        alignment < native_bytes) {
                     mod_rem.modulus /= 2;
                     mod_rem.remainder /= 2;
                     alignment *= 2;
-                }
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least the native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector stores wider than the native vector
