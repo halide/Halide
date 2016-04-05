@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     set_alignment_host_ptr(i1, 128, m);
     set_alignment_host_ptr(i2, 32, m);
 
-    Func f;
+    Func f("f");
     f(x) = i1(x) + i2(x) + i3(x);
     f.output_buffer().set_host_alignment(128);
     m.insert(std::pair<string, int>("f.host", 128));
