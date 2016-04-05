@@ -1385,7 +1385,7 @@ void check_hvx_all() {
     check("vavg(v*.h,v*.h):rnd", hvx_width/2, i16((i32(i16_1) + i32(i16_2) + 1)/2));
     check("vavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) + i64(i32_2))/2));
     check("vavg(v*.w,v*.w):rnd", hvx_width/4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
-    check("vnavg(v*.ub,v*.ub)", hvx_width/1, u8c((i16(u8_1) - i16(u8_2))/2));
+    check("vnavg(v*.ub,v*.ub)", hvx_width/1, i8c((i16(u8_1) - i16(u8_2))/2));
     check("vnavg(v*.h,v*.h)", hvx_width/2, i16c((i32(i16_1) - i32(i16_2))/2));
     check("vnavg(v*.w,v*.w)", hvx_width/4, i32c((i64(i32_1) - i64(i32_2))/2));
 

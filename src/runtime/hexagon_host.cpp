@@ -212,6 +212,7 @@ WEAK int map_arguments(void *user_context, size_t arg_count,
     int mapped_count = 0;
     for (size_t i = 0; i < arg_count; i++) {
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
+        remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
             // This is a buffer, map it and put the mapped buffer into
             // the result.
@@ -219,14 +220,13 @@ WEAK int map_arguments(void *user_context, size_t arg_count,
 
             uint64_t device_handle = halide_get_device_handle(*(uint64_t *)args[i]);
             ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
-            mapped_args[mapped_count].data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
-            mapped_args[mapped_count].dataLen = ion_handle->size;
+            mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
+            mapped_arg.dataLen = ion_handle->size;
         } else {
             // This is a scalar, just put the pointer/size in the result.
-            mapped_args[mapped_count].data = (uint8_t*)args[i];
-            mapped_args[mapped_count].dataLen = arg_sizes[i];
+            mapped_arg.data = (uint8_t*)args[i];
+            mapped_arg.dataLen = arg_sizes[i];
         }
-        mapped_count++;
     }
     return mapped_count;
 }
@@ -249,7 +249,7 @@ WEAK int halide_hexagon_run(void *user_context,
                         << "user_context: " << user_context << ", "
                         << "state_ptr: " << state_ptr << " (" << module << "), "
                         << "name: " << name << ", "
-                        << "function: " << function << ")\n";
+                        << "function: " << function << " (" << *function << "))\n";
 
     int result = -1;
 
@@ -281,17 +281,17 @@ WEAK int halide_hexagon_run(void *user_context,
                                            input_buffers);
     if (input_buffer_count < 0) return input_buffer_count;
 
-    // Then the input scalars.
-    remote_buffer *input_scalars = input_buffers + input_buffer_count;
-    int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
-                                           input_scalars);
-    if (input_scalar_count < 0) return input_scalar_count;
-
-    // And the output buffers.
-    remote_buffer *output_buffers = input_scalars + input_scalar_count;
+    // Then the output buffers.
+    remote_buffer *output_buffers = input_buffers + input_buffer_count;
     int output_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x2, 0x2,
                                             output_buffers);
     if (output_buffer_count < 0) return output_buffer_count;
+
+    // And the input scalars.
+    remote_buffer *input_scalars = output_buffers + output_buffer_count;
+    int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
+                                           input_scalars);
+    if (input_scalar_count < 0) return input_scalar_count;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before_run = halide_current_time_ns(user_context);
@@ -301,8 +301,8 @@ WEAK int halide_hexagon_run(void *user_context,
     debug(user_context) << "    halide_hexagon_remote_run -> \n";
     result = remote_run(module, *function,
                         input_buffers, input_buffer_count,
-                        input_scalars, input_scalar_count,
-                        output_buffers, output_buffer_count);
+                        output_buffers, output_buffer_count,
+                        input_scalars, input_scalar_count);
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
         error(user_context) << "Hexagon pipeline failed.\n";
@@ -452,6 +452,11 @@ WEAK void device_memcpy(void *user_context, device_copy c) {
 }  // namespace
 
 WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
+    int err = halide_hexagon_device_malloc(user_context, buf);
+    if (err) {
+        return err;
+    }
+
     debug(user_context)
         <<  "Ion: halide_hexagon_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";

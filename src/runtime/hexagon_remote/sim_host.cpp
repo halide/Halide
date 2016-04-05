@@ -172,7 +172,11 @@ public:
 
     remote_buffer() : data(0), dataLen(0) {}
     remote_buffer(int dataLen) : dataLen(dataLen) {
-        data = send_message(Message::Alloc, {dataLen});
+        if (dataLen > 0) {
+            data = send_message(Message::Alloc, {dataLen});
+        } else {
+            data = 0;
+        }
     }
     remote_buffer(const void *data, int dataLen) : remote_buffer(dataLen) {
         write_memory(this->data, data, dataLen);
@@ -234,33 +238,33 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name,
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_buffersPtrs, int input_buffersLen,
-                              const host_buffer *input_scalarsPtrs, int input_scalarsLen,
-                              host_buffer *output_buffersPtrs, int output_buffersLen) {
+                              host_buffer *output_buffersPtrs, int output_buffersLen,
+                              const host_buffer *input_scalarsPtrs, int input_scalarsLen) {
     assert(sim);
 
     std::vector<remote_buffer> remote_input_buffers;
-    std::vector<remote_buffer> remote_input_scalars;
     std::vector<remote_buffer> remote_output_buffers;
+    std::vector<remote_buffer> remote_input_scalars;
 
     for (int i = 0; i < input_buffersLen; i++)
         remote_input_buffers.emplace_back(input_buffersPtrs[i]);
-    for (int i = 0; i < input_scalarsLen; i++)
-        remote_input_scalars.emplace_back(input_scalarsPtrs[i]);
     for (int i = 0; i < output_buffersLen; i++)
         remote_output_buffers.emplace_back(output_buffersPtrs[i]);
+    for (int i = 0; i < input_scalarsLen; i++)
+        remote_input_scalars.emplace_back(input_scalarsPtrs[i]);
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_input_buffersPtrs(&remote_input_buffers[0], input_buffersLen * sizeof(remote_buffer));
-    remote_buffer remote_input_scalarsPtrs(&remote_input_scalars[0], input_scalarsLen * sizeof(remote_buffer));
     remote_buffer remote_output_buffersPtrs(&remote_output_buffers[0], output_buffersLen * sizeof(remote_buffer));
+    remote_buffer remote_input_scalarsPtrs(&remote_input_scalars[0], input_scalarsLen * sizeof(remote_buffer));
 
     // Run the init kernels command.
     int ret = send_message(
         Message::Run,
         {static_cast<int>(module_ptr), static_cast<int>(function),
          remote_input_buffersPtrs.data, input_buffersLen,
-         remote_input_scalarsPtrs.data, input_scalarsLen,
-         remote_output_buffersPtrs.data, output_buffersLen});
+         remote_output_buffersPtrs.data, output_buffersLen,
+         remote_input_scalarsPtrs.data, input_scalarsLen});
 
     // Copy the outputs back.
     for (int i = 0; i < output_buffersLen; i++)

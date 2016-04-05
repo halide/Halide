@@ -185,9 +185,16 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling")
+    elseif(TEST_SRC STREQUAL "c_plus_plus_name_mangling_define_extern_aottest.cpp")
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "c_plus_plus_name_mangling${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "c_plus_plus_name_mangling"
+			       TARGET_SUFFIX "_2"
+                               GENERATED_FUNCTION "c_plus_plus_name_mangling"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
                                GENERATOR_ARGS "target=host-c_plus_plus_name_mangling"
                                OUTPUT_LIB_VAR LIB_c_plus_plus_name_mangling)
-    elseif(TEST_SRC STREQUAL "c_plus_plus_name_mangling_define_extern_aottest.cpp")
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
                                GENERATOR_NAME "${GEN_NAME}"

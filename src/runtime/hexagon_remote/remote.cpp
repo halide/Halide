@@ -33,21 +33,11 @@ void halide_error(void *user_context, const char *str) {
 }
 
 void *halide_malloc(void *user_context, size_t x) {
-    // Allocate enough space for aligning the pointer we return.
-    const size_t alignment = 128;
-    void *orig = malloc(x + alignment);
-    if (orig == NULL) {
-        // Will result in a failed assertion and a call to halide_error
-        return NULL;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
-    return ptr;
+    return memalign(128, x);
 }
 
 void halide_free(void *user_context, void *ptr) {
-    free(((void**)ptr)[-1]);
+    free(ptr);
 }
 
 int halide_do_task(void *user_context, halide_task_t f, int idx,
@@ -163,8 +153,8 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name,
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
-                              const buffer *input_scalarsPtrs, int input_scalarsLen,
-                              buffer *output_buffersPtrs, int output_buffersLen) {
+                              buffer *output_buffersPtrs, int output_buffersLen,
+                              const buffer *input_scalarsPtrs, int input_scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
@@ -188,14 +178,14 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         next_buffer_t->host = input_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
     }
-    // Input scalars are next.
-    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
-        *next_arg = input_scalarsPtrs[i].data;
-    }
-    // Output buffers are last.
+    // Output buffers are next.
     for (int i = 0; i < output_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = output_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
+    }
+    // Input scalars are last.
+    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
+        *next_arg = input_scalarsPtrs[i].data;
     }
 
     // Call the pipeline and return the result.

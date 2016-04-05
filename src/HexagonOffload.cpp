@@ -21,9 +21,6 @@ namespace {
 
 Target hexagon_remote_target(Target::NoOS, Target::Hexagon, 32);
 
-}
-
-/////////////////////////////////////////////////////////////////////////////
 class InjectHexagonRpc : public IRMutator {
     using IRMutator::visit;
 
@@ -91,7 +88,9 @@ public:
             // Make an argument list, and generate a function in the
             // device_code module. The hexagon runtime code expects
             // the arguments to appear in the order of (input buffers,
-            // input scalars, output buffers).
+            // output buffers, input scalars).  There's a huge hack
+            // here, in that the scalars must be last for the scalar
+            // arguments to shadow the symbols of the buffer.
             std::vector<Argument> args;
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
@@ -100,14 +99,14 @@ public:
                 Argument::Kind kind = Argument::InputBuffer;
                 args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
             }
-            for (const auto& i : c.vars) {
-                args.push_back(Argument(i.first, Argument::InputScalar, i.second, 0));
-            }
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
                     Argument::Kind kind = Argument::OutputBuffer;
                     args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
                 }
+            }
+            for (const auto& i : c.vars) {
+                args.push_back(Argument(i.first, Argument::InputScalar, i.second, 0));
             }
             device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::External));
 
@@ -152,24 +151,6 @@ public:
         }
     }
 
-    template <typename ObjFileType>
-    static int get_symbol_offset(const ObjFileType& obj_file, const std::string& symbol) {
-        for (const llvm::object::SymbolRef& i : obj_file.symbols()) {
-            llvm::ErrorOr<llvm::StringRef> name_ref = i.getName();
-            if (!name_ref || name_ref.get() != symbol) continue;
-
-            int section_offset = 0;
-            llvm::ErrorOr<llvm::object::section_iterator> sec_i = i.getSection();
-            if (sec_i) {
-                const llvm::object::SectionRef& sec = *sec_i.get();
-                section_offset = static_cast<int>(obj_file.getSection(sec.getRawDataRefImpl())->sh_offset);
-            }
-
-            return section_offset + static_cast<int>(i.getValue());
-        }
-        return -1;
-    }
-
     Stmt inject(Stmt s) {
         s = mutate(s);
 
@@ -207,6 +188,8 @@ public:
         return s;
     }
 };
+
+}
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     Target target = hexagon_remote_target;
