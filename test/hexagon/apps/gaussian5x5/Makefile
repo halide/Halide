@@ -31,7 +31,7 @@ gaussian5x5_run.o: gaussian5x5.o gaussian5x5.h gaussian5x5_run.cpp
 	${HEXAGON_CLANG} -c gaussian5x5_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 gaussian5x5.out: gaussian5x5_run.o gaussian5x5.o gaussian5x5.h
-	${HEXAGON_CLANG} -mv60 -o gaussian5x5.out gaussian5x5_run.o gaussian5x5.o -lhexagon
+	${HEXAGON_CLANG} -mv60 -o gaussian5x5.out gaussian5x5_run.o gaussian5x5.o -lhexagon -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 all: gaussian5x5.out
 
