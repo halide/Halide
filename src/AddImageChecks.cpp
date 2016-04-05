@@ -479,11 +479,12 @@ Stmt add_image_checks(Stmt s,
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
-        if (param.defined() && param.host_alignment() > 1) {
+        if (param.defined() && param.host_alignment() != param.type().bytes()) {
             string host_name = name + ".host";
             int alignment_required = param.host_alignment();
             Expr host_ptr = Variable::make(Int(32), host_name);
-            Expr align_condition = ((host_ptr & (alignment_required - 1)) == 0);
+            Expr u64t = cast(UInt(64), host_ptr);
+            Expr align_condition = (u64t % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
                                     {name, alignment_required}, Call::Extern);
             asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
