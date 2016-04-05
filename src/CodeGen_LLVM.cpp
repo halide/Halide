@@ -1231,10 +1231,15 @@ void CodeGen_LLVM::visit(const Cast *op) {
     } else if (dst.is_handle() || src.is_handle()) {
         internal_error << "Can't cast from " << src << " to " << dst << "\n";
     } else if (!src.is_float() && !dst.is_float()) {
+        if (value->getType()->isPointerTy()) {
+            value = builder->CreatePointerCast(value, llvm_dst);
+        }
+        else {
         // Widening integer casts either zero extend or sign extend,
         // depending on the source type. Narrowing integer casts
         // always truncate.
         value = builder->CreateIntCast(value, llvm_dst, src.is_int());
+        }
     } else if (src.is_float() && dst.is_int()) {
         value = builder->CreateFPToSI(value, llvm_dst);
     } else if (src.is_float() && dst.is_uint()) {
