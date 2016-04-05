@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <dlfcn.h>
 
+#include <string.h>
+
 #include "hexagon_standalone.h"
 
 typedef struct _buffer__seq_octet _buffer__seq_octet;
@@ -153,8 +155,8 @@ handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
 
 int run(handle_t module_ptr, handle_t function,
         const buffer *input_buffersPtrs, int input_buffersLen,
-        const buffer *input_scalarsPtrs, int input_scalarsLen,
-        buffer *output_buffersPtrs, int output_buffersLen) {
+        buffer *output_buffersPtrs, int output_buffersLen,
+        const buffer *input_scalarsPtrs, int input_scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
@@ -178,14 +180,14 @@ int run(handle_t module_ptr, handle_t function,
         next_buffer_t->host = input_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
     }
-    // Input scalars are next.
-    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
-        *next_arg = input_scalarsPtrs[i].data;
-    }
-    // Output buffers are last.
+    // Output buffers are next.
     for (int i = 0; i < output_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = output_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
+    }
+    // Input scalars are last.
+    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
+        *next_arg = input_scalarsPtrs[i].data;
     }
 
     // Call the pipeline and return the result.
@@ -263,9 +265,9 @@ int main(int argc, const char **argv) {
                 static_cast<handle_t>(RPC_ARG(1)),
                 reinterpret_cast<const buffer*>(RPC_ARG(2)),
                 RPC_ARG(3),
-                reinterpret_cast<const buffer*>(RPC_ARG(4)),
+                reinterpret_cast<buffer*>(RPC_ARG(4)),
                 RPC_ARG(5),
-                reinterpret_cast<buffer*>(RPC_ARG(6)),
+                reinterpret_cast<const buffer*>(RPC_ARG(6)),
                 RPC_ARG(7)));
             break;
         case Message::ReleaseKernels:
