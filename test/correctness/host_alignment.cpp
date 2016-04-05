@@ -54,7 +54,10 @@ public:
             ParseCondition p;
             c.accept(&p);
             if (p.left.defined() && p.right.defined()) {
-                Expr name =  p.left.as<Cast>()->value;
+                const Call *reinterpret_call = p.left.as<Call>();
+                if (!reinterpret_call ||
+                    !reinterpret_call->is_intrinsic(Call::reinterpret)) return;
+                Expr name =  reinterpret_call->args[0];
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
                 int expected_alignment = alignments_needed[name_host_ptr];
