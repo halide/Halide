@@ -707,23 +707,16 @@ void CodeGen_Hexagon::visit(const Mul *op) {
         // All the non-widening vector by scalar multiplies expect a narrower
         // scalar. Only two narrow types work, 8 bit and 16 bit. Start with
         // the 8 bit ones
-        Expr narrow_b = lossless_cast(b.type().with_bits(8), b);
-        Expr opb = narrow_b.defined() ? narrow_b : b;
-        value = call_intrin(op->type,
-                            "halide.hexagon.mpyi" +
-                            type_suffix(a, opb),
-                            {a, opb},
-                            true /*maybe*/);
-        if (value) return;
-
-        narrow_b = lossless_cast(b.type().with_bits(16), b);
-        opb = narrow_b.defined() ? narrow_b : b;
-        value = call_intrin(op->type,
-                            "halide.hexagon.mpyi" +
-                            type_suffix(a, opb),
-                            {a, opb},
-                            true /*maybe*/);
-        if (value) return;
+        for (int bits : {8, 16}) {
+            Expr narrow_b = lossless_cast(b.type().with_bits(bits), b);
+            Expr opb = narrow_b.defined() ? narrow_b : b;
+            value = call_intrin(op->type,
+                                "halide.hexagon.mpyi" +
+                                type_suffix(a, opb),
+                                {a, opb},
+                                true /*maybe*/);
+            if (value) return;
+        }
 
         // We didn't find an intrinsic for this type. Try again
         // without the scalar operand.
