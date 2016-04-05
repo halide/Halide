@@ -8,6 +8,7 @@ using std::map;
 using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
+
 class FindErrorHandler : public IRVisitor {
 public:
     bool result;
@@ -38,8 +39,8 @@ public:
 class CountHostAlignmentAsserts : public IRVisitor {
 public:
     int count;
-    std::map<string, Expr> alignments_needed;
-    CountHostAlignmentAsserts(std::map<string, Expr> m) : count(0),
+    std::map<string, int> alignments_needed;
+    CountHostAlignmentAsserts(std::map<string, int> m) : count(0),
                                                         alignments_needed(m){}
 
     using IRVisitor::visit;
@@ -53,23 +54,23 @@ public:
             ParseCondition p;
             c.accept(&p);
             if (p.left.defined() && p.right.defined()) {
-                Expr name = p.left;
-                Expr alignment = p.right;
+                Expr name =  p.left.as<Cast>()->value;
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
-                Expr expected_alignment = alignments_needed[name_host_ptr];
-                if (equal(alignment, expected_alignment)) {
+                int expected_alignment = alignments_needed[name_host_ptr];
+                if (is_const(p.right, expected_alignment)) {
                     count++;
+                    alignments_needed.erase(name_host_ptr);
                 }
             }
         }
     }
 };
-void set_alignment_host_ptr(ImageParam &i, int align, std::map<string, Expr> &m) {
+void set_alignment_host_ptr(ImageParam &i, int align, std::map<string, int> &m) {
     i.set_host_alignment(align);
-    m.insert(std::pair<string, Expr>(i.name()+".host", align));
+    m.insert(std::pair<string, int>(i.name()+".host", align));
 }
-int count_host_alignment_asserts(Func f, std::map<string, Expr> m) {
+int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     Target t = get_jit_target_from_environment();
     t.set_feature(Target::NoBoundsQuery);
     f.compute_root();
@@ -80,7 +81,7 @@ int count_host_alignment_asserts(Func f, std::map<string, Expr> m) {
 }
 int main(int argc, char **argv) {
     Var x, y, c;
-    std::map <string, Expr> m;
+    std::map<string, int> m;
     ImageParam i1(Int(8), 1);
     ImageParam i2(Int(8), 1);
     ImageParam i3(Int(8), 1);
@@ -91,7 +92,7 @@ int main(int argc, char **argv) {
     Func f;
     f(x) = i1(x) + i2(x) + i3(x);
     f.output_buffer().set_host_alignment(128);
-    m.insert(std::pair<string, Expr>("f0.host", 128));
+    m.insert(std::pair<string, int>("f.host", 128));
     int cnt = count_host_alignment_asserts(f, m);
     if (cnt != 3) {
         printf("Error: expected 3 host alignment assertions in code, but got %d\n", cnt);
