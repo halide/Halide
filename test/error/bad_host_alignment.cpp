@@ -8,9 +8,11 @@ IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
     Func f;
     Var x, y;
-
+    int arr[11][10];
+    uint8_t *ptr  = reinterpret_cast<uint8_t*>(arr);
+    ptr += 1;
     buffer_t buf;
-    buf.host = reinterpret_cast<uint8_t*>(1);
+    buf.host = ptr;
     buf.extent[0] = 10;
     buf.extent[1] = 10;
     buf.stride[0] = 1;
