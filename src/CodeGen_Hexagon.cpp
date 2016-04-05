@@ -177,7 +177,6 @@ void CodeGen_Hexagon::init_module() {
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
         { IPICK(Intrinsic::hexagon_V6_vzb), u16x2,  "zxt.vub", {u8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vzb), i16x2,  "zxt.vub", {u8x1} },
         { IPICK(Intrinsic::hexagon_V6_vzh), u32x2,  "zxt.vuh", {u16x1} },
         { IPICK(Intrinsic::hexagon_V6_vsb), i16x2,  "sxt.vb",  {i8x1} },
         { IPICK(Intrinsic::hexagon_V6_vsh), i32x2,  "sxt.vh",  {i16x1} },
@@ -188,7 +187,6 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunchi.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunchi.vw",  {i32x2} },
         { IPICK(Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vshuffob), u8x1,  "trunclo.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
