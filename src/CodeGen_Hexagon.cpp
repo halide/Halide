@@ -177,6 +177,7 @@ void CodeGen_Hexagon::init_module() {
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
         { IPICK(Intrinsic::hexagon_V6_vzb), u16x2,  "zxt.vub", {u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vzb), i16x2,  "zxt.vub", {u8x1} },
         { IPICK(Intrinsic::hexagon_V6_vzh), u32x2,  "zxt.vuh", {u16x1} },
         { IPICK(Intrinsic::hexagon_V6_vsb), i16x2,  "sxt.vb",  {i8x1} },
         { IPICK(Intrinsic::hexagon_V6_vsh), i32x2,  "sxt.vh",  {i16x1} },
@@ -187,6 +188,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunchi.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunchi.vw",  {i32x2} },
         { IPICK(Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshuffob), u8x1,  "trunclo.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
@@ -264,6 +266,8 @@ void CodeGen_Hexagon::init_module() {
         // Non-widening multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyih),  i16x1, "mpyi.vh.vh",   {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vmpyihb), i16x1, "mpyi.vh.b",    {i16x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mpyi.vw.h",    {i32x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mpyi.vw.b",    {i32x1, i8} },
 
         // Widening vector multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyubv),  u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
@@ -702,9 +706,24 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             std::swap(a, b);
 
         // Try to find an intrinsic for one of the operands being a scalar.
+        // All the non-widening vector by scalar multiplies expect a narrower
+        // scalar. Only two narrow types work, 8 bit and 16 bit. Start with
+        // the 8 bit ones
+        Expr narrow_b = lossless_cast(b.type().with_bits(8), b);
+        Expr opb = narrow_b.defined() ? narrow_b : b;
         value = call_intrin(op->type,
-                            "halide.hexagon.mpyi" + type_suffix(a, b),
-                            {a, b},
+                            "halide.hexagon.mpyi" +
+                            type_suffix(a, opb),
+                            {a, opb},
+                            true /*maybe*/);
+        if (value) return;
+
+        narrow_b = lossless_cast(b.type().with_bits(16), b);
+        opb = narrow_b.defined() ? narrow_b : b;
+        value = call_intrin(op->type,
+                            "halide.hexagon.mpyi" +
+                            type_suffix(a, opb),
+                            {a, opb},
                             true /*maybe*/);
         if (value) return;
 
