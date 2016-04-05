@@ -264,6 +264,8 @@ void CodeGen_Hexagon::init_module() {
         // Non-widening multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyih),  i16x1, "mpyi.vh.vh",   {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vmpyihb), i16x1, "mpyi.vh.b",    {i16x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mpyi.vw.h",    {i32x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mpyi.vw.b",    {i32x1, i8} },
 
         // Widening vector multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyubv),  u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
@@ -702,11 +704,19 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             std::swap(a, b);
 
         // Try to find an intrinsic for one of the operands being a scalar.
-        value = call_intrin(op->type,
-                            "halide.hexagon.mpyi" + type_suffix(a, b),
-                            {a, b},
-                            true /*maybe*/);
-        if (value) return;
+        // All the non-widening vector by scalar multiplies expect a narrower
+        // scalar. Only two narrow types work, 8 bit and 16 bit. Start with
+        // the 8 bit ones
+        for (int bits : {8, 16}) {
+            Expr narrow_b = lossless_cast(b.type().with_bits(bits), b);
+            Expr opb = narrow_b.defined() ? narrow_b : b;
+            value = call_intrin(op->type,
+                                "halide.hexagon.mpyi" +
+                                type_suffix(a, opb),
+                                {a, opb},
+                                true /*maybe*/);
+            if (value) return;
+        }
 
         // We didn't find an intrinsic for this type. Try again
         // without the scalar operand.

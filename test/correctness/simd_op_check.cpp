@@ -1541,15 +1541,15 @@ void check_hvx_all() {
     check("vmpy(v*.ub,r*.ub)", hvx_width/1, 3*u16(u8_1));
     check("vmpy(v*.uh,r*.uh)", hvx_width/2, 10*u32(u16_1));
 
+    check("vmpyi(v*.h,r*.b)", hvx_width/2, i16_1 * 127);
+    check("vmpyi(v*.h,r*.b)", hvx_width/2, 127 * i16_1);
+    check("vmpyi(v*.w,r*.h)", hvx_width/4, i32_1 * 32767);
+    check("vmpyi(v*.w,r*.h)", hvx_width/4, 32767 * i32_1);
+    check("vmpyi(v*.w,r*.b)", hvx_width/4, i32_1 * 127);
+    check("vmpyi(v*.w,r*.b)", hvx_width/4, 127 * i32_1);
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
-    // Curiously, these work only for double vectors. Should fix
-    // for single vectors.
-    check("vmpyi(v*.w,r*.h)", hvx_width/2, i32_1 * 252);
-    check("vmpyi(v*.w,r*.b)", hvx_width/2, i32_1 * 9);
-    check("vmpyi(v*.h,r*.b)", hvx_width/1, i16_1 * 10);
-
     // Todo: We don't generate vmpa(vdouble.ub, vdouble.b) yet.
     check("vmpa(v*:*.ub,v*:*.ub)", hvx_width, ((i16(u8_even) *5) + (i16(u8_odd) * 3)));
 
