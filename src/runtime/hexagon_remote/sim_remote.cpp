@@ -5,8 +5,6 @@
 #include <stdio.h>
 #include <dlfcn.h>
 
-#include <string.h>
-
 #include "hexagon_standalone.h"
 
 typedef struct _buffer__seq_octet _buffer__seq_octet;
