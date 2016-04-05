@@ -1231,10 +1231,15 @@ void CodeGen_LLVM::visit(const Cast *op) {
     } else if (dst.is_handle() || src.is_handle()) {
         internal_error << "Can't cast from " << src << " to " << dst << "\n";
     } else if (!src.is_float() && !dst.is_float()) {
+        if (value->getType()->isPointerTy()) {
+            value = builder->CreatePointerCast(value, llvm_dst);
+        }
+        else {
         // Widening integer casts either zero extend or sign extend,
         // depending on the source type. Narrowing integer casts
         // always truncate.
         value = builder->CreateIntCast(value, llvm_dst, src.is_int());
+        }
     } else if (src.is_float() && dst.is_int()) {
         value = builder->CreateFPToSI(value, llvm_dst);
     } else if (src.is_float() && dst.is_uint()) {
@@ -1471,11 +1476,11 @@ void CodeGen_LLVM::visit(const Mod *op) {
         int bits;
         if (is_const_power_of_two_integer(op->b, &bits)) {
             Expr one = make_one(op->b.type());
-            const Variable *v = op->a.as<Variable>();
-            if (v && ends_with(v->name, ".host"))
-                value = builder->CreateAnd(builder->CreatePtrToInt(codegen(op->a), llvm_type_of(op->b.type())),
-                                           codegen(op->b - one));
-            else
+            // const Variable *v = op->a.as<Variable>();
+            // if (v && ends_with(v->name, ".host"))
+            //     value = builder->CreateAnd(builder->CreatePtrToInt(codegen(op->a), llvm_type_of(op->b.type())),
+            //                                codegen(op->b - one));
+            // else
                 value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
         } else {
             Value *a = codegen(op->a);
