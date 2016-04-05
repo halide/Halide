@@ -114,7 +114,7 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id) {
 
     int buf_fd = ion_map(dev_ion, ion_h);
 
-    debug(user_context) << "    mmap map_size=" << (uint64_t)len << " Write Shared fd=" << buf_fd << " -> ";
+    debug(user_context) << "    mmap map_size=" << (uint64_t)len << " Read Write Shared fd=" << buf_fd << " -> ";
     void *mem = mmap(NULL, len, MapProtocol::Read | MapProtocol::Write, MapFlags::Shared, buf_fd, 0);
     if (mem == MAP_FAILED) {
         ion_free(dev_ion, ion_h);

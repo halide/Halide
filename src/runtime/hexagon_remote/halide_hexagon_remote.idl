@@ -11,8 +11,9 @@ interface halide_hexagon_remote
 
   // Routine to run a pipeline on the remote side.
   long run(in handle_t module_ptr, in handle_t symbol,
-           in sequence<buffer> input_buffers, in sequence<buffer> input_scalars, 
-           rout sequence<buffer> output_buffers);
+           in sequence<buffer> input_buffers,
+           rout sequence<buffer> output_buffers,
+           in sequence<buffer> input_scalars);
 
   // Routine to clean up a module on the remote side.
   long release_kernels(in handle_t module_ptr, in long size);
