@@ -28,7 +28,7 @@ gaussian3x3_run.o: gaussian3x3.o gaussian3x3.h gaussian3x3_run.cpp
 	${HEXAGON_CLANG} -c gaussian3x3_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include ${CXXFLAGS}
 
 gaussian3x3.out: gaussian3x3_run.o gaussian3x3.o gaussian3x3.h
-	${HEXAGON_CLANG}  -mv60 -o gaussian3x3.out gaussian3x3_run.o gaussian3x3.o -lhexagon
+	${HEXAGON_CLANG}  -mv60 -o gaussian3x3.out gaussian3x3_run.o gaussian3x3.o -lhexagon -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 all: gaussian3x3.out
 

@@ -145,6 +145,7 @@ std::vector<Pattern> casts = {
 
     // Widening casts
     { "halide.hexagon.zxt.vub", u16(wild_u8x), Pattern::InterleaveResult },
+    { "halide.hexagon.zxt.vub", i16(wild_u8x), Pattern::InterleaveResult },
     { "halide.hexagon.zxt.vuh", u32(wild_u16x), Pattern::InterleaveResult },
     { "halide.hexagon.sxt.vb", i16(wild_i8x), Pattern::InterleaveResult },
     { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
@@ -170,6 +171,7 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vh", u8(wild_i16x/256), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.vh", u8(wild_u16x), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.vw", u16(wild_u32x), Pattern::DeinterleaveOperands },
