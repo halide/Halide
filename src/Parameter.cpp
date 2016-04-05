@@ -32,7 +32,7 @@ struct ParameterContents {
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
         stride_constraint[0] = 1;
-        host_alignment = 1;
+        host_alignment = type.bytes();
     }
 };
 
