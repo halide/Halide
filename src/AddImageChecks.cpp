@@ -482,9 +482,9 @@ Stmt add_image_checks(Stmt s,
         if (param.defined() && param.host_alignment() != param.type().bytes()) {
             string host_name = name + ".host";
             int alignment_required = param.host_alignment();
-            Expr host_ptr = Variable::make(Int(32), host_name);
-            Expr u64t = cast(UInt(64), host_ptr);
-            Expr align_condition = (u64t % alignment_required) == 0;
+            Expr host_ptr = Variable::make(Handle(), host_name);
+            Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
+            Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
                                     {name, alignment_required}, Call::Extern);
             asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
