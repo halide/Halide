@@ -153,8 +153,8 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name,
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
-                              const buffer *input_scalarsPtrs, int input_scalarsLen,
-                              buffer *output_buffersPtrs, int output_buffersLen) {
+                              buffer *output_buffersPtrs, int output_buffersLen,
+                              const buffer *input_scalarsPtrs, int input_scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
@@ -178,14 +178,14 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         next_buffer_t->host = input_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
     }
-    // Input scalars are next.
-    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
-        *next_arg = input_scalarsPtrs[i].data;
-    }
-    // Output buffers are last.
+    // Output buffers are next.
     for (int i = 0; i < output_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = output_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
+    }
+    // Input scalars are last.
+    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
+        *next_arg = input_scalarsPtrs[i].data;
     }
 
     // Call the pipeline and return the result.

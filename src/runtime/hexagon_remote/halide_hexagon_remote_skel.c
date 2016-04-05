@@ -422,11 +422,11 @@ static const Type types[2];
 static const SequenceType sequenceTypes[1] = {{&(types[1]),0x0,0x4,0x4,0x0}};
 static const Type types[2] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)}};
 static const Parameter parameters[6] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0}};
-static const Parameter* const parameterArrays[11] = {(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[2])),(&(parameters[5])),(&(parameters[2])),(&(parameters[0])),(&(parameters[0])),(&(parameters[1]))};
+static const Parameter* const parameterArrays[11] = {(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[3])),(&(parameters[2])),(&(parameters[5])),(&(parameters[2])),(&(parameters[0])),(&(parameters[0])),(&(parameters[1]))};
 static const Method methods[4] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[9])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x0,0x0,0x0),0x8,0x0,3,2,(&(parameterArrays[7])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[0])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[5])),0x4,0x0}};
 static const Method* const methodArrays[4] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[3])};
 static const char strings[119] = "initialize_kernels\0release_kernels\0output_buffers\0input_scalars\0input_buffers\0get_symbol\0module_ptr\0size\0name\0code\0run\0";
-static const uint16_t methodStrings[15] = {115,89,82,64,50,35,19,89,100,78,89,105,0,110,89};
+static const uint16_t methodStrings[15] = {115,89,82,64,35,50,19,89,100,78,89,105,0,110,89};
 static const uint16_t methodStringsArrays[4] = {12,9,0,6};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {4,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
@@ -449,15 +449,7 @@ static __inline int _skel_method(int (*_pfn)(uint32_t, uint32_t), uint32_t _sc, 
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_pack(remote_arg* _praROutPost, remote_arg* _ppraROutPost[1], void* _primROut, char* _rout0[1], uint32_t _rout0Len[1]) {
-   int _nErr = 0;
-   remote_arg* _praROutPostStart = _praROutPost;
-   remote_arg** _ppraROutPostStart = _ppraROutPost;
-   _ppraROutPost = &_praROutPost;
-   _ppraROutPostStart[0] += (_praROutPost - _praROutPostStart) +1;
-   return _nErr;
-}
-static __inline int _skel_pack_1(remote_arg* _praROutPost, remote_arg* _ppraROutPost[1], void* _primROut, char* _in0[1], uint32_t _in0Len[1]) {
+static __inline int _skel_pack(remote_arg* _praROutPost, remote_arg* _ppraROutPost[1], void* _primROut, char* _in0[1], uint32_t _in0Len[1]) {
    int _nErr = 0;
    remote_arg* _praROutPostStart = _praROutPost;
    remote_arg** _ppraROutPostStart = _ppraROutPost;
@@ -465,23 +457,15 @@ static __inline int _skel_pack_1(remote_arg* _praROutPost, remote_arg* _ppraROut
    _ppraROutPostStart[0] += (_praROutPost - _praROutPostStart) +0;
    return _nErr;
 }
-static __inline int _skel_unpack(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], void* _primIn, void* _primROut, char* _rout0[1], uint32_t _rout0Len[1]) {
+static __inline int _skel_pack_1(remote_arg* _praROutPost, remote_arg* _ppraROutPost[1], void* _primROut, char* _rout0[1], uint32_t _rout0Len[1]) {
    int _nErr = 0;
-   remote_arg* _praInStart = _praIn;
-   remote_arg** _ppraInStart = _ppraIn;
-   remote_arg* _praROutStart = _praROut;
-   remote_arg** _ppraROutStart = _ppraROut;
-   _ppraIn = &_praIn;
-   _ppraROut = &_praROut;
-   _COPY(_rout0Len, 0, _primIn, 0, 4);
-   _ASSERT(_nErr, (int)((_praROut[0].buf.nLen / 1)) >= (int)(_rout0Len[0]));
-   _rout0[0] = _praROut[0].buf.pv;
-   _ppraInStart[0] += (_praIn - _praInStart) + 0;
-   _ppraROutStart[0] += (_praROut - _praROutStart) +1;
-   _CATCH(_nErr) {}
+   remote_arg* _praROutPostStart = _praROutPost;
+   remote_arg** _ppraROutPostStart = _ppraROutPost;
+   _ppraROutPost = &_praROutPost;
+   _ppraROutPostStart[0] += (_praROutPost - _praROutPostStart) +1;
    return _nErr;
 }
-static __inline int _skel_unpack_1(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], void* _primIn, void* _primROut, char* _in0[1], uint32_t _in0Len[1]) {
+static __inline int _skel_unpack(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], void* _primIn, void* _primROut, char* _in0[1], uint32_t _in0Len[1]) {
    int _nErr = 0;
    remote_arg* _praInStart = _praIn;
    remote_arg** _ppraInStart = _ppraIn;
@@ -497,16 +481,32 @@ static __inline int _skel_unpack_1(_allocator* _al, remote_arg* _praIn, remote_a
    _CATCH(_nErr) {}
    return _nErr;
 }
+static __inline int _skel_unpack_1(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], void* _primIn, void* _primROut, char* _rout0[1], uint32_t _rout0Len[1]) {
+   int _nErr = 0;
+   remote_arg* _praInStart = _praIn;
+   remote_arg** _ppraInStart = _ppraIn;
+   remote_arg* _praROutStart = _praROut;
+   remote_arg** _ppraROutStart = _ppraROut;
+   _ppraIn = &_praIn;
+   _ppraROut = &_praROut;
+   _COPY(_rout0Len, 0, _primIn, 0, 4);
+   _ASSERT(_nErr, (int)((_praROut[0].buf.nLen / 1)) >= (int)(_rout0Len[0]));
+   _rout0[0] = _praROut[0].buf.pv;
+   _ppraInStart[0] += (_praIn - _praInStart) + 0;
+   _ppraROutStart[0] += (_praROut - _praROutStart) +1;
+   _CATCH(_nErr) {}
+   return _nErr;
+}
 static __inline int _skel_method_1(int (*_pfn)(uint32_t, uint32_t, void*, uint32_t, void*, uint32_t, void*, uint32_t), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _in0[1];
    uint32_t _in1[1];
    void* _in2[1];
    uint32_t _in2Len[1];
-   void* _in3[1];
-   uint32_t _in3Len[1];
-   void* _rout4[1];
-   uint32_t _rout4Len[1];
+   void* _rout3[1];
+   uint32_t _rout3Len[1];
+   void* _in4[1];
+   uint32_t _in4Len[1];
    uint32_t* _primIn;
    int _numIn[1];
    remote_arg* _praIn;
@@ -540,32 +540,32 @@ static __inline int _skel_method_1(int (*_pfn)(uint32_t, uint32_t, void*, uint32
    _ALLOCATE(_nErr, _al, (_in2Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _in2[0]);
    for(_ii = 0, _seq_primIn2 = (char*)_praIn[0].buf.pv, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_primIn2 = (_seq_primIn2 + 4), _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
-      _TRY(_nErr, _skel_unpack_1(_al, (_praIn + 1), _ppraIn, (_praROut + 0), _ppraROut, _seq_primIn2, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
+      _TRY(_nErr, _skel_unpack(_al, (_praIn + 1), _ppraIn, (_praROut + 0), _ppraROut, _seq_primIn2, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
    }
-   _COPY(_in3Len, 0, _primIn, 12, 4);
-   _ASSERT(_nErr, (int)((_praIn[1].buf.nLen / 4)) >= (int)(_in3Len[0]));
-   _ALLOCATE(_nErr, _al, (_in3Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _in3[0]);
-   for(_ii = 0, _seq_primIn3 = (char*)_praIn[1].buf.pv, _seq_nat3 = (char*)_in3[0];_ii < (int)_in3Len[0];++_ii, _seq_primIn3 = (_seq_primIn3 + 4), _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
+   _COPY(_rout3Len, 0, _primIn, 12, 4);
+   _ASSERT(_nErr, (int)((_praIn[1].buf.nLen / 4)) >= (int)(_rout3Len[0]));
+   _ALLOCATE(_nErr, _al, (_rout3Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _rout3[0]);
+   for(_ii = 0, _seq_primIn3 = (char*)_praIn[1].buf.pv, _seq_nat3 = (char*)_rout3[0];_ii < (int)_rout3Len[0];++_ii, _seq_primIn3 = (_seq_primIn3 + 4), _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_unpack_1(_al, (_praIn + 2), _ppraIn, (_praROut + 0), _ppraROut, _seq_primIn3, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2]))));
    }
-   _COPY(_rout4Len, 0, _primIn, 16, 4);
-   _ASSERT(_nErr, (int)((_praIn[2].buf.nLen / 4)) >= (int)(_rout4Len[0]));
-   _ALLOCATE(_nErr, _al, (_rout4Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _rout4[0]);
-   for(_ii = 0, _seq_primIn4 = (char*)_praIn[2].buf.pv, _seq_nat4 = (char*)_rout4[0];_ii < (int)_rout4Len[0];++_ii, _seq_primIn4 = (_seq_primIn4 + 4), _seq_nat4 = (_seq_nat4 + SLIM_IFPTR32(8, 16)))
+   _COPY(_in4Len, 0, _primIn, 16, 4);
+   _ASSERT(_nErr, (int)((_praIn[2].buf.nLen / 4)) >= (int)(_in4Len[0]));
+   _ALLOCATE(_nErr, _al, (_in4Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _in4[0]);
+   for(_ii = 0, _seq_primIn4 = (char*)_praIn[2].buf.pv, _seq_nat4 = (char*)_in4[0];_ii < (int)_in4Len[0];++_ii, _seq_primIn4 = (_seq_primIn4 + 4), _seq_nat4 = (_seq_nat4 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_unpack(_al, (_praIn + 3), _ppraIn, (_praROut + 0), _ppraROut, _seq_primIn4, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat4)[0]), (char**)&(((uint64_t*)_seq_nat4)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat4)[1]), (uint32_t*)&(((uint32_t*)_seq_nat4)[2]))));
    }
-   _TRY(_nErr, _pfn(*_in0, *_in1, *_in2, *_in2Len, *_in3, *_in3Len, *_rout4, *_rout4Len));
+   _TRY(_nErr, _pfn(*_in0, *_in1, *_in2, *_in2Len, *_rout3, *_rout3Len, *_in4, *_in4Len));
    for(_ii = 0, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
-      _TRY(_nErr, _skel_pack_1((_praROutPost + 0), _ppraROutPost, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
+      _TRY(_nErr, _skel_pack((_praROutPost + 0), _ppraROutPost, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
    }
-   for(_ii = 0, _seq_nat3 = (char*)_in3[0];_ii < (int)_in3Len[0];++_ii, _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
+   for(_ii = 0, _seq_nat3 = (char*)_rout3[0];_ii < (int)_rout3Len[0];++_ii, _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_pack_1((_praROutPost + 0), _ppraROutPost, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2]))));
    }
-   for(_ii = 0, _seq_nat4 = (char*)_rout4[0];_ii < (int)_rout4Len[0];++_ii, _seq_nat4 = (_seq_nat4 + SLIM_IFPTR32(8, 16)))
+   for(_ii = 0, _seq_nat4 = (char*)_in4[0];_ii < (int)_in4Len[0];++_ii, _seq_nat4 = (_seq_nat4 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_pack((_praROutPost + 0), _ppraROutPost, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat4)[0]), (char**)&(((uint64_t*)_seq_nat4)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat4)[1]), (uint32_t*)&(((uint32_t*)_seq_nat4)[2]))));
    }

@@ -29,17 +29,15 @@ int main(int argc, char **argv) {
 
     Func f("f");
     f(x, y, c) = u8(sum(u16(input_bounded(x, y + ry, c)))/(2*radius + 1));
-    Func g("g");
-    g(x, y, c) = f(x, y, c);
 
     f.compute_root().hexagon(c).vectorize(x, 64);
 
-    g.output_buffer().set_min(0, 0).set_extent(0, (g.output_buffer().extent(0)/128)*128);
+    f.output_buffer().set_min(0, 0).set_extent(0, (f.output_buffer().extent(0)/128)*128);
 
-    g.compile_to_header("scale.h", {input}, "scale");
+    f.compile_to_header("scale.h", {input}, "scale");
     std::stringstream obj;
     obj << "scale-" << argv[1] << ".o";
-    g.compile_to_object(obj.str(), {input}, "scale", target);
+    f.compile_to_object(obj.str(), {input}, "scale", target);
 
     return 0;
 }

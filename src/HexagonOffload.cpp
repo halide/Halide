@@ -88,7 +88,9 @@ public:
             // Make an argument list, and generate a function in the
             // device_code module. The hexagon runtime code expects
             // the arguments to appear in the order of (input buffers,
-            // input scalars, output buffers).
+            // output buffers, input scalars).  There's a huge hack
+            // here, in that the scalars must be last for the scalar
+            // arguments to shadow the symbols of the buffer.
             std::vector<Argument> args;
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
@@ -97,14 +99,14 @@ public:
                 Argument::Kind kind = Argument::InputBuffer;
                 args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
             }
-            for (const auto& i : c.vars) {
-                args.push_back(Argument(i.first, Argument::InputScalar, i.second, 0));
-            }
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
                     Argument::Kind kind = Argument::OutputBuffer;
                     args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
                 }
+            }
+            for (const auto& i : c.vars) {
+                args.push_back(Argument(i.first, Argument::InputScalar, i.second, 0));
             }
             device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::External));
 

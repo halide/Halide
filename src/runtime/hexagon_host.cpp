@@ -281,17 +281,17 @@ WEAK int halide_hexagon_run(void *user_context,
                                            input_buffers);
     if (input_buffer_count < 0) return input_buffer_count;
 
-    // Then the input scalars.
-    remote_buffer *input_scalars = input_buffers + input_buffer_count;
-    int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
-                                           input_scalars);
-    if (input_scalar_count < 0) return input_scalar_count;
-
-    // And the output buffers.
-    remote_buffer *output_buffers = input_scalars + input_scalar_count;
+    // Then the output buffers.
+    remote_buffer *output_buffers = input_buffers + input_buffer_count;
     int output_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x2, 0x2,
                                             output_buffers);
     if (output_buffer_count < 0) return output_buffer_count;
+
+    // And the input scalars.
+    remote_buffer *input_scalars = output_buffers + output_buffer_count;
+    int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
+                                           input_scalars);
+    if (input_scalar_count < 0) return input_scalar_count;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before_run = halide_current_time_ns(user_context);
@@ -301,8 +301,8 @@ WEAK int halide_hexagon_run(void *user_context,
     debug(user_context) << "    halide_hexagon_remote_run -> \n";
     result = remote_run(module, *function,
                         input_buffers, input_buffer_count,
-                        input_scalars, input_scalar_count,
-                        output_buffers, output_buffer_count);
+                        output_buffers, output_buffer_count,
+                        input_scalars, input_scalar_count);
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
         error(user_context) << "Hexagon pipeline failed.\n";
