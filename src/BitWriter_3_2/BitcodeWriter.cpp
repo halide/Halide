@@ -632,7 +632,7 @@ static void WriteGenericDebugNode(const GenericDebugNode *,
   llvm_unreachable("unimplemented");
 }*/
 
-#if LLVM_VERSION >= 39 && CAUGHTUP
+#if LLVM_VERSION >= 39
 #define BITC_METADATA_STRING bitc::METADATA_STRING_OLD
 #else
 #define BITC_METADATA_STRING bitc::METADATA_STRING
