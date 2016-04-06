@@ -162,6 +162,7 @@ std::vector<Pattern> casts = {
     // Saturating narrowing casts
     { "halide.hexagon.satub.shr.vh.h", u8c(wild_i16x/wild_i16), Pattern::DeinterleaveOps | Pattern::ExactLog2Op1 },
     { "halide.hexagon.satuh.shr.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOps | Pattern::ExactLog2Op1 },
+    { "halide.hexagon.sath.shr.vw.w", i16c(wild_i32x/wild_i32), Pattern::DeinterleaveOps | Pattern::ExactLog2Op1 },
     { "halide.hexagon.satub.vh", u8c(wild_i16x), Pattern::DeinterleaveOps },
     { "halide.hexagon.sath.vw", i16c(wild_i32x), Pattern::DeinterleaveOps },
 
