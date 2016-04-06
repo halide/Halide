@@ -167,7 +167,7 @@ public:
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         compile_module_to_llvm_bitcode(device_code, "hex.bc");
-        int result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -shared -o hex.so");
+        int result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -shared -o hex.so");
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
