@@ -147,7 +147,10 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.zxt.vub", u16(wild_u8x), Pattern::InterleaveResult },
     { "halide.hexagon.zxt.vub", i16(wild_u8x), Pattern::InterleaveResult },
     { "halide.hexagon.zxt.vuh", u32(wild_u16x), Pattern::InterleaveResult },
+    { "halide.hexagon.zxt.vuh", i32(wild_u16x), Pattern::InterleaveResult },
+    { "halide.hexagon.sxt.vb", u16(wild_i8x), Pattern::InterleaveResult },
     { "halide.hexagon.sxt.vb", i16(wild_i8x), Pattern::InterleaveResult },
+    { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
     { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
 
     // Saturating narrowing casts
