@@ -144,7 +144,8 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, size_t code_size) {
-    init_hexagon_runtime(user_context);
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
 
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
@@ -171,8 +172,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         (*state)->next = state_list;
         state_list = *state;
     }
-
-    int result = 0;
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
@@ -242,7 +241,8 @@ WEAK int halide_hexagon_run(void *user_context,
                             int arg_flags[]) {
     halide_assert(user_context, state_ptr != NULL);
     halide_assert(user_context, function != NULL);
-    init_hexagon_runtime(user_context);
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
 
     halide_hexagon_handle_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
@@ -250,8 +250,6 @@ WEAK int halide_hexagon_run(void *user_context,
                         << "state_ptr: " << state_ptr << " (" << module << "), "
                         << "name: " << name << ", "
                         << "function: " << function << " (" << *function << "))\n";
-
-    int result = -1;
 
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
