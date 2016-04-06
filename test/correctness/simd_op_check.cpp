@@ -126,7 +126,9 @@ void check(string op, int vector_width, Expr e) {
     // The output to the pipeline is the maximum absolute difference as a double.
     RDom r(0, W, 0, H);
     Func error("error_" + name);
-    error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
+    Expr d = absd(f(r.x, r.y), f_scalar(r.x, r.y));
+    d = print_when(d != 0, d, " ", f(r.x, r.y), " ", f_scalar(r.x, r.y), " ", in_i16(r.x));
+    error() = cast<double>(maximum(d));
 
     vector<Argument> arg_types {in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
 
@@ -1438,6 +1440,11 @@ void check_hvx_all() {
     check("vpack(v*.w,v*.w)", hvx_width/2, u16c(i32_1));
     check("vpack(v*.h,v*.h)", hvx_width/1, i8c(i16_1));
     check("vsat(v*.w,v*.w)", hvx_width/2, i16c(i32_1));
+
+    check("vround(v*.h,v*.h)", hvx_width/1, u8c((i32(i16_1) + 128)/256));
+    check("vround(v*.h,v*.h)", hvx_width/1, i8c((i32(i16_1) + 128)/256));
+    check("vround(v*.w,v*.w)", hvx_width/2, u16c((i64(i32_1) + 32768)/65536));
+    check("vround(v*.w,v*.w)", hvx_width/2, i16c((i64(i32_1) + 32768)/65536));
 
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_u8(x/2), in_u8((x+16)/2)));
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_i8(x/2), in_i8((x+16)/2)));
