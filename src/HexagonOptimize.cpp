@@ -169,13 +169,20 @@ std::vector<Pattern> casts = {
 
     // Narrowing casts
     { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunclo.vh", u8(wild_i16x/256), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vh", i8(wild_u16x/256), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vw", u16(wild_i32x/65536), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vw", i16(wild_u32x/65536), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.vh", u8(wild_u16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vw", u16(wild_u32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vh", u8(wild_i16x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vh", i8(wild_u16x), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.vh", i8(wild_i16x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vw", u16(wild_u32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vw", u16(wild_i32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunchi.vw", i16(wild_u32x), Pattern::DeinterleaveOperands },
     { "halide.hexagon.trunchi.vw", i16(wild_i32x), Pattern::DeinterleaveOperands },
 };
 

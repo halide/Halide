@@ -1412,9 +1412,23 @@ void check_hvx_all() {
     check("vasl(v*.w,r*)", hvx_width/4, i32_1 << clamp(in_i32(0), 0, 31));
 
     check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16_1));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(u16_1));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16_1));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32_1));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(u32_1));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32_1));
+
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(i16_1 >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8(u16_1 >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8(i16_1 >> 8));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(i32_1 >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(u32_1 >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(i32_1 >> 16));
+
     check("vsat(v*.h,v*.h)", hvx_width/1, u8c(i16_1));
     check("vpack(v*.w,v*.w)", hvx_width/2, u16c(i32_1));
     check("vpack(v*.h,v*.h)", hvx_width/1, i8c(i16_1));
