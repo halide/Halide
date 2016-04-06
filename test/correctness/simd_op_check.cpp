@@ -1328,8 +1328,13 @@ void check_hvx_all() {
     }
 
     check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
+    check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
     check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
+    check("vzxt(v*.uh)", hvx_width/2, i32(u16_1));
+
+    check("vsxt(v*.b)", hvx_width/1, u16(i8_1));
     check("vsxt(v*.b)", hvx_width/1, i16(i8_1));
+    check("vsxt(v*.h)", hvx_width/2, u32(i16_1));
     check("vsxt(v*.h)", hvx_width/2, i32(i16_1));
 
     check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
