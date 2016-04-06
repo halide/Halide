@@ -1441,6 +1441,11 @@ void check_hvx_all() {
     check("vpack(v*.h,v*.h)", hvx_width/1, i8c(i16_1));
     check("vsat(v*.w,v*.w)", hvx_width/2, i16c(i32_1));
 
+    check("vround(v*.h,v*.h)", hvx_width/1, u8c((i32(i16_1) + 128)/256));
+    check("vround(v*.h,v*.h)", hvx_width/1, i8c((i32(i16_1) + 128)/256));
+    check("vround(v*.w,v*.w)", hvx_width/2, u16c((i64(i32_1) + 32768)/65536));
+    check("vround(v*.w,v*.w)", hvx_width/2, i16c((i64(i32_1) + 32768)/65536));
+
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_u8(x/2), in_u8((x+16)/2)));
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_i8(x/2), in_i8((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, in_u16(x/2), in_u16((x+16)/2)));
