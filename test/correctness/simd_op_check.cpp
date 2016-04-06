@@ -1402,6 +1402,8 @@ void check_hvx_all() {
     check("vlsr(v*.w,v*.w)", hvx_width/4, u32_1 >> clamp(u32_2, 0, 31));
     check("vasr(v*.h,v*.h)", hvx_width/2, i16_1 >> clamp(i16_2, 0, 15));
     check("vasr(v*.w,v*.w)", hvx_width/4, i32_1 >> clamp(i32_2, 0, 31));
+    check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8c(i16_1 >> 4));
+    check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c(i32_1 >> 8));
     check("vasl(v*.h,v*.h)", hvx_width/2, u16_1 << clamp(u16_2, 0, 15));
     check("vasl(v*.w,v*.w)", hvx_width/4, u32_1 << clamp(u32_2, 0, 31));
     check("vasl(v*.h,v*.h)", hvx_width/2, i16_1 << clamp(i16_2, 0, 15));

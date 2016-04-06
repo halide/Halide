@@ -91,6 +91,7 @@ struct Pattern {
         SwapOperands = 1 << 2,  ///< Swap operands prior to substitution.
         LosslessCastOp0 = 1 << 3, // Proceed only if lossless_cast on the first operand succeeds with the type of the first operand.
         LosslessCastOp1 = 1 << 4,  // Proceed only if lossless_cast on second operand succeeds with the type of the first operand.
+        ExactLog2Op1 = 1 << 5, // Proceed only if the second operand, i.e. op1 is scalar constant which is a power of two. We'll use its log to the base 2.
     };
     string intrin;        ///< Name of the intrinsic
     Expr pattern;         ///< The pattern to match against
@@ -160,6 +161,8 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.round.vw",  i16c((i64(wild_i32x) + 32768)/65536), Pattern::DeinterleaveOps },
 
     // Saturating narrowing casts
+    { "halide.hexagon.satub.shr.vh.h", u8c(wild_i16x/wild_i16), Pattern::DeinterleaveOps | Pattern::ExactLog2Op1 },
+    { "halide.hexagon.satuh.shr.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOps | Pattern::ExactLog2Op1 },
     { "halide.hexagon.satub.vh", u8c(wild_i16x), Pattern::DeinterleaveOps },
     { "halide.hexagon.sath.vw", i16c(wild_i32x), Pattern::DeinterleaveOps },
 
@@ -249,6 +252,15 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                     Expr b = lossless_cast(t.with_bits(t.bits()/2).with_lanes(1), matches[op_num]);
                     if (!b.defined())  continue;
                     else matches[op_num] = b;
+                }
+                if (p.flags & Pattern::ExactLog2Op1) {
+                    // This flag is mainly to capture right shifts. When the divisors in divisions
+                    // are powers of two we can generate right shifts.
+                    internal_assert(matches.size() == 2);
+                    int pow;
+                    if (is_const_power_of_two_integer(matches[1], &pow)) {
+                        matches[1] = cast(matches[1].type().with_lanes(1), pow);
+                    } else continue;
                 }
                 if (p.flags & Pattern::SwapOperands) {
                     std::swap(matches[0], matches[1]);
