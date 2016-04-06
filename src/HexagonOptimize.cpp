@@ -86,7 +86,7 @@ Expr u8c(Expr e) { return u8(simplified_clamp(e, min_u8, max_u8)); }
 
 struct Pattern {
     enum Flags {
-        DeinterleaveOperands = 1 << 0,  ///< Prior to evaluating the pattern, deinterleave native vectors of the operands.
+        DeinterleaveOps = 1 << 0,  ///< Prior to evaluating the pattern, deinterleave native vectors of the operands.
         InterleaveResult = 1 << 1,  ///< After evaluating the pattern, interleave native vectors of the result.
         SwapOperands = 1 << 2,  ///< Swap operands prior to substitution.
         LosslessCastOp0 = 1 << 3, // Proceed only if lossless_cast on the first operand succeeds with the type of the first operand.
@@ -153,9 +153,15 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
     { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
 
+    // Saturating narrowing casts with rounding
+    { "halide.hexagon.roundu.vh", u8c((i32(wild_i16x) + 128)/256), Pattern::DeinterleaveOps },
+    { "halide.hexagon.round.vh",  i8c((i32(wild_i16x) + 128)/256), Pattern::DeinterleaveOps },
+    { "halide.hexagon.roundu.vw", u16c((i64(wild_i32x) + 32768)/65536), Pattern::DeinterleaveOps },
+    { "halide.hexagon.round.vw",  i16c((i64(wild_i32x) + 32768)/65536), Pattern::DeinterleaveOps },
+
     // Saturating narrowing casts
-    { "halide.hexagon.satub.vh", u8c(wild_i16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.sath.vw", i16c(wild_i32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.satub.vh", u8c(wild_i16x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.sath.vw", i16c(wild_i32x), Pattern::DeinterleaveOps },
 
     // Note the absence of deinterleaving the operands. This is a
     // problem because we can't simplify away the interleaving
@@ -171,22 +177,22 @@ std::vector<Pattern> casts = {
     //{ "halide.hexagon.trunchi.sath.vw", i16c(wild_i32x) },
 
     // Narrowing casts
-    { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vh", u8(wild_i16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vh", i8(wild_u16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vw", u16(wild_i32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vw", i16(wild_u32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vh", u8(wild_u16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vh", u8(wild_i16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vh", i8(wild_u16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vh", i8(wild_i16x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vw", u16(wild_u32x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vw", u16(wild_i32x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vw", i16(wild_u32x), Pattern::DeinterleaveOperands },
-    { "halide.hexagon.trunchi.vw", i16(wild_i32x), Pattern::DeinterleaveOperands },
+    { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vh", u8(wild_i16x/256), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vh", i8(wild_u16x/256), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vw", u16(wild_i32x/65536), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vw", i16(wild_u32x/65536), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vh", u8(wild_u16x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vh", u8(wild_i16x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vh", i8(wild_u16x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vh", i8(wild_i16x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vw", u16(wild_u32x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vw", u16(wild_i32x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vw", i16(wild_u32x), Pattern::DeinterleaveOps },
+    { "halide.hexagon.trunchi.vw", i16(wild_i32x), Pattern::DeinterleaveOps },
 };
 
 std::vector<Pattern> muls = {
@@ -223,7 +229,7 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                 for (Expr &op : matches) {
                     op = op_mutator->mutate(op);
                 }
-                if (p.flags & Pattern::DeinterleaveOperands) {
+                if (p.flags & Pattern::DeinterleaveOps) {
                     // The pattern wants us to deinterleave the operands.
                     for (Expr &op : matches) {
                         // Only deinterleave vector operands.

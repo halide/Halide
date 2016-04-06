@@ -198,6 +198,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.satb.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sath.vw",  {i32x2} },
 
+        { IPICK(Intrinsic::hexagon_V6_vroundhub), u8x1,  "roundu.vh", {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundhb),  i8x1,  "round.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundwuh), u16x1, "roundu.vw", {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundwh),  i16x1, "round.vw",  {i32x2} },
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
