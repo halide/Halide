@@ -190,6 +190,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
+        { IPICK(Intrinsic::hexagon_V6_vasrhubsat), u8x1, "satub.shr.vh.h", {i16x2, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwuhsat), u16x1, "satuh.shr.vw.w", {i32x2, i32} },
         { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "satub.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sath.vw",   {i32x2} },
 

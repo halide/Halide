@@ -31,7 +31,7 @@ conv3x3a16_run.o: conv3x3a16.o conv3x3a16.h conv3x3a16_run.cpp
 	${HEXAGON_CLANG} -c conv3x3a16_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 conv3x3a16.out: conv3x3a16_run.o conv3x3a16.o conv3x3a16.h
-	${HEX_TOOLS}/bin/hexagon-clang -mv60 -o conv3x3a16.out conv3x3a16_run.o conv3x3a16.o -lhexagon
+	${HEX_TOOLS}/bin/hexagon-clang -mv60 -o conv3x3a16.out conv3x3a16_run.o conv3x3a16.o -lhexagon -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 clean:
 	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0
