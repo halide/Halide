@@ -51,7 +51,17 @@ class AllocationInference : public IRMutator {
         stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
 
         internal_assert(b.size() == op->bounds.size());
+
         for (size_t i = 0; i < b.size(); i++) {
+            // Get any applicable bound on this dimension
+            Bound bound;
+            for (size_t j = 0; j < f.schedule().bounds().size(); j++) {
+                Bound b = f.schedule().bounds()[j];
+                if (f.args()[i] == b.var) {
+                    bound = b;
+                }
+            }
+
             string prefix = op->name + "." + f.args()[i];
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
@@ -60,12 +70,30 @@ class AllocationInference : public IRMutator {
                 user_error << op->name << " is accessed over an unbounded domain in dimension "
                            << f.args()[i] << "\n";
             }
-            Expr min = simplify(b[i].min);
-            Expr max = simplify(b[i].max);
-            Expr extent = simplify((max - min) + 1);
+            Expr min, max, extent;
+            if (bound.min.defined()) {
+                min = bound.min;
+            } else {
+                min = simplify(b[i].min);
+            }
+            if (bound.extent.defined()) {
+                extent = bound.extent;
+                max = min + extent - 1;
+            } else {
+                max = simplify(b[i].max);
+                extent = simplify((max - min) + 1);
+            }
+
             stmt = LetStmt::make(extent_name, extent, stmt);
             stmt = LetStmt::make(min_name, min, stmt);
             stmt = LetStmt::make(max_name, max, stmt);
+
+            if (bound.min.defined()) {
+                stmt = Block::make(AssertStmt::make(min <= b[i].min, -1), stmt);
+            }
+            if (bound.extent.defined()) {
+                stmt = Block::make(AssertStmt::make(max >= b[i].max, -1), stmt);
+            }
         }
 
     }
