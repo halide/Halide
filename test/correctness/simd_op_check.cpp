@@ -126,9 +126,7 @@ void check(string op, int vector_width, Expr e) {
     // The output to the pipeline is the maximum absolute difference as a double.
     RDom r(0, W, 0, H);
     Func error("error_" + name);
-    Expr d = absd(f(r.x, r.y), f_scalar(r.x, r.y));
-    d = print_when(d != 0, d, " ", f(r.x, r.y), " ", f_scalar(r.x, r.y), " ", in_i16(r.x));
-    error() = cast<double>(maximum(d));
+    error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
     vector<Argument> arg_types {in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
 
