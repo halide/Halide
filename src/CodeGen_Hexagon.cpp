@@ -1103,6 +1103,27 @@ void CodeGen_Hexagon::visit(const Select *op) {
         value = call_intrin(op->type,
                             "halide.hexagon.mux" + type_suffix(t, f, false),
                             {cond, t, f});
+    } else if (op->type.is_vector()) {
+        // Implement scalar conditions with if-then-else.
+        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
+
+        builder->SetInsertPoint(true_bb);
+        Value *true_value = codegen(op->true_value);
+        builder->CreateBr(after_bb);
+
+        builder->SetInsertPoint(false_bb);
+        Value *false_value = codegen(op->false_value);
+        builder->CreateBr(after_bb);
+
+        builder->SetInsertPoint(after_bb);
+        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+        phi->addIncoming(true_value, true_bb);
+        phi->addIncoming(false_value, false_bb);
+
+        value = phi;
     } else {
         CodeGen_Posix::visit(op);
     }
