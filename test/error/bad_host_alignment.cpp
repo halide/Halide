@@ -32,5 +32,5 @@ int main(int argc, char **argv) {
 
     printf("I should not have reached here\n");
 
-    return -1;
+    return 0;
 }
