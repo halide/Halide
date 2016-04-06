@@ -469,8 +469,8 @@ private:
                 // Only the original value is used, regenerate the let.
                 result = LetType::make(op->name, value, result);
             } else {
-                // This is probably a bug? We killed the usage of the let?
-                internal_error << "EliminateInterleaves eliminated use of '" << op->name << "'\n";
+                // The let must have been dead.
+                internal_assert(!uses_var(op->body, op->name)) << "EliminateInterleaves eliminated a non-dead let.\n";
             }
         }
     }

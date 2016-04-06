@@ -380,6 +380,7 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret
 }
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const std::string &name,
                                                       const std::vector<Type> &arg_types, bool broadcast_scalar_word) {
+    internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
 
     // Get the types of the arguments we want to pass.
