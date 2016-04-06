@@ -270,14 +270,19 @@ public:
                     const Bound &bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
+                    Expr min_required = Variable::make(Int(32), min_var);
+                    Expr max_required = Variable::make(Int(32), max_var);
+
                     Expr min_bound = bound.min;
-                    Expr max_bound = (bound.min + bound.extent) - 1;
+                    if (!min_bound.defined()) {
+                        min_bound = min_required;
+                    }
+                    Expr max_bound = (min_bound + bound.extent) - 1;
+
                     s = LetStmt::make(min_var, min_bound, s);
                     s = LetStmt::make(max_var, max_bound, s);
 
                     // Save the unbounded values to use in bounds-checking assertions
-                    Expr min_required = Variable::make(Int(32), min_var);
-                    Expr max_required = Variable::make(Int(32), max_var);
                     s = LetStmt::make(min_var + "_unbounded", min_required, s);
                     s = LetStmt::make(max_var + "_unbounded", max_required, s);
                 }
@@ -381,7 +386,7 @@ public:
             }
 
             // Make the extern call
-            Expr e = Call::make(Int(32), extern_name, bounds_inference_args, 
+            Expr e = Call::make(Int(32), extern_name, bounds_inference_args,
                                 func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern);
             // Check if it succeeded
             string result_name = unique_name('t');
