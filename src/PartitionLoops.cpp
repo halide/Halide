@@ -286,7 +286,7 @@ private:
         // partition accordingly.
         IRVisitor::visit(op);
         const Call *call = op->condition.as<Call>();
-        if (call && call->call_type == Call::Intrinsic && call->name == Call::likely) {
+        if (call && call->is_intrinsic(Call::likely)) {
             new_simplification(op->condition, op->condition, const_true(), const_false());
         }
     }
