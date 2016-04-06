@@ -49,6 +49,7 @@ buffer_t make_buffer(int w, int h) {
 
 int main(int argc, char **argv) {
     const int W = 512, H = 128;
+    bool error = false;
     // Make some input buffers
     buffer_t bufs[] = {
         make_buffer<float>(W, H),
@@ -81,7 +82,10 @@ int main(int argc, char **argv) {
              bufs + 8,
              bufs + 9,
              &out);
-        if (*out_value) printf("Error: %f\n", *out_value);
+        if (*out_value) {
+            printf("Error: %f\n", *out_value);
+            error = true;
+        }
     }
 
     for (int i = 0; i < sizeof(bufs)/sizeof(buffer_t); i++) {
@@ -89,5 +93,11 @@ int main(int argc, char **argv) {
     }
     delete[] out.host;
 
-    return 0;
+    if (!error) {
+        printf ("Success!\n");
+        return 0;
+    } else {
+        printf ("Error occurred\n");
+        return -1;
+    }
 }
