@@ -14,13 +14,13 @@ using std::vector;
 using std::string;
 
 Expr deinterleave(Expr x, const Target &target) {
-    int lanes = target.natural_vector_size(x.type());
+    int lanes = target.natural_vector_size(x.type().element_of());
     return Call::make(x.type(), "hexagon_deinterleave",
                       {x, lanes}, Call::PureExtern);
 }
 
 Expr interleave(Expr x, const Target &target) {
-    int lanes = target.natural_vector_size(x.type());
+    int lanes = target.natural_vector_size(x.type().element_of());
     return Call::make(x.type(), "hexagon_interleave",
                       {x, lanes}, Call::PureExtern);
 }
@@ -460,8 +460,10 @@ private:
                 // deinterleaved version of this let. Generate both
                 // lets, using the deinterleaved one to generate the
                 // interleaved one.
-                result = LetType::make(op->name, interleave(deinterleaved_name), result);
-                result = LetType::make(deinterleaved_name, remove_interleave(value), result);
+                Expr deinterleaved = remove_interleave(value);
+                Expr deinterleaved_var = Variable::make(deinterleaved.type(), deinterleaved_name);
+                result = LetType::make(op->name, interleave(deinterleaved_var), result);
+                result = LetType::make(deinterleaved_name, deinterleaved, result);
             } else if (deinterleaved_used) {
                 // Only the deinterleaved value is used, we can eliminate the interleave.
                 result = LetType::make(deinterleaved_name, remove_interleave(value), result);
