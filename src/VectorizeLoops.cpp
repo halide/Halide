@@ -394,7 +394,7 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 int lanes = std::max(value.type().lanes(), index.type().lanes());
-                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes));
+                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes), op->param);
             }
         }
 

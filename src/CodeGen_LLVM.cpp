@@ -1054,8 +1054,7 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
 
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
-    if (!target.has_cgoption(Target::BuffersAligned))
-      might_be_misaligned.insert(name);
+    external_buffer.insert(name);
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1825,7 +1824,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
 void CodeGen_LLVM::visit(const Load *op) {
 
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (op->type.is_handle()) {
@@ -1856,15 +1855,21 @@ void CodeGen_LLVM::visit(const Load *op) {
             // can infer based on the index alone.
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = get_alignment_info(ramp->base);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
-                       (mod_rem.modulus & 1) == 0 &&
-                       alignment < native_bytes) {
-                    mod_rem.modulus /= 2;
-                    mod_rem.remainder /= 2;
-                    alignment *= 2;
-                }
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            while ((mod_rem.remainder & 1) == 0 &&
+                   (mod_rem.modulus & 1) == 0 &&
+                   alignment < native_bytes) {
+                mod_rem.modulus /= 2;
+                mod_rem.remainder /= 2;
+                alignment *= 2;
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector loads wider than the native vector
@@ -3288,13 +3293,13 @@ void CodeGen_LLVM::visit(const Store *op) {
     // memory, so convert stores of handles to stores of uint64_ts.
     if (op->value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
-        codegen(Store::make(op->name, v, op->index));
+        codegen(Store::make(op->name, v, op->index, op->param));
         return;
     }
 
     Halide::Type value_type = op->value.type();
     Value *val = codegen(op->value);
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -3309,15 +3314,21 @@ void CodeGen_LLVM::visit(const Store *op) {
             int native_bytes = native_bits / 8;
 
             // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = get_alignment_info(ramp->base);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
-                       (mod_rem.modulus & 1) == 0 &&
-                       alignment < native_bytes) {
-                    mod_rem.modulus /= 2;
-                    mod_rem.remainder /= 2;
-                    alignment *= 2;
-                }
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            while ((mod_rem.remainder & 1) == 0 &&
+                   (mod_rem.modulus & 1) == 0 &&
+                   alignment < native_bytes) {
+                mod_rem.modulus /= 2;
+                mod_rem.remainder /= 2;
+                alignment *= 2;
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least the native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector stores wider than the native vector

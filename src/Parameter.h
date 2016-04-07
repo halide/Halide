@@ -138,9 +138,11 @@ public:
     EXPORT void set_min_constraint(int dim, Expr e);
     EXPORT void set_extent_constraint(int dim, Expr e);
     EXPORT void set_stride_constraint(int dim, Expr e);
+    EXPORT void set_host_alignment(int bytes);
     EXPORT Expr min_constraint(int dim) const;
     EXPORT Expr extent_constraint(int dim) const;
     EXPORT Expr stride_constraint(int dim) const;
+    EXPORT int host_alignment() const;
     //@}
 
     /** Get and set constraints for scalar parameters. These are used
