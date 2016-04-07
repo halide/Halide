@@ -128,7 +128,7 @@ struct halide_handle_cplusplus_type {
 
 template<typename T>
 struct halide_c_type_to_name {
-  static constexpr bool known_type = false;
+  static const bool known_type = false;
 };
 
 template<> struct halide_c_type_to_name<bool> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple, "bool"}; } };
