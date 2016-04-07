@@ -244,8 +244,10 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr value, index;
+    // If it's a store to an output buffer, then this parameter points to it.
+    Parameter param;
 
-    EXPORT static Stmt make(std::string name, Expr value, Expr index);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index, Parameter param);
 };
 
 /** This defines the value of a function at a multi-dimensional

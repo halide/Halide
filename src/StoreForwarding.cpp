@@ -286,9 +286,9 @@ class UseScratch : public IRMutator {
 
             string var_name = unique_name('t');
             Expr var = Variable::make(value.type(), var_name);
-            Stmt store_to_orig = Store::make(op->name, var, op->index);
+            Stmt store_to_orig = Store::make(op->name, var, op->index, op->param);
             string next_buf_name = name + ".next";
-            Stmt store_to_next = Store::make(next_buf_name, var, scratch_index(value.type()));
+            Stmt store_to_next = Store::make(next_buf_name, var, scratch_index(value.type()), op->param);
             stmt = LetStmt::make(var_name, value, Block::make(store_to_orig, store_to_next));
 
             // TODO: storing to next is only necessary if there are later loads from scratch.
@@ -368,7 +368,7 @@ class StoreForwarding : public IRMutator {
                     // At the end of the loop body, store the local variable to the scratch
                     internal_assert(u.value_var.defined());
                     Expr idx = scratch_index(u.value_var.type());
-                    Stmt store_to_scratch = Store::make(b.name, u.value_var, idx);
+                    Stmt store_to_scratch = Store::make(b.name, u.value_var, idx, Parameter());
                     body = Block::make(body, store_to_scratch);
 
                     // That should cover all loads that match this
@@ -391,7 +391,7 @@ class StoreForwarding : public IRMutator {
         for (auto b : scratch_buffers) {
             // Make and initialize the scratch buffer
             Stmt store =
-                Store::make(b.name, b.initial_value, scratch_index(b.initial_value.type()));
+                Store::make(b.name, b.initial_value, scratch_index(b.initial_value.type()), Parameter());
             if (store_init.defined()) {
                 store_init = Block::make(store_init, store);
             } else {
@@ -625,7 +625,7 @@ class LoopCarryOverLoop : public IRMutator {
                         // We need to store this for the next loop iteration to use.
                         Expr idx = scratch_index(t);
                         Expr value = Variable::make(t, it->second.prev_name);
-                        result_stores.push_back(Store::make(it->second.scratch_name, value, idx));
+                        result_stores.push_back(Store::make(it->second.scratch_name, value, idx, Parameter()));
                     }
                 }
 
@@ -688,7 +688,7 @@ class LoopCarryOverLoop : public IRMutator {
         if (stores.empty()) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, new_value, new_index);
+            stmt = Store::make(op->name, new_value, new_index, op->param);
             stmt = append_stores(stmt, stores);
             stmt = wrap_with_lets(stmt, lets);
         }
@@ -853,7 +853,7 @@ class StoreForwarding2 : public IRMutator {
                 // can change if we move it.
                 string var_name = unique_name('t');
                 Expr var = Variable::make(store->value.type(), var_name);
-                Stmt new_store = Store::make(store->name, var, store->index);
+                Stmt new_store = Store::make(store->name, var, store->index, store->param);
                 ForwardSingleStore forwarder(new_store.as<Store>());
                 Stmt new_rest = forwarder.mutate(rest);
                 if (new_rest.same_as(rest)) {
@@ -1475,7 +1475,7 @@ class LoopCarry2 : public IRMutator {
             //   }
             //
             //          to
-            // 
+            //
             //   allocate b[1], int32
             //   b[0] = 0
             //   for (y, 0, extent) {
@@ -1542,7 +1542,7 @@ class LoopCarry2 : public IRMutator {
 
                 // Outside the loop, put the first loop iteration's
                 // version of this value in the scratch buffer.
-                Stmt init = Store::make(it->second.scratch_name, l.second, idx);
+                Stmt init = Store::make(it->second.scratch_name, l.second, idx, Parameter());
                 initialize_scratch_stores.push_back(init);
             }
 
@@ -1550,7 +1550,7 @@ class LoopCarry2 : public IRMutator {
             if (it != carried_values_by_save_name.end()) {
                 // We need to store this for the next loop iteration to use.
                 Expr value = Variable::make(t, it->second.save_for_next_var);
-                save_stores.push_back(Store::make(it->second.scratch_name, value, idx));
+                save_stores.push_back(Store::make(it->second.scratch_name, value, idx, Parameter()));
                 scratch_buffers.push_back(make_pair(it->second.scratch_name, value.type()));
             }
         }
