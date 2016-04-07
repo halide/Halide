@@ -459,6 +459,11 @@ enum halide_error_code_t {
      * a GPU kernel. Turn on -debug in your target string to see more
      * details. */
     halide_error_code_device_run_failed = -23,
+
+    /** The Halide runtime encountered a host pointer that violated
+     * the alignment set for it by way of a call to
+     * set_host_alignment */
+    halide_error_code_unaligned_host_ptr = -24,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -511,6 +516,8 @@ extern int halide_error_out_of_memory(void *user_context);
 extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
+extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+
 // @}
 
 /** Types in the halide type system. They can be ints, unsigned ints,

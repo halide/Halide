@@ -871,7 +871,19 @@ private:
         llvm::object::ObjectFile *obj = nullptr;
 
         // Open the object file in question. The API to do this keeps changing.
-        #if LLVM_VERSION >= 36
+        #if LLVM_VERSION >= 39
+
+        llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
+
+        if (!maybe_obj) {
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
+        }
+
+        obj = maybe_obj.get().getBinary();
+
+        #elif LLVM_VERSION >= 36
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);

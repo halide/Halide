@@ -126,6 +126,20 @@ static unsigned GetEncodedRMWOperation(AtomicRMWInst::BinOp Op) {
   }
 }
 
+#if LLVM_VERSION >= 39
+static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
+  switch (Ordering) {
+  case AtomicOrdering::NotAtomic: return bitc::ORDERING_NOTATOMIC;
+  case AtomicOrdering::Unordered: return bitc::ORDERING_UNORDERED;
+  case AtomicOrdering::Monotonic: return bitc::ORDERING_MONOTONIC;
+  case AtomicOrdering::Acquire: return bitc::ORDERING_ACQUIRE;
+  case AtomicOrdering::Release: return bitc::ORDERING_RELEASE;
+  case AtomicOrdering::AcquireRelease: return bitc::ORDERING_ACQREL;
+  case AtomicOrdering::SequentiallyConsistent: return bitc::ORDERING_SEQCST;
+  }
+  llvm_unreachable("Invalid ordering");
+}
+#else
 static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
   switch (Ordering) {
   case NotAtomic: return bitc::ORDERING_NOTATOMIC;
@@ -138,6 +152,7 @@ static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
   }
   llvm_unreachable("Invalid ordering");
 }
+#endif
 
 static unsigned GetEncodedSynchScope(SynchronizationScope SynchScope) {
   switch (SynchScope) {

@@ -898,7 +898,6 @@ void CodeGen_Hexagon::visit(const Load *op) {
   if (op->type.is_vector() && isValidHexagonVector(op->type,
                                                    native_vector_bits())) {
 
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
     if (ramp && stride && stride->value == 1) {
@@ -925,7 +924,7 @@ void CodeGen_Hexagon::visit(const Load *op) {
       // So for us to be able to generate an aligned load, ramp->base
       // should be
       // (lanes * c1) + c2.
-      if (!possibly_misaligned && !(mod_rem.modulus % lanes)) {
+      if (!(mod_rem.modulus % lanes)) {
         if (mod_rem.remainder == 0) {
           // This is a perfectly aligned address. Vanilla codegen can deal with
           // this.
