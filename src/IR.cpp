@@ -364,7 +364,7 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index) {
+Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
 
@@ -372,6 +372,7 @@ Stmt Store::make(std::string name, Expr value, Expr index) {
     node->name = name;
     node->value = value;
     node->index = index;
+    node->param = param;
     return node;
 }
 

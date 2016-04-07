@@ -3388,7 +3388,7 @@ private:
         } else if (value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index);
+            stmt = Store::make(op->name, value, index, op->param);
         }
     }
 
