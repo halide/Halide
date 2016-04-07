@@ -1573,6 +1573,11 @@ void check_hvx_all() {
     check("vmpyi(v*.w,r*.h)", hvx_width/4, 32767 * i32_1);
     check("vmpyi(v*.w,r*.b)", hvx_width/4, i32_1 * 127);
     check("vmpyi(v*.w,r*.b)", hvx_width/4, 127 * i32_1);
+
+    check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
+    check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
+    check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));
+
     // We know the following don't work yet; They are WIP. Do this to sort of
     // XFAIL them.
 #if 0
