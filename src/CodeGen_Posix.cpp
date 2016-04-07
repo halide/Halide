@@ -70,6 +70,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Only allocate memory if the condition is true, otherwise 0.
+    Value *llvm_condition = codegen(condition);
     if (llvm_size != nullptr) {
         // We potentially load one scalar value past the end of the
         // buffer, so pad the allocation with an extra instance of the
@@ -79,7 +80,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         llvm_size = builder->CreateAdd(llvm_size,
                                        ConstantInt::get(llvm_size->getType(), type.bytes()));
 
-        Value *llvm_condition = codegen(condition);
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
                                           ConstantInt::get(llvm_size->getType(), 0));
@@ -155,9 +155,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Assert that the allocation worked.
         Value *check = builder->CreateIsNotNull(allocation.ptr);
-        if (!new_expr.defined()) { // Zero sized allocation if allowed for custom new...
+        if (llvm_size) {
             Value *zero_size = builder->CreateIsNull(llvm_size);
             check = builder->CreateOr(check, zero_size);
+        }
+        if (!is_one(condition)) {
+            // If the condition is false, it's OK for the new_expr to be null.
+            Value *condition_is_false = builder->CreateIsNull(llvm_condition);
+            check = builder->CreateOr(check, condition_is_false);
         }
 
         create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
