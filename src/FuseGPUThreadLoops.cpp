@@ -443,10 +443,10 @@ class ExtractSharedAllocations : public IRMutator {
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                stmt = Store::make(shared_mem_name + "_" + op->name, value, index);
+                stmt = Store::make(shared_mem_name + "_" + op->name, value, index, op->param);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                stmt = Store::make(shared_mem_name, value, base + index);
+                stmt = Store::make(shared_mem_name, value, base + index, op->param);
             }
         } else {
             IRMutator::visit(op);
