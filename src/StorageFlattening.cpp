@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Bounds.h"
+#include "Parameter.h"
 
 namespace Halide {
 namespace Internal {
@@ -226,10 +227,15 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        vector<Parameter> output_buffers;
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
-            if (is_output) break;
+            if (is_output) {
+                output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
+                break;
+            }
         }
 
         Stmt result;
@@ -238,7 +244,7 @@ private:
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
-            Stmt store = Store::make(cv.name, var, idx);
+            Stmt store = Store::make(cv.name, var, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -259,9 +265,15 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        vector<Parameter> output_buffers;
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
+            if (is_output) {
+                output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
+                break;
+            }
         }
 
         Stmt result;
@@ -269,7 +281,7 @@ private:
             const ProvideValue &cv = values[i];
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Stmt store = Store::make(cv.name, cv.value, idx);
+            Stmt store = Store::make(cv.name, cv.value, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);

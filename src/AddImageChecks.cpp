@@ -109,6 +109,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_constrained;
     vector<Stmt> asserts_proposed;
     vector<Stmt> asserts_elem_size;
+    vector<Stmt> asserts_host_alignment;
     vector<Stmt> buffer_rewrites;
 
     // Inject the code that conditionally returns if we're in inference mode
@@ -479,8 +480,24 @@ Stmt add_image_checks(Stmt s,
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
+        if (param.defined() && param.host_alignment() != param.type().bytes()) {
+            string host_name = name + ".host";
+            int alignment_required = param.host_alignment();
+            Expr host_ptr = Variable::make(Handle(), host_name);
+            Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
+            Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
+            Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
+                                    {name, alignment_required}, Call::Extern);
+            asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
+        }
     }
 
+    // Inject the code that check for the alignment of the host pointers.
+    if (!no_asserts) {
+        for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
+            s = Block::make(asserts_host_alignment[i-1], s);
+        }
+    }
     // Inject the code that checks that no dimension math overflows
     if (!no_asserts) {
         for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
