@@ -126,17 +126,6 @@ Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
 std::vector<Pattern> casts = {
-    // Saturating add/subtract
-    { "halide.hexagon.addsat.vub.vub", u8c(wild_u16x + wild_u16x), Pattern::NarrowOps },
-    { "halide.hexagon.addsat.vuh.vuh", u16c(wild_u32x + wild_u32x), Pattern::NarrowOps },
-    { "halide.hexagon.addsat.vh.vh", i16c(wild_i32x + wild_i32x), Pattern::NarrowOps },
-    { "halide.hexagon.addsat.vw.vw", i32c(wild_i64x + wild_i64x), Pattern::NarrowOps },
-
-    { "halide.hexagon.subsat.vub.vub", u8c(wild_i16x - wild_i16x), Pattern::NarrowUnsignedOps },
-    { "halide.hexagon.subsat.vuh.vuh", u16c(wild_i32x - wild_i32x), Pattern::NarrowUnsignedOps },
-    { "halide.hexagon.subsat.vh.vh", i16c(wild_i32x - wild_i32x), Pattern::NarrowOps },
-    { "halide.hexagon.subsat.vw.vw", i32c(wild_i64x - wild_i64x), Pattern::NarrowOps },
-
     // Averaging
     { "halide.hexagon.avg.vub.vub", u8((wild_u16x + wild_u16x)/2), Pattern::NarrowOps },
     { "halide.hexagon.avg.vuh.vuh", u16((wild_u32x + wild_u32x)/2), Pattern::NarrowOps },
@@ -153,15 +142,16 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.navg.vw.vw", i32c((wild_i64x - wild_i64x)/2), Pattern::NarrowOps },
     // vnavg.uw doesn't exist.
 
-    // Widening casts
-    { "halide.hexagon.zxt.vub", u16(wild_u8x), Pattern::InterleaveResult },
-    { "halide.hexagon.zxt.vub", i16(wild_u8x), Pattern::InterleaveResult },
-    { "halide.hexagon.zxt.vuh", u32(wild_u16x), Pattern::InterleaveResult },
-    { "halide.hexagon.zxt.vuh", i32(wild_u16x), Pattern::InterleaveResult },
-    { "halide.hexagon.sxt.vb", u16(wild_i8x), Pattern::InterleaveResult },
-    { "halide.hexagon.sxt.vb", i16(wild_i8x), Pattern::InterleaveResult },
-    { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
-    { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
+    // Saturating add/subtract
+    { "halide.hexagon.addsat.vub.vub", u8c(wild_u16x + wild_u16x), Pattern::NarrowOps },
+    { "halide.hexagon.addsat.vuh.vuh", u16c(wild_u32x + wild_u32x), Pattern::NarrowOps },
+    { "halide.hexagon.addsat.vh.vh", i16c(wild_i32x + wild_i32x), Pattern::NarrowOps },
+    { "halide.hexagon.addsat.vw.vw", i32c(wild_i64x + wild_i64x), Pattern::NarrowOps },
+
+    { "halide.hexagon.subsat.vub.vub", u8c(wild_i16x - wild_i16x), Pattern::NarrowUnsignedOps },
+    { "halide.hexagon.subsat.vuh.vuh", u16c(wild_i32x - wild_i32x), Pattern::NarrowUnsignedOps },
+    { "halide.hexagon.subsat.vh.vh", i16c(wild_i32x - wild_i32x), Pattern::NarrowOps },
+    { "halide.hexagon.subsat.vw.vw", i32c(wild_i64x - wild_i64x), Pattern::NarrowOps },
 
     // Saturating narrowing casts with rounding
     { "halide.hexagon.roundu.vh", u8c((wild_i32x + 128)/256), Pattern::DeinterleaveOps | Pattern::NarrowOp0 },
@@ -205,6 +195,16 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.trunchi.vw", u16(wild_i32x), Pattern::DeinterleaveOps },
     { "halide.hexagon.trunchi.vw", i16(wild_u32x), Pattern::DeinterleaveOps },
     { "halide.hexagon.trunchi.vw", i16(wild_i32x), Pattern::DeinterleaveOps },
+
+    // Widening casts
+    { "halide.hexagon.zxt.vub", u16(wild_u8x), Pattern::InterleaveResult },
+    { "halide.hexagon.zxt.vub", i16(wild_u8x), Pattern::InterleaveResult },
+    { "halide.hexagon.zxt.vuh", u32(wild_u16x), Pattern::InterleaveResult },
+    { "halide.hexagon.zxt.vuh", i32(wild_u16x), Pattern::InterleaveResult },
+    { "halide.hexagon.sxt.vb", u16(wild_i8x), Pattern::InterleaveResult },
+    { "halide.hexagon.sxt.vb", i16(wild_i8x), Pattern::InterleaveResult },
+    { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
+    { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
 };
 
 std::vector<Pattern> muls = {
