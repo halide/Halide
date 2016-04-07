@@ -332,8 +332,8 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
  * If there is a memory allocation failure, the store does not store
  * the data into the cache.
  */
-extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+extern int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+                                          buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
 /** If halide_memoization_cache_lookup succeeds,
  * halide_memoization_cache_release must be called to signal the
