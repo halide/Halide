@@ -357,6 +357,14 @@ void CodeGen_Hexagon::init_module() {
 
         // Broadcasts
         { IPICK(Intrinsic::hexagon_V6_lvsplatw), u32x1,  "splat.w", {u32} },
+
+        // Bit counting
+        { IPICK(Intrinsic::hexagon_V6_vcl0h), u16x1, "clz.vh", {u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vcl0w), u32x1, "clz.vw", {u32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vpopcounth), u16x1, "popcount.vh", {u16x1} },
+        // TODO: If we need it, we could implement a popcountw in the
+        // runtime module that uses popcounth, and horizontally add
+        // each pair of lanes.
     };
     // TODO: Many variants of the above functions are missing. They
     // need to be implemented in the runtime module, or via
@@ -364,8 +372,7 @@ void CodeGen_Hexagon::init_module() {
     for (HvxIntrinsic &i : intrinsic_wrappers) {
         if (starts_with(i.name, "mpy")) {
             define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types, true /*broadcast_scalar_word*/);
-        }
-        else {
+        } else {
             define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
         }
     }
@@ -851,6 +858,20 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
+        } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+            internal_assert(op->args.size() == 1);
+            value = call_intrin(op->type,
+                                "halide.hexagon.clz" + type_suffix(op->args[0], false),
+                                {op->args[0]},
+                                true /*maybe*/);
+            if (value) return;
+        } else if (op->is_intrinsic(Call::popcount)) {
+            internal_assert(op->args.size() == 1);
+            value = call_intrin(op->type,
+                                "halide.hexagon.popcount" + type_suffix(op->args[0], false),
+                                {op->args[0]},
+                                true /*maybe*/);
+            if (value) return;
         } else if (is_interleave(op, target)) {
             value = call_intrin(op->type,
                                 "halide.hexagon.interleave" + type_suffix(op->args[0], false),
