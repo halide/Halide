@@ -1,5 +1,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Scope.h"
 #include <algorithm>
 
 namespace Halide {
@@ -8,6 +9,16 @@ namespace Internal {
 class EliminateBoolVectors : public IRMutator {
 private:
     using IRMutator::visit;
+
+    Scope<Type> lets;
+
+    void visit(const Variable *op) {
+        if (lets.contains(op->name)) {
+            expr = Variable::make(lets.get(op->name), op->name);
+        } else {
+            expr = op;
+        }
+    }
 
     template <typename T>
     void visit_comparison(const T* op) {
@@ -136,6 +147,33 @@ private:
             expr = op;
         }
     }
+
+    template <typename NodeType, typename LetType>
+    NodeType visit_let(const LetType *op) {
+        Expr value = mutate(op->value);
+
+        // We changed the type of the let, we need to replace the
+        // references to the let in the body. We can't just substitute
+        // them, because the types won't match without running the
+        // other visitors during the substitution, so we save the
+        // types that we changed for later.
+        if (value.type() != op->value.type()) {
+            lets.push(op->name, value.type());
+        }
+        auto body = mutate(op->body);
+        if (value.type() != op->value.type()) {
+            lets.pop(op->name);
+        }
+
+        if (!value.same_as(op->value) || !body.same_as(op->body)) {
+            return LetType::make(op->name, value, body);
+        } else {
+            return op;
+        }
+    }
+
+    void visit(const Let *op) { expr = visit_let<Expr>(op); }
+    void visit(const LetStmt *op) { stmt = visit_let<Stmt>(op); }
 };
 
 Stmt eliminate_bool_vectors(Stmt s) {
