@@ -107,7 +107,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon code...\n";
-    body = optimize_hexagon(body, target);
+    body = optimize_hexagon(body);
 
     if (uses_hvx(body)) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
@@ -889,16 +889,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 {op->args[0]},
                                 true /*maybe*/);
             if (value) return;
-        } else if (is_interleave(op, target)) {
-            value = call_intrin(op->type,
-                                "halide.hexagon.interleave" + type_suffix(op->args[0], false),
-                                {op->args[0]});
-            return;
-        } else if (is_deinterleave(op, target)) {
-            value = call_intrin(op->type,
-                                "halide.hexagon.deinterleave" + type_suffix(op->args[0], false),
-                                {op->args[0]});
-            return;
         } else if (op->is_intrinsic(Call::get_high_register)) {
             // TODO: This implementation should probably be in CodeGen_LLVM.
             internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
