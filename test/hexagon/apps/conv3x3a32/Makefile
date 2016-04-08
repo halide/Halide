@@ -31,7 +31,7 @@ conv3x3a32_run.o: conv3x3a32.o conv3x3a32.h conv3x3a32_run.cpp
 	${HEXAGON_CLANG} -c conv3x3a32_run.cpp ${CFLAGS} -I ${HALIDE_TOP}/include -O0 -g -I ${HALIDE_TOP}/test/hexagon/include
 
 conv3x3a32.out: conv3x3a32_run.o conv3x3a32.o conv3x3a32.h
-	${HEXAGON_CLANG} -mv60 -o conv3x3a32.out conv3x3a32_run.o conv3x3a32.o -lhexagon
+	${HEXAGON_CLANG} -mv60 -o conv3x3a32.out conv3x3a32_run.o conv3x3a32.o -lhexagon -L${HALIDE_TOP}/tools/sim_qurt -lsim_qurt
 
 clean:
 	rm -rf *.o median.h *~ *.out *.bc *.ll *.s *.txt pmu* *.html *.iss.0 out.bin result run.std* pa_dump.core.0 stats_dump.v60.iss.0
