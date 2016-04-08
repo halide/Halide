@@ -366,7 +366,7 @@ private:
         // Try commuting the op
         Expr commuted = T::make(op->b, op->a);
         expr = apply_patterns(commuted, patterns, this, target);
-        if (!expr.same_as(op)) return;
+        if (!expr.same_as(commuted)) return;
 
         IRMutator::visit(op);
     }
