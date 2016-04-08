@@ -306,8 +306,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "mpy.acc.vuh.vub.ub", {u16x2, u8x1,  u8} },
         { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "mpy.acc.vuw.vuh.uh", {u32x2, u16x1, u16} },
         { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "mpy.acc.vh.vub.b",   {i16x2, u8x1,  i8} },
-
-        { IPICK(Intrinsic::hexagon_V6_vmpyhsat_acc),   i32x2, "mpy.sat.acc.vw.vh.h",    {i32x2, i16x1, i16} },
+        // TODO: There's also vmpyhsat_acc.
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).

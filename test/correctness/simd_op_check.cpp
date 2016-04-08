@@ -1603,6 +1603,10 @@ void check_hvx_all() {
     check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 + 127 * i16(u8_1));
     check("v*.uw += vmpy(v*.uh,r*.uh)", hvx_width/2, u32_1 + 65535 * u32(u16_1));
 
+    check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 - i16(u8_1) * -127);
+    check("v*.h += vmpyi(v*.h,r*.b)", hvx_width/2, i16_1 - i16_2 * -127);
+
+
     check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
     check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
     check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));

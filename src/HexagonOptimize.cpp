@@ -3,6 +3,7 @@
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "ExprUsesVar.h"
+#include "Simplify.h"
 #include "Scope.h"
 #include "Target.h"
 
@@ -221,11 +222,6 @@ std::vector<Pattern> muls = {
     { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
     { "halide.hexagon.mpy.vuh.uh", wild_u32x*bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vh.h",   wild_i32x*bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
-    // Commute the four above.
-    { "halide.hexagon.mpy.vub.ub", bc(wild_u16)*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps | Pattern::SwapOps01 },
-    { "halide.hexagon.mpy.vub.b",  bc(wild_i16)*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp0 | Pattern::SwapOps01 },
-    { "halide.hexagon.mpy.vuh.uh", bc(wild_u32)*wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps | Pattern::SwapOps01 },
-    { "halide.hexagon.mpy.vh.h",   bc(wild_i32)*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps | Pattern::SwapOps01 },
 
     // Widening multiplication
     { "halide.hexagon.mpy.vub.vub", wild_u16x*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -235,8 +231,6 @@ std::vector<Pattern> muls = {
 
     { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
     { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 },
-    { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::SwapOps01 },
-    { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 | Pattern::SwapOps01 },
 };
 
 // Many of the following patterns are accumulating widening
@@ -244,8 +238,6 @@ std::vector<Pattern> muls = {
 // reinterleave the result.
 const int ReinterleaveOp0 = Pattern::InterleaveResult | Pattern::DeinterleaveOp0;
 
-// Note that when we pattern match, we always commute adds such that
-// if a multiply present, it is on the right.
 std::vector<Pattern> adds = {
     // Widening multiply-accumulates with a scalar.
     { "halide.hexagon.mpy.acc.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
@@ -293,8 +285,7 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                     Type target_t = t.with_bits(t.bits()/2);
                     if (p.flags & (Pattern::NarrowOp0 << i)) {
                         matches[i] = lossless_cast(target_t, matches[i]);
-                    }
-                    if (p.flags & (Pattern::NarrowUnsignedOp0 << i)) {
+                    } else if (p.flags & (Pattern::NarrowUnsignedOp0 << i)) {
                         matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
                     }
                     if (!matches[i].defined()) is_match = false;
@@ -304,7 +295,7 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
                 if (p.flags & Pattern::ExactLog2Op1) {
                     // This flag is mainly to capture right shifts. When the divisors in divisions
                     // are powers of two we can generate right shifts.
-                    internal_assert(matches.size() == 2);
+                    internal_assert(matches.size() >= 2);
                     int pow;
                     if (is_const_power_of_two_integer(matches[1], &pow)) {
                         matches[1] = cast(matches[1].type().with_lanes(1), pow);
@@ -341,6 +332,24 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
     return x;
 }
 
+Expr lossless_negate(Expr x) {
+    const Mul *m = x.as<Mul>();
+    if (m) {
+        Expr a = lossless_negate(m->a);
+        if (a.defined()) {
+            return Mul::make(a, m->b);
+        }
+        Expr b = lossless_negate(m->b);
+        if (b.defined()) {
+            return Mul::make(m->a, b);
+        }
+    }
+    if (is_negative_negatable_const(x) || is_positive_const(x)) {
+        return simplify(-x);
+    }
+    return Expr();
+}
+
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
@@ -349,29 +358,34 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Mul *op) {
-        expr = apply_patterns(op, muls, this, target);
-        if (expr.same_as(op)) IRMutator::visit(op);
+    template <typename T>
+    void visit_commutative_op(const T *op, const vector<Pattern> &patterns) {
+        expr = apply_patterns(op, patterns, this, target);
+        if (!expr.same_as(op)) return;
+
+        // Try commuting the op
+        Expr commuted = T::make(op->b, op->a);
+        expr = apply_patterns(commuted, patterns, this, target);
+        if (!expr.same_as(op)) return;
+
+        IRMutator::visit(op);
     }
 
-    void visit(const Add *op) {
-        Expr a = op->a;
-        Expr b = op->b;
-        Expr add = op;
-        if (a.as<Mul>() && !b.as<Mul>()) {
-            // If the left is a multiply and the right is not, commute
-            // it so we don't need to have a ridiculous number of
-            // permutations of patterns.
-            add = Add::make(b, a);
-        }
-
-        expr = apply_patterns(add, adds, this, target);
-        if (expr.same_as(add)) IRMutator::visit(op);
-    }
+    void visit(const Mul *op) { visit_commutative_op(op, muls); }
+    void visit(const Add *op) { visit_commutative_op(op, adds); }
 
     void visit(const Sub *op) {
-        // TODO: Try to rewrite the Sub as an Add, for which we have
-        // more patterns.
+        // Try negating op->b, and using an add pattern if successful.
+        Expr neg_b = lossless_negate(op->b);
+        if (neg_b.defined()) {
+            Expr add = Add::make(op->a, neg_b);
+            expr = apply_patterns(add, adds, this, target);
+            if (!expr.same_as(add)) return;
+
+            add = Add::make(neg_b, op->a);
+            expr = apply_patterns(add, adds, this, target);
+            if (!expr.same_as(add)) return;
+        }
         IRMutator::visit(op);
     }
 
