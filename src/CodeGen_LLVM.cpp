@@ -991,20 +991,6 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
-    // Check it's 32-byte aligned
-
-    // Disabled, because we don't currently require external
-    // allocations to be aligned.
-
-    /*
-    Value *base = builder->CreatePtrToInt(host_ptr, i64);
-    Value *check_alignment = builder->CreateAnd(base, 0x1f);
-    check_alignment = builder->CreateIsNull(check_alignment);
-
-    string error_message = "Buffer " + name + " is not 32-byte aligned";
-    create_assertion(check_alignment, error_message);
-    */
-
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
     external_buffer.insert(name);
