@@ -273,23 +273,41 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mpyi.vw.h",    {i32x1, i16} },
         { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mpyi.vw.b",    {i32x1, i8} },
 
+        { IPICK(Intrinsic::hexagon_V6_vmpyih_acc),  i16x1, "mpyi.acc.vh.vh.vh",   {i16x1, i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyihb_acc), i16x1, "mpyi.acc.vh.vh.b",    {i16x1, i16x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh_acc), i32x1, "mpyi.acc.vw.vw.h",    {i32x1, i32x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb_acc), i32x1, "mpyi.acc.vw.vw.b",    {i32x1, i32x1, i8} },
+
         // Widening vector multiplication:
-        { IPICK(Intrinsic::hexagon_V6_vmpyubv),  u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuhv),  u32x2, "mpy.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpybv),   i16x2, "mpy.vb.vb",   {i8x1,  i8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyhv),   i32x2, "mpy.vh.vh",   {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyubv), u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuhv), u32x2, "mpy.vuh.vuh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybv),  i16x2, "mpy.vb.vb",   {i8x1,  i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhv),  i32x2, "mpy.vh.vh",   {i16x1, i16x1} },
+
+        { IPICK(Intrinsic::hexagon_V6_vmpyubv_acc), u16x2, "mpy.acc.vuh.vub.vub", {u16x2, u8x1, u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuhv_acc), u32x2, "mpy.acc.vuw.vuh.vuh", {u32x2, u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybv_acc),  i16x2, "mpy.acc.vh.vb.vb",    {i16x2, i8x1, i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhv_acc),  i32x2, "mpy.acc.vw.vh.vh",    {i32x2, i16x1, i16x1} },
 
         // Inconsistencies: both are vector instructions despite the
         // missing 'v', and the signedness is indeed swapped.
         { IPICK(Intrinsic::hexagon_V6_vmpybusv), i16x2, "mpy.vub.vb",  {u8x1,  i8x1} },
         { IPICK(Intrinsic::hexagon_V6_vmpyhus),  i32x2, "mpy.vh.vuh",  {i16x1, u16x1} },
 
-        // Widening scalar multiplication:
-        { IPICK(Intrinsic::hexagon_V6_vmpyub),   u16x2, "mpy.vub.ub",  {u8x1,  u8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh),   u32x2, "mpy.vuh.uh",  {u16x1, u16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyh),    i32x2, "mpy.vh.h",    {i16x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybusv_acc), i16x2, "mpy.acc.vh.vub.vb",  {i16x2, u8x1,  i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhus_acc),  i32x2, "mpy.acc.vw.vh.vuh",  {i32x2, i16x1, u16x1} },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpybus),  i16x2, "mpy.vub.b",   {u8x1,  i8} },
+        // Widening scalar multiplication:
+        { IPICK(Intrinsic::hexagon_V6_vmpyub),  u16x2, "mpy.vub.ub",  {u8x1,  u8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh),  u32x2, "mpy.vuh.uh",  {u16x1, u16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8} },
+
+        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "mpy.acc.vuh.vub.ub", {u16x2, u8x1,  u8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "mpy.acc.vuw.vuh.uh", {u32x2, u16x1, u16} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "mpy.acc.vh.vub.b",   {i16x2, u8x1,  i8} },
+
+        { IPICK(Intrinsic::hexagon_V6_vmpyhsat_acc),   i32x2, "mpy.sat.acc.vw.vh.h",    {i32x2, i16x1, i16} },
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).
