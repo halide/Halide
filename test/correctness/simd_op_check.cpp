@@ -1574,6 +1574,39 @@ void check_hvx_all() {
     check("vmpyi(v*.w,r*.b)", hvx_width/4, i32_1 * 127);
     check("vmpyi(v*.w,r*.b)", hvx_width/4, 127 * i32_1);
 
+    check("v*.h += vmpyi(v*.h,v*.h)", hvx_width/2, i16_1 + i16_2*i16_3);
+
+    check("v*.h += vmpyi(v*.h,r*.b)", hvx_width/2, i16_1 + i16_2 * 127);
+    check("v*.w += vmpyi(v*.w,r*.h)", hvx_width/4, i32_1 + i32_2 * 32767);
+    check("v*.h += vmpyi(v*.h,r*.b)", hvx_width/2, i16_1 + 127 * i16_2);
+    check("v*.w += vmpyi(v*.w,r*.h)", hvx_width/4, i32_1 + 32767 * i32_2);
+
+    check("v*.uh += vmpy(v*.ub,v*.ub)", hvx_width/1, u16_1 + u16(u8_1) * u16(u8_2));
+    check("v*.uw += vmpy(v*.uh,v*.uh)", hvx_width/2, u32_1 + u32(u16_1) * u32(u16_2));
+    check("v*.h += vmpy(v*.b,v*.b)", hvx_width/1, i16_1 + i16(i8_1) * i16(i8_2));
+    check("v*.w += vmpy(v*.h,v*.h)", hvx_width/2, i32_1 + i32(i16_1) * i32(i16_2));
+
+    check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(u8_1) * i16(i8_2));
+    check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(i16_1) * i32(u16_2));
+    check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(u8_1) * i16(i8_2));
+    check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(i16_1) * i32(u16_2));
+
+    check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(i8_1) * i16(u8_2));
+    check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
+    check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(i8_1) * i16(u8_2));
+    check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
+
+    check("v*.uh += vmpy(v*.ub,r*.ub)", hvx_width/1, u16_1 + u16(u8_1) * 255);
+    check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 + i16(u8_1) * 127);
+    check("v*.uw += vmpy(v*.uh,r*.uh)", hvx_width/2, u32_1 + u32(u16_1) * 65535);
+    check("v*.uh += vmpy(v*.ub,r*.ub)", hvx_width/1, u16_1 + 255 * u16(u8_1));
+    check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 + 127 * i16(u8_1));
+    check("v*.uw += vmpy(v*.uh,r*.uh)", hvx_width/2, u32_1 + 65535 * u32(u16_1));
+
+    check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 - i16(u8_1) * -127);
+    check("v*.h += vmpyi(v*.h,r*.b)", hvx_width/2, i16_1 - i16_2 * -127);
+
+
     check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
     check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
     check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));
