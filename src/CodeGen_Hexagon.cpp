@@ -734,6 +734,13 @@ void CodeGen_Hexagon::visit(const Mul *op) {
         if (a.type().is_scalar())
             std::swap(a, b);
 
+        // Check if this is a multiplication by a power of 2.
+        int shift_amount;
+        if (is_const_power_of_two_integer(b, &shift_amount)) {
+            value = codegen(a << shift_amount);
+            return;
+        }
+
         // Try to find an intrinsic for one of the operands being a scalar.
         // All the non-widening vector by scalar multiplies expect a narrower
         // scalar. Only two narrow types work, 8 bit and 16 bit. Start with
