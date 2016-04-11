@@ -429,6 +429,8 @@ struct Call : public ExprNode<Call> {
         register_destructor,
         get_high_register,
         get_low_register;
+        div_round_to_zero,
+        mod_round_to_zero;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

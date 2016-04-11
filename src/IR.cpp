@@ -691,6 +691,8 @@ Call::ConstString Call::likely = "likely";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::get_high_register = "get_high_register";
 Call::ConstString Call::get_low_register = "get_low_register";
+Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
+Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 
 
 }

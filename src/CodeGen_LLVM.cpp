@@ -1343,19 +1343,6 @@ Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
     return a + (b - a)/2;
 }
 
-// Although these look like intrinsics, they are designed to be
-// produced and consumed entirely within CodeGen_LLVM. They represent
-// "native" division and mod operations, which round toward zero.
-Expr div_round_to_zero(Expr a, Expr b) {
-    internal_assert(a.type() == b.type());
-    return Call::make(a.type(), "div_round_to_zero", {a, b}, Call::PureIntrinsic);
-}
-
-Expr mod_round_to_zero(Expr a, Expr b) {
-    internal_assert(a.type() == b.type());
-    return Call::make(a.type(), "mod_round_to_zero", {a, b}, Call::PureIntrinsic);
-}
-
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
@@ -1445,33 +1432,8 @@ void CodeGen_LLVM::visit(const Div *op) {
         }
 
         value = codegen(val);
-    } else if (op->type.is_uint()) {
-        value = codegen(div_round_to_zero(op->a, op->b));
     } else {
-        // Signed integer division sucks. It should be defined such
-        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
-        // i.e. Euclidean division.
-
-        // We get rounding to work by examining the implied remainder
-        // and correcting the quotient.
-
-        /* Here's the C code that we're trying to match:
-        int q = a / b;
-        int r = a - q * b;
-        int bs = b >> (t.bits() - 1);
-        int rs = r >> (t.bits() - 1);
-        return q - (rs & bs) + (rs & ~bs);
-        */
-
-        Expr a = op->a;
-        Expr b = op->b;
-        Expr q = div_round_to_zero(a, b);
-        Expr r = a - q*b;
-        Expr bs = b >> (a.type().bits() - 1);
-        Expr rs = r >> (a.type().bits() - 1);
-        q = q - (rs & bs) + (rs & ~bs);
-        q = common_subexpression_elimination(q);
-        value = codegen(q);
+        value = codegen(implement_div(op->a, op->b));
     }
 }
 
@@ -1484,21 +1446,8 @@ void CodeGen_LLVM::visit(const Mod *op) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
-    } else if (op->type.is_uint()) {
-        value = codegen(mod_round_to_zero(op->a, op->b));
     } else {
-        // Match this non-overflowing C code
-        /*
-          T r = a % b;
-          r = r + (r < 0 ? abs(b) : 0);
-        */
-
-        Expr a = op->a;
-        Expr b = op->b;
-        Expr r = mod_round_to_zero(a, b);
-        r = select(r < 0, r + abs(b), r);
-        r = common_subexpression_elimination(r);
-        value = codegen(r);
+        value = codegen(implement_mod(op->a, op->b));
     }
 }
 
