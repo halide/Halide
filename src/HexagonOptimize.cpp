@@ -97,6 +97,7 @@ struct Pattern {
         SwapOps01 = 1 << 1,  ///< Swap operands 0 and 1 prior to substitution.
         SwapOps12 = 1 << 2,  ///< Swap operands 1 and 2 prior to substitution.
         ExactLog2Op1 = 1 << 3, ///< Replace operand 1 with its log base 2, if the log base 2 is exact.
+        ExactLog2Op2 = 1 << 4, ///< Save as above, but for operand 2.
 
         DeinterleaveOp0 = 1 << 5,  ///< Prior to evaluating the pattern, deinterleave native vectors of operand 0.
         DeinterleaveOp1 = 1 << 6,  ///< Same as above, but for operand 1.
@@ -175,23 +176,23 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.round.vw",  i16c((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
 
     // Saturating narrowing casts
-    { "halide.hexagon.satub.shr.vh.h", u8c(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-    { "halide.hexagon.satuh.shr.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-    { "halide.hexagon.satub.vh", u8c(wild_i16x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.sath.vw", i16c(wild_i32x), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.shrsatub.vh.h", u8c(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.shrsatuh.vw.w", u16c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.shrsath.vw.w",  i16c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.shrsatub.vh.h", u8c(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shrsatuh.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shrsath.vw.w",  i16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
-    // Note the absence of deinterleaving the operands. This is a
-    // problem because we can't simplify away the interleaving
-    // resulting from widening if this is the later narrowing op. But,
-    // we don't have vsat variants for all of the types we need.
+    // For these narrowing ops, we have the option of these, which do
+    // not interleave the input (vpack), or alternative instructions
+    // which do (vsat). Because we don't know which one we prefer
+    // during pattern matching, we match these for now and replace
+    // them with the instructions that interleave later if it makes
+    // sense.
+    { "halide.hexagon.trunchi.satub.vh", u8c(wild_i16x) },
     { "halide.hexagon.trunchi.satuh.vw", u16c(wild_i32x) },
     { "halide.hexagon.trunchi.satb.vh", i8c(wild_i16x) },
-
-    // We don't pattern match these two, because we prefer the sat
-    // instructions above for the same pattern, due to not requiring
-    // an extra deinterleave.
-    //{ "halide.hexagon.trunchi.satub.vh", u8c(wild_i16x) },
-    //{ "halide.hexagon.trunchi.sath.vw", i16c(wild_i32x) },
+    { "halide.hexagon.trunchi.sath.vw", i16c(wild_i32x) },
 
     // Narrowing casts
     { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOp0 },
@@ -202,6 +203,8 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.trunclo.vw", u16(wild_i32x/65536), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunclo.vw", i16(wild_u32x/65536), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.shrh.vw.w",  i16(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.shrh.vw.w",  i16(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
     { "halide.hexagon.trunchi.vh", u8(wild_u16x), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunchi.vh", u8(wild_i16x), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunchi.vh", i8(wild_u16x), Pattern::DeinterleaveOp0 },
@@ -245,6 +248,16 @@ std::vector<Pattern> muls = {
 const int ReinterleaveOp0 = Pattern::InterleaveResult | Pattern::DeinterleaveOp0;
 
 std::vector<Pattern> adds = {
+    // Shift-accumulates.
+    { "halide.hexagon.shr.acc.vw.vw.w", wild_i32x + (wild_i32x >> bc(wild_i32)) },
+    { "halide.hexagon.shl.acc.vw.vw.w", wild_i32x + (wild_i32x << bc(wild_i32)) },
+    { "halide.hexagon.shl.acc.vw.vw.w", wild_u32x + (wild_u32x << bc(wild_u32)) },
+    { "halide.hexagon.shr.acc.vw.vw.w", wild_i32x + (wild_i32x/bc(wild_i32)), Pattern::ExactLog2Op2 },
+    { "halide.hexagon.shl.acc.vw.vw.w", wild_i32x + (wild_i32x*bc(wild_i32)), Pattern::ExactLog2Op2 },
+    { "halide.hexagon.shl.acc.vw.vw.w", wild_u32x + (wild_u32x*bc(wild_u32)), Pattern::ExactLog2Op2 },
+    { "halide.hexagon.shl.acc.vw.vw.w", wild_i32x + (bc(wild_i32)*wild_i32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+    { "halide.hexagon.shl.acc.vw.vw.w", wild_u32x + (bc(wild_u32)*wild_u32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+
     // Widening multiply-accumulates with a scalar.
     { "halide.hexagon.mpy.acc.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
     { "halide.hexagon.mpy.acc.vh.vub.b",   wild_i16x + wild_i16x*bc(wild_i16), ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
@@ -296,15 +309,20 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
             }
             if (!is_match) continue;
 
-            if (p.flags & Pattern::ExactLog2Op1) {
-                // This flag is mainly to capture right shifts. When the divisors in divisions
-                // are powers of two we can generate right shifts.
-                internal_assert(matches.size() >= 2);
-                int pow;
-                if (is_const_power_of_two_integer(matches[1], &pow)) {
-                    matches[1] = cast(matches[1].type().with_lanes(1), pow);
-                } else continue;
+            for (size_t i = 1; i < matches.size() && is_match; i++) {
+                // This flag is mainly to capture shifts. When the
+                // operand of a div or mul is a power of 2, we can use
+                // a shift instead.
+                if (p.flags & (Pattern::ExactLog2Op1 << (i - 1))) {
+                    int pow;
+                    if (is_const_power_of_two_integer(matches[i], &pow)) {
+                        matches[i] = cast(matches[i].type().with_lanes(1), pow);
+                    } else {
+                        is_match = false;
+                    }
+                }
             }
+            if (!is_match) continue;
 
             for (size_t i = 0; i < matches.size(); i++) {
                 if (p.flags & (Pattern::DeinterleaveOp0 << i)) {
@@ -596,7 +614,7 @@ private:
         }
     }
 
-    void visit(const Call *op) {
+    bool is_interleavable(const Call *op) {
         // These calls can have interleaves moved from operands to the
         // result.
         static set<string> interleavable = {
@@ -610,51 +628,79 @@ private:
             Call::absd,
         };
 
-        if (is_native_deinterleave(op)) {
-            expr = mutate(op->args[0]);
-            if (yields_interleave(expr)) {
-                // This is a deinterleave of an interleave! Remove them both.
-                expr = remove_interleave(expr);
-            } else if (!expr.same_as(op->args[0])) {
-                expr = native_deinterleave(expr);
-            } else {
-                expr = op;
-            }
-            // TODO: Need to change interleave(deinterleave(x)) ?
-        } else if (starts_with(op->name, "halide.hexagon.") ||
-                   interleavable.count(op->name)) {
-            // This function can move interleaves.
-            vector<Expr> args(op->args);
+        if (interleavable.count(op->name) != 0) return true;
 
-            // mutate all the args.
-            bool changed = false;
+        for (Expr i : op->args) {
+            if (i.type().is_scalar()) continue;
+            if (i.type().bits() != op->type.bits() || i.type().lanes() != op->type.lanes()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void visit(const Call *op) {
+        vector<Expr> args(op->args);
+
+        // mutate all the args.
+        bool changed = false;
+        for (Expr &i : args) {
+            Expr new_i = mutate(i);
+            changed = changed || !new_i.same_as(i);
+            i = new_i;
+        }
+
+        // For a few operations, we have a choice of several
+        // instructions, an interleaving or a non-inerleaving
+        // variant. We handle this by generating the instruction that
+        // does not deinterleave, and then opportunistically select
+        // the interleaving alternative when we can cancel out to the
+        // interleave.
+        struct DeinterleavingAlternative {
+            string name;
+            vector<Expr> extra_args;
+        };
+        static std::map<string, DeinterleavingAlternative> deinterleaving_alts = {
+            { "halide.hexagon.trunchi.satub.vh", { "halide.hexagon.satub.vh" } },
+            { "halide.hexagon.trunchi.sath.vw", { "halide.hexagon.sath.vw" } },
+            // For this one, we don't have a simple alternative. But,
+            // we have a shift-saturate-narrow that we can use with a
+            // shift of 0.
+            { "halide.hexagon.trunchi.satuh.vw", { "halide.hexagon.shrsatuh.vw.w", { 0 } } },
+        };
+
+        if (is_native_deinterleave(op) && yields_interleave(args[0])) {
+            // This is a deinterleave of an interleave! Remove them both.
+            expr = remove_interleave(args[0]);
+        } else if (is_interleavable(op) && yields_removable_interleave(args)) {
+            // All the arguments yield interleaves (and one of
+            // them is an interleave), create a new call with the
+            // interleave removed from the arguments.
             for (Expr &i : args) {
-                Expr new_i = mutate(i);
-                changed = changed || !new_i.same_as(i);
-                i = new_i;
+                i = remove_interleave(i);
             }
-
-            if (yields_removable_interleave(args)) {
-                // All the arguments yield interleaves (and one of
-                // them is an interleave), create a new call with the
-                // interleave removed from the arguments.
-                for (Expr &i : args) {
-                    i = remove_interleave(i);
-                }
-                expr = Call::make(op->type, op->name, args, op->call_type,
-                                  op->func, op->value_index, op->image, op->param);
-                // Add the interleave back to the result of the call.
-                expr = native_interleave(expr);
-            } else if (changed) {
-                expr = Call::make(op->type, op->name, args, op->call_type,
-                                  op->func, op->value_index, op->image, op->param);
-            } else {
-                expr = op;
+            expr = Call::make(op->type, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+            // Add the interleave back to the result of the call.
+            expr = native_interleave(expr);
+        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
+                   yields_removable_interleave(args)) {
+            // This call has a deinterleaving alternative, and the
+            // arguments are interleaved, so we should use the
+            // alternative instead.
+            const DeinterleavingAlternative &alt = deinterleaving_alts[op->name];
+            for (Expr &i : args) {
+                i = remove_interleave(i);
             }
+            for (Expr i : alt.extra_args) {
+                args.push_back(i);
+            }
+            expr = Call::make(op->type, alt.name, args, op->call_type);
+        } else if (changed) {
+            expr = Call::make(op->type, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
         } else {
-            // TODO: Treat interleave_vectors(a, b) where a and b are
-            // native vectors as an interleave?
-            IRMutator::visit(op);
+            expr = op;
         }
     }
 

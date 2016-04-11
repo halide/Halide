@@ -190,8 +190,6 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
-        { IPICK(Intrinsic::hexagon_V6_vasrhubsat), u8x1, "satub.shr.vh.h", {i16x2, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vasrwuhsat), u16x1, "satuh.shr.vw.w", {i32x2, i32} },
         { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "satub.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sath.vw",   {i32x2} },
 
@@ -357,6 +355,14 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vaslw),  u32x1, "shl.vuw.uw", {u32x1, u32} },
         { IPICK(Intrinsic::hexagon_V6_vaslh),  i16x1, "shl.vh.h",   {i16x1, i16} },
         { IPICK(Intrinsic::hexagon_V6_vaslw),  i32x1, "shl.vw.w",   {i32x1, i32} },
+
+        { IPICK(Intrinsic::hexagon_V6_vasrw_acc), i32x1, "shr.acc.vw.vw.w", {i32x1, i32x1, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vaslw_acc), i32x1, "shl.acc.vw.vw.w", {i32x1, i32x1, i32} },
+
+        { IPICK(Intrinsic::hexagon_V6_vasrwh), i16x1, "shrh.vw.w",   {i32x2, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrhubsat), u8x1, "shrsatub.vh.h",  {i16x2, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwuhsat), u16x1, "shrsatuh.vw.w", {i32x2, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwhsat),  i16x1, "shrsath.vw.w",  {i32x2, i32} },
 
         // Bitwise operators
         { IPICK(Intrinsic::hexagon_V6_vand),  u8x1,  "and.vb.vb",  {u8x1,  u8x1} },
