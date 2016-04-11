@@ -17,6 +17,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "MatlabWrapper.h"
 #include "IntegerDivisionTable.h"
+#include "CSE.h"
 
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
@@ -1421,24 +1422,14 @@ void CodeGen_LLVM::visit(const Div *op) {
         return q - (rs & bs) + (rs & ~bs);
         */
 
-        string a_name = unique_name('a');
-        string b_name = unique_name('b');
-        string q_name = unique_name('q');
-        string bs_name = unique_name("bs");
-        string rs_name = unique_name("rs");
-        Expr a = Variable::make(op->a.type(), a_name);
-        Expr b = Variable::make(op->b.type(), b_name);
-        Expr q = Variable::make(op->a.type(), q_name);
+        Expr a = op->a;
+        Expr b = op->b;
+        Expr q = div_round_to_zero(a, b);
         Expr r = a - q*b;
-        Expr bs = Variable::make(op->b.type(), bs_name);
-        Expr rs = Variable::make(r.type(), rs_name);
+        Expr bs = b >> (a.type().bits() - 1);
+        Expr rs = r >> (a.type().bits() - 1);
         q = q - (rs & bs) + (rs & ~bs);
-        q = Let::make(rs_name, r >> (op->a.type().bits() - 1), q);
-        q = Let::make(bs_name, b >> (op->a.type().bits() - 1), q);
-        q = Let::make(q_name, div_round_to_zero(a, b), q);
-        q = Let::make(b_name, op->b, q);
-        q = Let::make(a_name, op->a, q);
-
+        q = common_subexpression_elimination(q);
         value = codegen(q);
     }
 }
@@ -1461,14 +1452,11 @@ void CodeGen_LLVM::visit(const Mod *op) {
           r = r + (r < 0 ? abs(b) : 0);
         */
 
-        string b_name = unique_name('b');
-        string r_name = unique_name('r');
         Expr a = op->a;
-        Expr b = Variable::make(op->b.type(), b_name);
-        Expr r = Variable::make(op->type, r_name);
+        Expr b = op->b;
+        Expr r = mod_round_to_zero(a, b);
         r = select(r < 0, r + abs(b), r);
-        r = Let::make(r_name, mod_round_to_zero(a, b), r);
-        r = Let::make(b_name, op->b, r);
+        r = common_subexpression_elimination(r);
         value = codegen(r);
     }
 }
