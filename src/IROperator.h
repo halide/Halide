@@ -1641,11 +1641,12 @@ inline Expr count_trailing_zeros(Expr x) {
  * Halide's division operator, which is Euclidean (rounds towards
  * -infinity). */
 inline Expr div_round_to_zero(Expr x, Expr y) {
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "div_round_to_zero only takes integer arguments\n";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "div_round_to_zero only takes integer arguments\n";
     Internal::match_types(x, y);
+    if (x.type().is_uint()) {
+        return x / y;
+    }
+    user_assert(x.type().is_int()) << "div_round_to_zero only takes integer arguments\n";
+    user_assert(y.type().is_int()) << "div_round_to_zero only takes integer arguments\n";
     return Internal::Call::make(x.type(), Internal::Call::div_round_to_zero,
                                 {x, y},
                                 Internal::Call::PureIntrinsic);
@@ -1657,11 +1658,12 @@ inline Expr div_round_to_zero(Expr x, Expr y) {
  * Euclidean (produces the remainder when division rounds towards
  * -infinity). */
 inline Expr mod_round_to_zero(Expr x, Expr y) {
-    user_assert(x.type().is_int() || x.type().is_uint())
-        << "mod_round_to_zero only takes integer arguments\n";
-    user_assert(y.type().is_int() || y.type().is_uint())
-        << "mod_round_to_zero only takes integer arguments\n";
     Internal::match_types(x, y);
+    if (x.type().is_uint()) {
+        return x % y;
+    }
+    user_assert(x.type().is_int()) << "mod_round_to_zero only takes integer arguments\n";
+    user_assert(y.type().is_int()) << "mod_round_to_zero only takes integer arguments\n";
     return Internal::Call::make(x.type(), Internal::Call::mod_round_to_zero,
                                 {x, y},
                                 Internal::Call::PureIntrinsic);
