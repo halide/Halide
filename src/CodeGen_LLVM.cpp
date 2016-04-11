@@ -1342,6 +1342,19 @@ Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
     return a + (b - a)/2;
 }
 
+// Although these look like intrinsics, they are designed to be
+// produced and consumed entirely within CodeGen_LLVM. They represent
+// "native" division and mod operations, which round toward zero.
+Expr div_round_to_zero(Expr a, Expr b) {
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), "div_round_to_zero", {a, b}, Call::PureIntrinsic);
+}
+
+Expr mod_round_to_zero(Expr a, Expr b) {
+    internal_assert(a.type() == b.type());
+    return Call::make(a.type(), "mod_round_to_zero", {a, b}, Call::PureIntrinsic);
+}
+
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
@@ -1350,18 +1363,11 @@ void CodeGen_LLVM::visit(const Div *op) {
     const uint64_t *const_uint_divisor = as_const_uint(op->b);
 
     int shift_amount;
-    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
-
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
-    } else if (power_of_two && op->type.is_int()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateAShr(numerator, shift);
-    } else if (power_of_two && op->type.is_uint()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateLShr(numerator, shift);
+    } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
+               (op->type.is_int() || op->type.is_uint())) {
+        value = codegen(op->a >> shift_amount);
     } else if (const_int_divisor &&
                op->type.is_int() &&
                (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
@@ -1439,22 +1445,11 @@ void CodeGen_LLVM::visit(const Div *op) {
 
         value = codegen(val);
     } else if (op->type.is_uint()) {
-        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
+        value = codegen(div_round_to_zero(op->a, op->b));
     } else {
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
         // i.e. Euclidean division.
-
-        // If it's a small const power of two, then we can just
-        // arithmetic right shift. This rounds towards negative
-        // infinity.
-        for (int bits = 1; bits < 30; bits++) {
-            if (is_const(op->b, 1 << bits)) {
-                Value *shift = codegen(make_const(op->a.type(), bits));
-                value = builder->CreateAShr(codegen(op->a), shift);
-                return;
-            }
-        }
 
         // We get rounding to work by examining the implied remainder
         // and correcting the quotient.
@@ -1467,16 +1462,25 @@ void CodeGen_LLVM::visit(const Div *op) {
         return q - (rs & bs) + (rs & ~bs);
         */
 
-        Value *a = codegen(op->a), *b = codegen(op->b);
+        string a_name = unique_name('a');
+        string b_name = unique_name('b');
+        string q_name = unique_name('q');
+        string bs_name = unique_name("bs");
+        string rs_name = unique_name("rs");
+        Expr a = Variable::make(op->a.type(), a_name);
+        Expr b = Variable::make(op->b.type(), b_name);
+        Expr q = Variable::make(op->a.type(), q_name);
+        Expr r = a - q*b;
+        Expr bs = Variable::make(op->b.type(), bs_name);
+        Expr rs = Variable::make(r.type(), rs_name);
+        q = q - (rs & bs) + (rs & ~bs);
+        q = Let::make(rs_name, r >> (op->a.type().bits() - 1), q);
+        q = Let::make(bs_name, b >> (op->a.type().bits() - 1), q);
+        q = Let::make(q_name, div_round_to_zero(a, b), q);
+        q = Let::make(b_name, op->b, q);
+        q = Let::make(a_name, op->a, q);
 
-        Value *q = builder->CreateSDiv(a, b);
-        Value *r = builder->CreateSub(a, builder->CreateMul(q, b));
-        Value *shift = ConstantInt::get(a->getType(), op->a.type().bits()-1);
-        Value *bs = builder->CreateAShr(b, shift);
-        Value *rs = builder->CreateAShr(r, shift);
-        Value *round_up = builder->CreateAnd(rs, bs);
-        Value *round_down = builder->CreateAnd(rs, builder->CreateNot(bs));
-        value = builder->CreateAdd(builder->CreateSub(q, round_up), round_down);
+        value = codegen(q);
     }
 }
 
@@ -1484,38 +1488,29 @@ void CodeGen_LLVM::visit(const Mod *op) {
     // To match our definition of division, mod should be between 0
     // and |b|.
 
+    int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
+    } else if (is_const_power_of_two_integer(op->b, &bits)) {
+        value = codegen(op->a & (op->b - 1));
     } else if (op->type.is_uint()) {
-        int bits;
-        if (is_const_power_of_two_integer(op->b, &bits)) {
-            Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
-        } else {
-            value = builder->CreateURem(codegen(op->a), codegen(op->b));
-        }
+        value = codegen(mod_round_to_zero(op->a, op->b));
     } else {
-        int bits;
-        if (is_const_power_of_two_integer(op->b, &bits)) {
-            Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
-        } else {
-            Value *a = codegen(op->a);
-            Value *b = codegen(op->b);
+        // Match this non-overflowing C code
+        /*
+          T r = a % b;
+          r = r + (r < 0 ? abs(b) : 0);
+        */
 
-            // Match this non-overflowing C code
-            /*
-              T r = a % b;
-              r = r + (r < 0 ? abs(b) : 0);
-            */
-
-            Value *r = builder->CreateSRem(a, b);
-            Value *zero = ConstantInt::get(r->getType(), 0);
-            Value *b_lt_0 = builder->CreateICmpSLT(b, zero);
-            Value *abs_b = builder->CreateSelect(b_lt_0, builder->CreateNeg(b), b);
-            Value *r_lt_0 = builder->CreateICmpSLT(r, zero);
-            value = builder->CreateSelect(r_lt_0, builder->CreateAdd(r, abs_b), r);
-        }
+        string b_name = unique_name('b');
+        string r_name = unique_name('r');
+        Expr a = op->a;
+        Expr b = Variable::make(op->b.type(), b_name);
+        Expr r = Variable::make(op->type, r_name);
+        r = select(r < 0, r + abs(b), r);
+        r = Let::make(r_name, mod_round_to_zero(a, b), r);
+        r = Let::make(b_name, op->b, r);
+        value = codegen(r);
     }
 }
 
@@ -2444,6 +2439,28 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Let::make(a_name, op->args[0],
                               Let::make(b_name, op->args[1],
                                         Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
+        }
+    } else if (op->is_intrinsic("div_round_to_zero")) {
+        internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        if (op->type.is_int()) {
+            value = builder->CreateSDiv(a, b);
+        } else if (op->type.is_uint()) {
+            value = builder->CreateUDiv(a, b);
+        } else {
+            internal_error << "div_round_to_zero of non-integer type.\n";
+        }
+    } else if (op->is_intrinsic("mod_round_to_zero")) {
+        internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        if (op->type.is_int()) {
+            value = builder->CreateSRem(a, b);
+        } else if (op->type.is_uint()) {
+            value = builder->CreateURem(a, b);
+        } else {
+            internal_error << "mod_round_to_zero of non-integer type.\n";
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
         // Make some memory for this buffer_t
