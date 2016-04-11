@@ -853,6 +853,12 @@ public:
      * splitting it up. If bounds inference decides that it requires
      * more of this function than the bounds you have stated, a
      * runtime error will occur when you try to run your pipeline.
+     *
+     * The min argument may be an undefined Expr, in which case the
+     * extent is bounded but the min is whatever bounds inference
+     * computes. This can be useful for forcing a function's
+     * allocation to be a fixed size, which often means it can go on
+     * the stack.
      */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
 
