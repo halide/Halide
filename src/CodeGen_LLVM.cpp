@@ -1392,21 +1392,20 @@ void CodeGen_LLVM::visit(const Div *op) {
 
         value = codegen(val);
     } else {
-        value = codegen(implement_div(op->a, op->b));
+        value = codegen(lower_euclidean_div(op->a, op->b));
     }
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
-    // To match our definition of division, mod should be between 0
-    // and |b|.
-
     int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
     } else {
-        value = codegen(implement_mod(op->a, op->b));
+        // To match our definition of division, mod should be between 0
+        // and |b|.
+        value = codegen(lower_euclidean_mod(op->a, op->b));
     }
 }
 
