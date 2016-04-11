@@ -183,12 +183,12 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.shrsatuh.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
     { "halide.hexagon.shrsath.vw.w",  i16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
-    // For these narrowing ops, we have the option of these, which do
-    // not interleave the input (vpack), or alternative instructions
-    // which do (vsat). Because we don't know which one we prefer
-    // during pattern matching, we match these for now and replace
-    // them with the instructions that interleave later if it makes
-    // sense.
+    // For these narrowing ops, we have the choice of non-interleaving
+    // instructions (vpack), or instructions which interleave
+    // (vsat). Because we don't know which one we prefer during
+    // pattern matching, we match these for now and replace them with
+    // the instructions that interleave later if it makes sense.
+    // TODO: We can also do this with the non-saturating casts below.
     { "halide.hexagon.trunchi.satub.vh", u8c(wild_i16x) },
     { "halide.hexagon.trunchi.satuh.vw", u16c(wild_i32x) },
     { "halide.hexagon.trunchi.satb.vh", i8c(wild_i16x) },
