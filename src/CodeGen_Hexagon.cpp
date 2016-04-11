@@ -1178,23 +1178,42 @@ void CodeGen_Hexagon::visit(const EQ *op) {
 }
 
 void CodeGen_Hexagon::visit(const GE *op) {
-    Expr ge = Not::make(GT::make(op->b, op->a));
-    ge.accept(this);
+    if (op->type.is_vector()) {
+        Expr ge = Not::make(GT::make(op->b, op->a));
+        ge = eliminate_bool_vectors(ge);
+        ge.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_Hexagon::visit(const LE *op) {
-    Expr le = Not::make(GT::make(op->a, op->b));
-    le.accept(this);
+    if (op->type.is_vector()) {
+        Expr le = Not::make(GT::make(op->a, op->b));
+        le = eliminate_bool_vectors(le);
+        le.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_Hexagon::visit(const LT *op) {
-    Expr lt = GT::make(op->b, op->a);
-    lt.accept(this);
+    if (op->type.is_vector()) {
+        Expr lt = GT::make(op->b, op->a);
+        lt.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_Hexagon::visit(const NE *op) {
-    Expr eq = Not::make(EQ::make(op->a, op->b));
-    eq.accept(this);
+    if (op->type.is_vector()) {
+        Expr eq = Not::make(EQ::make(op->a, op->b));
+        eq = eliminate_bool_vectors(eq);
+        eq.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 }}
