@@ -458,6 +458,7 @@ void CodeGen_X86::visit(const Max *op) {
 }
 
 string CodeGen_X86::mcpu() const {
+    if (target.has_feature(Target::AVX2)) return "haswell";
     if (target.has_feature(Target::AVX)) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
     if (target.has_feature(Target::SSE41)) return "penryn";

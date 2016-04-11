@@ -54,13 +54,13 @@ class IRPrinter : public IRVisitor {
 public:
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    IRPrinter(std::ostream &);
+    EXPORT IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    void print(Expr);
+    EXPORT void print(Expr);
 
     /** emit a statement on the output stream */
-    void print(Stmt);
+    EXPORT void print(Stmt);
 
     EXPORT static void test();
 

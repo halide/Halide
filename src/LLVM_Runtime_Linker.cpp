@@ -509,6 +509,16 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     if (llvm_used) {
         llvm_used->eraseFromParent();
     }
+
+    // Also drop the dummy runtime api usage. We only needed it so
+    // that the declarations are retained in the module during the
+    // linking procedure above.
+    llvm::GlobalValue *runtime_api =
+        modules[0]->getNamedGlobal("halide_runtime_api_functions");
+    if (runtime_api) {
+        runtime_api->eraseFromParent();
+    }
+
 }
 
 }
