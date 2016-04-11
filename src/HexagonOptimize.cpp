@@ -627,13 +627,30 @@ private:
             Call::abs,
             Call::absd,
         };
-
         if (interleavable.count(op->name) != 0) return true;
 
-        for (Expr i : op->args) {
-            if (i.type().is_scalar()) continue;
-            if (i.type().bits() != op->type.bits() || i.type().lanes() != op->type.lanes()) {
-                return false;
+        // These calls cannot. Furthermore, these calls have the same
+        // return type as the arguments, which means our test below
+        // will be inaccurate.
+        static set<string> not_interleavable = {
+            "halide.hexagon.interleave.vb",
+            "halide.hexagon.interleave.vh",
+            "halide.hexagon.interleave.vw",
+            "halide.hexagon.deinterleave.vb",
+            "halide.hexagon.deinterleave.vh",
+            "halide.hexagon.deinterleave.vw",
+        };
+        if (not_interleavable.count(op->name) != 0) return false;
+
+        if (starts_with(op->name, "halide.hexagon.")) {
+            // We assume that any hexagon intrinsic is interleavable
+            // as long as all of the vector operands have the same
+            // number of lanes and lane width as the return type.
+            for (Expr i : op->args) {
+                if (i.type().is_scalar()) continue;
+                if (i.type().bits() != op->type.bits() || i.type().lanes() != op->type.lanes()) {
+                    return false;
+                }
             }
         }
         return true;
