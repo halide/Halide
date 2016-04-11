@@ -782,7 +782,7 @@ void CodeGen_C::visit(const Div *op) {
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(implement_div(op->a, op->b));
+        print_expr(lower_euclidean_div(op->a, op->b));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -795,7 +795,7 @@ void CodeGen_C::visit(const Mod *op) {
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(implement_mod(op->a, op->b));
+        print_expr(lower_euclidean_mod(op->a, op->b));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }

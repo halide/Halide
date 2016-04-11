@@ -185,12 +185,12 @@ bool can_allocation_fit_on_stack(int32_t size) {
     return (size <= 1024 * 16);
 }
 
-Expr implement_div(Expr a, Expr b) {
+Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
-    Expr q = div_round_to_zero(a, b);
-    if (a.type().is_uint()) {
-        return q;
-    } else {
+    // IROperator's div_round_to_zero will replace this with a / b for
+    // unsigned ops, so create the intrinsic directly.
+    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
+    if (a.type().is_int()) {
         internal_assert(a.type().is_int());
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
@@ -212,15 +212,17 @@ Expr implement_div(Expr a, Expr b) {
         Expr rs = r >> (a.type().bits() - 1);
         q = q - (rs & bs) + (rs & ~bs);
         return common_subexpression_elimination(q);
+    } else {
+        return q;
     }
 }
 
-Expr implement_mod(Expr a, Expr b) {
+Expr lower_euclidean_mod(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
-    Expr r = mod_round_to_zero(a, b);
-    if (a.type().is_uint()) {
-        return r;
-    } else {
+    // IROperator's div_round_to_zero will replace this with a % b for
+    // unsigned ops, so create the intrinsic directly.
+    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
+    if (a.type().is_int()) {
         internal_assert(a.type().is_int());
         // Match this non-overflowing C code
         /*
@@ -230,6 +232,8 @@ Expr implement_mod(Expr a, Expr b) {
 
         r = select(r < 0, r + abs(b), r);
         return common_subexpression_elimination(r);
+    } else {
+        return r;
     }
 }
 
