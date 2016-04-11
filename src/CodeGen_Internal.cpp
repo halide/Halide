@@ -1,4 +1,6 @@
 #include "CodeGen_Internal.h"
+#include "IROperator.h"
+#include "CSE.h"
 #include "Debug.h"
 
 namespace Halide {
@@ -181,6 +183,54 @@ bool function_takes_user_context(const std::string &name) {
 bool can_allocation_fit_on_stack(int32_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
     return (size <= 1024 * 16);
+}
+
+Expr implement_div(Expr a, Expr b) {
+    internal_assert(a.type() == b.type());
+    Expr q = div_round_to_zero(a, b);
+    if (a.type().is_uint()) {
+        return q;
+    } else {
+        internal_assert(a.type().is_int());
+        // Signed integer division sucks. It should be defined such
+        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
+        // i.e. Euclidean division.
+
+        // We get rounding to work by examining the implied remainder
+        // and correcting the quotient.
+
+        /* Here's the C code that we're trying to match:
+           int q = a / b;
+           int r = a - q * b;
+           int bs = b >> (t.bits() - 1);
+           int rs = r >> (t.bits() - 1);
+           return q - (rs & bs) + (rs & ~bs);
+        */
+
+        Expr r = a - q*b;
+        Expr bs = b >> (a.type().bits() - 1);
+        Expr rs = r >> (a.type().bits() - 1);
+        q = q - (rs & bs) + (rs & ~bs);
+        return common_subexpression_elimination(q);
+    }
+}
+
+Expr implement_mod(Expr a, Expr b) {
+    internal_assert(a.type() == b.type());
+    Expr r = mod_round_to_zero(a, b);
+    if (a.type().is_uint()) {
+        return r;
+    } else {
+        internal_assert(a.type().is_int());
+        // Match this non-overflowing C code
+        /*
+          T r = a % b;
+          r = r + (r < 0 ? abs(b) : 0);
+        */
+
+        r = select(r < 0, r + abs(b), r);
+        return common_subexpression_elimination(r);
+    }
 }
 
 }

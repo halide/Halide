@@ -1636,6 +1636,37 @@ inline Expr count_trailing_zeros(Expr x) {
                                 {x}, Internal::Call::PureIntrinsic);
 }
 
+/** Divide two integers, rounding towards zero. This is the typical
+ * behavior of most hardware architectures, which differs from
+ * Halide's division operator, which is Euclidean (rounds towards
+ * -infinity). */
+inline Expr div_round_to_zero(Expr x, Expr y) {
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "div_round_to_zero only takes integer arguments\n";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "div_round_to_zero only takes integer arguments\n";
+    Internal::match_types(x, y);
+    return Internal::Call::make(x.type(), Internal::Call::div_round_to_zero,
+                                {x, y},
+                                Internal::Call::PureIntrinsic);
+}
+
+/** Compute the remainder of dividing two integers, when division is
+ * rounding toward zero. This is the typical behavior of most hardware
+ * architectures, which differs from Halide's mod operator, which is
+ * Euclidean (produces the remainder when division rounds towards
+ * -infinity). */
+inline Expr mod_round_to_zero(Expr x, Expr y) {
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "mod_round_to_zero only takes integer arguments\n";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "mod_round_to_zero only takes integer arguments\n";
+    Internal::match_types(x, y);
+    return Internal::Call::make(x.type(), Internal::Call::mod_round_to_zero,
+                                {x, y},
+                                Internal::Call::PureIntrinsic);
+}
+
 /** Return a random variable representing a uniformly distributed
  * float in the half-open interval [0.0f, 1.0f). For random numbers of
  * other types, use lerp with a random float as the last parameter.
