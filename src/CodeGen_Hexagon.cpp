@@ -169,10 +169,14 @@ void CodeGen_Hexagon::init_module() {
     // it easier to generate code, we define wrapper intrinsics with
     // the correct type (plus the necessary bitcasts).
     struct HvxIntrinsic {
+        enum {
+            BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments broadcasted up to 32 bits.
+        };
         Intrinsic::ID id;
         Type ret_type;
         const char *name;
         std::vector<Type> arg_types;
+        int flags;
     };
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
@@ -267,14 +271,14 @@ void CodeGen_Hexagon::init_module() {
 
         // Non-widening multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyih),  i16x1, "mpyi.vh.vh",   {i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyihb), i16x1, "mpyi.vh.b",    {i16x1, i8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mpyi.vw.h",    {i32x1, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mpyi.vw.b",    {i32x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyihb), i16x1, "mpyi.vh.b",    {i16x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mpyi.vw.h",    {i32x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mpyi.vw.b",    {i32x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
         { IPICK(Intrinsic::hexagon_V6_vmpyih_acc),  i16x1, "mpyi.acc.vh.vh.vh",   {i16x1, i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyihb_acc), i16x1, "mpyi.acc.vh.vh.b",    {i16x1, i16x1, i8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwh_acc), i32x1, "mpyi.acc.vw.vw.h",    {i32x1, i32x1, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwb_acc), i32x1, "mpyi.acc.vw.vw.b",    {i32x1, i32x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyihb_acc), i16x1, "mpyi.acc.vh.vh.b",    {i16x1, i16x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh_acc), i32x1, "mpyi.acc.vw.vw.h",    {i32x1, i32x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb_acc), i32x1, "mpyi.acc.vw.vw.b",    {i32x1, i32x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Widening vector multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyubv), u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
@@ -296,14 +300,14 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vmpyhus_acc),  i32x2, "mpy.acc.vw.vh.vuh",  {i32x2, i16x1, u16x1} },
 
         // Widening scalar multiplication:
-        { IPICK(Intrinsic::hexagon_V6_vmpyub),  u16x2, "mpy.vub.ub",  {u8x1,  u8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh),  u32x2, "mpy.vuh.uh",  {u16x1, u16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyub),  u16x2, "mpy.vub.ub",  {u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh),  u32x2, "mpy.vuh.uh",  {u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "mpy.acc.vuh.vub.ub", {u16x2, u8x1,  u8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "mpy.acc.vuw.vuh.uh", {u32x2, u16x1, u16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "mpy.acc.vh.vub.b",   {i16x2, u8x1,  i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "mpy.acc.vuh.vub.ub", {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "mpy.acc.vuw.vuh.uh", {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "mpy.acc.vh.vub.b",   {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
         // TODO: There's also vmpyhsat_acc.
 
         // Select/conditionals. Conditions are always signed integer
@@ -393,11 +397,8 @@ void CodeGen_Hexagon::init_module() {
     // need to be implemented in the runtime module, or via
     // fall-through to CodeGen_LLVM.
     for (HvxIntrinsic &i : intrinsic_wrappers) {
-        if (starts_with(i.name, "mpy")) {
-            define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types, true /*broadcast_scalar_word*/);
-        } else {
-            define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
-        }
+        define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types,
+                             i.flags & HvxIntrinsic::BroadcastScalarsToWords);
     }
 }
 
