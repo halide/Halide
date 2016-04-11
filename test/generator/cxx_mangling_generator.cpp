@@ -50,4 +50,4 @@ public:
     }
 };
 
-Halide::RegisterGenerator<CPlusPlusNameManglingGenerator> register_my_gen{"c_plus_plus_name_mangling"};
+Halide::RegisterGenerator<CPlusPlusNameManglingGenerator> register_my_gen{"cxx_mangling"};

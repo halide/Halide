@@ -877,6 +877,7 @@ private:
             llvm::object::ObjectFile::createObjectFile(binary);
 
         if (!maybe_obj) {
+            consumeError(maybe_obj.takeError());
             debug(1) << "Failed to load binary:" << binary << "\n";
             return;
         }
