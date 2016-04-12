@@ -169,10 +169,14 @@ void CodeGen_Hexagon::init_module() {
     // it easier to generate code, we define wrapper intrinsics with
     // the correct type (plus the necessary bitcasts).
     struct HvxIntrinsic {
+        enum {
+            BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments broadcasted up to 32 bits.
+        };
         Intrinsic::ID id;
         Type ret_type;
         const char *name;
         std::vector<Type> arg_types;
+        int flags;
     };
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
@@ -184,24 +188,25 @@ void CodeGen_Hexagon::init_module() {
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
-        { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunchi.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunchi.vw",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunc.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunc.vw",  {i32x2} },
         { IPICK(Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
 
         // Downcast with saturation:
-        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "satub.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "sath.vw",   {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsathub),  u8x1,  "trunc_satub.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsatwh),   i16x1, "trunc_sath.vw",   {i32x2} },
 
-        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "trunchi.satub.vh", {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "trunchi.satuh.vw", {i32x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "trunchi.satb.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "trunchi.sath.vw",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundhub), u8x1,  "trunc_satub_rnd.vh", {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundhb),  i8x1,  "trunc_satb_rnd.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundwuh), u16x1, "trunc_satuh_rnd.vw", {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vroundwh),  i16x1, "trunc_sath_rnd.vw",  {i32x2} },
 
-        { IPICK(Intrinsic::hexagon_V6_vroundhub), u8x1,  "roundu.vh", {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vroundhb),  i8x1,  "round.vh",  {i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vroundwuh), u16x1, "roundu.vw", {i32x2} },
-        { IPICK(Intrinsic::hexagon_V6_vroundwh),  i16x1, "round.vw",  {i32x2} },
+        // vpack does not interleave its input.
+        { IPICK(Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "pack_satub.vh", {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "pack_satuh.vw", {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "pack_satb.vh",  {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "pack_sath.vw",  {i32x2} },
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
@@ -222,23 +227,23 @@ void CodeGen_Hexagon::init_module() {
 
 
         // Adds/subtract of unsigned values with saturation.
-        { IPICK(Intrinsic::hexagon_V6_vaddubsat),    u8x1,  "addsat.vub.vub",    {u8x1,  u8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vadduhsat),    u16x1, "addsat.vuh.vuh",    {u16x1, u16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vaddhsat),     i16x1, "addsat.vh.vh",      {i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vaddwsat),     i32x1, "addsat.vw.vw",      {i32x1, i32x1} },
-        { IPICK(Intrinsic::hexagon_V6_vaddubsat_dv), u8x2,  "addsat.vub.vub.dv", {u8x2,  u8x2} },
-        { IPICK(Intrinsic::hexagon_V6_vadduhsat_dv), u16x2, "addsat.vuh.vuh.dv", {u16x2, u16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vaddhsat_dv),  i16x2, "addsat.vh.vh.dv",   {i16x2, i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vaddwsat_dv),  i32x2, "addsat.vw.vw.dv",   {i32x2, i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vaddubsat),    u8x1,  "satub_add.vub.vub",    {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vadduhsat),    u16x1, "satuh_add.vuh.vuh",    {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vaddhsat),     i16x1, "sath_add.vh.vh",       {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vaddwsat),     i32x1, "satw_add.vw.vw",       {i32x1, i32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vaddubsat_dv), u8x2,  "satub_add.vub.vub.dv", {u8x2,  u8x2} },
+        { IPICK(Intrinsic::hexagon_V6_vadduhsat_dv), u16x2, "satuh_add.vuh.vuh.dv", {u16x2, u16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vaddhsat_dv),  i16x2, "sath_add.vh.vh.dv",    {i16x2, i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vaddwsat_dv),  i32x2, "satw_add.vw.vw.dv",    {i32x2, i32x2} },
 
-        { IPICK(Intrinsic::hexagon_V6_vsububsat),    u8x1,  "subsat.vub.vub",    {u8x1,  u8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vsubuhsat),    u16x1, "subsat.vuh.vuh",    {u16x1, u16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vsubhsat),     i16x1, "subsat.vh.vh",      {i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vsubwsat),     i32x1, "subsat.vw.vw",      {i32x1, i32x1} },
-        { IPICK(Intrinsic::hexagon_V6_vsububsat_dv), u8x2,  "subsat.vub.vub.dv", {u8x2,  u8x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsubuhsat_dv), u16x2, "subsat.vuh.vuh.dv", {u16x2, u16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsubhsat_dv),  i16x2, "subsat.vh.vh.dv",   {i16x2, i16x2} },
-        { IPICK(Intrinsic::hexagon_V6_vsubwsat_dv),  i32x2, "subsat.vw.vw.dv",   {i32x2, i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsububsat),    u8x1,  "satub_sub.vub.vub",    {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vsubuhsat),    u16x1, "satuh_sub.vuh.vuh",    {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vsubhsat),     i16x1, "sath_sub.vh.vh",       {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vsubwsat),     i32x1, "satw_sub.vw.vw",       {i32x1, i32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vsububsat_dv), u8x2,  "satub_sub.vub.vub.dv", {u8x2,  u8x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsubuhsat_dv), u16x2, "satuh_sub.vuh.vuh.dv", {u16x2, u16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsubhsat_dv),  i16x2, "sath_sub.vh.vh.dv",    {i16x2, i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vsubwsat_dv),  i32x2, "satw_sub.vw.vw.dv",    {i32x2, i32x2} },
 
         // Absolute value:
         { IPICK(Intrinsic::hexagon_V6_vabsh),   u16x1, "abs.vh", {i16x1} },
@@ -256,25 +261,25 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vavgh),  i16x1, "avg.vh.vh",   {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vavgw),  i32x1, "avg.vw.vw",   {i32x1, i32x1} },
 
-        { IPICK(Intrinsic::hexagon_V6_vavgubrnd), u8x1,  "avgrnd.vub.vub", {u8x1,  u8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vavguhrnd), u16x1, "avgrnd.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vavghrnd),  i16x1, "avgrnd.vh.vh",   {i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vavgwrnd),  i32x1, "avgrnd.vw.vw",   {i32x1, i32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vavgubrnd), u8x1,  "avg_rnd.vub.vub", {u8x1,  u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vavguhrnd), u16x1, "avg_rnd.vuh.vuh", {u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vavghrnd),  i16x1, "avg_rnd.vh.vh",   {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vavgwrnd),  i32x1, "avg_rnd.vw.vw",   {i32x1, i32x1} },
 
         { IPICK(Intrinsic::hexagon_V6_vnavgub), i8x1,  "navg.vub.vub", {u8x1,  u8x1} },
         { IPICK(Intrinsic::hexagon_V6_vnavgh),  i16x1, "navg.vh.vh",   {i16x1, i16x1} },
         { IPICK(Intrinsic::hexagon_V6_vnavgw),  i32x1, "navg.vw.vw",   {i32x1, i32x1} },
 
         // Non-widening multiplication:
-        { IPICK(Intrinsic::hexagon_V6_vmpyih),  i16x1, "mpyi.vh.vh",   {i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyihb), i16x1, "mpyi.vh.b",    {i16x1, i8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mpyi.vw.h",    {i32x1, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mpyi.vw.b",    {i32x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyih),  i16x1, "mul.vh.vh",   {i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyihb), i16x1, "mul.vh.b",    {i16x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mul.vw.h",    {i32x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mul.vw.b",    {i32x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpyih_acc),  i16x1, "mpyi.acc.vh.vh.vh",   {i16x1, i16x1, i16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyihb_acc), i16x1, "mpyi.acc.vh.vh.b",    {i16x1, i16x1, i8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwh_acc), i32x1, "mpyi.acc.vw.vw.h",    {i32x1, i32x1, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyiwb_acc), i32x1, "mpyi.acc.vw.vw.b",    {i32x1, i32x1, i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyih_acc),  i16x1, "add_mul.vh.vh.vh",   {i16x1, i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyihb_acc), i16x1, "add_mul.vh.vh.b",    {i16x1, i16x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwh_acc), i32x1, "add_mul.vw.vw.h",    {i32x1, i32x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyiwb_acc), i32x1, "add_mul.vw.vw.b",    {i32x1, i32x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Widening vector multiplication:
         { IPICK(Intrinsic::hexagon_V6_vmpyubv), u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
@@ -282,28 +287,28 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vmpybv),  i16x2, "mpy.vb.vb",   {i8x1,  i8x1} },
         { IPICK(Intrinsic::hexagon_V6_vmpyhv),  i32x2, "mpy.vh.vh",   {i16x1, i16x1} },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpyubv_acc), u16x2, "mpy.acc.vuh.vub.vub", {u16x2, u8x1, u8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuhv_acc), u32x2, "mpy.acc.vuw.vuh.vuh", {u32x2, u16x1, u16x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpybv_acc),  i16x2, "mpy.acc.vh.vb.vb",    {i16x2, i8x1, i8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyhv_acc),  i32x2, "mpy.acc.vw.vh.vh",    {i32x2, i16x1, i16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyubv_acc), u16x2, "add_mpy.vuh.vub.vub", {u16x2, u8x1, u8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuhv_acc), u32x2, "add_mpy.vuw.vuh.vuh", {u32x2, u16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybv_acc),  i16x2, "add_mpy.vh.vb.vb",    {i16x2, i8x1, i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhv_acc),  i32x2, "add_mpy.vw.vh.vh",    {i32x2, i16x1, i16x1} },
 
         // Inconsistencies: both are vector instructions despite the
         // missing 'v', and the signedness is indeed swapped.
         { IPICK(Intrinsic::hexagon_V6_vmpybusv), i16x2, "mpy.vub.vb",  {u8x1,  i8x1} },
         { IPICK(Intrinsic::hexagon_V6_vmpyhus),  i32x2, "mpy.vh.vuh",  {i16x1, u16x1} },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpybusv_acc), i16x2, "mpy.acc.vh.vub.vb",  {i16x2, u8x1,  i8x1} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyhus_acc),  i32x2, "mpy.acc.vw.vh.vuh",  {i32x2, i16x1, u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpybusv_acc), i16x2, "add_mpy.vh.vub.vb",  {i16x2, u8x1,  i8x1} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhus_acc),  i32x2, "add_mpy.vw.vh.vuh",  {i32x2, i16x1, u16x1} },
 
         // Widening scalar multiplication:
-        { IPICK(Intrinsic::hexagon_V6_vmpyub),  u16x2, "mpy.vub.ub",  {u8x1,  u8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh),  u32x2, "mpy.vuh.uh",  {u16x1, u16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyub),  u16x2, "mpy.vub.ub",  {u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh),  u32x2, "mpy.vuh.uh",  {u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "mpy.acc.vuh.vub.ub", {u16x2, u8x1,  u8} },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "mpy.acc.vuw.vuh.uh", {u32x2, u16x1, u16} },
-        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "mpy.acc.vh.vub.b",   {i16x2, u8x1,  i8} },
+        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "add_mpy.vuh.vub.ub", {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "add_mpy.vuw.vuh.uh", {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "add_mpy.vh.vub.b",   {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
         // TODO: There's also vmpyhsat_acc.
 
         // Select/conditionals. Conditions are always signed integer
@@ -356,13 +361,13 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vaslh),  i16x1, "shl.vh.h",   {i16x1, i16} },
         { IPICK(Intrinsic::hexagon_V6_vaslw),  i32x1, "shl.vw.w",   {i32x1, i32} },
 
-        { IPICK(Intrinsic::hexagon_V6_vasrw_acc), i32x1, "shr.acc.vw.vw.w", {i32x1, i32x1, i32} },
-        { IPICK(Intrinsic::hexagon_V6_vaslw_acc), i32x1, "shl.acc.vw.vw.w", {i32x1, i32x1, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrw_acc), i32x1, "add_shr.vw.vw.w", {i32x1, i32x1, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vaslw_acc), i32x1, "add_shl.vw.vw.w", {i32x1, i32x1, i32} },
 
-        { IPICK(Intrinsic::hexagon_V6_vasrwh), i16x1, "shrh.vw.w",   {i32x2, i32} },
-        { IPICK(Intrinsic::hexagon_V6_vasrhubsat), u8x1, "shrsatub.vh.h",  {i16x2, i16} },
-        { IPICK(Intrinsic::hexagon_V6_vasrwuhsat), u16x1, "shrsatuh.vw.w", {i32x2, i32} },
-        { IPICK(Intrinsic::hexagon_V6_vasrwhsat),  i16x1, "shrsath.vw.w",  {i32x2, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwh), i16x1, "trunc_shr.vw.w",   {i32x2, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrhubsat), u8x1, "trunc_satub_shr.vh.h",  {i16x2, i16} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwuhsat), u16x1, "trunc_satuh_shr.vw.w", {i32x2, i32} },
+        { IPICK(Intrinsic::hexagon_V6_vasrwhsat),  i16x1, "trunc_sath_shr.vw.w",  {i32x2, i32} },
 
         // Bitwise operators
         { IPICK(Intrinsic::hexagon_V6_vand),  u8x1,  "and.vb.vb",  {u8x1,  u8x1} },
@@ -393,11 +398,8 @@ void CodeGen_Hexagon::init_module() {
     // need to be implemented in the runtime module, or via
     // fall-through to CodeGen_LLVM.
     for (HvxIntrinsic &i : intrinsic_wrappers) {
-        if (starts_with(i.name, "mpy")) {
-            define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types, true /*broadcast_scalar_word*/);
-        } else {
-            define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types);
-        }
+        define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types,
+                             i.flags & HvxIntrinsic::BroadcastScalarsToWords);
     }
 }
 
@@ -755,7 +757,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             Expr narrow_b = lossless_cast(b.type().with_bits(bits), b);
             Expr opb = narrow_b.defined() ? narrow_b : b;
             value = call_intrin(op->type,
-                                "halide.hexagon.mpyi" +
+                                "halide.hexagon.mul" +
                                 type_suffix(a, opb),
                                 {a, opb},
                                 true /*maybe*/);
@@ -765,7 +767,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
         // We didn't find an intrinsic for this type. Try again
         // without the scalar operand.
         value = call_intrin(op->type,
-                            "halide.hexagon.mpyi" + type_suffix(op->a, op->b),
+                            "halide.hexagon.mul" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
         if (value) return;
@@ -789,7 +791,7 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             // but the trunc operation reinterleaves.
             Type wide = op->type.with_bits(op->type.bits()*2);
             value = call_intrin(llvm_type_of(op->type),
-                                "halide.hexagon.trunchi" + type_suffix(wide, false),
+                                "halide.hexagon.trunc" + type_suffix(wide, false),
                                 {value});
             return;
         }
