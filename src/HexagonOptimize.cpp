@@ -4,6 +4,7 @@
 #include "IRMatch.h"
 #include "ExprUsesVar.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -12,6 +13,7 @@ namespace Internal {
 using std::set;
 using std::vector;
 using std::string;
+using std::pair;
 
 Expr native_interleave(Expr x) {
     string fn;
@@ -50,6 +52,47 @@ bool is_native_deinterleave(Expr x) {
 }
 
 namespace {
+
+// This mutator rewrites patterns with an unknown number of lanes to
+// have the specified number of lanes.
+class WithLanes : public IRMutator {
+    using IRMutator::visit;
+
+    int lanes;
+
+    Type with_lanes(Type t) { return t.with_lanes(lanes); }
+
+    void visit(const Cast *op) {
+        if (op->type.lanes() != lanes) {
+            expr = Cast::make(with_lanes(op->type), mutate(op->value));
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (op->type.lanes() != lanes) {
+            expr = Variable::make(with_lanes(op->type), op->name);
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const Broadcast *op) {
+        if (op->type.lanes() != lanes) {
+            expr = Broadcast::make(op->value, lanes);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    WithLanes(int lanes) : lanes(lanes) {}
+};
+
+Expr with_lanes(Expr x, int lanes) {
+    return WithLanes(lanes).mutate(x);
+}
 
 Expr u8(Expr E) { return cast(UInt(8, E.type().lanes()), E); }
 Expr i8(Expr E) { return cast(Int(8, E.type().lanes()), E); }
@@ -412,9 +455,45 @@ private:
     }
 
     void visit(const Cast *op) {
+        // To hit more of the patterns we want, rewrite "double casts"
+        // as two stage casts.
+        static vector<pair<Expr, Expr>> cast_rewrites = {
+            // Saturating narrowing
+            { u8c(wild_u32x), u8c(u16c(wild_u32x)) },
+            { u8c(wild_i32x), u8c(i16c(wild_i32x)) },
+            { i8c(wild_u32x), i8c(u16c(wild_u32x)) },
+            { i8c(wild_i32x), i8c(i16c(wild_i32x)) },
+
+            // Narrowing
+            { u8(wild_u32x), u8(u16(wild_u32x)) },
+            { u8(wild_i32x), u8(i16(wild_i32x)) },
+            { i8(wild_u32x), i8(u16(wild_u32x)) },
+            { i8(wild_i32x), i8(i16(wild_i32x)) },
+
+            // Widening
+            { u32(wild_u8x), u32(u16(wild_u8x)) },
+            { u32(wild_i8x), u32(i16(wild_i8x)) },
+            { i32(wild_u8x), i32(u16(wild_u8x)) },
+            { i32(wild_i8x), i32(i16(wild_i8x)) },
+        };
+
         if (op->type.is_vector()) {
-            expr = apply_patterns(op, casts, this);
-            if (!expr.same_as(op)) return;
+            Expr cast = op;
+
+            expr = apply_patterns(cast, casts, this);
+            if (!expr.same_as(cast)) return;
+
+            // If we didn't find a pattern, try using one of the
+            // rewrites above.
+            std::vector<Expr> matches;
+            for (auto i : cast_rewrites) {
+                if (expr_match(i.first, cast, matches)) {
+                    Expr replacement = with_lanes(i.second, op->type.lanes());
+                    expr = substitute("*", matches[0], replacement);
+                    expr = mutate(expr);
+                    return;
+                }
+            }
         }
         IRMutator::visit(op);
     }

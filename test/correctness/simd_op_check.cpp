@@ -1331,11 +1331,15 @@ void check_hvx_all() {
     check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
     check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
     check("vzxt(v*.uh)", hvx_width/2, i32(u16_1));
-
     check("vsxt(v*.b)", hvx_width/1, u16(i8_1));
     check("vsxt(v*.b)", hvx_width/1, i16(i8_1));
     check("vsxt(v*.h)", hvx_width/2, u32(i16_1));
     check("vsxt(v*.h)", hvx_width/2, i32(i16_1));
+
+    check("vzxt(v*.ub)", hvx_width/1, u32(u8_1));
+    check("vzxt(v*.ub)", hvx_width/1, i32(u8_1));
+    check("vsxt(v*.b)", hvx_width/1, u32(i8_1));
+    check("vsxt(v*.b)", hvx_width/1, i32(i8_1));
 
     check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
     check("vadd(v*.h,v*.h)", hvx_width/2, u16_1 + u16_2);
@@ -1451,6 +1455,11 @@ void check_hvx_all() {
     check("v*.ub = vsat(v*.h,v*.h)", hvx_width/1, u8c(i16(i8_1) << 8));
     check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c(i32(i16_1) << 16));
     check("v*.h = vsat(v*.w,v*.w)", hvx_width/2, i16c(i32(i16_1) << 16));
+
+    // Also check double saturating narrows.
+    check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i32_1));
+    check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8c(i32_1));
+    check("v*.h = vsat(v*.w,v*.w)", hvx_width/1, u8c(i32(i16_1) << 8));
 
     check("vround(v*.h,v*.h)", hvx_width/1, u8c((i32(i16_1) + 128)/256));
     check("vround(v*.h,v*.h)", hvx_width/1, i8c((i32(i16_1) + 128)/256));
