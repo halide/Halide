@@ -177,9 +177,11 @@ std::vector<Pattern> casts = {
 
     // Saturating narrowing casts
     { "halide.hexagon.trunc_satub_shr.vh.h", u8c(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
+    { "halide.hexagon.trunc_satub_shr.vw.w", u8c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_satuh_shr.vw.w", u16c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_sath_shr.vw.w",  i16c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_satub_shr.vh.h", u8c(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+    { "halide.hexagon.trunc_satub_shr.vw.w", u8c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
     { "halide.hexagon.trunc_satuh_shr.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
     { "halide.hexagon.trunc_sath_shr.vw.w",  i16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
