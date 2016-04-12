@@ -1634,15 +1634,6 @@ void check_hvx_all() {
 #if 0
     // Todo: We don't generate vmpa(vdouble.ub, vdouble.b) yet.
     check("vmpa(v*:*.ub,v*:*.ub)", hvx_width, ((i16(u8_even) *5) + (i16(u8_odd) * 3)));
-
-    // We don't test for rounding versions for vasr. At most generate an extra add.
-    check("vasr(v*.h,r*)", hvx_width/2, i16_1 >> 8);
-    check("vasr(v*.w,r*)", hvx_width/2, i32_1 >> 16);
-    check("v*.ub = vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8c((i16(u8_1) + i16(u8_2)) >> 4));
-    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(i16_1) + i32(i16_2)) >> 8));
-    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(u16_1) + i32(u16_2)) >> 8));
-    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(i16_1) + i32(i16_2)) >> 8));
-    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(u16_1) + i32(u16_2)) >> 8));
 #endif
 }
 
