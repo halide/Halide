@@ -19,7 +19,7 @@ void test_median(Target& target) {
   set_min(input, 0, 0);
   set_min(input, 1, 0);
   set_stride_multiple(input, 1, 1 << LOG2VLEN);
-
+  input.set_host_alignment(1 << LOG2VLEN);
 
   /* EJP: note that there's some overlap between max and min and mid.
    * Does the compiler pick this up automatically, or do we need to tweak the code?
@@ -64,7 +64,7 @@ void test_median(Target& target) {
   set_output_buffer_min(median, 0, 0);
   set_output_buffer_min(median, 1, 0);
   set_stride_multiple(median, 1, 1 << LOG2VLEN);
-
+  median.output_buffer().set_host_alignment(1 << LOG2VLEN);
   // max_x.compute_root();
   // min_x.compute_root();
   // mid_x.compute_root();
@@ -91,7 +91,6 @@ int main(int argc, char **argv) {
 	Target target;
         setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
         commonPerfSetup(target);
-        target.set_cgoption(Target::BuffersAligned);
 	test_median(target);
 	printf ("Done\n");
 	return 0;
