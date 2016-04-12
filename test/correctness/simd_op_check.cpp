@@ -1450,6 +1450,7 @@ void check_hvx_all() {
     // we can cancel with the deinterleaving from widening.
     check("v*.ub = vsat(v*.h,v*.h)", hvx_width/1, u8c(i16(i8_1) << 8));
     check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c(i32(i16_1) << 16));
+    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u8c(i32(i16_1) >> 4));
     check("v*.h = vsat(v*.w,v*.w)", hvx_width/2, i16c(i32(i16_1) << 16));
 
     check("vround(v*.h,v*.h)", hvx_width/1, u8c((i32(i16_1) + 128)/256));
@@ -1633,33 +1634,6 @@ void check_hvx_all() {
 #if 0
     // Todo: We don't generate vmpa(vdouble.ub, vdouble.b) yet.
     check("vmpa(v*:*.ub,v*:*.ub)", hvx_width, ((i16(u8_even) *5) + (i16(u8_odd) * 3)));
-
-    // We don't test for rounding versions for vasr. At most generate an extra add.
-    check("vasr(v*.h,r*)", hvx_width/2, i16_1 >> 8);
-    check("vasr(v*.w,r*)", hvx_width/2, i32_1 >> 16);
-    check("v*.ub = vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8c((i16(u8_1) + i16(u8_2)) >> 4));
-    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(i16_1) + i32(i16_2)) >> 8));
-    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c((i32(u16_1) + i32(u16_2)) >> 8));
-    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(i16_1) + i32(i16_2)) >> 8));
-    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c((i32(u16_1) + i32(u16_2)) >> 8));
-
-    // Todo: Move the following tests from test/hexagon/codegen into simd_op_check
-    // 1. vminmax.cpp <DONE>
-    // 2. vsat.cpp    <DEPRECATED>
-    // 3. vselect.cpp <DONE>
-    // 4. vshuff.cpp  <DONE>
-    // 5. vsplat.cpp  <DONE>
-    // 6. vzero.cpp   <DONE>
-    // 7. vmpyi.cpp   <DONE>
-    // 8. vmpyi-vector-by-scalar.cpp <DONE, handle single vector>
-    // 9. vmpa.cpp    <DONE>
-    // 10. vmpy.cpp   <DONE>
-    // 11. valign.cpp <Cannot test until ImageParam::set_host_alignment is implemented>
-    // 12. vbitwise.cpp
-    // 13. varith.cpp
-    // 14. vmpa-accumulate.cpp
-    // 15. vdmpy.cpp
-    // 16. vasr.cpp  <DONE>
 #endif
 }
 
