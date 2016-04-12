@@ -48,6 +48,13 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int32_t size);
 
+/** Given a Halide Euclidean division/mod operation, define it in terms of
+ * div_round_to_zero or mod_round_to_zero. */
+///@{
+Expr lower_euclidean_div(Expr a, Expr b);
+Expr lower_euclidean_mod(Expr a, Expr b);
+///@}
+
 }}
 
 #endif

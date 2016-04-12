@@ -15,12 +15,6 @@ namespace h = Halide;
 namespace p = boost::python;
 
 
-h::Stage &stage_split0(h::Stage &that, h::VarOrRVar old, h::VarOrRVar outer, h::VarOrRVar inner, h::Expr factor)
-{
-    return that.split(old, outer, inner, factor);
-}
-
-
 void defineStage()
 {
     using Halide::Stage;
@@ -47,11 +41,8 @@ void defineStage()
     // Scheduling calls that control how the domain of this stage is traversed.
     // "See the documentation for Func for the meanings."
 
-    //Stage &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
-    //Stage &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
-    //Stage &serial(VarOrRVar var);
     stage_class
-            .def("split", &stage_split0, p::args("self", "old", "outer", "inner", "factor"),
+            .def("split", &func_split<Stage>, p::args("self", "old", "outer", "inner", "factor"),
                  p::return_internal_reference<1>(),
                  "Split a dimension into inner and outer subdimensions with the "
                  "given names, where the inner dimension iterates from 0 to "
@@ -66,24 +57,6 @@ void defineStage()
             .def("serial", &Stage::serial, p::args("self","var"),
                  p::return_internal_reference<1>(),
                  "Mark a dimension to be traversed serially. This is the default.");
-
-    //Stage &parallel(VarOrRVar var);
-    //Stage &vectorize(VarOrRVar var);
-    //Stage &unroll(VarOrRVar var);
-    //Stage &parallel(VarOrRVar var, Expr task_size);
-    //Stage &vectorize(VarOrRVar var, int factor);
-    //Stage &unroll(VarOrRVar var, int factor);
-    //Stage &tile(VarOrRVar x, VarOrRVar y,
-    //                            VarOrRVar xo, VarOrRVar yo,
-    //                            VarOrRVar xi, VarOrRVar yi, Expr
-    //                            xfactor, Expr yfactor);
-    //Stage &tile(VarOrRVar x, VarOrRVar y,
-    //                            VarOrRVar xi, VarOrRVar yi,
-    //                            Expr xfactor, Expr yfactor);
-    //Stage &reorder(const std::vector<VarOrRVar> &vars);
-    //template <typename... Args>
-    //typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
-    //reorder(VarOrRVar x, VarOrRVar y, Args... args)
 
     stage_class.def("parallel", &func_parallel0<Stage>, p::args("self", "var"),
                     p::return_internal_reference<1>(),
@@ -135,40 +108,15 @@ void defineStage()
                  "Reorder variables to have the given nesting order, "
                  "from innermost out");
 
-    //Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     stage_class.def("rename", &Stage::rename, p::args("self", "old_name", "new_name"),
                     p::return_internal_reference<1>(),
                     "Rename a dimension. Equivalent to split with a inner size of one.");
 
-    //Stage specialize(Expr condition);
     stage_class.def("specialize", &Stage::specialize, p::args("self", "condition"),
                    "Specialize a Func (Stage). This creates a special-case version of the "
                    "Func where the given condition is true. The most effective "
                    "conditions are those of the form param == value, and boolean "
                    "Params. See C++ documentation for more details.");
-
-
-    //Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
-
-    //Stage &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
-
-    //Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu(VarOrRVar block_x, VarOrRVar block_y,
-    //                           VarOrRVar thread_x, VarOrRVar thread_y,
-    //                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-    //                           VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
-    //                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_tile(VarOrRVar x, Expr x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
-    //                                DeviceAPI device_api = DeviceAPI::Default_GPU);
-    //Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-    //                                Expr x_size, Expr y_size, Expr z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     defineFuncOrStageGpuMethods<h::Stage>(stage_class);
 

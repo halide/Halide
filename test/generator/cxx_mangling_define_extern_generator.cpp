@@ -32,14 +32,14 @@ public:
         args.push_back(Expr(11.0));
         args.push_back(ptr);
         args.push_back(const_ptr);
-        f.define_extern("HalideTest::c_plus_plus_name_mangling",
+        f.define_extern("HalideTest::cxx_mangling",
                         args, Float(64), 1, true);
 
-        g.compute_root(); 
+        g.compute_root();
 
         return f;
     }
 };
 
 Halide::RegisterGenerator<CPlusPlusNameManglingDefineExternGenerator>
-    register_my_gen{"c_plus_plus_name_mangling_define_extern"};
+    register_my_gen{"cxx_mangling_define_extern"};
