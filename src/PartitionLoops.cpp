@@ -399,6 +399,11 @@ class PartitionLoops : public IRMutator {
         FindSimplifications finder;
         body.accept(&finder);
 
+        if (finder.simplifications.empty()) {
+            IRMutator::visit(op);
+            return;
+        }
+
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
 
         vector<Expr> min_vals, max_vals;
@@ -597,11 +602,22 @@ class PartitionLoops : public IRMutator {
             // Uncomment to include code that prints the epilogue value
             //epilogue_val = print(epilogue_val, op->name, "epilogue");
             stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
+        } else {
+            epilogue_val = op->min + op->extent;
         }
         if (make_prologue) {
             // Uncomment to include code that prints the prologue value
             //prologue_val = print(prologue_val, op->name, "prologue");
             stmt = LetStmt::make(prologue_name, prologue_val, stmt);
+        } else {
+            prologue_val = op->min;
+        }
+
+        if (is_one(simplify(epilogue_val <= prologue_val))) {
+            // The steady state is empty. I've made a huge
+            // mistake. Try to partition a loop further in.
+            IRMutator::visit(op);
+            return;
         }
 
         in_gpu_loop = old_in_gpu_loop;
