@@ -914,7 +914,71 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
             value = slice_vector(codegen(op->args[0]), 0, op->type.lanes());
             return;
-        }
+        } // else if (op->name == Call::slice_vector) {
+        //     if (!isValidHexagonVector(op->type, native_vector_bits())) {
+        //         CodeGen_Posix::visit(op);
+        //         return;
+        //     }
+        //     const IntImm *num_vector_args = op->args[0].as<IntImm>();
+        //     internal_assert(num_vector_args);
+        //     size_t num_vectors = num_vector_args->value;
+        //     internal_assert(op->args.size() == (num_vectors + 3));
+        //     if (num_vectors != 2) {
+        //         CodeGen_Posix::visit(op);
+        //         return;
+        //     }
+
+        //     Expr vec_low = op->args[1];
+        //     Expr vec_high = op->args[2];
+        //     // These are hard and fast only for now. It is conceivable that
+        //     // we could have a slice_vector that takes vectors of two different
+        //     // types and produces a valid native vector.
+        //     internal_assert(vec_low.type() == vec_high.type());
+
+        //     if (op->type != vec_low.type()) {
+        //         CodeGen_Posix::visit(op);
+        //         return;
+        //     }
+
+        //     int start_lane = op->args[3].as<IntImm>()->value;
+        //     int num_lanes = op->args[4].as<IntImm>()->value;
+        //     internal_assert(num_lanes = vec_low.type().lanes());
+        //     int vec_size_bytes = native_vector_bits() / 8;
+        //     int offset_bytes = start_lane * op->type.bytes();
+        //     int reverse_offset = vec_size_bytes - offset_bytes;
+        //     Intrinsic::ID IntrinsID = IPICK(Intrinsic::hexagon_V6_valignbi);
+        //     int bytes_off = offset_bytes;
+        //     if (reverse_offset <= 7) {
+        //         //e.g offset_bytes = 126, then reverse_offset is 2. Use vlalignbi;
+        //         IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignbi);
+        //         bytes_off = reverse_offset;
+        //     } else if (offset_bytes > 7 && reverse_offset > 7) {
+        //         IntrinsID = IPICK(Intrinsic::hexagon_V6_valignb);
+        //     }
+        //     Value *low_vec = codegen(vec_low);
+        //     Value *high_vec = codegen(vec_high);
+        //     Value *scalar;
+        //     if (IntrinsID == IPICK(Intrinsic::hexagon_V6_valignb)) {
+        //         scalar = codegen(bytes_off);
+        //     } else {
+        //         Expr scalar_imm_expr = IntImm::make(Int(32), bytes_off);
+        //         scalar = codegen(scalar_imm_expr);
+        //     }
+        //     std::vector<Value *> Ops;
+        //     Ops.push_back(high_vec);
+        //     Ops.push_back(low_vec);
+        //     Ops.push_back(scalar);
+        //     debug(4) << "Creating alignbyte\n";
+        //     debug(4) << "offset_bytes: " << offset_bytes << "\n";
+        //     debug(4) << "reverse_offset: " << reverse_offset << "\n";
+        //     Value *align_byte =
+        //         CallLLVMIntrinsic(Intrinsic::
+        //                           getDeclaration(module.get(), IntrinsID), Ops);
+        //     if (debug::debug_level >= 2) align_byte -> dump();
+        //     value = convertValueType(align_byte, llvm_type_of(op->type));
+        //     if (debug::debug_level >= 2) value -> dump();
+        //     return;
+        // }
     }
     CodeGen_Posix::visit(op);
 }
