@@ -42,6 +42,7 @@ void test_sobel(Target &target) {
   set_min(input, 0, 0);
   set_min(input, 1, 0);
   set_stride_multiple(input, 1, 1 << LOG2VLEN);
+  input.set_host_alignment(1 << LOG2VLEN);
 
   // Halide:: Function
   Halide::Func input_16("input_16");
@@ -68,7 +69,7 @@ void test_sobel(Target &target) {
   set_output_buffer_min(Sobel, 0, 0);
   set_output_buffer_min(Sobel, 1, 0);
   set_stride_multiple(Sobel, 1, 1 << LOG2VLEN);
-
+  Sobel.output_buffer().set_host_alignment(1 << LOG2VLEN);
 #ifdef TRACING
   Sobel.trace_stores();
 #endif
@@ -95,7 +96,6 @@ int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
   commonPerfSetup(target);
-  target.set_cgoption(Target::BuffersAligned);
   test_sobel(target);
   printf ("Done\n");
   return 0;
