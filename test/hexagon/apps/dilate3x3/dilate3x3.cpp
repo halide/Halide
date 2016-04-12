@@ -2,7 +2,8 @@
 #include "halide-hexagon-setup.h"
 #include <stdio.h>
 using namespace Halide;
-
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 #define COMPILE_OBJ(X)  ((X).compile_to_file("dilate3x3", args, target))
 
 void test_dilate3x3(Target& target) {
