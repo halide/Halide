@@ -1,4 +1,4 @@
-#include "AlignLoads.h"
+#include "HexagonAlignLoads.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
@@ -9,9 +9,9 @@ namespace Halide {
 namespace Internal {
 using std::vector;
 
-class AlignLoads : public IRMutator {
+class HexagonAlignLoads : public IRMutator {
 public:
-    AlignLoads(Target t) : target(t) {}
+    HexagonAlignLoads(Target t) : target(t) {}
 private:
     Target target;
 
@@ -22,13 +22,13 @@ private:
         return modulus_remainder(e, alignment_info);
     }
     void visit(const Load *op) {
-        debug(4) << "AlignLoads: Working on " << (Expr) op << "..\n";
+        debug(4) << "HexagonAlignLoads: Working on " << (Expr) op << "..\n";
         Expr index = mutate(op->index);
         if (op->type.is_vector()) {
             // int reqd_alignment = target.natural_vector_size(op->type);
             bool external = op->param.defined() || op->image.defined();
             if (external) {
-                debug(4) << "AlignLoads: Not dealing with an external image\n";
+                debug(4) << "HexagonAlignLoads: Not dealing with an external image\n";
                 debug(4) << (Expr) op << "\n";
                 expr = op;
                 return;
@@ -50,9 +50,9 @@ private:
                         mod_rem.remainder == 0) {
                         // We know nothing about alignment. Give up.
                         // TODO: Fix this.
-                        debug(4) << "AlignLoads: Cannot reason about alignment.\n";
-                        debug(4) << "AlignLoads: Type: " << op->type << "\n";
-                        debug(4) << "AlignLoads: Index: " << index << "\n";
+                        debug(4) << "HexagonAlignLoads: Cannot reason about alignment.\n";
+                        debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                        debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
                         expr = op;
                         return;
                     }
@@ -70,15 +70,15 @@ private:
                             // The second handles ramps such as
                             // ramp(64 * c1 + 128, 1, 64)
                             // This is a perfectly aligned address. Nothing to do here.
-                            debug(4) << "AlignLoads: Encountered a perfectly aligned load.\n";
-                            debug(4) << "AlignLoads: Type: " << op->type << "\n";
-                            debug(4) << "AlignLoads: Index: " << index << "\n";
+                            debug(4) << "HexagonAlignLoads: Encountered a perfectly aligned load.\n";
+                            debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                            debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
                             expr = op;
                             return;
                         } else {
-                            debug(4) << "AlignLoads: Unaligned load.\n";
-                            debug(4) << "AlignLoads: Type: " << op->type << "\n";
-                            debug(4) << "AlignLoads: Index: " << index << "\n";
+                            debug(4) << "HexagonAlignLoads: Unaligned load.\n";
+                            debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                            debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
                             // We can generate two aligned loads followed by a shuffle_vectors if the
                             // base is like so
                             // 1. (aligned_expr + const)
@@ -91,9 +91,9 @@ private:
                             if (!b) {
                                 // Should we be expecting the index to be in simplified
                                 // canonical form, i.e. expression + IntImm?
-                                debug(4) << "AlignLoads: add->b is not a constant\n";
-                                debug(4) << "AlignLoads: Type: " << op->type << "\n";
-                                debug(4) << "AlignLoads: Index: " << index << "\n";
+                                debug(4) << "HexagonAlignLoads: add->b is not a constant\n";
+                                debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                                debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
                                 expr = op;
                                 return;
                             }
@@ -113,11 +113,11 @@ private:
                             Expr start_lane = IntImm::make(Int(32), offset_elements);
                             Expr num_lanes = IntImm::make(Int(32), lanes);
                             vector<Expr> args = {two, load_low, load_high, start_lane, num_lanes};
-                            debug(4) << "AlignLoads: Replacing with two aligned loads and slice_vector\n";
-                            debug(4) << "AlignLoads: load_low  : " << load_low << "\n";
-                            debug(4) << "AlignLoads: load_high : " << load_high << "\n";
+                            debug(4) << "HexagonAlignLoads: Replacing with two aligned loads and slice_vector\n";
+                            debug(4) << "HexagonAlignLoads: load_low  : " << load_low << "\n";
+                            debug(4) << "HexagonAlignLoads: load_high : " << load_high << "\n";
                             expr = Call::make(op->type, Call::slice_vector, args, Call::Intrinsic);
-                            debug(4) << "AlignLoads: slice_vector : " << expr << "\n";
+                            debug(4) << "HexagonAlignLoads: slice_vector : " << expr << "\n";
                             return;
                         } // (mod_rem.remainder != 0)
                     } else {
@@ -163,8 +163,8 @@ private:
 
 };
 
-Stmt align_loads(Stmt s, const Target &t) {
-    return AlignLoads(t).mutate(s);
+Stmt hexagon_align_loads(Stmt s, const Target &t) {
+    return HexagonAlignLoads(t).mutate(s);
   }
 }
 }

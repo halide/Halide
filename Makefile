@@ -257,7 +257,6 @@ TMP_DIR     = $(BUILD_DIR)/tmp
 SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
-  AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -300,6 +299,7 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
+  HexagonAlignLoads.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   Image.cpp \
@@ -383,7 +383,6 @@ BITWRITER_SOURCE_FILES = \
 HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
-  AlignLoads.h \
   AllocationBoundsInference.h \
   Argument.h \
   BoundaryConditions.h \
@@ -428,6 +427,7 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  HexagonAlignLoads.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   runtime/HalideRuntime.h \
