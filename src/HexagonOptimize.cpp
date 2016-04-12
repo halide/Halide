@@ -220,11 +220,9 @@ std::vector<Pattern> casts = {
 
     // Saturating narrowing casts
     { "halide.hexagon.trunc_satub_shr.vh.h", u8c(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc_satub_shr.vw.w", u8c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_satuh_shr.vw.w", u16c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_sath_shr.vw.w",  i16c(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_satub_shr.vh.h", u8c(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-    { "halide.hexagon.trunc_satub_shr.vw.w", u8c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
     { "halide.hexagon.trunc_satuh_shr.vw.w", u16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
     { "halide.hexagon.trunc_sath_shr.vw.w",  i16c(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
@@ -458,7 +456,9 @@ private:
 
     void visit(const Cast *op) {
         // To hit more of the patterns we want, rewrite "double casts"
-        // as two stage casts.
+        // as two stage casts. This also avoids letting vector casts
+        // fall through to LLVM, which will generate large unoptimized
+        // shuffles.
         static vector<pair<Expr, Expr>> cast_rewrites = {
             // Saturating narrowing
             { u8c(wild_u32x), u8c(u16c(wild_u32x)) },
