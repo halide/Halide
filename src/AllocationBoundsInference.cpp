@@ -84,16 +84,23 @@ class AllocationInference : public IRMutator {
                 extent = simplify((max - min) + 1);
             }
 
+            Expr min_var = Variable::make(Int(32), min_name);
+            Expr max_var = Variable::make(Int(32), max_name);
+
+            Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
+                                        {f.args()[i], f.name(), min_var, max_var, b[i].min, b[i].max},
+                                        Call::Extern);
+
+            if (bound.min.defined()) {
+                stmt = Block::make(AssertStmt::make(min_var <= b[i].min, error_msg), stmt);
+            }
+            if (bound.extent.defined()) {
+                stmt = Block::make(AssertStmt::make(max_var >= b[i].max, error_msg), stmt);
+            }
+
             stmt = LetStmt::make(extent_name, extent, stmt);
             stmt = LetStmt::make(min_name, min, stmt);
             stmt = LetStmt::make(max_name, max, stmt);
-
-            if (bound.min.defined()) {
-                stmt = Block::make(AssertStmt::make(min <= b[i].min, -1), stmt);
-            }
-            if (bound.extent.defined()) {
-                stmt = Block::make(AssertStmt::make(max >= b[i].max, -1), stmt);
-            }
         }
 
     }
