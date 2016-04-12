@@ -2248,7 +2248,9 @@ bool saves_frame_pointer(void *fn) {
 }
 
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
     #ifdef __ARM__
     return;
     #else
@@ -2278,7 +2280,7 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
             return;
         }
 
-        debug_sections->working = (*test)();
+        debug_sections->working = (*test)(test_a);
         if (!debug_sections->working) {
             debug(5) << "Failed because test routine failed\n";
             return;
