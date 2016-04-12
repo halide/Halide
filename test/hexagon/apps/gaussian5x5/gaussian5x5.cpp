@@ -22,6 +22,7 @@ void test_gaussian5x5(Target& target) {
   set_min(input, 0, 0);
   set_min(input, 1, 0);
   set_stride_multiple(input, 1, 1 << LOG2VLEN);
+  input.set_host_alignment(1 << LOG2VLEN);
 #endif
 
   Func input_16("input_16");
@@ -44,6 +45,7 @@ void test_gaussian5x5(Target& target) {
   set_output_buffer_min(gaussian5x5, 0, 0);
   set_output_buffer_min(gaussian5x5, 1, 0);
   set_stride_multiple(gaussian5x5, 1, 1 << LOG2VLEN);
+  gaussian5x5.output_buffer().set_host_alignment(1 << LOG2VLEN);
 #endif
   std::vector<Argument> args(1);
   args[0]  = input;
@@ -65,7 +67,6 @@ int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
   commonPerfSetup(target);
-  target.set_cgoption(Target::BuffersAligned);
   test_gaussian5x5(target);
   printf ("Done\n");
   return 0;

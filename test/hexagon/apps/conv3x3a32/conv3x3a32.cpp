@@ -11,13 +11,14 @@ int main(int argc, char **argv) {
   Target target;
   setupHexagonTarget(target, LOG2VLEN == 7 ? Target::HVX_128 : Target::HVX_64);
   commonPerfSetup(target);
-  target.set_cgoption(Target::BuffersAligned);
+
 
   Halide::Var x("x"), y("y");
   Var xo,xi;
 
   ImageParam In (type_of<uint8_t>(), 2);
   ImageParam Mask (type_of<int8_t>(), 2);
+  In.set_host_alignment(1 << LOG2VLEN);
   set_min(In, 0, 0);
   set_min(In, 1, 0);
   set_stride_multiple(In, 1, 1 << LOG2VLEN);
@@ -36,6 +37,7 @@ int main(int argc, char **argv) {
   set_output_buffer_min(conv3x3, 0, 0);
   set_output_buffer_min(conv3x3, 1, 0);
   set_stride_multiple(conv3x3, 1, 1 << LOG2VLEN);
+  conv3x3.output_buffer().set_host_alignment(1 << LOG2VLEN);
   std::vector<Argument> args(2);
   args[0]  = In;
   args[1]  = Mask;

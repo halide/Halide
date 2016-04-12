@@ -87,10 +87,6 @@ struct Target {
 
         FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
-  enum CGOption {
-    BuffersAligned,
-    CGOptionEnd
-  };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
@@ -180,15 +176,6 @@ struct Target {
         }
         return true;
     }
-    void set_cgoption(CGOption c, bool value = true) {
-        user_assert(c < CGOptionEnd) << "Invalid Target CGOption.\n";
-        cgoptions.set(c, value);
-    }
-
-    bool has_cgoption(CGOption c) const {
-        user_assert(c < CGOptionEnd) << "Invalid Target CGOption.\n";
-        return cgoptions[c];
-    }
 
     /** Returns whether a particular device API can be used with this
      * Target. */
@@ -198,8 +185,7 @@ struct Target {
       return os == other.os &&
           arch == other.arch &&
           bits == other.bits &&
-          features == other.features &&
-          cgoptions == other.cgoptions;
+          features == other.features;
     }
 
     bool operator!=(const Target &other) const {
@@ -293,7 +279,6 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
-    std::bitset<CGOptionEnd> cgoptions;
 };
 
 /** Return the target corresponding to the host machine. */
