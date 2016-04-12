@@ -2318,7 +2318,9 @@ void register_heap_object(const void *obj, size_t size, const void *helper) {
 void deregister_heap_object(const void *obj, size_t size) {
 }
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
 }
 
 }
