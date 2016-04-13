@@ -55,7 +55,7 @@ int init_sim() {
         printf("Debugger port: %d\n", pnum);
         HEXAPI_Status dbg_state;
         dbg_state = sim->ConfigureRemoteDebug(pnum);
-        if (dbg_state) {
+        if (dbg_state != HEX_STAT_SUCCESS) {
             printf("Debugger port failed: state: %d\n", dbg_state);
             return -1;
         }
