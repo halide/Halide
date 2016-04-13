@@ -442,6 +442,12 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
+    /** Create an LLVM shuffle vectors instruction. */
+    llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
+                                 const std::vector<int> &indices);
+    /** Shorthand for shuffling a vector with an undef vector. */
+    llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
+
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:
      *
