@@ -123,6 +123,7 @@ private:
         Expr value;
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+            value = op->value;
         } else {
             const Load *ld = op->value.template as<Load>();
             if (ld) value = mutate(op->value);
