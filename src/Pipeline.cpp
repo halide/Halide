@@ -261,11 +261,14 @@ class InferArguments : public IRGraphVisitor {
 public:
     vector<InferredArgument> &args;
 
-    InferArguments(vector<InferredArgument> &a,
-                   const vector<Function> &o) : args(a), outputs(o) {
+    InferArguments(vector<InferredArgument> &a, const vector<Function> &o, Stmt body)
+        : args(a), outputs(o) {
         args.clear();
         for (const Function &f : outputs) {
             visit_function(f);
+        }
+        if (body.defined()) {
+            body.accept(this);
         }
     }
 
@@ -375,21 +378,21 @@ private:
 
 } // namespace Internal
 
-vector<Argument> Pipeline::infer_arguments() {
+vector<Argument> Pipeline::infer_arguments(Stmt body) {
+
     user_assert(defined()) << "Can't infer arguments on an undefined Pipeline\n";
 
-    if (contents.ptr->inferred_args.empty()) {
-        // Infer an arguments vector by walking the IR
-        InferArguments infer_args(contents.ptr->inferred_args,
-                                  contents.ptr->outputs);
+    // Infer an arguments vector by walking the IR
+    InferArguments infer_args(contents.ptr->inferred_args,
+                              contents.ptr->outputs,
+                              body);
 
-        // Sort the Arguments with all buffers first (alphabetical by name),
-        // followed by all non-buffers (alphabetical by name).
-        std::sort(contents.ptr->inferred_args.begin(), contents.ptr->inferred_args.end());
+    // Sort the Arguments with all buffers first (alphabetical by name),
+    // followed by all non-buffers (alphabetical by name).
+    std::sort(contents.ptr->inferred_args.begin(), contents.ptr->inferred_args.end());
 
-        // Add the user context argument.
-        contents.ptr->inferred_args.push_back(contents.ptr->user_context_arg);
-    }
+    // Add the user context argument.
+    contents.ptr->inferred_args.push_back(contents.ptr->user_context_arg);
 
     // Return the inferred argument types, minus any constant images
     // (we'll embed those in the binary by default), and minus the user_context arg.
@@ -406,10 +409,14 @@ vector<Argument> Pipeline::infer_arguments() {
     return result;
 }
 
+vector<Argument> Pipeline::infer_arguments() {
+    return infer_arguments(Stmt());
+}
+
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args) {
-    infer_arguments();
+vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+    infer_arguments(body);
 
     vector<Buffer> images_to_embed;
 
@@ -524,7 +531,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         public_args.insert(public_args.begin(), contents.ptr->user_context_arg.arg);
     }
 
-    vector<Buffer> global_images = validate_arguments(public_args);
+    vector<Buffer> global_images = validate_arguments(public_args, private_body);
 
     // Add the output buffer arguments
     for (Function out : contents.ptr->outputs) {
@@ -619,8 +626,10 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Compile to a module
     Module module = compile_to_module(args, name, target);
 
-    // Make sure we're not embedding any images
-    internal_assert(module.buffers.empty());
+    // We need to infer the arguments again, because compiling (GPU
+    // and offload targets) might have added new buffers we need to
+    // embed.
+    infer_arguments(module.functions.back().body);
 
     std::map<std::string, JITExtern> lowered_externs = contents.ptr->jit_externs;
     // Compile to jit module

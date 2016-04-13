@@ -18,6 +18,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -40,6 +41,7 @@
 #include "Simplify.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StoreForwarding.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "UnifyDuplicateLets.h"
@@ -167,7 +169,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::Renderscript)) {
+        t.has_feature(Target::Renderscript) ||
+        (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
@@ -217,6 +220,11 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
+#ifdef STORE_FORWARDING
+    debug(1) << "Forwarding stores across loop iterations...\n";
+    s = store_forwarding(s);
+    debug(2) << "Lowering after forwarding stores:\n" << s << "\n\n";
+#endif
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
@@ -244,6 +252,10 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    debug(1) << "Splitting off Hexagon offload...\n";
+    s = inject_hexagon_rpc(s, t);
+    debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

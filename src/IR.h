@@ -426,6 +426,8 @@ struct Call : public ExprNode<Call> {
         make_int64,
         make_float64,
         register_destructor,
+        get_high_register,
+        get_low_register,
         div_round_to_zero,
         mod_round_to_zero;
 
