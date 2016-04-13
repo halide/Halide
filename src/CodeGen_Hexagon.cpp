@@ -590,6 +590,90 @@ Value *CodeGen_Hexagon::concat_vectors(const vector<Value *> &v) {
     return CodeGen_Posix::concat_vectors(v);
 }
 
+Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
+                                        const std::vector<int> &indices) {
+    internal_assert(a->getType() == b->getType());
+
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+
+    llvm::Type *vec_ty = a->getType();
+    int vec_elements = vec_ty->getVectorNumElements();
+    int element_bits = vec_ty->getScalarSizeInBits();
+    int result_vec_elements = static_cast<int>(indices.size());
+    if (vec_elements*element_bits != native_vector_bits() ||
+        result_vec_elements*element_bits != native_vector_bits()) {
+        // Don't handle non-native vector widths.
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+
+        // TODO: This currently only handles two input native vectors
+        // and returns one native vector. We could also handle
+        // shuffles that are 1 vector -> 1 vector, or 2 vectors -> 2
+        // vectors.
+    }
+
+    // We're shuffling vectors that are native HVX vectors. We might
+    // be able to use nice HVX instructions.
+    a->dump();
+    b->dump();
+    for (int i : indices) {
+        debug(0) << " " << i << " ";
+    }
+    debug(0) << "\n" << result_vec_elements << " " << vec_elements << "\n";
+
+    internal_assert(result_vec_elements == vec_elements);
+
+    bool is_strided_ramp = true;
+    int stride = indices[1] - indices[0];
+    for (int i = 1; i + 1 < result_vec_elements; i++) {
+        if (indices[i] + stride != indices[i + 1]) {
+            is_strided_ramp = false;
+            break;
+        }
+    }
+
+    if (is_strided_ramp) {
+        int start = indices[0];
+        if (stride == 1) {
+            // Dense ramp.
+            if (start == 0) {
+                return a;
+            } else if (start == vec_elements) {
+                return b;
+            }
+
+            // TODO: These indirectly call eachother, which is relying
+            // on the conditions getting here to avoid infinite
+            // recursion. I think it would be better to eventually
+            // move all of slice_vector's logic here.
+            return slice_vector(concat_vectors({a, b}), start, vec_elements);
+        } else if (stride == 2) {
+            // Stride 2 ramp, use a vshufe/vshuffo instruction.
+            Intrinsic::ID id = Intrinsic::not_intrinsic;
+            if (start == 0) {
+                if (element_bits == 8) {
+                    id = IPICK(Intrinsic::hexagon_V6_vshuffeb);
+                } else if (element_bits == 16) {
+                    id = IPICK(Intrinsic::hexagon_V6_vshufeh);
+                }
+            } else if (start == 1) {
+                if (element_bits == 8) {
+                    id = IPICK(Intrinsic::hexagon_V6_vshuffob);
+                } else if (element_bits == 16) {
+                    id = IPICK(Intrinsic::hexagon_V6_vshufoh);
+                }
+            }
+            if (id != Intrinsic::not_intrinsic) {
+                return call_intrin_cast(vec_ty, id, {b, a});
+            }
+        }
+    }
+
+    // TODO: There are more HVX permute instructions that could be
+    // implemented here.
+
+    return CodeGen_Posix::shuffle_vectors(a, b, indices);
+}
+
 
 namespace {
 std::string type_suffix(Type type, bool signed_variants = true) {
