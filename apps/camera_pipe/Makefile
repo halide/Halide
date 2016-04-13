@@ -29,7 +29,7 @@ fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 
 ifdef HEX_TOOLS
 process: process.cpp curved.o fcam/Demosaic.o
-	$(TGT_CXX) $(TGT_CXXFLAGS) -Wall -O3 $^ -o $@ -lhexagon
+	$(TGT_CXX) $(TGT_CXXFLAGS) -Wall -O3 $^ -o $@ -lhexagon -L$(HALIDE_SRC_PATH)/tools/sim_qurt -lsim_qurt
 else
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS)
