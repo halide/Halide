@@ -276,28 +276,39 @@ Func process(Func raw, Type result_type,
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
     if (target.arch == Target::ARM) {
         // Compute in chunks over tiles, vectorized by 8
-        denoised.compute_at(processed, tx).vectorize(x, 8);
-        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
-        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
-        processed.tile(x, y, tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
-        processed.parallel(ty);
+        const int tile_size = 32;
+        denoised.compute_at(processed, tx)
+            .vectorize(x, 8);
+        deinterleaved.compute_at(processed, tx)
+            .vectorize(x, 8)
+            .reorder(c, x, y)
+            .unroll(c);
+        corrected.compute_at(processed, tx)
+            .vectorize(x, 4)
+            .reorder(c, x, y)
+            .unroll(c);
+        processed.tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
+            .reorder(xi, yi, c, tx, ty)
+            .parallel(ty);
 
         // We can generate slightly better code if we know the output is a whole number of tiles.
         processed
-            .bound(x, 0, (out_width/32)*32)
-            .bound(y, 0, (out_height/32)*32);
+            .bound(x, 0, (out_width/tile_size)*tile_size)
+            .bound(y, 0, (out_height/tile_size)*tile_size);
     } else if (target.arch == Target::X86) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
+        const int tile_size = 128;
         denoised.compute_at(processed, tx);
         deinterleaved.compute_at(processed, tx);
         corrected.compute_at(processed, tx);
-        processed.tile(x, y, tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
-        processed.parallel(ty);
+        processed.tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
+            .reorder(xi, yi, c, tx, ty)
+            .parallel(ty);
 
         // We can generate slightly better code if we know the output is a whole number of tiles.
         processed
-            .bound(x, 0, (out_width/128)*128)
-            .bound(y, 0, (out_height/128)*128);
+            .bound(x, 0, (out_width/tile_size)*tile_size)
+            .bound(y, 0, (out_height/tile_size)*tile_size);
     } else {
         denoised.compute_root();
         deinterleaved.compute_root();
