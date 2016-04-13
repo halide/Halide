@@ -1,18 +1,12 @@
 include ../support/Makefile.inc
 
-ifeq ($(HL_TARGET),ptx)
-  SCHEDULE=100
-else
-  SCHEDULE=0
-endif
-
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
 	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
 
 curved.o: camera_pipe
-	./camera_pipe 8 0 # 8-bit output,
+	./camera_pipe 8 # 8-bit output,
 
 fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
@@ -21,7 +15,7 @@ fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
 
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS) -ldl -lpthread
 
 out.png: process
 	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png

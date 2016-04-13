@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-int schedule;
+Target target;
 
 Var x, y, tx("tx"), ty("ty"), c("c");
 Func processed("processed");
@@ -15,6 +15,7 @@ Expr avg(Expr a, Expr b) {
 }
 
 Func hot_pixel_suppression(Func input) {
+
     Expr a = max(max(input(x-2, y), input(x+2, y)),
                  max(input(x, y-2), input(x, y+2)));
 
@@ -41,9 +42,9 @@ Func deinterleave(Func raw) {
     Func deinterleaved;
 
     deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
-                                    select(c == 1, raw(2*x+1, 2*y),
-                                           select(c == 2, raw(2*x, 2*y+1),
-                                                  raw(2*x+1, 2*y+1))));
+                                    c == 1, raw(2*x+1, 2*y),
+                                    c == 2, raw(2*x, 2*y+1),
+                                            raw(2*x+1, 2*y+1));
     return deinterleaved;
 }
 
@@ -146,7 +147,7 @@ Func demosaic(Func deinterleaved) {
 
 
     /* THE SCHEDULE */
-    if (schedule == 0) {
+    if (target.arch == Target::ARM) {
         // optimized for ARM
         // Compute these in chunks over tiles, vectorized by 8
         g_r.compute_at(processed, tx).vectorize(x, 8);
@@ -162,8 +163,7 @@ Func demosaic(Func deinterleaved) {
             .vectorize(x, 8)
             .unroll(y, 2)
             .reorder(c, x, y).bound(c, 0, 3).unroll(c);
-    } else if (schedule == 1) {
-        // optimized for X86
+    } else if (target.arch == Target::X86) {
         // Don't vectorize, because sse is bad at 16-bit interleaving
         g_r.compute_at(processed, tx);
         g_b.compute_at(processed, tx);
@@ -176,7 +176,6 @@ Func demosaic(Func deinterleaved) {
         // These interleave in x and y, so unrolling them helps
         output.compute_at(processed, tx).unroll(x, 2).unroll(y, 2)
             .reorder(c, x, y).bound(c, 0, 3).unroll(c);
-
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -272,14 +271,14 @@ Func process(Func raw, Type result_type,
 
     // Schedule
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
-    if (schedule == 0) {
+    if (target.arch == Target::ARM) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.compute_at(processed, tx).vectorize(x, 8);
         deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
-    } else if (schedule == 1) {
+    } else if (target.arch == Target::X86) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
         denoised.compute_at(processed, tx);
         deinterleaved.compute_at(processed, tx);
@@ -319,8 +318,8 @@ int main(int argc, char **argv) {
     int bit_width = atoi(argv[1]);
     Type result_type = UInt(bit_width);
 
-    // Pick a schedule
-    schedule = atoi(argv[2]);
+    // Pick a target
+    target = get_target_from_environment();
 
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
@@ -333,13 +332,10 @@ int main(int argc, char **argv) {
         .bound(tx, 0, (out_width/32)*32)
         .bound(ty, 0, (out_height/32)*32);
 
-    //string s = processed.serialize();
-    //printf("%s\n", s.c_str());
-
     std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
                                   input, matrix_3200, matrix_7000};
-    processed.compile_to_file("curved", args);
-    processed.compile_to_assembly("curved.s", args);
+    processed.compile_to_file("curved", args, target);
+    processed.compile_to_assembly("curved.s", args, target);
 
     return 0;
 }
