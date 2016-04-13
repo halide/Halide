@@ -309,9 +309,10 @@ int main(int argc, char **argv) {
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
     // to make a 2560x1920 output image, just like the FCam pipe, so
-    // shift by 16, 12
+    // shift by 16, 12. We also convert it to be signed, so we can deal
+    // with values that fall below 0 during processing.
     Func shifted;
-    shifted(x, y) = input(x+16, y+12);
+    shifted(x, y) = cast<int16_t>(input(x+16, y+12));
 
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
