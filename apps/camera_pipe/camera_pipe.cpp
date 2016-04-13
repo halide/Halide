@@ -267,24 +267,37 @@ Func process(Func raw, Type result_type,
     Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
     Func curved = apply_curve(corrected, result_type, gamma, contrast, blackLevel, whiteLevel);
 
-    processed(tx, ty, c) = curved(tx, ty, c);
+    processed(x, y, c) = curved(x, y, c);
 
     // Schedule
+    Expr out_width = processed.output_buffer().width();
+    Expr out_height = processed.output_buffer().height();
+
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
     if (target.arch == Target::ARM) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.compute_at(processed, tx).vectorize(x, 8);
         deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
-        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        processed.tile(x, y, tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
+
+        // We can generate slightly better code if we know the output is a whole number of tiles.
+        processed
+            .bound(x, 0, (out_width/32)*32)
+            .bound(y, 0, (out_height/32)*32);
     } else if (target.arch == Target::X86) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
         denoised.compute_at(processed, tx);
         deinterleaved.compute_at(processed, tx);
         corrected.compute_at(processed, tx);
-        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
+        processed.tile(x, y, tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
+
+        // We can generate slightly better code if we know the output is a whole number of tiles.
+        processed
+            .bound(x, 0, (out_width/128)*128)
+            .bound(y, 0, (out_height/128)*128);
     } else {
         denoised.compute_root();
         deinterleaved.compute_root();
@@ -325,13 +338,6 @@ int main(int argc, char **argv) {
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
                              color_temp, gamma, contrast, blackLevel, whiteLevel);
-
-    // We can generate slightly better code if we know the output is a whole number of tiles.
-    Expr out_width = processed.output_buffer().width();
-    Expr out_height = processed.output_buffer().height();
-    processed
-        .bound(tx, 0, (out_width/32)*32)
-        .bound(ty, 0, (out_height/32)*32);
 
     std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
                                   input, matrix_3200, matrix_7000};
