@@ -52,7 +52,7 @@ int init_sim() {
     int pnum = 0;
     char *s= getenv("HALIDE_HEX_DBG_PORT");
     if (s && (pnum=(atoi(s)))) {
-        fprintf(stderr, "\nDebugger port: %d\n", pnum);
+        printf("Debugger port: %d\n", pnum);
         HEXAPI_Status dbg_state;
         dbg_state = sim->ConfigureRemoteDebug(pnum);
         if (dbg_state) {
