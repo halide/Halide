@@ -516,7 +516,7 @@ class Interleaver : public IRMutator {
             value = deinterleave_expr(value);
         }
 
-        stmt = Store::make(op->name, value, idx);
+        stmt = Store::make(op->name, value, idx, op->param);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -654,7 +654,7 @@ class Interleaver : public IRMutator {
             t = t.with_lanes(lanes*stores.size());
             Expr index = Ramp::make(base, make_one(Int(32)), t.lanes());
             Expr value = Call::make(t, Call::interleave_vectors, args, Call::PureIntrinsic);
-            Stmt new_store = Store::make(store->name, value, index);
+            Stmt new_store = Store::make(store->name, value, index, store->param);
 
             // Continue recursively into the stuff that
             // collect_strided_stores didn't collect.

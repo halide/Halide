@@ -283,7 +283,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
                 } else {
                     break;
                 }
-              
+
             }
         }
     } else {
@@ -483,7 +483,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                     }
                 }
             }
-        }           
+        }
     }
 
     have_user_context = false;
@@ -782,18 +782,7 @@ void CodeGen_C::visit(const Div *op) {
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        string a = print_expr(op->a);
-        string b = print_expr(op->b);
-        // q = a / b
-        string q = print_assignment(op->type, a + " / " + b);
-        // r = a - q * b
-        string r = print_assignment(op->type, a + " - " + q + " * " + b);
-        // bs = b >> (8*sizeof(T) - 1)
-        string bs = print_assignment(op->type, b + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
-        // rs = r >> (8*sizeof(T) - 1)
-        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
-        // id = q - (rs & bs) + (rs & bs)
-        print_assignment(op->type, q + " - (" + rs + " & " + bs + ") + (" + rs + " & ~" + bs + ")");
+        print_expr(lower_euclidean_div(op->a, op->b));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -806,16 +795,7 @@ void CodeGen_C::visit(const Mod *op) {
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        string a = print_expr(op->a);
-        string b = print_expr(op->b);
-        // r = a % b
-        string r = print_assignment(op->type, a + " % " + b);
-        // rs = r >> (8*sizeof(T) - 1)
-        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
-        // abs_b = abs(b)
-        string abs_b = print_expr(cast(op->type, abs(op->b)));
-        // id = r + (abs_b & rs)
-        print_assignment(op->type, r + " + (" + abs_b + " & " + rs + ")");
+        print_expr(lower_euclidean_mod(op->a, op->b));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
@@ -1210,6 +1190,10 @@ void CodeGen_C::visit(const Call *op) {
                << "~" << struct_name << "() {" << call << "}"
                << "} " << instance_name << "(" << arg << ");\n";
         rhs << print_expr(0);
+    } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+        rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
+        rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics
@@ -1559,7 +1543,7 @@ void CodeGen_C::test() {
     Param<float> alpha("alpha");
     Param<int> beta("beta");
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
-    Stmt s = Store::make("buf", e, x);
+    Stmt s = Store::make("buf", e, x, Parameter());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
     s = Allocate::make("tmp.stack", Int(32), {127}, const_true(), s);

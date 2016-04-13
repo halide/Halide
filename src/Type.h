@@ -66,7 +66,7 @@ struct halide_cplusplus_type_name {
                  name < rhs.name);
     }
 };
-   
+
 /** A structure to represent the fully scoped name of a C++ composite
  * type for use in generating function signatures that use that type.
  *
@@ -128,19 +128,19 @@ struct halide_handle_cplusplus_type {
 
 template<typename T>
 struct halide_c_type_to_name {
-  static constexpr bool known_type = false;
+  static const bool known_type = false;
 };
 
-template<> struct halide_c_type_to_name<bool> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple, "bool"}; } };
-template<> struct halide_c_type_to_name<int8_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int8_t"}; } };
-template<> struct halide_c_type_to_name<uint8_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint8_t"}; } };
-template<> struct halide_c_type_to_name<int16_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int16_t"}; } };
-template<> struct halide_c_type_to_name<uint16_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint16_t"}; } };
-template<> struct halide_c_type_to_name<int32_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int32_t"}; } };
-template<> struct halide_c_type_to_name<uint32_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint32_t"}; } };
-template<> struct halide_c_type_to_name<float> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
-template<> struct halide_c_type_to_name<double> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
-template<> struct halide_c_type_to_name<struct buffer_t> { static constexpr bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
+template<> struct halide_c_type_to_name<bool> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple, "bool"}; } };
+template<> struct halide_c_type_to_name<int8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int8_t"}; } };
+template<> struct halide_c_type_to_name<uint8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint8_t"}; } };
+template<> struct halide_c_type_to_name<int16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int16_t"}; } };
+template<> struct halide_c_type_to_name<uint16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint16_t"}; } };
+template<> struct halide_c_type_to_name<int32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int32_t"}; } };
+template<> struct halide_c_type_to_name<uint32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint32_t"}; } };
+template<> struct halide_c_type_to_name<float> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
+template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
+template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
 
 template<typename T, bool KnownType>
 struct halide_internal_handle_traits {
@@ -237,12 +237,12 @@ struct Type {
     // Default ctor initializes everything to predictable-but-unlikely values
     Type() : type(Handle, 0, 0), handle_type(nullptr) {}
 
-    
+
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    Type(halide_type_code_t code, uint8_t bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr) 
+    Type(halide_type_code_t code, uint8_t bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
     }
 

@@ -871,7 +871,20 @@ private:
         llvm::object::ObjectFile *obj = nullptr;
 
         // Open the object file in question. The API to do this keeps changing.
-        #if LLVM_VERSION >= 36
+        #if LLVM_VERSION >= 39
+
+        llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
+
+        if (!maybe_obj) {
+            consumeError(maybe_obj.takeError());
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
+        }
+
+        obj = maybe_obj.get().getBinary();
+
+        #elif LLVM_VERSION >= 36
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -2235,7 +2248,9 @@ bool saves_frame_pointer(void *fn) {
 }
 
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
     #ifdef __ARM__
     return;
     #else
@@ -2265,7 +2280,7 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
             return;
         }
 
-        debug_sections->working = (*test)();
+        debug_sections->working = (*test)(test_a);
         if (!debug_sections->working) {
             debug(5) << "Failed because test routine failed\n";
             return;
@@ -2303,7 +2318,9 @@ void register_heap_object(const void *obj, size_t size, const void *helper) {
 void deregister_heap_object(const void *obj, size_t size) {
 }
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
 }
 
 }

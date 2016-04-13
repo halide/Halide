@@ -17,6 +17,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "MatlabWrapper.h"
 #include "IntegerDivisionTable.h"
+#include "CSE.h"
 
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
@@ -991,23 +992,9 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
-    // Check it's 32-byte aligned
-
-    // Disabled, because we don't currently require external
-    // allocations to be aligned.
-
-    /*
-    Value *base = builder->CreatePtrToInt(host_ptr, i64);
-    Value *check_alignment = builder->CreateAnd(base, 0x1f);
-    check_alignment = builder->CreateIsNull(check_alignment);
-
-    string error_message = "Buffer " + name + " is not 32-byte aligned";
-    create_assertion(check_alignment, error_message);
-    */
-
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
-    might_be_misaligned.insert(name);
+    external_buffer.insert(name);
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1323,18 +1310,11 @@ void CodeGen_LLVM::visit(const Div *op) {
     const uint64_t *const_uint_divisor = as_const_uint(op->b);
 
     int shift_amount;
-    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
-
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
-    } else if (power_of_two && op->type.is_int()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateAShr(numerator, shift);
-    } else if (power_of_two && op->type.is_uint()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateLShr(numerator, shift);
+    } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
+               (op->type.is_int() || op->type.is_uint())) {
+        value = codegen(op->a >> shift_amount);
     } else if (const_int_divisor &&
                op->type.is_int() &&
                (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
@@ -1411,84 +1391,21 @@ void CodeGen_LLVM::visit(const Div *op) {
         }
 
         value = codegen(val);
-    } else if (op->type.is_uint()) {
-        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
-        // Signed integer division sucks. It should be defined such
-        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
-        // i.e. Euclidean division.
-
-        // If it's a small const power of two, then we can just
-        // arithmetic right shift. This rounds towards negative
-        // infinity.
-        for (int bits = 1; bits < 30; bits++) {
-            if (is_const(op->b, 1 << bits)) {
-                Value *shift = codegen(make_const(op->a.type(), bits));
-                value = builder->CreateAShr(codegen(op->a), shift);
-                return;
-            }
-        }
-
-        // We get rounding to work by examining the implied remainder
-        // and correcting the quotient.
-
-        /* Here's the C code that we're trying to match:
-        int q = a / b;
-        int r = a - q * b;
-        int bs = b >> (t.bits() - 1);
-        int rs = r >> (t.bits() - 1);
-        return q - (rs & bs) + (rs & ~bs);
-        */
-
-        Value *a = codegen(op->a), *b = codegen(op->b);
-
-        Value *q = builder->CreateSDiv(a, b);
-        Value *r = builder->CreateSub(a, builder->CreateMul(q, b));
-        Value *shift = ConstantInt::get(a->getType(), op->a.type().bits()-1);
-        Value *bs = builder->CreateAShr(b, shift);
-        Value *rs = builder->CreateAShr(r, shift);
-        Value *round_up = builder->CreateAnd(rs, bs);
-        Value *round_down = builder->CreateAnd(rs, builder->CreateNot(bs));
-        value = builder->CreateAdd(builder->CreateSub(q, round_up), round_down);
+        value = codegen(lower_euclidean_div(op->a, op->b));
     }
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
-    // To match our definition of division, mod should be between 0
-    // and |b|.
-
+    int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
-    } else if (op->type.is_uint()) {
-        int bits;
-        if (is_const_power_of_two_integer(op->b, &bits)) {
-            Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
-        } else {
-            value = builder->CreateURem(codegen(op->a), codegen(op->b));
-        }
+    } else if (is_const_power_of_two_integer(op->b, &bits)) {
+        value = codegen(op->a & (op->b - 1));
     } else {
-        int bits;
-        if (is_const_power_of_two_integer(op->b, &bits)) {
-            Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
-        } else {
-            Value *a = codegen(op->a);
-            Value *b = codegen(op->b);
-
-            // Match this non-overflowing C code
-            /*
-              T r = a % b;
-              r = r + (r < 0 ? abs(b) : 0);
-            */
-
-            Value *r = builder->CreateSRem(a, b);
-            Value *zero = ConstantInt::get(r->getType(), 0);
-            Value *b_lt_0 = builder->CreateICmpSLT(b, zero);
-            Value *abs_b = builder->CreateSelect(b_lt_0, builder->CreateNeg(b), b);
-            Value *r_lt_0 = builder->CreateICmpSLT(r, zero);
-            value = builder->CreateSelect(r_lt_0, builder->CreateAdd(r, abs_b), r);
-        }
+        // To match our definition of division, mod should be between 0
+        // and |b|.
+        value = codegen(lower_euclidean_mod(op->a, op->b));
     }
 }
 
@@ -1777,7 +1694,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
 void CodeGen_LLVM::visit(const Load *op) {
 
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (op->type.is_handle()) {
@@ -1809,14 +1726,20 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
-                       (mod_rem.modulus & 1) == 0 &&
-                       alignment < native_bytes) {
-                    mod_rem.modulus /= 2;
-                    mod_rem.remainder /= 2;
-                    alignment *= 2;
-                }
+            while ((mod_rem.remainder & 1) == 0 &&
+                   (mod_rem.modulus & 1) == 0 &&
+                   alignment < native_bytes) {
+                mod_rem.modulus /= 2;
+                mod_rem.remainder /= 2;
+                alignment *= 2;
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector loads wider than the native vector
@@ -2328,6 +2251,28 @@ void CodeGen_LLVM::visit(const Call *op) {
             codegen(Let::make(a_name, op->args[0],
                               Let::make(b_name, op->args[1],
                                         Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
+        }
+    } else if (op->is_intrinsic("div_round_to_zero")) {
+        internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        if (op->type.is_int()) {
+            value = builder->CreateSDiv(a, b);
+        } else if (op->type.is_uint()) {
+            value = builder->CreateUDiv(a, b);
+        } else {
+            internal_error << "div_round_to_zero of non-integer type.\n";
+        }
+    } else if (op->is_intrinsic("mod_round_to_zero")) {
+        internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        if (op->type.is_int()) {
+            value = builder->CreateSRem(a, b);
+        } else if (op->type.is_uint()) {
+            value = builder->CreateURem(a, b);
+        } else {
+            internal_error << "mod_round_to_zero of non-integer type.\n";
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
         // Make some memory for this buffer_t
@@ -3185,13 +3130,13 @@ void CodeGen_LLVM::visit(const Store *op) {
     // memory, so convert stores of handles to stores of uint64_ts.
     if (op->value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
-        codegen(Store::make(op->name, v, op->index));
+        codegen(Store::make(op->name, v, op->index, op->param));
         return;
     }
 
     Halide::Type value_type = op->value.type();
     Value *val = codegen(op->value);
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -3207,14 +3152,20 @@ void CodeGen_LLVM::visit(const Store *op) {
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
+            while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
                        alignment < native_bytes) {
                     mod_rem.modulus /= 2;
                     mod_rem.remainder /= 2;
                     alignment *= 2;
-                }
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least the native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector stores wider than the native vector

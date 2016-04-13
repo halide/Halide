@@ -394,7 +394,7 @@ protected:
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
-    std::set<std::string> might_be_misaligned;
+    std::set<std::string> external_buffer;
 
     /** The user_context argument. May be a constant null if the
      * function is being compiled without a user context. */
