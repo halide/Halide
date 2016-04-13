@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         // We need p elements of f per split of g. This could create a
         // dynamic allocation. Instead we'll assert that 8 is enough, so
         // that f can go on the stack and be entirely vectorized.
-        f.compute_at(g, xo).bound(x, Expr(), 8).vectorize(x);
+        f.compute_at(g, xo).bound_extent(x, 8).vectorize(x);
 
         // Check there's no malloc when the bound is good
         g.set_custom_allocator(&my_malloc, &my_free);
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         f.compute_at(g, xo);
         // In the tail case, the amount of g required is min(8, some
         // nasty thing), so we'll add a bound.
-        f.bound(x, Expr(), 8);
+        f.bound_extent(x, 8);
 
         g.set_custom_allocator(&my_malloc, &my_free);
         g.realize(20);
