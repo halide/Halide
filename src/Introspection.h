@@ -49,7 +49,9 @@ EXPORT std::string get_source_location();
 // This gets called automatically by anyone who includes Halide.h by
 // the code below. It tests if this functionality works for the given
 // compilation unit, and disables it if not.
-EXPORT void test_compilation_unit(bool (*test)(), void (*calib)());
+EXPORT void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                                  bool (*test_a)(const void *, const std::string &),
+                                  void (*calib)());
 }
 
 }
@@ -107,27 +109,29 @@ struct A {
     bool test(const std::string &my_name);
 };
 
-static bool test_a(const A &a, const std::string &my_name) {
+static bool test_a(const void *a_ptr, const std::string &my_name) {
+    const A *a = (const A *)a_ptr;
     bool success = true;
-    success &= Halide::Internal::check_introspection(&a.an_int, "int", my_name + ".an_int", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a.a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a.a_b.parent, "HalideIntrospectionCanary::A *", my_name + ".a_b.parent", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a.a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(a.a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->an_int, "int", my_name + ".an_int", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A *", my_name + ".a_b.parent", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(a->a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__ , __LINE__);
     return success;
 }
 
-static bool test() {
+static bool test(bool (*f)(const void *, const std::string &)) {
     A a1, a2;
 
-    return test_a(a1, "a1") && test_a(a2, "a2");
+    // Call via pointer to prevent inlining.
+    return f(&a1, "a1") && f(&a2, "a2");
 }
 
 // Run the tests, and calibrate for the PC offset at static initialization time.
 namespace {
 struct TestCompilationUnit {
     TestCompilationUnit() {
-        Halide::Internal::Introspection::test_compilation_unit(&test, &offset_marker);
+        Halide::Internal::Introspection::test_compilation_unit(&test, &test_a, &offset_marker);
     }
 };
 }
