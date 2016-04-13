@@ -385,6 +385,7 @@ struct Call : public ExprNode<Call> {
         shuffle_vector,
         interleave_vectors,
         slice_vector,
+        concat_vectors,
         reinterpret,
         bitwise_and,
         bitwise_not,

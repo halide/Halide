@@ -107,7 +107,51 @@ private:
                         debug(4) <<  "... " << expr << "\n";
                         return;
                     }
-                 } else {
+                } else if (ramp && stride && stride->value == 2) {
+                    // We'll try to break this into two dense loads followed by a shuffle.
+                    Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
+                    bool shifted_b = false;
+                    int lanes = ramp->lanes;
+
+                    if (op->param.defined()) {
+                        // We need to be able to figure out if buffer_base + base_a is aligned. If not,
+                        // we may have to shift base_b left by one so as to not read beyond the end
+                        // of an external buffer.
+                        ModulusRemainder mod_rem = get_alignment_info(base_a);
+                        int base_lanes_off = mod_imp(op->param.host_alignment(), lanes) +
+                            mod_imp(mod_rem.modulus, lanes);
+                        int rem_mod = mod_imp(mod_rem.remainder, lanes);
+                        if (base_lanes_off + rem_mod) {
+                            debug(0) << "HexagonAlignLoads: base_a is unaligned: shifting base_b\n";
+                            debug(0) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                            debug(0) << "HexagonAlignLoads: Index: " << index << "\n";
+                            base_b -= 1;
+                            shifted_b = true;
+                        }
+                    }
+
+                    Expr ramp_a = Ramp::make(base_a, 1, lanes);
+                    Expr ramp_b = Ramp::make(base_b, 1, lanes);
+                    Expr vec_a = mutate(Load::make(op->type, op->name, ramp_a, op->image, op->param));
+                    Expr vec_b = mutate(Load::make(op->type, op->name, ramp_b, op->image, op->param));
+                    Expr dbl_vec = Call::make(op->type.with_lanes(lanes*2), Call::concat_vectors, { vec_a, vec_b }, Call::PureIntrinsic);
+
+                    std::vector<Expr> args;
+                    args.push_back(dbl_vec);
+                    for (int i = 0; i < lanes/2; ++i) {
+                        args.push_back(make_const(Int(32), i*2));
+                    }
+                    for (int i = lanes/2; i < lanes; ++i) {
+                        args.push_back(make_const(Int(32), i*2 + (shifted_b ? 1 : 0)));
+                    }
+
+                    debug(0) << "HexagonAlignLoads: Unaligned Load: Converting " << (Expr) op << " into ...\n";
+
+                    expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
+
+                    debug(0) <<  "... " << expr << "\n";
+                    return;
+                }else {
                     expr = op;
                     return;
                 }

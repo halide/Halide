@@ -2244,6 +2244,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         int start_lane = op->args[op->args.size() - 2].as<IntImm>()->value;
         int size = op->args[op->args.size() - 1].as<IntImm>()->value;
         value = slice_vector(big_vector, start_lane, size);
+    } else if (op->is_intrinsic(Call::concat_vectors)) {
+        std::vector<Value *> slices;
+        for (const auto &arg : op->args) {
+            slices.push_back(codegen(arg));
+        }
+        value = concat_vectors(slices);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
