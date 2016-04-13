@@ -120,14 +120,20 @@ private:
 
     template<typename NodeType, typename LetType>
     void visit_let(NodeType &result, const LetType *op) {
+        Expr value;
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+        } else {
+            const Load *ld = op->value.template as<Load>();
+            if (ld) value = mutate(op->value);
+            else value = op->value;
         }
+
         NodeType body = mutate(op->body);
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
         }
-        result = LetType::make(op->name, op->value, body);
+        result = LetType::make(op->name, value, body);
     }
 
     void visit(const Let *op) { visit_let(expr, op); }
