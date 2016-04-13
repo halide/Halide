@@ -32,7 +32,7 @@ int init_sim() {
     // Configue tracing.
     const char *T = getenv("HALIDE_HEX_SIM_MIN_TRACE");
     if (T && T[0] != 0) {
-        status - sim->SetTracing(HEX_TRACE_PC_MIN, T);
+        status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
             return -1;
@@ -40,7 +40,7 @@ int init_sim() {
     } else {
         const char *T = getenv("HALIDE_HEX_SIM_TRACE");
         if (T && T[0] != 0) {
-             status - sim->SetTracing(HEX_TRACE_PC, T);
+            status = sim->SetTracing(HEX_TRACE_PC, T);
             if (status != HEX_STAT_SUCCESS) {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
@@ -56,7 +56,7 @@ int init_sim() {
         HEXAPI_Status dbg_state;
         dbg_state = sim->ConfigureRemoteDebug(pnum);
         if (dbg_state) {
-            printf("\n`Debugger port failed: state: %d\n", dbg_state);
+            printf("Debugger port failed: state: %d\n", dbg_state);
             return -1;
         }
     }
