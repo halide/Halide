@@ -291,10 +291,7 @@ public:
                                          (index / i.second.size_expr), Parameter()));
             index += i.second.size_expr;
         }
-        Stmt blocks;
-        for (size_t i = writes.size(); i > 0; i--) {
-            blocks = Block::make(writes[i - 1], blocks);
-        }
+        Stmt blocks = fold_right(writes, Block::make);
 
         return blocks;
     }

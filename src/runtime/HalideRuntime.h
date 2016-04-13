@@ -118,8 +118,12 @@ extern halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t do_p
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
+//@{
 typedef int (*halide_do_task_t)(void *, halide_task_t, int, uint8_t *);
 extern halide_do_task_t halide_set_custom_do_task(halide_do_task_t do_task);
+extern int halide_do_task(void *user_context, halide_task_t f, int idx,
+                          uint8_t *closure);
+//@}
 
 /** Spawn a thread, independent of halide's thread pool. */
 extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);

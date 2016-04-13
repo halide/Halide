@@ -191,8 +191,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
         Value *kernel_src_ptr =
-            CodeGen_CPU::create_constant_binary_blob(kernel_src,
-                                                     "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
+            CodeGen_CPU::create_binary_blob(kernel_src,
+                                            "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
         if (f.args[0].name == "__user_context") {
             // The user context is first argument of the function.

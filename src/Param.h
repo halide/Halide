@@ -192,7 +192,7 @@ protected:
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind;
-    
+
     void add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                           Expr last_arg,
                                           int total_args,

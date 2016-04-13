@@ -27,6 +27,8 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, 16, 16).vectorize(Var::gpu_threads(), 4);
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon().vectorize(x, 64);
         } else {
             f.vectorize(x, 8);
         }
@@ -58,6 +60,8 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, 16, 16).vectorize(Var::gpu_threads(), 4);
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon().vectorize(x, 64);
         } else {
             f.vectorize(x, 8);
         }

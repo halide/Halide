@@ -584,11 +584,8 @@ pair<Stmt, Stmt> build_production(Function func) {
     Stmt produce = build_produce(func);
     vector<Stmt> updates = build_update(func);
 
-    // Build it from the last stage backwards.
-    Stmt merged_updates;
-    for (size_t s = updates.size(); s > 0; s--) {
-        merged_updates = Block::make(updates[s-1], merged_updates);
-    }
+    // Combine the update steps
+    Stmt merged_updates = fold_right(updates, Block::make);
     return make_pair(produce, merged_updates);
 }
 
@@ -1121,7 +1118,9 @@ class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (ends_with(op->name, ".__outermost") && is_one(simplify(op->extent))) {
+        if (ends_with(op->name, ".__outermost") &&
+            is_one(simplify(op->extent)) &&
+            op->device_api != DeviceAPI::Hexagon) {
             stmt = mutate(substitute(op->name, op->min, op->body));
         } else {
             IRMutator::visit(op);
