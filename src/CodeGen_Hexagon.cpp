@@ -549,14 +549,23 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
     // If we're getting a native vector bits worth of data from half
     // of the argument, we might be able to use lo/hi if the start is appropriate.
     if (size*2 == vec_elements && element_bits*size == native_vector_bits()) {
-        CallInst *call = dyn_cast<CallInst>(vec);
+        CallInst *call;
+        if (BitCastInst *bc = dyn_cast<BitCastInst>(vec)) {
+            call = dyn_cast<CallInst>(bc->getOperand(0));
+        } else {
+            call = dyn_cast<CallInst>(vec);
+        }
         llvm::Function *combine_fn =
             Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vcombine));
+        llvm::Type *ret_ty = llvm::VectorType::get(vec_ty->getScalarType(), size);
+
         if (call && call->getCalledFunction() == combine_fn) {
             if (start == 0) {
-                return call->getArgOperand(1);
+                // Not bitcasting here puts the onus on the caller to use call_intrin_cast before
+                // using this in an intrinsic. Might as well just do it here.
+                return builder->CreateBitCast(call->getArgOperand(1), ret_ty);
             } else if (start == vec_elements/2) {
-                return call->getArgOperand(0);
+                return builder->CreateBitCast(call->getArgOperand(0), ret_ty);
             }
         } else {
             if (start == 0) {
@@ -577,9 +586,14 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
             IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignbi);
             bytes_off = reverse_bytes;
         }
-        llvm::Type *ret_ty = llvm::VectorType::get(vec_ty->getScalarType(), size);
-        Value *hi = call_intrin_cast(ret_ty, IPICK(Intrinsic::hexagon_V6_hi), {vec});
-        Value *lo = call_intrin_cast(ret_ty, IPICK(Intrinsic::hexagon_V6_lo), {vec});
+        Value *hi, *lo;
+        if (call) {
+            hi = call->getArgOperand(0);
+            lo = call->getArgOperand(1);
+        } else {
+            hi = call_intrin_cast(ret_ty, IPICK(Intrinsic::hexagon_V6_hi), {vec});
+            lo = call_intrin_cast(ret_ty, IPICK(Intrinsic::hexagon_V6_lo), {vec});
+        }
         Value *b = codegen(bytes_off);
         return call_intrin_cast(ret_ty, IntrinsID, {hi, lo, b});
     }
