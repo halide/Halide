@@ -29,6 +29,39 @@ int init_sim() {
         return -1;
     }
 
+    // Configue tracing.
+    const char *T = getenv("HALIDE_HEX_SIM_MIN_TRACE");
+    if (T && T[0] != 0) {
+        status - sim->SetTracing(HEX_TRACE_PC_MIN, T);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
+            return -1;
+        }
+    } else {
+        const char *T = getenv("HALIDE_HEX_SIM_TRACE");
+        if (T && T[0] != 0) {
+             status - sim->SetTracing(HEX_TRACE_PC, T);
+            if (status != HEX_STAT_SUCCESS) {
+                printf("HexagonWrapper::SetTracing failed: %d\n", status);
+                return -1;
+            }
+        }
+    }
+
+    // Configure use of debugger
+    int pnum = 0;
+    char *s= getenv("HALIDE_HEX_DBG_PORT");
+    if (s && (pnum=(atoi(s)))) {
+        fprintf(stderr, "\nDebugger port: %d\n", pnum);
+        HEXAPI_Status dbg_state;
+        dbg_state = sim->ConfigureRemoteDebug(pnum);
+        if (dbg_state) {
+            printf("\n`Debugger port failed: state: %d\n", dbg_state);
+            return -1;
+        }
+    }
+
+
     status = sim->EndOfConfiguration();
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::EndOfConfiguration failed: %d\n", status);
