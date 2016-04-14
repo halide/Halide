@@ -205,7 +205,7 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     Func matrix;
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
-    matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
+    matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
     matrix.compute_root();
 
     Func corrected;
