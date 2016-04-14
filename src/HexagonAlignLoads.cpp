@@ -26,16 +26,6 @@ private:
     int natural_vector_lanes(Type t) {
         return vector_size / t.bytes();
     }
-    Expr concat_and_shuffle(Expr vec_a, Expr vec_b, int start, int size) {
-        Type dbl_t = vec_a.type().with_lanes(vec_a.type().lanes() * 2);
-        Expr dbl_vec = Call::make(dbl_t, Call::concat_vectors, { vec_a, vec_b }, Call::PureIntrinsic);
-        std::vector<Expr> args;
-        args.push_back(dbl_vec);
-        for (int i = start; i < start+size; i++) {
-            args.push_back(i);
-        }
-        return Call::make(vec_a.type(), Call::shuffle_vector, args, Call::PureIntrinsic);
-    }
 
     Expr concat_and_shuffle(Expr vec_a, Expr vec_b, std::vector<Expr> &indices) {
         Type dbl_t = vec_a.type().with_lanes(vec_a.type().lanes() * 2);
@@ -46,6 +36,13 @@ private:
             args.push_back(indices[i]);
         }
         return Call::make(vec_a.type(), Call::shuffle_vector, args, Call::PureIntrinsic);
+    }
+    Expr concat_and_shuffle(Expr vec_a, Expr vec_b, int start, int size) {
+        std::vector<Expr> args;
+        for (int i = start; i < start+size; i++) {
+            args.push_back(i);
+        }
+        return concat_and_shuffle(vec_a, vec_b, args);
     }
 
     AlignCheck get_alignment_check(const Ramp *ramp, int host_alignment, int *lanes_off) {
@@ -231,7 +228,9 @@ private:
                 internal_error << "Unknown HVX mode";
             }
         }
+        int saved_vector_size = vector_size;
         IRMutator::visit(op);
+        vector_size = saved_vector_size;
         return;
     }
 };
