@@ -11,18 +11,21 @@ using std::vector;
 
 class HexagonAlignLoads : public IRMutator {
 public:
-    HexagonAlignLoads(Target t) : target(t) {}
+    HexagonAlignLoads(Target t, int vs) : target(t), vector_size(vs) {}
 private:
     Target target;
     enum AlignCheck { Aligned, Unaligned, NoResult };
-
+    // size of a vector in bytes.
+    int vector_size;
     /** Alignment info for Int(32) variables in scope. */
     Scope<ModulusRemainder> alignment_info;
     using IRMutator::visit;
     ModulusRemainder get_alignment_info(Expr e) {
         return modulus_remainder(e, alignment_info);
     }
-
+    int natural_vector_lanes(Type t) {
+        return vector_size / t.bytes();
+    }
     Expr concat_and_shuffle(Expr vec_a, Expr vec_b, int start, int size) {
         Type dbl_t = vec_a.type().with_lanes(vec_a.type().lanes() * 2);
         Expr dbl_vec = Call::make(dbl_t, Call::concat_vectors, { vec_a, vec_b }, Call::PureIntrinsic);
@@ -88,19 +91,18 @@ private:
                 const Ramp *ramp = index.as<Ramp>();
                 const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
                 // We will work only on natural vectors supported by the target.
-                if (ramp->lanes != target.natural_vector_size(op->type)) {
+                if (ramp->lanes != natural_vector_lanes(op->type)) {
                     expr = op;
                     return;
                 }
                 if (ramp && stride && stride->value == 1) {
                     int lanes = ramp->lanes;
-                    int vec_size = target.natural_vector_size(Int(8));
                     // If this is a parameter, the base_alignment should be host_alignment.
                     // This cannot be an external image because we have already checked for
                     // it. Otherwise, this is an internal buffers that is always aligned
                     // to the natural vector width.
                     int base_alignment = op->param.defined() ?
-                        op->param.host_alignment() : vec_size;
+                        op->param.host_alignment() : vector_size;
                     int lanes_off;
                     AlignCheck ac = get_alignment_check(ramp, base_alignment, &lanes_off);
                     if (ac == AlignCheck::NoResult) {
@@ -218,10 +220,24 @@ private:
 
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
+    void visit(const For *op) {
+        if (op->device_api == DeviceAPI::Hexagon) {
+            if (target.has_feature(Target::HVX_128)) {
+                vector_size = 128;
+            }
+            else if (target.has_feature(Target::HVX_64)) {
+                vector_size = 64;
+            } else {
+                internal_error << "Unknown HVX mode";
+            }
+        }
+        IRMutator::visit(op);
+        return;
+    }
 };
 
 Stmt hexagon_align_loads(Stmt s, const Target &t) {
-    return HexagonAlignLoads(t).mutate(s);
+    return HexagonAlignLoads(t, t.natural_vector_size(Int(8))).mutate(s);
   }
 }
 }
