@@ -14,7 +14,7 @@ public:
     HexagonAlignLoads(Target t) : target(t) {}
 private:
     Target target;
-    enum AlignCheck { Aligned, Unaligned, NoResult } rs_argument_type;
+    enum AlignCheck { Aligned, Unaligned, NoResult };
 
     /** Alignment info for Int(32) variables in scope. */
     Scope<ModulusRemainder> alignment_info;
