@@ -1,22 +1,361 @@
-        Func f10;
-        f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
-        f10.vectorize(x, lanes);
-        Image<A> im10 = f10.realize(W, H);
+#include "Halide.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <cmath>
+#include <algorithm>
 
+using namespace Halide;
+
+#ifdef _MSC_VER
+bool is_finite(double x) {
+    return _finite(x);
+}
+#else
+bool is_finite(double x) {
+    return std::isfinite(x);
+}
+#endif
+
+// Make some functions for turning types into strings
+template<typename A>
+const char *string_of_type();
+
+#define DECL_SOT(name)                                          \
+    template<>                                                  \
+    const char *string_of_type<name>() {return #name;}
+
+DECL_SOT(uint8_t);
+DECL_SOT(int8_t);
+DECL_SOT(uint16_t);
+DECL_SOT(int16_t);
+DECL_SOT(uint32_t);
+DECL_SOT(int32_t);
+DECL_SOT(float);
+DECL_SOT(double);
+
+template<typename A>
+A mod(A x, A y);
+
+template<>
+float mod(float x, float y) {
+    return fmod(x, y);
+}
+
+template<>
+double mod(double x, double y) {
+    return fmod(x, y);
+}
+
+template<typename A>
+A mod(A x, A y) {
+    return x % y;
+}
+
+template<typename A>
+bool close_enough(A x, A y) {
+    return x == y;
+}
+
+template<>
+bool close_enough<float>(float x, float y) {
+    return fabs(x-y) < 1e-4;
+}
+
+template<>
+bool close_enough<double>(double x, double y) {
+    return fabs(x-y) < 1e-5;
+}
+
+template<typename T>
+T divide(T x, T y) {
+    return (x - (((x % y) + y) % y)) / y;
+}
+
+template<>
+float divide(float x, float y) {
+    return x/y;
+}
+
+template<>
+double divide(double x, double y) {
+    return x/y;
+}
+
+template <typename A>
+A absd(A x, A y) {
+    return x > y ? x - y : y - x;
+}
+
+int mantissa(float x) {
+    int bits = 0;
+    memcpy(&bits, &x, 4);
+    return bits & 0x007fffff;
+}
+
+template <typename T>
+struct with_unsigned {
+    typedef T type;
+};
+
+template <>
+struct with_unsigned<int8_t> {
+    typedef uint8_t type;
+};
+
+template <>
+struct with_unsigned<int16_t> {
+    typedef uint16_t type;
+};
+
+template <>
+struct with_unsigned<int32_t> {
+    typedef uint32_t type;
+};
+
+template <>
+struct with_unsigned<int64_t> {
+    typedef uint64_t type;
+};
+
+
+template<typename A>
+bool test(int lanes) {
+    const int W = 320;
+    const int H = 16;
+
+    const int verbose = false;
+
+    printf("Testing %sx%d\n", string_of_type<A>(), lanes);
+
+    Image<A> input(W+16, H+16);
+    for (int y = 0; y < H+16; y++) {
+        for (int x = 0; x < W+16; x++) {
+            input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
+            if ((A)(-1) < 0) {
+                input(x, y) -= 10;
+            }
+        }
+    }
+    Var x, y;
+
+    // Add
+    if (verbose) printf("Add\n");
+    Func f1;
+    f1(x, y) = input(x, y) + input(x+1, y);
+    f1.vectorize(x, lanes);
+    Image<A> im1 = f1.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x, y) + input(x+1, y);
+            if (im1(x, y) != correct) {
+                printf("im1(%d, %d) = %f instead of %f\n", x, y, (double)(im1(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Sub
+    if (verbose) printf("Subtract\n");
+    Func f2;
+    f2(x, y) = input(x, y) - input(x+1, y);
+    f2.vectorize(x, lanes);
+    Image<A> im2 = f2.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x, y) - input(x+1, y);
+            if (im2(x, y) != correct) {
+                printf("im2(%d, %d) = %f instead of %f\n", x, y, (double)(im2(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Mul
+    if (verbose) printf("Multiply\n");
+    Func f3;
+    f3(x, y) = input(x, y) * input(x+1, y);
+    f3.vectorize(x, lanes);
+    Image<A> im3 = f3.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x, y) * input(x+1, y);
+            if (im3(x, y) != correct) {
+                printf("im3(%d, %d) = %f instead of %f\n", x, y, (double)(im3(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // select
+    if (verbose) printf("Select\n");
+    Func f4;
+    f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
+    f4.vectorize(x, lanes);
+    Image<A> im4 = f4.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x, y) > input(x+1, y) ? input(x+2, y) : input(x+3, y);
+            if (im4(x, y) != correct) {
+                printf("im4(%d, %d) = %f instead of %f\n", x, y, (double)(im4(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+
+    // Gather
+    if (verbose) printf("Gather\n");
+    Func f5;
+    Expr xCoord = clamp(cast<int>(input(x, y)), 0, W-1);
+    Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
+    f5(x, y) = input(xCoord, yCoord);
+    f5.vectorize(x, lanes);
+    Image<A> im5 = f5.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            int xCoord = (int)(input(x, y));
+            if (xCoord >= W) xCoord = W-1;
+            if (xCoord < 0) xCoord = 0;
+
+            int yCoord = (int)(input(x+1, y));
+            if (yCoord >= H) yCoord = H-1;
+            if (yCoord < 0) yCoord = 0;
+
+            A correct = input(xCoord, yCoord);
+
+            if (im5(x, y) != correct) {
+                printf("im5(%d, %d) = %f instead of %f\n", x, y, (double)(im5(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Gather and scatter with constant but unknown stride
+    Func f5a;
+    f5a(x, y) = input(x, y)*cast<A>(2);
+    f5a.vectorize(y, lanes);
+    Image<A> im5a = f5a.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x, y) * ((A)(2));
+            if (im5a(x, y) != correct) {
+                printf("im5a(%d, %d) = %f instead of %f\n", x, y, (double)(im5a(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Scatter
+    if (verbose) printf("Scatter\n");
+    Func f6;
+    // Set one entry in each column high
+    f6(x, y) = 0;
+    f6(x, clamp(x*x, 0, H-1)) = 1;
+
+    f6.update().vectorize(x, lanes);
+
+    Image<int> im6 = f6.realize(W, H);
+
+    for (int x = 0; x < W; x++) {
+        int yCoord = x*x;
+        if (yCoord >= H) yCoord = H-1;
+        if (yCoord < 0) yCoord = 0;
         for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
+            int correct = y == yCoord ? 1 : 0;
+            if (im6(x, y) != correct) {
+                printf("im6(%d, %d) = %d instead of %d\n", x, y, im6(x, y), correct);
+                return false;
+            }
+        }
+    }
+
+    // Min/max
+    if (verbose) printf("Min/max\n");
+    Func f7;
+    f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
+    f7.vectorize(x, lanes);
+    Image<A> im7 = f7.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            if (im7(x, y) < (A)10 || im7(x, y) > (A)20) {
+                printf("im7(%d, %d) = %f\n", x, y, (double)(im7(x, y)));
+                return false;
+            }
+        }
+    }
+
+    // Extern function call
+    if (verbose) printf("External call to hypot\n");
+    Func f8;
+    f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
+    f8.vectorize(x, lanes);
+    Image<float> im8 = f8.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            float correct = hypotf(1.1f, (float)input(x, y));
+            if (!close_enough(im8(x, y), correct)) {
+                printf("im8(%d, %d) = %f instead of %f\n",
+                       x, y, (double)im8(x, y), correct);
+                return false;
+            }
+        }
+    }
+
+    // Div
+    if (verbose) printf("Division\n");
+    Func f9;
+    f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
+    f9.vectorize(x, lanes);
+    Image<A> im9 = f9.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A clamped = input(x+1, y);
+            if (clamped < (A)1) clamped = (A)1;
+            if (clamped > (A)3) clamped = (A)3;
+            A correct = divide(input(x, y), clamped);
+            // We allow floating point division to take some liberties with accuracy
+            if (!close_enough(im9(x, y), correct)) {
+                printf("im9(%d, %d) = %f/%f = %f instead of %f\n",
+                       x, y,
+                       (double)input(x, y), (double)clamped,
+                       (double)(im9(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Divide by small constants
+    if (verbose) printf("Dividing by small constants\n");
+    for (int c = 2; c < 16; c++) {
+	Func f10;
+	f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
+	f10.vectorize(x, lanes);
+	Image<A> im10 = f10.realize(W, H);
+
+	for (int y = 0; y < H; y++) {
+	    for (int x = 0; x < W; x++) {
                 A correct = divide(input(x, y), (A)c);
 
                 if (!close_enough(im10(x, y), correct)) {
-                    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
-                           (double)(input(x, y)), c,
-                           (double)(im10(x, y)),
-                           (double)(correct));
-                    printf("Error when dividing by %d\n", c);
-                    return false;
-                }
-            }
-        }
+		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
+			   (double)(input(x, y)), c,
+			   (double)(im10(x, y)),
+			   (double)(correct));
+		    printf("Error when dividing by %d\n", c);
+		    return false;
+		}
+	    }
+	}
     }
 
     // Interleave

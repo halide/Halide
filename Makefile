@@ -71,8 +71,8 @@ else
     WITH_INTROSPECTION ?= not-empty
 endif
 WITH_EXCEPTIONS ?=
-WITH_JAVASCRIPT_V8 ?=
-WITH_JAVASCRIPT_SPIDERMONKEY ?=
+WITH_JAVASCRIPT_V8 ?= not-empty
+WITH_JAVASCRIPT_SPIDERMONKEY ?= not-empty
 
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
@@ -114,12 +114,13 @@ INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
 V8_PATH=../v8/
-JAVASCRIPT_V8_CXX_FLAGS=$(if $(WITH_JAVASCRIPT_V8), -DWITH_JAVASCRIPT_V8 -I$(V8_PATH))
+JAVASCRIPT_V8_CXX_FLAGS=$(if $(WITH_JAVASCRIPT_V8), -DWITH_JAVASCRIPT_V8 -I$(V8_PATH)/include)
 JAVASCRIPT_V8_LDFLAGS=$(if $(WITH_JAVASCRIPT_V8), $(V8_PATH)/out/native/lib*.a)
 
 SPIDERMONKEY_PATH=../gecko-dev/js/src/build_OPT.OBJ/dist/
 JAVASCRIPT_SPIDERMONKEY_CXX_FLAGS=$(if $(WITH_JAVASCRIPT_SPIDERMONKEY), -DWITH_JAVASCRIPT_SPIDERMONKEY -I$(SPIDERMONKEY_PATH)/include)
-JAVASCRIPT_SPIDERMONKEY_LDFLAGS=$(if $(WITH_JAVASCRIPT_SPIDERMONKEY), $(SPIDERMONKEY_PATH)/sdk/lib/lib*.dylib)
+JAVASCRIPT_SPIDERMONKEY_LIB_PATHS=$(wildcard $(SPIDERMONKEY_PATH)/sdk/lib/lib*.dylib $(SPIDERMONKEY_PATH)/sdk/lib/lib*.so)
+JAVASCRIPT_SPIDERMONKEY_LDFLAGS=$(if $(WITH_JAVASCRIPT_SPIDERMONKEY), $(JAVASCRIPT_SPIDERMONKEY_LIB_PATHS))
 
 JAVASCRIPT_CXX_FLAGS=$(JAVASCRIPT_V8_CXX_FLAGS) $(JAVASCRIPT_SPIDERMONKEY_CXX_FLAGS)
 JAVASCRIPT_LDFLAGS=$(JAVASCRIPT_V8_LDFLAGS) $(JAVASCRIPT_SPIDERMONKEY_LDFLAGS)
@@ -167,7 +168,7 @@ LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//
 
 UNAME = $(shell uname)
 
-TEST_LDFLAGS=$(LLVM_LDFLAGS)
+TEST_LDFLAGS=$(LLVM_LDFLAGS) -rdynamic
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -604,7 +605,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@rm -rf $(BUILD_DIR)/llvm_objects
 	@mkdir -p $(BUILD_DIR)/llvm_objects
 	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) $(JAVASCRIPT_LDFLAGS) -lz -lpthread | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list
-	cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh
+		cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh
 	# Extract the necessary object files from the llvm archives.
 	cd $(BUILD_DIR)/llvm_objects; bash ./extract.sh
 	# Archive together all the halide and llvm object files

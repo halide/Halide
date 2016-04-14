@@ -94,6 +94,7 @@ protected:
 
     void visit(const Variable *);
     void visit(const IntImm *);
+    void visit(const UIntImm *);
     void visit(const StringImm *);
     void visit(const FloatImm *);
     void visit(const Cast *);

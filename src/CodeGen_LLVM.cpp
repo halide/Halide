@@ -459,6 +459,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn, const std::st
     llvm::Type *buffer_t_type = module->getTypeByName("struct.buffer_t");
     llvm::Type *i8 = llvm::Type::getInt8Ty(module->getContext());
     llvm::Type *i32 = llvm::Type::getInt32Ty(module->getContext());
+    llvm::Type *void_type = llvm::Type::getVoidTy(module->getContext());
 
     llvm::Type *result_type = (result_kind == IntFunctionResult) ? i32 : void_t;
     llvm::Type *args_t[] = {i8->getPointerTo()->getPointerTo()};
@@ -486,7 +487,20 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn, const std::st
     }
     debug(4) << "Creating call from wrapper to actual function\n";
     llvm::Value *result = builder.CreateCall(fn, wrapper_args);
-    builder.CreateRet(result);
+
+    if (result_kind == IntFunctionResult) {
+        builder.CreateRet(result);
+    } else {
+        if (fn->getReturnType() != void_type) {
+            llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, wrapper_args.size());
+            ptr = builder.CreateLoad(ptr);
+            // Cast to the appropriate type and store
+            ptr = builder.CreatePointerCast(ptr, fn->getReturnType()->getPointerTo());
+            builder.CreateStore(result, ptr);
+        }
+        builder.CreateRetVoid();
+    }   
+
     llvm::verifyFunction(*wrapper);
     return wrapper;
 }
@@ -573,7 +587,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
-	    llvm::Function *wrapper = add_argv_wrapper(function, argv_name, IntFunctionResult);
+            llvm::Function *wrapper = add_argv_wrapper(function, argv_name, IntFunctionResult);
             llvm::Constant *metadata = embed_metadata(metadata_name, simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
                 register_metadata(simple_name, metadata, wrapper);

@@ -4,6 +4,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping reuse_stack_alloc test for JavaScript as it does not make sense.\n");
+        return 0;
+    }
+
     Func f, g, h, k;
     Var x;
 

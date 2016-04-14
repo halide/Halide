@@ -86,7 +86,7 @@ public:
 
     enum ARGVWrapperReturnResultKind {
         IntFunctionResult,
-        FirstArgPointsToResult,
+        LastArgPointsToResult,
     };
 
     /** Make a wrapper to call the function with an array of pointer

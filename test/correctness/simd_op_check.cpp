@@ -1404,6 +1404,13 @@ void check_altivec_all() {
 }
 
 int main(int argc, char **argv) {
+    // TODO: if any vector op correctness is being covered by this test, we should see if it can be made to work for JavaScript.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping simd_op_check test for JavaScript as SIMD op patterns don't really apply.\n");
+        return 0;
+    }
+
     if (argc > 1) {
         num_processes = 1;
         filter = argv[1];

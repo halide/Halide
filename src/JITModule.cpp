@@ -29,7 +29,12 @@ void *get_symbol_address(const char *s) {
 #else
 #include <dlfcn.h>
 void *get_symbol_address(const char *s) {
-    return dlsym(nullptr, s);
+    // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
+    // is passed to dlsym. This seems to work.
+    void *handle = dlopen(nullptr, RTLD_LAZY);
+    void *result = dlsym(handle, s);
+    dlclose(handle);
+    return result;
 }
 #endif
 
@@ -468,7 +473,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg, const std
         Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second.signature, extern_entry.second.c_function);
         codegen->add_argv_wrapper(cast<llvm::FunctionType>(sym.llvm_type),
                                   extern_entry.first + suffix, extern_entry.first,
-                                  CodeGen_LLVM::FirstArgPointsToResult);
+                                  CodeGen_LLVM::LastArgPointsToResult);
         requested_exports.push_back(extern_entry.first + suffix);
     }
     result.compile_module(codegen->finalize_module(), "", target, deps,

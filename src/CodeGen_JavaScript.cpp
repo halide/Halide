@@ -53,7 +53,7 @@ const string preamble =
     "if (typeof(halide_error) != \"function\") { halide_error = function (user_context, msg) { halide_print(user_context, msg); } }\n"
     "if (typeof(halide_trace) != \"function\") { var id = 0; halide_trace = function (user_context, event) { return id++; } }\n"
     "if (typeof(halide_shutdown_trace) != \"function\") { halide_shutdown_trace = function () { return 0; } }\n"
-    "if (typeof(halide_debug_to_file) != \"function\") { halide_debug_to_file = function (user_context, filename, data, s0, s1, s2, s3, type_code, bytes_per_element) { halide_print(user_context, \"halide_debug_to_file called. Implementation needed.\\n\"); return 0; } }\n"
+    "if (typeof(halide_debug_to_file) != \"function\") { halide_debug_to_file = function (user_context, filename, typecode, buffer) { halide_print(user_context, \"halide_debug_to_file called. Implementation needed.\\n\"); return 0; } }\n"
     "if (typeof(fast_inverse_f32) != \"function\") { fast_inverse_f32 = function(x) { return 1 / x; } }\n"
     "if (typeof(fast_inverse_sqrt_f32) != \"function\") { fast_inverse_sqrt_f32 = function(x) { return 1 / Math.sqrt(x); } }\n"
     "if (typeof(halide_error_bounds_inference_call_failed) !=\"function\") { halide_error_bounds_inference_call_failed = \n"
@@ -280,8 +280,7 @@ string CodeGen_JavaScript::make_js_int_cast(string value, bool src_unsigned, int
             mask = "0xffffffff";
             break;
         default:
-          debug(0) << "unknown bit width is " << dst_bits << "\n";
-            internal_error << "Unknown bit width making JavaScript cast.\n";
+            internal_error << "Unknown bit width (" << dst_bits << ") making JavaScript cast.\n";
             break;
         }
 
@@ -384,7 +383,6 @@ void CodeGen_JavaScript::compile(const Module &input) {
 }
 
 void CodeGen_JavaScript::compile(const LoweredFunc &f) {
-  debug(0) << "Compile called on lowered func " << f.name << "\n";
     have_user_context = false;
     for (size_t i = 0; i < f.args.size(); i++) {
         have_user_context |= (f.args[i].name == "__user_context");
@@ -759,6 +757,12 @@ void CodeGen_JavaScript::visit(const IntImm *op) {
     id = oss.str();
 }
 
+void CodeGen_JavaScript::visit(const UIntImm *op) {
+    ostringstream oss;
+    oss << op->value;
+    id = oss.str();
+}
+
 void CodeGen_JavaScript::visit(const StringImm *op) {
     ostringstream oss;
     oss << Expr(op);
@@ -876,444 +880,441 @@ std::map<string, std::pair<string, int> > js_math_functions {
 }
 
 void CodeGen_JavaScript::visit(const Call *op) {
-    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+    // TODO: It is probably possible to add support for name mangling
+    // here and make this go away for calling into native code.
+    internal_assert(op->call_type != Call::ExternCPlusPlus) <<
+        "C++ extern calls not allowed in JavaScript.\n";
+
+    internal_assert(op->call_type == Call::Extern ||
+                    op->call_type == Call::PureExtern ||
+                    op->call_type == Call::Intrinsic ||
+                    op->call_type == Call::PureIntrinsic)
         << "Can only codegen extern calls and intrinsics\n";
 
     ostringstream rhs;
 
-    // Handle intrinsics first
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::shuffle_vector) {
-            internal_assert((int) op->args.size() == 1 + op->type.lanes());
-            string input_vector = print_expr(op->args[0]);
-            const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
-            for (size_t i = 1; i < op->args.size(); i++) {
-                rhs << lead_char << input_vector << "[" << print_expr(op->args[i]) << "]";
-                lead_char = ", ";
-            }
-            if (op->type.lanes() != 1) {
-                rhs << "]";
-            }
-        } else if (op->name == Call::interleave_vectors) {
-            vector<string> vecs(op->args.size());
-            for (size_t i = 0; i < op->args.size(); i++) {
-                vecs[i] = print_expr(op->args[i]);
-            }
-            const char *lead_char = "[";
-            for (int i = 0; i < op->type.lanes(); i++) {
-                for (size_t j = 0; j < op->args.size(); j++) {
-                    rhs << lead_char <<  vecs[j] << "[" << i << "]";
-                    lead_char = ", ";
-                }
-            }
-            rhs << "]";
-        } else if (op->name == Call::debug_to_file) {
-            internal_assert(op->args.size() == 9);
-            const StringImm *string_imm = op->args[0].as<StringImm>();
-            internal_assert(string_imm);
-            string filename = string_imm->value;
-            const Load *load = op->args[1].as<Load>();
-            internal_assert(load);
-            string func = print_name(load->name);
-
-            vector<string> args(6);
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = print_expr(op->args[i+3]);
-            }
-
-            rhs << "halide_debug_to_file(";
-            rhs << (have_user_context ? "__user_context" : "null");
-            rhs << ", \"" + filename + "\", " + func;
-            for (size_t i = 0; i < args.size(); i++) {
-                rhs << ", " << args[i];
-            }
-            rhs << ")";
-        } else if (op->name == Call::bitwise_and) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " & " << a1;
-        } else if (op->name == Call::bitwise_xor) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " ^ " << a1;
-        } else if (op->name == Call::bitwise_or) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " | " << a1;
-        } else if (op->name == Call::bitwise_not) {
-            internal_assert(op->args.size() == 1);
-            rhs << "~" << print_expr(op->args[0]);
-        } else if (op->name == Call::reinterpret) {
-            internal_assert(op->args.size() == 1);
-            rhs << print_reinterpret(op->type, op->args[0]);
-        } else if (op->name == Call::shift_left) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << " << " << a1;
-        } else if (op->name == Call::shift_right) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
-            const char *shift_op = op->type.is_uint() ? " >>> " : " >> ";
-            rhs << a0 << shift_op << a1;
-        } else if (op->name == Call::rewrite_buffer) {
-            int dims = ((int)(op->args.size())-2)/3;
-            (void)dims; // In case internal_assert is ifdef'd to do nothing
-            internal_assert((int)(op->args.size()) == dims*3 + 2);
-            internal_assert(dims <= 4);
-            vector<string> args(op->args.size());
-            const Variable *v = op->args[0].as<Variable>();
-            internal_assert(v);
-            args[0] = print_name(v->name);
-            for (size_t i = 1; i < op->args.size(); i++) {
-                args[i] = print_expr(op->args[i]);
-            }
-            rhs << "halide_rewrite_buffer(";
-            for (size_t i = 0; i < 14; i++) {
-                if (i > 0) rhs << ", ";
-                if (i < args.size()) {
-                    rhs << args[i];
-                } else {
-                    rhs << '0';
-                }
-            }
-            rhs << ")";
-        } else if (op->name == Call::null_handle) {
-            rhs << "null";
-        } else if (op->name == Call::address_of) {
-            // TODO: Figure out if arrays can be sliced, viewed, etc.
-            const Load *l = op->args[0].as<Load>();
-            internal_assert(op->args.size() == 1 && l);
-            rhs << print_name(l->name) << ".subarray(" << print_expr(l->index) << ")";
-        } else if (op->name == Call::trace || op->name == Call::trace_expr) {
-            int int_args = (int)(op->args.size()) - 5;
-            internal_assert(int_args >= 0);
-
-            Type type = op->type;
-
-            ostringstream value_stream;
-            const char *lead_char = "[";
-            for (int32_t v_index = 0; v_index < type.lanes(); v_index++) {
-                value_stream << lead_char << print_expr(conditionally_extract_lane(op->args[4], v_index));
-                lead_char = ", ";
-            }
-            value_stream << "]";
-
-            ostringstream coordinates_stream;
-            coordinates_stream << "[";
-            for (int32_t c_index = 0; c_index < int_args; c_index++) {
-                if (c_index != 0) {
-                  coordinates_stream << ", ";
-                }
-                coordinates_stream << print_expr(op->args[5 + c_index]);
-            }
-            coordinates_stream << "]";
-
-            string event_name = unique_name('e');
-            do_indent();
-            stream << "var " << event_name << " = { func: " << op->args[0] << ", ";
-            stream << "event: " << op->args[1] << ", ";
-            stream << "parent_id: " << op->args[2] << ", ";
-            stream << "type_code: " << type.code() << ", bits: " << type.bits() << ", vector_width: " << type.lanes() << ", ";
-            stream << "value_index: " << op->args[3] << ", ";
-            stream << "value: " << value_stream.str() << ", ";
-            stream << "dimensions: " << int_args * type.lanes() << ", ";
-            stream << "coordinates: " << coordinates_stream.str() << " }\n";
-
-            if (op->name == Call::trace_expr) {
-                do_indent();
-                rhs << "halide_trace(__user_context, " << event_name << ")";
-            } else {
-                stream << "halide_trace(__user_context, " << event_name << ");\n";
-                rhs << print_expr(op->args[4]);
-            }
-        } else if (op->name == Call::lerp) {
-            // JavaScript doesn't support 64-bit ints, which are used for 32-bit interger lerps.
-            // Handle this by converting to double instead, which will be as efficient in JS unless
-            // SIMD.js or asm.js are being used.
-            Expr e;
-            if (!op->type.is_float() && op->type.bits() >= 32) {
-                e = Cast::make(op->type, round(lower_lerp(Cast::make(Float(64), op->args[0]),
-                                                          Cast::make(Float(64), op->args[1]), op->args[2])));
-            } else {
-                e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-            }
-            rhs << print_expr(e);
-        } else if (op->name == Call::popcount) {
-            Expr e = cast<uint32_t>(op->args[0]);
-            e = e - ((e >> 1) & 0x55555555);
-            e = (e & 0x33333333) + ((e >> 2) & 0x33333333);
-            e = (e & 0x0f0f0f0f) + ((e >> 4) & 0x0f0f0f0f);
-            e = (e * 0x1010101) >> 24;
-            rhs << print_expr(e);
-        } else if (op->name == Call::count_leading_zeros) {
-            // TODO: Should this be a print_assignment?
-            string e = print_expr(op->args[0]);
-            int32_t bits = op->args[0].type().bits();
-            rhs << "((" << e << "< 0) ? 0 : ((" << e << " == 0) ? " << bits << ": " << (bits - 1) << " - ((Math.log(" << e << ")  / Math.LN2) >> 0)))";
-        } else if (op->name == Call::count_trailing_zeros) {
-            Expr e = op->args[0];
-            int32_t bits = op->args[0].type().bits();
-
-            e = e & -e;
-            Expr ctz = bits;
-            if (bits > 16) {
-                ctz = ctz - select((e & 0x0000ffff) != 0, 16, 0);
-                ctz = ctz - select((e & 0x00ff00ff) != 0, 8, 0);
-                ctz = ctz - select((e & 0x0f0f0f0f) != 0, 4, 0);
-                ctz = ctz - select((e & 0x33333333) != 0, 2, 0);
-                ctz = ctz - select((e & 0x55555555) != 0, 1, 0);
-                ctz = ctz - select(e != 0, 1, 0);
-            } else if (bits > 8) {
-                ctz = ctz - select((e & 0x00ff) != 0, 8, 0);
-                ctz = ctz - select((e & 0x0f0f) != 0, 4, 0);
-                ctz = ctz - select((e & 0x3333) != 0, 2, 0);
-                ctz = ctz - select((e & 0x5555) != 0, 1, 0);
-                ctz = ctz - select(e != 0, 1, 0);
-            } else if (bits > 1) {
-                ctz = ctz - select((e & 0x0f) != 0, 4, 0);
-                ctz = ctz - select((e & 0x33) != 0, 2, 0);
-                ctz = ctz - select((e & 0x55) != 0, 1, 0);
-                ctz = ctz - select(e != 0, 1, 0);
-            } else {
-                ctz = ctz - select(e, 1, 0);
-            }
-            rhs << print_expr(ctz);
-        } else if (op->name == Call::return_second) {
-            internal_assert(op->args.size() == 2);
-            string arg0 = print_expr(op->args[0]);
-            string arg1 = print_expr(op->args[1]);
-            rhs << "(" << arg0 << ", " << arg1 << ")";
-        } else if (op->name == Call::if_then_else) {
-            internal_assert(op->args.size() == 3);
-
-            string result_id = unique_name('_');
-
-            do_indent();
-            stream << "var " << result_id << ";\n";
-
-            string cond_id = print_expr(op->args[0]);
-
-            do_indent();
-            stream << "if (" << cond_id << ")\n";
-            open_scope();
-            string true_case = print_expr(op->args[1]);
-            do_indent();
-            stream << result_id << " = " << true_case << ";\n";
-            close_scope("if " + cond_id);
-            do_indent();
-            stream << "else\n";
-            open_scope();
-            string false_case = print_expr(op->args[2]);
-            do_indent();
-            stream << result_id << " = " << false_case << ";\n";
-            close_scope("if " + cond_id + " else");
-
-            rhs << result_id;
-        } else if (op->name == Call::copy_buffer_t) {
-            internal_assert(op->args.size() == 1);
-            string arg = print_expr(op->args[0]);
-            string buf_id = unique_name('B');
-            do_indent();
-            stream << "var " << buf_id << " = ";
-            open_scope();
-            do_indent();
-            stream << "dev: " << arg << ".dev,\n";
-            do_indent();
-            stream << "host: " << arg << ".host,\n";
-            do_indent();
-            stream << "min: [" << arg << ".min[0], " << arg << ".min[1], " << arg << ".min[2], " << arg << ".min[3]],\n";
-            do_indent();
-            stream << "extent: [" << arg << ".extent[0], " << arg << ".extent[1], " << arg << ".extent[2], " << arg << ".extent[3]],\n";
-            do_indent();
-            stream << "stride: [" << arg << ".stride[0], " << arg << ".stride[1], " << arg << ".stride[2], " << arg << ".stride[3]],\n";
-            do_indent();
-            stream << "elem_size: " << arg << ".elem_size,\n";
-            do_indent();
-            stream << "host_dirty: " << arg << ".host_dirty,\n";
-            do_indent();
-            stream << "dev_dirty: " << arg << ".dev_dirty,\n";
-            close_scope("copy_buffer_t");
-            rhs << buf_id;
-        } else if (op->name == Call::create_buffer_t) {
-            internal_assert(op->args.size() >= 2);
-            vector<string> args;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                args.push_back(print_expr(op->args[i]));
-            }
-            string buf_id = unique_name('B');
-            do_indent();
-            stream << "var " << buf_id << " = {\n";
-            do_indent();
-            stream << "dev: 0,\n";
-            do_indent();
-            stream << "host: " << args[0] << ",\n";
-            int dims = ((int)op->args.size() - 2)/3;
-            do_indent();
-            stream << "min: ["; 
-            for (int i = 0; i < dims; i++) {
-                if (i > 0) {
-                    stream << ", ";
-                }
-                stream << args[i*3+2];
-            }
-            stream << "],\n";
-            do_indent();
-            stream << "extent: [";
-            for (int i = 0; i < dims; i++) {
-                if (i > 0) {
-                    stream << ", ";
-                }
-                stream << args[i*3+3];
-            }
-            stream << "],\n";
-            do_indent();
-            stream << "stride: [";
-            for (int i = 0; i < dims; i++) {
-                if (i > 0) {
-                    stream << ", ";
-                }
-                stream << args[i*3+4];
-            }
-            stream << "],\n";
-            do_indent();
-            stream << "elem_size: " << op->args[1].type().bytes() << ",\n";
-            do_indent();
-            stream << "array_constructor: " << javascript_type_array_name_fragment(op->args[1].type()) << "Array,\n";
-            stream << "host_dirty: false,\n";
-            do_indent();
-            stream << "dev_dirty: false,\n";
-            stream << "};\n";
-            rhs << buf_id;
-        } else if (op->name == Call::extract_buffer_max) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << "(" << a0 << ".min[" << a1 << "] + " << a0 << ".extent[" << a1 << "] - 1)";
-        } else if (op->name == Call::extract_buffer_min) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            rhs << a0 << ".min[" << a1 << "]";
-        } else if (op->name == Call::extract_buffer_host) {
-            internal_assert(op->args.size() == 1);
-            string a0 = print_expr(op->args[0]);
-            rhs << a0 << ".host";
-        } else if (op->name == Call::set_host_dirty) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            do_indent();
-            stream << a0 << ".host_dirty = " << a1 << ";\n";
-            rhs << "0";
-        } else if (op->name == Call::set_dev_dirty) {
-            internal_assert(op->args.size() == 2);
-            string a0 = print_expr(op->args[0]);
-            string a1 = print_expr(op->args[1]);
-            do_indent();
-            stream << a0 << ".dev_dirty = " << a1 << ";\n";
-            rhs << "0";
-        } else if (op->name == Call::abs) {
-            internal_assert(op->args.size() == 1);
-            string arg = print_expr(op->args[0]);
-            // TODO: Should this use Math.abs?
-            rhs << "(" << arg << " >= 0 ? " << arg << " : " <<
-                fround_start_if_needed(op->type) << "-" << arg << fround_end_if_needed(op->type) << ")";
-        } else if (op->name == Call::absd) {
-            internal_assert(op->args.size() == 2);
-            string temp = unique_name('_');
-            string arg_a = print_expr(op->args[0]);
-            string arg_b = print_expr(op->args[1]);
-            do_indent();
-            stream << "var " << temp << " = " <<
-                fround_start_if_needed(op->type) << arg_a << " - " << arg_b << fround_end_if_needed(op->type) << ";\n";
-            // TODO: Should this use Math.abs?
-            rhs << "(" << temp << " >= 0 ? " << temp << " : -" << temp << ")";
-        } else if (op->name == Call::memoize_expr) {
-            internal_assert(op->args.size() >= 1);
-            string arg = print_expr(op->args[0]);
-            rhs << "(" << arg << ")";
-        } else if (op->name == Call::copy_memory) {
-            internal_assert(op->args.size() == 3);
-            string dest = print_expr(op->args[0]);
-            string src = print_expr(op->args[1]);
-            string size = print_expr(op->args[2]);
-            string index_var = unique_name('i');
-
-            bool is_string_imm = op->args[1].as<StringImm>() != nullptr;
-            stream << "for (var " << index_var << " = 0; " << index_var << " < " << size << "; " << index_var << "++) ";
-            open_scope();
-            do_indent();
-            stream << dest << "[" << index_var << "] = " << src;
-            if (is_string_imm) {
-                stream << ".charCodeAt(" << index_var << ");\n";
-            } else {
-                stream << "[" << index_var << "];\n";
-            }
-            close_scope("copy_memory");
-            rhs << dest;
-        } else if (op->name == Call::make_struct) {
-            // Emit a line something like: var foo = [3.0f, 'c', 4 ];
-            // Using an array has been chosen as the order is the most
-            // important property of a structure as it is used bay
-            // Halide.
-
-            // Get the args
-            vector<string> values;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                values.push_back(print_expr(op->args[i]));
-            }
-            rhs << "/* make_struct */ [ ";
-            const char *separator = "";
-            for (size_t i = 0; i < op->args.size(); i++) {
-                rhs << separator << values[i];
-                separator = ", ";
-            }
-            rhs <<" ]";
-        } else if (op->name == Call::stringify) {
-            string buf_name = unique_name('b');
-
-            // Print all args that are general Exprs before starting output on stream.
-            std::vector<string> printed_args(op->args.size());
-            for (size_t i = 0; i < op->args.size(); i++) {
-              if (op->args[i].type().is_float()) {
-                  do_indent();
-                  string temp = unique_name('f');
-                  string e = print_expr(op->args[i]);
-                  string format_function = (op->args[i].type().bits() == 32) ? "toFixed" : "toScientifc";
-                  stream << "var " << temp << " = (" << e << ")." << format_function << "(6);\n";
-                  printed_args[i] = temp;
-                } else if (op->args[i].as<StringImm>() == NULL && !op->args[i].type().is_handle()) {
-                    printed_args[i] = print_expr(op->args[i]);
-                }
-            }
-            do_indent();
-            stream << "var " << buf_name << " = \"\";\n";
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Type t = op->args[i].type();
-
-                do_indent();
-
-                if (op->args[i].type().is_float()) {
-                    stream << buf_name << " = " << buf_name << ".concat(" << printed_args[i] << ");\n";
-                } else if (op->args[i].as<StringImm>()) {
-                    stream << buf_name << " = " << buf_name << ".concat(" << op->args[i] << ");\n";
-                } else if (t.is_handle()) {
-                    stream << buf_name << " = " << buf_name << ".concat(\"<Object>\");\n";
-                } else {
-                    stream << buf_name << " = " << buf_name << ".concat(" << printed_args[i] << ".toString());\n";
-                }
-            }
-            rhs << buf_name;
-        } else {
-            // TODO: other intrinsics
-            internal_error << "Unhandled intrinsic in JavaScript backend: " << op->name << '\n';
+    if (op->is_intrinsic(Call::shuffle_vector)) {
+        internal_assert((int) op->args.size() == 1 + op->type.lanes());
+        string input_vector = print_expr(op->args[0]);
+        const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
+        for (size_t i = 1; i < op->args.size(); i++) {
+            rhs << lead_char << input_vector << "[" << print_expr(op->args[i]) << "]";
+            lead_char = ", ";
         }
+        if (op->type.lanes() != 1) {
+            rhs << "]";
+        }
+    } else if (op->is_intrinsic(Call::interleave_vectors)) {
+        vector<string> vecs(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            vecs[i] = print_expr(op->args[i]);
+        }
+        const char *lead_char = "[";
+        for (int i = 0; i < op->type.lanes(); i++) {
+            for (size_t j = 0; j < op->args.size(); j++) {
+                rhs << lead_char <<  vecs[j] << "[" << i << "]";
+                lead_char = ", ";
+            }
+        }
+        rhs << "]";
+    } else if (op->is_intrinsic(Call::debug_to_file)) {
+        internal_assert(op->args.size() == 3);
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        internal_assert(string_imm);
+        string filename = string_imm->value;
+        string typecode = print_expr(op->args[1]);
+        string buffer = print_name(print_expr(op->args[2]));
+
+        rhs << "halide_debug_to_file(";
+        rhs << (have_user_context ? "__user_context" : "null");
+        rhs << ", \"" + filename + "\", " + typecode;
+        rhs << ", " << buffer << ")";
+    } else if (op->is_intrinsic(Call::bitwise_and)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " & " << a1;
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " ^ " << a1;
+    } else if (op->is_intrinsic(Call::bitwise_or)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " | " << a1;
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        internal_assert(op->args.size() == 1);
+        rhs << "~" << print_expr(op->args[0]);
+    } else if (op->is_intrinsic(Call::reinterpret)) {
+        internal_assert(op->args.size() == 1);
+        rhs << print_reinterpret(op->type, op->args[0]);
+    } else if (op->is_intrinsic(Call::shift_left)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " << " << a1;
+    } else if (op->is_intrinsic(Call::shift_right)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
+        const char *shift_op = op->type.is_uint() ? " >>> " : " >> ";
+        rhs << a0 << shift_op << a1;
+    } else if (op->is_intrinsic(Call::rewrite_buffer)) {
+        int dims = ((int)(op->args.size())-2)/3;
+        (void)dims; // In case internal_assert is ifdef'd to do nothing
+        internal_assert((int)(op->args.size()) == dims*3 + 2);
+        internal_assert(dims <= 4);
+        vector<string> args(op->args.size());
+        const Variable *v = op->args[0].as<Variable>();
+        internal_assert(v);
+        args[0] = print_name(v->name);
+        for (size_t i = 1; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
+        }
+        rhs << "halide_rewrite_buffer(";
+        for (size_t i = 0; i < 14; i++) {
+            if (i > 0) rhs << ", ";
+            if (i < args.size()) {
+                rhs << args[i];
+            } else {
+                rhs << '0';
+            }
+        }
+        rhs << ")";
+    } else if (op->is_intrinsic(Call::null_handle)) {
+        rhs << "null";
+    } else if (op->is_intrinsic(Call::address_of)) {
+        // TODO: Figure out if arrays can be sliced, viewed, etc.
+        const Load *l = op->args[0].as<Load>();
+        internal_assert(op->args.size() == 1 && l);
+        rhs << print_name(l->name) << ".subarray(" << print_expr(l->index) << ")";
+    } else if (op->is_intrinsic(Call::trace) || op->is_intrinsic(Call::trace_expr)) {
+        int int_args = (int)(op->args.size()) - 5;
+        internal_assert(int_args >= 0);
+
+        Type type = op->type;
+
+        ostringstream value_stream;
+        const char *lead_char = "[";
+        for (int32_t v_index = 0; v_index < type.lanes(); v_index++) {
+            value_stream << lead_char << print_expr(conditionally_extract_lane(op->args[4], v_index));
+            lead_char = ", ";
+        }
+        value_stream << "]";
+
+        ostringstream coordinates_stream;
+        coordinates_stream << "[";
+        for (int32_t c_index = 0; c_index < int_args; c_index++) {
+            if (c_index != 0) {
+              coordinates_stream << ", ";
+            }
+            coordinates_stream << print_expr(op->args[5 + c_index]);
+        }
+        coordinates_stream << "]";
+
+        string event_name = unique_name('e');
+        do_indent();
+        stream << "var " << event_name << " = { func: " << op->args[0] << ", ";
+        stream << "event: " << op->args[1] << ", ";
+        stream << "parent_id: " << op->args[2] << ", ";
+        stream << "type_code: " << type.code() << ", bits: " << type.bits() << ", vector_width: " << type.lanes() << ", ";
+        stream << "value_index: " << op->args[3] << ", ";
+        stream << "value: " << value_stream.str() << ", ";
+        stream << "dimensions: " << int_args * type.lanes() << ", ";
+        stream << "coordinates: " << coordinates_stream.str() << " }\n";
+
+        if (op->is_intrinsic(Call::trace_expr)) {
+            do_indent();
+            rhs << "halide_trace(__user_context, " << event_name << ")";
+        } else {
+            stream << "halide_trace(__user_context, " << event_name << ");\n";
+            rhs << print_expr(op->args[4]);
+        }
+    } else if (op->is_intrinsic(Call::lerp)) {
+        // JavaScript doesn't support 64-bit ints, which are used for 32-bit interger lerps.
+        // Handle this by converting to double instead, which will be as efficient in JS unless
+        // SIMD.js or asm.js are being used.
+        Expr e;
+        if (!op->type.is_float() && op->type.bits() >= 32) {
+            e = Cast::make(op->type, round(lower_lerp(Cast::make(Float(64), op->args[0]),
+                                                      Cast::make(Float(64), op->args[1]), op->args[2])));
+        } else {
+            e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        }
+        rhs << print_expr(e);
+    } else if (op->is_intrinsic(Call::popcount)) {
+        Expr e = cast<uint32_t>(op->args[0]);
+        e = e - ((e >> 1) & 0x55555555);
+        e = (e & 0x33333333) + ((e >> 2) & 0x33333333);
+        e = (e & 0x0f0f0f0f) + ((e >> 4) & 0x0f0f0f0f);
+        e = (e * 0x1010101) >> 24;
+        rhs << print_expr(e);
+    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+        // TODO: Should this be a print_assignment?
+        string e = print_expr(op->args[0]);
+        int32_t bits = op->args[0].type().bits();
+        rhs << "((" << e << "< 0) ? 0 : ((" << e << " == 0) ? " << bits << ": " << (bits - 1) << " - ((Math.log(" << e << ")  / Math.LN2) >> 0)))";
+    } else if (op->is_intrinsic(Call::count_trailing_zeros)) {
+        Expr e = op->args[0];
+        int32_t bits = op->args[0].type().bits();
+
+        e = e & -e;
+        Expr ctz = bits;
+        if (bits > 16) {
+            ctz = ctz - select((e & 0x0000ffff) != 0, 16, 0);
+            ctz = ctz - select((e & 0x00ff00ff) != 0, 8, 0);
+            ctz = ctz - select((e & 0x0f0f0f0f) != 0, 4, 0);
+            ctz = ctz - select((e & 0x33333333) != 0, 2, 0);
+            ctz = ctz - select((e & 0x55555555) != 0, 1, 0);
+            ctz = ctz - select(e != 0, 1, 0);
+        } else if (bits > 8) {
+            ctz = ctz - select((e & 0x00ff) != 0, 8, 0);
+            ctz = ctz - select((e & 0x0f0f) != 0, 4, 0);
+            ctz = ctz - select((e & 0x3333) != 0, 2, 0);
+            ctz = ctz - select((e & 0x5555) != 0, 1, 0);
+            ctz = ctz - select(e != 0, 1, 0);
+        } else if (bits > 1) {
+            ctz = ctz - select((e & 0x0f) != 0, 4, 0);
+            ctz = ctz - select((e & 0x33) != 0, 2, 0);
+            ctz = ctz - select((e & 0x55) != 0, 1, 0);
+            ctz = ctz - select(e != 0, 1, 0);
+        } else {
+            ctz = ctz - select(e, 1, 0);
+        }
+        rhs << print_expr(ctz);
+    } else if (op->is_intrinsic(Call::return_second)) {
+        internal_assert(op->args.size() == 2);
+        string arg0 = print_expr(op->args[0]);
+        string arg1 = print_expr(op->args[1]);
+        rhs << "(" << arg0 << ", " << arg1 << ")";
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        internal_assert(op->args.size() == 3);
+
+        string result_id = unique_name('_');
+
+        do_indent();
+        stream << "var " << result_id << ";\n";
+
+        string cond_id = print_expr(op->args[0]);
+
+        do_indent();
+        stream << "if (" << cond_id << ")\n";
+        open_scope();
+        string true_case = print_expr(op->args[1]);
+        do_indent();
+        stream << result_id << " = " << true_case << ";\n";
+        close_scope("if " + cond_id);
+        do_indent();
+        stream << "else\n";
+        open_scope();
+        string false_case = print_expr(op->args[2]);
+        do_indent();
+        stream << result_id << " = " << false_case << ";\n";
+        close_scope("if " + cond_id + " else");
+
+        rhs << result_id;
+    } else if (op->is_intrinsic(Call::copy_buffer_t)) {
+        internal_assert(op->args.size() == 1);
+        string arg = print_expr(op->args[0]);
+        string buf_id = unique_name('B');
+        do_indent();
+        stream << "var " << buf_id << " = ";
+        open_scope();
+        do_indent();
+        stream << "dev: " << arg << ".dev,\n";
+        do_indent();
+        stream << "host: " << arg << ".host,\n";
+        do_indent();
+        stream << "min: [" << arg << ".min[0], " << arg << ".min[1], " << arg << ".min[2], " << arg << ".min[3]],\n";
+        do_indent();
+        stream << "extent: [" << arg << ".extent[0], " << arg << ".extent[1], " << arg << ".extent[2], " << arg << ".extent[3]],\n";
+        do_indent();
+        stream << "stride: [" << arg << ".stride[0], " << arg << ".stride[1], " << arg << ".stride[2], " << arg << ".stride[3]],\n";
+        do_indent();
+        stream << "elem_size: " << arg << ".elem_size,\n";
+        do_indent();
+        stream << "host_dirty: " << arg << ".host_dirty,\n";
+        do_indent();
+        stream << "dev_dirty: " << arg << ".dev_dirty,\n";
+        close_scope("copy_buffer_t");
+        rhs << buf_id;
+    } else if (op->is_intrinsic(Call::create_buffer_t)) {
+        internal_assert(op->args.size() >= 2);
+        vector<string> args;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            args.push_back(print_expr(op->args[i]));
+        }
+        string buf_id = unique_name('B');
+        do_indent();
+        stream << "var " << buf_id << " = {\n";
+        do_indent();
+        stream << "dev: 0,\n";
+        do_indent();
+        stream << "host: " << args[0] << ",\n";
+        int dims = ((int)op->args.size() - 2)/3;
+        do_indent();
+        stream << "min: ["; 
+        for (int i = 0; i < dims; i++) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            stream << args[i*3+2];
+        }
+        stream << "],\n";
+        do_indent();
+        stream << "extent: [";
+        for (int i = 0; i < dims; i++) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            stream << args[i*3+3];
+        }
+        stream << "],\n";
+        do_indent();
+        stream << "stride: [";
+        for (int i = 0; i < dims; i++) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            stream << args[i*3+4];
+        }
+        stream << "],\n";
+        do_indent();
+        stream << "elem_size: " << op->args[1].type().bytes() << ",\n";
+        do_indent();
+        stream << "array_constructor: " << javascript_type_array_name_fragment(op->args[1].type()) << "Array,\n";
+        stream << "host_dirty: false,\n";
+        do_indent();
+        stream << "dev_dirty: false,\n";
+        stream << "};\n";
+        rhs << buf_id;
+    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << "(" << a0 << ".min[" << a1 << "] + " << a0 << ".extent[" << a1 << "] - 1)";
+    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << ".min[" << a1 << "]";
+    } else if (op->is_intrinsic(Call::extract_buffer_host)) {
+        internal_assert(op->args.size() == 1);
+        string a0 = print_expr(op->args[0]);
+        rhs << a0 << ".host";
+    } else if (op->is_intrinsic(Call::set_host_dirty)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        do_indent();
+        stream << a0 << ".host_dirty = " << a1 << ";\n";
+        rhs << "0";
+    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        do_indent();
+        stream << a0 << ".dev_dirty = " << a1 << ";\n";
+        rhs << "0";
+    } else if (op->is_intrinsic(Call::abs)) {
+        internal_assert(op->args.size() == 1);
+        string arg = print_expr(op->args[0]);
+        // TODO: Should this use Math.abs?
+        rhs << "(" << arg << " >= 0 ? " << arg << " : " <<
+            fround_start_if_needed(op->type) << "-" << arg << fround_end_if_needed(op->type) << ")";
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        string temp = unique_name('_');
+        string arg_a = print_expr(op->args[0]);
+        string arg_b = print_expr(op->args[1]);
+        do_indent();
+        stream << "var " << temp << " = " <<
+            fround_start_if_needed(op->type) << arg_a << " - " << arg_b << fround_end_if_needed(op->type) << ";\n";
+        // TODO: Should this use Math.abs?
+        rhs << "(" << temp << " >= 0 ? " << temp << " : -" << temp << ")";
+    } else if (op->is_intrinsic(Call::memoize_expr)) {
+        internal_assert(op->args.size() >= 1);
+        string arg = print_expr(op->args[0]);
+        rhs << "(" << arg << ")";
+    } else if (op->is_intrinsic(Call::copy_memory)) {
+        internal_assert(op->args.size() == 3);
+        string dest = print_expr(op->args[0]);
+        string src = print_expr(op->args[1]);
+        string size = print_expr(op->args[2]);
+        string index_var = unique_name('i');
+
+        bool is_string_imm = op->args[1].as<StringImm>() != nullptr;
+        stream << "for (var " << index_var << " = 0; " << index_var << " < " << size << "; " << index_var << "++) ";
+        open_scope();
+        do_indent();
+        stream << dest << "[" << index_var << "] = " << src;
+        if (is_string_imm) {
+            stream << ".charCodeAt(" << index_var << ");\n";
+        } else {
+            stream << "[" << index_var << "];\n";
+        }
+        close_scope("copy_memory");
+        rhs << dest;
+    } else if (op->is_intrinsic(Call::make_struct)) {
+        // Emit a line something like: var foo = [3.0f, 'c', 4 ];
+        // Using an array has been chosen as the order is the most
+        // important property of a structure as it is used bay
+        // Halide.
+
+        // Get the args
+        vector<string> values;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            values.push_back(print_expr(op->args[i]));
+        }
+        rhs << "/* make_struct */ [ ";
+        const char *separator = "";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            rhs << separator << values[i];
+            separator = ", ";
+        }
+        rhs <<" ]";
+    } else if (op->is_intrinsic(Call::stringify)) {
+        string buf_name = unique_name('b');
+
+        // Print all args that are general Exprs before starting output on stream.
+        std::vector<string> printed_args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+          if (op->args[i].type().is_float()) {
+              do_indent();
+              string temp = unique_name('f');
+              string e = print_expr(op->args[i]);
+              string format_function = (op->args[i].type().bits() == 32) ? "toFixed" : "toScientifc";
+              stream << "var " << temp << " = (" << e << ")." << format_function << "(6);\n";
+              printed_args[i] = temp;
+            } else if (op->args[i].as<StringImm>() == NULL && !op->args[i].type().is_handle()) {
+                printed_args[i] = print_expr(op->args[i]);
+            }
+        }
+        do_indent();
+        stream << "var " << buf_name << " = \"\";\n";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            Type t = op->args[i].type();
+
+            do_indent();
+
+            if (op->args[i].type().is_float()) {
+                stream << buf_name << " = " << buf_name << ".concat(" << printed_args[i] << ");\n";
+            } else if (op->args[i].as<StringImm>()) {
+                stream << buf_name << " = " << buf_name << ".concat(" << op->args[i] << ");\n";
+            } else if (t.is_handle()) {
+                stream << buf_name << " = " << buf_name << ".concat(\"<Object>\");\n";
+            } else {
+                stream << buf_name << " = " << buf_name << ".concat((" << printed_args[i] << ").toString());\n";
+            }
+        }
+        rhs << buf_name;
+    } else if (op->call_type == Call::Intrinsic ||
+               op->call_type == Call::PureIntrinsic) {
+        // TODO: other intrinsics
+        internal_error << "Unhandled intrinsic in JavaScript backend: " << op->name << '\n';
     } else {
         // Generic calls
 

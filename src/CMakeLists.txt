@@ -214,6 +214,7 @@ set(HEADER_FILES
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_JavaScript.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -313,7 +314,6 @@ set(HEADER_FILES
   VaryingAttributes.h
   VectorizeLoops.h
   runtime/HalideRuntime.h
-  CodeGen_JavaScript.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -361,6 +361,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
   CodeGen_Internal.cpp
+  CodeGen_JavaScript.cpp
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
   CodeGen_OpenCL_Dev.cpp
@@ -455,34 +456,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Util.cpp
   Var.cpp
   VaryingAttributes.cpp
-  ExprUsesVar.cpp
-  Introspection.cpp
-  Buffer.cpp
-  Param.cpp
-  Error.cpp
-  Image.cpp
-  Debug.cpp
-  InjectOpenGLIntrinsics.cpp
-  InjectHostDevBufferCopies.cpp
-  Schedule.cpp
-  FuseGPUThreadLoops.cpp
-  ParallelRVar.cpp
-  BoundaryConditions.cpp
-  HumanReadableStmt.cpp
-  StmtToHtml.cpp
-  Memoization.cpp
-  CodeGen_MIPS.cpp
-  Generator.cpp
-  ObjectInstanceRegistry.cpp
-  BlockFlattening.cpp
-  RemoveDeadAllocations.cpp
-  LLVM_Runtime_Linker.cpp
-  Output.cpp
-  LLVM_Output.cpp
-  Module.cpp
-  DeviceInterface.cpp
   VectorizeLoops.cpp
-  CodeGen_JavaScript.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

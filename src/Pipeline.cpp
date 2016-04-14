@@ -433,7 +433,7 @@ class FindExterns : public IRGraphVisitor {
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
 
-        if (op->call_type == Call::Extern &&
+        if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) &&
             externs.count(op->name) == 0) {
             void *address = get_symbol_address(op->name.c_str());
             if (address == NULL && !starts_with(op->name, "_")) {
@@ -444,10 +444,16 @@ class FindExterns : public IRGraphVisitor {
                 struct JITExtern jit_extern;
                 jit_extern.c_function = address;
                 jit_extern.signature.is_void_return = op->type.bits() == 0;
-                jit_extern.signature.ret_type = op->type;
+                // TODO: here and below for arguments, we force types to scalar,
+                // which means this code cannot support functions which actually do
+                // take vectors. But generally the function is actually scalar and
+                // call sites which use vectors will have to be scalarized into a
+                // separate call per lane. Not sure there is anywhere to get
+                // information to make a distinction in the current design.
+                jit_extern.signature.ret_type = op->type.element_of();
                 for (Expr e : op->args) {
                     ScalarOrBufferT this_arg;
-                    this_arg.scalar_type = e.type();
+                    this_arg.scalar_type = e.type().element_of();
                     if (e.type().is_handle()) {
                         const Variable *v = e.as<Variable>();
                         // This code heuristically matches the patterns define_extern uses to pass buffer arguments and result parameters.
@@ -695,6 +701,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, name, target);
 
     if (target.has_feature(Target::JavaScript)) {
+      debug(0) << "Target has JavaScript.\n";
         std::stringstream out(std::ios_base::out);
         CodeGen_JavaScript cg(out);
         cg.compile(module);
@@ -705,9 +712,13 @@ void Pipeline::compile_jit(const Target &target_arg) {
         
         std::map<std::string, JITExtern> externs_js;
         externs_js = contents.ptr->jit_externs;
+      debug(0) << "Looking for externs.\n";
         FindExterns find_externs(externs_js);
         for (LoweredFunc &f : contents.ptr->module.functions) {
             f.body.accept(&find_externs);
+        }
+        for (const auto &p : externs_js) {
+          debug(0) << "Found extern: " << p.first << "\n";
         }
         externs_js = filter_externs(externs_js);
 

@@ -28,6 +28,18 @@ int32_t buffer_total_size(const buffer_t *buf) {
     return total_size;
 }
 
+enum ExternalArrayType {
+  kExternalInt8Array = 1,
+  kExternalUint8Array,
+  kExternalInt16Array,
+  kExternalUint16Array,
+  kExternalInt32Array,
+  kExternalUint32Array,
+  kExternalFloat32Array,
+  kExternalFloat64Array,
+  kExternalUint8ClampedArray,
+};
+
 }
 
 #endif
@@ -45,8 +57,8 @@ std::map<std::string, Halide::JITExtern> filter_externs(const std::map<std::stri
 
 #if WITH_JAVASCRIPT_V8
 
-#include "include/v8.h"
-#include "include/libplatform/libplatform.h"
+#include "v8.h"
+#include "libplatform/libplatform.h"
 
 namespace Halide { namespace Internal {
 
@@ -206,7 +218,7 @@ Local<Object> make_buffer_t(Isolate *isolate, struct buffer_t *buf, ExternalArra
 
 ExternalArrayType halide_type_to_external_array_type(const Type &t) {
   if (t.is_uint()) {
-      switch (t.bits) {
+      switch (t.bits()) {
           case 1:
           case 8:
               return kExternalUint8Array;
@@ -223,7 +235,7 @@ ExternalArrayType halide_type_to_external_array_type(const Type &t) {
               break;
       }
   } else if (t.is_int()) {
-       switch (t.bits) {
+    switch (t.bits()) {
            case 8:
                return kExternalInt8Array;
                break;
@@ -239,7 +251,7 @@ ExternalArrayType halide_type_to_external_array_type(const Type &t) {
                break;
        }
    } else   if (t.is_float()) {
-       switch (t.bits) {
+    switch (t.bits()) {
            case 32:
                return kExternalFloat32Array;
                break;
@@ -268,7 +280,7 @@ Local<Value> wrap_scalar(Isolate *isolate, const Type &t, const void *val_ptr) {
     } else {
         double val = 0;
         if (t.is_uint()) {
-            switch (t.bits) {
+            switch (t.bits()) {
                 case 1:
                 case 8:
                     val = *reinterpret_cast<const uint8_t *>(val_ptr);
@@ -285,7 +297,7 @@ Local<Value> wrap_scalar(Isolate *isolate, const Type &t, const void *val_ptr) {
                     break;
             }
         } else if (t.is_int()) {
-            switch (t.bits) {
+            switch (t.bits()) {
                 case 8:
                     val = *reinterpret_cast<const int8_t *>(val_ptr);
                     break;
@@ -301,7 +313,7 @@ Local<Value> wrap_scalar(Isolate *isolate, const Type &t, const void *val_ptr) {
                     break;
             }
          } else if (t.is_float()) {
-             switch (t.bits) {
+             switch (t.bits()) {
                  case 32:
                      val = *reinterpret_cast<const float *>(val_ptr);
                      break;
@@ -661,35 +673,35 @@ void js_value_to_uint64_slot(const Halide::Type &type, const Local<Value> &val, 
         Local<External> wrapped_handle = Local<External>::Cast(wrapper_obj->GetInternalField(0));
         *slot = (uint64_t)wrapped_handle->Value();
     } else if (type.is_float()) {
-        if (type.bits == 32) {
+        if (type.bits() == 32) {
             val_to_slot<float>(val, slot);
         } else {
-            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            internal_assert(type.bits() == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
             val_to_slot<double>(val, slot);
         }
     } else if (type.is_uint()) {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
             val_to_slot<bool>(val, slot);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
             val_to_slot<uint8_t>(val, slot);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
             val_to_slot<uint16_t>(val, slot);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
             val_to_slot<uint32_t>(val, slot);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
             val_to_slot<uint64_t>(val, slot);
         }
     } else {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
             val_to_slot<bool>(val, slot);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
             val_to_slot<int8_t>(val, slot);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
             val_to_slot<int16_t>(val, slot);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
             val_to_slot<int32_t>(val, slot);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "64-bit integer types are not supported with JavaScript.\n";
             val_to_slot<int64_t>(val, slot);
         }
@@ -791,35 +803,35 @@ void slot_to_return_val(const uint64_t *slot, ReturnValue<Value> val) {
 void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot, ReturnValue<Value> val) {
     if (type.is_handle()) {
     } else if (type.is_float()) {
-        if (type.bits == 32) {
+        if (type.bits() == 32) {
             slot_to_return_val<float, double>(slot, val);
         } else {
-            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            internal_assert(type.bits() == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
             slot_to_return_val<double, double>(slot, val);
         }
     } else if (type.is_uint()) {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
           slot_to_return_val<bool, bool>(slot, val);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
           slot_to_return_val<uint8_t, uint32_t>(slot, val);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
           slot_to_return_val<uint16_t, uint32_t>(slot, val);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
           slot_to_return_val<uint32_t, uint32_t>(slot, val);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
             slot_to_return_val<uint64_t, double>(slot, val);
         }
     } else {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
           slot_to_return_val<bool, bool>(slot, val);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
           slot_to_return_val<int8_t, int32_t>(slot, val);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
           slot_to_return_val<int16_t, int32_t>(slot, val);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
           slot_to_return_val<int32_t, int32_t>(slot, val);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "64-bit integer types are not supported with JavaScript.\n";
             slot_to_return_val<int64_t, double>(slot, val);
         }
@@ -936,6 +948,7 @@ int compile_javascript_v8(const std::string &source, const std::string &fn_name,
 
     debug(0) << "Compiling JavaScript function " << fn_name << "\n";
     // TODO: thread safety.
+    static std::unique_ptr<ArrayBuffer::Allocator> array_buffer_allocator(new HalideArrayBufferAllocator());
     static bool inited = false;
     if (!inited) {
         // Initialize V8.
@@ -953,12 +966,13 @@ int compile_javascript_v8(const std::string &source, const std::string &fn_name,
         int flags_size = sizeof(flags)/sizeof(flags[0]);
         V8::SetFlagsFromCommandLine(&flags_size, const_cast<char **>(flags), false);
         V8::Initialize();
-        V8::SetArrayBufferAllocator(new HalideArrayBufferAllocator());
         inited = true;
     }
 
+    Isolate::CreateParams isolate_params;
+    isolate_params.array_buffer_allocator = array_buffer_allocator.get();
     // Create a new Isolate and make it the current one.
-    isolate = Isolate::New();
+    isolate = Isolate::New(isolate_params);
 
     Isolate::Scope isolate_scope(isolate);
 
@@ -1055,6 +1069,7 @@ int run_javascript_v8(std::vector<std::pair<Argument, const void *>> args,
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "js/Conversions.h"
+#include "js/Initialization.h"
 
 #pragma clang diagnostic pop
 
@@ -1100,7 +1115,7 @@ static JSClass global_class = {
     JSCLASS_GLOBAL_FLAGS,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL,
     JS_GlobalObjectTraceHook,
     { }
 };
@@ -1114,21 +1129,9 @@ void reportError(JSContext *cx, const char *message, JSErrorReport *report) {
     internal_error << "Error running JavaScript: " << message << " | File: " << filename << " Line: " << report->lineno << "\n";
 }
 
-enum ExternalArrayType {
-  kExternalInt8Array = 1,
-  kExternalUint8Array,
-  kExternalInt16Array,
-  kExternalUint16Array,
-  kExternalInt32Array,
-  kExternalUint32Array,
-  kExternalFloat32Array,
-  kExternalFloat64Array,
-  kExternalUint8ClampedArray,
-};
-
 ExternalArrayType halide_type_to_external_array_type(const Type &t) {
   if (t.is_uint()) {
-      switch (t.bits) {
+      switch (t.bits()) {
           case 1:
           case 8:
               return kExternalUint8Array;
@@ -1145,7 +1148,7 @@ ExternalArrayType halide_type_to_external_array_type(const Type &t) {
               break;
       }
   } else if (t.is_int()) {
-       switch (t.bits) {
+      switch (t.bits()) {
            case 8:
                return kExternalInt8Array;
                break;
@@ -1161,7 +1164,7 @@ ExternalArrayType halide_type_to_external_array_type(const Type &t) {
                break;
        }
    } else   if (t.is_float()) {
-       switch (t.bits) {
+       switch (t.bits()) {
            case 32:
                return kExternalFloat32Array;
                break;
@@ -1265,7 +1268,7 @@ static JSClass buffer_t_class = {
     JSCLASS_HAS_PRIVATE,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL,
     NULL,
   { }
 };
@@ -1349,7 +1352,7 @@ static JSClass handle_class = {
     JSCLASS_HAS_PRIVATE,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL,
     NULL,
     { }
 };
@@ -1363,7 +1366,7 @@ Value wrap_scalar(JSContext *context, const Type &t, const void *val_ptr) {
         result.setObject(*temp);
     } else {
         if (t.is_uint()) {
-            switch (t.bits) {
+            switch (t.bits()) {
                 case 1:
                 case 8:
                     result.setInt32(*reinterpret_cast<const uint8_t *>(val_ptr));
@@ -1380,7 +1383,7 @@ Value wrap_scalar(JSContext *context, const Type &t, const void *val_ptr) {
                     break;
             }
         } else if (t.is_int()) {
-            switch (t.bits) {
+            switch (t.bits()) {
                 case 8:
                     result.setInt32(*reinterpret_cast<const int8_t *>(val_ptr));
                     break;
@@ -1396,7 +1399,7 @@ Value wrap_scalar(JSContext *context, const Type &t, const void *val_ptr) {
                     break;
             }
          } else if (t.is_float()) {
-             switch (t.bits) {
+             switch (t.bits()) {
                  case 32:
                      result.setDouble(*reinterpret_cast<const float *>(val_ptr));
                      break;
@@ -1604,7 +1607,8 @@ void js_buffer_t_to_struct(JSContext *context, HandleValue val, struct buffer_t 
     RootedObject array_buffer(context);
 
     if (get_array_buffer_from_typed_array_field(context, buffer_obj, "host", &array_buffer)) {
-        GetArrayBufferLengthAndData(array_buffer, &length, &data);
+        bool is_shared_memory = false;
+        GetArrayBufferLengthAndData(array_buffer, &length, &is_shared_memory, &data);
     }
     slot->host = data;
 
@@ -1634,35 +1638,35 @@ void js_value_to_uint64_slot(const Halide::Type &type, HandleValue val, uint64_t
     if (type.is_handle()) {
         *(void **)slot = get_user_context(val);
     } else if (type.is_float()) {
-        if (type.bits == 32) {
+        if (type.bits() == 32) {
             val_to_slot<float>(val, slot);
         } else {
-            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            internal_assert(type.bits() == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
             val_to_slot<double>(val, slot);
         }
     } else if (type.is_uint()) {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
             val_to_slot<bool>(val, slot);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
             val_to_slot<uint8_t>(val, slot);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
             val_to_slot<uint16_t>(val, slot);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
             val_to_slot<uint32_t>(val, slot);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
             val_to_slot<uint64_t>(val, slot);
         }
     } else {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
             val_to_slot<bool>(val, slot);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
             val_to_slot<int8_t>(val, slot);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
             val_to_slot<int16_t>(val, slot);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
             val_to_slot<int32_t>(val, slot);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "64-bit integer types are not supported with JavaScript.\n";
             val_to_slot<int64_t>(val, slot);
         }
@@ -1727,35 +1731,35 @@ void uint64_slot_to_return_value(const Halide::Type &type, const uint64_t *slot,
     if (type.is_handle()) {
         internal_error << "Returning handles to JavaScript is not supported.\n";
     } else if (type.is_float()) {
-        if (type.bits == 32) {
+        if (type.bits() == 32) {
             slot_to_return_val<float, double>(slot, val);
         } else {
-            internal_assert(type.bits == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
+            internal_assert(type.bits() == 64) << "Floating-point type that isn't 32 or 64-bits wide.\n";
             slot_to_return_val<double, double>(slot, val);
         }
     } else if (type.is_uint()) {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
           slot_to_return_val<bool, bool>(slot, val);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
           slot_to_return_val<uint8_t, uint32_t>(slot, val);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
           slot_to_return_val<uint16_t, uint32_t>(slot, val);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
           slot_to_return_val<uint32_t, uint32_t>(slot, val);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "Unsigned 64-bit integer types are not supported with JavaScript.\n";
             slot_to_return_val<uint64_t, double>(slot, val);
         }
     } else {
-        if (type.bits == 1) {
+        if (type.bits() == 1) {
           slot_to_return_val<bool, bool>(slot, val);
-        } else if (type.bits == 8) {
+        } else if (type.bits() == 8) {
           slot_to_return_val<int8_t, int32_t>(slot, val);
-        } else if (type.bits == 16) {
+        } else if (type.bits() == 16) {
           slot_to_return_val<int16_t, int32_t>(slot, val);
-        } else if (type.bits == 32) {
+        } else if (type.bits() == 32) {
           slot_to_return_val<int32_t, int32_t>(slot, val);
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             user_error << "64-bit integer types are not supported with JavaScript.\n";
             slot_to_return_val<int64_t, double>(slot, val);
         }
@@ -1937,8 +1941,9 @@ int compile_javascript_spider_monkey(const std::string &source, const std::strin
     {
         // Create the global object and a new compartment.
         RootedObject global(context);
+        JS::CompartmentOptions compartment_options;
         global = JS_NewGlobalObject(context, &global_class, NULL,
-                                    JS::DontFireOnNewGlobalHook);
+                                    JS::DontFireOnNewGlobalHook, compartment_options);
         if (!global) {
             JS_DestroyContext(context);
             spider_monkey_release_runtime();
