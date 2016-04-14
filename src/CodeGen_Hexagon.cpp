@@ -965,17 +965,16 @@ void CodeGen_Hexagon::visit(const Call *op) {
                     Value *dv = codegen(op->args[0]);
                     Value *low = slice_vector(dv, 0, lanes);
                     Value *high = slice_vector(dv, lanes, lanes);
-                    Intrinsic::ID intrin_id;
+                    Intrinsic::ID intrin_id = llvm::Intrinsic::not_intrinsic;
                     switch(op->type.bits()) {
-                    case 8: intrin_id = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeb) :
-                        IPICK(llvm::Intrinsic::hexagon_V6_vpackob);
+                    case 8: intrin_id =
+                            even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeb) : IPICK(llvm::Intrinsic::hexagon_V6_vpackob);
                         break;
-                    case 16: intrin_id = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeh) :
-                        IPICK(llvm::Intrinsic::hexagon_V6_vpackoh);
+                    case 16: intrin_id =
+                            even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeh) : IPICK(llvm::Intrinsic::hexagon_V6_vpackoh);
                         break;
                     }
-                    string s = "Generating a vpack";
-                    debug(4) << (s +  (even ? "e\n" : "o\n"));
+                    debug(4) << "Generating a vpack" <<  (even ? "e\n" : "o\n");
                     llvm::Type *ret_ty = llvm_type_of(op->type);
                     value = call_intrin_cast(ret_ty, intrin_id, { high, low });
                     return;

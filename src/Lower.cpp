@@ -221,8 +221,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::HVX_128) ||
-        t.has_feature(Target::HVX_64)) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         debug(1) << "Aligning loads for HVX....\n";
         s = hexagon_align_loads(s, t);
         s = simplify(s);
