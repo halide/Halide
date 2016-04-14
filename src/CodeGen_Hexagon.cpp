@@ -561,9 +561,6 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
         bool is_vcombine = call && call->getCalledFunction() == combine_fn;
         if (is_vcombine) {
             if (start == 0) {
-                // Not bitcasting here puts the onus on the caller to use call_intrin_cast before
-                // using this in an intrinsic. This function should return the same element type
-                // as the input.
                 return builder->CreateBitCast(call->getArgOperand(1), ret_ty);
             } else if (start == vec_elements/2) {
                 return builder->CreateBitCast(call->getArgOperand(0), ret_ty);
