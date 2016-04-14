@@ -126,6 +126,20 @@ static unsigned GetEncodedRMWOperation(AtomicRMWInst::BinOp Op) {
   }
 }
 
+#if LLVM_VERSION >= 39
+static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
+  switch (Ordering) {
+  case AtomicOrdering::NotAtomic: return bitc::ORDERING_NOTATOMIC;
+  case AtomicOrdering::Unordered: return bitc::ORDERING_UNORDERED;
+  case AtomicOrdering::Monotonic: return bitc::ORDERING_MONOTONIC;
+  case AtomicOrdering::Acquire: return bitc::ORDERING_ACQUIRE;
+  case AtomicOrdering::Release: return bitc::ORDERING_RELEASE;
+  case AtomicOrdering::AcquireRelease: return bitc::ORDERING_ACQREL;
+  case AtomicOrdering::SequentiallyConsistent: return bitc::ORDERING_SEQCST;
+  }
+  llvm_unreachable("Invalid ordering");
+}
+#else
 static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
   switch (Ordering) {
   case NotAtomic: return bitc::ORDERING_NOTATOMIC;
@@ -138,6 +152,7 @@ static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
   }
   llvm_unreachable("Invalid ordering");
 }
+#endif
 
 static unsigned GetEncodedSynchScope(SynchronizationScope SynchScope) {
   switch (SynchScope) {
@@ -632,6 +647,12 @@ static void WriteGenericDebugNode(const GenericDebugNode *,
   llvm_unreachable("unimplemented");
 }*/
 
+#if LLVM_VERSION >= 39
+#define BITC_METADATA_STRING bitc::METADATA_STRING_OLD
+#else
+#define BITC_METADATA_STRING bitc::METADATA_STRING
+#endif
+
 static void WriteModuleMetadata(const Module *M,
                                 const llvm_3_2::ValueEnumerator &VE,
                                 BitstreamWriter &Stream) {
@@ -646,7 +667,7 @@ static void WriteModuleMetadata(const Module *M,
   if (VE.hasMDString()) {
     // Abbrev for METADATA_STRING.
     BitCodeAbbrev *Abbv = new BitCodeAbbrev();
-    Abbv->Add(BitCodeAbbrevOp(bitc::METADATA_STRING));
+    Abbv->Add(BitCodeAbbrevOp(BITC_METADATA_STRING));
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
     MDSAbbrev = Stream.EmitAbbrev(Abbv);
@@ -713,7 +734,7 @@ static void WriteModuleMetadata(const Module *M,
     Record.append(MDS->bytes_begin(), MDS->bytes_end());
 
     // Emit the finished record.
-    Stream.EmitRecord(bitc::METADATA_STRING, Record, MDSAbbrev);
+    Stream.EmitRecord(BITC_METADATA_STRING, Record, MDSAbbrev);
     Record.clear();
   }
 

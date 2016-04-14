@@ -129,35 +129,81 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the function args in terms of the loop variables using the splits
-    map<string, pair<string, Expr>> base_values;
     for (const Split &split : splits) {
         Expr outer = Variable::make(Int(32), prefix + split.outer);
+        Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
         if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
+            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
 
             known_size_dims[split.inner] = split.factor;
 
             Expr base = outer * split.factor + old_min;
+            string base_name = prefix + split.inner + ".base";
+            Expr base_var = Variable::make(Int(32), base_name);
+            string old_var_name = prefix + split.old_var;
+            Expr old_var = Variable::make(Int(32), old_var_name);
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+
+            if (is_update) {
+                user_assert(split.tail != TailStrategy::ShiftInwards)
+                    << "When splitting Var " << split.old_var
+                    << " ShiftInwards is not a legal tail strategy for update definitions, as"
+                    << " it may change the meaning of the algorithm\n";
+            }
+
+            if (split.exact) {
+                user_assert(split.tail == TailStrategy::Auto ||
+                            split.tail == TailStrategy::GuardWithIf)
+                    << "When splitting Var " << split.old_var
+                    << " the tail strategy must be GuardWithIf or Auto. "
+                    << "Anything else may change the meaning of the algorithm\n";
+            }
+
+            TailStrategy tail = split.tail;
+            if (tail == TailStrategy::Auto) {
+                if (split.exact) {
+                    tail = TailStrategy::GuardWithIf;
+                } else if (is_update) {
+                    tail = TailStrategy::RoundUp;
+                } else {
+                    tail = TailStrategy::ShiftInwards;
+                }
+            }
+
             if ((iter != known_size_dims.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
-
                 // We have proved that the split factor divides the
-                // old extent. No need to adjust the base.
+                // old extent. No need to adjust the base or add an if
+                // statement.
                 known_size_dims[split.outer] = iter->second / split.factor;
-            } else if (split.exact) {
+            } else if (is_one(split.factor)) {
+                // The split factor trivially divides the old extent,
+                // but we know nothing new about the outer dimension.
+            } else if (tail == TailStrategy::GuardWithIf) {
                 // It's an exact split but we failed to prove that the
-                // extent divides the factor. This is a problem.
-                user_error << "When splitting " << split.old_var << " into "
-                           << split.outer << " and " << split.inner << ", "
-                           << "could not prove the split factor (" << split.factor << ") "
-                           << "divides the extent of " << split.old_var
-                           << " (" << iter->second << "). This is required when "
-                           << "the split originates from an RVar.\n";
-            } else if (!is_update) {
+                // extent divides the factor. Use predication.
+
+                // Make a var representing the original var minus its
+                // min. It's important that this is a single Var so
+                // that bounds inference has a chance of understanding
+                // what it means for it to be limited by the if
+                // statement's condition.
+                Expr rebased = outer * split.factor + inner;
+                string rebased_var_name = prefix + split.old_var + ".rebased";
+                Expr rebased_var = Variable::make(Int(32), rebased_var_name);
+                stmt = substitute(prefix + split.old_var, rebased_var + old_min, stmt);
+
+                // Tell Halide to optimize for the case in which this
+                // condition is true by partitioning some outer loop.
+                Expr cond = likely(rebased_var < old_extent);
+                stmt = IfThenElse::make(cond, stmt, Stmt());
+                stmt = LetStmt::make(rebased_var_name, rebased, stmt);
+
+            } else if (tail == TailStrategy::ShiftInwards) {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
@@ -171,14 +217,14 @@ Stmt build_provide_loop_nest(Function f,
                 }
 
                 base = Min::make(base, old_max + (1 - split.factor));
+            } else {
+                internal_assert(tail == TailStrategy::RoundUp);
             }
 
-            string base_name = prefix + split.inner + ".base";
-            Expr base_var = Variable::make(Int(32), base_name);
             // Substitute in the new expression for the split variable ...
-            stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+            stmt = substitute(old_var_name, base_var + inner, stmt);
             // ... but also define it as a let for the benefit of bounds inference.
-            stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+            stmt = LetStmt::make(old_var_name, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
@@ -299,7 +345,7 @@ Stmt build_provide_loop_nest(Function f,
     {
         string o = prefix + Var::outermost().name();
         stmt = LetStmt::make(o + ".loop_min", 0, stmt);
-        stmt = LetStmt::make(o + ".loop_max", 1, stmt);
+        stmt = LetStmt::make(o + ".loop_max", 0, stmt);
         stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
     }
 
@@ -377,18 +423,18 @@ Stmt build_produce(Function f) {
                         buf_name += "." + std::to_string(k);
                     }
                     buf_name += ".buffer";
-                    Expr buffer = Variable::make(Handle(), buf_name);
+                    Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
                 Buffer b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
@@ -407,7 +453,7 @@ Stmt build_produce(Function f) {
                     buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
-                Expr buffer = Variable::make(Handle(), buf_name);
+                Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
             }
         } else {
@@ -442,18 +488,19 @@ Stmt build_produce(Function f) {
                     buffer_args.push_back(stride);
                 }
 
-                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                                   buffer_args, Call::Intrinsic);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(Handle(), buf_name));
+                extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
         }
 
         // Make the extern call
-        Expr e = Call::make(Int(32), extern_name,
-                            extern_call_args, Call::Extern);
+        Expr e = Call::make(Int(32), extern_name, extern_call_args,
+                            f.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus
+                                                                 : Call::Extern);
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
@@ -588,7 +635,7 @@ class IsUsedInStmt : public IRVisitor {
 
     // A reference to the function's buffers counts as a use
     void visit(const Variable *op) {
-        if (op->type == Handle() &&
+        if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
             result = true;
@@ -822,7 +869,7 @@ private:
     }
 
     void visit(const Variable *v) {
-        if (v->type == Handle() &&
+        if (v->type.is_handle() &&
             starts_with(v->name, func.name() + ".") &&
             ends_with(v->name, ".buffer")) {
             register_use();
@@ -1074,22 +1121,10 @@ class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (ends_with(op->name, ".__outermost")) {
-            stmt = mutate(op->body);
+        if (ends_with(op->name, ".__outermost") && is_one(simplify(op->extent))) {
+            stmt = mutate(substitute(op->name, op->min, op->body));
         } else {
             IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Variable *op) {
-        if (ends_with(op->name, ".__outermost.loop_extent")) {
-            expr = 1;
-        } else if (ends_with(op->name, ".__outermost.loop_min")) {
-            expr = 0;
-        } else if (ends_with(op->name, ".__outermost.loop_max")) {
-            expr = 1;
-        } else {
-            expr = op;
         }
     }
 
@@ -1097,7 +1132,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
         if (ends_with(op->name, ".__outermost.loop_extent") ||
             ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {
-            stmt = mutate(op->body);
+            stmt = mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
             IRMutator::visit(op);
         }

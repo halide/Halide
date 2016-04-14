@@ -257,14 +257,14 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     if (!no_stack_alloc) {
         for (int i = num_funcs-1; i >= 0; --i) {
-            s = Block::make(Store::make("profiling_func_stack_peak_buf", profiling.func_stack_peak[i], i), s);
+            s = Block::make(Store::make("profiling_func_stack_peak_buf", profiling.func_stack_peak[i], i, Parameter()), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
         s = Allocate::make("profiling_func_stack_peak_buf", Int(32), {num_funcs}, const_true(), s);
     }
 
     for (std::pair<string, int> p : profiling.indices) {
-        s = Block::make(Store::make("profiling_func_names", p.first, p.second), s);
+        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter()), s);
     }
 
     s = Block::make(s, Free::make("profiling_func_names"));

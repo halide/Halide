@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Bounds.h"
+#include "Parameter.h"
 
 namespace Halide {
 namespace Internal {
@@ -158,14 +159,14 @@ private:
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
             args[1] = make_zero(realize->types[idx]);
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
                 args[3*i+3] = extent_var[i];
                 args[3*i+4] = stride_var[i];
             }
-            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                   args, Call::Intrinsic);
             stmt = LetStmt::make(buffer_name + ".buffer",
                                  buf,
@@ -226,10 +227,15 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        vector<Parameter> output_buffers;
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
-            if (is_output) break;
+            if (is_output) {
+                output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
+                break;
+            }
         }
 
         Stmt result;
@@ -238,7 +244,7 @@ private:
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
-            Stmt store = Store::make(cv.name, var, idx);
+            Stmt store = Store::make(cv.name, var, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -259,9 +265,15 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        vector<Parameter> output_buffers;
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
+            if (is_output) {
+                output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
+                break;
+            }
         }
 
         Stmt result;
@@ -269,7 +281,7 @@ private:
             const ProvideValue &cv = values[i];
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Stmt store = Store::make(cv.name, cv.value, idx);
+            Stmt store = Store::make(cv.name, cv.value, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -313,20 +325,8 @@ private:
     }
 
     void visit(const Call *call) {
-
-        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
-            vector<Expr> args(call->args.size());
-            bool changed = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(call->args[i]);
-                if (!args[i].same_as(call->args[i])) changed = true;
-            }
-            if (!changed) {
-                expr = call;
-            } else {
-                expr = Call::make(call->type, call->name, args, call->call_type);
-            }
-        } else {
+        if (call->call_type == Call::Halide ||
+            call->call_type == Call::Image) {
             string name = call->name;
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
@@ -348,6 +348,18 @@ private:
 
             if (call->type.bits() != t.bits()) {
                 expr = Cast::make(call->type, expr);
+            }
+        } else {
+            vector<Expr> args(call->args.size());
+            bool changed = false;
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(call->args[i]);
+                if (!args[i].same_as(call->args[i])) changed = true;
+            }
+            if (!changed) {
+                expr = call;
+            } else {
+                expr = Call::make(call->type, call->name, args, call->call_type);
             }
         }
     }

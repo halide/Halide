@@ -79,6 +79,9 @@ struct Target {
 
         Metal, ///< Enable the (Apple) Metal runtime.
         MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
+
+        CPlusPlusMangling, ///< Generate C++ mangled names for result function, et al
+
         FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
 

@@ -76,7 +76,7 @@ static string print_type_maybe_storage(Type type, bool storage) {
     return oss.str();
 }
 
-string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type) {
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type, AppendSpaceIfNeeded) {
     return print_type_maybe_storage(type, false);
 }
 

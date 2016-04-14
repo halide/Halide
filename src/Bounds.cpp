@@ -11,6 +11,7 @@
 #include "Var.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -685,10 +686,10 @@ private:
 
     void visit(const Call *op) {
         // If the args are const we can return the call of those args
-        // for pure functions (extern and image). For other types of
-        // functions, the same call in two different places might
-        // produce different results (e.g. during the update step of a
-        // reduction), so we can't move around call nodes.
+        // for pure functions. For other types of functions, the same
+        // call in two different places might produce different
+        // results (e.g. during the update step of a reduction), so we
+        // can't move around call nodes.
         std::vector<Expr> new_args(op->args.size());
         bool const_args = true;
         for (size_t i = 0; i < op->args.size() && const_args; i++) {
@@ -702,27 +703,29 @@ private:
 
         Type t = op->type.element_of();
 
-        if (t == Handle()) {
+        if (t.is_handle()) {
             min = max = Expr();
             return;
         }
 
-        if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
+        if (const_args &&
+            (op->call_type == Call::PureExtern ||
+             op->call_type == Call::Image)) {
             min = max = Call::make(t, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::abs) {
+        } else if (op->is_intrinsic(Call::abs)) {
             Expr min_a = min, max_a = max;
             min = make_zero(t);
             if (min_a.defined() && max_a.defined()) {
                 if (equal(min_a, max_a)) {
-                    min = max = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
+                    min = max = Call::make(t, Call::abs, {max_a}, Call::PureIntrinsic);
                 } else {
                     min = make_zero(t);
                     if (op->args[0].type().is_int() && op->args[0].type().bits() == 32) {
                         max = Max::make(Cast::make(t, -min_a), Cast::make(t, max_a));
                     } else {
-                        min_a = Call::make(t, Call::abs, {min_a}, Call::Intrinsic);
-                        max_a = Call::make(t, Call::abs, {max_a}, Call::Intrinsic);
+                        min_a = Call::make(t, Call::abs, {min_a}, Call::PureIntrinsic);
+                        max_a = Call::make(t, Call::abs, {max_a}, Call::PureIntrinsic);
                         max = Max::make(min_a, max_a);
                     }
                 }
@@ -730,19 +733,20 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::likely) {
+        } else if (op->is_intrinsic(Call::likely)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::return_second) {
+        } else if (op->is_intrinsic(Call::return_second)) {
             assert(op->args.size() == 2);
             op->args[1].accept(this);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::if_then_else) {
+        } else if (op->is_intrinsic(Call::if_then_else)) {
             assert(op->args.size() == 3);
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
-        } else if (op->call_type == Call::Intrinsic &&
-                   (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
+        } else if (op->is_intrinsic(Call::shift_left) ||
+                   op->is_intrinsic(Call::shift_right) ||
+                   op->is_intrinsic(Call::bitwise_and)) {
             Expr simplified = simplify(op);
             if (!equal(simplified, op)) {
                 simplified.accept(this);
@@ -764,11 +768,8 @@ private:
             max = Call::make(t, op->name, {max_a}, op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
-        } else if (op->call_type == Call::Intrinsic &&
-                   (op->name == Call::extract_buffer_min ||
-                    op->name == Call::extract_buffer_max) &&
-                   !op->args.empty() &&
-                   op->args[0].as<Variable>()) {
+        } else if (op->is_intrinsic(Call::extract_buffer_min) ||
+                   op->is_intrinsic(Call::extract_buffer_max)) {
             // Bounds query results should have perfect nesting. Their
             // max over a loop is just the same bounds query call at
             // an outer loop level. This requires that the query is
@@ -777,12 +778,12 @@ private:
             //
             // TODO: There should be an assert injected in the inner
             // loop to check perfect nesting.
-            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
-            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::memoize_expr) {
+            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::PureIntrinsic);
+            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::PureIntrinsic);
+        } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
-        } else if (op->call_type == Call::Intrinsic && op->name == Call::trace_expr) {
+        } else if (op->is_intrinsic(Call::trace_expr)) {
             // trace_expr returns argument 4
             internal_assert(op->args.size() >= 5);
             op->args[4].accept(this);
@@ -1120,7 +1121,7 @@ private:
 
         // Calls inside of an address_of aren't touched, because no
         // actual memory access takes place.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             // Visit the args of the inner call
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
@@ -1141,18 +1142,16 @@ private:
 
         IRVisitor::visit(op);
 
-        if (op->call_type == Call::Intrinsic ||
-            op->call_type == Call::Extern) {
-            return;
+        if (op->call_type == Call::Halide ||
+            op->call_type == Call::Image) {
+            Box b(op->args.size());
+            b.used = const_true();
+            for (size_t i = 0; i < op->args.size(); i++) {
+                op->args[i].accept(this);
+                b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+            }
+            merge_boxes(boxes[op->name], b);
         }
-
-        Box b(op->args.size());
-        b.used = const_true();
-        for (size_t i = 0; i < op->args.size(); i++) {
-            op->args[i].accept(this);
-            b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
-        }
-        merge_boxes(boxes[op->name], b);
     }
 
     class CountVars : public IRVisitor {
@@ -1231,8 +1230,78 @@ private:
         op->condition.accept(this);
 
         if (expr_uses_vars(op->condition, scope)) {
-            op->then_case.accept(this);
-            if (op->else_case.defined()) {
+            if (!op->else_case.defined()) {
+                // Trim the scope down to represent the fact that the
+                // condition is true. We only understand certain types
+                // of conditions for now.
+                Expr c = op->condition;
+                const Call *call = c.as<Call>();
+                if (call && call->is_intrinsic(Call::likely)) {
+                    c = call->args[0];
+                }
+                const LT *lt = c.as<LT>();
+                const LE *le = c.as<LE>();
+                const GT *gt = c.as<GT>();
+                const GE *ge = c.as<GE>();
+                const EQ *eq = c.as<EQ>();
+                Expr a, b;
+                if (lt) {a = lt->a; b = lt->b;}
+                if (le) {a = le->a; b = le->b;}
+                if (gt) {a = gt->a; b = gt->b;}
+                if (ge) {a = ge->a; b = ge->b;}
+                if (eq) {a = eq->a; b = eq->b;}
+                const Variable *var_a = a.as<Variable>();
+                const Variable *var_b = b.as<Variable>();
+
+                string var_to_pop;
+                if (a.defined() && b.defined() && a.type() == Int(32)) {
+                    Expr inner_min, inner_max;
+                    if (var_a && scope.contains(var_a->name)) {
+                        Interval i = scope.get(var_a->name);
+
+                        // If the original condition is likely, then
+                        // the additional trimming of the domain due
+                        // to the condition is probably unnecessary,
+                        // which means the mins/maxes below should
+                        // probably just be the LHS.
+                        Interval likely_i = i;
+                        if (call && call->is_intrinsic(Call::likely)) {
+                            likely_i.min = likely(i.min);
+                            likely_i.max = likely(i.max);
+                        }
+
+                        Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
+                        if (lt)       i.max = min(likely_i.max, bi.max - 1);
+                        if (le || eq) i.max = min(likely_i.max, bi.max);
+                        if (gt)       i.min = max(likely_i.min, bi.min + 1);
+                        if (ge || eq) i.min = max(likely_i.min, bi.min);
+                        scope.push(var_a->name, i);
+                        var_to_pop = var_a->name;
+                    } else if (var_b && scope.contains(var_b->name)) {
+                        Interval i = scope.get(var_b->name);
+
+                        Interval likely_i = i;
+                        if (call && call->is_intrinsic(Call::likely)) {
+                            likely_i.min = likely(i.min);
+                            likely_i.max = likely(i.max);
+                        }
+
+                        Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
+                        if (gt)       i.max = min(likely_i.max, ai.max - 1);
+                        if (ge || eq) i.max = min(likely_i.max, ai.max);
+                        if (lt)       i.min = max(likely_i.min, ai.min + 1);
+                        if (le || eq) i.min = max(likely_i.min, ai.min);
+                        scope.push(var_b->name, i);
+                        var_to_pop = var_b->name;
+                    }
+                }
+                op->then_case.accept(this);
+                if (!var_to_pop.empty()) {
+                    scope.pop(var_to_pop);
+                }
+            } else {
+                // Just take the union over the branches
+                op->then_case.accept(this);
                 op->else_case.accept(this);
             }
         } else {

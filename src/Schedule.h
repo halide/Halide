@@ -8,6 +8,54 @@
 #include "Expr.h"
 
 namespace Halide {
+
+
+
+/** Different ways to handle a tail case in a split when the
+ * factor does not provably divide the extent. */
+enum class TailStrategy {
+    /** Round up the extent to be a multiple of the split
+     * factor. Not legal for RVars, as it would change the meaning
+     * of the algorithm. Pros: generates the simplest, fastest
+     * code. Cons: if used on a stage that reads from the input or
+     * writes to the output, constrains the input or output size
+     * to be a multiple of the split factor. */
+    RoundUp,
+
+    /** Guard the inner loop with an if statement that prevents
+     * evaluation beyond the original extent. Always legal. The if
+     * statement is treated like a boundary condition, and
+     * factored out into a loop epilogue if possible. Pros: no
+     * redundant re-evaluation; does not constrain input our
+     * output sizes. Cons: increases code size due to separate
+     * tail-case handling; vectorization will scalarize in the tail
+     * case to handle the if statement. */
+    GuardWithIf,
+
+    /** Prevent evaluation beyond the original extent by shifting
+     * the tail case inwards, re-evaluating some points near the
+     * end. Only legal for pure variables in pure definitions. If
+     * the inner loop is very simple, the tail case is treated
+     * like a boundary condition and factored out into an
+     * epilogue.
+     *
+     * This is a good trade-off between several factors. Like
+     * RoundUp, it supports vectorization well, because the inner
+     * loop is always a fixed size with no data-dependent
+     * branching. It increases code size slightly for inner loops
+     * due to the epilogue handling, but not for outer loops
+     * (e.g. loops over tiles). If used on a stage that reads from
+     * an input or writes to an output, this stategy only requires
+     * that the input/output extent be at least the split factor,
+     * instead of a multiple of the split factor as with RoundUp. */
+    ShiftInwards,
+
+    /** For pure definitions use ShiftInwards. For pure vars in
+     * update definitions use RoundUp. For RVars in update
+     * definitions use GuardWithIf. */
+    Auto
+};
+
 namespace Internal {
 
 /** A reference to a site in a Halide statement at the top of the
@@ -63,7 +111,10 @@ struct LoopLevel {
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
-    bool exact; // Is it required that the factor divides the extent of the old var. True for splits of RVars.
+    bool exact; // Is it required that the factor divides the extent
+                // of the old var. True for splits of RVars. Forces
+                // tail strategy to be GuardWithIf.
+    TailStrategy tail;
 
     enum SplitType {SplitVar = 0, RenameVar, FuseVars};
 

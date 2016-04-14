@@ -56,6 +56,9 @@ Expr OutputImageParam::stride(int x) const {
     s << name() << ".stride." << x;
     return Internal::Variable::make(Int(32), s.str(), param);
 }
+int OutputImageParam::host_alignment() const {
+    return param.host_alignment();
+}
 
 OutputImageParam &OutputImageParam::set_extent(int dim, Expr extent) {
     param.set_extent_constraint(dim, extent);
@@ -69,6 +72,11 @@ OutputImageParam &OutputImageParam::set_min(int dim, Expr min) {
 
 OutputImageParam &OutputImageParam::set_stride(int dim, Expr stride) {
     param.set_stride_constraint(dim, stride);
+    return *this;
+}
+
+OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
+    param.set_host_alignment(bytes);
     return *this;
 }
 

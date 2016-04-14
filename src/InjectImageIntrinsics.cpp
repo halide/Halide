@@ -36,7 +36,7 @@ private:
         Expr value_arg = mutate(provide->values[0]);
         vector<Expr> args = {
             provide->name,
-            Variable::make(Handle(), provide->name + ".buffer"),
+            Variable::make(type_of<struct buffer_t *>(), provide->name + ".buffer"),
             provide->args[0],
             provide->args[1],
             provide->args[2],
@@ -49,8 +49,9 @@ private:
     }
 
     void visit(const Call *call) {
-        if (!inside_kernel_loop || call->call_type == Call::Intrinsic ||
-            call->call_type == Call::Extern) {
+        if (!inside_kernel_loop ||
+            (call->call_type != Call::Halide &&
+             call->call_type != Call::Image)) {
             IRMutator::visit(call);
             return;
         }
@@ -72,7 +73,7 @@ private:
         // for coordinates normalization.
         vector<Expr> args(2);
         args[0] = call->name;
-        args[1] = Variable::make(Handle(), call->name + ".buffer");
+        args[1] = Variable::make(type_of<struct buffer_t *>(), call->name + ".buffer");
         for (size_t i = 0; i < padded_call_args.size(); i++) {
 
             // If this is an ordinary dimension, insert a variable that will be
@@ -105,17 +106,17 @@ private:
         Type load_type = call->type;
         // load_type = load_type.with_lanes(4);
 
-        Expr load_call = Call::make(load_type,
-                          Call::image_load,
-                          args,
-                          Call::Intrinsic,
-                          Function(),
-                          0,
-                          call->image,
-                          call->param);
+        Expr load_call =
+            Call::make(load_type,
+                       Call::image_load,
+                       args,
+                       Call::PureIntrinsic,
+                       Function(),
+                       0,
+                       call->image,
+                       call->param);
+
         expr = load_call;
-        // expr = Call::make(call->type, Call::shuffle_vector,
-        //                   vec(load_call, args[4]), Call::Intrinsic);
     }
 
     void visit(const LetStmt *let) {
