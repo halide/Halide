@@ -77,21 +77,21 @@ define weak_odr i32 @halide.hexagon.dup2.h(i16 %arg) nounwind uwtable readnone a
 }
 
 define weak_odr i32 @halide.hexagon.dup4.b(i8 %arg) nounwind uwtable readnone alwaysinline {
-  %halide.hexagon.dup2 = call i16 @halide.hexagon.dup2.b(i8 %arg)
-  %halide.hexagon.dup4 = call i32 @halide.hexagon.dup2.h(i16 %halide.hexagon.dup2)
-  ret i32 %halide.hexagon.dup4
+  %dup2 = call i16 @halide.hexagon.dup2.b(i8 %arg)
+  %dup4 = call i32 @halide.hexagon.dup2.h(i16 %dup2)
+  ret i32 %dup4
 }
 
 define weak_odr <128 x i8> @halide.hexagon.splat.b(i8 %arg) nounwind uwtable readnone alwaysinline {
-  %halide.hexagon.dup4 = call i32 @halide.hexagon.dup4.b(i8 %arg)
-  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32 %halide.hexagon.dup4)
+  %dup4 = call i32 @halide.hexagon.dup4.b(i8 %arg)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32 %dup4)
   %r = bitcast <32 x i32> %r_32 to <128 x i8>
   ret <128 x i8> %r
 }
 
 define weak_odr <64 x i16> @halide.hexagon.splat.h(i16 %arg) nounwind uwtable readnone alwaysinline {
-  %halide.hexagon.dup2 = call i32 @halide.hexagon.dup2.h(i16 %arg)
-  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32 %halide.hexagon.dup2)
+  %dup2 = call i32 @halide.hexagon.dup2.h(i16 %arg)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32 %dup2)
   %r = bitcast <32 x i32> %r_32 to <64 x i16>
   ret <64 x i16> %r
 }
