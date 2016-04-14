@@ -1570,6 +1570,7 @@ void check_hvx_all() {
     check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) * u32(u16_2));
     check("vmpy(v*.h,v*.h)", hvx_width/2, i32(i16_1) * i32(i16_2));
     check("vmpyi(v*.h,v*.h)", hvx_width/2, i16_1 * i16_2);
+    check("vmpyieo(v*.h,v*.h)", hvx_width/4, i32_1 * i32_2);
     // The inconsistency in the expected instructions here is
     // correct. For bytes, the unsigned value is first, for half
     // words, the signed value is first.
