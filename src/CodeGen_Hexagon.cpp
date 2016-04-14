@@ -874,6 +874,8 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 }
 
 void CodeGen_Hexagon::visit(const Call *op) {
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+
     internal_assert(op->call_type == Call::Extern ||
                     op->call_type == Call::Intrinsic ||
                     op->call_type == Call::PureExtern ||
@@ -940,6 +942,47 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
             value = slice_vector(codegen(op->args[0]), 0, op->type.lanes());
             return;
+        } else if (op->is_intrinsic(Call::shuffle_vector)) {
+            // TODO: This implementation should move to the function
+            // shuffle_vector that should become virtual in the
+            // base class CodeGen_LLVM. dsharletg is working on
+            // this refactoring.
+            if(op->type.lanes() * 2 == op->args[0].type().lanes()) {
+                const int64_t *first_idx; first_idx = as_const_int(op->args[1]);
+                if (!first_idx || *first_idx > 1) {
+                    CodeGen_Posix::visit(op);
+                    return;
+                }
+                bool even = (*first_idx == 0) ? true : false;
+                bool use_vpack = true;
+                for (int i = 1; i < op->args.size() - 1; i++) {
+                    const int64_t *curr = as_const_int(op->args[i]);
+                    const int64_t *next = as_const_int(op->args[i+1]);
+                    if (!(curr && next && ((*next) - (*curr)) == 2)) {
+                        use_vpack = false;
+                    }
+                }
+                if (use_vpack) {
+                    int lanes = op->type.lanes();
+                    Value *dv = codegen(op->args[0]);
+                    Value *low = slice_vector(dv, 0, lanes);
+                    Value *high = slice_vector(dv, lanes, lanes);
+                    Intrinsic::ID IntrinsID;
+                    switch(op->type.bits()) {
+                    case 8: IntrinsID = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeb) :
+                        IPICK(llvm::Intrinsic::hexagon_V6_vpackob);
+                        break;
+                    case 16: IntrinsID = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeh) :
+                        IPICK(llvm::Intrinsic::hexagon_V6_vpackoh);
+                        break;
+                    }
+                    string s = "Generating a vpack";
+                    debug(0) << (s +  (even ? "e\n" : "o\n"));
+                    llvm::Type *ret_ty = llvm_type_of(op->type);
+                    value = call_intrin_cast(ret_ty, IntrinsID, { high, low });
+                    return;
+                }
+            }
         }
     }
     CodeGen_Posix::visit(op);
