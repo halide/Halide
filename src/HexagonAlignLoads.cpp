@@ -122,9 +122,9 @@ private:
                             mod_imp(mod_rem.modulus, lanes);
                         int rem_mod = mod_imp(mod_rem.remainder, lanes);
                         if (base_lanes_off + rem_mod) {
-                            debug(0) << "HexagonAlignLoads: base_a is unaligned: shifting base_b\n";
-                            debug(0) << "HexagonAlignLoads: Type: " << op->type << "\n";
-                            debug(0) << "HexagonAlignLoads: Index: " << index << "\n";
+                            debug(4) << "HexagonAlignLoads: base_a is unaligned: shifting base_b\n";
+                            debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                            debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
                             base_b -= 1;
                             shifted_b = true;
                         }
@@ -145,11 +145,11 @@ private:
                         args.push_back(make_const(Int(32), i*2 + (shifted_b ? 1 : 0)));
                     }
 
-                    debug(0) << "HexagonAlignLoads: Unaligned Load: Converting " << (Expr) op << " into ...\n";
+                    debug(4) << "HexagonAlignLoads: Unaligned Load: Converting " << (Expr) op << " into ...\n";
 
                     expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
 
-                    debug(0) <<  "... " << expr << "\n";
+                    debug(4) <<  "... " << expr << "\n";
                     return;
                 }else {
                     expr = op;

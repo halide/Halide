@@ -977,7 +977,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
                         break;
                     }
                     string s = "Generating a vpack";
-                    debug(0) << (s +  (even ? "e\n" : "o\n"));
+                    debug(4) << (s +  (even ? "e\n" : "o\n"));
                     llvm::Type *ret_ty = llvm_type_of(op->type);
                     value = call_intrin_cast(ret_ty, IntrinsID, { high, low });
                     return;
