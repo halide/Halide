@@ -147,8 +147,7 @@ class VectorizeLoops : public IRMutator {
             // convention than the rest of Halide. Instead of passing widened
             // expressions, individual scalar expressions for each lane are
             // passed as a variable number of arguments to the intrinisc.
-            if (op->name == Call::shuffle_vector &&
-                op->call_type == Call::Intrinsic) {
+            if (op->is_intrinsic(Call::shuffle_vector)) {
 
                 int replacement_lanes = replacement.type().lanes();
                 int shuffle_lanes = op->type.lanes();
@@ -395,7 +394,7 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 int lanes = std::max(value.type().lanes(), index.type().lanes());
-                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes));
+                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes), op->param);
             }
         }
 

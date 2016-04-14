@@ -364,7 +364,7 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index) {
+Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
 
@@ -372,6 +372,7 @@ Stmt Store::make(std::string name, Expr value, Expr index) {
     node->name = name;
     node->value = value;
     node->index = index;
+    node->param = param;
     return node;
 }
 
@@ -514,15 +515,20 @@ Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, Call
         internal_assert(value_index >= 0 &&
                         value_index < func.outputs())
             << "Value index out of range in call to halide function\n";
-        internal_assert((func.has_pure_definition() || func.has_extern_definition())) << "Call to undefined halide function\n";
-        internal_assert((int)args.size() <= func.dimensions()) << "Call node with too many arguments.\n";
+        internal_assert((func.has_pure_definition() || func.has_extern_definition()))
+            << "Call to undefined halide function\n";
+        internal_assert((int)args.size() <= func.dimensions())
+            << "Call node with too many arguments.\n";
         for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32)) << "Args to call to halide function must be type Int(32)\n";
+            internal_assert(args[i].type() == Int(32))
+                << "Args to call to halide function must be type Int(32)\n";
         }
     } else if (call_type == Image) {
-        internal_assert((param.defined() || image.defined())) << "Call node to undefined image\n";
+        internal_assert((param.defined() || image.defined()))
+            << "Call node to undefined image\n";
         for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32)) << "Args to load from image must be type Int(32)\n";
+            internal_assert(args[i].type() == Int(32))
+                << "Args to load from image must be type Int(32)\n";
         }
     }
 
@@ -676,6 +682,9 @@ Call::ConstString Call::likely = "likely";
 Call::ConstString Call::make_int64 = "make_int64";
 Call::ConstString Call::make_float64 = "make_float64";
 Call::ConstString Call::register_destructor = "register_destructor";
+Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
+Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
+
 
 }
 }

@@ -9,6 +9,12 @@
 #endif
 
 #ifdef __cplusplus
+// Forward declare type to allow naming typed handles.
+// See Type.h for documentation.
+template<typename T> struct halide_handle_traits;
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -326,8 +332,8 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
  * If there is a memory allocation failure, the store does not store
  * the data into the cache.
  */
-extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+extern int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+                                          buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
 /** If halide_memoization_cache_lookup succeeds,
  * halide_memoization_cache_release must be called to signal the
@@ -449,6 +455,11 @@ enum halide_error_code_t {
      * a GPU kernel. Turn on -debug in your target string to see more
      * details. */
     halide_error_code_device_run_failed = -23,
+
+    /** The Halide runtime encountered a host pointer that violated
+     * the alignment set for it by way of a call to
+     * set_host_alignment */
+    halide_error_code_unaligned_host_ptr = -24,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -501,6 +512,8 @@ extern int halide_error_out_of_memory(void *user_context);
 extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
+extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+
 // @}
 
 /** Types in the halide type system. They can be ints, unsigned ints,
@@ -884,6 +897,23 @@ struct halide_type_of_helper<T *> {
         return halide_type_t(halide_type_handle, 64);
     }
 };
+
+template<typename T>
+struct halide_type_of_helper<T &> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+
+// Halide runtime does not require C++11
+#if __cplusplus > 199711L
+template<typename T>
+struct halide_type_of_helper<T &&> {
+    operator halide_type_t() {
+        return halide_type_t(halide_type_handle, 64);
+    }
+};
+#endif
 
 template<>
 struct halide_type_of_helper<float> {

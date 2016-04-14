@@ -17,10 +17,8 @@ else()
 	find_package(PythonLibs 3.4 REQUIRED)
 	find_package(NumPy REQUIRED)
 	if (NOT USE_EXTERNAL_BOOST)
-		find_package(Boost COMPONENTS python-py34)
-		if(NOT Boost_FOUND)
-			find_package(Boost COMPONENTS python-py33)
-		endif()
+		string( REGEX REPLACE "([0-9]+).([0-9]+).[0-9.]+" "\\1\\2" PYTHON_CONCAT_VERSION_STRING ${PYTHON_VERSION_STRING} )
+		find_package(Boost COMPONENTS python-py${PYTHON_CONCAT_VERSION_STRING})
 		if(NOT Boost_FOUND)
 			find_package(Boost COMPONENTS python3 REQUIRED)
 		endif()
@@ -66,7 +64,7 @@ include_directories(
 link_directories(
   ../build/lib
   ${HALIDE_ROOT_DIR}/lib
-  ${Boost_LIBRARY_DIR}
+  ${Boost_LIBRARY_DIRS}
   ${BoostNumpy_LIBRARY_DIR}
   ${Numpy_LIBRARY_DIR}
 )
@@ -85,7 +83,6 @@ python/*.cpp
 add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
   ${HALIDE_LIBRARIES}
-  InitialModules
   ${Boost_LIBRARIES}
   ${BoostNumpy_LIBRARIES}
   ${PYTHON_LIBRARIES}

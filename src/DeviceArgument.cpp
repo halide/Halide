@@ -32,11 +32,10 @@ std::vector<DeviceArgument> HostClosure::arguments() {
 }
 
 void HostClosure::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic &&
-        (op->name == Call::glsl_texture_load ||
-         op->name == Call::image_load ||
-         op->name == Call::glsl_texture_store ||
-         op->name == Call::image_store)) {
+    if (op->is_intrinsic(Call::glsl_texture_load) ||
+        op->is_intrinsic(Call::image_load) ||
+        op->is_intrinsic(Call::glsl_texture_store) ||
+        op->is_intrinsic(Call::image_store)) {
 
         // The argument to the call is either a StringImm or a broadcasted
         // StringImm if this is part of a vectorized expression

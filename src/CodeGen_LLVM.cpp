@@ -5,6 +5,7 @@
 
 #include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
 #include "IROperator.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -16,6 +17,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "MatlabWrapper.h"
 #include "IntegerDivisionTable.h"
+#include "CSE.h"
 
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
@@ -419,6 +421,36 @@ bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
 namespace {
 
+void mangled_names(const LoweredFunc &f, const Target &target, std::string &simple_name,
+                   std::string &extern_name, std::string &argv_name, std::string &metadata_name) {
+    std::vector<std::string> namespaces;
+    simple_name = extract_namespaces(f.name, namespaces);
+    argv_name = simple_name + "_argv";
+    metadata_name = simple_name + "_metadata";
+    const std::vector<Argument> &args = f.args;
+
+    if (f.linkage == LoweredFunc::External &&
+        target.has_feature(Target::CPlusPlusMangling) &&
+        !target.has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
+        std::vector<ExternFuncArgument> mangle_args;
+        for (const auto &arg : args) {
+            if (arg.kind == Argument::InputScalar) {
+                mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
+            } else if (arg.kind == Argument::InputBuffer ||
+                       arg.kind == Argument::OutputBuffer) {
+                mangle_args.push_back(ExternFuncArgument(Buffer()));
+            }
+        }
+        extern_name = cplusplus_function_mangled_name(simple_name, namespaces, type_of<int>(), mangle_args, target);
+        halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
+                                                { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
+        Type void_star_star(Handle(1, &inner_type));
+        argv_name = cplusplus_function_mangled_name(argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+    } else {
+        extern_name = simple_name;
+    }
+}
+
 // Make a wrapper to call the function with an array of pointer
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
@@ -499,19 +531,27 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
         const LoweredFunc &f = input.functions[i];
-        compile_func(f);
+
+        std::string simple_name;
+        std::string extern_name;
+        std::string argv_name;
+        std::string metadata_name;
+
+        mangled_names(f, get_target(), simple_name, extern_name, argv_name, metadata_name);
+
+        compile_func(f, simple_name, extern_name);
 
         // If the Func is externally visible, also create the argv wrapper
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
-            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, f.name + "_argv");
-            llvm::Constant *metadata = embed_metadata(f.name + "_metadata", f.name, f.args);
+            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, argv_name);
+            llvm::Constant *metadata = embed_metadata(metadata_name, simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(f.name, metadata, wrapper);
+                register_metadata(simple_name, metadata, wrapper);
             }
 
             if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), f.name);
+                define_matlab_wrapper(module.get(), wrapper, metadata);
             }
         }
     }
@@ -529,8 +569,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     return std::move(module);
 }
 
+
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
-                              const std::vector<Argument>& args) {
+                              const std::string& extern_name, const std::vector<Argument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -543,7 +584,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(linkage), name, module.get());
+    function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -589,9 +630,10 @@ void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
     internal_assert(!verifyFunction(*function));
 }
 
-void CodeGen_LLVM::compile_func(const LoweredFunc &f) {
+  void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
+                                  const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
-    begin_func(f.linkage, f.name, f.args);
+    begin_func(f.linkage, simple_name, extern_name, f.args);
 
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
@@ -746,7 +788,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type() == Handle()) {
+    if (!e.defined() || e.type().is_handle()) {
         // Handle is always emitted into metadata "undefined", regardless of
         // what sort of Expr is provided.
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
@@ -950,23 +992,9 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
-    // Check it's 32-byte aligned
-
-    // Disabled, because we don't currently require external
-    // allocations to be aligned.
-
-    /*
-    Value *base = builder->CreatePtrToInt(host_ptr, i64);
-    Value *check_alignment = builder->CreateAnd(base, 0x1f);
-    check_alignment = builder->CreateIsNull(check_alignment);
-
-    string error_message = "Buffer " + name + " is not 32-byte aligned";
-    create_assertion(check_alignment, error_message);
-    */
-
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
-    might_be_misaligned.insert(name);
+    external_buffer.insert(name);
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1260,34 +1288,19 @@ void CodeGen_LLVM::visit(const Mul *op) {
     }
 }
 
-Value *CodeGen_LLVM::unsigned_mulhi_shr(Value *a, Value *b, int shr) {
-    llvm::Type *ty = a->getType();
-    llvm::VectorType *vty = dyn_cast<VectorType>(ty);
-    llvm::Type *element_ty = vty ? vty->getElementType() : ty;
-    llvm::Type *wide_ty = llvm::IntegerType::get(ty->getContext(), element_ty->getIntegerBitWidth() * 2);
-    if (vty) {
-        wide_ty = llvm::VectorType::get(wide_ty, vty->getNumElements());
-    }
+Expr CodeGen_LLVM::mulhi_shr(Expr a, Expr b, int shr) {
+    Type ty = a.type();
+    Type wide_ty = ty.with_bits(ty.bits() * 2);
 
-    // We assume the inputs are unsigned, so we zero extend.
-    Value *a_wide = builder->CreateIntCast(a, wide_ty, false);
-    Value *b_wide = builder->CreateIntCast(b, wide_ty, false);
-    Value *p_wide = builder->CreateMul(a_wide, b_wide);
-
-    // Do the shift (add 8 or 16 or 32 to narrow back down)
-    Constant *shift_amount = ConstantInt::get(wide_ty, shr + element_ty->getIntegerBitWidth());
-    Value *p = builder->CreateLShr(p_wide, shift_amount);
-    return builder->CreateIntCast(p, ty, true);
+    Expr p_wide = cast(wide_ty, a) * cast(wide_ty, b);
+    return cast(ty, p_wide >> (shr + ty.bits()));
 }
 
-Value *CodeGen_LLVM::sorted_avg(Value *a, Value *b) {
+Expr CodeGen_LLVM::sorted_avg(Expr a, Expr b) {
     // b > a, so the following works without widening:
     // a + (b - a)/2
-    Value *diff = builder->CreateSub(b, a);
-    diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
-    return builder->CreateAdd(a, diff);
+    return a + (b - a)/2;
 }
-
 
 void CodeGen_LLVM::visit(const Div *op) {
     user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
@@ -1297,18 +1310,11 @@ void CodeGen_LLVM::visit(const Div *op) {
     const uint64_t *const_uint_divisor = as_const_uint(op->b);
 
     int shift_amount;
-    bool power_of_two = is_const_power_of_two_integer(op->b, &shift_amount);
-
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
-    } else if (power_of_two && op->type.is_int()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateAShr(numerator, shift);
-    } else if (power_of_two && op->type.is_uint()) {
-        Value *numerator = codegen(op->a);
-        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
-        value = builder->CreateLShr(numerator, shift);
+    } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
+               (op->type.is_int() || op->type.is_uint())) {
+        value = codegen(op->a >> shift_amount);
     } else if (const_int_divisor &&
                op->type.is_int() &&
                (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
@@ -1327,22 +1333,24 @@ void CodeGen_LLVM::visit(const Div *op) {
             multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
             shift      = IntegerDivision::table_s8[*const_int_divisor][3];
         }
-
-        Value *val = codegen(op->a);
+        Expr num = op->a;
 
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
+        Expr sign = num >> make_const(op->type, op->type.bits() - 1);
+
         // Flip the numerator bits if the mask is high.
-        Value *flipped = builder->CreateXor(sign, val);
+        num = cast(num.type().with_code(Type::UInt), num);
+        num = num ^ sign;
 
-        // Grab the multiplier.
-        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
+        // Multiply and keep the high half of the
+        // result, and then apply the shift.
+        Expr mult = make_const(num.type(), multiplier);
+        num = mulhi_shr(num, mult, shift);
 
-        // Widening multiply, keep high half, shift
-        val = unsigned_mulhi_shr(flipped, mult, shift);
+        // Maybe flip the bits back again.
+        num = num ^ sign;
 
-        // Maybe flip the bits again
-        value = builder->CreateXor(val, sign);
+        value = codegen(num);
 
     } else if (const_uint_divisor &&
                op->type.is_uint() &&
@@ -1366,12 +1374,11 @@ void CodeGen_LLVM::visit(const Div *op) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-
-        Value *num = codegen(op->a);
+        Expr num = op->a;
 
         // Widen, multiply, narrow
-        Value *mult = ConstantInt::get(llvm_type_of(op->type), multiplier);
-        Value *val = unsigned_mulhi_shr(num, mult, method == 1 ? shift : 0);
+        Expr mult = make_const(num.type(), multiplier);
+        Expr val = mulhi_shr(num, mult, method == 1 ? shift : 0);
 
         if (method == 2) {
             // Average with original numerator.
@@ -1379,124 +1386,47 @@ void CodeGen_LLVM::visit(const Div *op) {
 
             // Do the final shift
             if (shift) {
-                val = builder->CreateLShr(val, ConstantInt::get(llvm_type_of(op->type), shift));
+                val = val >> make_const(op->type, shift);
             }
         }
 
-        value = val;
-    } else if (op->type.is_uint()) {
-        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
+        value = codegen(val);
     } else {
-        // Signed integer division sucks. It should be defined such
-        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
-        // i.e. Euclidean division.
-
-        // If it's a small const power of two, then we can just
-        // arithmetic right shift. This rounds towards negative
-        // infinity.
-        for (int bits = 1; bits < 30; bits++) {
-            if (is_const(op->b, 1 << bits)) {
-                Value *shift = codegen(make_const(op->a.type(), bits));
-                value = builder->CreateAShr(codegen(op->a), shift);
-                return;
-            }
-        }
-
-        // We get rounding to work by examining the implied remainder
-        // and correcting the quotient.
-
-        /* Here's the C code that we're trying to match:
-        int q = a / b;
-        int r = a - q * b;
-        int bs = b >> (t.bits() - 1);
-        int rs = r >> (t.bits() - 1);
-        return q - (rs & bs) + (rs & ~bs);
-        */
-
-        Value *a = codegen(op->a), *b = codegen(op->b);
-
-        Value *q = builder->CreateSDiv(a, b);
-        Value *r = builder->CreateSub(a, builder->CreateMul(q, b));
-        Value *shift = ConstantInt::get(a->getType(), op->a.type().bits()-1);
-        Value *bs = builder->CreateAShr(b, shift);
-        Value *rs = builder->CreateAShr(r, shift);
-        Value *round_up = builder->CreateAnd(rs, bs);
-        Value *round_down = builder->CreateAnd(rs, builder->CreateNot(bs));
-        value = builder->CreateAdd(builder->CreateSub(q, round_up), round_down);
+        value = codegen(lower_euclidean_div(op->a, op->b));
     }
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
-    // To match our definition of division, mod should be between 0
-    // and |b|.
-
+    int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
-    } else if (op->type.is_uint()) {
-        int bits;
-        if (is_const_power_of_two_integer(op->b, &bits)) {
-            Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
-        } else {
-            value = builder->CreateURem(codegen(op->a), codegen(op->b));
-        }
+    } else if (is_const_power_of_two_integer(op->b, &bits)) {
+        value = codegen(op->a & (op->b - 1));
     } else {
-        int bits;
-        if (is_const_power_of_two_integer(op->b, &bits)) {
-            Expr one = make_one(op->b.type());
-            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
-        } else {
-            Value *a = codegen(op->a);
-            Value *b = codegen(op->b);
-
-            // Match this non-overflowing C code
-            /*
-              T r = a % b;
-              r = r + (r < 0 ? abs(b) : 0);
-            */
-
-            Value *r = builder->CreateSRem(a, b);
-            Value *zero = ConstantInt::get(r->getType(), 0);
-            Value *b_lt_0 = builder->CreateICmpSLT(b, zero);
-            Value *abs_b = builder->CreateSelect(b_lt_0, builder->CreateNeg(b), b);
-            Value *r_lt_0 = builder->CreateICmpSLT(r, zero);
-            value = builder->CreateSelect(r_lt_0, builder->CreateAdd(r, abs_b), r);
-        }
+        // To match our definition of division, mod should be between 0
+        // and |b|.
+        value = codegen(lower_euclidean_mod(op->a, op->b));
     }
 }
 
 void CodeGen_LLVM::visit(const Min *op) {
-    Value *a = codegen(op->a);
-    Value *b = codegen(op->b);
-    Value *cmp;
-
-    Halide::Type t = op->a.type();
-    if (t.is_float()) {
-        cmp = builder->CreateFCmpOLT(a, b);
-    } else if (t.is_int()) {
-        cmp = builder->CreateICmpSLT(a, b);
-    } else {
-        cmp = builder->CreateICmpULT(a, b);
-    }
-
-    value = builder->CreateSelect(cmp, a, b);
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a < b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const Max *op) {
-    Value *a = codegen(op->a);
-    Value *b = codegen(op->b);
-    Value *cmp;
-
-    Halide::Type t = op->a.type();
-    if (t.is_float()) {
-        cmp = builder->CreateFCmpOLT(a, b);
-    } else if (t.is_int()) {
-        cmp = builder->CreateICmpSLT(a, b);
-    } else {
-        cmp = builder->CreateICmpULT(a, b);
-    }
-
-    value = builder->CreateSelect(cmp, b, a);
+    string a_name = unique_name('a');
+    string b_name = unique_name('b');
+    Expr a = Variable::make(op->a.type(), a_name);
+    Expr b = Variable::make(op->b.type(), b_name);
+    value = codegen(Let::make(a_name, op->a,
+                              Let::make(b_name, op->b,
+                                        select(a > b, a, b))));
 }
 
 void CodeGen_LLVM::visit(const EQ *op) {
@@ -1760,7 +1690,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
 void CodeGen_LLVM::visit(const Load *op) {
 
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (op->type.is_handle()) {
@@ -1792,14 +1722,20 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
-                       (mod_rem.modulus & 1) == 0 &&
-                       alignment < native_bytes) {
-                    mod_rem.modulus /= 2;
-                    mod_rem.remainder /= 2;
-                    alignment *= 2;
-                }
+            while ((mod_rem.remainder & 1) == 0 &&
+                   (mod_rem.modulus & 1) == 0 &&
+                   alignment < native_bytes) {
+                mod_rem.modulus /= 2;
+                mod_rem.remainder /= 2;
+                alignment *= 2;
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector loads wider than the native vector
@@ -2146,602 +2082,623 @@ void CodeGen_LLVM::scalarize(Expr e) {
 }
 
 void CodeGen_LLVM::visit(const Call *op) {
-    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+    internal_assert(op->call_type == Call::Extern ||
+                    op->call_type == Call::ExternCPlusPlus ||
+                    op->call_type == Call::Intrinsic ||
+                    op->call_type == Call::PureExtern ||
+                    op->call_type == Call::PureIntrinsic)
         << "Can only codegen extern calls and intrinsics\n";
 
-
-    if (op->call_type == Call::Intrinsic) {
-        // Some call nodes are actually injected at various stages as a
-        // cue for llvm to generate particular ops. In general these are
-        // handled in the standard library, but ones with e.g. varying
-        // types are handled here.
-        if (op->name == Call::shuffle_vector) {
-            internal_assert((int) op->args.size() == 1 + op->type.lanes());
-            vector<Constant *> indices(op->type.lanes());
-            for (size_t i = 0; i < indices.size(); i++) {
-                const IntImm *idx = op->args[i+1].as<IntImm>();
-                internal_assert(idx);
-                internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().lanes());
-                indices[i] = ConstantInt::get(i32, idx->value);
-            }
-            Value *arg = codegen(op->args[0]);
-
-            // Make a size 1 vector of undef at the end to mix in undef values.
-            Value *undefs = UndefValue::get(arg->getType());
-
-            value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
-
-            if (op->type.is_scalar()) {
-                value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
-            }
-
-        } else if (op->name == Call::interleave_vectors) {
-            internal_assert(0 < op->args.size());
-            value = interleave_vectors(op->type, op->args);
-        } else if (op->name == Call::debug_to_file) {
-            internal_assert(op->args.size() == 3);
-            const StringImm *filename = op->args[0].as<StringImm>();
-            internal_assert(filename) << "Malformed debug_to_file node\n";
-            // Grab the function from the initial module
-            llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
-            internal_assert(debug_to_file) << "Could not find halide_debug_to_file function in initial module\n";
-
-            // Make the filename a global string constant
-            Value *user_context = get_user_context();
-            Value *char_ptr = codegen(Expr(filename));
-            vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
-
-            Value *buffer = codegen(op->args[2]);
-            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-            args.push_back(buffer);
-
-            debug(4) << "Creating call to debug_to_file\n";
-
-            value = builder->CreateCall(debug_to_file, args);
-        } else if (op->name == Call::bitwise_and) {
-            internal_assert(op->args.size() == 2);
-            value = builder->CreateAnd(codegen(op->args[0]), codegen(op->args[1]));
-        } else if (op->name == Call::bitwise_xor) {
-            internal_assert(op->args.size() == 2);
-            value = builder->CreateXor(codegen(op->args[0]), codegen(op->args[1]));
-        } else if (op->name == Call::bitwise_or) {
-            internal_assert(op->args.size() == 2);
-            value = builder->CreateOr(codegen(op->args[0]), codegen(op->args[1]));
-        } else if (op->name == Call::bitwise_not) {
-            internal_assert(op->args.size() == 1);
-            value = builder->CreateNot(codegen(op->args[0]));
-        } else if (op->name == Call::reinterpret) {
-            internal_assert(op->args.size() == 1);
-            Type dst = op->type;
-            Type src = op->args[0].type();
-            llvm::Type *llvm_dst = llvm_type_of(dst);
-            value = codegen(op->args[0]);
-            if (src.is_handle() && !dst.is_handle()) {
-                internal_assert(dst.is_uint() && dst.bits() == 64);
-
-                // Handle -> UInt64
-                llvm::DataLayout d(module.get());
-                if (d.getPointerSize() == 4) {
-                    llvm::Type *intermediate = llvm_type_of(UInt(32, dst.lanes()));
-                    value = builder->CreatePtrToInt(value, intermediate);
-                    value = builder->CreateZExt(value, llvm_dst);
-                } else if (d.getPointerSize() == 8) {
-                    value = builder->CreatePtrToInt(value, llvm_dst);
-                } else {
-                    internal_error << "Pointer size is neither 4 nor 8 bytes\n";
-                }
-
-            } else if (dst.is_handle() && !src.is_handle()) {
-                internal_assert(src.is_uint() && src.bits() == 64);
-
-                // UInt64 -> Handle
-                llvm::DataLayout d(module.get());
-                if (d.getPointerSize() == 4) {
-                    llvm::Type *intermediate = llvm_type_of(UInt(32, src.lanes()));
-                    value = builder->CreateTrunc(value, intermediate);
-                    value = builder->CreateIntToPtr(value, llvm_dst);
-                } else if (d.getPointerSize() == 8) {
-                    value = builder->CreateIntToPtr(value, llvm_dst);
-                } else {
-                    internal_error << "Pointer size is neither 4 nor 8 bytes\n";
-                }
-
-            } else {
-                value = builder->CreateBitCast(codegen(op->args[0]), llvm_dst);
-            }
-        } else if (op->name == Call::shift_left) {
-            internal_assert(op->args.size() == 2);
-            value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
-        } else if (op->name == Call::shift_right) {
-            internal_assert(op->args.size() == 2);
-            if (op->type.is_int()) {
-                value = builder->CreateAShr(codegen(op->args[0]), codegen(op->args[1]));
-            } else {
-                value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
-            }
-        } else if (op->name == Call::abs) {
-
-            internal_assert(op->args.size() == 1);
-
-            // Check if an appropriate vector abs for this type exists in the initial module
-            Type t = op->args[0].type();
-            string name = (t.is_float() ? "abs_f" : "abs_i") + std::to_string(t.bits());
-            llvm::Function * builtin_abs =
-                find_vector_runtime_function(name, op->type.lanes()).first;
-
-            if (t.is_vector() && builtin_abs) {
-                codegen(Call::make(op->type, name, op->args, Call::Extern));
-            } else {
-                // Generate select(x >= 0, x, -x) instead
-                Value *arg = codegen(op->args[0]);
-                Value *zero = Constant::getNullValue(arg->getType());
-                Value *cmp, *neg;
-                if (t.is_float()) {
-                    cmp = builder->CreateFCmpOGE(arg, zero);
-                    neg = builder->CreateFSub(zero, arg);
-                } else {
-                    internal_assert(t.is_int());
-                    cmp = builder->CreateICmpSGE(arg, zero);
-                    neg = builder->CreateSub(zero, arg);
-                }
-                value = builder->CreateSelect(cmp, arg, neg);
-            }
-        } else if (op->name == Call::absd) {
-
-            internal_assert(op->args.size() == 2);
-
-            Expr a = op->args[0];
-            Expr b = op->args[1];
-
-            // Check if an appropriate vector abs for this type exists in the initial module
-            Type t = a.type();
-            string name;
-            if (t.is_float()) {
-                codegen(abs(a - b));
-                return;
-            } else if (t.is_int()) {
-                name = "absd_i" + std::to_string(t.bits());
-            } else {
-                name = "absd_u" + std::to_string(t.bits());
-            }
-
-            llvm::Function *builtin_absd =
-                find_vector_runtime_function(name, op->type.lanes()).first;
-
-            if (t.is_vector() && builtin_absd) {
-                codegen(Call::make(op->type, name, op->args, Call::Extern));
-            } else {
-                // Use a select instead
-                codegen(Select::make(a < b, b - a, a - b));
-            }
-        } else if (op->name == Call::copy_buffer_t) {
-            // Make some memory for this buffer_t
-            Value *dst = create_alloca_at_entry(buffer_t_type, 1);
-            Value *src = codegen(op->args[0]);
-            src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
-            src = builder->CreateLoad(src);
-            builder->CreateStore(src, dst);
-            value = dst;
-        } else if (op->name == Call::create_buffer_t) {
-            // Make some memory for this buffer_t
-            Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
-
-            // Populate the fields
-            internal_assert(op->args[0].type().is_handle())
-                << "The first argument to create_buffer_t must be a Handle\n";
-            Value *host_ptr = codegen(op->args[0]);
-            host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
-            builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
-
-            // Type check integer arguments
-            for (size_t i = 2; i < op->args.size(); i++) {
-                internal_assert(op->args[i].type() == Int(32))
-                    << "All arguments to create_buffer_t beyond the second must have type Int(32)\n";
-            }
-
-            // Second argument is used solely for its Type. Value is unimportant.
-            // Currenty, only the size matters, but ultimately we will encode
-            // complete type info in buffer_t.
-            Value *elem_size = codegen(op->args[1].type().bytes());
-            builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
-
-            int dims = (op->args.size() - 2) / 3;
-            user_assert(dims <= 4)
-                << "Halide currently has a limit of four dimensions on "
-                << "Funcs used on the GPU or passed to extern stages.\n";
-            for (int i = 0; i < 4; i++) {
-                Value *min, *extent, *stride;
-                if (i < dims) {
-                    min    = codegen(op->args[i*3+2]);
-                    extent = codegen(op->args[i*3+3]);
-                    stride = codegen(op->args[i*3+4]);
-                } else {
-                    min = extent = stride = ConstantInt::get(i32, 0);
-                }
-                builder->CreateStore(min, buffer_min_ptr(buffer, i));
-                builder->CreateStore(extent, buffer_extent_ptr(buffer, i));
-                builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
-            }
-
-            builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
-            builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
-            builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
-
-            value = buffer;
-        } else if (op->name == Call::extract_buffer_host) {
-            internal_assert(op->args.size() == 1);
-            Value *buffer = codegen(op->args[0]);
-            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-            value = buffer_host(buffer);
-        } else if (op->name == Call::extract_buffer_min) {
-            internal_assert(op->args.size() == 2);
-            const IntImm *idx = op->args[1].as<IntImm>();
+    // Some call nodes are actually injected at various stages as a
+    // cue for llvm to generate particular ops. In general these are
+    // handled in the standard library, but ones with e.g. varying
+    // types are handled here.
+    if (op->is_intrinsic(Call::shuffle_vector)) {
+        internal_assert((int) op->args.size() == 1 + op->type.lanes());
+        vector<Constant *> indices(op->type.lanes());
+        for (size_t i = 0; i < indices.size(); i++) {
+            const IntImm *idx = op->args[i+1].as<IntImm>();
             internal_assert(idx);
-            Value *buffer = codegen(op->args[0]);
-            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-            value = buffer_min(buffer, idx->value);
-        } else if (op->name == Call::extract_buffer_max) {
-            internal_assert(op->args.size() == 2);
-            const IntImm *idx = op->args[1].as<IntImm>();
-            internal_assert(idx);
-            Value *buffer = codegen(op->args[0]);
-            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-            Value *extent = buffer_extent(buffer, idx->value);
-            Value *min = buffer_min(buffer, idx->value);
-            Value *max_plus_one = builder->CreateNSWAdd(min, extent);
-            value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32, 1));
-        } else if (op->name == Call::rewrite_buffer) {
-            int dims = ((int)(op->args.size())-2)/3;
-            internal_assert((int)(op->args.size()) == dims*3 + 2);
-            internal_assert(dims <= 4);
+            internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().lanes());
+            indices[i] = ConstantInt::get(i32, idx->value);
+        }
+        Value *arg = codegen(op->args[0]);
 
-            Value *buffer = codegen(op->args[0]);
+        // Make a size 1 vector of undef at the end to mix in undef values.
+        Value *undefs = UndefValue::get(arg->getType());
 
-            // Rewrite the buffer_t using the args
-            builder->CreateStore(codegen(op->args[1]), buffer_elem_size_ptr(buffer));
-            for (int i = 0; i < dims; i++) {
-                builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
-                builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
-                builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
-            }
-            for (int i = dims; i < 4; i++) {
-                builder->CreateStore(ConstantInt::get(i32, 0), buffer_min_ptr(buffer, i));
-                builder->CreateStore(ConstantInt::get(i32, 0), buffer_extent_ptr(buffer, i));
-                builder->CreateStore(ConstantInt::get(i32, 0), buffer_stride_ptr(buffer, i));
-            }
+        value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
 
-            // From the point of view of the continued code (a containing assert stmt), this returns true.
-            value = codegen(const_true());
-        } else if (op->name == Call::set_host_dirty) {
-            internal_assert(op->args.size() == 2);
-            Value *buffer = codegen(op->args[0]);
-            Value *arg = codegen(op->args[1]);
-            builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
-            value = ConstantInt::get(i32, 0);
-        } else if (op->name == Call::set_dev_dirty) {
-            internal_assert(op->args.size() == 2);
-            Value *buffer = codegen(op->args[0]);
-            Value *arg = codegen(op->args[1]);
-            builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
-            value = ConstantInt::get(i32, 0);
-        } else if (op->name == Call::null_handle) {
-            internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
-            internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
-            value = ConstantPointerNull::get(i8->getPointerTo());
-        } else if (op->name == Call::address_of) {
-            internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
-            internal_assert(op->type == Handle()) << "address_of must return a Handle type\n";
-            const Load *load = op->args[0].as<Load>();
-            internal_assert(load) << "The sole argument to address_of must be a Load node\n";
-            internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
+        if (op->type.is_scalar()) {
+            value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+        }
 
-            value = codegen_buffer_pointer(load->name, load->type, load->index);
+    } else if (op->is_intrinsic(Call::interleave_vectors)) {
+        internal_assert(0 < op->args.size());
+        value = interleave_vectors(op->type, op->args);
+    } else if (op->is_intrinsic(Call::debug_to_file)) {
+        internal_assert(op->args.size() == 3);
+        const StringImm *filename = op->args[0].as<StringImm>();
+        internal_assert(filename) << "Malformed debug_to_file node\n";
+        // Grab the function from the initial module
+        llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
+        internal_assert(debug_to_file) << "Could not find halide_debug_to_file function in initial module\n";
 
-        } else if (op->name == Call::trace || op->name == Call::trace_expr) {
+        // Make the filename a global string constant
+        Value *user_context = get_user_context();
+        Value *char_ptr = codegen(Expr(filename));
+        vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
 
-            int int_args = (int)(op->args.size()) - 5;
-            internal_assert(int_args >= 0);
+        Value *buffer = codegen(op->args[2]);
+        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        args.push_back(buffer);
 
-            // Make a global string for the func name. Should be the same for all lanes.
-            Value *name = codegen(unbroadcast(op->args[0]));
+        value = builder->CreateCall(debug_to_file, args);
 
-            // Codegen the event type. Should be the same for all lanes.
-            Value *event_type = codegen(unbroadcast(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_and)) {
+        internal_assert(op->args.size() == 2);
+        value = builder->CreateAnd(codegen(op->args[0]), codegen(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        internal_assert(op->args.size() == 2);
+        value = builder->CreateXor(codegen(op->args[0]), codegen(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_or)) {
+        internal_assert(op->args.size() == 2);
+        value = builder->CreateOr(codegen(op->args[0]), codegen(op->args[1]));
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        internal_assert(op->args.size() == 1);
+        value = builder->CreateNot(codegen(op->args[0]));
+    } else if (op->is_intrinsic(Call::reinterpret)) {
+        internal_assert(op->args.size() == 1);
+        Type dst = op->type;
+        Type src = op->args[0].type();
+        llvm::Type *llvm_dst = llvm_type_of(dst);
+        value = codegen(op->args[0]);
+        if (src.is_handle() && !dst.is_handle()) {
+            internal_assert(dst.is_uint() && dst.bits() == 64);
 
-            // Codegen the buffer id
-            Expr id = op->args[2];
-            Value *realization_id;
-            if (id.as<Broadcast>()) {
-                realization_id = codegen(unbroadcast(id));
+            // Handle -> UInt64
+            llvm::DataLayout d(module.get());
+            if (d.getPointerSize() == 4) {
+                llvm::Type *intermediate = llvm_type_of(UInt(32, dst.lanes()));
+                value = builder->CreatePtrToInt(value, intermediate);
+                value = builder->CreateZExt(value, llvm_dst);
+            } else if (d.getPointerSize() == 8) {
+                value = builder->CreatePtrToInt(value, llvm_dst);
             } else {
-                realization_id = codegen(id);
+                internal_error << "Pointer size is neither 4 nor 8 bytes\n";
             }
 
-            // Codegen the value index. Should be the same for all lanes.
-            Value *value_index = codegen(unbroadcast(op->args[3]));
+        } else if (dst.is_handle() && !src.is_handle()) {
+            internal_assert(src.is_uint() && src.bits() == 64);
 
-            // Allocate and populate a stack entry for the value arg
-            Type type = op->args[4].type();
-            Value *value_stored_array = create_alloca_at_entry(llvm_type_of(type), 1);
-            Value *value_stored = codegen(op->args[4]);
-            builder->CreateStore(value_stored, value_stored_array);
-            value_stored_array = builder->CreatePointerCast(value_stored_array, i8->getPointerTo());
+            // UInt64 -> Handle
+            llvm::DataLayout d(module.get());
+            if (d.getPointerSize() == 4) {
+                llvm::Type *intermediate = llvm_type_of(UInt(32, src.lanes()));
+                value = builder->CreateTrunc(value, intermediate);
+                value = builder->CreateIntToPtr(value, llvm_dst);
+            } else if (d.getPointerSize() == 8) {
+                value = builder->CreateIntToPtr(value, llvm_dst);
+            } else {
+                internal_error << "Pointer size is neither 4 nor 8 bytes\n";
+            }
 
-            // Allocate and populate a stack array for the integer args
-            Value *coords;
-            if (int_args > 0) {
-                llvm::Type *coords_type = llvm_type_of(op->args[5].type());
-                coords = create_alloca_at_entry(coords_type, int_args);
-                for (int i = 0; i < int_args; i++) {
-                    Value *coord_ptr =
-                        builder->CreateConstInBoundsGEP1_32(
+        } else {
+            value = builder->CreateBitCast(codegen(op->args[0]), llvm_dst);
+        }
+    } else if (op->is_intrinsic(Call::shift_left)) {
+        internal_assert(op->args.size() == 2);
+        value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
+    } else if (op->is_intrinsic(Call::shift_right)) {
+        internal_assert(op->args.size() == 2);
+        if (op->type.is_int()) {
+            value = builder->CreateAShr(codegen(op->args[0]), codegen(op->args[1]));
+        } else {
+            value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
+        }
+    } else if (op->is_intrinsic(Call::abs)) {
+
+        internal_assert(op->args.size() == 1);
+
+        // Check if an appropriate vector abs for this type exists in the initial module
+        Type t = op->args[0].type();
+        string name = (t.is_float() ? "abs_f" : "abs_i") + std::to_string(t.bits());
+        llvm::Function * builtin_abs =
+            find_vector_runtime_function(name, op->type.lanes()).first;
+
+        if (t.is_vector() && builtin_abs) {
+            codegen(Call::make(op->type, name, op->args, Call::Extern));
+        } else {
+            // Generate select(x >= 0, x, -x) instead
+            string x_name = unique_name('x');
+            Expr x = Variable::make(op->args[0].type(), x_name);
+            value = codegen(Let::make(x_name, op->args[0], select(x >= 0, x, -x)));
+        }
+    } else if (op->is_intrinsic(Call::absd)) {
+
+        internal_assert(op->args.size() == 2);
+
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+
+        // Check if an appropriate vector abs for this type exists in the initial module
+        Type t = a.type();
+        string name;
+        if (t.is_float()) {
+            codegen(abs(a - b));
+            return;
+        } else if (t.is_int()) {
+            name = "absd_i" + std::to_string(t.bits());
+        } else {
+            name = "absd_u" + std::to_string(t.bits());
+        }
+
+        llvm::Function *builtin_absd =
+            find_vector_runtime_function(name, op->type.lanes()).first;
+
+        if (t.is_vector() && builtin_absd) {
+            codegen(Call::make(op->type, name, op->args, Call::Extern));
+        } else {
+            // Use a select instead
+            string a_name = unique_name('a');
+            string b_name = unique_name('b');
+            Expr a_var = Variable::make(op->args[0].type(), a_name);
+            Expr b_var = Variable::make(op->args[1].type(), b_name);
+            codegen(Let::make(a_name, op->args[0],
+                              Let::make(b_name, op->args[1],
+                                        Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
+        }
+    } else if (op->is_intrinsic("div_round_to_zero")) {
+        internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        if (op->type.is_int()) {
+            value = builder->CreateSDiv(a, b);
+        } else if (op->type.is_uint()) {
+            value = builder->CreateUDiv(a, b);
+        } else {
+            internal_error << "div_round_to_zero of non-integer type.\n";
+        }
+    } else if (op->is_intrinsic("mod_round_to_zero")) {
+        internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        if (op->type.is_int()) {
+            value = builder->CreateSRem(a, b);
+        } else if (op->type.is_uint()) {
+            value = builder->CreateURem(a, b);
+        } else {
+            internal_error << "mod_round_to_zero of non-integer type.\n";
+        }
+    } else if (op->is_intrinsic(Call::copy_buffer_t)) {
+        // Make some memory for this buffer_t
+        Value *dst = create_alloca_at_entry(buffer_t_type, 1);
+        Value *src = codegen(op->args[0]);
+        src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
+        src = builder->CreateLoad(src);
+        builder->CreateStore(src, dst);
+        value = dst;
+    } else if (op->is_intrinsic(Call::create_buffer_t)) {
+        // Make some memory for this buffer_t
+        Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
+
+        // Populate the fields
+        internal_assert(op->args[0].type().is_handle())
+            << "The first argument to create_buffer_t must be a Handle\n";
+        Value *host_ptr = codegen(op->args[0]);
+        host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
+        builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
+
+        // Type check integer arguments
+        for (size_t i = 2; i < op->args.size(); i++) {
+            internal_assert(op->args[i].type() == Int(32))
+                << "All arguments to create_buffer_t beyond the second must have type Int(32)\n";
+        }
+
+        // Second argument is used solely for its Type. Value is unimportant.
+        // Currenty, only the size matters, but ultimately we will encode
+        // complete type info in buffer_t.
+        Value *elem_size = codegen(op->args[1].type().bytes());
+        builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
+
+        int dims = (op->args.size() - 2) / 3;
+        user_assert(dims <= 4)
+            << "Halide currently has a limit of four dimensions on "
+            << "Funcs used on the GPU or passed to extern stages.\n";
+        for (int i = 0; i < 4; i++) {
+            Value *min, *extent, *stride;
+            if (i < dims) {
+                min    = codegen(op->args[i*3+2]);
+                extent = codegen(op->args[i*3+3]);
+                stride = codegen(op->args[i*3+4]);
+            } else {
+                min = extent = stride = ConstantInt::get(i32, 0);
+            }
+            builder->CreateStore(min, buffer_min_ptr(buffer, i));
+            builder->CreateStore(extent, buffer_extent_ptr(buffer, i));
+            builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
+        }
+
+        builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
+
+        value = buffer;
+    } else if (op->is_intrinsic(Call::extract_buffer_host)) {
+        internal_assert(op->args.size() == 1);
+        Value *buffer = codegen(op->args[0]);
+        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        value = buffer_host(buffer);
+    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+        internal_assert(op->args.size() == 2);
+        const IntImm *idx = op->args[1].as<IntImm>();
+        internal_assert(idx);
+        Value *buffer = codegen(op->args[0]);
+        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        value = buffer_min(buffer, idx->value);
+    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+        internal_assert(op->args.size() == 2);
+        const IntImm *idx = op->args[1].as<IntImm>();
+        internal_assert(idx);
+        Value *buffer = codegen(op->args[0]);
+        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        Value *extent = buffer_extent(buffer, idx->value);
+        Value *min = buffer_min(buffer, idx->value);
+        Value *max_plus_one = builder->CreateNSWAdd(min, extent);
+        value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32, 1));
+    } else if (op->is_intrinsic(Call::rewrite_buffer)) {
+        int dims = ((int)(op->args.size())-2)/3;
+        internal_assert((int)(op->args.size()) == dims*3 + 2);
+        internal_assert(dims <= 4);
+
+        Value *buffer = codegen(op->args[0]);
+
+        // Rewrite the buffer_t using the args
+        builder->CreateStore(codegen(op->args[1]), buffer_elem_size_ptr(buffer));
+        for (int i = 0; i < dims; i++) {
+            builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
+            builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
+            builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
+        }
+        for (int i = dims; i < 4; i++) {
+            builder->CreateStore(ConstantInt::get(i32, 0), buffer_min_ptr(buffer, i));
+            builder->CreateStore(ConstantInt::get(i32, 0), buffer_extent_ptr(buffer, i));
+            builder->CreateStore(ConstantInt::get(i32, 0), buffer_stride_ptr(buffer, i));
+        }
+
+        // From the point of view of the continued code (a containing assert stmt), this returns true.
+        value = codegen(const_true());
+    } else if (op->is_intrinsic(Call::set_host_dirty)) {
+        internal_assert(op->args.size() == 2);
+        Value *buffer = codegen(op->args[0]);
+        Value *arg = codegen(op->args[1]);
+        builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+        value = ConstantInt::get(i32, 0);
+    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
+        internal_assert(op->args.size() == 2);
+        Value *buffer = codegen(op->args[0]);
+        Value *arg = codegen(op->args[1]);
+        builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+        value = ConstantInt::get(i32, 0);
+    } else if (op->is_intrinsic(Call::null_handle)) {
+        internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
+        internal_assert(op->type.is_handle()) << "null_handle must return a Handle type\n";
+        value = ConstantPointerNull::get(i8->getPointerTo());
+    } else if (op->is_intrinsic(Call::address_of)) {
+        internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
+        internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
+        const Load *load = op->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+        internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
+
+        value = codegen_buffer_pointer(load->name, load->type, load->index);
+
+    } else if (op->is_intrinsic(Call::trace) ||
+               op->is_intrinsic(Call::trace_expr)) {
+
+        int int_args = (int)(op->args.size()) - 5;
+        internal_assert(int_args >= 0);
+
+        // Make a global string for the func name. Should be the same for all lanes.
+        Value *name = codegen(unbroadcast(op->args[0]));
+
+        // Codegen the event type. Should be the same for all lanes.
+        Value *event_type = codegen(unbroadcast(op->args[1]));
+
+        // Codegen the buffer id
+        Expr id = op->args[2];
+        Value *realization_id;
+        if (id.as<Broadcast>()) {
+            realization_id = codegen(unbroadcast(id));
+        } else {
+            realization_id = codegen(id);
+        }
+
+        // Codegen the value index. Should be the same for all lanes.
+        Value *value_index = codegen(unbroadcast(op->args[3]));
+
+        // Allocate and populate a stack entry for the value arg
+        Type type = op->args[4].type();
+        Value *value_stored_array = create_alloca_at_entry(llvm_type_of(type), 1);
+        Value *value_stored = codegen(op->args[4]);
+        builder->CreateStore(value_stored, value_stored_array);
+        value_stored_array = builder->CreatePointerCast(value_stored_array, i8->getPointerTo());
+
+        // Allocate and populate a stack array for the integer args
+        Value *coords;
+        if (int_args > 0) {
+            llvm::Type *coords_type = llvm_type_of(op->args[5].type());
+            coords = create_alloca_at_entry(coords_type, int_args);
+            for (int i = 0; i < int_args; i++) {
+                Value *coord_ptr =
+                    builder->CreateConstInBoundsGEP1_32(
 #if LLVM_VERSION >= 37
-                            coords_type,
+                        coords_type,
 #endif
-                            coords,
-                            i);
-                    builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
-                }
-                coords = builder->CreatePointerCast(coords, i32->getPointerTo());
-            } else {
-                coords = Constant::getNullValue(i32->getPointerTo());
+                        coords,
+                        i);
+                builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
+            }
+            coords = builder->CreatePointerCast(coords, i32->getPointerTo());
+        } else {
+            coords = Constant::getNullValue(i32->getPointerTo());
+        }
+
+        StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
+        user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
+        Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
+
+        Value *members[10] = {
+            name,
+            event_type,
+            realization_id,
+            ConstantInt::get(i32, type.code()),
+            ConstantInt::get(i32, type.bits()),
+            ConstantInt::get(i32, type.lanes()),
+            value_index,
+            value_stored_array,
+            ConstantInt::get(i32, int_args * type.lanes()),
+            coords};
+
+        for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
+            Value *field_ptr =
+                builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+                    trace_event_type,
+#endif
+                    trace_event,
+                    0,
+                    i);
+            builder->CreateStore(members[i], field_ptr);
+        }
+
+        // Call the runtime function
+        vector<Value *> args(2);
+        args[0] = get_user_context();
+        args[1] = trace_event;
+
+        llvm::Function *trace_fn = module->getFunction("halide_trace");
+        internal_assert(trace_fn);
+
+        value = builder->CreateCall(trace_fn, args);
+
+        if (op->is_intrinsic(Call::trace_expr)) {
+            value = value_stored;
+        }
+
+    } else if (op->is_intrinsic(Call::lerp)) {
+        internal_assert(op->args.size() == 3);
+        value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
+    } else if (op->is_intrinsic(Call::popcount)) {
+        internal_assert(op->args.size() == 1);
+        std::vector<llvm::Type*> arg_type(1);
+        arg_type[0] = llvm_type_of(op->args[0].type());
+        llvm::Function *fn = Intrinsic::getDeclaration(module.get(), Intrinsic::ctpop, arg_type);
+        CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
+        value = call;
+    } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros)) {
+        internal_assert(op->args.size() == 1);
+        std::vector<llvm::Type*> arg_type(1);
+        arg_type[0] = llvm_type_of(op->args[0].type());
+        llvm::Function *fn = Intrinsic::getDeclaration(module.get(),
+                                                       (op->is_intrinsic(Call::count_leading_zeros)) ? Intrinsic::ctlz :
+                                                       Intrinsic::cttz,
+                                                       arg_type);
+        llvm::Value *zero_is_not_undef = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = { codegen(op->args[0]), zero_is_not_undef };
+        CallInst *call = builder->CreateCall(fn, args);
+        value = call;
+    } else if (op->is_intrinsic(Call::return_second)) {
+        internal_assert(op->args.size() == 2);
+        codegen(op->args[0]);
+        value = codegen(op->args[1]);
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        if (op->type.is_vector()) {
+            scalarize(op);
+
+        } else {
+
+            internal_assert(op->args.size() == 3);
+
+            BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+            BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+            BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+            builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+            builder->SetInsertPoint(true_bb);
+            Value *true_value = codegen(op->args[1]);
+            builder->CreateBr(after_bb);
+
+            builder->SetInsertPoint(false_bb);
+            Value *false_value = codegen(op->args[2]);
+            builder->CreateBr(after_bb);
+
+            builder->SetInsertPoint(after_bb);
+
+            PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+            phi->addIncoming(true_value, true_bb);
+            phi->addIncoming(false_value, false_bb);
+
+            value = phi;
+        }
+    } else if (op->is_intrinsic(Call::make_struct)) {
+        if (op->type.is_vector()) {
+            // Make a vector-of-structs
+            scalarize(op);
+        } else {
+            // Codegen each element.
+            assert(!op->args.empty());
+            vector<llvm::Value *> args(op->args.size());
+            vector<llvm::Type *> types(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                args[i] = codegen(op->args[i]);
+                types[i] = args[i]->getType();
             }
 
-            StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
-            user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
-            Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
+            // Create an struct on the stack.
+            StructType *struct_t = StructType::create(types);
+            Value *ptr = create_alloca_at_entry(struct_t, 1);
 
-            Value *members[10] = {
-                name,
-                event_type,
-                realization_id,
-                ConstantInt::get(i32, type.code()),
-                ConstantInt::get(i32, type.bits()),
-                ConstantInt::get(i32, type.lanes()),
-                value_index,
-                value_stored_array,
-                ConstantInt::get(i32, int_args * type.lanes()),
-                coords};
-
-            for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
+            // Put the elements in the struct.
+            for (size_t i = 0; i < args.size(); i++) {
                 Value *field_ptr =
                     builder->CreateConstInBoundsGEP2_32(
 #if LLVM_VERSION >= 37
-                        trace_event_type,
+                        struct_t,
 #endif
-                        trace_event,
+                        ptr,
                         0,
                         i);
-                builder->CreateStore(members[i], field_ptr);
+                builder->CreateStore(args[i], field_ptr);
             }
 
-            // Call the runtime function
-            vector<Value *> args(2);
-            args[0] = get_user_context();
-            args[1] = trace_event;
-
-            llvm::Function *trace_fn = module->getFunction("halide_trace");
-            internal_assert(trace_fn);
-
-            value = builder->CreateCall(trace_fn, args);
-
-            if (op->name == Call::trace_expr) {
-                value = value_stored;
-            }
-
-        } else if (op->name == Call::lerp) {
-            internal_assert(op->args.size() == 3);
-            value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
-        } else if (op->name == Call::popcount) {
-            internal_assert(op->args.size() == 1);
-            std::vector<llvm::Type*> arg_type(1);
-            arg_type[0] = llvm_type_of(op->args[0].type());
-            llvm::Function *fn = Intrinsic::getDeclaration(module.get(), Intrinsic::ctpop, arg_type);
-            CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
-            value = call;
-        } else if (op->name == Call::count_leading_zeros ||
-                   op->name == Call::count_trailing_zeros) {
-            internal_assert(op->args.size() == 1);
-            std::vector<llvm::Type*> arg_type(1);
-            arg_type[0] = llvm_type_of(op->args[0].type());
-            llvm::Function *fn = Intrinsic::getDeclaration(module.get(),
-                (op->name == Call::count_leading_zeros) ? Intrinsic::ctlz :
-                                                          Intrinsic::cttz,
-                arg_type);
-            llvm::Value *zero_is_not_undef = llvm::ConstantInt::getFalse(*context);
-            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_not_undef };
-            CallInst *call = builder->CreateCall(fn, args);
-            value = call;
-        } else if (op->name == Call::return_second) {
-            internal_assert(op->args.size() == 2);
-            codegen(op->args[0]);
-            value = codegen(op->args[1]);
-        } else if (op->name == Call::if_then_else) {
-            if (op->type.is_vector()) {
-                scalarize(op);
-
-            } else {
-
-                internal_assert(op->args.size() == 3);
-
-                BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-                BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-                BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-                builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
-                builder->SetInsertPoint(true_bb);
-                Value *true_value = codegen(op->args[1]);
-                builder->CreateBr(after_bb);
-
-                builder->SetInsertPoint(false_bb);
-                Value *false_value = codegen(op->args[2]);
-                builder->CreateBr(after_bb);
-
-                builder->SetInsertPoint(after_bb);
-
-                PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-                phi->addIncoming(true_value, true_bb);
-                phi->addIncoming(false_value, false_bb);
-
-                value = phi;
-            }
-        } else if (op->name == Call::make_struct) {
-            if (op->type.is_vector()) {
-                // Make a vector-of-structs
-                scalarize(op);
-            } else {
-                // Codegen each element.
-                assert(!op->args.empty());
-                vector<llvm::Value *> args(op->args.size());
-                vector<llvm::Type *> types(op->args.size());
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    args[i] = codegen(op->args[i]);
-                    types[i] = args[i]->getType();
-                }
-
-                // Create an struct on the stack.
-                StructType *struct_t = StructType::create(types);
-                Value *ptr = create_alloca_at_entry(struct_t, 1);
-
-                // Put the elements in the struct.
-                for (size_t i = 0; i < args.size(); i++) {
-                    Value *field_ptr =
-                        builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
-                            struct_t,
-#endif
-                            ptr,
-                            0,
-                            i);
-                    builder->CreateStore(args[i], field_ptr);
-                }
-
-                value = ptr;
-            }
-
-        } else if (op->name == Call::stringify) {
-            assert(!op->args.empty());
-
-            if (op->type.is_vector()) {
-                scalarize(op);
-            } else {
-
-                // Compute the maximum possible size of the message.
-                int buf_size = 1; // One for the terminating zero.
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    Type t = op->args[i].type();
-                    if (op->args[i].as<StringImm>()) {
-                        buf_size += op->args[i].as<StringImm>()->value.size();
-                    } else if (t.is_int() || t.is_uint()) {
-                        buf_size += 19; // 2^64 = 18446744073709551616
-                    } else if (t.is_float()) {
-                        if (t.bits() == 32) {
-                            buf_size += 47; // %f format of max negative float
-                        } else {
-                            buf_size += 14; // Scientific notation with 6 decimal places.
-                        }
-                    } else {
-                        internal_assert(t.is_handle());
-                        buf_size += 18; // 0x0123456789abcdef
-                    }
-                }
-                // Round up to a multiple of 16 bytes.
-                buf_size = ((buf_size + 15)/16)*16;
-
-                // Clamp to at most 8k.
-                if (buf_size > 8192) buf_size = 8192;
-
-                // Allocate a stack array to hold the message.
-                llvm::Value *buf = create_alloca_at_entry(i8, buf_size);
-
-                llvm::Value *dst = buf;
-                llvm::Value *buf_end = builder->CreateConstGEP1_32(buf, buf_size);
-
-                llvm::Function *append_string  = module->getFunction("halide_string_to_string");
-                llvm::Function *append_int64   = module->getFunction("halide_int64_to_string");
-                llvm::Function *append_uint64  = module->getFunction("halide_uint64_to_string");
-                llvm::Function *append_double  = module->getFunction("halide_double_to_string");
-                llvm::Function *append_pointer = module->getFunction("halide_pointer_to_string");
-
-                internal_assert(append_string);
-                internal_assert(append_int64);
-                internal_assert(append_uint64);
-                internal_assert(append_double);
-                internal_assert(append_pointer);
-
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    const StringImm *s = op->args[i].as<StringImm>();
-                    Type t = op->args[i].type();
-                    internal_assert(t.lanes() == 1);
-                    vector<Value *> call_args(2);
-                    call_args[0] = dst;
-                    call_args[1] = buf_end;
-
-                    if (s) {
-                        call_args.push_back(codegen(op->args[i]));
-                        dst = builder->CreateCall(append_string, call_args);
-                    } else if (t.is_int()) {
-                        call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
-                        call_args.push_back(ConstantInt::get(i32, 1));
-                        dst = builder->CreateCall(append_int64, call_args);
-                    } else if (t.is_uint()) {
-                        call_args.push_back(codegen(Cast::make(UInt(64), op->args[i])));
-                        call_args.push_back(ConstantInt::get(i32, 1));
-                        dst = builder->CreateCall(append_uint64, call_args);
-                    } else if (t.is_float()) {
-                        call_args.push_back(codegen(Cast::make(Float(64), op->args[i])));
-                        // Use scientific notation for doubles
-                        call_args.push_back(ConstantInt::get(i32, t.bits() == 64 ? 1 : 0));
-                        dst = builder->CreateCall(append_double, call_args);
-                    } else {
-                        internal_assert(t.is_handle());
-                        call_args.push_back(codegen(op->args[i]));
-                        dst = builder->CreateCall(append_pointer, call_args);
-                    }
-                }
-                value = buf;
-            }
-        } else if (op->name == Call::memoize_expr) {
-            // Used as an annotation for caching, should be invisible to
-            // codegen. Ignore arguments beyond the first as they are only
-            // used in the cache key.
-            internal_assert(op->args.size() > 0);
-            value = codegen(op->args[0]);
-        } else if (op->name == Call::copy_memory) {
-            value = builder->CreateMemCpy(codegen(op->args[0]),
-                                          codegen(op->args[1]),
-                                          codegen(op->args[2]), 0);
-        } else if (op->name == Call::register_destructor) {
-            internal_assert(op->args.size() == 2);
-            const StringImm *fn = op->args[0].as<StringImm>();
-            internal_assert(fn);
-            Expr arg = op->args[1];
-            internal_assert(arg.type() == Handle());
-            llvm::Function *f = module->getFunction(fn->value);
-            if (!f) {
-                llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
-                FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
-                f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
-                f->setCallingConv(CallingConv::C);
-            }
-            register_destructor(f, codegen(arg), Always);
-        } else {
-            internal_error << "Unknown intrinsic: " << op->name << "\n";
+            value = ptr;
         }
-    } else if (op->call_type == Call::Extern && op->name == "pow_f32") {
+
+    } else if (op->is_intrinsic(Call::stringify)) {
+        assert(!op->args.empty());
+
+        if (op->type.is_vector()) {
+            scalarize(op);
+        } else {
+
+            // Compute the maximum possible size of the message.
+            int buf_size = 1; // One for the terminating zero.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Type t = op->args[i].type();
+                if (op->args[i].as<StringImm>()) {
+                    buf_size += op->args[i].as<StringImm>()->value.size();
+                } else if (t.is_int() || t.is_uint()) {
+                    buf_size += 19; // 2^64 = 18446744073709551616
+                } else if (t.is_float()) {
+                    if (t.bits() == 32) {
+                        buf_size += 47; // %f format of max negative float
+                    } else {
+                        buf_size += 14; // Scientific notation with 6 decimal places.
+                    }
+                } else {
+                    internal_assert(t.is_handle());
+                    buf_size += 18; // 0x0123456789abcdef
+                }
+            }
+            // Round up to a multiple of 16 bytes.
+            buf_size = ((buf_size + 15)/16)*16;
+
+            // Clamp to at most 8k.
+            if (buf_size > 8192) buf_size = 8192;
+
+            // Allocate a stack array to hold the message.
+            llvm::Value *buf = create_alloca_at_entry(i8, buf_size);
+
+            llvm::Value *dst = buf;
+            llvm::Value *buf_end = builder->CreateConstGEP1_32(buf, buf_size);
+
+            llvm::Function *append_string  = module->getFunction("halide_string_to_string");
+            llvm::Function *append_int64   = module->getFunction("halide_int64_to_string");
+            llvm::Function *append_uint64  = module->getFunction("halide_uint64_to_string");
+            llvm::Function *append_double  = module->getFunction("halide_double_to_string");
+            llvm::Function *append_pointer = module->getFunction("halide_pointer_to_string");
+
+            internal_assert(append_string);
+            internal_assert(append_int64);
+            internal_assert(append_uint64);
+            internal_assert(append_double);
+            internal_assert(append_pointer);
+
+            for (size_t i = 0; i < op->args.size(); i++) {
+                const StringImm *s = op->args[i].as<StringImm>();
+                Type t = op->args[i].type();
+                internal_assert(t.lanes() == 1);
+                vector<Value *> call_args(2);
+                call_args[0] = dst;
+                call_args[1] = buf_end;
+
+                if (s) {
+                    call_args.push_back(codegen(op->args[i]));
+                    dst = builder->CreateCall(append_string, call_args);
+                } else if (t.is_int()) {
+                    call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
+                    call_args.push_back(ConstantInt::get(i32, 1));
+                    dst = builder->CreateCall(append_int64, call_args);
+                } else if (t.is_uint()) {
+                    call_args.push_back(codegen(Cast::make(UInt(64), op->args[i])));
+                    call_args.push_back(ConstantInt::get(i32, 1));
+                    dst = builder->CreateCall(append_uint64, call_args);
+                } else if (t.is_float()) {
+                    call_args.push_back(codegen(Cast::make(Float(64), op->args[i])));
+                    // Use scientific notation for doubles
+                    call_args.push_back(ConstantInt::get(i32, t.bits() == 64 ? 1 : 0));
+                    dst = builder->CreateCall(append_double, call_args);
+                } else {
+                    internal_assert(t.is_handle());
+                    call_args.push_back(codegen(op->args[i]));
+                    dst = builder->CreateCall(append_pointer, call_args);
+                }
+            }
+            value = buf;
+        }
+    } else if (op->is_intrinsic(Call::memoize_expr)) {
+        // Used as an annotation for caching, should be invisible to
+        // codegen. Ignore arguments beyond the first as they are only
+        // used in the cache key.
+        internal_assert(op->args.size() > 0);
+        value = codegen(op->args[0]);
+    } else if (op->is_intrinsic(Call::copy_memory)) {
+        value = builder->CreateMemCpy(codegen(op->args[0]),
+                                      codegen(op->args[1]),
+                                      codegen(op->args[2]), 0);
+    } else if (op->is_intrinsic(Call::register_destructor)) {
+        internal_assert(op->args.size() == 2);
+        const StringImm *fn = op->args[0].as<StringImm>();
+        internal_assert(fn);
+        Expr arg = op->args[1];
+        internal_assert(arg.type().is_handle());
+        llvm::Function *f = module->getFunction(fn->value);
+        if (!f) {
+            llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
+            FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
+            f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
+            f->setCallingConv(CallingConv::C);
+        }
+        register_destructor(f, codegen(arg), Always);
+    } else if (op->call_type == Call::Intrinsic ||
+               op->call_type == Call::PureIntrinsic) {
+        internal_error << "Unknown intrinsic: " << op->name << "\n";
+    } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
         internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
         Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
         e.accept(this);
-    } else if (op->call_type == Call::Extern && op->name == "log_f32") {
+    } else if (op->call_type == Call::PureExtern && op->name == "log_f32") {
         internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_log(op->args[0]);
         e.accept(this);
-    } else if (op->call_type == Call::Extern && op->name == "exp_f32") {
+    } else if (op->call_type == Call::PureExtern && op->name == "exp_f32") {
         internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_exp(op->args[0]);
         e.accept(this);
-    } else if (op->call_type == Call::Extern &&
+    } else if (op->call_type == Call::PureExtern &&
                (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
@@ -2749,13 +2706,30 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else {
         // It's an extern call.
 
+        std::string name;
+        if (op->call_type == Call::ExternCPlusPlus) {
+            user_assert(get_target().has_feature(Target::CPlusPlusMangling)) <<
+                "Target must specify C++ name mangling (\"c_plus_plus_name_mangling\") in order to call C++ externs. (" <<
+                op->name << ")\n";
+
+            std::vector<std::string> namespaces;
+            name = extract_namespaces(op->name, namespaces);
+            std::vector<ExternFuncArgument> mangle_args;
+            for (const auto &arg : op->args) {
+                mangle_args.push_back(ExternFuncArgument(arg));
+            }
+            name = cplusplus_function_mangled_name(name, namespaces, op->type, mangle_args, get_target());
+        } else {
+            name = op->name;
+        }
+
         // Codegen the args
         vector<Value *> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = codegen(op->args[i]);
         }
 
-        llvm::Function *fn = module->getFunction(op->name);
+        llvm::Function *fn = module->getFunction(name);
 
         llvm::Type *result_type = llvm_type_of(op->type);
 
@@ -2786,12 +2760,16 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
 
-            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module.get());
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
             fn->setCallingConv(CallingConv::C);
             debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
             debug(4) << "Found " << op->name << "\n";
 
+            // TODO: Say something more accurate here as there is now
+            // partial information in the handle_type field, but it is
+            // not clear it can be matched to the LLVM types and it is
+            // not always there.
             // Halide's type system doesn't preserve pointer types
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
@@ -2821,26 +2799,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
 
-        // If any of the args are handles, assume it might access memory
-        bool pure = true;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            if (op->args[i].type().is_handle()) {
-                pure = false;
-            }
-        }
-
-        // We also have several impure runtime functions that do not
-        // take a handle.
-        if (op->name == "halide_current_time_ns" ||
-            op->name == "halide_gpu_thread_barrier" ||
-            op->name == "halide_profiler_get_state" ||
-            starts_with(op->name, "halide_error")) {
-            pure = false;
-        }
-
         if (op->type.is_scalar()) {
             CallInst *call = builder->CreateCall(fn, args);
-            if (pure) {
+            if (op->is_pure()) {
                 call->setDoesNotAccessMemory();
             }
             call->setDoesNotThrow();
@@ -2850,7 +2811,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             // Check if a vector version of the function already
             // exists at some useful width.
             pair<llvm::Function *, int> vec =
-                find_vector_runtime_function(op->name, op->type.lanes());
+                find_vector_runtime_function(name, op->type.lanes());
             llvm::Function *vec_fn = vec.first;
             int w = vec.second;
 
@@ -2873,7 +2834,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                         }
                     }
                     CallInst *call = builder->CreateCall(fn, arg_lane);
-                    if (pure) {
+                    if (op->is_pure()) {
                         call->setDoesNotAccessMemory();
                     }
                     call->setDoesNotThrow();
@@ -3165,13 +3126,13 @@ void CodeGen_LLVM::visit(const Store *op) {
     // memory, so convert stores of handles to stores of uint64_ts.
     if (op->value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
-        codegen(Store::make(op->name, v, op->index));
+        codegen(Store::make(op->name, v, op->index, op->param));
         return;
     }
 
     Halide::Type value_type = op->value.type();
     Value *val = codegen(op->value);
-    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -3187,14 +3148,20 @@ void CodeGen_LLVM::visit(const Store *op) {
 
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            if (!possibly_misaligned) {
-                while ((mod_rem.remainder & 1) == 0 &&
+            while ((mod_rem.remainder & 1) == 0 &&
                        (mod_rem.modulus & 1) == 0 &&
                        alignment < native_bytes) {
                     mod_rem.modulus /= 2;
                     mod_rem.remainder /= 2;
                     alignment *= 2;
-                }
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least the native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector stores wider than the native vector

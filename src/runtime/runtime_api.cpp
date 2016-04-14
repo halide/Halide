@@ -13,8 +13,7 @@
 // Can be generated via the following:
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
-namespace {
-__attribute__((used)) void *runtime_api_functions[] = {
+extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_copy_to_device,
     (void *)&halide_copy_to_host,
     (void *)&halide_cuda_detach_device_ptr,
@@ -43,6 +42,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_error_constraint_violated,
     (void *)&halide_error_constraints_make_required_region_smaller,
     (void *)&halide_error_debug_to_file_failed,
+    (void *)&halide_error_unaligned_host_ptr,
     (void *)&halide_error_explicit_bounds_too_small,
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_out_of_memory,
@@ -130,4 +130,3 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_uint64_to_string,
     (void *)&halide_use_jit_module,
 };
-}

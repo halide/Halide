@@ -34,7 +34,7 @@ public:
     virtual ~CodeGen_GPU_Host();
 
 protected:
-    void compile_func(const LoweredFunc &func);
+    void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
 
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
