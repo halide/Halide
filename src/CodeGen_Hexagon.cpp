@@ -955,7 +955,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
                 }
                 bool even = (*first_idx == 0) ? true : false;
                 bool use_vpack = true;
-                for (int i = 1; i < op->args.size() - 1; i++) {
+                for (int i = 1; i < (int)op->args.size() - 1; i++) {
                     const int64_t *curr = as_const_int(op->args[i]);
                     const int64_t *next = as_const_int(op->args[i+1]);
                     if (!(curr && next && ((*next) - (*curr)) == 2)) {
