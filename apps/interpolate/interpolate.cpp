@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
         normalize
             .compute_at(final, xo)
             .reorder(c, x, y)
-            .gpu_tile(x, y, 16, 16, DeviceAPI::Default_GPU)
+            .gpu_tile(x, y, 16, 16)
             .unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
             if (tile_size > 8) tile_size = 8;
             downsampled[l]
                 .compute_root()
-                .gpu_tile(x, y, c, tile_size, tile_size, 4, DeviceAPI::Default_GPU);
+                .gpu_tile(x, y, c, tile_size, tile_size, 4);
             if (l == 1 || l == 4) {
                 interpolated[l]
                     .compute_at(final, xo)

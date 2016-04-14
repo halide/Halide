@@ -244,8 +244,10 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr value, index;
+    // If it's a store to an output buffer, then this parameter points to it.
+    Parameter param;
 
-    EXPORT static Stmt make(std::string name, Expr value, Expr index);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index, Parameter param);
 };
 
 /** This defines the value of a function at a multi-dimensional
@@ -423,7 +425,9 @@ struct Call : public ExprNode<Call> {
         likely,
         make_int64,
         make_float64,
-        register_destructor;
+        register_destructor,
+        div_round_to_zero,
+        mod_round_to_zero;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

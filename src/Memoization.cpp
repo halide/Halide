@@ -232,14 +232,14 @@ public:
         Expr top_level_name_size = (int32_t)top_level_name.size();
         writes.push_back(Store::make(key_name,
                                      Cast::make(Int(32), top_level_name_size),
-                                     (index / Int(32).bytes())));
+                                     (index / Int(32).bytes()), Parameter()));
         index += 4;
         writes.push_back(call_copy_memory(key_name, top_level_name, index));
         // Align to four byte boundary again.
         index += top_level_name_size;
         size_t alignment = 4 + top_level_name.size();
         while (alignment % 4) {
-            writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index));
+            writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index, Parameter()));
             index = index + 1;
             alignment++;
         }
@@ -263,7 +263,7 @@ public:
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
-                                     (index / Handle().bytes())));
+                                     (index / Handle().bytes()), Parameter()));
         size_t alignment = Handle().bytes();
         index += Handle().bytes();
 
@@ -271,7 +271,7 @@ public:
         static std::atomic<int> memoize_instance {0};
         writes.push_back(Store::make(key_name,
                                      memoize_instance++,
-                                     (index / Int(32).bytes())));
+                                     (index / Int(32).bytes()), Parameter()));
         alignment += 4;
         index += 4;
 #endif
@@ -279,7 +279,7 @@ public:
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
             while (alignment % needed_alignment) {
-                writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index));
+                writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index, Parameter()));
                 index = index + 1;
                 alignment++;
             }
@@ -288,7 +288,7 @@ public:
         for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
                                          i.second.value_expr,
-                                         (index / i.second.size_expr)));
+                                         (index / i.second.size_expr), Parameter()));
             index += i.second.size_expr;
         }
         Stmt blocks;
@@ -346,7 +346,7 @@ public:
         args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
-        return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_store", args, Call::Extern));
+        return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
     }
 };
 
@@ -420,6 +420,7 @@ private:
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
                                                                    Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
                                                   cache_miss_marker);
+
             Stmt cache_lookup = LetStmt::make(cache_result_name,
                                               key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
                                               cache_lookup_check);

@@ -411,8 +411,9 @@ int main(int argc, char **argv) {
         im.set(input);
         out.realize(output);
 
-        if (if_then_else_count != 1) {
-            printf("Expected 1 IfThenElse stmts. Found %d.\n", if_then_else_count);
+        // The tail case of the vectorized for loop converts to a second if statement.
+        if (if_then_else_count != 2) {
+            printf("Expected 2 IfThenElse stmts. Found %d.\n", if_then_else_count);
             return -1;
         }
     }
@@ -440,11 +441,13 @@ int main(int argc, char **argv) {
         im.set(input);
         out.realize(output);
 
-        // There should have been 2 Ifs: The outer cond1 && cond2, and
-        // the condition in the true case should have been simplified
-        // away. The If in the false branch cannot be simplified.
-        if (if_then_else_count != 2) {
-            printf("Expected 2 IfThenElse stmts. Found %d.\n", if_then_else_count);
+        // There should have been 3 Ifs total: The first two are the
+        // outer cond1 && cond2, and the condition in the true case
+        // should have been simplified away. The If in the false
+        // branch cannot be simplified. The tail case of the
+        // vectorized for loop converts to a third if statement.
+        if (if_then_else_count != 3) {
+            printf("Expected 3 IfThenElse stmts. Found %d.\n", if_then_else_count);
             return -1;
         }
     }
