@@ -148,7 +148,7 @@ Func demosaic(Func deinterleaved) {
 
     /* THE SCHEDULE */
     if (target.arch == Target::ARM) {
-        // optimized for ARM
+        // Optimized for ARM
         // Compute these in chunks over tiles, vectorized by 8
         g_r.compute_at(processed, tx).vectorize(x, 8);
         g_b.compute_at(processed, tx).vectorize(x, 8);
@@ -158,11 +158,13 @@ Func demosaic(Func deinterleaved) {
         b_gb.compute_at(processed, tx).vectorize(x, 8);
         r_b.compute_at(processed, tx).vectorize(x, 8);
         b_r.compute_at(processed, tx).vectorize(x, 8);
+
         // These interleave in y, so unrolling them in y helps
         output.compute_at(processed, tx)
             .vectorize(x, 8)
             .unroll(y, 2)
-            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+            .reorder(c, x, y)
+            .bound(c, 0, 3).unroll(c);
     } else if (target.arch == Target::X86) {
         // Don't vectorize, because sse is bad at 16-bit interleaving
         g_r.compute_at(processed, tx);
@@ -173,9 +175,13 @@ Func demosaic(Func deinterleaved) {
         b_gb.compute_at(processed, tx);
         r_b.compute_at(processed, tx);
         b_r.compute_at(processed, tx);
+
         // These interleave in x and y, so unrolling them helps
-        output.compute_at(processed, tx).unroll(x, 2).unroll(y, 2)
-            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
+        output.compute_at(processed, tx)
+            .unroll(x, 2)
+            .unroll(y, 2)
+            .reorder(c, x, y)
+            .bound(c, 0, 3).unroll(c);
     } else {
         // Basic naive schedule
         g_r.compute_root();
@@ -287,7 +293,8 @@ Func process(Func raw, Type result_type,
             .vectorize(x, 4)
             .reorder(c, x, y)
             .unroll(c);
-        processed.tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
+        processed.compute_root()
+            .tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
             .reorder(xi, yi, c, tx, ty)
             .parallel(ty);
 
@@ -301,7 +308,8 @@ Func process(Func raw, Type result_type,
         denoised.compute_at(processed, tx);
         deinterleaved.compute_at(processed, tx);
         corrected.compute_at(processed, tx);
-        processed.tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
+        processed.compute_root()
+            .tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
             .reorder(xi, yi, c, tx, ty)
             .parallel(ty);
 
