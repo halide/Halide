@@ -95,3 +95,39 @@ define weak_odr <64 x i16> @halide.hexagon.splat.h(i16 %arg) nounwind uwtable re
   %r = bitcast <32 x i32> %r_32 to <64 x i16>
   ret <64 x i16> %r
 }
+
+declare <32 x i32> @llvm.hexagon.V6.vaslw.128B(<32 x i32>, i32)
+declare <32 x i32> @llvm.hexagon.V6.vlsrw.128B(<32 x i32>, i32)
+declare <32 x i32> @llvm.hexagon.V6.vmpyieoh.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vmpyiowh.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vmpyiewuh.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vaddw.128B(<32 x i32>, <32 x i32>)
+
+define weak_odr <32 x i32> @halide.hexagon.mul.vw.vw(<32 x i32> %a, <32 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab_lo = call <32 x i32> @llvm.hexagon.V6.vmpyiewuh.128B(<32 x i32> %a, <32 x i32> %b)
+  %ab_hi = call <32 x i32> @llvm.hexagon.V6.vmpyieoh.128B(<32 x i32> %a, <32 x i32> %b)
+  %ab = call <32 x i32> @llvm.hexagon.V6.vaddw.128B(<32 x i32> %ab_hi, <32 x i32> %ab_lo)
+  ret <32 x i32> %ab
+}
+
+define weak_odr <64 x i32> @halide.hexagon.mul.vw.vh(<64 x i32> %a, <64 x i16> %b) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %a)
+  %a_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %a)
+  %b_hi = bitcast <64 x i16> %b to <32 x i32>
+  %b_lo = call <32 x i32> @llvm.hexagon.V6.vaslw.128B(<32 x i32> %b_hi, i32 16)
+  %ab_lo = call <32 x i32> @llvm.hexagon.V6.vmpyiowh.128B(<32 x i32> %a_lo, <32 x i32> %b_lo)
+  %ab_hi = call <32 x i32> @llvm.hexagon.V6.vmpyiowh.128B(<32 x i32> %a_hi, <32 x i32> %b_hi)
+  %ab = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %ab_hi, <32 x i32> %ab_lo)
+  ret <64 x i32> %ab
+}
+
+define weak_odr <64 x i32> @halide.hexagon.mul.vw.vuh(<64 x i32> %a, <64 x i16> %b) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %a)
+  %a_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %a)
+  %b_lo = bitcast <64 x i16> %b to <32 x i32>
+  %b_hi = call <32 x i32> @llvm.hexagon.V6.vlsrw.128B(<32 x i32> %b_lo, i32 16)
+  %ab_lo = call <32 x i32> @llvm.hexagon.V6.vmpyiewuh.128B(<32 x i32> %a_lo, <32 x i32> %b_lo)
+  %ab_hi = call <32 x i32> @llvm.hexagon.V6.vmpyiewuh.128B(<32 x i32> %a_hi, <32 x i32> %b_hi)
+  %ab = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %ab_hi, <32 x i32> %ab_lo)
+  ret <64 x i32> %ab
+}
