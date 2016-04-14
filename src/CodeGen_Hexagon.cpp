@@ -558,11 +558,12 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
         llvm::Function *combine_fn =
             Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vcombine));
         llvm::Type *ret_ty = llvm::VectorType::get(vec_ty->getScalarType(), size);
-
-        if (call && call->getCalledFunction() == combine_fn) {
+        bool is_vcombine = call && call->getCalledFunction() == combine_fn;
+        if (is_vcombine) {
             if (start == 0) {
                 // Not bitcasting here puts the onus on the caller to use call_intrin_cast before
-                // using this in an intrinsic. Might as well just do it here.
+                // using this in an intrinsic. This function should return the same element type
+                // as the input.
                 return builder->CreateBitCast(call->getArgOperand(1), ret_ty);
             } else if (start == vec_elements/2) {
                 return builder->CreateBitCast(call->getArgOperand(0), ret_ty);
@@ -581,13 +582,13 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
         // We know vec is a double vector.
         int bytes_off = start * (element_bits / 8);
         int reverse_bytes = (native_vector_bits() / 8) - bytes_off;
-        Intrinsic::ID IntrinsID = IPICK(Intrinsic::hexagon_V6_valignbi);
+        Intrinsic::ID intrin_id = IPICK(Intrinsic::hexagon_V6_valignbi);
         if (reverse_bytes <= 7) {
-            IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignbi);
+            intrin_id = IPICK(Intrinsic::hexagon_V6_vlalignbi);
             bytes_off = reverse_bytes;
         }
         Value *hi, *lo;
-        if (call) {
+        if (is_vcombine) {
             hi = call->getArgOperand(0);
             lo = call->getArgOperand(1);
         } else {
@@ -595,7 +596,7 @@ Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
             lo = call_intrin_cast(ret_ty, IPICK(Intrinsic::hexagon_V6_lo), {vec});
         }
         Value *b = codegen(bytes_off);
-        return call_intrin_cast(ret_ty, IntrinsID, {hi, lo, b});
+        return call_intrin_cast(ret_ty, intrin_id, {hi, lo, b});
     }
     return CodeGen_Posix::slice_vector(vec, start, size);
 }
@@ -967,19 +968,19 @@ void CodeGen_Hexagon::visit(const Call *op) {
                     Value *dv = codegen(op->args[0]);
                     Value *low = slice_vector(dv, 0, lanes);
                     Value *high = slice_vector(dv, lanes, lanes);
-                    Intrinsic::ID IntrinsID;
+                    Intrinsic::ID intrin_id;
                     switch(op->type.bits()) {
-                    case 8: IntrinsID = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeb) :
+                    case 8: intrin_id = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeb) :
                         IPICK(llvm::Intrinsic::hexagon_V6_vpackob);
                         break;
-                    case 16: IntrinsID = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeh) :
+                    case 16: intrin_id = even ? IPICK(llvm::Intrinsic::hexagon_V6_vpackeh) :
                         IPICK(llvm::Intrinsic::hexagon_V6_vpackoh);
                         break;
                     }
                     string s = "Generating a vpack";
                     debug(4) << (s +  (even ? "e\n" : "o\n"));
                     llvm::Type *ret_ty = llvm_type_of(op->type);
-                    value = call_intrin_cast(ret_ty, IntrinsID, { high, low });
+                    value = call_intrin_cast(ret_ty, intrin_id, { high, low });
                     return;
                 }
             }

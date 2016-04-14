@@ -648,7 +648,6 @@ template<> IRNodeType StmtNode<Evaluate>::_type_info = {};
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::shuffle_vector = "shuffle_vector";
 Call::ConstString Call::interleave_vectors = "interleave_vectors";
-Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::concat_vectors = "concat_vectors";
 Call::ConstString Call::reinterpret = "reinterpret";
 Call::ConstString Call::bitwise_and = "bitwise_and";
