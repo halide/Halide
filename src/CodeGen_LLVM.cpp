@@ -2211,7 +2211,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
         if (is_ramp) {
-            debug(0) << "Using slice_vector for shuffle_vector " << Expr(op) << "\n";
+            debug(4) << "Using slice_vector for shuffle_vector " << Expr(op) << "\n";
             value = slice_vector(codegen(op->args[0]), indices[0], op->type.lanes());
         } else {
             vector<Constant *> indices_values(op->type.lanes());
