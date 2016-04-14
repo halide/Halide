@@ -17,7 +17,7 @@ private:
     enum AlignCheck { Aligned, Unaligned, NoResult };
     // size of a vector in bytes.
     int vector_size;
-    /** Alignment info for Int(32) variables in scope. */
+    // Alignment info for Int(32) variables in scope.
     Scope<ModulusRemainder> alignment_info;
     using IRMutator::visit;
     ModulusRemainder get_alignment_info(Expr e) {
@@ -62,12 +62,12 @@ private:
         if (mod_rem.modulus == 1 && mod_rem.remainder == 0) {
             // We can't reason about alignment.
             return AlignCheck::NoResult;
-        }
-        else {
+        } else {
             int base_mod = base_lanes_off + mod_imp(mod_rem.modulus, lanes);
             int rem_mod = mod_imp(mod_rem.remainder, lanes);
-            if (!(base_mod + rem_mod)) return AlignCheck::Aligned;
-            else {
+            if (!(base_mod + rem_mod)) {
+                return AlignCheck::Aligned;
+            } else {
                 if (lanes_off) *lanes_off = base_mod + rem_mod;
                 return AlignCheck::Unaligned;
             }
@@ -83,8 +83,7 @@ private:
                 debug(4) << (Expr) op << "\n";
                 expr = op;
                 return;
-            }
-            else {
+            } else {
                 const Ramp *ramp = index.as<Ramp>();
                 const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
                 // We will work only on natural vectors supported by the target.
@@ -98,38 +97,12 @@ private:
                     // This cannot be an external image because we have already checked for
                     // it. Otherwise, this is an internal buffers that is always aligned
                     // to the natural vector width.
-                    int base_alignment = op->param.defined() ?
-                        op->param.host_alignment() : vector_size;
+                    int base_alignment =
+                        op->param.defined() ? op->param.host_alignment() : vector_size;
                     int lanes_off;
                     AlignCheck ac = get_alignment_check(ramp, base_alignment, &lanes_off);
-                    if (ac == AlignCheck::NoResult) {
-                        // We know nothing about alignment. Give up.
-                        // TODO: Fix this.
-                        debug(4) << "HexagonAlignLoads: Cannot reason about alignment.\n";
-                        debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
-                        debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
-                        expr = op;
-                        return;
-                    }
-                    if (ac == AlignCheck::Aligned) {
-                        expr = op;
-                        debug(4) << "HexagonAlignLoads: Encountered a perfectly aligned load.\n";
-                        debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
-                        debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
-                        return;
-                    } else {
+                    if (ac == AlignCheck::Unaligned) {
                         Expr base = ramp->base;
-                        const Add *add = base.as<Add>();
-                        const IntImm *b = add->b.as<IntImm>();
-                        if (!b) {
-                            // Should we be expecting the index to be in simplified
-                            // canonical form, i.e. expression + IntImm?
-                            debug(4) << "HexagonAlignLoads: add->b is not a constant\n";
-                            debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
-                            debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
-                            expr = op;
-                            return;
-                        }
                         Expr base_low = base - (lanes_off);
                         Expr ramp_low = Ramp::make(simplify(base_low), 1, lanes);
                         Expr ramp_high = Ramp::make(simplify(base_low + lanes), 1, lanes);
@@ -143,6 +116,12 @@ private:
                         debug(4) << "HexagonAlignLoads: Unaligned Load: Converting " << (Expr) op << " into ...\n";
                         expr = concat_and_shuffle(load_low, load_high, lanes_off, lanes);
                         debug(4) <<  "... " << expr << "\n";
+                        return;
+                    } else {
+                        debug(4) <<  "HexagonAlignLoads: " << ((ac == AlignCheck::Aligned) ? "Aligned Load" : "Cannot reason about alignment");
+                        debug(4) << "HexagonAlignLoads: Type: " << op->type << "\n";
+                        debug(4) << "HexagonAlignLoads: Index: " << index << "\n";
+                        expr = op;
                         return;
                     }
                 } else if (ramp && stride && stride->value == 2) {
@@ -198,17 +177,13 @@ private:
 
     template<typename NodeType, typename LetType>
     void visit_let(NodeType &result, const LetType *op) {
-        Expr value;
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
-            value = op->value;
-        } else {
-            const Load *ld = op->value.template as<Load>();
-            if (ld) value = mutate(op->value);
-            else value = op->value;
         }
 
+        Expr value = mutate(op->value);
         NodeType body = mutate(op->body);
+
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
         }
@@ -218,6 +193,7 @@ private:
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
     void visit(const For *op) {
+        int saved_vector_size = vector_size;
         if (op->device_api == DeviceAPI::Hexagon) {
             if (target.has_feature(Target::HVX_128)) {
                 vector_size = 128;
@@ -228,7 +204,6 @@ private:
                 internal_error << "Unknown HVX mode";
             }
         }
-        int saved_vector_size = vector_size;
         IRMutator::visit(op);
         vector_size = saved_vector_size;
         return;
