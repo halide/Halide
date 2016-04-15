@@ -147,7 +147,24 @@ Func demosaic(Func deinterleaved) {
 
 
     /* THE SCHEDULE */
-    if (target.arch == Target::ARM) {
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // Compute these in chunks over tiles, vectorized by 64
+        g_r.compute_at(processed, tx).vectorize(x, 64);
+        g_b.compute_at(processed, tx).vectorize(x, 64);
+        r_gr.compute_at(processed, tx).vectorize(x, 64);
+        b_gr.compute_at(processed, tx).vectorize(x, 64);
+        r_gb.compute_at(processed, tx).vectorize(x, 64);
+        b_gb.compute_at(processed, tx).vectorize(x, 64);
+        r_b.compute_at(processed, tx).vectorize(x, 64);
+        b_r.compute_at(processed, tx).vectorize(x, 64);
+
+        // These interleave in y, so unrolling them in y helps
+        output.compute_at(processed, tx)
+            .vectorize(x, 128)
+            .unroll(y, 2)
+            .reorder(c, x, y)
+            .bound(c, 0, 3).unroll(c);
+    } else if (target.arch == Target::ARM) {
         // Optimized for ARM
         // Compute these in chunks over tiles, vectorized by 8
         g_r.compute_at(processed, tx).vectorize(x, 8);
@@ -280,7 +297,29 @@ Func process(Func raw, Type result_type,
     Expr out_height = processed.output_buffer().height();
 
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
-    if (target.arch == Target::ARM) {
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        const int tile_size = 128;
+        denoised.compute_at(processed, tx)
+            .vectorize(x, 64);
+        deinterleaved.compute_at(processed, tx)
+            .vectorize(x, 64)
+            .reorder(c, x, y)
+            .unroll(c);
+        corrected.compute_at(processed, tx)
+            .vectorize(x, 128)
+            .reorder(c, x, y)
+            .unroll(c);
+        processed.compute_root()
+            .hexagon()
+            .tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
+            .reorder(xi, yi, c, tx, ty)
+            .parallel(ty);
+
+        // We can generate slightly better code if we know the output is a whole number of tiles.
+        processed
+            .bound(x, 0, (out_width/tile_size)*tile_size)
+            .bound(y, 0, (out_height/tile_size)*tile_size);
+    } else if (target.arch == Target::ARM) {
         // Compute in chunks over tiles, vectorized by 8
         const int tile_size = 32;
         denoised.compute_at(processed, tx)
