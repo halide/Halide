@@ -51,14 +51,18 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     }
     options_processed = true;
 
+    string hvx_setting = "+hvx,-hvx-double";
     if (module.target().has_feature(Halide::Target::HVX_128)) {
-        char *s = strdup("HALIDE_LLVM_INTERNAL=-enable-hexagon-hvx-double");
-        ::putenv(s);
-        cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_INTERNAL",
-                                    "Halide HVX internal options\n");
+        hvx_setting = "+hvx,+hvx-double";
         if (module.target().has_feature(Halide::Target::HVX_64))
                 internal_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
+    for (llvm::Function &fn : llvm_module->functions()) {
+        if (fn.isDeclaration()) {
+            fn.addFnAttr("target-features", hvx_setting);
+        }
+    }
+
     return llvm_module;
 }
 
