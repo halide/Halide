@@ -854,9 +854,16 @@ public:
      * vectorize the color channel dimension without the overhead of
      * splitting it up. If bounds inference decides that it requires
      * more of this function than the bounds you have stated, a
-     * runtime error will occur when you try to run your pipeline.
-     */
+     * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Bound the extent of a Func's realization, but not its
+     * min. This means the dimension can be unrolled or vectorized
+     * even when its min is not fixed (for example because it is
+     * compute_at tiles of another Func). This can also be useful for
+     * forcing a function's allocation to be a fixed size, which often
+     * means it can go on the stack. */
+    EXPORT Func &bound_extent(Var var, Expr extent);
 
     /** Split two dimensions at once by the given factors, and then
      * reorder the resulting dimensions to be xi, yi, xo, yo from
