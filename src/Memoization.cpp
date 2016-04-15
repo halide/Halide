@@ -247,7 +247,7 @@ public:
         Expr name_size = (int32_t)function_name.size();
         writes.push_back(Store::make(key_name,
                                      Cast::make(Int(32), name_size),
-                                     (index / Int(32).bytes())));
+                                     (index / Int(32).bytes()), Parameter()));
         index += 4;
         writes.push_back(call_copy_memory(key_name, function_name, index));
         index += name_size;

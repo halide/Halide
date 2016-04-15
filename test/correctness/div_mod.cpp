@@ -419,12 +419,12 @@ int main(int argc, char **argv) {
     success &= f_mod<float,double,32>();
 
     for (int vector_width = 1; vector_width <= 4; vector_width *= 2) {
-        if (!target.supports_type(UInt(64))) {
+        if (target.supports_type(UInt(64))) {
             success &= div_mod<uint8_t,uint64_t,8>(vector_width);
             success &= div_mod<uint16_t,uint64_t,16>(vector_width);
             success &= div_mod<uint32_t,uint64_t,32>(vector_width);
         }
-        if (!target.supports_type(Int(64))) {
+        if (target.supports_type(Int(64))) {
             success &= div_mod<int8_t,int64_t,8>(vector_width);
             success &= div_mod<int16_t,int64_t,16>(vector_width);
             success &= div_mod<int32_t,int64_t,32>(vector_width);
