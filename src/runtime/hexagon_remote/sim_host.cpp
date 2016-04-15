@@ -30,7 +30,7 @@ int init_sim() {
     }
 
     // Configue tracing.
-    const char *T = getenv("HALIDE_HEX_SIM_MIN_TRACE");
+    const char *T = getenv("HL_HEX_SIM_MIN_TRACE");
     if (T && T[0] != 0) {
         status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
         if (status != HEX_STAT_SUCCESS) {
@@ -38,7 +38,7 @@ int init_sim() {
             return -1;
         }
     } else {
-        const char *T = getenv("HALIDE_HEX_SIM_TRACE");
+        const char *T = getenv("HL_HEX_SIM_TRACE");
         if (T && T[0] != 0) {
             status = sim->SetTracing(HEX_TRACE_PC, T);
             if (status != HEX_STAT_SUCCESS) {
@@ -50,13 +50,12 @@ int init_sim() {
 
     // Configure use of debugger
     int pnum = 0;
-    char *s= getenv("HALIDE_HEX_DBG_PORT");
-    if (s && (pnum=(atoi(s)))) {
+    char *s = getenv("HL_HEX_SIM_DBG_PORT");
+    if (s && (pnum = atoi(s))) {
         printf("Debugger port: %d\n", pnum);
-        HEXAPI_Status dbg_state;
-        dbg_state = sim->ConfigureRemoteDebug(pnum);
-        if (dbg_state != HEX_STAT_SUCCESS) {
-            printf("Debugger port failed: state: %d\n", dbg_state);
+        status = sim->ConfigureRemoteDebug(pnum);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigureRemoteDebug failed: %d\n", status);
             return -1;
         }
     }
@@ -180,7 +179,7 @@ int send_message(int msg, const std::vector<int> &arguments) {
     } else {
         do {
             HEX_4u_t cycles;
-            state = sim->StepTime(100, HEX_MICROSEC, &cycles);
+            state = sim->Step(1000, &cycles);
             read_memory(&msg, remote_msg, 4);
             if (msg == Message::None) {
                 HEX_4u_t ret = 0;
@@ -291,6 +290,9 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     remote_buffer remote_output_buffersPtrs(&remote_output_buffers[0], output_buffersLen * sizeof(remote_buffer));
     remote_buffer remote_input_scalarsPtrs(&remote_input_scalars[0], input_scalarsLen * sizeof(remote_buffer));
 
+    HEX_8u_t cycles_begin = 0;
+    sim->GetSimulatedCycleCount(&cycles_begin);
+
     // Run the init kernels command.
     int ret = send_message(
         Message::Run,
@@ -298,6 +300,14 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
          remote_input_buffersPtrs.data, input_buffersLen,
          remote_output_buffersPtrs.data, output_buffersLen,
          remote_input_scalarsPtrs.data, input_scalarsLen});
+
+    HEX_8u_t cycles_end = 0;
+    sim->GetSimulatedCycleCount(&cycles_end);
+
+    if (getenv("HL_HEX_SIM_CYCLES")) {
+        int cycles = static_cast<int>(cycles_end - cycles_begin);
+        printf("Hexagon simulator executed function 0x%x in %d cycles\n", function, cycles);
+    }
 
     // Copy the outputs back.
     for (int i = 0; i < output_buffersLen; i++)
