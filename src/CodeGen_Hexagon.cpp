@@ -552,25 +552,27 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 
     if (!is_strided_ramp) {
+        // This is not a strided ramp, let LLVM handle it.
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
     }
-    // This is a strided ramp, try to optimize.
+
     int start = indices[0];
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements = native_vector_bits() / element_bits;
     llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
-
+    llvm::Type *native2x_ty = llvm::VectorType::get(element_ty, native_elements * 2);
     bool B128 = target.has_feature(Halide::Target::HVX_128);
 
     if (isa<UndefValue>(b)) {
+        // Try to rewrite shufflevector(vcombine(a, b), undef, ...) to
+        // shufflevector(a, b, ...)
         BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
         llvm::Function *vcombine =
             Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vcombine));
         if (a_call && a_call->getCalledFunction() == vcombine) {
-            // Rewrite shufflevector(vcombine(a, b), undef, ...) to shufflevector(a, b, ...)
             a = a_call->getArgOperand(1);
             b = a_call->getArgOperand(0);
             if (a->getType() != native_ty) {
@@ -585,11 +587,9 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *a_ty = a->getType();
     llvm::Type *b_ty = b->getType();
 
-    int result_elements = static_cast<int>(indices.size());
-    llvm::Type *result_ty = llvm::VectorType::get(element_ty, result_elements);
-
     int a_elements = static_cast<int>(a_ty->getVectorNumElements());
     int b_elements = isa<UndefValue>(b) ? 0 : static_cast<int>(b_ty->getVectorNumElements());
+    int result_elements = static_cast<int>(indices.size());
 
     if (stride == 1) {
         if (start == 0 && result_elements == a_elements) {
@@ -605,11 +605,11 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             start + result_elements <= a_elements) {
             // This is a selection of a native vector subset of a.
             if (start == 0) {
-                return call_intrin_cast(result_ty,
+                return call_intrin_cast(native_ty,
                                         IPICK(Intrinsic::hexagon_V6_lo),
                                         {a});
             } else if (start == result_elements) {
-                return call_intrin_cast(result_ty,
+                return call_intrin_cast(native_ty,
                                         IPICK(Intrinsic::hexagon_V6_hi),
                                         {a});
             } else {
@@ -620,11 +620,12 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         if (start == 0 && result_elements == a_elements + b_elements &&
             a_elements == native_elements && b_elements == native_elements) {
             // This is a concatenation of a and b, where a and b are native vectors. use vcombine.
-            return call_intrin_cast(result_ty,
+            return call_intrin_cast(native2x_ty,
                                     IPICK(Intrinsic::hexagon_V6_vcombine),
                                     {b, a});
         }
     } else if (stride == 2 && result_elements == a_elements && result_elements == b_elements) {
+        internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and concat manually.
         vector<Value *> result_slices;
@@ -651,10 +652,10 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 result_slice = call_intrin_cast(native_ty, intrin, {b_slice, a_slice});
             } else if (element_bits % 8 == 0) {
                 int element_bytes = element_bits / 8;
-                // Need to use vdealw, followed by lo/hi.  TODO: Is
-                // there a better way? This generates a double vector,
-                // then only uses half of the result.
-                Value *deinterleaved = call_intrin_cast(llvm::VectorType::get(element_ty, native_elements*2),
+                // Need to use vdealw, followed by lo/hi.
+                // TODO: Is there a better way? This generates a
+                // double vector, then only uses half of the result.
+                Value *deinterleaved = call_intrin_cast(native2x_ty,
                                                         IPICK(Intrinsic::hexagon_V6_vdealvdd),
                                                         {b_slice, a_slice, ConstantInt::get(i32, -element_bytes)});
                 Intrinsic::ID intrin =
