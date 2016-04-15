@@ -1442,6 +1442,13 @@ void check_hvx_all() {
     check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(u32_1 >> 16));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(i32_1 >> 16));
 
+    check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
+    check("vdeal(v*,v*)", hvx_width/4, in_u32(2*x));
+    check("vpacko(v*.h,v*.h)", hvx_width/1, in_u8(2*x + 1));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
+    check("vdeal(v*,v*)", hvx_width/4, in_u32(2*x + 1));
+
     check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i16_1));
     check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8c(i16_1));
     check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width/2, u16c(i32_1));
@@ -1473,16 +1480,13 @@ void check_hvx_all() {
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, in_i16(x/2), in_i16((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_u32(x/2), in_u32((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_i32(x/2), in_i32((x+16)/2)));
-#if 0
-    // I *think* this is failing in the non-vectorized reference case
-    // due to ridiculous shuffling being generated.
+
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, u8(x/2), u8(x/2)));
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, i8(x/2), i8(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, u16(x/2), u16(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, i16(x/2), i16(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
-#endif
 
     check("vmax(v*.ub,v*.ub)", hvx_width/1, max(u8_1, u8_2));
     check("vmax(v*.uh,v*.uh)", hvx_width/2, max(u16_1, u16_2));

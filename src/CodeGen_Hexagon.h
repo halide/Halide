@@ -93,8 +93,6 @@ protected:
     /** Override CodeGen_LLVM to use hexagon intrinics when possible. */
     ///@{
     llvm::Value *interleave_vectors(Type type, const std::vector<Expr> &v);
-    llvm::Value *slice_vector(llvm::Value *vec, int start, int size);
-    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &v);
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                  const std::vector<int> &indices);
     ///@}
