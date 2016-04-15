@@ -960,6 +960,10 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     return *this;
 }
 
+Func &Func::bound_extent(Var var, Expr extent) {
+    return bound(var, Expr(), extent);
+}
+
 Func &Func::tile(VarOrRVar x, VarOrRVar y,
                  VarOrRVar xo, VarOrRVar yo,
                  VarOrRVar xi, VarOrRVar yi,
