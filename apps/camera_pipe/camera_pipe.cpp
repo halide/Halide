@@ -148,19 +148,20 @@ Func demosaic(Func deinterleaved) {
 
     /* THE SCHEDULE */
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        // Compute these in chunks over tiles, vectorized by 64
-        g_r.compute_at(processed, tx).vectorize(x, 64);
-        g_b.compute_at(processed, tx).vectorize(x, 64);
-        r_gr.compute_at(processed, tx).vectorize(x, 64);
-        b_gr.compute_at(processed, tx).vectorize(x, 64);
-        r_gb.compute_at(processed, tx).vectorize(x, 64);
-        b_gb.compute_at(processed, tx).vectorize(x, 64);
-        r_b.compute_at(processed, tx).vectorize(x, 64);
-        b_r.compute_at(processed, tx).vectorize(x, 64);
+        // Compute these in chunks over tiles
+        const int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
+        g_r.compute_at(processed, tx).vectorize(x, vector_size);
+        g_b.compute_at(processed, tx).vectorize(x, vector_size);
+        r_gr.compute_at(processed, tx).vectorize(x, vector_size);
+        b_gr.compute_at(processed, tx).vectorize(x, vector_size);
+        r_gb.compute_at(processed, tx).vectorize(x, vector_size);
+        b_gb.compute_at(processed, tx).vectorize(x, vector_size);
+        r_b.compute_at(processed, tx).vectorize(x, vector_size);
+        b_r.compute_at(processed, tx).vectorize(x, vector_size);
 
         // These interleave in y, so unrolling them in y helps
         output.compute_at(processed, tx)
-            .vectorize(x, 128)
+            .vectorize(x, vector_size * 2)
             .unroll(y, 2)
             .reorder(c, x, y)
             .bound(c, 0, 3).unroll(c);
@@ -299,14 +300,15 @@ Func process(Func raw, Type result_type,
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int tile_size = 128;
+        const int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
         denoised.compute_at(processed, tx)
-            .vectorize(x, 64);
+            .vectorize(x, vector_size);
         deinterleaved.compute_at(processed, tx)
-            .vectorize(x, 64)
+            .vectorize(x, vector_size)
             .reorder(c, x, y)
             .unroll(c);
         corrected.compute_at(processed, tx)
-            .vectorize(x, 128)
+            .vectorize(x, vector_size)
             .reorder(c, x, y)
             .unroll(c);
         processed.compute_root()
