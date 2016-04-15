@@ -30,7 +30,7 @@ int init_sim() {
     }
 
     // Configue tracing.
-    const char *T = getenv("HL_HEXAGON_SIM_MIN_TRACE");
+    const char *T = getenv("HL_HEX_SIM_MIN_TRACE");
     if (T && T[0] != 0) {
         status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
         if (status != HEX_STAT_SUCCESS) {
@@ -38,7 +38,7 @@ int init_sim() {
             return -1;
         }
     } else {
-        const char *T = getenv("HL_HEXAGON_SIM_TRACE");
+        const char *T = getenv("HL_HEX_SIM_TRACE");
         if (T && T[0] != 0) {
             status = sim->SetTracing(HEX_TRACE_PC, T);
             if (status != HEX_STAT_SUCCESS) {
@@ -50,7 +50,7 @@ int init_sim() {
 
     // Configure use of debugger
     int pnum = 0;
-    char *s = getenv("HL_HEXAGON_SIM_DBG_PORT");
+    char *s = getenv("HL_HEX_SIM_DBG_PORT");
     if (s && (pnum = atoi(s))) {
         printf("Debugger port: %d\n", pnum);
         status = sim->ConfigureRemoteDebug(pnum);
@@ -304,7 +304,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     HEX_8u_t cycles_end = 0;
     sim->GetSimulatedCycleCount(&cycles_end);
 
-    if (getenv("HL_HEXAGON_SIM_CYCLES")) {
+    if (getenv("HL_HEX_SIM_CYCLES")) {
         int cycles = static_cast<int>(cycles_end - cycles_begin);
         printf("Hexagon simulator executed function 0x%x in %d cycles\n", function, cycles);
     }
