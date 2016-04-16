@@ -14,6 +14,7 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
 /** Find all calls arguments to the given function. Substitutes in
  * lets, so take care with the combinatorially large results. */
 class FindLoads : public IRVisitor {
@@ -85,7 +86,7 @@ class SubstituteInBooleanLets : public IRMutator {
         }
     }
 };
-
+}
 
 bool can_parallelize_rvar(const string &v,
                           const string &f,
