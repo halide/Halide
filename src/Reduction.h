@@ -46,6 +46,14 @@ public:
 
     /** Immutable access to the reduction variables. */
     EXPORT const std::vector<ReductionVariable> &domain() const;
+
+    /** Add predicate to the reduction domain. See \ref RDom::bound
+     * for more details. */
+    EXPORT void bound(const Expr &predicate);
+
+    /** Get the predicates defined on this reducation demain if there is any. */
+    EXPORT const std::vector<Expr> &predicates() const;
+    EXPORT std::vector<Expr> &predicates();
 };
 
 }

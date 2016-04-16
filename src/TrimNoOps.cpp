@@ -62,6 +62,9 @@ class IsNoOp : public IRVisitor {
         if (op->value.type().is_handle()) {
             condition = const_false();
         } else {
+            if (is_zero(condition)) {
+                return;
+            }
             // If the value being stored is the same as the value loaded,
             // this is a no-op
             debug(3) << "Considering store: " << Stmt(op) << "\n";
@@ -76,6 +79,9 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const For *op) {
+        if (is_zero(condition)) {
+            return;
+        }
         Expr old_condition = condition;
         condition = const_true();
         op->body.accept(this);
@@ -89,6 +95,9 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const IfThenElse *op) {
+        if (is_zero(condition)) {
+            return;
+        }
         Expr total_condition = condition;
         condition = const_true();
         op->then_case.accept(this);
@@ -279,8 +288,6 @@ public:
 
 class TrimNoOps : public IRMutator {
     using IRMutator::visit;
-
-    Scope<Interval> loop_bounds;
 
     void visit(const For *op) {
         // TODO: bounds of GPU loops can't depend on outer gpu loop vars

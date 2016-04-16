@@ -24,7 +24,7 @@ namespace {
 // A structure representing a containing LetStmt or For loop. Used in
 // build_provide_loop_nest below.
 struct Container {
-    int dim_idx; // index in the dims list. -1 for let statements.
+    int dim_idx; // index in the dims list. -1 for let statements. -2 for predicate guard.
     string name;
     Expr value;
 };
@@ -280,11 +280,40 @@ Stmt build_provide_loop_nest(Function f,
         stmt = let->body;
     }
 
+    // Put all the reduction domain predicate into the containers vector.
+    int n_predicates = 0;
+    if (rdom.defined()) {
+        n_predicates = rdom.predicates().size();
+        for (Expr pred : rdom.predicates()) {
+            pred = qualify(prefix, pred);
+            Container c = {-2, "", pred};
+            nest.push_back(c);
+        }
+    }
+
     // Resort the containers vector so that lets are as far outwards
     // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)s.dims().size(); i < (int)nest.size(); i++) {
+    for (int i = (int)s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
+        internal_assert(nest[i].dim_idx == -1);
+
+        for (int j = i-1; j >= 0; j--) {
+            // Try to push it up by one.
+            internal_assert(nest[j+1].value.defined());
+            if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
+                std::swap(nest[j+1], nest[j]);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Sort the predicate guards so they are as far outwards as possible.
+    for (int i = (int)nest.size() - n_predicates; i < (int)nest.size(); i++) {
+        // Only push up LetStmts.
+        internal_assert(nest[i].value.defined());
+        internal_assert(nest[i].dim_idx == -2);
 
         for (int j = i-1; j >= 0; j--) {
             // Try to push it up by one.
@@ -299,8 +328,12 @@ Stmt build_provide_loop_nest(Function f,
 
     // Rewrap the statement in the containing lets and fors.
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
-        if (nest[i].value.defined()) {
+        if (nest[i].dim_idx == -1) { // let stmt
+            internal_assert(nest[i].value.defined());
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
+        } else if (nest[i].dim_idx == -2) { // predicate guard
+            internal_assert(nest[i].value.defined());
+            stmt = IfThenElse::make(likely(nest[i].value), stmt, Stmt());
         } else {
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
@@ -550,13 +583,14 @@ vector<Stmt> build_update(Function f) {
             Expr v = r.values[i];
             v = qualify(prefix, v);
             values[i] = v;
+            debug(3) << "Update value " << i << " = " << v << "\n";
         }
 
         for (size_t i = 0; i < r.args.size(); i++) {
             Expr s = r.args[i];
             s = qualify(prefix, s);
             site[i] = s;
-            debug(2) << "Update site " << i << " = " << s << "\n";
+            debug(3) << "Update site " << i << " = " << s << "\n";
         }
 
         Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);

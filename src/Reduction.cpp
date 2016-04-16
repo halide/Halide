@@ -7,6 +7,7 @@ namespace Internal {
 struct ReductionDomainContents {
     mutable RefCount ref_count;
     std::vector<ReductionVariable> domain;
+    std::vector<Expr> predicates;
 };
 
 template<>
@@ -22,6 +23,18 @@ ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
 
 const std::vector<ReductionVariable> &ReductionDomain::domain() const {
     return contents.ptr->domain;
+}
+
+void ReductionDomain::bound(const Expr &predicate) {
+    contents.ptr->predicates.push_back(predicate);
+}
+
+const std::vector<Expr> &ReductionDomain::predicates() const {
+    return contents.ptr->predicates;
+}
+
+std::vector<Expr> &ReductionDomain::predicates() {
+    return contents.ptr->predicates;
 }
 
 }
