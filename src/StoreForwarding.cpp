@@ -330,14 +330,15 @@ class LoopCarryOverLoop : public IRMutator {
 
         // Find loads done on this loop iteration that will be
         // reusable as some other Expr on the next loop iteration.
-        map<int, int> carries;
+        vector<vector<int>> chains;
         for (int i = 0; i < (int)indices.size(); i++) {
             for (int j = 0; j < (int)indices.size(); j++) {
                 // Don't catch loop invariants here.
                 if (i == j) continue;
-                if (next_indices[j].defined() &&
+                if (loads[i][0]->name == loads[j][0]->name &&
+                    next_indices[j].defined() &&
                     graph_equal(indices[i], next_indices[j])) {
-                    carries[j] = i;
+                    chains.push_back({i, j});
                     debug(4) << "Found carry:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
                              << j << ":  -> " << Expr(loads[j][0]) << "\n";
@@ -345,35 +346,38 @@ class LoopCarryOverLoop : public IRMutator {
             }
         }
 
-        if (carries.empty()) {
+        if (chains.empty()) {
             return orig_stmt;
         }
 
-        // Group these pairs into chains of carried values
-        vector<vector<int>> chains;
-        for (pair<int, int> p : carries) {
-            bool found = false;
-            for (vector<int> &c : chains) {
-                if (p.second == c.front()) {
-                    c.insert(c.begin(), p.first);
-                    found = true;
-                    break;
-                }
-                if (p.first == c.back()) {
-                    c.push_back(p.second);
-                    found = true;
-                    break;
+        // Agglomerate chains of carries
+        bool done = false;
+        while (!done) {
+            done = true;
+            for (size_t i = 0; i < chains.size(); i++) {
+                if (chains[i].empty()) continue;
+                for (size_t j = 0; j < chains.size(); j++) {
+                    if (chains[j].empty()) continue;
+                    if (chains[i].back() == chains[j].front()) {
+                        chains[i].insert(chains[i].end(), chains[j].begin()+1, chains[j].end());
+                        chains[j].clear();
+                        done = false;
+                    }
                 }
             }
-            if (!found) {
-                chains.push_back({p.first, p.second});
+
+            for (size_t i = 0; i < chains.size(); i++) {
+                while (i < chains.size() && chains[i].empty()) {
+                    chains[i].swap(chains.back());
+                    chains.pop_back();
+                }
             }
         }
 
         for (const vector<int> &c : chains) {
             debug(0) << "Found chain:\n";
             for (int i : c) {
-                debug(1) << i << ":  <- " << indices[i] << "\n";
+                debug(0) << i << ":  <- " << indices[i] << "\n";
             }
         }
 
