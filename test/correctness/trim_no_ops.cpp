@@ -28,7 +28,6 @@ private:
 };
 
 int main(int argc, char **argv) {
-
     {
         // Loop iterations that would be no-ops should be trimmed off.
         Func f;

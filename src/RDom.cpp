@@ -205,6 +205,13 @@ RDom::operator RVar() const {
     return x;
 }
 
+void RDom::bound(const Expr &predicate) {
+    if (!dom.defined()) {
+        user_error << "Error: Can't add predicate to undefined RDom.\n";
+    }
+    dom.bound(predicate);
+}
+
 /** Emit an RVar in a human-readable form */
 std::ostream &operator<<(std::ostream &stream, RVar v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
@@ -217,7 +224,16 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";
     }
-    stream << ")\n";
+    stream << ")";
+    const auto &predicates = dom.domain().predicates();
+    if (!predicates.empty()) {
+        stream << " where (\n";
+        for (const auto &pred : predicates) {
+            stream << "  " << pred << "\n";
+        }
+        stream << ")";
+    }
+    stream << "\n";
     return stream;
 }
 
