@@ -219,6 +219,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
     debug(1) << "Forwarding stores across loop iterations...\n";
+    s = remove_trivial_for_loops(s);
     s = store_forwarding(s);
     debug(2) << "Lowering after forwarding stores:\n" << s << "\n\n";
 
