@@ -501,22 +501,27 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
     return wrapper;
 }
 
+Value *CodeGen_Hexagon::create_bitcast(Value *v, llvm::Type *ty) {
+    if (BitCastInst *c = dyn_cast<BitCastInst>(v)) {
+        return create_bitcast(c->getOperand(0), ty);
+    } else if (isa<UndefValue>(v)) {
+        return UndefValue::get(ty);
+    } else if (v->getType() != ty) {
+        v = builder->CreateBitCast(v, ty);
+    }
+    return v;
+}
+
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
                                          llvm::Function *F,
                                          std::vector<Value *> Ops) {
     llvm::FunctionType *FType = F->getFunctionType();
     internal_assert(FType->getNumParams() == Ops.size());
     for (unsigned I = 0; I < FType->getNumParams(); ++I) {
-        llvm::Type *T = FType->getParamType(I);
-        if (T != Ops[I]->getType()) {
-            Ops[I] = builder->CreateBitCast(Ops[I], T);
-        }
+        Ops[I] = create_bitcast(Ops[I], FType->getParamType(I));
     }
     Value *ret = builder->CreateCall(F, Ops);
-    if (ret->getType() != ret_ty) {
-        ret = builder->CreateBitCast(ret, ret_ty);
-    }
-    return ret;
+    return create_bitcast(ret, ret_ty);
 }
 
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
@@ -527,25 +532,98 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 
 Value *CodeGen_Hexagon::interleave_vectors(Type type, const std::vector<Expr> &v) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
-    if (v.size() == 2 && v[0].type() == v[1].type()) {
-        Type v_ty = v[0].type();
-        if (v_ty.bits()*v_ty.lanes() == native_vector_bits()) {
-            internal_assert(v_ty.lanes()*2 == type.lanes());
-            std::vector<Value *> ops = {
-                codegen(v[1]),
-                codegen(v[0]),
-                codegen(-1*type.bytes())
-            };
-            return call_intrin_cast(llvm_type_of(type),
-                                    IPICK(Intrinsic::hexagon_V6_vshuffvdd),
-                                    ops);
+    if (v.size() == 2) {
+        // Interleaving two vectors. Break them into native vectors,
+        // use vshuffvdd, and concatenate the shuffled results.
+        llvm::Type *element_ty = llvm_type_of(type.element_of());
+        int native_elements = native_vector_bits() / type.bits();
+        llvm::Type *native2_ty = llvm::VectorType::get(element_ty, native_elements*2);
+
+        Value *a = codegen(v[0]);
+        Value *b = codegen(v[1]);
+        Value *bytes = codegen(-type.bytes());
+        vector<Value *> ret;
+        for (int i = 0; i < type.lanes()/2; i += native_elements) {
+            Value *a_i = slice_vector(a, i, native_elements);
+            Value *b_i = slice_vector(b, i, native_elements);
+            Value *ret_i = call_intrin_cast(native2_ty,
+                                            IPICK(Intrinsic::hexagon_V6_vshuffvdd),
+                                            {b_i, a_i, bytes});
+            if ((i + native_elements)*2 > type.lanes()) {
+                // This is the last vector, and it has some extra
+                // elements. Slice it down.
+                ret_i = slice_vector(ret_i, 0, (i + native_elements)*2 - type.lanes());
+            }
+            ret.push_back(ret_i);
         }
+        return concat_vectors(ret);
     }
     return CodeGen_Posix::interleave_vectors(type, v);
 }
 
 Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                                         const std::vector<int> &indices) {
+    llvm::Type *a_ty = a->getType();
+    llvm::Type *b_ty = b->getType();
+    internal_assert(a_ty == b_ty);
+
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+    int a_elements = static_cast<int>(a_ty->getVectorNumElements());
+    int b_elements = static_cast<int>(b_ty->getVectorNumElements());
+
+    llvm::Type *element_ty = a->getType()->getVectorElementType();
+    int element_bits = element_ty->getScalarSizeInBits();
+    int native_elements = native_vector_bits() / element_bits;
+    llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
+    llvm::Type *native2_ty = llvm::VectorType::get(element_ty, native_elements*2);
+
+    int result_elements = static_cast<int>(indices.size());
+    llvm::Type *result_ty = VectorType::get(element_ty, result_elements);
+
+    // Try to rewrite shuffles that only access the elements of b.
+    int min = indices[0];
+    for (size_t i = 1; i < indices.size(); i++) {
+        if (indices[i] != -1 && indices[i] < min) {
+            min = indices[i];
+        }
+    }
+    if (min >= a_elements) {
+        vector<int> shifted_indices(indices);
+        for (int &i : shifted_indices) {
+            if (i != -1) i -= a_elements;
+        }
+        return shuffle_vectors(b, UndefValue::get(b->getType()), shifted_indices);
+    }
+
+    // Try to rewrite shuffles that only access the elements of a.
+    int max = *std::max_element(indices.begin(), indices.end());
+    if (max < a_elements) {
+        BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
+        CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
+        llvm::Function *vcombine =
+            Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vcombine));
+        if (a_call && a_call->getCalledFunction() == vcombine) {
+            // Rewrite shuffle(vcombine(a, b), x) to shuffle(a, b)
+            return shuffle_vectors(
+                create_bitcast(a_call->getArgOperand(1), native_ty),
+                create_bitcast(a_call->getArgOperand(0), native_ty),
+                indices);
+        } else if (ShuffleVectorInst *a_shuffle = dyn_cast<ShuffleVectorInst>(a)) {
+            bool is_identity = true;
+            for (int i = 0; i < a_elements; i++) {
+                int mask_i = a_shuffle->getMaskValue(i);
+                is_identity = is_identity && (mask_i == i || mask_i == -1);
+            }
+            if (is_identity) {
+                return shuffle_vectors(
+                    a_shuffle->getOperand(0),
+                    a_shuffle->getOperand(1),
+                    indices);
+            }
+        }
+    }
+
+    // Try to rewrite shuffles of (maybe strided) ramps.
     bool is_strided_ramp = true;
     int stride = indices.size() > 1 ? indices[1] - indices[0] : 1;
     for (int i = 1; i + 1 < static_cast<int>(indices.size()); i++) {
@@ -562,119 +640,72 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
 
     int start = indices[0];
 
-    llvm::Type *element_ty = a->getType()->getVectorElementType();
-    int element_bits = element_ty->getScalarSizeInBits();
-    int native_elements = native_vector_bits() / element_bits;
-    llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
-    llvm::Type *native2x_ty = llvm::VectorType::get(element_ty, native_elements * 2);
-    bool B128 = target.has_feature(Halide::Target::HVX_128);
-
-    if (isa<UndefValue>(b)) {
-        // Try to rewrite shufflevector(vcombine(a, b), undef, ...) to
-        // shufflevector(a, b, ...)
-        BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
-        CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
-        llvm::Function *vcombine =
-            Intrinsic::getDeclaration(module.get(), IPICK(Intrinsic::hexagon_V6_vcombine));
-        if (a_call && a_call->getCalledFunction() == vcombine) {
-            a = a_call->getArgOperand(1);
-            b = a_call->getArgOperand(0);
-            if (a->getType() != native_ty) {
-                a = builder->CreateBitCast(a, native_ty);
-            }
-            if (b->getType() != native_ty) {
-                b = builder->CreateBitCast(b, native_ty);
-            }
-        }
-    }
-
-    llvm::Type *a_ty = a->getType();
-    llvm::Type *b_ty = b->getType();
-
-    int a_elements = static_cast<int>(a_ty->getVectorNumElements());
-    int b_elements = isa<UndefValue>(b) ? 0 : static_cast<int>(b_ty->getVectorNumElements());
-    int result_elements = static_cast<int>(indices.size());
-
     if (stride == 1) {
-        if (start == 0 && result_elements == a_elements) {
-            // This is a selection of a.
+        if (result_ty == native2_ty && a_ty == native_ty && b_ty == native_ty) {
+            // This is a concatenation of a and b, where a and b are
+            // native vectors. Use vcombine.
+            internal_assert(start == 0);
+            return call_intrin_cast(native2_ty, IPICK(Intrinsic::hexagon_V6_vcombine), {b, a});
+        }
+        if (result_ty == native_ty && a_ty == native2_ty && max < a_elements) {
+            // Extract a and b from a double vector.
+            b = call_intrin_cast(native_ty, IPICK(Intrinsic::hexagon_V6_hi), {a});
+            a = call_intrin_cast(native_ty, IPICK(Intrinsic::hexagon_V6_lo), {a});
+            a_ty = a->getType();
+            b_ty = b->getType();
+            a_elements = a_ty->getVectorNumElements();
+            b_elements = b_ty->getVectorNumElements();
+        }
+        if (start == 0 && result_ty == a_ty) {
             return a;
         }
-        if (start == a_elements && result_elements == b_elements) {
-            // This is a selection of b.
+        if (start == a_elements && result_ty == b_ty) {
             return b;
         }
-
-        if (result_elements == native_elements && a_elements == result_elements * 2 &&
-            start + result_elements <= a_elements) {
-            // This is a selection of a native vector subset of a.
-            if (start == 0) {
-                return call_intrin_cast(native_ty,
-                                        IPICK(Intrinsic::hexagon_V6_lo),
-                                        {a});
-            } else if (start == result_elements) {
-                return call_intrin_cast(native_ty,
-                                        IPICK(Intrinsic::hexagon_V6_hi),
-                                        {a});
-            } else {
-                // TODO: Use valign
-            }
+        if (result_ty == native_ty && a_ty == native_ty && b_ty == native_ty) {
+            // TODO: Use valign.
         }
-
-        if (start == 0 && result_elements == a_elements + b_elements &&
-            a_elements == native_elements && b_elements == native_elements) {
-            // This is a concatenation of a and b, where a and b are native vectors. use vcombine.
-            return call_intrin_cast(native2x_ty,
-                                    IPICK(Intrinsic::hexagon_V6_vcombine),
-                                    {b, a});
-        }
-    } else if (stride == 2 && result_elements == a_elements && result_elements == b_elements) {
+    } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
-        // It's hard to use call_intrin here. We'll just slice and concat manually.
-        vector<Value *> result_slices;
-        for (int slice = 0; slice < result_elements; slice += native_elements) {
-            Value *a_slice = slice_vector(a, slice, native_elements);
-            Value *b_slice = slice_vector(b, slice, native_elements);
-            Value *result_slice;
-            // Stride 2 ramp, use a vshufe/vshuffo instruction.
+        // It's hard to use call_intrin here. We'll just slice and
+        // concat manually.
+        Value *ab = max < a_elements ? a : concat_vectors({a, b});
+        vector<Value *> ret;
+        for (int i = 0; i < result_elements; i += native_elements) {
+            Value *ab_i0 = slice_vector(ab, i*2, native_elements);
+            Value *ab_i1 = slice_vector(ab, i*2 + native_elements, native_elements);
+            Value *ret_i;
             if (element_bits == 8) {
-                Intrinsic::ID intrin = Intrinsic::not_intrinsic;
-                if (start == 0) {
-                    intrin = IPICK(Intrinsic::hexagon_V6_vpackeb);
-                } else {
-                    intrin = IPICK(Intrinsic::hexagon_V6_vpackob);
-                }
-                result_slice = call_intrin_cast(native_ty, intrin, {b_slice, a_slice});
+                Intrinsic::ID intrin =
+                    start == 0 ? IPICK(Intrinsic::hexagon_V6_vpackeb) : IPICK(Intrinsic::hexagon_V6_vpackob);
+                ret_i = call_intrin_cast(native_ty, intrin, {ab_i1, ab_i0});
             } else if (element_bits == 16) {
-                Intrinsic::ID intrin = Intrinsic::not_intrinsic;
-                if (start == 0) {
-                    intrin = IPICK(Intrinsic::hexagon_V6_vpackeh);
-                } else {
-                    intrin = IPICK(Intrinsic::hexagon_V6_vpackoh);
-                }
-                result_slice = call_intrin_cast(native_ty, intrin, {b_slice, a_slice});
-            } else if (element_bits % 8 == 0) {
-                int element_bytes = element_bits / 8;
+                Intrinsic::ID intrin =
+                    start == 0 ? IPICK(Intrinsic::hexagon_V6_vpackeh) : IPICK(Intrinsic::hexagon_V6_vpackoh);
+                ret_i = call_intrin_cast(native_ty, intrin, {ab_i1, ab_i0});
+            } else if (element_bits%8 == 0) {
                 // Need to use vdealw, followed by lo/hi.
-                // TODO: Is there a better way? This generates a
+                // TODO: Is there a better instruction? This generates a
                 // double vector, then only uses half of the result.
-                Value *deinterleaved = call_intrin_cast(native2x_ty,
-                                                        IPICK(Intrinsic::hexagon_V6_vdealvdd),
-                                                        {b_slice, a_slice, ConstantInt::get(i32, -element_bytes)});
+                int element_bytes = element_bits / 8;
+                Value *packed = call_intrin_cast(native2_ty,
+                                                 IPICK(Intrinsic::hexagon_V6_vdealvdd),
+                                                 {ab_i1, ab_i0, ConstantInt::get(i32, -element_bytes)});
                 Intrinsic::ID intrin =
                     start == 0 ? IPICK(Intrinsic::hexagon_V6_lo) : IPICK(Intrinsic::hexagon_V6_hi);
-                result_slice = call_intrin_cast(native_ty, intrin, {deinterleaved});
+                ret_i = call_intrin_cast(native_ty, intrin, {packed});
             } else {
                 return CodeGen_Posix::shuffle_vectors(a, b, indices);
             }
-            if (slice + native_elements > result_elements) {
-                // This is the last vector, and it has a few extra elements. Slice it down.
-                result_slice = slice_vector(result_slice, 0, slice + native_elements - result_elements);
+            if (i + native_elements > result_elements) {
+                // This is the last vector, and it has a few extra
+                // elements. Slice it down.
+                ret_i = slice_vector(ret_i, 0, i + native_elements - result_elements);
             }
-            result_slices.push_back(result_slice);
+            ret.push_back(ret_i);
         }
-        return concat_vectors(result_slices);
+        return concat_vectors(ret);
     }
 
     // TODO: There are more HVX permute instructions that could be
