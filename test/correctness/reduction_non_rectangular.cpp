@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
         f(x, y) = x + y;
 
         RDom r(0, 14, 0, 11);
-        r.bound(r.x < r.y);
+        r.where(r.x < r.y);
         f(r.x, r.y) += 1;
 
         Image<int> im = f.realize(20, 20);
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         f(x, y) = x + y;
 
         RDom r(0, 14, 0, 11);
-        r.bound(r.x < r.y);
+        r.where(r.x < r.y);
         f(r.x, r.y) += 1;
 
         RVar rx_outer, rx_inner, r_fused;
@@ -66,8 +66,8 @@ int main(int argc, char **argv) {
         f(x, y) = x + y;
 
         RDom r(0, 100, 0, 100);
-        r.bound(2*r.x + 30 < r.y);
-        r.bound(r.y >= 100 - r.x);
+        r.where(2*r.x + 30 < r.y);
+        r.where(r.y >= 100 - r.x);
         f(r.x, r.y) += 1;
 
         g(x, y) = 2*f(x, y);
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
         f(x, y, z) = x + y + z;
 
         RDom r(0, 200, 0, 100);
-        r.bound(r.x < r.y + z);
+        r.where(r.x < r.y + z);
         f(r.x, r.y, z) += 1;
 
         Image<int> im = f.realize(200, 100, 50);
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
         f(x, y) = x + y;
 
         RDom r(0, 100, 0, 50);
-        r.bound(r.x < g(r.y));
+        r.where(r.x < g(r.y));
         f(r.x, r.y) += 1;
 
         g.compute_root();
@@ -150,14 +150,14 @@ int main(int argc, char **argv) {
     }
 
     if (1) {
-        Func f, g;
+        Func f("f"), g("g");
         Var x, y;
 
         g(x, y) = x;
         f(x, y) = x + y;
 
         RDom r(0, 100, 0, 100);
-        r.bound(r.x < r.y);
+        r.where(r.x < r.y);
         f(r.x, r.y) = g(r.x, r.y);
 
         g.compute_at(f, r.y);

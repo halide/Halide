@@ -250,7 +250,7 @@ public:
      * Consider a simple example:
      \code
      RDom r(0, 13, 0, 10);
-     r.bound(r.x < r.y);
+     r.where(r.x < r.y);
      f(r.x, r.y) += 1;
      \endcode
      * This is equivalent to:
@@ -272,7 +272,7 @@ public:
      }
      \endcode
      */
-    EXPORT void bound(const Expr &predicate);
+    EXPORT void where(const Expr &predicate);
 
     /** Direct access to the first four dimensions of the reduction
      * domain. Some of these variables may be undefined if the
