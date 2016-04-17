@@ -40,6 +40,8 @@ ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope)
  * to remainder if an answer could be found. */
 bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
 
+bool reduce_expr_modulo(Expr e, int modulus, int *remainder, const Scope<ModulusRemainder> &scope);
+
 EXPORT void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */

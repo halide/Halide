@@ -7,7 +7,7 @@
 
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
-#include "HexagonAlignLoads.h"
+#include "AlignLoads.h"
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
@@ -223,7 +223,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         debug(1) << "Aligning loads for HVX....\n";
-        s = hexagon_align_loads(s, t);
+        s = align_loads(s, t);
         s = simplify(s);
         debug(2) << "Lowering after aligning loads:\n" << s << "\n\n";
     }
