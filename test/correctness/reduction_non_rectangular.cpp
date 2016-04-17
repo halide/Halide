@@ -4,20 +4,22 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    //TODO: the current algorithm can't seem to simplify this one
     if (0) {
-        Func f;
-        Var x, y;
+        Func f("f");
+        Var x("x"), y("y");
         f(x, y) = x + y;
 
-        RDom r(0, 14, 0, 11);
+        RDom r(0, 20, 0, 20);
         r.where(r.x < r.y);
+        r.where(r.x == 10);
         f(r.x, r.y) += 1;
 
-        Image<int> im = f.realize(20, 20);
+        Image<int> im = f.realize(50, 50);
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
-                if ((0 <= x && x <= 13) && (0 <= y && y <= 10)) {
+                if ((x == 10) && (0 <= y && y <= 19)) {
                     correct += (x < y) ? 1 : 0;
                 }
                 if (im(x, y) != correct) {
@@ -30,8 +32,8 @@ int main(int argc, char **argv) {
     }
 
     if (0) {
-        Func f;
-        Var x, y;
+        Func f("f");
+        Var x("x"), y("y");
         f(x, y) = x + y;
 
         RDom r(0, 14, 0, 11);
@@ -61,8 +63,8 @@ int main(int argc, char **argv) {
 
 
     if (0) {
-        Func f, g;
-        Var x, y;
+        Func f("f"), g("g");
+        Var x("x"), y("y");
         f(x, y) = x + y;
 
         RDom r(0, 100, 0, 100);
@@ -92,11 +94,11 @@ int main(int argc, char **argv) {
     }
 
     if (0) {
-        Func f;
-        Var x, y, z;
+        Func f("f");
+        Var x("x"), y("y"), z("z");
         f(x, y, z) = x + y + z;
 
-        RDom r(0, 200, 0, 100);
+        RDom r(0, 200, 0, 100, "r");
         r.where(r.x < r.y + z);
         f(r.x, r.y, z) += 1;
 
@@ -119,17 +121,19 @@ int main(int argc, char **argv) {
     }
 
     if (0) {
-        Func f, g;
-        Var x, y;
+        Func f("f"), g("g");
+        Var x("x"), y("y");
 
         g(x) = x;
 
         f(x, y) = x + y;
 
-        RDom r(0, 100, 0, 50);
+        RDom r(0, 100, 0, 50, "r");
         r.where(r.x < g(r.y));
+        std::cout << "*******Defining RDom: \n" << r << "\n";
         f(r.x, r.y) += 1;
 
+        std::cout << "*******schedule g to compute at root\n";
         g.compute_root();
 
         Image<int> im = f.realize(200, 200);
@@ -149,9 +153,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (0) {
         Func f("f"), g("g");
-        Var x, y;
+        Var x("x"), y("y");
 
         g(x, y) = x;
         f(x, y) = x + y;
@@ -171,6 +175,31 @@ int main(int argc, char **argv) {
                     if (x < y) {
                         correct = x;
                     }
+                }
+                if (im(x, y) != correct) {
+                    printf("im(%d, %d) = %d instead of %d\n",
+                           x, y, im(x, y), correct);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    if (1) {
+        Func f("f");
+        Var x("x"), y("y");
+        f(x, y) = x + y;
+
+        RDom r(10, 20, 10, 20);
+        r.where((r.x + r.y) % 2 == 0);
+        f(r.x, r.y) = f(r.x-1, r.y) + 3;
+
+        Image<int> im = f.realize(50, 50);
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int correct = x + y;
+                if ((10 <= x && x <= 29) && (10 <= y && y <= 29)) {
+                    correct += ((x + y) % 2 == 0) ? 2 : 0;
                 }
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n",

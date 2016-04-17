@@ -9,6 +9,9 @@ struct ReductionDomainContents {
     mutable RefCount ref_count;
     std::vector<ReductionVariable> domain;
     std::vector<Expr> predicates;
+    bool frozen;
+
+    ReductionDomainContents() : frozen(false) {}
 };
 
 template<>
@@ -47,6 +50,14 @@ Expr ReductionDomain::and_predicates() const {
 		and_pred = (and_pred && contents.ptr->predicates[i]);
 	}
 	return and_pred;
+}
+
+void ReductionDomain::freeze() {
+    contents.ptr->frozen = true;
+}
+
+bool ReductionDomain::frozen() const {
+    return contents.ptr->frozen;
 }
 
 }

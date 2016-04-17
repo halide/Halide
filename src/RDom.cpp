@@ -206,6 +206,9 @@ RDom::operator RVar() const {
 }
 
 void RDom::where(const Expr &predicate) {
+    user_assert(!dom.frozen())
+        << (*this) << " cannot be given a new predicate, because it has already"
+        << " been used in the update definition of some function.\n";
     if (!dom.defined()) {
         user_error << "Error: Can't add predicate to undefined RDom.\n";
     }
