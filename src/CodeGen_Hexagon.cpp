@@ -310,10 +310,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "add_mpy.vuh.vub.ub", {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "add_mpy.vuw.vuh.uh", {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "add_mpy.vh.vub.b",   {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
-        // TODO: There's also vmpyhsat_acc.
+        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),   u16x2, "add_mpy.vuh.vub.ub",   {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),   u32x2, "add_mpy.vuw.vuh.uh",   {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc),  i16x2, "add_mpy.vh.vub.b",     {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhsat_acc), i32x2, "satw_add_mpy.vw.vh.h", {i32x2, i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).
