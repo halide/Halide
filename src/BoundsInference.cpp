@@ -126,9 +126,9 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
-                /*if (r.domain.defined()) {
+                if (r.domain.defined()) {
                     exprs.insert(exprs.end(), r.domain.predicates().begin(), r.domain.predicates().end());
-                }*/
+                }
             }
         }
 
@@ -554,35 +554,18 @@ public:
 
             } else {
                 const vector<Expr> &exprs = consumer.exprs;
-                const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
-                map<string, Box> new_boxes;
-
-                std::cout << "CALLING BOXES_REQUIRED: " << r.domain.defined() << "\n";
-                // TODO: fixed the predicates to be just an expression
-                if (r.domain.defined() && r.domain.predicates().size() > 0) {
-                    std::cout << "CALLING BOXES_REQUIRED 1\n";
-                    Stmt wrapped = IfThenElse::make(r.domain.predicates()[0], Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic)));
-                    std::cout << "CALLING BOXES_REQUIRED2 \n";
-                    new_boxes = boxes_required(wrapped, scope, func_bounds);
-                } else {
-                    new_boxes = boxes_required(Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic)), scope, func_bounds);
+                Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
+                if (consumer.stage > 0) {
+                    const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
+                    if (r.domain.defined() && r.domain.predicates().size() > 0) {
+                        wrapped = IfThenElse::make(r.domain.and_predicates(), wrapped);
+                    }
                 }
+
+                map<string, Box> new_boxes = boxes_required(wrapped, scope, func_bounds);
                 for (const pair<string, Box> &i : new_boxes) {
                     merge_boxes(boxes[i.first], i.second);
                 }
-
-                /*for (size_t j = 0; j < exprs.size(); j++) {
-                    map<string, Box> new_boxes;
-                    if (r.domain.defined()) {
-                        Stmt wrapped = IfThenElse::make(r.domain.predicates(), Evaluate::make(Call::make(exprs[j])));
-                        map<string, Box> new_boxes = boxes_required(wrapped, scope, func_bounds);
-                    } else {
-                        new_boxes = boxes_required(exprs[j], scope, func_bounds);
-                    }
-                    for (const pair<string, Box> &i : new_boxes) {
-                        merge_boxes(boxes[i.first], i.second);
-                    }
-                }*/
             }
 
             // Expand the bounds required of all the producers found.
@@ -609,15 +592,15 @@ public:
                     }
 
                     // Dump out the region required of each stage for debugging.
-                    /*
-                    debug(0) << "Box required of " << producer.name
+
+                    /*debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
                              << " stage " << consumer.stage << ":\n";
                     for (size_t k = 0; k < b.size(); k++) {
                         debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
                     }
-                    debug(0) << "\n";
-                    */
+                    debug(0) << "\n";*/
+
 
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
                     producer.consumers.push_back((int)i);

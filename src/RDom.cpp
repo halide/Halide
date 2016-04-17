@@ -205,11 +205,11 @@ RDom::operator RVar() const {
     return x;
 }
 
-void RDom::bound(const Expr &predicate) {
+void RDom::where(const Expr &predicate) {
     if (!dom.defined()) {
         user_error << "Error: Can't add predicate to undefined RDom.\n";
     }
-    dom.bound(predicate);
+    dom.where(predicate);
 }
 
 /** Emit an RVar in a human-readable form */
