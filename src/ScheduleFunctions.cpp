@@ -634,22 +634,22 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (size_t i = 0; i < s.bounds().size(); i++) {
             Bound b = s.bounds()[i];
-            Expr max_val = (b.extent + b.min) - 1;
-            Expr min_val = b.min;
             string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
             string min_name = prefix + ".min_unbounded";
             string max_name = prefix + ".max_unbounded";
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
+            if (!b.min.defined()) {
+                b.min = min_var;
+            }
+
+            Expr max_val = (b.extent + b.min) - 1;
+            Expr min_val = b.min;
+
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
                                         {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
-
-            // bounds inference has already respected these values for us
-            //body = LetStmt::make(prefix + ".min", min_val, body);
-            //body = LetStmt::make(prefix + ".max", max_val, body);
-
             body = Block::make(AssertStmt::make(check, error_msg), body);
         }
     }

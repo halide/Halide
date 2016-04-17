@@ -498,18 +498,18 @@ private:
                 min = make_zero(t);
                 max = max_b - make_one(t);
             } else if (max_b.type().is_int()) {
-                // mod takes the sign of the second arg
+                // mod is always positive
                 // x % [4,10] -> [0,9]
-                // x % [-8,-3] -> [-7,0]
-                // x % [-8, 10] -> [-7,9]
-                min = Min::make(min_b + make_one(t), make_zero(t));
-                max = Max::make(max_b - make_one(t), make_zero(t));
+                // x % [-8,-3] -> [0,7]
+                // x % [-8, 10] -> [0,9]
+                min = make_zero(t);
+                max = Max::make(abs(min_b), abs(max_b)) - make_one(t);
             } else {
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                min = Min::make(min_b, make_zero(t));
-                max = Max::make(max_b, make_zero(t));
+                min = 0;
+                max = Max::make(abs(min_b), abs(max_b));
             }
         }
     }
