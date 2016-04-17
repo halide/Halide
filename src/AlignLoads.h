@@ -1,9 +1,9 @@
-#ifndef HALIDE_HEXAGON_ALIGN_LOADS_H
-#define HALIDE_HEXAGON_ALIGN_LOADS_H
+#ifndef HALIDE_ALIGN_LOADS_H
+#define HALIDE_ALIGN_LOADS_H
 
 /** \file
  * Defines a lowering pass the breaks unaligned loads into two aligned
- * loads for Hexagon (HVX).
+ * loads.
  */
 
 #include <map>
@@ -13,7 +13,7 @@
 namespace Halide {
 namespace Internal {
 
-    Stmt hexagon_align_loads(Stmt s, const Target &t);
+    Stmt align_loads(Stmt s, const Target &t);
 
 }
 }
