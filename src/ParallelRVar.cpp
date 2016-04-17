@@ -108,12 +108,15 @@ bool can_parallelize_rvar(const string &v,
     Expr distinct_v = (Variable::make(Int(32), v) !=
                        Variable::make(Int(32), renamer.get_new_name(v)));
 
+    debug(0) << "******* distinct_v: \n\t" << distinct_v << "\n";
+
     // Construct an expression which is true if there's a collision
     // between this thread's store and the other thread's store.
     Expr hazard = const_true();
     for (size_t i = 0; i < r.args.size(); i++) {
         hazard = hazard && (distinct_v && (r.args[i] == other_store[i]));
     }
+    debug(0) << "******* hazard store store: \n\t" << hazard << "\n";
 
     // Add expressions that are true if there's a collision between
     // the other thread's store and this thread's loads.
@@ -125,6 +128,7 @@ bool can_parallelize_rvar(const string &v,
         }
         hazard = hazard || check;
     }
+    debug(0) << "******* hazard load store: \n\t" << hazard << "\n";
 
     // Make a scope representing the bounds of the reduction domain
     Scope<Interval> bounds;
@@ -135,14 +139,22 @@ bool can_parallelize_rvar(const string &v,
             bounds.push(rv.var, in);
             bounds.push(renamer.get_new_name(rv.var), in);
         }
+        // Add the reduction domain's predicates
+        if (r.domain.predicates().size() > 0) {
+            Expr this_pred = r.domain.and_predicates();
+            Expr other_pred = renamer.mutate(r.domain.and_predicates());
+            debug(0) << "......this thread pred: " << this_pred << "\n";
+            debug(0) << "......other thread pred: " << other_pred << "\n";
+            hazard = hazard && this_pred && other_pred;
+        }
     }
 
-    debug(3) << "Attempting to falsify: " << hazard << "\n";
+    debug(0) << "Attempting to falsify: " << hazard << "\n";
     // Pull out common non-boolean terms
     hazard = common_subexpression_elimination(hazard);
     hazard = SubstituteInBooleanLets().mutate(hazard);
     hazard = simplify(hazard, false, bounds);
-    debug(3) << "Simplified to: " << hazard << "\n";
+    debug(0) << "Simplified to: " << hazard << "\n";
 
     // strip lets
     while (const Let *l = hazard.as<Let>()) {

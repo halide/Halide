@@ -244,19 +244,21 @@ public:
     EXPORT operator Expr() const;
 
     /** Add predicate to the RDom. The variables in the predicate can be of anything,
-     * including RVar of the RDom itself and free variables. This allows RDom's iteration
-     * domain to be more general, not necessarily limited to rectangular domain. AND of
-     * all these predicates defines the valid domain to iterate over.
+     * including RVar of the RDom itself and free variables. This allows RDom's
+     * iteration domain to be more general, not necessarily limited to rectangular
+     * domain. AND of all these predicates defines the valid domain to iterate over.
+     * Note that once RDom is used in the update definition of some function, a new
+     * predicate cannot be added to the RDom.
      * Consider a simple example:
      \code
-     RDom r(0, 13, 0, 10);
+     RDom r(0, 20, 0, 20);
      r.where(r.x < r.y);
      f(r.x, r.y) += 1;
      \endcode
      * This is equivalent to:
      \code
-     for (int r.y = 0; r.y < 11; r.y++) {
-       for (int r.x = 0; r.x < 14; r.x++) {
+     for (int r.y = 0; r.y < 20; r.y++) {
+       for (int r.x = 0; r.x < 20; r.x++) {
          if (r.x < r.y) {
            f[r.x, r.y] += 1;
          }
@@ -265,12 +267,13 @@ public:
      \endcode
      * which would be further simplified during lowering into:
      \code
-     for (int r.y = 0; r.y < 11; r.y++) {
+     for (int r.y = 1; r.y < 20; r.y++) {
        for (int r.x = 0; r.x < r.y; r.x++) {
          f[r.x, r.y] += 1;
        }
      }
      \endcode
+     *
      */
     EXPORT void where(const Expr &predicate);
 
