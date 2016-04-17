@@ -1642,13 +1642,6 @@ void check_hvx_all() {
     check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
     check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
     check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));
-
-    // We know the following don't work yet; They are WIP. Do this to sort of
-    // XFAIL them.
-#if 0
-    // Todo: We don't generate vmpa(vdouble.ub, vdouble.b) yet.
-    check("vmpa(v*:*.ub,v*:*.ub)", hvx_width, ((i16(u8_even) *5) + (i16(u8_odd) * 3)));
-#endif
 }
 
 void check_altivec_all() {

@@ -987,6 +987,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
         { Call::bitwise_or, { "halide.hexagon.or", false } },
         { Call::bitwise_xor, { "halide.hexagon.xor", false } },
         { Call::bitwise_not, { "halide.hexagon.not", false } },
+        { Call::count_leading_zeros, { "halide.hexagon.clz", false } },
+        { Call::popcount, { "halide.hexagon.popcount", false } },
     };
 
     if (starts_with(op->name, "halide.hexagon.")) {
@@ -1014,20 +1016,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
-        } else if (op->is_intrinsic(Call::count_leading_zeros)) {
-            internal_assert(op->args.size() == 1);
-            value = call_intrin(op->type,
-                                "halide.hexagon.clz" + type_suffix(op->args[0], false),
-                                {op->args[0]},
-                                true /*maybe*/);
-            if (value) return;
-        } else if (op->is_intrinsic(Call::popcount)) {
-            internal_assert(op->args.size() == 1);
-            value = call_intrin(op->type,
-                                "halide.hexagon.popcount" + type_suffix(op->args[0], false),
-                                {op->args[0]},
-                                true /*maybe*/);
-            if (value) return;
         } else if (op->is_intrinsic(Call::get_high_register)) {
             // TODO: This implementation should probably be in CodeGen_LLVM.
             internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
