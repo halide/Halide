@@ -96,6 +96,12 @@ protected:
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                  const std::vector<int> &indices);
     ///@}
+
+    /** Because HVX intrinsics operate on vectors of i32, using them
+     * requires a lot of extraneous bitcasts, which make it difficult
+     * to manipulate the IR. This function avoids generating redundant
+     * bitcasts. */
+    llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
 };
 
 }}
