@@ -191,7 +191,6 @@ Expr lower_euclidean_div(Expr a, Expr b) {
     // unsigned ops, so create the intrinsic directly.
     Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
     if (a.type().is_int()) {
-        internal_assert(a.type().is_int());
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
         // i.e. Euclidean division.
@@ -219,11 +218,10 @@ Expr lower_euclidean_div(Expr a, Expr b) {
 
 Expr lower_euclidean_mod(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
-    // IROperator's div_round_to_zero will replace this with a % b for
+    // IROperator's mod_round_to_zero will replace this with a % b for
     // unsigned ops, so create the intrinsic directly.
     Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
     if (a.type().is_int()) {
-        internal_assert(a.type().is_int());
         // Match this non-overflowing C code
         /*
           T r = a % b;
