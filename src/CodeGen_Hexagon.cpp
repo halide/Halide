@@ -530,35 +530,37 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
     return call_intrin_cast(ret_ty, Intrinsic::getDeclaration(module.get(), id), Ops);
 }
 
-Value *CodeGen_Hexagon::interleave_vectors(Type type, const std::vector<Expr> &v) {
+Value *CodeGen_Hexagon::interleave_vectors(const std::vector<llvm::Value *> &v) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
     if (v.size() == 2) {
+        llvm::Type *v_ty = v[0]->getType();
         // Interleaving two vectors. Break them into native vectors,
         // use vshuffvdd, and concatenate the shuffled results.
-        llvm::Type *element_ty = llvm_type_of(type.element_of());
-        int native_elements = native_vector_bits() / type.bits();
+        llvm::Type *element_ty = v_ty->getVectorElementType();
+        int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
         llvm::Type *native2_ty = llvm::VectorType::get(element_ty, native_elements*2);
+        int result_elements = v_ty->getVectorNumElements()*2;
 
-        Value *a = codegen(v[0]);
-        Value *b = codegen(v[1]);
-        Value *bytes = codegen(-type.bytes());
+        Value *a = v[0];
+        Value *b = v[1];
+        Value *bytes = codegen(-static_cast<int>(element_ty->getScalarSizeInBits()/8));
         vector<Value *> ret;
-        for (int i = 0; i < type.lanes()/2; i += native_elements) {
+        for (int i = 0; i < result_elements/2; i += native_elements) {
             Value *a_i = slice_vector(a, i, native_elements);
             Value *b_i = slice_vector(b, i, native_elements);
             Value *ret_i = call_intrin_cast(native2_ty,
                                             IPICK(Intrinsic::hexagon_V6_vshuffvdd),
                                             {b_i, a_i, bytes});
-            if ((i + native_elements)*2 > type.lanes()) {
+            if ((i + native_elements)*2 > result_elements) {
                 // This is the last vector, and it has some extra
                 // elements. Slice it down.
-                ret_i = slice_vector(ret_i, 0, (i + native_elements)*2 - type.lanes());
+                ret_i = slice_vector(ret_i, 0, (i + native_elements)*2 - result_elements);
             }
             ret.push_back(ret_i);
         }
         return concat_vectors(ret);
     }
-    return CodeGen_Posix::interleave_vectors(type, v);
+    return CodeGen_Posix::interleave_vectors(v);
 }
 
 Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,

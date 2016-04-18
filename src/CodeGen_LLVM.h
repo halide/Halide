@@ -216,6 +216,7 @@ protected:
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
 
+
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
@@ -404,7 +405,7 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    virtual llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+    virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
