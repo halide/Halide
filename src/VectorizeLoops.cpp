@@ -291,6 +291,8 @@ class VectorizeLoops : public IRMutator {
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 expr = op;
+            } else if (scalarized) {
+                expr = Let::make(op->name, mutated_value, mutated_body);
             } else {
                 // Otherwise create a new Let containing the original value
                 // expression plus the widened expression
@@ -325,6 +327,8 @@ class VectorizeLoops : public IRMutator {
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 stmt = op;
+            } else if (scalarized) {
+                stmt = LetStmt::make(op->name, mutated_value, mutated_body);
             } else {
                 stmt = LetStmt::make(op->name, op->value, mutated_body);
 
