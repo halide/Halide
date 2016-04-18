@@ -65,11 +65,21 @@ private:
                 const Ramp *ramp = index.as<Ramp>();
                 const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
                 // We will work only on natural vectors supported by the target.
-                if (ramp->lanes != natural_vector_lanes(op->type)) {
-                    expr = op;
+                int native_lanes = natural_vector_lanes(op->type);
+                if (ramp->lanes != native_lanes) {
+                    int load_lanes = ramp->lanes;
+                    std::vector<Expr> slices;
+                    for (int i = 0; i < load_lanes; i+= native_lanes) {
+                        int slice_lanes = std::min(native_lanes, (load_lanes - i));
+                        Expr slice_base = simplify(ramp->base + i);
+                        Expr slice =
+                            Load::make(op->type.with_lanes(slice_lanes), op->name, Ramp::make(slice_base, ramp->stride, slice_lanes),
+                                       op->image, op->param);
+                        slices.push_back(slice);
+                    }
+                    expr = Call::make(op->type, Call::concat_vectors, slices, Call::PureIntrinsic);
                     return;
-                }
-                if (ramp && stride && stride->value == 1) {
+                } else if (ramp && stride && stride->value == 1) {
                     // If this is a parameter, the base_alignment should be host_alignment.
                     // This cannot be an external image because we have already checked for
                     // it. Otherwise, this is an internal buffers that is always aligned
