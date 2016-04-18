@@ -310,8 +310,10 @@ std::vector<Pattern> adds = {
     { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + bc(wild_u32)*wild_u32x, ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
 
     // These patterns aren't exactly right because the instruction
-    // saturates the result. We are exploiting the fact that 32 bit
-    // signed arithmetic overflow is undefined...
+    // saturates the result. However, this is really the instruction
+    // that we want to use in most cases, and we can exploit the fact
+    // that 32 bit signed arithmetic overflow is undefined to argue
+    // that these patterns are not completely incorrect.
     { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + wild_i32x*bc(wild_i32), ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
     { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + bc(wild_i32)*wild_i32x, ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
 
