@@ -1945,146 +1945,73 @@ Expr unbroadcast(Expr e) {
     }
 }
 
-Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
-    if(vecs.size() == 1) {
-        return codegen(vecs[0]);
-    } else if(vecs.size() == 2) {
-        Expr a = vecs[0], b = vecs[1];
-        debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
+    internal_assert(vecs.size() >= 1);
+    for (size_t i = 1; i < vecs.size(); i++) {
+        internal_assert(vecs[0]->getType() == vecs[i]->getType());
+    }
+    int vec_elements = vecs[0]->getType()->getVectorNumElements();
 
-        vector<int> indices(type.lanes());
-        for (int i = 0; i < type.lanes(); i++) {
-            int idx = i/2;
-            if (i % 2 == 1) idx += a.type().lanes();
-            indices[i] = idx;
+    if (vecs.size() == 1) {
+        return vecs[0];
+    } else if (vecs.size() == 2) {
+        Value *a = vecs[0];
+        Value *b = vecs[1];
+        vector<int> indices(vec_elements*2);
+        for (int i = 0; i < vec_elements*2; i++) {
+            indices[i] = i%2 == 0 ? i/2 : i/2 + vec_elements;
         }
-
-        return shuffle_vectors(codegen(a), codegen(b), indices);
-    } else if(vecs.size() == 3) {
-        Expr a = vecs[0], b = vecs[1], c = vecs[2];
-        debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << "\n";
-
-        // First we shuffle a & b together...
-        vector<int> indices(type.lanes());
-        for (int i = 0; i < type.lanes(); i++) {
-            if (i % 3 == 0) {
-                indices[i] = i/3;
-            } else if (i % 3 == 1) {
-                indices[i] = i/3 + a.type().lanes();
-            } else {
-                indices[i] = -1;
-            }
-        }
-
-        Value *value_ab = shuffle_vectors(codegen(a), codegen(b), indices);
-
-        // Then we create a vector of the output size that contains c...
-        for (int i = 0; i < type.lanes(); i++) {
-            indices[i] = i < c.type().lanes() ? i : -1;
-        }
-
-        Value *value_c = shuffle_vectors(codegen(c), indices);
-
-        // Finally, we shuffle the above 2 vectors together into the result.
-        for (int i = 0; i < type.lanes(); i++) {
-            if (i % 3 < 2) {
-                indices[i] = i;
-            } else {
-                indices[i] = i/3 + type.lanes();
-            }
-        }
-        return shuffle_vectors(value_ab, value_c, indices);
-    } else if (vecs.size() == 4 && vecs[0].type().bits() <= 32) {
-        Expr a = vecs[0], b = vecs[1], c = vecs[2], d = vecs[3];
-        debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
-
-        int half_lanes = type.lanes() / 2;
-        vector<int> indices(half_lanes);
-        for (int i = 0; i < half_lanes; i++) {
-            int idx = i/2;
-            if (i % 2 == 1) idx += a.type().lanes();
-            indices[i] = idx;
-        }
-
-        // First we shuffle a & b together...
-        Value *value_ab = shuffle_vectors(codegen(a), codegen(b), indices);
-
-        // Next we shuffle c & d together...
-        Value *value_cd = shuffle_vectors(codegen(c), codegen(d), indices);
-
-        // Now we reinterpret the shuffled vectors as vectors of pairs...
-        Type t = a.type().with_bits(a.type().bits() * 2);
-        Value *vec_ab = builder->CreateBitCast(value_ab, llvm_type_of(t));
-        Value *vec_cd = builder->CreateBitCast(value_cd, llvm_type_of(t));
-
-        // Finally, we shuffle the above 2 vectors together into the result.
-        Value *vec = shuffle_vectors(vec_ab, vec_cd, indices);
-        return builder->CreateBitCast(vec, llvm_type_of(type));
+        return shuffle_vectors(a, b, indices);
     } else {
-        Type even_t = type.with_lanes(0);
-        Type odd_t  = type.with_lanes(0);
-        std::vector<Expr> even_vecs, odd_vecs;
-        int odd_num_vecs = vecs.size() % 2;
-        for (size_t i = 0; i < vecs.size() - odd_num_vecs; ++i) {
-            if (i % 2 == 0) {
-                even_t = even_t.with_lanes(even_t.lanes() + vecs[i].type().lanes());
+        // Grab the even and odd elements of vecs.
+        vector<Value *> even_vecs;
+        vector<Value *> odd_vecs;
+        for (size_t i = 0; i < vecs.size(); i++) {
+            if (i%2 == 0) {
                 even_vecs.push_back(vecs[i]);
             } else {
-                odd_t = odd_t.with_lanes(odd_t.lanes() + vecs[i].type().lanes());
                 odd_vecs.push_back(vecs[i]);
             }
         }
 
-        Expr last;
-        if (odd_num_vecs) {
-            last = vecs.back();
+        // If the number of vecs is odd, save the last one for later.
+        Value *last = nullptr;
+        if (even_vecs.size() > odd_vecs.size()) {
+            last = even_vecs.back();
+            even_vecs.pop_back();
         }
+        internal_assert(even_vecs.size() == odd_vecs.size());
 
-        Value* a = interleave_vectors(even_t, even_vecs);
-        Value* b = interleave_vectors(odd_t, odd_vecs);
+        // Interleave the even and odd parts.
+        Value *even = interleave_vectors(even_vecs);
+        Value *odd = interleave_vectors(odd_vecs);
 
-        if (odd_num_vecs == 0 ) {
-            vector<int> indices(type.lanes());
-            for (int i = 0; i < type.lanes(); i++) {
-                int idx = i/2;
-                if (i % 2 == 1) idx += even_t.lanes();
-                indices[i] = idx;
-            }
+        if (last) {
+            int result_elements = vec_elements*vecs.size();
 
-            return shuffle_vectors(a, b, indices);
-        } else {
-            vector<int> indices(type.lanes());
-            for (int i = 0, idx = 0; i < type.lanes(); i++) {
-                if (i % vecs.size() < vecs.size()-1) {
-                    if (idx % 2 == 0) {
-                        indices[i] = idx / 2;
-                    } else {
-                        indices[i] = idx / 2 + even_t.lanes();
-                    }
-
-                    ++idx;
-                } else {
-                    indices[i] = -1;
+            // Interleave even and odd, leaving a space for the last element.
+            vector<int> indices(result_elements, -1);
+            for (int i = 0, idx = 0; i < result_elements; i++) {
+                if (i%vecs.size() < vecs.size() - 1) {
+                    indices[i] = idx%2 == 0 ? idx/2 : idx/2 + vec_elements*even_vecs.size();
+                    idx++;
                 }
             }
+            Value *even_odd = shuffle_vectors(even, odd, indices);
 
-            Value *ab = shuffle_vectors(a, b, indices);
-
-            for (int i = 0; i < type.lanes(); i++) {
-                indices[i] = i < last.type().lanes() ? i : -1;
-            }
-
-            Value *c = shuffle_vectors(codegen(last), indices);
-
-            for (int i = 0; i < type.lanes(); i++) {
-                if (i % vecs.size() < vecs.size()-1) {
+            // Interleave the last vector into the result.
+            last = slice_vector(last, 0, result_elements);
+            for (int i = 0; i < result_elements; i++) {
+                if (i%vecs.size() < vecs.size() - 1) {
                     indices[i] = i;
                 } else {
-                    indices[i] = i / vecs.size() + type.lanes();
+                    indices[i] = i/vecs.size() + result_elements;
                 }
             }
 
-            return shuffle_vectors(ab, c, indices);
+            return shuffle_vectors(even_odd, last, indices);
+        } else {
+            return interleave_vectors({even, odd});
         }
     }
 }
@@ -2144,8 +2071,12 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
         }
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
-        internal_assert(0 < op->args.size());
-        value = interleave_vectors(op->type, op->args);
+        vector<Value *> args;
+        args.reserve(op->args.size());
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        value = interleave_vectors(args);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
