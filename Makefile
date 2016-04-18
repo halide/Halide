@@ -154,7 +154,7 @@ LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//
 
 UNAME = $(shell uname)
 
-TEST_LDFLAGS=$(LLVM_LDFLAGS)
+TEST_LDFLAGS=$(LLVM_LDFLAGS) -Wl,-rpath $(CURDIR)/$(BIN_DIR)
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -311,6 +311,7 @@ SOURCE_FILES = \
   Lerp.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
+  LoopCarry.cpp \
   Lower.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
@@ -344,7 +345,6 @@ SOURCE_FILES = \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
-  StoreForwarding.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
@@ -439,6 +439,7 @@ HEADER_FILES = \
   Lerp.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
+  LoopCarry.h \
   Lower.h \
   MainPage.h \
   MatlabWrapper.h \
