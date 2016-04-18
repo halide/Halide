@@ -66,7 +66,27 @@ private:
                 const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
                 // We will work only on natural vectors supported by the target.
                 int native_lanes = natural_vector_lanes(op->type);
-                if (ramp->lanes != native_lanes) {
+                if (ramp->lanes < native_lanes) {
+                    // Load a native vector and then shuffle.
+                    if (stride->value > 2) {
+                        // Right now we deal only with strides at most 2.
+                        expr = op;
+                        return;
+                    } else {
+                        Expr vec = mutate(Load::make(op->type.with_lanes(native_lanes), op->name,
+                                                      Ramp::make(ramp->base, ramp->stride, native_lanes),
+                                                      op->image, op->param));
+                        std::vector<Expr> args;
+                        args.push_back(vec);
+                        // We can now pick contiguous lanes because vec should be a shuffle_vector of native length
+                        // that picks out the elements needed.
+                        for (int i = 0; i < ramp->lanes; i++) {
+                            args.push_back(i);
+                        }
+                        expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
+                        return;
+                    }
+                } else if (ramp->lanes > native_lanes) {
                     int load_lanes = ramp->lanes;
                     std::vector<Expr> slices;
                     for (int i = 0; i < load_lanes; i+= native_lanes) {
@@ -75,9 +95,9 @@ private:
                         Expr slice =
                             Load::make(op->type.with_lanes(slice_lanes), op->name, Ramp::make(slice_base, ramp->stride, slice_lanes),
                                        op->image, op->param);
-                        slices.push_back(mutate(slice));
+                        slices.push_back(slice);
                     }
-                    expr = Call::make(op->type, Call::concat_vectors, slices, Call::PureIntrinsic);
+                    expr = mutate(Call::make(op->type, Call::concat_vectors, slices, Call::PureIntrinsic));
                     return;
                 } else if (ramp && stride && stride->value == 1) {
                     // If this is a parameter, the base_alignment should be host_alignment.
