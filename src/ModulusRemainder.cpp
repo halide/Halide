@@ -84,9 +84,7 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
      */
 
     if (result.modulus % modulus == 0) {
-        if (remainder) {
-            *remainder = result.remainder % modulus;
-        }
+        *remainder = result.remainder % modulus;
         return true;
     } else {
         return false;
@@ -95,17 +93,8 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
 bool reduce_expr_modulo(Expr expr, int modulus, int *remainder, const Scope<ModulusRemainder> &scope) {
     ModulusRemainder result = modulus_remainder(expr, scope);
 
-    /* As an example: If we asked for expr mod 8, and the analysis
-     * said that expr = 16*k + 13, then because 16 % 8 == 0, the
-     * result is 13 % 8 == 5. But if the analysis says that expr =
-     * 6*k + 3, then expr mod 8 could be 1, 3, 5, or 7, so we just
-     * return false.
-     */
-
     if (result.modulus % modulus == 0) {
-        if (remainder) {
-            *remainder = result.remainder % modulus;
-        }
+        *remainder = result.remainder % modulus;
         return true;
     } else {
         return false;
