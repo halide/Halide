@@ -75,7 +75,7 @@ private:
                         Expr slice =
                             Load::make(op->type.with_lanes(slice_lanes), op->name, Ramp::make(slice_base, ramp->stride, slice_lanes),
                                        op->image, op->param);
-                        slices.push_back(slice);
+                        slices.push_back(mutate(slice));
                     }
                     expr = Call::make(op->type, Call::concat_vectors, slices, Call::PureIntrinsic);
                     return;
