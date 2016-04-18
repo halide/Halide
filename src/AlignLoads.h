@@ -5,15 +5,12 @@
  * Defines a lowering pass the breaks unaligned loads into two aligned
  * loads.
  */
-
-#include <map>
-
 #include "IR.h"
 #include "Target.h"
 namespace Halide {
 namespace Internal {
 
-    Stmt align_loads(Stmt s, const Target &t);
+Stmt align_loads(Stmt s, const Target &t);
 
 }
 }
