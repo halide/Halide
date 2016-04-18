@@ -1,5 +1,7 @@
 #include "Halide.h"
 
+#include "../performance/benchmark.h"
+
 using namespace Halide;
 
 void dump_asm(Func f) {
@@ -137,20 +139,26 @@ int main(int argc, char **argv) {
     {
         // A case with far too many entries to keep around
         Func f, g, h;
-        Var x, y;
+        Var x, y, c;
 
-        f(x, y) = x + y;
+        f(c, x, y) = c + x + y;
         f.compute_root();
 
-        g(x, y) = f(x-2, y) + f(x-1, y) + f(x, y) + f(x+1, y) + f(x+2, y);
-        h(x, y) = g(x, y-2) + g(x, y-1) + g(x, y) + g(x, y+1) + g(x, y+2);
+        g(c, x, y) = f(c, x-2, y) + f(c, x-1, y) + f(c, x, y) + f(c, x+1, y) + f(c, x+2, y);
+        h(c, x, y) = g(c, x, y-2) + g(c, x, y-1) + g(c, x, y) + g(c, x, y+1) + g(c, x, y+2) + f(c, x-3, y);
+
+        h.bound(c, 0, 4).vectorize(c);
 
         dump_asm(h);
 
-        h.realize(100, 100);
+        h.realize(4, 100, 100);
+
+        Image<int> out(4, 1000, 1000);
+        double t = benchmark(10, 10, [&]{h.realize(out);});
+        printf("%f\n", t);
     }
 
-    {
+    if (get_jit_target_from_environment().has_gpu_feature()) {
         // Reusing values from local memory on the GPU is much better
         // than reloading from shared or global.
         Func f, g, h;

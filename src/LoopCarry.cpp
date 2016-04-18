@@ -1,4 +1,4 @@
-#include "StoreForwarding.h"
+#include "LoopCarry.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 #include "IROperator.h"
@@ -338,8 +338,8 @@ class LoopCarryOverLoop : public IRMutator {
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
                     graph_equal(indices[i], next_indices[j])) {
-                    chains.push_back({i, j});
-                    debug(4) << "Found carry:\n"
+                    chains.push_back({j, i});
+                    debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
                              << j << ":  -> " << Expr(loads[j][0]) << "\n";
                 }
@@ -374,12 +374,36 @@ class LoopCarryOverLoop : public IRMutator {
             }
         }
 
+        // Sort the carry chains by decreasing order of size. The
+        // longest ones get the most reuse of each value.
+        std::sort(chains.begin(), chains.end(),
+                  [&](const vector<int> &c1, const vector<int> &c2){return c1.size() > c2.size();});
+
         for (const vector<int> &c : chains) {
-            debug(0) << "Found chain:\n";
+            debug(3) << "Found chain of carried values:\n";
             for (int i : c) {
-                debug(0) << i << ":  <- " << indices[i] << "\n";
+                debug(3) << i << ":  <- " << indices[i] << "\n";
             }
         }
+
+        // Only keep the top N carried values. Otherwise we'll just
+        // spray stack spills everywhere. This is ugly, because we're
+        // relying on a heuristic.
+        vector<vector<int>> trimmed;
+        const int max_carried_values = 8;
+        size_t sz = 0;
+        for (const vector<int> &c : chains) {
+            if (sz + c.size() > max_carried_values) {
+                if (sz < max_carried_values - 1) {
+                    // Take a partial chain
+                    trimmed.emplace_back(c.begin(), c.begin() + 8 - sz);
+                }
+                break;
+            }
+            trimmed.push_back(c);
+            sz += c.size();
+        }
+        chains.swap(trimmed);
 
         // We now have chains of the form:
         // f[x] <- f[x+1] <- ... <- f[x+N-1]
@@ -492,7 +516,6 @@ class LoopCarryOverLoop : public IRMutator {
 
 public:
     LoopCarryOverLoop(const string &var, const Scope<int> &s) : in_consume(s) {
-        debug(4) << "******************** Considering loop over " << var << "\n";
         linear.push(var, 1);
     }
 

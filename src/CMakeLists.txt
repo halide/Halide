@@ -265,6 +265,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   Lambda.h
   Lerp.h
+  LoopCarry.h
   Lower.h
   MainPage.h
   MatlabWrapper.h
@@ -408,6 +409,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Output.cpp
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
+  LoopCarry.cpp
   Lower.cpp
   MatlabWrapper.cpp
   Memoization.cpp
