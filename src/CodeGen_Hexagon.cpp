@@ -525,23 +525,20 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
     return call_intrin_cast(ret_ty, Intrinsic::getDeclaration(module.get(), id), Ops);
 }
 
-Value *CodeGen_Hexagon::interleave_vectors(Type type, const std::vector<Expr> &v) {
+Value *CodeGen_Hexagon::interleave_vectors(const std::vector<llvm::Value *> &v) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
-    if (v.size() == 2 && v[0].type() == v[1].type()) {
-        Type v_ty = v[0].type();
-        if (v_ty.bits()*v_ty.lanes() == native_vector_bits()) {
-            internal_assert(v_ty.lanes()*2 == type.lanes());
-            std::vector<Value *> ops = {
-                codegen(v[1]),
-                codegen(v[0]),
-                codegen(-1*type.bytes())
-            };
-            return call_intrin_cast(llvm_type_of(type),
+    if (v.size() == 2 && v[0]->getType() == v[1]->getType()) {
+        llvm::Type *v_ty = v[0]->getType();
+        if (static_cast<int>(v_ty->getPrimitiveSizeInBits()) == native_vector_bits()) {
+            int element_size = v_ty->getScalarSizeInBits()/8;
+            llvm::Type *ret_ty =
+                VectorType::get(v_ty->getVectorElementType(), v_ty->getVectorNumElements()*2);
+            return call_intrin_cast(ret_ty,
                                     IPICK(Intrinsic::hexagon_V6_vshuffvdd),
-                                    ops);
+                                    {v[1], v[0], codegen(-element_size)});
         }
     }
-    return CodeGen_Posix::interleave_vectors(type, v);
+    return CodeGen_Posix::interleave_vectors(v);
 }
 
 Value *CodeGen_Hexagon::slice_vector(Value *vec, int start, int size) {
