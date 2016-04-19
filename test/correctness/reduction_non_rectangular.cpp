@@ -4,12 +4,14 @@
 using namespace Halide;
 
 // A trace that checks for vector and scalar stores
+int buffer_index = 0;
 bool run_tracer = false;
 int niters_expected = 0;
 int niters = 0;
 
-int intermediate_depend_on_output_trace(void *user_context, const halide_trace_event *e) {
-    if (std::string(e->func) == "g") {
+int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event *e) {
+    std::string buffer_name = "g_" + std::to_string(buffer_index);
+    if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
             //printf(".....Turning on tracer for g\n");
             run_tracer = true;
@@ -34,7 +36,8 @@ int intermediate_depend_on_output_trace(void *user_context, const halide_trace_e
 }
 
 int two_linear_bounds_trace(void *user_context, const halide_trace_event *e) {
-    if (std::string(e->func) == "g") {
+    std::string buffer_name = "g_" + std::to_string(buffer_index);
+    if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
             run_tracer = true;
         } else if (e->event == halide_trace_consume) {
@@ -54,8 +57,10 @@ int two_linear_bounds_trace(void *user_context, const halide_trace_event *e) {
     return 0;
 }
 
-int equality_inequality_bound_test() {
-    Func f("f");
+int equality_inequality_bound_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index));
     Var x("x"), y("y");
     f(x, y) = x + y;
 
@@ -81,8 +86,10 @@ int equality_inequality_bound_test() {
     return 0;
 }
 
-int split_fuse_test() {
-    Func f("f");
+int split_fuse_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index));
     Var x("x"), y("y");
     f(x, y) = x + y;
 
@@ -112,8 +119,10 @@ int split_fuse_test() {
     return 0;
 }
 
-int two_linear_bounds_test() {
-    Func f("f"), g("g");
+int two_linear_bounds_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
     Var x("x"), y("y");
 
     g(x, y) = x + y;
@@ -124,8 +133,8 @@ int two_linear_bounds_test() {
     r.where(r.y >= 100 - r.x);
     f(r.x, r.y) += 2*g(r.x, r.y);
 
-    // Expect g to be still computed over x=[0,99] and y=[0,99] since the
-    // bound inference is in term of boxes
+    // Expect g to be still computed over x=[0,99] and y=[0,99] since the bound
+    // inference is done in term of boxes (i.e. can't represent polytopes)
     g.compute_root();
 
     f.set_custom_trace(&two_linear_bounds_trace);
@@ -157,8 +166,10 @@ int two_linear_bounds_test() {
     return 0;
 }
 
-int free_variable_bound_test() {
-    Func f("f");
+int free_variable_bound_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index));
     Var x("x"), y("y"), z("z");
     f(x, y, z) = x + y + z;
 
@@ -185,8 +196,10 @@ int free_variable_bound_test() {
     return 0;
 }
 
-int func_call_inside_bound_test() {
-    Func f("f"), g("g");
+int func_call_inside_bound_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
     Var x("x"), y("y");
 
     g(x) = x;
@@ -217,8 +230,10 @@ int func_call_inside_bound_test() {
     return 0;
 }
 
-int intermediate_depend_on_output_test() {
-    Func f("f"), g("g");
+int intermediate_bound_depend_on_output_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
     Var x("x"), y("y");
 
     g(x, y) = x;
@@ -228,9 +243,11 @@ int intermediate_depend_on_output_test() {
     r.where(r.x < r.y);
     f(r.x, r.y) = g(r.x, r.y);
 
+    // Expect bound of g on r.x to be directly dependent on the simplified
+    // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, r.y);
 
-    f.set_custom_trace(&intermediate_depend_on_output_trace);
+    f.set_custom_trace(&intermediate_bound_depend_on_output_trace);
     g.trace_stores();
     g.trace_realizations();
 
@@ -255,14 +272,14 @@ int intermediate_depend_on_output_test() {
         }
     }
     if (niters_expected != niters) {
-        printf("intermediate_depend_on_output_test: Expect niters on g to be %d but got %d instead\n",
+        printf("intermediate_bound_depend_on_output_test: Expect niters on g to be %d but got %d instead\n",
                niters_expected, niters);
         return -1;
     }
     return 0;
 }
 
-int newton_test() {
+int newton_method_test() {
     Func inverse;
     Var x;
     // Negating the bits of a float is a piecewise linear approximation to inverting it
@@ -273,7 +290,7 @@ int newton_test() {
     r.where(not_converged);
 
     // Compute the inverse of x using Newton's method, and count the
-    // number of iterations required to reach convergence.
+    // number of iterations required to reach convergence
     inverse(x) = {inverse(x)[0] * (2 - (x+1) * inverse(x)[0]),
                   r+1};
     {
@@ -301,37 +318,37 @@ int newton_test() {
 
 int main(int argc, char **argv) {
     printf("Running equality inequality bound test\n");
-    if (equality_inequality_bound_test() != 0) {
+    if (equality_inequality_bound_test(0) != 0) {
         return -1;
     }
 
     printf("Running split fuse test\n");
-    if (split_fuse_test() != 0) {
+    if (split_fuse_test(1) != 0) {
         return -1;
     }
 
     printf("Running two linear bounds test\n");
-    if (two_linear_bounds_test() != 0) {
+    if (two_linear_bounds_test(2) != 0) {
         return -1;
     }
 
     printf("Running bound depend on free variable test\n");
-    if (free_variable_bound_test() != 0) {
+    if (free_variable_bound_test(3) != 0) {
         return -1;
     }
 
     printf("Running function call inside bound test\n");
-    if (func_call_inside_bound_test() != 0) {
+    if (func_call_inside_bound_test(4) != 0) {
         return -1;
     }
 
     printf("Running intermediate stage depend on output bound\n");
-    if (intermediate_depend_on_output_test() != 0) {
+    if (intermediate_bound_depend_on_output_test(5) != 0) {
         return -1;
     }
 
-    printf("Running newton test\n");
-    if (newton_test() != 0) {
+    printf("Running newton's method test\n");
+    if (newton_method_test() != 0) {
         return -1;
     }
 
