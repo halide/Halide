@@ -51,7 +51,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                           "target=target-string [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of optional files to emit. Accepted values are "
                           "[assembly, bitcode, stmt, html, cpp]\n"
-                          "  -x  A comma separated list of extension=extension pairs to subsitute during file naming.\n";
+                          "  -x  A comma separated list of file extension pairs to subsitute during file naming, "
+                          "in the form [.old=.new[,.old2=.new2]]\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
