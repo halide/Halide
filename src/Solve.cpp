@@ -810,7 +810,9 @@ class SolveForInterval : public IRVisitor {
     }
 
     void visit(const NE *op) {
-        fail();
+        // Normalize to lt and gt
+        Expr cond = (op->a < op->b) || (op->a > op->b);
+        cond.accept(this);
     }
 
 public:
@@ -1040,6 +1042,11 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_inner_interval returned undefined Exprs: " << c << "\n";
+    if (is_one(simplify(s.result.min > s.result.max))) {
+        // Empty interval
+        s.result.min = pos_inf;
+        s.result.max = neg_inf;
+    }
     return s.result;
 }
 
@@ -1048,6 +1055,11 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_outer_interval returned undefined Exprs: " << c << "\n";
+    if (is_one(simplify(s.result.min > s.result.max))) {
+        // Empty interval
+        s.result.min = pos_inf;
+        s.result.max = neg_inf;
+    }
     return s.result;
 }
 
@@ -1205,6 +1217,12 @@ void solve_test() {
 
     check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
     check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, pos_inf, neg_inf);
+
+    check_inner_interval(x == 10, 10, 10);
+    check_outer_interval(x == 10, 10, 10);
+
+    check_inner_interval(!(x != 10), 10, 10);
+    check_outer_interval(!(x != 10), 10, 10);
 
     check_inner_interval(3*x + 4 < 27, neg_inf, 7);
     check_outer_interval(3*x + 4 < 27, neg_inf, 7);

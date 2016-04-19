@@ -245,8 +245,8 @@ public:
 
     /** Add predicate to the RDom. The variables in the predicate can be of anything,
      * including RVar of the RDom itself and free variables. This allows RDom's
-     * iteration domain to be more general, not necessarily limited to rectangular
-     * domain. AND of all these predicates defines the valid domain to iterate over.
+     * iteration domain to be more general, not restricted to rectangular domain
+     * only. AND of all these predicates defines the valid domain to iterate over.
      * Note that once RDom is used in the update definition of some function, a new
      * predicate cannot be added to the RDom.
      * Consider a simple example:

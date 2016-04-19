@@ -598,13 +598,15 @@ public:
 
                     // Dump out the region required of each stage for debugging.
 
-                    /*debug(0) << "Box required of " << producer.name
+                    /*
+                    debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
                              << " stage " << consumer.stage << ":\n";
                     for (size_t k = 0; k < b.size(); k++) {
                         debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
                     }
-                    debug(0) << "\n";*/
+                    debug(0) << "\n";
+                    */
 
 
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;

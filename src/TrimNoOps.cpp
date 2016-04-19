@@ -166,8 +166,16 @@ class SimplifyUsingBounds : public IRMutator {
                 break;
             } else if (!expr_uses_var(test, loop.var)) {
                 continue;
-            } else if (loop.i.min.same_as(loop.i.max) && expr_uses_var(test, loop.var)) {
+            }  else if (is_one(simplify(loop.i.min == loop.i.max)) && expr_uses_var(test, loop.var)) {
+                // If min == max then either the domain only has one correct value, which we
+                // can substitute directly.
                 test = common_subexpression_elimination(Let::make(loop.var, loop.i.min, test));
+            } else if (is_one(simplify(loop.i.min >= loop.i.max)) && expr_uses_var(test, loop.var)) {
+                // If min >= max then either the domain only has one correct value,
+                // or the domain is empty, which implies both min/max are true under
+                // the domain.
+                test = common_subexpression_elimination(Let::make(loop.var, loop.i.min, test) ||
+                                                        Let::make(loop.var, loop.i.max, test));
             } else {
                 Scope<Interval> s;
                 // Rearrange the expression if possible so that the
@@ -323,6 +331,12 @@ class TrimNoOps : public IRMutator {
         if (interval_is_everything(i)) {
             // Nope.
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            return;
+        }
+
+        if (interval_is_empty(i)) {
+            // Empty loop
+            stmt = Evaluate::make(0);
             return;
         }
 

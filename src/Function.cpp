@@ -487,6 +487,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             const string &v = r.domain.domain()[i].var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
+
             Dim d = {v, ForType::Serial, DeviceAPI::Parent, pure};
             r.schedule.dims().push_back(d);
         }
