@@ -1213,10 +1213,11 @@ public:
      * realizations of this function up to be a multiple of the
      * specified alignment. This guarantees that the strides for the
      * dimensions stored outside of dim will be multiples of the
-     * specified alignment.
+     * specified alignment, where the strides and alignment are
+     * described as numbers of elements.
      *
      * For example, to guarantee that a function foo(x, y, c)
-     * representing an image has scanlines starting on memory offsets
+     * representing an image has scanlines starting on offsets
      * aligned to multiples of 16, use foo.align_storage(x, 16). */
     EXPORT Func &align_storage(Var dim, Expr alignment);
 
