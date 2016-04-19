@@ -201,22 +201,6 @@ private:
 
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
-    void visit(const For *op) {
-        int saved_required_alignment = required_alignment;
-        if (op->device_api == DeviceAPI::Hexagon) {
-            if (target.has_feature(Target::HVX_128)) {
-                required_alignment = 128;
-            }
-            else if (target.has_feature(Target::HVX_64)) {
-                required_alignment = 64;
-            } else {
-                internal_error << "Unknown HVX mode";
-            }
-        }
-        IRMutator::visit(op);
-        required_alignment = saved_required_alignment;
-        return;
-    }
 };
 
 Stmt align_loads(Stmt s, const Target &t) {
