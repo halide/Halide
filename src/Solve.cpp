@@ -804,7 +804,9 @@ class SolveForInterval : public IRVisitor {
     }
 
     void visit(const EQ *op) {
-        fail();
+        // Normalize to le and ge
+        Expr cond = (op->a <= op->b) && (op->a >= op->b);
+        cond.accept(this);
     }
 
     void visit(const NE *op) {
