@@ -13,6 +13,7 @@
 #include "IRPrinter.h"
 #include "EliminateBoolVectors.h"
 #include "HexagonOptimize.h"
+#include "AlignLoads.h"
 
 #define IPICK(i64) (B128 ? i64##_128B : i64)
 
@@ -99,6 +100,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
+
+    debug(1) << "Aligning loads for HVX....\n";
+    body = align_loads(body, target);
+    body = simplify(body);
+    debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";

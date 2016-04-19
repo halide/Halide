@@ -7,7 +7,6 @@
 
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
-#include "AlignLoads.h"
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
@@ -220,13 +219,6 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = partition_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
-
-    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        debug(1) << "Aligning loads for HVX....\n";
-        s = align_loads(s, t);
-        s = simplify(s);
-        debug(2) << "Lowering after aligning loads:\n" << s << "\n\n";
-    }
 
 #ifdef STORE_FORWARDING
     debug(1) << "Forwarding stores across loop iterations...\n";
