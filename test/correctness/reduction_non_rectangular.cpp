@@ -13,15 +13,12 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
-            //printf(".....Turning on tracer for g\n");
             run_tracer = true;
         } else if (e->event == halide_trace_consume) {
-            //printf(".....Turning off tracer for g\n");
             run_tracer = false;
         }
 
         if (run_tracer && (e->event == halide_trace_store)) {
-            //printf("Running tracer on [%d, %d]\n", e->coordinates[0], e->coordinates[1]);
             if (!((e->coordinates[0] < e->coordinates[1]) && (e->coordinates[0] >= 0) &&
                   (e->coordinates[0] <= 99) && (e->coordinates[1] >= 0) &&
                   (e->coordinates[1] <= 99))) {
@@ -35,7 +32,7 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     return 0;
 }
 
-int two_linear_bounds_trace(void *user_context, const halide_trace_event *e) {
+int box_bound_trace(void *user_context, const halide_trace_event *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -137,7 +134,7 @@ int two_linear_bounds_test(int index) {
     // inference is done in term of boxes (i.e. can't represent polytopes)
     g.compute_root();
 
-    f.set_custom_trace(&two_linear_bounds_trace);
+    f.set_custom_trace(&box_bound_trace);
     g.trace_stores();
     g.trace_realizations();
 
@@ -279,6 +276,48 @@ int intermediate_bound_depend_on_output_test(int index) {
     return 0;
 }
 
+int circle_bound_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+    Var x("x"), y("y");
+    g(x, y) = x;
+    f(x, y) = x + y;
+
+    // Iterate over circle with radius of 10
+    RDom r(0, 100, 0, 100);
+    r.where(r.x*r.x + r.y*r.y <= 100);
+    f(r.x, r.y) += g(r.x, r.y);
+
+    // Expect g to be still computed over x=[0,99] and y=[0,99]. The predicate
+    // guard for the non-linear term will be left as is in the inner loop of f,
+    // i.e. f loop will still iterate over x=[0,99] and y=[0,99].
+    g.compute_at(f, r.y);
+
+    f.set_custom_trace(&box_bound_trace);
+    g.trace_stores();
+    g.trace_realizations();
+
+    run_tracer = false;
+    niters_expected = 100*100;
+    niters = 0;
+    Image<int> im = f.realize(200, 200);
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            int correct = x + y;
+            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+                correct += (x*x + y*y <= 100) ? x : 0;
+            }
+            if (im(x, y) != correct) {
+                printf("im(%d, %d) = %d instead of %d\n",
+                       x, y, im(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 int newton_method_test() {
     Func inverse;
     Var x;
@@ -344,6 +383,11 @@ int main(int argc, char **argv) {
 
     printf("Running intermediate stage depend on output bound\n");
     if (intermediate_bound_depend_on_output_test(5) != 0) {
+        return -1;
+    }
+
+    printf("Running circular bound test\n");
+    if (circle_bound_test(6) != 0) {
         return -1;
     }
 

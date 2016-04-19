@@ -3557,6 +3557,9 @@ private:
         Stmt update = op->update;
         if (update.defined()) {
             update = mutate(update);
+            if (is_no_op(update)) {
+                update = Stmt();
+            }
         }
         Stmt consume = mutate(op->consume);
 

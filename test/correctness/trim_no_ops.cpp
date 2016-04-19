@@ -64,6 +64,38 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Loop iterations that would be no-ops should be trimmed off. trim_no_ops
+        // should be able to handle equality as well.
+        Func f;
+        Var x, y;
+        f(x, y) = x + y;
+        f(x, y) += select((x == 10) && (x < y), 1, 0);
+        Module m = f.compile_to_module({});
+
+        // There should be no selects after trim_no_ops runs
+        CountConditionals s;
+        m.functions[0].body.accept(&s);
+        if (s.count != 0) {
+            std::cerr << "There were selects in the lowered code: " << m.functions[0].body << "\n";
+            return -1;
+        }
+
+        // Also check the output is correct
+        Image<int> im = f.realize(100, 100);
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int correct = x + y;
+                correct += ((x == 10) && (x < y))? 1 : 0;
+                if (im(x, y) != correct) {
+                    printf("im(%d, %d) = %d instead of %d\n",
+                           x, y, im(x, y), correct);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    {
         // Test a tiled histogram
         Func f;
         Var x, y;
