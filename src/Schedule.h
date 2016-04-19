@@ -152,6 +152,11 @@ struct Specialization {
     IntrusivePtr<ScheduleContents> schedule;
 };
 
+struct StorageDim {
+    std::string var;
+    Expr alignment;
+};
+
 class ReductionDomain;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
@@ -211,8 +216,8 @@ public:
      * innermost dimension for storage (i.e. which dimension is
      * tightly packed in memory) */
     // @{
-    const std::vector<std::string> &storage_dims() const;
-    std::vector<std::string> &storage_dims();
+    const std::vector<StorageDim> &storage_dims() const;
+    std::vector<StorageDim> &storage_dims();
     // @}
 
     /** You may explicitly bound some of the dimensions of a
