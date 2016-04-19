@@ -49,11 +49,10 @@ public:
 
     /** Add predicate to the reduction domain. See \ref RDom::where
      * for more details. */
-    EXPORT void where(const Expr &predicate);
+    EXPORT void where(Expr predicate);
 
     /** Get the predicates defined on this reducation demain if there is any. */
     EXPORT const std::vector<Expr> &predicates() const;
-    EXPORT std::vector<Expr> &predicates();
 
     /** Return AND of predicates defined on this reducation domain as one Expr.
      * If there is no predicate (i.e. all iteration domain in this reduction domain
