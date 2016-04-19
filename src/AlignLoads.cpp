@@ -11,9 +11,8 @@ using std::vector;
 
 class AlignLoads : public IRMutator {
 public:
-    AlignLoads(Target t, int vs) : target(t), required_alignment(vs) {}
+    AlignLoads(int alignment) : required_alignment(alignment) {}
 private:
-    Target target;
     // The desired alignment of a vector load.
     int required_alignment;
     // Alignment info for variables in scope.
@@ -22,11 +21,8 @@ private:
     ModulusRemainder get_alignment_info(Expr e) {
         return modulus_remainder(e, alignment_info);
     }
-    int natural_vector_lanes(Type t) {
-        return required_alignment / t.bytes();
-    }
 
-    Expr concat_and_shuffle(Expr vec_a, Expr vec_b, std::vector<Expr> &indices) {
+    Expr concat_and_shuffle(Expr vec_a, Expr vec_b, const std::vector<Expr> &indices) {
         Type dbl_t = vec_a.type().with_lanes(vec_a.type().lanes() * 2);
         Expr dbl_vec = Call::make(dbl_t, Call::concat_vectors, { vec_a, vec_b }, Call::PureIntrinsic);
         std::vector<Expr> args;
@@ -65,7 +61,7 @@ private:
                 const Ramp *ramp = index.as<Ramp>();
                 const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
                 // We will work only on natural vectors supported by the target.
-                int native_lanes = natural_vector_lanes(op->type);
+                int native_lanes = required_alignment / op->type.bytes();
                 if (ramp->lanes < native_lanes) {
                     // Load a native vector and then shuffle.
                     if (stride->value > 2) {
@@ -203,8 +199,8 @@ private:
     void visit(const LetStmt *op) { visit_let(stmt, op); }
 };
 
-Stmt align_loads(Stmt s, const Target &t) {
-    return AlignLoads(t, t.natural_vector_size(Int(8))).mutate(s);
-  }
+Stmt align_loads(Stmt s, int alignment) {
+    return AlignLoads(alignment).mutate(s);
+}
 }
 }

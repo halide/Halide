@@ -14,6 +14,7 @@
 #include "EliminateBoolVectors.h"
 #include "HexagonOptimize.h"
 #include "AlignLoads.h"
+#include "CSE.h"
 
 #define IPICK(i64) (B128 ? i64##_128B : i64)
 
@@ -102,7 +103,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Aligning loads for HVX....\n";
-    body = align_loads(body, target);
+    body = align_loads(body, target.natural_vector_size(Int(8)));
+    body = common_subexpression_elimination(body);
     body = simplify(body);
     debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 

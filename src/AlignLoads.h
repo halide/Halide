@@ -10,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-Stmt align_loads(Stmt s, const Target &t);
+Stmt align_loads(Stmt s, int alignment);
 
 }
 }
