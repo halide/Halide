@@ -572,7 +572,7 @@ class LoopCarry : public IRMutator {
 }
 
 
-Stmt store_forwarding(Stmt s) {
+Stmt loop_carry(Stmt s) {
     s = LoopCarry().mutate(s);
     return s;
 }
