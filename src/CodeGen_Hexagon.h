@@ -59,7 +59,6 @@ protected:
     void visit(const Cast *);
     void visit(const Call *);
     void visit(const Mul *);
-    void visit(const Load *);
     void visit(const GE *);
     void visit(const LE *);
     void visit(const LT *);
