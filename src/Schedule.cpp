@@ -14,7 +14,7 @@ struct ScheduleContents {
     LoopLevel store_level, compute_level;
     std::vector<Split> splits;
     std::vector<Dim> dims;
-    std::vector<std::string> storage_dims;
+    std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Specialization> specializations;
     ReductionDomain reduction_domain;
@@ -70,11 +70,11 @@ const std::vector<Dim> &Schedule::dims() const {
     return contents.ptr->dims;
 }
 
-std::vector<std::string> &Schedule::storage_dims() {
+std::vector<StorageDim> &Schedule::storage_dims() {
     return contents.ptr->storage_dims;
 }
 
-const std::vector<std::string> &Schedule::storage_dims() const {
+const std::vector<StorageDim> &Schedule::storage_dims() const {
     return contents.ptr->storage_dims;
 }
 
