@@ -22,6 +22,8 @@
 
 #include "HalideRuntime.h"
 
+#include "halide_image.h"
+
 namespace Halide {
 namespace Tools {
 
