@@ -30,7 +30,7 @@ struct Container {
 };
 }
 
-class ContainsNonPureCall : public IRVisitor {
+class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Call *op) {
@@ -43,12 +43,12 @@ class ContainsNonPureCall : public IRVisitor {
 
 public:
     bool result;
-    ContainsNonPureCall() : result(false) {}
+    ContainsImpureCall() : result(false) {}
 
 };
 
 bool is_expr_pure(const Expr &expr) {
-    ContainsNonPureCall is_not_pure;
+    ContainsImpureCall is_not_pure;
     expr.accept(&is_not_pure);
     return !is_not_pure.result;
 }

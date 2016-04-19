@@ -303,7 +303,7 @@ public:
      * However, for other cases, the second example may be suboptimal since it will
      * tend to put all the predicates in the innermost loop.
      */
-    EXPORT void where(const Expr &predicate);
+    EXPORT void where(Expr predicate);
 
     /** Direct access to the first four dimensions of the reduction
      * domain. Some of these variables may be undefined if the
