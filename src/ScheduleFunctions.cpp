@@ -30,6 +30,29 @@ struct Container {
 };
 }
 
+class ContainsNonPureCall : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    bool result;
+    ContainsNonPureCall() : result(false) {}
+
+};
+
+bool is_expr_pure(const Expr &expr) {
+    ContainsNonPureCall is_not_pure;
+    expr.accept(&is_not_pure);
+    return !is_not_pure.result;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(Function f,
                              string prefix,
@@ -314,6 +337,11 @@ Stmt build_provide_loop_nest(Function f,
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].dim_idx == -2);
+
+        // Cannot lift out the predicate guard if it contains call to non-pure function
+        if (!is_expr_pure(nest[i].value)) {
+            continue;
+        }
 
         for (int j = i-1; j >= 0; j--) {
             // Try to push it up by one.

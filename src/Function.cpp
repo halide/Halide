@@ -328,7 +328,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 }
 
 void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
-    debug(0) << "**********CALLING define_update ON function: " << name() << "\n";
     int update_idx = static_cast<int>(contents.ptr->updates.size());
 
     user_assert(!name().empty())
@@ -488,7 +487,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             const string &v = r.domain.domain()[i].var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
-            debug(0) << ".........can_parallelize_rvar " << v << " on func " << name() << "? " << pure << "\n";
             Dim d = {v, ForType::Serial, DeviceAPI::Parent, pure};
             r.schedule.dims().push_back(d);
         }

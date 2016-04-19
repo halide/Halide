@@ -253,27 +253,55 @@ public:
      \code
      RDom r(0, 20, 0, 20);
      r.where(r.x < r.y);
+     r.where(r.x == 10);
+     r.where(r.y > 13);
      f(r.x, r.y) += 1;
      \endcode
      * This is equivalent to:
      \code
      for (int r.y = 0; r.y < 20; r.y++) {
+       if (r.y > 13) {
+         for (int r.x = 0; r.x < 20; r.x++) {
+           if (r.x == 10) {
+             if (r.x < r.y) {
+               f[r.x, r.y] += 1;
+             }
+           }
+         }
+       }
+     }
+     \endcode
+     * which would be further simplified into:
+     \code
+     for (int r.y = 14; r.y < 20; r.y++) {
+       f[r.x, r.y] += 1;
+     }
+     \endcode
+     *
+     * You could also put the predicates into one expression and do the
+     * following instead:
+     \code
+     RDom r(0, 20, 0, 20);
+     r.where((r.x < r.y) && (r.x == 10) && (r.y > 13));
+     f(r.x, r.y) += 1;
+     \endcode
+     *
+     * The first example is more preferable however, since we can pull (r.y > 13)
+     * outwards into the outer loop. We will make no attempt to break down the
+     * ANDs in the second example and would produce the following instead:
+     \code
+     for (int r.y = 0; r.y < 20; r.y++) {
        for (int r.x = 0; r.x < 20; r.x++) {
-         if (r.x < r.y) {
+         if ((r.x < r.y) && (r.x == 10) && (r.y > 13)) {
            f[r.x, r.y] += 1;
          }
        }
      }
      \endcode
-     * which would be further simplified during lowering into:
-     \code
-     for (int r.y = 1; r.y < 20; r.y++) {
-       for (int r.x = 0; r.x < r.y; r.x++) {
-         f[r.x, r.y] += 1;
-       }
-     }
-     \endcode
-     *
+     * It does not make any difference in this example since the predicates are
+     * simple enough to simplify; both examples will produce the same final loops.
+     * However, for other cases, the second example may be suboptimal since it will
+     * tend to put all the predicates in the innermost loop.
      */
     EXPORT void where(const Expr &predicate);
 
