@@ -2211,7 +2211,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
         if (is_ramp) {
-            debug(0) << "Using slice_vector for shuffle_vector " << Expr(op) << "\n";
+            debug(4) << "Using slice_vector for shuffle_vector " << Expr(op) << "\n";
             value = slice_vector(codegen(op->args[0]), indices[0], op->type.lanes());
         } else {
             vector<Constant *> indices_values(op->type.lanes());
@@ -2231,6 +2231,12 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
         internal_assert(0 < op->args.size());
         value = interleave_vectors(op->type, op->args);
+    } else if (op->is_intrinsic(Call::concat_vectors)) {
+        std::vector<Value *> slices;
+        for (const auto &arg : op->args) {
+            slices.push_back(codegen(arg));
+        }
+        value = concat_vectors(slices);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
