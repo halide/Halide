@@ -1209,6 +1209,18 @@ public:
     }
     // @}
 
+    /** Align the storage extent of a particular dimension of
+     * realizations of this func. Strides of internal allocations for
+     * realizations of functions are computed to densely store the
+     * realization in memory. This function allows you to tell Halide
+     * to pad a particular dimension up to a multiple of the
+     * alignment, which guarantees that the strides for the dimensions
+     * stored outside of dim will be aligned to the specified
+     * alignment. For example, to guarantee that a func
+     * foo(x, y, c) has scanlines which start on multiples of 16, use
+     * foo.align_storage(x, 16). */
+    EXPORT Func &align_storage(Var dim, Expr alignment);
+
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.
      *
