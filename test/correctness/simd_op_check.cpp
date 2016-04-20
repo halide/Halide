@@ -39,7 +39,7 @@ int num_processes = 16;
 int my_process_id = 0;
 
 // width and height of test images
-const int W = 256*3, H = 100;
+const int W = 256*3, H = 128;
 
 bool can_run_code() {
 
@@ -1632,6 +1632,9 @@ void check_hvx_all() {
     check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 - i16(u8_1) * -127);
     check("v*.h += vmpyi(v*.h,r*.b)", hvx_width/2, i16_1 - i16_2 * -127);
 
+    check("v*.w += vmpy(v*.h,r*.h)", hvx_width/1, i32_1 + i32(i16_1)*32767);
+    check("v*.w += vmpy(v*.h,r*.h)", hvx_width/1, i32_1 + 32767*i32(i16_1));
+
     check("v*.w += vasl(v*.w,r*)", hvx_width/4, u32_1 + (u32_2 * 8));
     check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 * 8));
     check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 / 8));
@@ -1817,6 +1820,11 @@ int main(int argc, char **argv) {
             p.set(b);
         }
     }
+    for (ImageParam p : image_params) {
+        p.set_host_alignment(128);
+        p.set_min(0, 0);
+    }
+
     if (target.arch == Target::X86) {
         check_sse_all();
     } else if (target.arch == Target::ARM) {
