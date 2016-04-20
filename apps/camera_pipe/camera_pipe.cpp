@@ -150,30 +150,16 @@ Func demosaic(Func deinterleaved) {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         // Compute these in chunks over tiles
         const int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
-        g_r.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        g_b.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        r_gr.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        b_gr.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        r_gb.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        b_gb.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        r_b.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
-        b_r.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
+
+        // It helps hexagon to align each scanline of the storage to the vector size.
+        g_r.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        g_b.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        r_gr.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        b_gr.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        r_gb.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        b_gb.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        r_b.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
+        b_r.compute_at(processed, tx).align_storage(x, vector_size).vectorize(x, vector_size);
 
         // These interleave in y, so unrolling them in y helps
         output.compute_at(processed, tx)
