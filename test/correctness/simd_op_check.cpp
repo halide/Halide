@@ -1327,6 +1327,19 @@ void check_hvx_all() {
         hvx_width = 128;
     }
 
+    // Verify that unaligned loads use the right instructions, and don't try to use
+    // immediates of more than 3 bits.
+    check("valign(v*,v*,#7)", hvx_width/1, in_u8(x + 7));
+    check("vlalign(v*,v*,#7)", hvx_width/1, in_u8(x + hvx_width - 7));
+#if 0
+    // These are currently not generating because the LLVM Hexagon
+    // target incorrectly places the offset in an immediate, which is
+    // not valid because the immediate must fit in 3 bits (per the HVX
+    // docs).
+    check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + 8));
+    check("vlalign(v*,v*,r*)", hvx_width/1, in_u8(x + hvx_width - 8));
+#endif
+
     check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
     check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
     check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
@@ -1444,10 +1457,10 @@ void check_hvx_all() {
 
     check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
     check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
-    check("vdeal(v*,v*)", hvx_width/4, in_u32(2*x));
-    check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x + 1));
-    check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
-    check("vdeal(v*,v*)", hvx_width/4, in_u32(2*x + 1));
+    check("vdeal(v*,v*,r*)", hvx_width/4, in_u32(2*x));
+    check("vpacko(v*.h,v*.h)", hvx_width/1, in_u8(2*x + 1));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
+    check("vdeal(v*,v*,r*)", hvx_width/4, in_u32(2*x + 1));
 
     check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i16_1));
     check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8c(i16_1));

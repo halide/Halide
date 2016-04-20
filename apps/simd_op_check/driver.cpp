@@ -29,7 +29,7 @@ extern "C" void halide_print(void *, const char *msg) {
 
 template<typename T>
 buffer_t make_buffer(int w, int h) {
-    T *mem = new T[w*h];
+    T *mem = (T *)memalign(128, w*h*sizeof(T));
     buffer_t buf = {0};
     buf.host = (uint8_t *)mem;
     buf.extent[0] = w;
@@ -48,7 +48,7 @@ buffer_t make_buffer(int w, int h) {
 #include "filters.h"
 
 int main(int argc, char **argv) {
-    const int W = 512, H = 128;
+    const int W = 1024, H = 128;
     bool error = false;
     // Make some input buffers
     buffer_t bufs[] = {
@@ -89,9 +89,9 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < sizeof(bufs)/sizeof(buffer_t); i++) {
-        delete[] bufs[i].host;
+        free(bufs[i].host);
     }
-    delete[] out.host;
+    free(out.host);
 
     if (!error) {
         printf ("Success!\n");
