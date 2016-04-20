@@ -1,14 +1,23 @@
 #ifndef HALIDE_CODEGEN_HEXAGON_H
 #define HALIDE_CODEGEN_HEXAGON_H
+
 /** \file
  * Defines the code-generator for producing ARM machine code
  */
+
+#ifdef WITH_HEXAGON
 
 #include "CodeGen_Posix.h"
 
 namespace llvm {
 namespace Intrinsic {
-    enum ID : unsigned;
+
+#if LLVM_VERSION >= 39
+enum ID : unsigned;
+#else
+enum ID;
+#endif
+
 }
 }
 
@@ -104,5 +113,7 @@ protected:
 };
 
 }}
+
+#endif  // WITH_HEXAGON
 
 #endif
