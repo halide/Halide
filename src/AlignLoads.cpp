@@ -107,10 +107,11 @@ private:
         }
 
         // We now have a dense vector load to deal with.
+        internal_assert(stride == 1);
         if (lanes < native_lanes) {
             // This load is smaller than a native vector. Load a
             // native vector.
-            Expr native_load = make_load(op, Ramp::make(ramp->base, ramp->stride, native_lanes));
+            Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes));
 
             // Slice the native load.
             vector<Expr> args = { native_load };
