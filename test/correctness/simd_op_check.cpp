@@ -1331,14 +1331,8 @@ void check_hvx_all() {
     // immediates of more than 3 bits.
     check("valign(v*,v*,#7)", hvx_width/1, in_u8(x + 7));
     check("vlalign(v*,v*,#7)", hvx_width/1, in_u8(x + hvx_width - 7));
-#if 0
-    // These are currently not generating because the LLVM Hexagon
-    // target incorrectly places the offset in an immediate, which is
-    // not valid because the immediate must fit in 3 bits (per the HVX
-    // docs).
     check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + 8));
-    check("vlalign(v*,v*,r*)", hvx_width/1, in_u8(x + hvx_width - 8));
-#endif
+    check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + hvx_width - 8));
 
     check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
     check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
