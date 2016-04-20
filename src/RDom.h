@@ -243,12 +243,22 @@ public:
     /** Single-dimensional reduction domains can be also be used as Exprs directly. */
     EXPORT operator Expr() const;
 
-    /** Add predicate to the RDom. The variables in the predicate can be of anything,
-     * including RVar of the RDom itself and free variables. This allows RDom's
-     * iteration domain to be more general, not restricted to rectangular domain
-     * only. AND of all these predicates defines the valid domain to iterate over.
-     * Note that once RDom is used in the update definition of some function, a new
-     * predicate cannot be added to the RDom.
+    /** Add a predicate to the RDom. An RDom may have multiple
+     * predicates associated with it. An update definition that uses
+     * an RDom only iterates over the subset points in the domain for
+     * which all of its predicates are true. The predicate expression
+     * obeys the same rules as the expressions used on the
+     * right-hand-side of the corresponding update definition. It may
+     * refer to the RDom's variables and free variables in the Func's
+     * update definition. It may include calls to other Funcs, or make
+     * recursive calls to the same Func. This permits iteration over
+     * non-rectangular domains, or domains with sizes that vary with
+     * some free variable, or domains with shapes determined by some
+     * other Func.
+     *
+     * Note that once RDom is used in the update definition of some
+     * Func, no new predicates can be added to the RDom.
+     *
      * Consider a simple example:
      \code
      RDom r(0, 20, 0, 20);
@@ -271,24 +281,32 @@ public:
        }
      }
      \endcode
-     * which would be further simplified into:
+     *
+     * Where possible Halide restricts the range of the containing for
+     * loops to avoid the cases where the predicate is false so that
+     * the if statement can be removed entirely. The case above would
+     * be further simplified into:
+     *
      \code
      for (int r.y = 14; r.y < 20; r.y++) {
        f[r.x, r.y] += 1;
      }
      \endcode
      *
-     * You could also put the predicates into one expression and do the
-     * following instead:
+     * In general, the predicates that we can simplify away by
+     * restricting loop ranges are inequalities that compare an inner
+     * Var or RVar to some expression in outer Vars or RVars.
+     *
+     * You can also pack multiple conditions into one predicate like so:
+     *
      \code
      RDom r(0, 20, 0, 20);
      r.where((r.x < r.y) && (r.x == 10) && (r.y > 13));
      f(r.x, r.y) += 1;
      \endcode
      *
-     * The first example is more preferable however, since we can pull (r.y > 13)
-     * outwards into the outer loop. We will make no attempt to break down the
-     * ANDs in the second example and would produce the following instead:
+     * This produces the following loop nest:
+     *
      \code
      for (int r.y = 0; r.y < 20; r.y++) {
        for (int r.x = 0; r.x < 20; r.x++) {
@@ -298,10 +316,12 @@ public:
        }
      }
      \endcode
-     * It does not make any difference in this example since the predicates are
-     * simple enough to simplify; both examples will produce the same final loops.
-     * However, for other cases, the second example may be suboptimal since it will
-     * tend to put all the predicates in the innermost loop.
+     *
+     * Using separate RDom::where calls is preferable however, since
+     * we place each if condition as far outwards as possible in the
+     * loop nest, which has lower overhead in cases where we cannot
+     * successfully restrict the loop range to remove the if
+     * statement.
      */
     EXPORT void where(Expr predicate);
 
