@@ -1214,6 +1214,18 @@ public:
     }
     // @}
 
+    /** Pad the storage extent of a particular dimension of
+     * realizations of this function up to be a multiple of the
+     * specified alignment. This guarantees that the strides for the
+     * dimensions stored outside of dim will be multiples of the
+     * specified alignment, where the strides and alignment are
+     * measured in numbers of elements.
+     *
+     * For example, to guarantee that a function foo(x, y, c)
+     * representing an image has scanlines starting on offsets
+     * aligned to multiples of 16, use foo.align_storage(x, 16). */
+    EXPORT Func &align_storage(Var dim, Expr alignment);
+
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.
      *
