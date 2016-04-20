@@ -92,8 +92,7 @@ private:
             int shift = known_alignment && aligned_offset < stride ? aligned_offset : 0;
 
             // Load a dense vector covering all of the addresses in the load.
-            internal_assert(stride >= 0);
-            Expr dense_base = simplify(ramp->base - aligned_offset);
+            Expr dense_base = simplify(ramp->base - shift);
             Expr dense_index = Ramp::make(dense_base, 1, (lanes - 1)*stride + 1 + shift);
             Expr dense = make_load(op, dense_index);
 
