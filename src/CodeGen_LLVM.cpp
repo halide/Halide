@@ -2077,6 +2077,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             args.push_back(codegen(i));
         }
         value = interleave_vectors(args);
+    } else if (op->is_intrinsic(Call::concat_vectors)) {
+        vector<Value *> args;
+        args.reserve(op->args.size());
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        value = concat_vectors(args);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();

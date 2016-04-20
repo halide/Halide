@@ -13,6 +13,8 @@
 #include "IRPrinter.h"
 #include "EliminateBoolVectors.h"
 #include "HexagonOptimize.h"
+#include "AlignLoads.h"
+#include "CSE.h"
 
 #define IPICK(i64) (B128 ? i64##_128B : i64)
 
@@ -103,6 +105,12 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
+
+    debug(1) << "Aligning loads for HVX....\n";
+    body = align_loads(body, target.natural_vector_size(Int(8)));
+    body = common_subexpression_elimination(body);
+    body = simplify(body);
+    debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
@@ -310,10 +318,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),  u16x2, "add_mpy.vuh.vub.ub", {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),  u32x2, "add_mpy.vuw.vuh.uh", {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc), i16x2, "add_mpy.vh.vub.b",   {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
-        // TODO: There's also vmpyhsat_acc.
+        { IPICK(Intrinsic::hexagon_V6_vmpyub_acc),   u16x2, "add_mpy.vuh.vub.ub",   {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyuh_acc),   u32x2, "add_mpy.vuw.vuh.uh",   {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpybus_acc),  i16x2, "add_mpy.vh.vub.b",     {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(Intrinsic::hexagon_V6_vmpyhsat_acc), i32x2, "satw_add_mpy.vw.vh.h", {i32x2, i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).
@@ -665,7 +673,15 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return b;
         }
         if (result_ty == native_ty && a_ty == native_ty && b_ty == native_ty) {
-            // TODO: Use valign.
+            // Use valign to select a subset of the concatenation of a and b.
+            int bytes_off = start * (element_bits / 8);
+            int reverse_bytes = (native_vector_bits() / 8) - bytes_off;
+            Intrinsic::ID intrin_id = IPICK(Intrinsic::hexagon_V6_valignbi);
+            if (reverse_bytes <= 7) {
+                intrin_id = IPICK(Intrinsic::hexagon_V6_vlalignbi);
+                bytes_off = reverse_bytes;
+            }
+            return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
     } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
         internal_assert(start == 0 || start == 1);
@@ -1043,179 +1059,6 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
                             "halide.hexagon.splat" + type_suffix(op->value, false),
                             {op->value});
     }
-}
-
-static bool isValidHexagonVector(Type t, int vec_bits) {
-  return t.is_vector() &&
-    ((t.bits() * t.lanes()) == vec_bits);
-}
-
-void CodeGen_Hexagon::visit(const Load *op) {
-  bool B128 = target.has_feature(Halide::Target::HVX_128);
-  if (op->type.is_vector() && isValidHexagonVector(op->type,
-                                                   native_vector_bits())) {
-
-    const Ramp *ramp = op->index.as<Ramp>();
-    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
-    if (ramp && stride && stride->value == 1) {
-      int lanes = ramp->lanes;
-      // int alignment = op->type.bytes(); // The size of a single element
-      int native_vector_bytes = native_vector_bits() / 8;
-
-      // We are loading a partial vector. if we are, default to vanilla codegen.
-      if (lanes * op->type.bytes() != native_vector_bytes) {
-        CodeGen_Posix::visit(op);
-        return;
-      }
-      // At this point we are satisfied that we are loading a native vector.
-      ModulusRemainder mod_rem = get_alignment_info(ramp->base);
-      if (mod_rem.modulus == 1 &&
-          mod_rem.remainder == 0) {
-        // We know nothing about alignment. Just fall back upon vanilla codegen.
-        CodeGen_Posix::visit(op);
-        return;
-      }
-      // ModulusRemainder tells us if something can be written in the
-      // form
-      // (ModulusRemainder.modulus * c1) + ModulusRemainder.remainder.
-      // So for us to be able to generate an aligned load, ramp->base
-      // should be
-      // (lanes * c1) + c2.
-      if (!(mod_rem.modulus % lanes)) {
-        if (mod_rem.remainder == 0) {
-          // This is a perfectly aligned address. Vanilla codegen can deal with
-          // this.
-          CodeGen_Posix::visit(op);
-          return;
-        } else {
-          Expr base = simplify(ramp->base);
-          const Add *add = base.as<Add>();
-          const IntImm *b = add->b.as<IntImm>();
-          // We can generate a combination of two vmems (aligned) followed by
-          // a valign/vlalign if The base is like
-          // 1. (aligned_expr + const)
-          // In the former case, for double vector mode, we will have
-          // mod_rem.modulus == alignment_required and
-          // mod_rem.remainder == vector_width + const
-          if (!b) {
-            CodeGen_Posix::visit(op);
-            return;
-          }
-          int b_val = b->value;
-          // offset_elements is an expr that tells us how many elements away we
-          // are from an aligned vector;
-          int offset_elements = mod_imp(b_val, lanes);
-          if (offset_elements == 0) {
-            CodeGen_Posix::visit(op);
-            return;
-          }
-          // If the index is A + b, then we know that A is already aligned. We need
-          // to know if b, which is an IntImm also contains an aligned vector inside.
-          // For e.g. if b is 65 and lanes is 64, then we have 1 aligned vector in it.
-          // and base_low should be (A + 64)
-          int offset_vector = div_imp(b_val, lanes) * lanes;
-          // offset_elements tells us that we are off by those many elements
-          // from the vector width. We will load two vectors
-          // v_low = load(add->a + offset_vector)
-          // v_high = load(add->a + offset_vector + lanes)
-          // Now,
-          // valign (v_high, v_low, x) = vlalign(v_high, v_low, vec_length - x);
-          // Since offset_elements is always between 0 and (lanes-1), we need to
-          // look at the sign of b_val to create the right offset for vlalign.
-          int bytes_off = b_val > 0 ? offset_elements * op->type.bytes() :
-              (lanes - offset_elements)  * op->type.bytes();
-          Expr base_low =  simplify(add->a + offset_vector);
-          Expr base_high =  simplify(base_low + lanes);
-          Expr ramp_low = Ramp::make(base_low, 1, lanes);
-          Expr ramp_high = Ramp::make(base_high, 1, lanes);
-          Expr load_low = Load::make(op->type, op->name, ramp_low, op->image,
-                                     op->param);
-          Expr load_high = Load::make(op->type, op->name, ramp_high, op->image,
-                                      op->param);
-          Value *vec_low = codegen(load_low);
-          Value *vec_high = codegen(load_high);
-
-          Intrinsic::ID IntrinsID = (Intrinsic::ID) 0;
-          if (b_val > 0) {
-            Value *Scalar;
-            if (bytes_off < 7) {
-              IntrinsID = IPICK(Intrinsic::hexagon_V6_valignbi);
-              Expr ScalarImmExpr = IntImm::make(Int(32), bytes_off);
-              Scalar = codegen(ScalarImmExpr);
-            }
-            else {
-              IntrinsID = IPICK(Intrinsic::hexagon_V6_valignb);
-              // FIXME: PDB: Is this correct? Should this require a register
-              // transfer.
-              Scalar = codegen(bytes_off);
-            }
-            value = call_intrin_cast(llvm_type_of(op->type), IntrinsID,
-                                     {vec_high, vec_low, Scalar});
-            return;
-          } else {
-            Value *Scalar;
-            if (bytes_off < 7) {
-              IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignbi);
-              Expr ScalarImmExpr = IntImm::make(Int(32), bytes_off);
-              Scalar = codegen(ScalarImmExpr);
-            }
-            else {
-              IntrinsID = IPICK(Intrinsic::hexagon_V6_vlalignb);
-              // FIXME: PDB: Is this correct? Should this require a register
-              // transfer.
-              Scalar = codegen(bytes_off);
-            }
-            value = call_intrin_cast(llvm_type_of(op->type), IntrinsID,
-                                     {vec_high, vec_low, Scalar});
-            return;
-          }
-        }
-      }
-    } else if (ramp && stride && stride->value == 2) {
-        // Load two vectors worth and then shuffle
-        Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
-
-        // False indicates we should take the even-numbered lanes
-        // from the load, true indicates we should take the
-        // odd-numbered-lanes.
-        bool shifted_a = false, shifted_b = false;
-        // If the base ends in an odd constant, then subtract one
-        // and do a different shuffle. This helps expressions like
-        // (f(2*x) + f(2*x+1) share loads
-        const Add *add = ramp->base.as<Add>();
-        const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
-        if (offset && offset->value & 1) {
-          base_a -= 1;
-          shifted_a = true;
-          base_b -= 1;
-          shifted_b = true;
-        }
-
-        // Do each load.
-        Expr ramp_a = Ramp::make(base_a, 1, ramp->lanes);
-        Expr ramp_b = Ramp::make(base_b, 1, ramp->lanes);
-        Expr load_a = Load::make(op->type, op->name, ramp_a, op->image,
-                                 op->param);
-        Expr load_b = Load::make(op->type, op->name, ramp_b, op->image,
-                                 op->param);
-        Value *vec_a = codegen(load_a);
-        Value *vec_b = codegen(load_b);
-
-        // Shuffle together the results.
-        vector<int> indices(ramp->lanes);
-        for (int i = 0; i < (ramp->lanes + 1)/2; i++) {
-          indices[i] = i*2 + (shifted_a ? 1 : 0);
-        }
-        for (int i = (ramp->lanes + 1)/2; i < ramp->lanes; i++) {
-          indices[i] = i*2 + (shifted_b ? 1 : 0);
-        }
-
-        value = shuffle_vectors(vec_a, vec_b, indices);
-      }
-  }
-  if (!value)
-    CodeGen_Posix::visit(op);
-  return;
 }
 
 void CodeGen_Hexagon::visit(const Max *op) {
