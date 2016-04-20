@@ -1445,8 +1445,8 @@ void check_hvx_all() {
     check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
     check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
     check("vdeal(v*,v*)", hvx_width/4, in_u32(2*x));
-    check("vpacko(v*.h,v*.h)", hvx_width/1, in_u8(2*x + 1));
-    check("vpacko(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
+    check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x + 1));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
     check("vdeal(v*,v*)", hvx_width/4, in_u32(2*x + 1));
 
     check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i16_1));
