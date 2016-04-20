@@ -16,6 +16,8 @@
 #include "AlignLoads.h"
 #include "CSE.h"
 
+#ifdef WITH_HEXAGON
+
 #define IPICK(i64) (B128 ? i64##_128B : i64)
 
 namespace Halide {
@@ -1192,3 +1194,5 @@ void CodeGen_Hexagon::visit(const NE *op) {
 }
 
 }}
+
+#endif  // WITH_HEXAGON
