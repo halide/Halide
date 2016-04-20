@@ -711,7 +711,7 @@ Stmt make_block(Stmt a, Stmt b = Stmt(), Stmt c = Stmt()) {
     if (a.defined()) s.push_back(a);
     if (b.defined()) s.push_back(b);
     if (c.defined()) s.push_back(c);
-    return fold_right(s, Block::make);
+    return Block::make(s);
 }
 
     template<typename T, typename A>
