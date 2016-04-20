@@ -494,6 +494,17 @@ Stmt Block::make(Stmt first, Stmt rest) {
     return node;
 }
 
+Stmt Block::make(const std::vector<Stmt> &stmts) {
+    if (stmts.empty()) {
+        return Stmt();
+    }
+    Stmt result = stmts.back();
+    for (size_t i = stmts.size()-1; i > 0; i--) {
+        result = Block::make(stmts[i-1], result);
+    }
+    return result;
+}
+
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.

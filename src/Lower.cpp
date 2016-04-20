@@ -26,6 +26,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "Profiling.h"
@@ -41,7 +42,6 @@
 #include "Simplify.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
-#include "StoreForwarding.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "UnifyDuplicateLets.h"
@@ -220,11 +220,11 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
-#ifdef STORE_FORWARDING
-    debug(1) << "Forwarding stores across loop iterations...\n";
-    s = store_forwarding(s);
+    debug(1) << "Reusing loads across loop iterations...\n";
+    s = remove_trivial_for_loops(s);
+    s = loop_carry(s);
     debug(2) << "Lowering after forwarding stores:\n" << s << "\n\n";
-#endif
+
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";

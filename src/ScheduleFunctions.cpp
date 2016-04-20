@@ -585,7 +585,7 @@ pair<Stmt, Stmt> build_production(Function func) {
     vector<Stmt> updates = build_update(func);
 
     // Combine the update steps
-    Stmt merged_updates = fold_right(updates, Block::make);
+    Stmt merged_updates = Block::make(updates);
     return make_pair(produce, merged_updates);
 }
 

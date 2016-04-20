@@ -3623,6 +3623,7 @@ private:
                                        Variable::make(let_first->value.type(), let_first->name),
                                        new_block);
             }
+
             stmt = LetStmt::make(let_first->name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&

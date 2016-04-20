@@ -291,7 +291,7 @@ public:
                                          (index / i.second.size_expr), Parameter()));
             index += i.second.size_expr;
         }
-        Stmt blocks = fold_right(writes, Block::make);
+        Stmt blocks = Block::make(writes);
 
         return blocks;
     }
