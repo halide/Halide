@@ -70,7 +70,6 @@ class Image {
         size = (size + alignment - 1) & ~(alignment - 1);
         uint8_t *ptr = new uint8_t[sizeof(T)*size + alignment - 1];
         buf.host = (uint8_t *)((uintptr_t)(ptr + alignment - 1) & ~(alignment - 1));
-        buf.host = ptr;
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
