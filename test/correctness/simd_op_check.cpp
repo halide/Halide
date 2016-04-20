@@ -1333,6 +1333,10 @@ void check_hvx_all() {
     check("vlalign(v*,v*,#7)", hvx_width/1, in_u8(x + hvx_width - 7));
     check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + 8));
     check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + hvx_width - 8));
+    check("valign(v*,v*,#6)", hvx_width/1, in_u16(x + 3));
+    check("vlalign(v*,v*,#6)", hvx_width/1, in_u16(x + hvx_width - 3));
+    check("valign(v*,v*,r*)", hvx_width/1, in_u16(x + 4));
+    check("valign(v*,v*,r*)", hvx_width/1, in_u16(x + hvx_width - 4));
 
     check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
     check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
