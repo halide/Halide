@@ -50,6 +50,11 @@ public:
     Stage(Internal::Schedule s, const std::string &n) :
         schedule(s), stage_name(n) {s.touched() = true;}
 
+    /** Return the current Schedule associated with this Stage.  For
+     * introspection only: to modify Schedule, use the Func
+     * interface. */
+    const Internal::Schedule& get_schedule() const { return schedule; }
+
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
     EXPORT std::string dump_argument_list() const;
