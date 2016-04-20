@@ -305,7 +305,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::Parent, true};
         contents.ptr->schedule.dims().push_back(d);
-        contents.ptr->schedule.storage_dims().push_back(args[i]);
+        StorageDim sd = {args[i]};
+        contents.ptr->schedule.storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
@@ -550,7 +551,8 @@ void Function::define_extern(const std::string &function_name,
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
         contents.ptr->args[i] = arg;
-        contents.ptr->schedule.storage_dims().push_back(arg);
+        StorageDim sd = {arg};
+        contents.ptr->schedule.storage_dims().push_back(sd);
     }
 }
 
