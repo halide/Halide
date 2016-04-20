@@ -122,52 +122,24 @@ private:
                         debug(4) <<  "... " << expr << "\n";
                         return;
                     } else {
-                        debug(4) <<  "AlignLoads: Unknown alignment or aligned load";
+                        debug(4) << "AlignLoads: Unknown alignment or aligned load";
                         debug(4) << "AlignLoads: Type: " << op->type << "\n";
                         debug(4) << "AlignLoads: Index: " << index << "\n";
                         expr = op;
                         return;
                     }
                 } else if (ramp && stride && stride->value == 2) {
-                    // We'll try to break this into two dense loads followed by a shuffle.
-                    Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
-                    int b_shift = 0;
-                    int lanes = ramp->lanes;
+                    // Convert this to a dense ramp load, followed by a shuffle.
+                    int dense_lanes = ramp->lanes*2 - 1;
+                    Expr dense_ramp = Ramp::make(ramp->base, 1, dense_lanes);
+                    Expr dense_load = mutate(Load::make(op->type.with_lanes(dense_lanes), op->name, dense_ramp, op->image, op->param));
 
-                    if (op->param.defined()) {
-                        // We need to be able to figure out if buffer_base + base_a is aligned. If not,
-                        // we may have to shift base_b left by one so as to not read beyond the end
-                        // of an external buffer.
-                        int lanes_off = 0;
-                        bool known_alignment = get_alignment_check(ramp, op->param.host_alignment(), op->type, &lanes_off);
-
-                        if (!known_alignment || (known_alignment && lanes_off)) {
-                            debug(4) << "AlignLoads: base_a is unaligned: shifting base_b\n";
-                            debug(4) << "AlignLoads: Type: " << op->type << "\n";
-                            debug(4) << "AlignLoads: Index: " << index << "\n";
-                            base_b -= 1;
-                            b_shift = 1;
-                        }
+                    std::vector<Expr> args = { dense_load };
+                    for (int i = 0; i < ramp->lanes; ++i) {
+                        args.push_back(i*2);
                     }
 
-                    Expr ramp_a = Ramp::make(base_a, 1, lanes);
-                    Expr ramp_b = Ramp::make(base_b, 1, lanes);
-                    Expr vec_a = mutate(Load::make(op->type, op->name, ramp_a, op->image, op->param));
-                    Expr vec_b = mutate(Load::make(op->type, op->name, ramp_b, op->image, op->param));
-
-                    std::vector<Expr> indices;
-                    for (int i = 0; i < lanes/2; ++i) {
-                        indices.push_back(i*2);
-                    }
-                    for (int i = lanes/2; i < lanes; ++i) {
-                        indices.push_back(i*2 + b_shift);
-                    }
-
-                    debug(4) << "AlignLoads: Unaligned Load: Converting " << (Expr) op << " into ...\n";
-
-                    expr = concat_and_shuffle(vec_a, vec_b, indices);
-
-                    debug(4) <<  "... " << expr << "\n";
+                    expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
                     return;
                 }else {
                     expr = op;
