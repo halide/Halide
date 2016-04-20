@@ -39,7 +39,7 @@ int num_processes = 16;
 int my_process_id = 0;
 
 // width and height of test images
-const int W = 256*3, H = 100;
+const int W = 256*3, H = 128;
 
 bool can_run_code() {
 
@@ -1327,6 +1327,17 @@ void check_hvx_all() {
         hvx_width = 128;
     }
 
+    // Verify that unaligned loads use the right instructions, and don't try to use
+    // immediates of more than 3 bits.
+    check("valign(v*,v*,#7)", hvx_width/1, in_u8(x + 7));
+    check("vlalign(v*,v*,#7)", hvx_width/1, in_u8(x + hvx_width - 7));
+    check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + 8));
+    check("valign(v*,v*,r*)", hvx_width/1, in_u8(x + hvx_width - 8));
+    check("valign(v*,v*,#6)", hvx_width/1, in_u16(x + 3));
+    check("vlalign(v*,v*,#6)", hvx_width/1, in_u16(x + hvx_width - 3));
+    check("valign(v*,v*,r*)", hvx_width/1, in_u16(x + 4));
+    check("valign(v*,v*,r*)", hvx_width/1, in_u16(x + hvx_width - 4));
+
     check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
     check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
     check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
@@ -1442,6 +1453,13 @@ void check_hvx_all() {
     check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(u32_1 >> 16));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(i32_1 >> 16));
 
+    check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
+    check("vdeal(v*,v*,r*)", hvx_width/4, in_u32(2*x));
+    check("vpacko(v*.h,v*.h)", hvx_width/1, in_u8(2*x + 1));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
+    check("vdeal(v*,v*,r*)", hvx_width/4, in_u32(2*x + 1));
+
     check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i16_1));
     check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8c(i16_1));
     check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width/2, u16c(i32_1));
@@ -1473,16 +1491,13 @@ void check_hvx_all() {
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, in_i16(x/2), in_i16((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_u32(x/2), in_u32((x+16)/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, in_i32(x/2), in_i32((x+16)/2)));
-#if 0
-    // I *think* this is failing in the non-vectorized reference case
-    // due to ridiculous shuffling being generated.
+
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, u8(x/2), u8(x/2)));
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, i8(x/2), i8(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, u16(x/2), u16(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/2, select((x%2) == 0, i16(x/2), i16(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, u32(x/2), u32(x/2)));
     check("vshuff(v*,v*,r*)", (hvx_width*2)/4, select((x%2) == 0, i32(x/2), i32(x/2)));
-#endif
 
     check("vmax(v*.ub,v*.ub)", hvx_width/1, max(u8_1, u8_2));
     check("vmax(v*.uh,v*.uh)", hvx_width/2, max(u16_1, u16_2));
@@ -1816,6 +1831,11 @@ int main(int argc, char **argv) {
             p.set(b);
         }
     }
+    for (ImageParam p : image_params) {
+        p.set_host_alignment(128);
+        p.set_min(0, 0);
+    }
+
     if (target.arch == Target::X86) {
         check_sse_all();
     } else if (target.arch == Target::ARM) {
