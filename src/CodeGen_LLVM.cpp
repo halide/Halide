@@ -1631,6 +1631,10 @@ int next_power_of_two(int x) {
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
 
+    // Get the unique name for the block of memory this allocate node
+    // is using.
+    buffer = get_allocation_name(buffer);
+
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;

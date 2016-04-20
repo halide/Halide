@@ -92,6 +92,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.ptr = nullptr;
     allocation.destructor = nullptr;
     allocation.destructor_function = nullptr;
+    allocation.name = name;
 
     if (!new_expr.defined() && stack_bytes != 0) {
         // Try to find a free stack allocation we can use.
@@ -114,6 +115,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // Use a free alloc we found.
             allocation.ptr = free->ptr;
             allocation.stack_bytes = free->stack_bytes;
+            allocation.name = free->name;
 
             // This allocation isn't free anymore.
             free_stack_allocs.erase(free);
@@ -184,6 +186,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocations.push(name, allocation);
 
     return allocation;
+}
+
+string CodeGen_Posix::get_allocation_name(const std::string &n) {
+    if (allocations.contains(n)) {
+        return allocations.get(n).name;
+    } else {
+        return n;
+    }
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
