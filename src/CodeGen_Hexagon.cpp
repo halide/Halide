@@ -677,19 +677,15 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // and b.
             int bytes_off = start * (element_bits / 8);
             int reverse_bytes = (native_vector_bits() / 8) - bytes_off;
-            Intrinsic::ID intrin_id = IPICK(Intrinsic::hexagon_V6_valignbi);
-            if (reverse_bytes <= 7) {
-                // v(l)align is a bit more efficient if the offset
-                // fits in 3 bits, so if the offset is with in 3 bits
-                // from the high end, use vlalign instead.
+            Intrinsic::ID intrin_id = IPICK(Intrinsic::hexagon_V6_valignb);
+            // v(l)align is a bit more efficient if the offset fits in
+            // 3 bits, so if the offset is with in 3 bits from the
+            // high end, use vlalign instead.
+            if (bytes_off <= 7) {
+                intrin_id = IPICK(Intrinsic::hexagon_V6_valignbi);
+            } else if (reverse_bytes <= 7) {
                 intrin_id = IPICK(Intrinsic::hexagon_V6_vlalignbi);
                 bytes_off = reverse_bytes;
-            }
-            if (bytes_off > 7) {
-                // This is a workaround for a bug in LLVM which uses
-                // an immediate for valign even when the immediate
-                // doesn't fit in 3 bits.
-                return CodeGen_Posix::shuffle_vectors(a, b, indices);
             }
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
