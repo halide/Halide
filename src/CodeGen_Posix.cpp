@@ -94,40 +94,15 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.destructor_function = nullptr;
 
     if (!new_expr.defined() && stack_bytes != 0) {
-        // Try to find a free stack allocation we can use.
-        vector<Allocation>::iterator free = free_stack_allocs.end();
-        for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
-            AllocaInst *alloca_inst = dyn_cast<AllocaInst>(free->ptr);
-            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : nullptr;
-            llvm::Function *current_func = builder->GetInsertBlock()->getParent();
-
-            if (allocated_in == current_func &&
-                free->type == type &&
-                free->stack_bytes >= stack_bytes) {
-                break;
-            }
-        }
-        if (free != free_stack_allocs.end()) {
-            debug(4) << "Reusing freed stack allocation of " << free->stack_bytes
-                     << " bytes for allocation " << name
-                     << " of " << stack_bytes << " bytes.\n";
-            // Use a free alloc we found.
-            allocation.ptr = free->ptr;
-            allocation.stack_bytes = free->stack_bytes;
-
-            // This allocation isn't free anymore.
-            free_stack_allocs.erase(free);
-        } else {
-            debug(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
-            // We used to do the alloca locally and save and restore the
-            // stack pointer, but this makes llvm generate streams of
-            // spill/reloads.
-            int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
-            // Handles are stored as uint64s
-            llvm::Type *t = llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
-            allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
-            allocation.stack_bytes = stack_bytes;
-        }
+        debug(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
+        // We used to do the alloca locally and save and restore the
+        // stack pointer, but this makes llvm generate streams of
+        // spill/reloads.
+        int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
+        // Handles are stored as uint64s
+        llvm::Type *t = llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
+        allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
+        allocation.stack_bytes = stack_bytes;
     } else {
         if (new_expr.defined()) {
             allocation.ptr = codegen(new_expr);
@@ -207,10 +182,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 void CodeGen_Posix::visit(const Free *stmt) {
     Allocation alloc = allocations.get(stmt->name);
 
-    if (alloc.stack_bytes) {
-        // Remember this allocation so it can be re-used by a later allocation.
-        free_stack_allocs.push_back(alloc);
-    } else {
+    if (!alloc.stack_bytes) {
         internal_assert(alloc.destructor);
         trigger_destructor(alloc.destructor_function, alloc.destructor);
     }
