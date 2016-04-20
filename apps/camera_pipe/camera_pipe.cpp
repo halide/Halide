@@ -417,6 +417,9 @@ int main(int argc, char **argv) {
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
                              color_temp, gamma, contrast, blackLevel, whiteLevel);
 
+    // Assert our input is aligned, which helps Hexagon generate better code.
+    input.set_host_alignment(128);
+
     std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
                                   input, matrix_3200, matrix_7000};
     processed.compile_to_file("curved", args, target);
