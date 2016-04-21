@@ -1,103 +1,14 @@
-#include "Derivative.h"
+#include "Monotonic.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 #include "Scope.h"
+#include "Simplify.h"
 #include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
-
-class FiniteDifference : public IRMutator {
-    Scope<Expr> scope;
-    string var;
-
-    Expr brute_force(Expr e) {
-        return substitute(var, (Variable::make(Int(32), var)) + 1, e) - e;
-    }
-
-    using IRMutator::visit;
-
-    void visit(const IntImm *op) {
-        expr = make_zero(op->type);
-    }
-
-    void visit(const UIntImm *op) {
-        expr = make_zero(op->type);
-    }
-
-    void visit(const FloatImm *op) {
-        expr = make_zero(op->type);
-    }
-
-    void visit(const Cast *op) {
-        expr = brute_force(op);
-    }
-
-    void visit(const Variable *op) {
-        if (op->name == var) {
-            expr = make_one(op->type);
-        } else if (scope.contains(op->name)) {
-            expr = scope.get(op->name);
-        } else {
-            expr = make_zero(op->type);
-        }
-    }
-
-    void visit(const Add *op) {
-        expr = mutate(op->a) + mutate(op->b);
-    }
-
-    void visit(const Sub *op) {
-        expr = mutate(op->a) - mutate(op->b);
-    }
-
-    void visit(const Mul *op) {
-        Expr da = mutate(op->a), db = mutate(op->b);
-        expr = op->a * db + da * op->b + da * db;
-    }
-
-    void visit(const Div *op) {
-        expr = brute_force(op);
-    }
-
-    void visit(const Mod *op) {
-        expr = brute_force(op);
-    }
-
-    void visit(const Min *op) {
-        expr = select(op->a < op->b, mutate(op->a), mutate(op->b));
-    }
-
-    void visit(const Max *op) {
-        expr = select(op->a > op->b, mutate(op->a), mutate(op->b));
-    }
-
-    void visit(const Select *op) {
-        expr = select(op->condition, mutate(op->true_value), mutate(op->false_value));
-    }
-
-    void visit(const Load *op) {
-        expr = brute_force(op);
-    }
-
-    void visit(const Call *op) {
-        expr = brute_force(op);
-    }
-
-    void visit(const Let *op) {
-        scope.push(op->name, mutate(op->value));
-        expr = mutate(op->body);
-        scope.pop(op->name);
-    }
-public:
-    FiniteDifference(string v) : var(v) {}
-};
-
-Expr finite_difference(Expr expr, const string &var) {
-    return FiniteDifference(var).mutate(expr);
-}
 
 class Monotonic : public IRVisitor {
     const string &var;
@@ -199,7 +110,21 @@ class Monotonic : public IRVisitor {
         MonotonicResult ra = result;
         op->b.accept(this);
         MonotonicResult rb = result;
-        result = unify(ra, rb);
+
+        if (ra == Constant && rb == Constant) {
+            result = Constant;
+        } else if (is_positive_const(op->a)) {
+            result = rb;
+        } else if (is_positive_const(op->b)) {
+            result = ra;
+        } else if (is_negative_const(op->a)) {
+            result = flip(rb);
+        } else if (is_negative_const(op->b)) {
+            result = flip(ra);
+        } else {
+            result = Unknown;
+        }
+
     }
 
     void visit(const Div *op) {
@@ -207,7 +132,16 @@ class Monotonic : public IRVisitor {
         MonotonicResult ra = result;
         op->b.accept(this);
         MonotonicResult rb = result;
-        result = unify(ra, flip(rb));
+
+        if (ra == Constant && rb == Constant) {
+            result = Constant;
+        } else if (is_positive_const(op->b)) {
+            result = ra;
+        } else if (is_negative_const(op->b)) {
+            result = flip(ra);
+        } else {
+            result = Unknown;
+        }
     }
 
     void visit(const Mod *op) {
@@ -230,7 +164,7 @@ class Monotonic : public IRVisitor {
         result = unify(ra, rb);
     }
 
-    void visit_cmp(Expr a, Expr b) {
+    void visit_eq(Expr a, Expr b) {
         a.accept(this);
         MonotonicResult ra = result;
         b.accept(this);
@@ -243,53 +177,95 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const EQ *op) {
-        visit_cmp(op->a, op->b);
+        visit_eq(op->a, op->b);
     }
 
     void visit(const NE *op) {
-        visit_cmp(op->a, op->b);
+        visit_eq(op->a, op->b);
+    }
+
+    void visit_lt(Expr a, Expr b) {
+        a.accept(this);
+        MonotonicResult ra = result;
+        b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(flip(ra), rb);
     }
 
     void visit(const LT *op) {
-        visit_cmp(op->a, op->b);
+        visit_lt(op->a, op->b);
     }
 
     void visit(const LE *op) {
-        visit_cmp(op->a, op->b);
+        visit_lt(op->a, op->b);
     }
 
     void visit(const GT *op) {
-        visit_cmp(op->a, op->b);
+        visit_lt(op->b, op->a);
     }
 
     void visit(const GE *op) {
-        visit_cmp(op->a, op->b);
+        visit_lt(op->b, op->a);
     }
 
     void visit(const And *op) {
-        visit_cmp(op->a, op->b);
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
     }
 
     void visit(const Or *op) {
-        visit_cmp(op->a, op->b);
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
     }
 
     void visit(const Not *op) {
         op->a.accept(this);
+        result = flip(result);
     }
 
     void visit(const Select *op) {
         op->condition.accept(this);
         MonotonicResult rcond = result;
 
-        if (rcond != Constant) {
-            result = Unknown;
-        } else {
-            op->true_value.accept(this);
-            MonotonicResult ra = result;
-            op->false_value.accept(this);
-            MonotonicResult rb = result;
+        op->true_value.accept(this);
+        MonotonicResult ra = result;
+        op->false_value.accept(this);
+        MonotonicResult rb = result;
+        MonotonicResult unified = unify(ra, rb);
+
+        if (rcond == Constant) {
+            result = unified;
+            return;
+        }
+
+        bool true_value_ge_false_value = is_one(simplify(op->true_value >= op->false_value));
+        bool true_value_le_false_value = is_one(simplify(op->true_value <= op->false_value));
+
+        bool switches_from_true_to_false = rcond == MonotonicDecreasing;
+        bool switches_from_false_to_true = rcond == MonotonicIncreasing;
+
+        if (rcond == Constant) {
             result = unify(ra, rb);
+        } else if ((unified == MonotonicIncreasing || unified == Constant) &&
+                   ((switches_from_false_to_true && true_value_ge_false_value) ||
+                    (switches_from_true_to_false && true_value_le_false_value))) {
+            // Both paths increase, and the condition makes it switch
+            // from the lesser path to the greater path.
+            result = MonotonicIncreasing;
+        } else if ((unified == MonotonicDecreasing || unified == Constant) &&
+                   ((switches_from_false_to_true && true_value_le_false_value) ||
+                    (switches_from_true_to_false && true_value_ge_false_value))) {
+            // Both paths decrease, and the condition makes it switch
+            // from the greater path to the lesser path.
+            result = MonotonicDecreasing;
+        } else {
+            result = Unknown;
         }
     }
 
@@ -399,6 +375,76 @@ MonotonicResult is_monotonic(Expr e, const std::string &var) {
     e.accept(&m);
     return m.result;
 }
+
+namespace {
+void check_increasing(Expr e) {
+    internal_assert(is_monotonic(e, "x") == MonotonicIncreasing)
+        << "Was supposed to be increasing: " << e << "\n";
+}
+
+void check_decreasing(Expr e) {
+    internal_assert(is_monotonic(e, "x") == MonotonicDecreasing)
+        << "Was supposed to be decreasing: " << e << "\n";
+}
+
+void check_constant(Expr e) {
+    internal_assert(is_monotonic(e, "x") == Constant)
+        << "Was supposed to be constant: " << e << "\n";
+}
+
+void check_unknown(Expr e) {
+    internal_assert(is_monotonic(e, "x") == Unknown)
+        << "Was supposed to be unknown: " << e << "\n";
+}
+}
+
+void is_monotonic_test() {
+
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+
+    check_increasing(x);
+    check_increasing(x+4);
+    check_increasing(x+y);
+    check_increasing(x*4);
+    check_increasing(min(x+4, y+4));
+    check_increasing(max(x+y, x-y));
+    check_increasing(x >= y);
+    check_increasing(x > y);
+
+    check_decreasing(-x);
+    check_decreasing(x*-4);
+    check_decreasing(y - x);
+    check_decreasing(x < y);
+    check_decreasing(x <= y);
+
+    check_unknown(x == y);
+    check_unknown(x != y);
+    check_unknown(x*y);
+
+    check_increasing(select(y == 2, x, x+4));
+    check_decreasing(select(y == 2, -x, x*-4));
+
+    check_increasing(select(x > 2, x+1, x));
+    check_increasing(select(x < 2, x, x+1));
+    check_decreasing(select(x > 2, -x-1, -x));
+    check_decreasing(select(x < 2, -x, -x-1));
+
+    check_unknown(select(x < 2, x, x-5));
+    check_unknown(select(x > 2, x-5, x));
+
+    check_constant(y);
+
+    check_increasing(select(x < 17, y, y+1));
+    check_increasing(select(x > 17, y, y-1));
+    check_decreasing(select(x < 17, y, y-1));
+    check_decreasing(select(x > 17, y, y+1));
+
+    check_constant(select(y > 3, y + 23, y - 65));
+
+    std::cout << "is_monotonic test passed" << std::endl;
+}
+
 
 }
 }
