@@ -1756,9 +1756,6 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             // For dense vector loads wider than the native vector
             // width, bust them up into native vectors
-            debug(4) << "Generating load w/ alignment: " << alignment << "\n";
-            debug(4) << "Type: " << op->type << "\n";
-            debug(4) << "Index: " << op->index << "\n";
             int load_lanes = op->type.lanes();
             int native_lanes = native_bits / op->type.bits();
             vector<Value *> slices;
@@ -1774,8 +1771,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 slices.push_back(load);
             }
             value = concat_vectors(slices);
-            debug(2) << "Concat_vectors 1:\n";
-            if (debug::debug_level >= 2) value -> dump();
+
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
@@ -1847,8 +1843,6 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
-                debug(2) << "Generate InsertElement without indices\n";
-                if (debug::debug_level >= 2) value -> dump();
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
         } else if (false /* should_scalarize(op->index) */) {
@@ -1864,8 +1858,6 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
-                debug(2) << "Generate InsertElement with index as scalars\n";
-                if (debug::debug_level >= 2) vec -> dump();
             }
             value = vec;
         } else {
@@ -1878,8 +1870,6 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
-                debug(2) << "Generate InsertElement general gathers\n";
-                if (debug::debug_level >= 2) vec -> dump();
             }
             value = vec;
         }
@@ -1912,8 +1902,6 @@ void CodeGen_LLVM::visit(const Ramp *op) {
                 }
             }
             value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
-            debug(2) << "Generate InsertElement Ramp adding stride to base\n";
-            if (debug::debug_level >= 2) value -> dump();
         }
     }
 }
@@ -1922,18 +1910,12 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
     Constant *undef = UndefValue::get(VectorType::get(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32, 0);
     v = builder->CreateInsertElement(undef, v, zero);
-    debug(2) << "Generate InsertElement broadcast v\n";
-    if (debug::debug_level >= 2) v -> dump();
     Constant *zeros = ConstantVector::getSplat(lanes, zero);
-    debug(2) << "Creating broadcast via shufflevector of zeros and V\n";
-    Value *value = builder->CreateShuffleVector(v, undef, zeros);
-    if (debug::debug_level >= 2) value -> dump();
-    return value;
+    return builder->CreateShuffleVector(v, undef, zeros);
 }
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
-    if (debug::debug_level >= 2) value -> dump();
 }
 
 // Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
@@ -2026,8 +2008,6 @@ void CodeGen_LLVM::scalarize(Expr e) {
     for (int i = 0; i < e.type().lanes(); i++) {
         Value *v = codegen(extract_lane(e, i));
         result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
-        debug(2) << "Generate InsertElement scalarize\n";
-        if (debug::debug_level >= 2) result -> dump();
     }
     value = result;
 }
@@ -2053,25 +2033,14 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().lanes());
             indices[i] = idx->value;
         }
-
-        // If the indices are a contiguous ramp, generate a call to slice_vector instead.
-        bool is_ramp = true;
-        for (size_t i = 0; i + 1 < indices.size(); i++) {
-            if (indices[i] + 1 != indices[i + 1]) {
-                is_ramp = false;
-                break;
-            }
-        }
         Value *arg = codegen(op->args[0]);
-        if (is_ramp) {
-            value = slice_vector(arg, indices[0], op->type.lanes());
-        } else {
-            value = shuffle_vectors(arg, indices);
-        }
+
+        value = shuffle_vectors(arg, indices);
 
         if (op->type.is_scalar()) {
             value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
         }
+
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
         vector<Value *> args;
         args.reserve(op->args.size());
@@ -2810,8 +2779,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
                         value = builder->CreateInsertElement(value, call, idx);
-                        debug(2) << "Generate InsertElement call\n";
-                        if (debug::debug_level >= 2) value -> dump();
                     } // otherwise leave it as undef.
                 }
             }
@@ -3138,9 +3105,6 @@ void CodeGen_LLVM::visit(const Store *op) {
 
             // For dense vector stores wider than the native vector
             // width, bust them up into native vectors.
-            debug(4) << "Generating store w/ alignment: " << alignment << "\n";
-            debug(4) << "Type: " << value_type << "\n";
-            debug(4) << "Index: " << op->index << "\n";
             int store_lanes = value_type.lanes();
             int native_lanes = native_bits / value_type.bits();
 
@@ -3306,9 +3270,6 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             results.push_back(call_intrin(result_slice_type, intrin_lanes, name, args));
         }
         Value *result = concat_vectors(results);
-        debug(2) << "Concat_vectors 2:\n";
-        if (debug::debug_level >= 2) result -> dump();
-
         return slice_vector(result, 0, arg_lanes);
     }
 
