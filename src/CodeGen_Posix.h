@@ -62,7 +62,7 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
-    std::string get_allocation_name(const std::string &n) override;
+    std::string get_allocation_name(const std::string &n);
 
 private:
 
