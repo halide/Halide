@@ -45,7 +45,7 @@ private:
 
         Expr index = mutate(op->index);
         const Ramp *ramp = index.as<Ramp>();
-        const int64_t *const_stride = as_const_int(ramp->stride);
+        const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
         if (!ramp || !const_stride) {
             // We can't handle indirect loads, or loads with
             // non-constant strides.
