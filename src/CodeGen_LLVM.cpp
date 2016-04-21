@@ -2313,36 +2313,35 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::rewrite_buffer)) {
         int dims = ((int)(op->args.size())-2)/3;
         internal_assert((int)(op->args.size()) == dims*3 + 2);
-        internal_assert(dims <= 4);
 
         Value *buffer = codegen(op->args[0]);
 
-        // Rewrite the buffer_t using the args
-        builder->CreateStore(codegen(op->args[1]), buffer_elem_size_ptr(buffer));
+        // Rewrite the halide_buffer_t using the args
+        // Arg 1 is only used for its type
+        Type t = op->args[1].type();
+        builder->CreateStore(ConstantInt::get(i8, t.code()), buffer_type_code_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i8, t.bits()), buffer_type_bits_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i16, t.lanes()), buffer_type_lanes_ptr(buffer));
+
+        builder->CreateStore(ConstantInt::get(i32, dims), buffer_dimensions_ptr(buffer));
+
         for (int i = 0; i < dims; i++) {
             builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
             builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
             builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
         }
-        for (int i = dims; i < 4; i++) {
-            builder->CreateStore(ConstantInt::get(i32, 0), buffer_min_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32, 0), buffer_extent_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32, 0), buffer_stride_ptr(buffer, i));
-        }
 
         // From the point of view of the continued code (a containing assert stmt), this returns true.
         value = codegen(const_true());
     } else if (op->is_intrinsic(Call::set_host_dirty)) {
-        internal_assert(op->args.size() == 2);
+        internal_assert(op->args.size() == 1);
         Value *buffer = codegen(op->args[0]);
-        Value *arg = codegen(op->args[1]);
-        builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+        buffer_set_flag(buffer, halide_buffer_t::flag_host_dirty, true);
         value = ConstantInt::get(i32, 0);
-    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
-        internal_assert(op->args.size() == 2);
+    } else if (op->is_intrinsic(Call::set_device_dirty)) {
+        internal_assert(op->args.size() == 1);
         Value *buffer = codegen(op->args[0]);
-        Value *arg = codegen(op->args[1]);
-        builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+        buffer_set_flag(buffer, halide_buffer_t::flag_device_dirty, true);
         value = ConstantInt::get(i32, 0);
     } else if (op->is_intrinsic(Call::null_handle)) {
         internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";

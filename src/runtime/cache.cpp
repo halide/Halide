@@ -192,7 +192,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 WEAK void CacheEntry::destroy() {
     for (uint32_t i = 0; i < tuple_count; i++) {
         halide_device_free(NULL, &buf[i]);
-        halide_free(NULL, get_pointer_to_header(&buf[i].host));
+        halide_free(NULL, get_pointer_to_header(buf[i].host));
     }
     halide_free(NULL, metadata_storage);
 }

@@ -302,6 +302,9 @@ public:
      * the size of type. */
     EXPORT int host_alignment() const;
 
+    /** Set the expected alignment of the host pointer in bytes. */
+    EXPORT OutputImageParam &set_host_alignment(int);
+
     /** Get the dimensionality of this image parameter */
     EXPORT int dimensions() const;
 

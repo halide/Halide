@@ -105,7 +105,7 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
                << "#define HALIDE_" << print_name(guard) << '\n';
     }
 
-    if (!is_header) {
+    if (!is_header()) {
         stream
             << headers
             << globals;
@@ -1133,7 +1133,7 @@ void CodeGen_C::visit(const Call *op) {
         do_indent();
         stream << "((halide_buffer_t *)(" << a0 << "))->set_host_dirty(" << a1 << ");\n";
         rhs << "0";
-    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
+    } else if (op->is_intrinsic(Call::set_device_dirty)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);

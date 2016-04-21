@@ -337,7 +337,7 @@ Stmt add_image_checks(Stmt s,
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(type_of<struct halide_buffer_t *>, name + ".buffer");
+        Expr buffer_name_expr = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
         vector<Expr> args = {buffer_name_expr, make_zero(type)};
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);

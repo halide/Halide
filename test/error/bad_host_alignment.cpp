@@ -9,17 +9,12 @@ int main(int argc, char **argv) {
     Func f;
     Var x, y;
     int arr[11][10];
-    uint8_t *ptr  = reinterpret_cast<uint8_t*>(arr);
+    uint8_t *ptr = reinterpret_cast<uint8_t*>(arr);
     ptr += 1;
-    buffer_t buf;
+    halide_nd_buffer_t<1> buf;
     buf.host = ptr;
-    buf.extent[0] = 10;
-    buf.extent[1] = 10;
-    buf.stride[0] = 1;
-    buf.stride[1] = 10;
-    buf.elem_size = 1;
-    buf.min[0] = 0;
-    buf.min[1] = 0;
+    buf.dim[0] = {0, 10, 1};
+    buf.type = halide_type_of<uint8_t>();
     Buffer param_buf(UInt(8), &buf);
     ImageParam in(UInt(8), 2);
 

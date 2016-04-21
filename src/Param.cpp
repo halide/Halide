@@ -108,6 +108,7 @@ OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) {
 
 const OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) const {
     return OutputImageParam::Dimension(param, i);
+}
 
 OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
     param.set_host_alignment(bytes);
