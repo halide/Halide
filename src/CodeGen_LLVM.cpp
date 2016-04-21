@@ -1664,6 +1664,10 @@ int next_power_of_two(int x) {
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
 
+    // Get the unique name for the block of memory this allocate node
+    // is using.
+    buffer = get_allocation_name(buffer);
+
     // If the index is constant, we generate some TBAA info that helps
     // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
@@ -1827,15 +1831,15 @@ void CodeGen_LLVM::visit(const Load *op) {
             Value *vec_b = codegen(load_b);
 
             // Shuffle together the results.
-            vector<Constant *> indices(ramp->lanes);
+            vector<int> indices(ramp->lanes);
             for (int i = 0; i < (ramp->lanes + 1)/2; i++) {
-                indices[i] = ConstantInt::get(i32, i*2 + (shifted_a ? 1 : 0));
+                indices[i] = i*2 + (shifted_a ? 1 : 0);
             }
             for (int i = (ramp->lanes + 1)/2; i < ramp->lanes; i++) {
-                indices[i] = ConstantInt::get(i32, i*2 + (shifted_b ? 1 : 0));
+                indices[i] = i*2 + (shifted_b ? 1 : 0);
             }
 
-            value = builder->CreateShuffleVector(vec_a, vec_b, ConstantVector::get(indices));
+            value = shuffle_vectors(vec_a, vec_b, indices);
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -1844,13 +1848,12 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             Value *flipped = codegen(flipped_load);
 
-            vector<Constant *> indices(ramp->lanes);
+            vector<int> indices(ramp->lanes);
             for (int i = 0; i < ramp->lanes; i++) {
-                indices[i] = ConstantInt::get(i32, ramp->lanes-1-i);
+                indices[i] = ramp->lanes - 1 - i;
             }
 
-            Constant *undef = UndefValue::get(flipped->getType());
-            value = builder->CreateShuffleVector(flipped, undef, ConstantVector::get(indices));
+            value = shuffle_vectors(flipped, indices);
         } else if (ramp) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
@@ -1947,157 +1950,73 @@ Expr unbroadcast(Expr e) {
     }
 }
 
-Value *CodeGen_LLVM::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
-    if(vecs.size() == 1) {
-        return codegen(vecs[0]);
-    } else if(vecs.size() == 2) {
-        Expr a = vecs[0], b = vecs[1];
-        debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
+    internal_assert(vecs.size() >= 1);
+    for (size_t i = 1; i < vecs.size(); i++) {
+        internal_assert(vecs[0]->getType() == vecs[i]->getType());
+    }
+    int vec_elements = vecs[0]->getType()->getVectorNumElements();
 
-        vector<Constant *> indices(type.lanes());
-        for (int i = 0; i < type.lanes(); i++) {
-            int idx = i/2;
-            if (i % 2 == 1) idx += a.type().lanes();
-            indices[i] = ConstantInt::get(i32, idx);
+    if (vecs.size() == 1) {
+        return vecs[0];
+    } else if (vecs.size() == 2) {
+        Value *a = vecs[0];
+        Value *b = vecs[1];
+        vector<int> indices(vec_elements*2);
+        for (int i = 0; i < vec_elements*2; i++) {
+            indices[i] = i%2 == 0 ? i/2 : i/2 + vec_elements;
         }
-
-        return builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-    } else if(vecs.size() == 3) {
-        Expr a = vecs[0], b = vecs[1], c = vecs[2];
-        debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << "\n";
-
-        // First we shuffle a & b together...
-        vector<Constant *> indices(type.lanes());
-        for (int i = 0; i < type.lanes(); i++) {
-            if (i % 3 == 0) {
-                indices[i] = ConstantInt::get(i32, i/3);
-            } else if (i % 3 == 1) {
-                indices[i] = ConstantInt::get(i32, i/3 + a.type().lanes());
-            } else {
-                indices[i] = UndefValue::get(i32);
-            }
-        }
-
-        Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-
-        // Then we create a vector of the output size that contains c...
-        for (int i = 0; i < type.lanes(); i++) {
-            if (i < c.type().lanes()) {
-                indices[i] = ConstantInt::get(i32, i);
-            } else {
-                indices[i] = UndefValue::get(i32);
-            }
-        }
-
-        Value *none = UndefValue::get(llvm_type_of(c.type()));
-        Value *value_c = builder->CreateShuffleVector(codegen(c), none, ConstantVector::get(indices));
-
-        // Finally, we shuffle the above 2 vectors together into the result.
-        for (int i = 0; i < type.lanes(); i++) {
-            if (i % 3 < 2) {
-                indices[i] = ConstantInt::get(i32, i);
-            } else {
-                indices[i] = ConstantInt::get(i32, i/3 + type.lanes());
-            }
-        }
-
-        return builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
-    } else if (vecs.size() == 4 && vecs[0].type().bits() <= 32) {
-        Expr a = vecs[0], b = vecs[1], c = vecs[2], d = vecs[3];
-        debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
-
-        int half_lanes = type.lanes() / 2;
-        vector<Constant *> indices(half_lanes);
-        for (int i = 0; i < half_lanes; i++) {
-            int idx = i/2;
-            if (i % 2 == 1) idx += a.type().lanes();
-            indices[i] = ConstantInt::get(i32, idx);
-        }
-
-        // First we shuffle a & b together...
-        Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-
-        // Next we shuffle c & d together...
-        Value *value_cd = builder->CreateShuffleVector(codegen(c), codegen(d), ConstantVector::get(indices));
-
-        // Now we reinterpret the shuffled vectors as vectors of pairs...
-        Type t = a.type().with_bits(a.type().bits() * 2);
-        Value *vec_ab = builder->CreateBitCast(value_ab, llvm_type_of(t));
-        Value *vec_cd = builder->CreateBitCast(value_cd, llvm_type_of(t));
-
-        // Finally, we shuffle the above 2 vectors together into the result.
-        Value *vec = builder->CreateShuffleVector(vec_ab, vec_cd, ConstantVector::get(indices));
-        return builder->CreateBitCast(vec, llvm_type_of(type));
+        return shuffle_vectors(a, b, indices);
     } else {
-        Type even_t = type.with_lanes(0);
-        Type odd_t  = type.with_lanes(0);
-        std::vector<Expr> even_vecs, odd_vecs;
-        int odd_num_vecs = vecs.size() % 2;
-        for (size_t i = 0; i < vecs.size() - odd_num_vecs; ++i) {
-            if (i % 2 == 0) {
-                even_t = even_t.with_lanes(even_t.lanes() + vecs[i].type().lanes());
+        // Grab the even and odd elements of vecs.
+        vector<Value *> even_vecs;
+        vector<Value *> odd_vecs;
+        for (size_t i = 0; i < vecs.size(); i++) {
+            if (i%2 == 0) {
                 even_vecs.push_back(vecs[i]);
             } else {
-                odd_t = odd_t.with_lanes(odd_t.lanes() + vecs[i].type().lanes());
                 odd_vecs.push_back(vecs[i]);
             }
         }
 
-        Expr last;
-        if (odd_num_vecs) {
-            last = vecs.back();
+        // If the number of vecs is odd, save the last one for later.
+        Value *last = nullptr;
+        if (even_vecs.size() > odd_vecs.size()) {
+            last = even_vecs.back();
+            even_vecs.pop_back();
         }
+        internal_assert(even_vecs.size() == odd_vecs.size());
 
-        Value* a = interleave_vectors(even_t, even_vecs);
-        Value* b = interleave_vectors(odd_t, odd_vecs);
+        // Interleave the even and odd parts.
+        Value *even = interleave_vectors(even_vecs);
+        Value *odd = interleave_vectors(odd_vecs);
 
-        if (odd_num_vecs == 0 ) {
-            vector<Constant *> indices(type.lanes());
-            for (int i = 0; i < type.lanes(); i++) {
-                int idx = i/2;
-                if (i % 2 == 1) idx += even_t.lanes();
-                indices[i] = ConstantInt::get(i32, idx);
+        if (last) {
+            int result_elements = vec_elements*vecs.size();
+
+            // Interleave even and odd, leaving a space for the last element.
+            vector<int> indices(result_elements, -1);
+            for (int i = 0, idx = 0; i < result_elements; i++) {
+                if (i%vecs.size() < vecs.size() - 1) {
+                    indices[i] = idx%2 == 0 ? idx/2 : idx/2 + vec_elements*even_vecs.size();
+                    idx++;
+                }
+            }
+            Value *even_odd = shuffle_vectors(even, odd, indices);
+
+            // Interleave the last vector into the result.
+            last = slice_vector(last, 0, result_elements);
+            for (int i = 0; i < result_elements; i++) {
+                if (i%vecs.size() < vecs.size() - 1) {
+                    indices[i] = i;
+                } else {
+                    indices[i] = i/vecs.size() + result_elements;
+                }
             }
 
-            return builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            return shuffle_vectors(even_odd, last, indices);
         } else {
-            vector<Constant *> indices(type.lanes());
-            for (int i = 0, idx = 0; i < type.lanes(); i++) {
-                if (i % vecs.size() < vecs.size()-1) {
-                    if (idx % 2 == 0) {
-                        indices[i] = ConstantInt::get(i32, idx / 2);
-                    } else {
-                        indices[i] = ConstantInt::get(i32, idx / 2 + even_t.lanes());
-                    }
-
-                    ++idx;
-                } else {
-                    indices[i] = UndefValue::get(i32);
-                }
-            }
-
-            Value *ab = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
-
-            for (int i = 0; i < type.lanes(); i++) {
-                if (i < last.type().lanes()) {
-                    indices[i] = ConstantInt::get(i32, i);
-                } else {
-                    indices[i] = UndefValue::get(i32);
-                }
-            }
-
-            Value *none = UndefValue::get(llvm_type_of(last.type()));
-            Value *c = builder->CreateShuffleVector(codegen(last), none, ConstantVector::get(indices));
-
-            for (int i = 0; i < type.lanes(); i++) {
-                if (i % vecs.size() < vecs.size()-1) {
-                    indices[i] = ConstantInt::get(i32, i);
-                } else {
-                    indices[i] = ConstantInt::get(i32, i/vecs.size() + type.lanes());
-                }
-            }
-
-            return builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+            return interleave_vectors({even, odd});
         }
     }
 }
@@ -2128,27 +2047,28 @@ void CodeGen_LLVM::visit(const Call *op) {
     // types are handled here.
     if (op->is_intrinsic(Call::shuffle_vector)) {
         internal_assert((int) op->args.size() == 1 + op->type.lanes());
-        vector<Constant *> indices(op->type.lanes());
+        vector<int> indices(op->type.lanes());
         for (size_t i = 0; i < indices.size(); i++) {
             const IntImm *idx = op->args[i+1].as<IntImm>();
             internal_assert(idx);
             internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().lanes());
-            indices[i] = ConstantInt::get(i32, idx->value);
+            indices[i] = idx->value;
         }
         Value *arg = codegen(op->args[0]);
 
-        // Make a size 1 vector of undef at the end to mix in undef values.
-        Value *undefs = UndefValue::get(arg->getType());
-
-        value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
+        value = shuffle_vectors(arg, indices);
 
         if (op->type.is_scalar()) {
             value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
         }
 
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
-        internal_assert(0 < op->args.size());
-        value = interleave_vectors(op->type, op->args);
+        vector<Value *> args;
+        args.reserve(op->args.size());
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        value = interleave_vectors(args);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
@@ -3079,7 +2999,7 @@ void CodeGen_LLVM::visit(const For *op) {
         FunctionType *func_t = FunctionType::get(i32, args_t, false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
-                                          "par for " + function->getName() + "_" + op->name, module.get());
+                                          "par_for_" + function->getName() + "_" + op->name, module.get());
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function
@@ -3396,18 +3316,16 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         return vec;
     }
 
-    vector<Constant *> indices(size);
+    vector<int> indices(size);
     for (int i = 0; i < size; i++) {
         int idx = start + i;
         if (idx >= 0 && idx < vec_lanes) {
-            indices[i] = ConstantInt::get(i32, idx);
+            indices[i] = idx;
         } else {
-            indices[i] = UndefValue::get(i32);
+            indices[i] = -1;
         }
     }
-    Constant *indices_vec = ConstantVector::get(indices);
-    Value *undefs = UndefValue::get(vec->getType());
-    return builder->CreateShuffleVector(vec, undefs, indices_vec);
+    return shuffle_vectors(vec, indices);
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
@@ -3437,16 +3355,15 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 
             internal_assert(v1->getType() == v2->getType());
 
-            vector<Constant *> indices(w1 + w2);
+            vector<int> indices(w1 + w2);
             for (int i = 0; i < w1; i++) {
-                indices[i] = ConstantInt::get(i32, i);
+                indices[i] = i;
             }
             for (int i = 0; i < w2; i++) {
-                indices[w1 + i] = ConstantInt::get(i32, w_matched + i);
+                indices[w1 + i] = w_matched + i;
             }
-            Constant *indices_vec = ConstantVector::get(indices);
 
-            Value *merged = builder->CreateShuffleVector(v1, v2, indices_vec);
+            Value *merged = shuffle_vectors(v1, v2, indices);
 
             new_vecs.push_back(merged);
         }
@@ -3462,6 +3379,30 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 
     return vecs[0];
 }
+
+Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
+                                     const std::vector<int> &indices) {
+    internal_assert(a->getType() == b->getType());
+    vector<Constant *> llvm_indices(indices.size());
+    for (size_t i = 0; i < llvm_indices.size(); i++) {
+        if (indices[i] >= 0) {
+            internal_assert(indices[i] < (int)a->getType()->getVectorNumElements() * 2);
+            llvm_indices[i] = ConstantInt::get(i32, indices[i]);
+        } else {
+            // Only let -1 be undef.
+            internal_assert(indices[i] == -1);
+            llvm_indices[i] = UndefValue::get(i32);
+        }
+    }
+
+    return builder->CreateShuffleVector(a, b, ConstantVector::get(llvm_indices));
+}
+
+Value *CodeGen_LLVM::shuffle_vectors(Value *a, const std::vector<int> &indices) {
+    Value *b = UndefValue::get(a->getType());
+    return shuffle_vectors(a, b, indices);
+}
+
 
 std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(const std::string &name, int lanes) {
     // Check if a vector version of the function already

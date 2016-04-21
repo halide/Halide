@@ -104,8 +104,8 @@ private:
         // Compute the size
         std::vector<Expr> extents;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
-          extents.push_back(realize->bounds[i].extent);
-          extents[i] = mutate(extents[i]);
+            extents.push_back(realize->bounds[i].extent);
+            extents[i] = mutate(extents[i]);
         }
         Expr condition = mutate(realize->condition);
 
@@ -115,12 +115,16 @@ private:
         {
             map<string, Function>::const_iterator iter = env.find(realize->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            const vector<string> &storage_dims = iter->second.schedule().storage_dims();
+            const vector<StorageDim> &storage_dims = iter->second.schedule().storage_dims();
             const vector<string> &args = iter->second.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j] == storage_dims[i]) {
+                    if (args[j] == storage_dims[i].var) {
                         storage_permutation.push_back((int)j);
+                        Expr alignment = storage_dims[i].alignment;
+                        if (alignment.defined()) {
+                            extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                        }
                     }
                 }
                 internal_assert(storage_permutation.size() == i+1);
@@ -191,7 +195,7 @@ private:
             // Assign the mins and extents stored
             for (size_t i = realize->bounds.size(); i > 0; i--) {
                 stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
-                stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
+                stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
             }
         }
     }

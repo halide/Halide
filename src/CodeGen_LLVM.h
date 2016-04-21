@@ -244,6 +244,7 @@ protected:
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
 
+
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
@@ -334,6 +335,11 @@ protected:
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+
+    /** Get a unique name for the actual block of memory that an
+     * allocate node uses. Used so that alias analysis understands
+     * when multiple Allocate nodes shared the same memory. */
+    virtual std::string get_allocation_name(const std::string &n) {return n;}
 
     /** Helpers for implementing fast integer division. */
     // @{
@@ -432,7 +438,7 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+    llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -455,6 +461,12 @@ protected:
 
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+
+    /** Create an LLVM shuffle vectors instruction. */
+    llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
+                                 const std::vector<int> &indices);
+    /** Shorthand for shuffling a vector with an undef vector. */
+    llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:

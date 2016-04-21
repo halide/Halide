@@ -859,9 +859,16 @@ public:
      * vectorize the color channel dimension without the overhead of
      * splitting it up. If bounds inference decides that it requires
      * more of this function than the bounds you have stated, a
-     * runtime error will occur when you try to run your pipeline.
-     */
+     * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Bound the extent of a Func's realization, but not its
+     * min. This means the dimension can be unrolled or vectorized
+     * even when its min is not fixed (for example because it is
+     * compute_at tiles of another Func). This can also be useful for
+     * forcing a function's allocation to be a fixed size, which often
+     * means it can go on the stack. */
+    EXPORT Func &bound_extent(Var var, Expr extent);
 
     /** Split two dimensions at once by the given factors, and then
      * reorder the resulting dimensions to be xi, yi, xo, yo from
@@ -1208,6 +1215,18 @@ public:
         return reorder_storage(collected_args);
     }
     // @}
+
+    /** Pad the storage extent of a particular dimension of
+     * realizations of this function up to be a multiple of the
+     * specified alignment. This guarantees that the strides for the
+     * dimensions stored outside of dim will be multiples of the
+     * specified alignment, where the strides and alignment are
+     * measured in numbers of elements.
+     *
+     * For example, to guarantee that a function foo(x, y, c)
+     * representing an image has scanlines starting on offsets
+     * aligned to multiples of 16, use foo.align_storage(x, 16). */
+    EXPORT Func &align_storage(Var dim, Expr alignment);
 
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.

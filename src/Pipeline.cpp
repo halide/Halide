@@ -143,7 +143,7 @@ Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents)
     }
 }
 
-vector<Func> Pipeline::outputs() {
+vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
     for (Function f : contents.ptr->outputs) {
         funcs.push_back(Func(f));

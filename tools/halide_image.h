@@ -64,12 +64,15 @@ class Image {
         if (z) size *= z;
         if (w) size *= w;
 
-        uint8_t *ptr = new uint8_t[sizeof(T)*size + 40];
-        buf.host = ptr;
+        // Conservatively align images to 128 bytes. This is enough
+        // alignment for all the platforms we might use.
+        const size_t alignment = 128;
+        size = (size + alignment - 1) & ~(alignment - 1);
+        uint8_t *ptr = new uint8_t[sizeof(T)*size + alignment - 1];
+        buf.host = (uint8_t *)((uintptr_t)(ptr + alignment - 1) & ~(alignment - 1));
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
-        while ((size_t)buf.host & 0x1f) buf.host++;
         contents = new Contents(buf, ptr);
     }
 
@@ -228,5 +231,4 @@ public:
 }  // namespace Tools
 }  // namespace Halide
 
-#include "halide_image_info.h"
 #endif  // HALIDE_TOOLS_IMAGE_H

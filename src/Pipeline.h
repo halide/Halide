@@ -119,7 +119,7 @@ public:
     EXPORT Pipeline(const std::vector<Func> &outputs);
 
     /** Get the Funcs this pipeline outputs. */
-    EXPORT std::vector<Func> outputs();
+    EXPORT std::vector<Func> outputs() const;
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in

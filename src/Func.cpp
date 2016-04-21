@@ -958,6 +958,10 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     return *this;
 }
 
+Func &Func::bound_extent(Var var, Expr extent) {
+    return bound(var, Expr(), extent);
+}
+
 Func &Func::tile(VarOrRVar x, VarOrRVar y,
                  VarOrRVar xo, VarOrRVar yo,
                  VarOrRVar xi, VarOrRVar yi,
@@ -1099,14 +1103,14 @@ Func &Func::glsl(Var x, Var y, Var c) {
 Func &Func::reorder_storage(Var x, Var y) {
     invalidate_cache();
 
-    vector<string> &dims = func.schedule().storage_dims();
+    vector<StorageDim> &dims = func.schedule().storage_dims();
     bool found_y = false;
     size_t y_loc = 0;
     for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i], y.name())) {
+        if (var_name_match(dims[i].var, y.name())) {
             found_y = true;
             y_loc = i;
-        } else if (var_name_match(dims[i], x.name())) {
+        } else if (var_name_match(dims[i].var, x.name())) {
             if (found_y) std::swap(dims[i], dims[y_loc]);
             return *this;
         }
@@ -1133,6 +1137,21 @@ Func &Func::reorder_storage(const std::vector<Var> &dims) {
         "reorder_storage must have at least two dimensions in reorder list.\n";
 
     return reorder_storage(dims, 0);
+}
+
+Func &Func::align_storage(Var dim, Expr alignment) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, dim.name())) {
+            dims[i].alignment = alignment;
+            return *this;
+        }
+    }
+    user_error << "Could not find variable " << dim.name()
+               << " to align the storage of.\n";
+    return *this;
 }
 
 Func &Func::compute_at(Func f, RVar var) {
