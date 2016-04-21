@@ -191,7 +191,7 @@ Stmt add_image_checks(Stmt s,
             for (size_t i = 0; i < extern_users.size(); i++) {
                 const string &extern_user = extern_users[i];
                 Box query_box;
-                Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
+                Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::extract_buffer_min,

@@ -8,7 +8,7 @@
 
 using namespace Halide::Tools;
 
-static const void *context_pointer = (void *)0xf00dd00d;
+static void *context_pointer = (void *)0xf00dd00d;
 
 static bool called_error = false;
 static bool called_trace = false;
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     halide_set_custom_malloc(&my_halide_malloc);
     halide_set_custom_free(&my_halide_free);
     halide_set_custom_trace(&my_halide_trace);
-    
+
     int result;
 
     Image<float> input(10, 10);

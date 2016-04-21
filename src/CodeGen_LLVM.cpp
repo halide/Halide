@@ -2227,12 +2227,22 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
+        internal_assert(op->args.size() == 2);
+        const int64_t *dims = as_const_int(op->args[1]);
+        internal_assert(dims);
         // Make some memory for this buffer_t
         Value *dst = create_alloca_at_entry(buffer_t_type, 1);
+        Value *dst_shape = create_alloca_at_entry(dimension_t_type, *dims);
+
         Value *src = codegen(op->args[0]);
         src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
-        src = builder->CreateLoad(src);
-        builder->CreateStore(src, dst);
+        Value *src_shape = buffer_dim_array(src);
+        builder->CreateStore(builder->CreateLoad(src), dst);
+        builder->CreateStore(dst_shape, buffer_dim_array_ptr(dst));
+        for (int i = 0; i < *dims; i++) {
+            Value *d = builder->CreateLoad(create_gep(dimension_t_type, src_shape, {i}));
+            builder->CreateStore(d, create_gep(dimension_t_type, dst_shape, {i}));
+        }
         value = dst;
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
         internal_assert(op->args.size() == 2);

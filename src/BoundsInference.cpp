@@ -205,9 +205,9 @@ public:
                 if (!in_pipeline.empty()) {
                     // 3)
                     string outer_query_name = func.name() + ".outer_bounds_query";
-                    Expr outer_query = Variable::make(type_of<struct buffer_t *>(), outer_query_name);
+                    Expr outer_query = Variable::make(type_of<struct halide_buffer_t *>(), outer_query_name);
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
                                                     {outer_query, i}, Call::PureIntrinsic);
@@ -235,7 +235,7 @@ public:
 
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
-                                      Variable::make(type_of<struct buffer_t *>(), func.name() + ".o0.bounds_query"), s);
+                                      Variable::make(type_of<struct halide_buffer_t *>(), func.name() + ".o0.bounds_query"), s);
                 } else {
                     // If we're at the outermost loop, there is no
                     // bounds query result from one level up, but we
@@ -246,7 +246,7 @@ public:
 
                     // 2)
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::extract_buffer_min,
                                                   {inner_query, i}, Call::PureIntrinsic);
@@ -344,7 +344,7 @@ public:
                                               args, Call::Intrinsic);
 
                         lets.push_back(make_pair(name, buf));
-                        bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
+                        bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
@@ -352,7 +352,7 @@ public:
                     string name = args[j].is_image_param() ? p.name() : b.name();
                     int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
 
-                    Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+                    Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
@@ -382,11 +382,11 @@ public:
                     output_buffer_t_args.push_back(0); // stride
                 }
 
-                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
                                                   output_buffer_t_args, Call::Intrinsic);
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
-                bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
+                bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
 
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
@@ -549,7 +549,7 @@ public:
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
-                            Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
+                            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
                                                   {buf, d}, Call::PureIntrinsic);
                             Expr max = Call::make(Int(32), Call::extract_buffer_max,

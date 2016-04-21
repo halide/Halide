@@ -31,6 +31,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_sync,
     (void *)&halide_do_par_for,
     (void *)&halide_double_to_string,
+    (void *)&halide_downgrade_buffer_t,
     (void *)&halide_enumerate_registered_filters,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
@@ -128,5 +129,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_string_to_string,
     (void *)&halide_trace,
     (void *)&halide_uint64_to_string,
+    (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
 };

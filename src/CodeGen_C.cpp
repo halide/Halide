@@ -162,7 +162,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
              (!type.handle_type->namespaces.empty() ||
               !type.handle_type->enclosing_types.empty() ||
               type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
-            oss << "const void *";
+            oss << "void *";
         } else {
             if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
                 oss << "struct ";
@@ -486,36 +486,18 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
-    }
 
-    // Close namespaces here as metadata must be outside them
-    if (!namespaces.empty()) {
-        stream << "\n";
-        for (size_t i = 0; i < namespaces.size(); i++) {
-            stream << "}";
-        }
-        stream << " // Close namespaces ";
-        const char *separator = "";
-        for (const auto &ns : namespaces) {
-            stream << separator << ns;
-            separator = "::";
-        }
-
-        stream << "\n\n";
-    }
-
-    if (is_header()) {
-        // And also the metadata.
-        stream << "extern const struct halide_filter_metadata_t " << simple_name << "_metadata;\n";
-
-        // And a stub to accept and upgrade old buffer_t's
+        // Define a stub to accept and upgrade old buffer_t's
         string ucon = have_user_context ? "__user_context" : "NULL";
         stream
-            << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n"
-            << "#ifdef __cplusplus\n"
-            << "}; // extern \"C\" \n"
-            << "HALIDE_ATTRIBUTE_DEPRECATED(\"buffer_t is deprecated. Use halide_buffer_t.\")\n"
-            << "inline int " << f.name << "(";
+            << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n";
+
+        if (!is_c_plus_plus_interface()) {
+            stream << "#ifdef __cplusplus\n"
+                   << "}; // extern \"C\" \n";
+        }
+        stream << "HALIDE_ATTRIBUTE_DEPRECATED(\"buffer_t is deprecated. Use halide_buffer_t.\")\n"
+               << "inline int " << simple_name << "(";
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer()) {
                 stream << "buffer_t *"
@@ -572,9 +554,34 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
             }
         }
         stream << "    return err;\n"
-               << "}\n"
-               << "extern \"C\" {\n"
-               << "#endif\n\n";
+               << "}\n";
+
+        if (!is_c_plus_plus_interface()) {
+            stream << "extern \"C\" {\n"
+                   << "#endif\n\n";
+        }
+    }
+
+    // Close namespaces here as metadata must be outside them
+    if (!namespaces.empty()) {
+        stream << "\n";
+        for (size_t i = 0; i < namespaces.size(); i++) {
+            stream << "}";
+        }
+        stream << " // Close namespaces ";
+        const char *separator = "";
+        for (const auto &ns : namespaces) {
+            stream << separator << ns;
+            separator = "::";
+        }
+
+        stream << "\n\n";
+    }
+
+
+    if (is_header()) {
+        // Declare the metadata.
+        stream << "extern const struct halide_filter_metadata_t " << simple_name << "_metadata;\n";
     }
 }
 
@@ -906,7 +913,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "halide_debug_to_file(";
         rhs << (have_user_context ? "__user_context_" : "nullptr");
         rhs << ", \"" + filename + "\", " + typecode;
-        rhs << ", (struct buffer_t *)" << buffer;
+        rhs << ", (struct halide_buffer_t *)" << buffer;
         rhs << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
@@ -941,26 +948,32 @@ void CodeGen_C::visit(const Call *op) {
         rhs << a0 << " >> " << a1;
     } else if (op->is_intrinsic(Call::rewrite_buffer)) {
         int dims = ((int)(op->args.size())-2)/3;
-        (void)dims; // In case internal_assert is ifdef'd to do nothing
         internal_assert((int)(op->args.size()) == dims*3 + 2);
-        internal_assert(dims <= 4);
-        vector<string> args(op->args.size());
+
         const Variable *v = op->args[0].as<Variable>();
         internal_assert(v);
-        args[0] = print_name(v->name);
-        for (size_t i = 1; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
+        string buf = "((halide_buffer_t *)" + print_name(v->name) + ")";
+        Type t = op->args[1].type();
+        vector<string> shape(dims * 3);
+        for (size_t i = 0; i < shape.size(); i++) {
+            shape[i] = print_expr(op->args[i+2]);
         }
-        rhs << "halide_rewrite_buffer(";
-        for (size_t i = 0; i < 14; i++) {
-            if (i > 0) rhs << ", ";
-            if (i < args.size()) {
-                rhs << args[i];
-            } else {
-                rhs << '0';
-            }
+
+        // We want to assign a bunch of fields, but we need to act
+        // as an expression that evaluates to true. Fortunately
+        // assignment in C is an expression, so we can just emit
+        // comma-separated assignments.
+        rhs << "("
+            << buf << "->type.code = (halide_type_code_t)(" << (int)t.code() << "), "
+            << buf << "->type.bits = " << t.bits() << ", "
+            << buf << "->type.lanes = " << t.lanes() << ", "
+            << buf << "->dimensions = " << dims << ", ";
+        for (int i = 0; i < dims; i++) {
+            rhs << buf << "->dim[" << i << "].min = " << shape[i*3] << ", "
+                << buf << "->dim[" << i << "].extent = " << shape[i*3+1] << ", "
+                << buf << "->dim[" << i << "].stride = " << shape[i*3+2] << ", ";
         }
-        rhs << ")";
+        rhs << "true)";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -988,35 +1001,6 @@ void CodeGen_C::visit(const Call *op) {
         string arg0 = print_expr(op->args[0]);
         string arg1 = print_expr(op->args[1]);
         rhs << "(" << arg0 << ", " << arg1 << ")";
-    } else if (op->is_intrinsic(Call::rewrite_buffer)) {
-        int dims = ((int)(op->args.size())-2)/3;
-        internal_assert((int)(op->args.size()) == dims*3 + 2);
-
-        const Variable *v = op->args[0].as<Variable>();
-        internal_assert(v);
-        string buf = "((halide_buffer_t *)" + print_name(v->name) + ")";
-        Type t = op->args[1].type();
-        vector<string> shape(dims * 3);
-        for (size_t i = 0; i < shape.size(); i++) {
-            shape[i] = print_expr(op->args[i+2]);
-        }
-
-        // We want to assign a bunch of fields, but we need to act
-        // as an expression that evaluates to true. Fortunately
-        // assignment in C is an expression, so we can just emit
-        // comma-separated assignments.
-        rhs << "("
-            << buf << "->type.code = (halide_type_code_t)(" << (int)t.code() << "), "
-            << buf << "->type.bits = " << t.bits() << ", "
-            << buf << "->type.lanes = " << t.lanes() << ", "
-            << buf << "->dimensions = " << dims << ", ";
-        for (int i = 0; i < dims; i++) {
-            rhs << buf << "->dim[" << i << "].min = " << shape[i*3] << ", "
-                << buf << "->dim[" << i << "].extent = " << shape[i*3+1] << ", "
-                << buf << "->dim[" << i << "].stride = " << shape[i*3+2] << ", ";
-        }
-        rhs << "true)";
-
     } else if (op->is_intrinsic(Call::if_then_else)) {
         internal_assert(op->args.size() == 3);
 
@@ -1619,7 +1603,7 @@ void CodeGen_C::test() {
         "extern \"C\" {\n"
         "#endif\n"
         "\n\n"
-        "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, const void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " const bool _buf_host_and_device_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->device == 0);\n"

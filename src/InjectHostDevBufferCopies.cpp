@@ -184,7 +184,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
-        Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
+        Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Expr call = Call::make(Int(32), "halide_device_malloc", {buf, device_interface}, Call::Extern);
         string call_result_name = unique_name("device_malloc_result");
@@ -202,7 +202,7 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_buffer_copy(CopyDirection direction, string buf_name, DeviceAPI target_device_api) {
         internal_assert(direction == ToHost || direction == ToDevice) << "make_buffer_copy caller logic error.\n";
         std::vector<Expr> args;
-        Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
+        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
         args.push_back(buffer);
         if (direction == ToDevice) {
             args.push_back(make_device_interface_call(target_device_api));
@@ -532,7 +532,7 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
                 vector<Expr> args = create_buffer_t->args;
                 args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                Expr val = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
+                Expr val = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
 
                 stmt = LetStmt::make(op->name, val, op->body);
             }

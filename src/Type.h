@@ -141,6 +141,7 @@ template<> struct halide_c_type_to_name<uint32_t> { static const bool known_type
 template<> struct halide_c_type_to_name<float> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
+template<> struct halide_c_type_to_name<struct halide_buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "halide_buffer_t"}; } };
 
 template<typename T, bool KnownType>
 struct halide_internal_handle_traits {

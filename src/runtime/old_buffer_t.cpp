@@ -1,8 +1,10 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
 
+extern "C" {
+
 WEAK int halide_upgrade_buffer_t(void *user_context, const char *name,
-                                   const buffer_t *old_buf, halide_buffer_t *new_buf) {
+                                 const buffer_t *old_buf, halide_buffer_t *new_buf) {
     if (old_buf->dev) {
         return halide_error_failed_to_upgrade_buffer_t(user_context, name,
                                                        "buffer has a device allocation");
@@ -17,7 +19,7 @@ WEAK int halide_upgrade_buffer_t(void *user_context, const char *name,
 }
 
 WEAK int halide_downgrade_buffer_t(void *user_context, const char *name,
-                                     const halide_buffer_t *new_buf, buffer_t *old_buf) {
+                                   const halide_buffer_t *new_buf, buffer_t *old_buf) {
     if (new_buf->device) {
         return halide_error_failed_to_downgrade_buffer_t(user_context, name,
                                                          "buffer has a device allocation");
@@ -41,3 +43,4 @@ WEAK int halide_downgrade_buffer_t(void *user_context, const char *name,
     return 0;
 }
 
+}

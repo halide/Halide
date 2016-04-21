@@ -4,7 +4,6 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-IRPrinter irp(std::cerr);
 int main(int argc, char **argv) {
     Func f;
     Var x, y;
@@ -15,7 +14,7 @@ int main(int argc, char **argv) {
     buf.host = ptr;
     buf.dim[0] = {0, 10, 1};
     buf.type = halide_type_of<uint8_t>();
-    Buffer param_buf(UInt(8), &buf);
+    Buffer param_buf(&buf);
     ImageParam in(UInt(8), 2);
 
     in.set_host_alignment(512);

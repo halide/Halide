@@ -170,7 +170,7 @@ private:
                 args[3*i+3] = extent_var[i];
                 args[3*i+4] = stride_var[i];
             }
-            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+            Expr buf = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
                                   args, Call::Intrinsic);
             stmt = LetStmt::make(buffer_name + ".buffer",
                                  buf,

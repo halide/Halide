@@ -423,18 +423,18 @@ Stmt build_produce(Function f) {
                         buf_name += "." + std::to_string(k);
                     }
                     buf_name += ".buffer";
-                    Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
+                    Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
                 Buffer b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                Expr buf = Variable::make(type_of<struct buffer_t *>(), b.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                Expr buf = Variable::make(type_of<struct buffer_t *>(), p.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
@@ -453,7 +453,7 @@ Stmt build_produce(Function f) {
                     buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
-                Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
+                Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
             }
         } else {
@@ -488,11 +488,11 @@ Stmt build_produce(Function f) {
                     buffer_args.push_back(stride);
                 }
 
-                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
                                                   buffer_args, Call::Intrinsic);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
+                extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
         }
