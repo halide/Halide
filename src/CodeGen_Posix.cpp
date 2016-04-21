@@ -192,6 +192,21 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
+void CodeGen_Posix::free_allocation(const std::string &name) {
+    Allocation alloc = allocations.get(name);
+
+    if (alloc.stack_bytes) {
+        // Remember this allocation so it can be re-used by a later allocation.
+        free_stack_allocs.push_back(alloc);
+    } else {
+        internal_assert(alloc.destructor);
+        trigger_destructor(alloc.destructor_function, alloc.destructor);
+    }
+
+    allocations.pop(name);
+    sym_pop(name + ".host");
+}
+
 void CodeGen_Posix::visit(const Allocate *alloc) {
     if (sym_exists(alloc->name + ".host")) {
         user_error << "Can't have two different buffers with the same name: "
@@ -205,24 +220,14 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 
     codegen(alloc->body);
 
-    // Should have been freed
-    internal_assert(!sym_exists(alloc->name + ".host"));
-    internal_assert(!allocations.contains(alloc->name));
+    // If there was no early free, free it now.
+    if (allocations.contains(alloc->name)) {
+        free_allocation(alloc->name);
+    }
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
-    Allocation alloc = allocations.get(stmt->name);
-
-    if (alloc.stack_bytes) {
-        // Remember this allocation so it can be re-used by a later allocation.
-        free_stack_allocs.push_back(alloc);
-    } else {
-        internal_assert(alloc.destructor);
-        trigger_destructor(alloc.destructor_function, alloc.destructor);
-    }
-
-    allocations.pop(stmt->name);
-    sym_pop(stmt->name + ".host");
+    free_allocation(stmt->name);
 }
 
 }}

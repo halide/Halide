@@ -86,6 +86,11 @@ private:
     Allocation create_allocation(const std::string &name, Type type,
                                  const std::vector<Expr> &extents,
                                  Expr condition, Expr new_expr, std::string free_function);
+
+    /** Free an allocation previously allocated with
+     * create_allocation */
+    void free_allocation(const std::string &name);
+
 };
 
 }}
