@@ -73,14 +73,8 @@ extern "C" void halide_free(void *, void *);
 halide_nd_buffer_t<2> ImageToBuffer(const ImageData &im) {
     halide_nd_buffer_t<2> buf;
     buf.host = (uint8_t *)im.data();
-    //buf.dim[0] = halide_dimension_t(0, im.size().width(), 1);
-    //buf.dim[1] = halide_dimension_t(0, im.size().height(), im.stride()/4);
-    buf.dim[0].min = 0;
-    buf.dim[0].extent = im.size().width();
-    buf.dim[0].stride = 1;
-    buf.dim[1].min = 0;
-    buf.dim[1].extent = im.size().height();
-    buf.dim[1].stride = im.stride()/4;
+    buf.dim[0] = {0, im.size().width(), 1};
+    buf.dim[1] = {0, im.size().height(), im.stride()/4};
     buf.type = halide_type_of<int32_t>();
     return buf;
 }

@@ -25,12 +25,12 @@ protected:
      * zero coordinate. */
     void *origin;
 
-    /** The strides. These fields are also stored in the buffer, but
-     * they're cached here in the handle to make operator() fast for
-     * low-dimensional images. This is safe to do because the buffer
-     * is never modified.
+    /** The first four strides. These fields are also stored in the
+     * buffer, but they're cached here in the handle to make
+     * operator() fast for low-dimensional images. This is safe to do
+     * because the buffer is never modified.
      */
-    int stride_0, stride_1, stride_2, stride_3;
+    int stride[4];
 
     /** The dimensionality. */
     int dims;
@@ -49,7 +49,7 @@ protected:
                                           bool placeholder_seen) const;
 public:
     /** Construct an undefined image handle */
-    ImageBase() : origin(nullptr), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
+    ImageBase() : origin(nullptr), stride{0, 0, 0, 0}, dims(0) {}
 
     /** Allocate an image with the given dimensions. */
     EXPORT ImageBase(Type t, const std::vector<int> &size, const std::string &name = "");
@@ -155,7 +155,7 @@ public:
     /** Get the address of a particular pixel in up to four dimensions. */
     void *address_of(int x, int y = 0, int z = 0, int w = 0) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
+        size_t offset = x*stride[0] + y*stride[1] + z*stride[2] + w*stride[3];
         return (void *)(ptr + offset * elem_size);
     }
 
@@ -164,7 +164,7 @@ public:
     typename std::enable_if<Internal::all_are_convertible<int, Args...>::value, void *>::type
     address_of(int x, int y, int z, int w, Args... args) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
+        size_t offset = x*stride[0] + y*stride[1] + z*stride[2] + w*stride[3];
 
         // We can't rely on the cached strides for the extra dimensions.
         const int extra[] = {args...};

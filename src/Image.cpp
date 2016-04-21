@@ -21,19 +21,11 @@ void ImageBase::prepare_for_direct_pixel_access() {
         ssize_t offset = 0;
         for (int i = 0; i < buffer.dimensions(); i++) {
             offset += buffer.dim(i).min() * buffer.dim(i).stride();
+            if (i < 4) {
+                stride[i] = buffer.dim(i).stride();
+            }
         }
-        if (buffer.dimensions() > 0) {
-            stride_0 = buffer.dim(0).stride();
-        }
-        if (buffer.dimensions() > 1) {
-            stride_1 = buffer.dim(1).stride();
-        }
-        if (buffer.dimensions() > 2) {
-            stride_2 = buffer.dim(2).stride();
-        }
-        if (buffer.dimensions() > 3) {
-            stride_3 = buffer.dim(3).stride();
-        }
+
         elem_size = buffer.type().bytes();
         offset *= elem_size;
         // The host pointer points to the mins vec, but we want to
@@ -42,7 +34,7 @@ void ImageBase::prepare_for_direct_pixel_access() {
         dims = buffer.dimensions();
     } else {
         origin = nullptr;
-        stride_0 = stride_1 = stride_2 = stride_3 = 0;
+        memset(stride, 0, sizeof(stride));
         dims = 0;
     }
 }
