@@ -308,6 +308,11 @@ protected:
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
 
+    /** Get a unique name for the actual block of memory that an
+     * allocate node uses. Used so that alias analysis understands
+     * when multiple Allocate nodes shared the same memory. */
+    virtual std::string get_allocation_name(const std::string &n) {return n;}
+
     /** Helpers for implementing fast integer division. */
     // @{
     // Compute high_half(a*b) >> shr. Note that this is a shift in

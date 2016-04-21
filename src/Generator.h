@@ -509,6 +509,7 @@ protected:
     using Pipeline = Halide::Pipeline;
     using ImageParam = Halide::ImageParam;
     using RDom = Halide::RDom;
+    using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
