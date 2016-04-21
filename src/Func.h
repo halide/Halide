@@ -44,7 +44,7 @@ class Stage {
     Internal::Schedule schedule;
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
-    void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
+    void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact, TailStrategy tail);
     std::string stage_name;
 public:
     Stage(Internal::Schedule s, const std::string &n) :
@@ -61,22 +61,24 @@ public:
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
-    EXPORT Stage &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
+    EXPORT Stage &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail = TailStrategy::Auto);
     EXPORT Stage &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
     EXPORT Stage &serial(VarOrRVar var);
     EXPORT Stage &parallel(VarOrRVar var);
     EXPORT Stage &vectorize(VarOrRVar var);
     EXPORT Stage &unroll(VarOrRVar var);
-    EXPORT Stage &parallel(VarOrRVar var, Expr task_size);
-    EXPORT Stage &vectorize(VarOrRVar var, int factor);
-    EXPORT Stage &unroll(VarOrRVar var, int factor);
+    EXPORT Stage &parallel(VarOrRVar var, Expr task_size, TailStrategy tail = TailStrategy::Auto);
+    EXPORT Stage &vectorize(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+    EXPORT Stage &unroll(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
     EXPORT Stage &tile(VarOrRVar x, VarOrRVar y,
-                                VarOrRVar xo, VarOrRVar yo,
-                                VarOrRVar xi, VarOrRVar yi, Expr
-                                xfactor, Expr yfactor);
+                       VarOrRVar xo, VarOrRVar yo,
+                       VarOrRVar xi, VarOrRVar yi, Expr
+                       xfactor, Expr yfactor,
+                       TailStrategy tail = TailStrategy::Auto);
     EXPORT Stage &tile(VarOrRVar x, VarOrRVar y,
-                                VarOrRVar xi, VarOrRVar yi,
-                                Expr xfactor, Expr yfactor);
+                       VarOrRVar xi, VarOrRVar yi,
+                       Expr xfactor, Expr yfactor,
+                       TailStrategy tail = TailStrategy::Auto);
     EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
@@ -100,62 +102,25 @@ public:
 
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y,
-                               VarOrRVar thread_x, VarOrRVar thread_y,
-                               DeviceAPI device_api = DeviceAPI::Default_GPU);
+                      VarOrRVar thread_x, VarOrRVar thread_y,
+                      DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                               VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
-                               DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
-                                    DeviceAPI device_api = DeviceAPI::Default_GPU);
+                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
+                      DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                    Expr x_size, Expr y_size, Expr z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &allow_race_conditions();
     // @}
-
-    // These calls are for legacy compatibility only.
-    EXPORT Stage &cuda_threads(VarOrRVar thread_x) {
-        return gpu_threads(thread_x);
-    }
-    EXPORT Stage &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
-        return gpu_threads(thread_x, thread_y);
-    }
-    EXPORT Stage &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
-        return gpu_threads(thread_x, thread_y, thread_z);
-    }
-
-    EXPORT Stage &cuda_blocks(VarOrRVar block_x) {
-        return gpu_blocks(block_x);
-    }
-    EXPORT Stage &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
-        return gpu_blocks(block_x, block_y);
-    }
-    EXPORT Stage &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
-        return gpu_blocks(block_x, block_y, block_z);
-    }
-
-    EXPORT Stage &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
-        return gpu(block_x, thread_x);
-    }
-    EXPORT Stage &cuda(VarOrRVar block_x, VarOrRVar block_y,
-                                VarOrRVar thread_x, VarOrRVar thread_y) {
-        return gpu(block_x, thread_x, block_y, thread_y);
-    }
-    EXPORT Stage &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
-        return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
-    }
-    EXPORT Stage &cuda_tile(VarOrRVar x, int x_size) {
-        return gpu_tile(x, x_size);
-    }
-    EXPORT Stage &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
-        return gpu_tile(x, y, x_size, y_size);
-    }
-    EXPORT Stage &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                                     int x_size, int y_size, int z_size) {
-        return gpu_tile(x, y, z, x_size, y_size, z_size);
-    }
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -459,6 +424,17 @@ public:
                                    const Target &target = get_target_from_environment());
     // @}
 
+    /** Statically compile this function to llvm assembly, with the
+     * given filename (which should probably end in .ll), type
+     * signature, and C function name (which defaults to the same name
+     * as this halide function */
+    //@{
+    EXPORT void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
+                                         const Target &target = get_target_from_environment());
+    EXPORT void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &,
+                                         const Target &target = get_target_from_environment());
+    // @}
+
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
@@ -755,14 +731,15 @@ public:
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
-                              int dimensionality) {
-        define_extern(function_name, params, std::vector<Type>{t}, dimensionality);
+                              int dimensionality,
+                              bool is_c_plus_plus = false) {
+        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, is_c_plus_plus);
     }
 
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               const std::vector<Type> &types,
-                              int dimensionality);
+                              int dimensionality, bool is_c_plus_plus = false);
     // @}
 
     /** Get the types of the outputs of this Func. */
@@ -818,8 +795,10 @@ public:
      * given names, where the inner dimension iterates from 0 to
      * factor-1. The inner and outer subdimensions can then be dealt
      * with using the other scheduling calls. It's ok to reuse the old
-     * variable name as either the inner or outer variable. */
-    EXPORT Func &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
+     * variable name as either the inner or outer variable. The final
+     * argument specifies how the tail should be handled if the split
+     * factor does not provably divide the extent. */
+    EXPORT Func &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Join two dimensions into a single fused dimenion. The fused
      * dimension covers the product of the extents of the inner and
@@ -838,7 +817,7 @@ public:
      * the split. The inner dimension has a new anonymous name. If you
      * wish to mutate it, or schedule with respect to it, do the split
      * manually. */
-    EXPORT Func &parallel(VarOrRVar var, Expr task_size);
+    EXPORT Func &parallel(VarOrRVar var, Expr task_size, TailStrategy tail = TailStrategy::Auto);
 
     /** Mark a dimension to be computed all-at-once as a single
      * vector. The dimension should have constant extent -
@@ -859,13 +838,13 @@ public:
      * size. The variable to be vectorized should be the innermost
      * one. After this call, var refers to the outer dimension of the
      * split. */
-    EXPORT Func &vectorize(VarOrRVar var, int factor);
+    EXPORT Func &vectorize(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by
      * some constant factor. After this call, var refers to the outer
      * dimension of the split. */
-    EXPORT Func &unroll(VarOrRVar var, int factor);
+    EXPORT Func &unroll(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
@@ -874,9 +853,16 @@ public:
      * vectorize the color channel dimension without the overhead of
      * splitting it up. If bounds inference decides that it requires
      * more of this function than the bounds you have stated, a
-     * runtime error will occur when you try to run your pipeline.
-     */
+     * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Bound the extent of a Func's realization, but not its
+     * min. This means the dimension can be unrolled or vectorized
+     * even when its min is not fixed (for example because it is
+     * compute_at tiles of another Func). This can also be useful for
+     * forcing a function's allocation to be a fixed size, which often
+     * means it can go on the stack. */
+    EXPORT Func &bound_extent(Var var, Expr extent);
 
     /** Split two dimensions at once by the given factors, and then
      * reorder the resulting dimensions to be xi, yi, xo, yo from
@@ -884,13 +870,15 @@ public:
     EXPORT Func &tile(VarOrRVar x, VarOrRVar y,
                       VarOrRVar xo, VarOrRVar yo,
                       VarOrRVar xi, VarOrRVar yi,
-                      Expr xfactor, Expr yfactor);
+                      Expr xfactor, Expr yfactor,
+                      TailStrategy tail = TailStrategy::Auto);
 
     /** A shorter form of tile, which reuses the old variable names as
      * the new outer dimensions */
     EXPORT Func &tile(VarOrRVar x, VarOrRVar y,
                       VarOrRVar xi, VarOrRVar yi,
-                      Expr xfactor, Expr yfactor);
+                      Expr xfactor, Expr yfactor,
+                      TailStrategy tail = TailStrategy::Auto);
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
@@ -1168,24 +1156,16 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          int x_size, int y_size, int z_size, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // @}
-
-    /** \deprecated Old name for #gpu_tile. */
-    // @{
-    EXPORT Func &cuda_tile(VarOrRVar x, int x_size) {
-        return gpu_tile(x, x_size);
-    }
-    EXPORT Func &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
-        return gpu_tile(x, y, x_size, y_size);
-    }
-    EXPORT Func &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                           int x_size, int y_size, int z_size) {
-        return gpu_tile(x, y, z, x_size, y_size, z_size);
-    }
+                          int x_size, int y_size, int z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** Schedule for execution using coordinate-based hardware api.
@@ -1223,6 +1203,18 @@ public:
         return reorder_storage(collected_args);
     }
     // @}
+
+    /** Pad the storage extent of a particular dimension of
+     * realizations of this function up to be a multiple of the
+     * specified alignment. This guarantees that the strides for the
+     * dimensions stored outside of dim will be multiples of the
+     * specified alignment, where the strides and alignment are
+     * measured in numbers of elements.
+     *
+     * For example, to guarantee that a function foo(x, y, c)
+     * representing an image has scanlines starting on offsets
+     * aligned to multiples of 16, use foo.align_storage(x, 16). */
+    EXPORT Func &align_storage(Var dim, Expr alignment);
 
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.

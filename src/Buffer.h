@@ -9,6 +9,7 @@
 
 #include "runtime/HalideRuntime.h" // For halide_buffer_t
 #include "IntrusivePtr.h"
+#include "Error.h"
 #include "Type.h"
 #include "Argument.h"
 

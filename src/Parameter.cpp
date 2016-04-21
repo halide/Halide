@@ -15,8 +15,13 @@ struct ParameterContents {
     const bool is_explicit_name;
     const bool is_registered;
     std::string name;
+    std::string handle_type;
     Buffer buffer;
+    bool initialized;
     uint64_t data;
+
+    uint64_t default_val;
+    int host_alignment;
     std::vector<Expr> min_constraint;
     std::vector<Expr> extent_constraint;
     std::vector<Expr> stride_constraint;
@@ -24,6 +29,7 @@ struct ParameterContents {
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
         : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r),
           name(n), buffer(Buffer()), data(0),
+          default_val(0), host_alignment(t.bytes()),
           min_constraint(d), extent_constraint(d), stride_constraint(d) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
@@ -184,6 +190,12 @@ void *Parameter::get_scalar_address() const {
     return &contents.ptr->data;
 }
 
+void *Parameter::get_default_address() const {
+    check_is_scalar();
+    return &contents.ptr->default_val;
+}
+
+
 /** Tests if this handle is the same as another handle */
 bool Parameter::same_as(const Parameter &other) const {
     return contents.ptr == other.contents.ptr;
@@ -211,6 +223,10 @@ void Parameter::set_stride_constraint(int dim, Expr e) {
     check_dim_ok(dim);
     contents.ptr->stride_constraint[dim] = e;
 }
+void Parameter::set_host_alignment(int bytes) {
+    check_is_buffer();
+    contents.ptr->host_alignment = bytes;
+}
 
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
@@ -229,7 +245,10 @@ Expr Parameter::stride_constraint(int dim) const {
     check_dim_ok(dim);
     return contents.ptr->stride_constraint[dim];
 }
-
+int Parameter::host_alignment() const {
+    check_is_buffer();
+    return contents.ptr->host_alignment;
+}
 void Parameter::set_min_value(Expr e) {
     check_is_scalar();
     user_assert(e.type() == contents.ptr->type)

@@ -97,6 +97,7 @@ DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
+DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
@@ -447,14 +448,14 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     vector<string> retain = {"__stack_chk_guard",
                              "__stack_chk_fail"};
 
-    if (t.has_feature(Target::MinGW)) {      
+    if (t.has_feature(Target::MinGW)) {
         retain.insert(retain.end(),
                              {"sincos", "sincosf",
                               "asinh", "asinhf",
                               "acosh", "acoshf",
                               "atanh", "atanhf"});
     }
-    
+
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
@@ -496,6 +497,16 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     if (llvm_used) {
         llvm_used->eraseFromParent();
     }
+
+    // Also drop the dummy runtime api usage. We only needed it so
+    // that the declarations are retained in the module during the
+    // linking procedure above.
+    llvm::GlobalValue *runtime_api =
+        modules[0]->getNamedGlobal("halide_runtime_api_functions");
+    if (runtime_api) {
+        runtime_api->eraseFromParent();
+    }
+
 }
 
 }
@@ -677,7 +688,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.bits == 32) {
                     modules.push_back(get_initmod_win32_math_ll(c));
                 } else {
-                    modules.push_back(get_initmod_posix_math_ll(c));                
+                    modules.push_back(get_initmod_posix_math_ll(c));
                 }
             } else if (t.arch == Target::PNaCl) {
                 modules.push_back(get_initmod_pnacl_math_ll(c));
@@ -701,6 +712,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_profiler(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
+            modules.push_back(get_initmod_errors(c, bits_64, debug));
         }
 
         if (module_type != ModuleJITShared) {

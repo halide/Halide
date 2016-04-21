@@ -374,6 +374,7 @@ void func_define_extern1(h::Func &that,const std::string &function_name,
 
 void defineFunc()
 {
+
     using Halide::Func;
     using namespace func_and_stage_implementation_details;
 
@@ -624,7 +625,7 @@ void defineFunc()
 
     // FIXME should share these definitions with Stage instead of having copy and paste code
 
-    func_class.def("split", &Func::split, p::args("self", "old", "outer", "inner", "factor"),
+    func_class.def("split", &func_split<Func>, p::args("self", "old", "outer", "inner", "factor"),
                    p::return_internal_reference<1>(),
                    "Split a dimension into inner and outer subdimensions with the "
                    "given names, where the inner dimension iterates from 0 to "
@@ -680,11 +681,11 @@ void defineFunc()
                    p::return_internal_reference<1>(),
                    "Split two dimensions at once by the given factors, and then "
                    "reorder the resulting dimensions to be xi, yi, xo, yo from "
-                   "innermost outwards. This gives a tiled traversal.")
-            .def("tile", &func_tile1<Func>,  p::args("self", "x", "y", "xi", "yi", "xfactor", "yfactor"),
-                 p::return_internal_reference<1>(),
-                 "A shorter form of tile, which reuses the old variable names as the new outer dimensions");
+                   "innermost outwards. This gives a tiled traversal.");
 
+    func_class.def("tile", &func_tile1<Func>,  p::args("self", "x", "y", "xi", "yi", "xfactor", "yfactor"),
+                   p::return_internal_reference<1>(),
+                   "A shorter form of tile, which reuses the old variable names as the new outer dimensions");
 
     func_class.def("reorder", &func_reorder0<Func, p::tuple>, p::args("self", "vars"),
                    p::return_internal_reference<1>(),
@@ -727,7 +728,6 @@ void defineFunc()
                                                                    p::arg("v2")=p::object(), p::arg("v3")=p::object(),
                                                                    p::arg("v4")=p::object(), p::arg("v5")=p::object()),
                  p::return_internal_reference<1>(), reorder_storage_doc.c_str());
-
 
     func_class.def("compute_at", &func_compute_at0, p::args("self", "f", "var"),
                    p::return_internal_reference<1>(),
@@ -790,12 +790,9 @@ void defineFunc()
 
     func_class.def("__repr__", &func_repr, p::arg("self"));
 
-
     defineFuncGpuMethods(func_class);
 
     defineStage();
     defineVarOrRVar();
     defineFuncRef();
-
-    return;
 }

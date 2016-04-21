@@ -173,16 +173,16 @@ public:
 class IsBufferSpecial : public IRVisitor {
 public:
     string func;
-    bool special;
+    bool special = false;
 
-    IsBufferSpecial(string f) : func(f), special(false) {}
+    IsBufferSpecial(string f) : func(f) {}
 private:
 
     using IRVisitor::visit;
 
-    void visit(const Call *call) {
-        if (call->call_type == Call::Intrinsic &&
-            call->name == func) {
+    void visit(const Variable *var) {
+        if (var->type.is_handle() &&
+            var->name == func + ".buffer") {
             special = true;
         }
     }
@@ -200,7 +200,7 @@ class StorageFolding : public IRMutator {
         op->accept(&special);
 
         if (special.special) {
-            debug(3) << "Not attempting to fold " << op->name << " because it is referenced by an intrinsic\n";
+            debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {

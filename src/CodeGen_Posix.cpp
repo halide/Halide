@@ -54,14 +54,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                                                            Expr new_expr, std::string free_function) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
-    int32_t constant_bytes = 0;
-    if (constant_allocation_size(extents, name, constant_bytes)) {
+    int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
+    if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
             user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-        } else if (stack_bytes > 1024 * 16) {
+        } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }
@@ -70,6 +70,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Only allocate memory if the condition is true, otherwise 0.
+    Value *llvm_condition = codegen(condition);
     if (llvm_size != nullptr) {
         // We potentially load one scalar value past the end of the
         // buffer, so pad the allocation with an extra instance of the
@@ -79,7 +80,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         llvm_size = builder->CreateAdd(llvm_size,
                                        ConstantInt::get(llvm_size->getType(), type.bytes()));
 
-        Value *llvm_condition = codegen(condition);
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
                                           ConstantInt::get(llvm_size->getType(), 0));
@@ -92,6 +92,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.ptr = nullptr;
     allocation.destructor = nullptr;
     allocation.destructor_function = nullptr;
+    allocation.name = name;
 
     if (!new_expr.defined() && stack_bytes != 0) {
         // Try to find a free stack allocation we can use.
@@ -114,6 +115,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // Use a free alloc we found.
             allocation.ptr = free->ptr;
             allocation.stack_bytes = free->stack_bytes;
+            allocation.name = free->name;
 
             // This allocation isn't free anymore.
             free_stack_allocs.erase(free);
@@ -155,9 +157,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Assert that the allocation worked.
         Value *check = builder->CreateIsNotNull(allocation.ptr);
-        if (!new_expr.defined()) { // Zero sized allocation if allowed for custom new...
+        if (llvm_size) {
             Value *zero_size = builder->CreateIsNull(llvm_size);
             check = builder->CreateOr(check, zero_size);
+        }
+        if (!is_one(condition)) {
+            // If the condition is false, it's OK for the new_expr to be null.
+            Value *condition_is_false = builder->CreateIsNull(llvm_condition);
+            check = builder->CreateOr(check, condition_is_false);
         }
 
         create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
@@ -179,6 +186,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocations.push(name, allocation);
 
     return allocation;
+}
+
+string CodeGen_Posix::get_allocation_name(const std::string &n) {
+    if (allocations.contains(n)) {
+        return allocations.get(n).name;
+    } else {
+        return n;
+    }
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {

@@ -135,7 +135,7 @@ Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents)
     }
 }
 
-vector<Func> Pipeline::outputs() {
+vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
     for (Function f : contents.ptr->outputs) {
         funcs.push_back(Func(f));
@@ -184,6 +184,13 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const string &fn_name,
                                   const Target &target) {
     compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
+}
+
+void Pipeline::compile_to_llvm_assembly(const string &filename,
+                                        const vector<Argument> &args,
+                                        const string &fn_name,
+                                        const Target &target) {
+    compile_module_to_llvm_assembly(compile_to_module(args, fn_name, target), filename);
 }
 
 void Pipeline::compile_to_object(const string &filename,
@@ -496,7 +503,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         private_body = lower(contents.ptr->outputs, fn_name, target, custom_passes);
     }
 
-    string private_name = "__" + new_fn_name;
+    std::vector<std::string> namespaces;
+    std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
+    string private_name = "__" + simple_new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = args;
@@ -527,7 +536,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     }
 
     // Create a module with all the global images in it.
-    Module module(new_fn_name, target);
+    Module module(simple_new_fn_name, target);
 
     // Add all the global images to the module, and add the global
     // images used to the private argument list.

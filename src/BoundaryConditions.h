@@ -85,6 +85,9 @@ inline NO_INLINE Func func_like_to_func(T func_like) {
  *
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER
  *   and putting value in the border of the texture.)
+ *
+ *  You may pass undefined Exprs for dimensions that you do not wish
+ *  to bound.
  */
 // @{
 EXPORT Func constant_exterior(const Func &source, Tuple value,
@@ -128,6 +131,9 @@ inline NO_INLINE Func constant_exterior(T func_like, Expr value,
  *  min and extent methods of the passed object.
  *
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_EDGE.)
+ *
+ *  You may pass undefined Exprs for dimensions that you do not wish
+ *  to bound.
  */
 // @{
 EXPORT Func repeat_edge(const Func &source,
@@ -160,6 +166,9 @@ inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
  *  min and extent methods of the passed object.
  *
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_REPEAT.)
+ *
+ *  You may pass undefined Exprs for dimensions that you do not wish
+ *  to bound.
  */
 // @{
 EXPORT Func repeat_image(const Func &source,
@@ -191,6 +200,9 @@ inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
  *  min and extent methods of the passed object.
  *
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_MIRRORED_REPEAT.)
+ *
+ *  You may pass undefined Exprs for dimensions that you do not wish
+ *  to bound.
  */
 // @{
 EXPORT Func mirror_image(const Func &source,
@@ -225,6 +237,9 @@ inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
  *  min and extent methods of the passed object.
  *
  *  (I do not believe there is a direct GL_TEXTURE_WRAP_* equivalent for this.)
+ *
+ *  You may pass undefined Exprs for dimensions that you do not wish
+ *  to bound.
  */
 // @{
 EXPORT Func mirror_interior(const Func &source,

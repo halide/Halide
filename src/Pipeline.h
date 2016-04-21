@@ -116,7 +116,7 @@ public:
     EXPORT Pipeline(const std::vector<Func> &outputs);
 
     /** Get the Funcs this pipeline outputs. */
-    EXPORT std::vector<Func> outputs();
+    EXPORT std::vector<Func> outputs() const;
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
@@ -132,6 +132,15 @@ public:
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_bitcode. */
     EXPORT void compile_to_bitcode(const std::string &filename,
+                                   const std::vector<Argument> &args,
+                                   const std::string &fn_name,
+                                   const Target &target = get_target_from_environment());
+
+    /** Statically compile a pipeline to llvm assembly, with the given
+     * filename (which should probably end in .ll), type signature,
+     * and C function name. If you're compiling a pipeline with a
+     * single output Func, see also Func::compile_to_llvm_assembly. */
+    EXPORT void compile_to_llvm_assembly(const std::string &filename,
                                    const std::vector<Argument> &args,
                                    const std::string &fn_name,
                                    const Target &target = get_target_from_environment());

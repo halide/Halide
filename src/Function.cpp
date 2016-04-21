@@ -36,12 +36,15 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
+    bool extern_is_c_plus_plus;
 
     bool trace_loads, trace_stores, trace_realizations;
 
     bool frozen;
 
-    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
+    FunctionContents() : extern_is_c_plus_plus(false), trace_loads(false),
+                         trace_stores(false), trace_realizations(false),
+                         frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
         for (Expr i : values) {
@@ -302,7 +305,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::Parent, true};
         contents.ptr->schedule.dims().push_back(d);
-        contents.ptr->schedule.storage_dims().push_back(args[i]);
+        StorageDim sd = {args[i]};
+        contents.ptr->schedule.storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
@@ -517,7 +521,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
-                             int dimensionality) {
+                             int dimensionality,
+                             bool is_c_plus_plus) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -530,6 +535,7 @@ void Function::define_extern(const std::string &function_name,
     contents.ptr->extern_function_name = function_name;
     contents.ptr->extern_arguments = args;
     contents.ptr->output_types = types;
+    contents.ptr->extern_is_c_plus_plus = is_c_plus_plus;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -545,7 +551,8 @@ void Function::define_extern(const std::string &function_name,
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
         contents.ptr->args[i] = arg;
-        contents.ptr->schedule.storage_dims().push_back(arg);
+        StorageDim sd = {arg};
+        contents.ptr->schedule.storage_dims().push_back(sd);
     }
 }
 
@@ -595,6 +602,10 @@ bool Function::has_update_definition() const {
 
 bool Function::has_extern_definition() const {
     return !contents.ptr->extern_function_name.empty();
+}
+
+bool Function::extern_definition_is_c_plus_plus() const {
+    return contents.ptr->extern_is_c_plus_plus;
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {

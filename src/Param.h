@@ -150,6 +150,10 @@ public:
     }
     // @}
 
+    void set_default_value(const T &value) {
+        param.set_default(value);
+    }
+
     /** You can use this parameter as an expression in a halide
      * function definition */
     operator Expr() const {
@@ -293,6 +297,10 @@ public:
     /** Get a handle on one of the dimensions for the purposes of
      * inspecting its min, extent, or stride. */
     EXPORT const Dimension dim(int i) const;
+
+    /** Get the alignment of the host pointer in bytes. Defaults to
+     * the size of type. */
+    EXPORT int host_alignment() const;
 
     /** Get the dimensionality of this image parameter */
     EXPORT int dimensions() const;

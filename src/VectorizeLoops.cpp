@@ -147,8 +147,7 @@ class VectorizeLoops : public IRMutator {
             // convention than the rest of Halide. Instead of passing widened
             // expressions, individual scalar expressions for each lane are
             // passed as a variable number of arguments to the intrinisc.
-            if (op->name == Call::shuffle_vector &&
-                op->call_type == Call::Intrinsic) {
+            if (op->is_intrinsic(Call::shuffle_vector)) {
 
                 int replacement_lanes = replacement.type().lanes();
                 int shuffle_lanes = op->type.lanes();
@@ -292,6 +291,8 @@ class VectorizeLoops : public IRMutator {
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 expr = op;
+            } else if (scalarized) {
+                expr = Let::make(op->name, mutated_value, mutated_body);
             } else {
                 // Otherwise create a new Let containing the original value
                 // expression plus the widened expression
@@ -326,6 +327,8 @@ class VectorizeLoops : public IRMutator {
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 stmt = op;
+            } else if (scalarized) {
+                stmt = LetStmt::make(op->name, mutated_value, mutated_body);
             } else {
                 stmt = LetStmt::make(op->name, op->value, mutated_body);
 
@@ -395,7 +398,7 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 int lanes = std::max(value.type().lanes(), index.type().lanes());
-                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes));
+                stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes), op->param);
             }
         }
 

@@ -1,4 +1,6 @@
 #include "CodeGen_Internal.h"
+#include "IROperator.h"
+#include "CSE.h"
 #include "Debug.h"
 
 namespace Halide {
@@ -124,38 +126,6 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     }
 }
 
-bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size) {
-    int64_t result = 1;
-
-    for (size_t i = 0; i < extents.size(); i++) {
-        if (const IntImm *int_size = extents[i].as<IntImm>()) {
-            // Check if the individual dimension is > 2^31 - 1. Not
-            // currently necessary because it's an int32_t, which is
-            // always smaller than 2^31 - 1. If we ever upgrade the
-            // type of IntImm but not the maximum allocation size, we
-            // should re-enable this.
-            /*
-            if ((int64_t)int_size->value > (((int64_t)(1)<<31) - 1)) {
-                user_error
-                    << "Dimension " << i << " for allocation " << name << " has size " <<
-                    int_size->value << " which is greater than 2^31 - 1.";
-            }
-            */
-            result *= int_size->value;
-            if (result > (static_cast<int64_t>(1)<<31) - 1) {
-                user_error
-                    << "Total size for allocation " << name
-                    << " is constant but exceeds 2^31 - 1.\n";
-            }
-        } else {
-            return false;
-        }
-    }
-
-    size = static_cast<int32_t>(result);
-    return true;
-}
-
 // Returns true if the given function name is one of the Halide runtime
 // functions that takes a user_context pointer as its first parameter.
 bool function_takes_user_context(const std::string &name) {
@@ -173,8 +143,11 @@ bool function_takes_user_context(const std::string &name) {
         "halide_free",
         "halide_malloc",
         "halide_print",
+        "halide_profiler_memory_allocate",
+        "halide_profiler_memory_free",
         "halide_profiler_pipeline_start",
         "halide_profiler_pipeline_end",
+        "halide_profiler_stack_peak_update",
         "halide_spawn_thread",
         "halide_device_release",
         "halide_start_clock",
@@ -205,6 +178,61 @@ bool function_takes_user_context(const std::string &name) {
     }
     // The error functions all take a user context
     return starts_with(name, "halide_error_");
+}
+
+bool can_allocation_fit_on_stack(int32_t size) {
+    user_assert(size > 0) << "Allocation size should be a positive number\n";
+    return (size <= 1024 * 16);
+}
+
+Expr lower_euclidean_div(Expr a, Expr b) {
+    internal_assert(a.type() == b.type());
+    // IROperator's div_round_to_zero will replace this with a / b for
+    // unsigned ops, so create the intrinsic directly.
+    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
+    if (a.type().is_int()) {
+        // Signed integer division sucks. It should be defined such
+        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
+        // i.e. Euclidean division.
+
+        // We get rounding to work by examining the implied remainder
+        // and correcting the quotient.
+
+        /* Here's the C code that we're trying to match:
+           int q = a / b;
+           int r = a - q * b;
+           int bs = b >> (t.bits() - 1);
+           int rs = r >> (t.bits() - 1);
+           return q - (rs & bs) + (rs & ~bs);
+        */
+
+        Expr r = a - q*b;
+        Expr bs = b >> (a.type().bits() - 1);
+        Expr rs = r >> (a.type().bits() - 1);
+        q = q - (rs & bs) + (rs & ~bs);
+        return common_subexpression_elimination(q);
+    } else {
+        return q;
+    }
+}
+
+Expr lower_euclidean_mod(Expr a, Expr b) {
+    internal_assert(a.type() == b.type());
+    // IROperator's mod_round_to_zero will replace this with a % b for
+    // unsigned ops, so create the intrinsic directly.
+    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
+    if (a.type().is_int()) {
+        // Match this non-overflowing C code
+        /*
+          T r = a % b;
+          r = r + (r < 0 ? abs(b) : 0);
+        */
+
+        r = select(r < 0, r + abs(b), r);
+        return common_subexpression_elimination(r);
+    } else {
+        return r;
+    }
 }
 
 }

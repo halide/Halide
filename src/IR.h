@@ -244,8 +244,10 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr value, index;
+    // If it's a store to an output buffer, then this parameter points to it.
+    Parameter param;
 
-    EXPORT static Stmt make(std::string name, Expr value, Expr index);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index, Parameter param);
 };
 
 /** This defines the value of a function at a multi-dimensional
@@ -285,6 +287,14 @@ struct Allocate : public StmtNode<Allocate> {
     EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
                             Expr condition, Stmt body,
                             Expr new_expr = Expr(), std::string free_function = std::string());
+
+    /** A routine to check if the extents are all constants, and if so verify
+     * the total size is less than 2^31 - 1. If the result is constant, but
+     * overflows, this routine asserts. This returns 0 if the extents are
+     * not all constants; otherwise, it returns the total constant allocation
+     * size. */
+    EXPORT static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
+    EXPORT int32_t constant_allocation_size() const;
 };
 
 /** Free the resources associated with the given buffer. */
@@ -345,16 +355,23 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
-/** A function call. This can represent a call to some extern
- * function (like sin), but it's also our multi-dimensional
- * version of a Load, so it can be a load from an input image, or
- * a call to another halide function. The latter two types of call
- * nodes don't survive all the way down to code generation - the
- * lowering process converts them to Load nodes. */
+/** A function call. This can represent a call to some extern function
+ * (like sin), but it's also our multi-dimensional version of a Load,
+ * so it can be a load from an input image, or a call to another
+ * halide function. These two types of call nodes don't survive all
+ * the way down to code generation - the lowering process converts
+ * them to Load nodes. */
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide, Intrinsic} CallType;
+    typedef enum {Image,        //< A load from an input image
+                  Extern,       //< A call to an external C-ABI function, possibly with side-effects
+                  ExternCPlusPlus, //< A call to an external C-ABI function, possibly with side-effects
+                  PureExtern,   //< A call to a guaranteed-side-effect-free external function
+                  Halide,       //< A call to a Func
+                  Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                  PureIntrinsic //< A side-effect-free version of the above.
+    } CallType;
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
@@ -408,7 +425,9 @@ struct Call : public ExprNode<Call> {
         likely,
         make_int64,
         make_float64,
-        register_destructor;
+        register_destructor,
+        div_round_to_zero,
+        mod_round_to_zero;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.
@@ -450,6 +469,24 @@ struct Call : public ExprNode<Call> {
         return make(param.type(), param.name(), args, Image, Function(), 0, Buffer(), param);
     }
 
+    /** Check if a call node is pure within a pipeline, meaning that
+     * the same args always give the same result, and the calls can be
+     * reordered, duplicated, unified, etc without changing the
+     * meaning of anything. Not transitive - doesn't guarantee the
+     * args themselves are pure. An example of a pure Call node is
+     * sqrt. If in doubt, don't mark a Call node as pure. */
+    bool is_pure() const {
+        return (call_type == PureExtern ||
+                call_type == Image ||
+                call_type == PureIntrinsic);
+    }
+
+    bool is_intrinsic(ConstString intrin_name) const {
+        return
+            ((call_type == Intrinsic ||
+              call_type == PureIntrinsic) &&
+             name == intrin_name);
+    }
 };
 
 /** A named variable. Might be a loop variable, function argument,

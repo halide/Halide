@@ -25,9 +25,12 @@ class GEMMGenerator :
     Param<T>   b_ = {"b", 1.0};
     ImageParam C_ = {type_of<T>(), 2, "C"};
 
-    Var i, j, ii, ji, jii, io, jo, ti, tj, t;
+    Var i, j, ii, ji, jii, iii, io, jo, ti, tj, t;
 
     Func build() {
+        // Matrices are interpreted as column-major by default. The
+        // transpose GeneratorParams are used to handle cases where
+        // one or both is actually row major.
         const Expr num_rows = (A_.width()/32)*32;
         const Expr num_cols = (B_.height()/32)*32;
         const Expr sum_size = (A_.height()/32)*32;
@@ -35,12 +38,11 @@ class GEMMGenerator :
         const int vec = natural_vector_size(a_.type());
         const int s = vec * 2;
 
-        // Instead of transposing B, swap A and B, transpose A, and
-        // then transpose AB.
+        // If they're both transposed, then reverse the order and transpose the result instead.
         bool transpose_AB = false;
-        if (transpose_B_) {
+        if ((bool)transpose_A_ && (bool)transpose_B_) {
             std::swap(A_, B_);
-            transpose_A_.set(!transpose_A_);
+            transpose_A_.set(false);
             transpose_B_.set(false);
             transpose_AB = true;
         }
@@ -49,8 +51,9 @@ class GEMMGenerator :
         Func result("result");
 
         // Swizzle A for better memory order in the inner loop.
-        Func A("A"), B("B"), As("As"), Atmp("Atmp");
+        Func A("A"), B("B"), Btmp("Btmp"), As("As"), Atmp("Atmp");
         Atmp(i, j) = A_(i, j);
+
         if (transpose_A_) {
             As(i, j, io) = Atmp(j, io*s + i);
         } else {
@@ -58,7 +61,13 @@ class GEMMGenerator :
         }
 
         A(i, j) = As(i % s, j, i / s);
-        B(i, j) = B_(i, j);
+
+        Btmp(i, j) = B_(i, j);
+        if (transpose_B_) {
+            B(i, j) = Btmp(j, i);
+        } else {
+            B(i, j) = Btmp(i, j);
+        }
 
         Var k("k");
         Func prod;
@@ -102,6 +111,8 @@ class GEMMGenerator :
             .tile(ti[0], tj[0], ti[0], tj[0], ti[2], tj[2], 2, 2)
             .fuse(tj[0], ti[0], t).parallel(t);
 
+        result.rename(tj[0], t);
+
         result.bound(i, 0, num_rows).bound(j, 0, num_cols);
 
         As.compute_root()
@@ -111,6 +122,17 @@ class GEMMGenerator :
 
         Atmp.compute_at(As, io)
             .vectorize(i).unroll(j);
+
+        if (transpose_B_) {
+            B.compute_at(result, t)
+                .tile(i, j, ii, ji, 8, 8)
+                .vectorize(ii).unroll(ji);
+            Btmp.reorder_storage(j, i)
+                .compute_at(B, i)
+                .vectorize(i)
+                .unroll(j);
+        }
+
 
         AB.compute_at(result, i)
             .unroll(j).vectorize(i)

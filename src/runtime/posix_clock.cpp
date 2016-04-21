@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 #ifndef _STRUCT_TIMEVAL
 #define _STRUCT_TIMEVAL

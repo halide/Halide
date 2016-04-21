@@ -78,6 +78,9 @@ Expr OutputImageParam::Dimension::stride() const {
     s << param.name() << ".stride." << d;
     return Internal::Variable::make(Int(32), s.str(), param);
 }
+int OutputImageParam::host_alignment() const {
+    return param.host_alignment();
+}
 
 OutputImageParam::Dimension OutputImageParam::Dimension::set_extent(Expr extent) {
     param.set_extent_constraint(d, extent);
@@ -94,6 +97,7 @@ OutputImageParam::Dimension OutputImageParam::Dimension::set_stride(Expr stride)
     return *this;
 }
 
+
 OutputImageParam::Dimension OutputImageParam::Dimension::set_bounds(Expr min, Expr extent) {
     return set_min(min).set_extent(extent);
 }
@@ -104,6 +108,10 @@ OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) {
 
 const OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) const {
     return OutputImageParam::Dimension(param, i);
+
+OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
+    param.set_host_alignment(bytes);
+    return *this;
 }
 
 int OutputImageParam::dimensions() const {

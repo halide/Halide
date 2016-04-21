@@ -27,6 +27,7 @@ set(RUNTIME_CPP
   cuda
   destructors
   device_interface
+  errors
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -231,6 +232,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
   Deinterleave.h
@@ -238,6 +240,7 @@ set(HEADER_FILES
   DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
+  EliminateBoolVectors.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -375,6 +378,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
+  CPlusPlusMangle.cpp
   CSE.cpp
   Debug.cpp
   Debug.cpp
@@ -384,6 +388,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
+  EliminateBoolVectors.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
@@ -464,7 +469,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
    if (WIN32)
      if (MSVC)
-	   # empty
+           # empty
      else()
        set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
      endif()

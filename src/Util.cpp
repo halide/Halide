@@ -62,6 +62,11 @@ string running_program_name() {
     #endif
 }
 
+// TODO: Rationalize the two different versions of unique_name,
+// possibly changing the name of one of them as they are used
+// for different things, and in fact the two versions can end
+// up returning the same name, thus they are not collectively
+// unique.
 string unique_name(char prefix) {
     // arrays with static storage duration should be initialized to zero automatically
     static std::atomic<int> instances[256];
@@ -172,6 +177,13 @@ std::vector<std::string> split_string(const std::string &source, const std::stri
         elements.push_back(source.substr(start, std::string::npos));
     }
     return elements;
+}
+
+std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces) {
+    namespaces = split_string(name, "::");
+    std::string result = namespaces.back();
+    namespaces.pop_back();
+    return result;
 }
 
 }

@@ -100,7 +100,7 @@ struct HeapObject {
 };
 
 int main(int argc, char **argv) {
-    bool result = HalideIntrospectionCanary::test();
+    bool result = HalideIntrospectionCanary::test(&HalideIntrospectionCanary::test_a);
 
     if (result) {
         printf("Halide C++ introspection claims to be working with this build config\n");

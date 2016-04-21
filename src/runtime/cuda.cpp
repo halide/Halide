@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeCuda.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
@@ -501,6 +500,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // Only destroy the context if we own it
         if (ctx == context) {
             debug(user_context) << "    cuCtxDestroy " << context << "\n";
+            err = cuProfilerStop();
             err = cuCtxDestroy(context);
             halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
             context = NULL;
@@ -881,6 +881,9 @@ WEAK const char *get_error_name(CUresult error) {
     case CUDA_ERROR_LAUNCH_TIMEOUT: return "CUDA_ERROR_LAUNCH_TIMEOUT";
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING: return "CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING";
     case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
+    // A trap instruction produces the below error, which is how we codegen asserts on GPU
+    case CUDA_ERROR_ILLEGAL_INSTRUCTION:
+        return "Illegal instruction or Halide assertion failure inside kernel";
     default: return "<Unknown error>";
     }
 }

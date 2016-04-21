@@ -119,7 +119,7 @@ ImageBase::ImageBase(Type t, const halide_buffer_t *b, const std::string &name) 
     prepare_for_direct_pixel_access();
 }
 
-const std::string &ImageBase::name() {
+const std::string &ImageBase::name() const {
     return buffer.name();
 }
 

@@ -248,18 +248,27 @@ private:
     }
 
 
+    // Check if an Expr is integer-division-rounding-up by the given
+    // factor. If so, return the core expression.
+    Expr is_round_up_div(Expr e, int64_t factor) {
+        if (!no_overflow(e.type())) return Expr();
+        const Div *div = e.as<Div>();
+        if (!div) return Expr();
+        if (!is_const(div->b, factor)) return Expr();
+        const Add *add = div->a.as<Add>();
+        if (!add) return Expr();
+        if (!is_const(add->b, factor-1)) return Expr();
+        return add->a;
+    }
+
+    // Check if an Expr is a rounding-up operation, and if so, return
+    // the factor.
     Expr is_round_up(Expr e, int64_t *factor) {
         if (!no_overflow(e.type())) return Expr();
         const Mul *mul = e.as<Mul>();
         if (!mul) return Expr();
         if (!const_int(mul->b, factor)) return Expr();
-        const Div *div = mul->a.as<Div>();
-        if (!div) return Expr();
-        if (!is_const(div->b, *factor)) return Expr();
-        const Add *add = div->a.as<Add>();
-        if (!add) return Expr();
-        if (!is_const(add->b, (*factor)-1)) return Expr();
-        return add->a;
+        return is_round_up_div(mul->a, *factor);
     }
 
     void visit(const Cast *op) {
@@ -690,6 +699,11 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
+        const Div *div_b_a = mul_b ? mul_b->a.as<Div>() : nullptr;
+
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
 
         const Min *min_b = b.as<Min>();
         const Add *add_b_a = min_b ? min_b->a.as<Add>() : nullptr;
@@ -699,8 +713,20 @@ private:
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : nullptr;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : nullptr;
 
+        if (div_a) {
+            add_a_a = div_a->a.as<Add>();
+            add_a_b = div_a->b.as<Add>();
+        }
+        if (div_b) {
+            add_b_a = div_b->a.as<Add>();
+            add_b_b = div_b->b.as<Add>();
+        }
+
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
+
+        const Sub *sub_a_a = div_a ? div_a->a.as<Sub>() : nullptr;
+        const Sub *sub_b_a = div_b ? div_b->a.as<Sub>() : nullptr;
 
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
@@ -1004,6 +1030,119 @@ private:
                    is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
+        } else if (no_overflow(op->type) &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   mul_a &&
+                   div_a_a &&
+                   is_positive_const(mul_a->b) &&
+                   equal(mul_a->b, div_a_a->b) &&
+                   equal(div_a_a->a, b)) {
+            // (x/4)*4 - x -> -(x%4)
+            expr = mutate(make_zero(a.type()) - (b % mul_a->b));
+        } else if (no_overflow(op->type) &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   mul_b &&
+                   div_b_a &&
+                   is_positive_const(mul_b->b) &&
+                   equal(mul_b->b, div_b_a->b) &&
+                   equal(div_b_a->a, a)) {
+            // x - (x/4)*4 -> x%4
+            expr = mutate(a % mul_b->b);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b_a &&
+                   equal(add_a_a->a, add_b_a->a) &&
+                   (is_simple_const(add_a_a->b) ||
+                    is_simple_const(add_b_a->b))) {
+            // This pattern comes up in bounds inference on upsampling code:
+            // (x + a)/c - (x + b)/c ->
+            //    ((c + a - 1 - b) - (x + a)%c)/c (duplicates a)
+            // or ((x + b)%c + (a - b))/c         (duplicates b)
+            Expr x = add_a_a->a, a = add_a_a->b, b = add_b_a->b, c = div_a->b;
+            if (is_simple_const(b)) {
+                // Use the version that injects two copies of b
+                expr = mutate((((x + (b % c)) % c) + (a - b))/c);
+            } else {
+                // Use the version that injects two copies of a
+                expr = mutate((((c + a - 1) - b) - ((x + (a % c)) % c))/c);
+            }
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_b_a &&
+                   equal(div_a->a, add_b_a->a)) {
+            // Same as above, where a == 0
+            Expr x = div_a->a, b = add_b_a->b, c = div_a->b;
+            expr = mutate(((c - 1 - b) - (x % c))/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   equal(add_a_a->a, div_b->a)) {
+            // Same as above, where b == 0
+            Expr x = add_a_a->a, a = add_a_a->b, c = div_a->b;
+            expr = mutate(((x % c) + a)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_b_a &&
+                   equal(div_a->a, sub_b_a->a)) {
+            // Same as above, where a == 0 and b is subtracted
+            Expr x = div_a->a, b = sub_b_a->b, c = div_a->b;
+            expr = mutate(((c - 1 + b) - (x % c))/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_a_a &&
+                   equal(sub_a_a->a, div_b->a)) {
+            // Same as above, where b == 0, and a is subtracted
+            Expr x = sub_a_a->a, a = sub_a_a->b, c = div_a->b;
+            expr = mutate(((x % c) - a)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   sub_a_a &&
+                   add_b_a &&
+                   equal(sub_a_a->a, add_b_a->a) &&
+                   is_simple_const(add_b_a->b)) {
+            // Same as above, where a is subtracted and b is a constant
+            // (x - a)/c - (x + b)/c -> ((x + b)%c - a - b)/c
+            Expr x = sub_a_a->a, a = sub_a_a->b, b = add_b_a->b, c = div_a->b;
+            expr = mutate((((x + (b % c)) % c) - a - b)/c);
+        } else if (div_a &&
+                   div_b &&
+                   is_positive_const(div_a->b) &&
+                   equal(div_a->b, div_b->b) &&
+                   op->type.is_int() &&
+                   no_overflow(op->type) &&
+                   add_a_a &&
+                   sub_b_a &&
+                   equal(add_a_a->a, sub_b_a->a) &&
+                   is_simple_const(add_a_a->b)) {
+            // Same as above, where b is subtracted and a is a constant
+            // (x + a)/c - (x - b)/c -> (b - (x + a)%c + (a + c - 1))/c
+            Expr x = add_a_a->a, a = add_a_a->b, b = sub_b_a->b, c = div_a->b;
+            expr = mutate((b - (x + (a % c))%c + (a + c - 1))/c);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1693,14 +1832,12 @@ private:
                 expr = mutate(max(mul_a->a, ratio) * factor);
             }
         } else if (call_a &&
-                   call_a->name == Call::likely &&
-                   call_a->call_type == Call::Intrinsic &&
+                   call_a->is_intrinsic(Call::likely) &&
                    equal(call_a->args[0], b)) {
             // min(likely(b), b) -> likely(b)
             expr = a;
         } else if (call_b &&
-                   call_b->name == Call::likely &&
-                   call_b->call_type == Call::Intrinsic &&
+                   call_b->is_intrinsic(Call::likely) &&
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
@@ -2002,14 +2139,12 @@ private:
                 expr = mutate(min(mul_a->a, ratio) * factor);
             }
         } else if (call_a &&
-                   call_a->name == Call::likely &&
-                   call_a->call_type == Call::Intrinsic &&
+                   call_a->is_intrinsic(Call::likely) &&
                    equal(call_a->args[0], b)) {
             // max(likely(b), b) -> likely(b)
             expr = a;
         } else if (call_b &&
-                   call_b->name == Call::likely &&
-                   call_b->call_type == Call::Intrinsic &&
+                   call_b->is_intrinsic(Call::likely) &&
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
@@ -2147,11 +2282,14 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
+        const Add *add_a_a_a = div_a_a ? div_a_a->a.as<Add>() : nullptr;
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
@@ -2273,6 +2411,19 @@ private:
                        is_const(a)) {
                 // (c1 < b * c2) <=> ((c1 / c2) < b)
                 expr = mutate((a / mul_b->b) < mul_b->a);
+            } else if (a.type().is_int() &&
+                       div_a &&
+                       is_positive_const(div_a->b) &&
+                       is_const(b)) {
+                // a / c1 < c2 <=> a < c1*c2
+                expr = mutate(div_a->a < (div_a->b * b));
+            } else if (a.type().is_int() &&
+                       div_b &&
+                       is_positive_const(div_b->b) &&
+                       is_const(a)) {
+                // c1 < b / c2 <=> (c1+1)*c2-1 < b
+                Expr one = make_one(a.type());
+                expr = mutate((a + one)*div_b->b - one < div_b->a);
             } else if (min_a) {
                 // (min(a, b) < c) <=> (a < c || b < c)
                 // See if that would simplify usefully:
@@ -2320,16 +2471,74 @@ private:
                 }
             } else if (mul_a &&
                        div_a_a &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(div_a_a->a, b)) {
+                // subtract (x/c1)*c1 from both sides
+                // (x/c1)*c1 < x -> 0 < x % c1
+                expr = mutate(0 < b % make_const(a.type(), ia));
+            } else if (mul_a &&
+                       div_a_a &&
                        add_b &&
                        const_int(div_a_a->b, &ia) &&
                        const_int(mul_a->b, &ib) &&
-                       const_int(add_b->b, &ic) &&
                        ia > 0 &&
                        ia == ib &&
-                       ia <= -ic &&
                        equal(div_a_a->a, add_b->a)) {
-                // (x/c1)*c1 < x + c2 where c1 <= -c2 -> false
-                expr = const_false();
+                // subtract (x/c1)*c1 from both sides
+                // (x/c1)*c1 < x + y -> 0 < x % c1 + y
+                expr = mutate(0 < add_b->a % div_a_a->b + add_b->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       sub_b &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(div_a_a->a, sub_b->a)) {
+                // subtract (x/c1)*c1 from both sides
+                // (x/c1)*c1 < x - y -> y < x % c1
+                expr = mutate(sub_b->b < sub_b->a % div_a_a->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       add_a_a_a &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_a_a_a->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(add_a_a_a->a, b)) {
+                // subtract ((x+c2)/c1)*c1 from both sides
+                // ((x+c2)/c1)*c1 < x -> c2 < (x+c2) % c1
+                expr = mutate(add_a_a_a->b < div_a_a->a % div_a_a->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       add_b &&
+                       add_a_a_a &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_a_a_a->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(add_a_a_a->a, add_b->a)) {
+                // subtract ((x+c2)/c1)*c1 from both sides
+                // ((x+c2)/c1)*c1 < x + y -> c2 < (x+c2) % c1 + y
+                expr = mutate(add_a_a_a->b < div_a_a->a % div_a_a->b + add_b->b);
+            } else if (mul_a &&
+                       div_a_a &&
+                       add_a_a_a &&
+                       sub_b &&
+                       const_int(div_a_a->b, &ia) &&
+                       const_int(mul_a->b, &ib) &&
+                       const_int(add_a_a_a->b, &ic) &&
+                       ia > 0 &&
+                       ia == ib &&
+                       equal(add_a_a_a->a, sub_b->a)) {
+                // subtract ((x+c2)/c1)*c1 from both sides
+                // ((x+c2)/c1)*c1 < x - y -> y < (x+c2) % c1 + (-c2)
+                expr = mutate(sub_b->b < div_a_a->a % div_a_a->b + make_const(a.type(), -ic));
             } else if (delta_ramp &&
                        is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) < 0))) {
@@ -2577,6 +2786,22 @@ private:
             expr = true_value;
         } else if (equal(true_value, false_value)) {
             expr = true_value;
+        } else if (true_value.type().is_bool() &&
+                   is_one(true_value) &&
+                   is_zero(false_value)) {
+            if (true_value.type().is_vector() && condition.type().is_scalar()) {
+                expr = Broadcast::make(condition, true_value.type().lanes());
+            } else {
+                expr = condition;
+            }
+        } else if (true_value.type().is_bool() &&
+                   is_zero(true_value) &&
+                   is_one(false_value)) {
+            if (true_value.type().is_vector() && condition.type().is_scalar()) {
+                expr = Broadcast::make(mutate(!condition), true_value.type().lanes());
+            } else {
+                expr = mutate(!condition);
+            }
         } else if (const Broadcast *b = condition.as<Broadcast>()) {
             // Select of broadcast -> scalar select
             expr = mutate(Select::make(b->value, true_value, false_value));
@@ -2586,13 +2811,12 @@ private:
         } else if (const LE *le = condition.as<LE>()) {
             // Normalize select(a <= b, c, d) to select(b < a, d, c)
             expr = mutate(Select::make(le->b < le->a, false_value, true_value));
-        } else if (ct && ct->name == Call::likely && ct->call_type == Call::Intrinsic &&
+        } else if (ct && ct->is_intrinsic(Call::likely) &&
                    equal(ct->args[0], false_value)) {
             // select(cond, likely(a), a) -> likely(a)
             expr = true_value;
         } else if (cf &&
-                   cf->name == Call::likely &&
-                   cf->call_type == Call::Intrinsic &&
+                   cf->is_intrinsic(Call::likely) &&
                    equal(cf->args[0], true_value)) {
             // select(cond, a, likely(a)) -> likely(a)
             expr = false_value;
@@ -2760,16 +2984,15 @@ private:
             }
         }
 
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::shift_left ||
-             op->name == Call::shift_right)) {
+        if (op->is_intrinsic(Call::shift_left) ||
+            op->is_intrinsic(Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
 
             int64_t ib = 0;
             if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
                 Type t = op->type;
 
-                bool shift_left = op->name == Call::shift_left;
+                bool shift_left = op->is_intrinsic(Call::shift_left);
                 if (t.is_int() && ib < 0) {
                     shift_left = !shift_left;
                     ib = -ib;
@@ -2793,13 +3016,12 @@ private:
 
             if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
-            } else if (op->name == Call::shift_left) {
+            } else if (op->is_intrinsic(Call::shift_left)) {
                 expr = a << b;
             } else {
                 expr = a >> b;
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::bitwise_and) {
+        } else if (op->is_intrinsic(Call::bitwise_and)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             int64_t ib = 0;
             uint64_t ub = 0;
@@ -2820,8 +3042,7 @@ private:
             } else {
                 expr = a & b;
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::abs) {
+        } else if (op->is_intrinsic(Call::abs)) {
             // Constant evaluate abs(x).
             Expr a = mutate(op->args[0]);
             Type ta = a.type();
@@ -2845,7 +3066,7 @@ private:
             } else {
                 expr = abs(a);
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
             double f = 0.0;
@@ -2856,8 +3077,7 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::interleave_vectors) {
+        } else if (op->is_intrinsic(Call::interleave_vectors)) {
             // Mutate the args
             vector<Expr> new_args;
             bool changed = false;
@@ -2909,7 +3129,7 @@ private:
 
                 if ((int)load_indices.size() == terms) {
                     Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
-                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::Intrinsic);
+                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
                     interleaved_index = mutate(interleaved_index);
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
@@ -2925,8 +3145,7 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, new_args, op->call_type);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::stringify) {
+        } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
             vector<Expr> new_args;
@@ -2976,7 +3195,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -2986,7 +3205,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "exp_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -2996,7 +3215,7 @@ private:
             } else {
                 expr = op;
             }
-        } else if (op->call_type == Call::Extern &&
+        } else if (op->call_type == Call::PureExtern &&
                    (op->name == "floor_f32" || op->name == "ceil_f32" ||
                     op->name == "round_f32" || op->name == "trunc_f32")) {
             internal_assert(op->args.size() == 1);
@@ -3012,7 +3231,7 @@ private:
                 } else if (op->name == "trunc_f32") {
                     expr = FloatImm::make(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
                 }
-            } else if (call && call->call_type == Call::Extern &&
+            } else if (call && call->call_type == Call::PureExtern &&
                        (call->name == "floor_f32" || call->name == "ceil_f32" ||
                         call->name == "round_f32" || call->name == "trunc_f32")) {
                 // For any combination of these integer-valued functions, we can
@@ -3248,10 +3467,7 @@ private:
 
         if (is_no_op(new_body)) {
             stmt = new_body;
-            return;
-        }
-
-        if (op->min.same_as(new_min) &&
+        } else if (op->min.same_as(new_min) &&
             op->extent.same_as(new_extent) &&
             op->body.same_as(new_body)) {
             stmt = op;
@@ -3296,9 +3512,45 @@ private:
         } else if (value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index);
+            stmt = Store::make(op->name, value, index, op->param);
         }
     }
+
+    void visit(const Allocate *op) {
+        std::vector<Expr> new_extents;
+        bool all_extents_unmodified = true;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            new_extents.push_back(mutate(op->extents[i]));
+            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
+        }
+        Stmt body = mutate(op->body);
+        Expr condition = mutate(op->condition);
+        Expr new_expr;
+        if (op->new_expr.defined()) {
+            new_expr = mutate(op->new_expr);
+        }
+        const IfThenElse *body_if = body.as<IfThenElse>();
+        if (body_if &&
+            op->condition.defined() &&
+            equal(op->condition, body_if->condition)) {
+            // We can move the allocation into the if body case. The
+            // else case must not use it.
+            stmt = Allocate::make(op->name, op->type, new_extents,
+                                  condition, body_if->then_case,
+                                  new_expr, op->free_function);
+            stmt = IfThenElse::make(body_if->condition, stmt, body_if->else_case);
+        } else if (all_extents_unmodified &&
+                   body.same_as(op->body) &&
+                   condition.same_as(op->condition) &&
+                   new_expr.same_as(op->new_expr)) {
+            stmt = op;
+        } else {
+            stmt = Allocate::make(op->name, op->type, new_extents,
+                                  condition, body,
+                                  new_expr, op->free_function);
+        }
+    }
+
 
     void visit(const ProducerConsumer *op) {
         Stmt produce = mutate(op->produce);
@@ -3307,10 +3559,31 @@ private:
             update = mutate(update);
         }
         Stmt consume = mutate(op->consume);
+
+        const IfThenElse *produce_if = produce.as<IfThenElse>();
+        const IfThenElse *update_if  = update.as<IfThenElse>();
+        const IfThenElse *consume_if = consume.as<IfThenElse>();
+
         if (is_no_op(produce) &&
             is_no_op(consume) &&
             is_no_op(update)) {
             stmt = Evaluate::make(0);
+        } else if (produce_if &&
+                   !produce_if->else_case.defined() &&
+                   consume_if &&
+                   !consume_if->else_case.defined() &&
+                   equal(produce_if->condition, consume_if->condition) &&
+                   (!update.defined() ||
+                    (update_if &&
+                     !update_if->else_case.defined() &&
+                     equal(produce_if->condition, update_if->condition)))) {
+            // All parts are guarded by the same condition. Lift it outwards.
+            Expr condition = produce_if->condition;
+            produce = produce_if->then_case;
+            if (update_if) update = update_if->then_case;
+            consume = consume_if->then_case;
+            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = IfThenElse::make(condition, stmt);
         } else if (produce.same_as(op->produce) &&
                    update.same_as(op->update) &&
                    consume.same_as(op->consume)) {
@@ -3358,6 +3631,7 @@ private:
             } else if (if_first &&
                        if_rest &&
                        equal(if_first->condition, if_rest->condition)) {
+                // Two ifs with matching conditions
                 Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
                 Stmt else_case;
                 if (if_first->else_case.defined() && if_rest->else_case.defined()) {
@@ -3368,6 +3642,17 @@ private:
                 } else {
                     else_case = if_rest->else_case;
                 }
+                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
+            } else if (if_first &&
+                       if_rest &&
+                       !if_rest->else_case.defined() &&
+                       is_one(simplify((if_first->condition && if_rest->condition) == if_rest->condition))) {
+                // Two ifs where the second condition is tighter than
+                // the first condition.  The second if can be nested
+                // inside the first one, because if it's true the
+                // first one must also be true.
+                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
+                Stmt else_case = mutate(if_first->else_case);
                 stmt = IfThenElse::make(if_first->condition, then_case, else_case);
             } else if (op->first.same_as(first) &&
                        op->rest.same_as(rest)) {
@@ -3445,7 +3730,7 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
     Type t = e[0].type().with_lanes(e[0].type().lanes() * e.size());
-    return Call::make(t, Call::interleave_vectors, e, Call::Intrinsic);
+    return Call::make(t, Call::interleave_vectors, e, Call::PureIntrinsic);
 }
 
 Expr ramp(Expr base, Expr stride, int w) {
@@ -3552,6 +3837,15 @@ void check_algebra() {
     check(xf + yf*-2.0f, xf - y*2.0f);
     check(xf*-2.0f + yf, yf - x*2.0f);
 
+    check(x - (x/8)*8, x % 8);
+    check((x/8)*8 - x, -(x % 8));
+    check((x/8)*8 < x + y, 0 < x%8 + y);
+    check((x/8)*8 < x - y, y < x%8);
+    check((x/8)*8 < x, 0 < x%8);
+    check(((x+3)/8)*8 < x + y, 3 < (x+3)%8 + y);
+    check(((x+3)/8)*8 < x - y, y < (x+3)%8 + (-3));
+    check(((x+3)/8)*8 < x, 3 < (x+3)%8);
+
     check(x*0, 0);
     check(0*x, 0);
     check(x*1, x);
@@ -3616,6 +3910,22 @@ void check_algebra() {
 
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
+
+    // Almost-cancellations through integer divisions. These rules all
+    // deduplicate x and wrap it in a modulo operator, neutering it
+    // for the purposes of bounds inference. Patterns below look
+    // confusing, but were brute-force tested.
+    check((x + 17)/3 - (x + 7)/3, ((x+1)%3 + 10)/3);
+    check((x + 17)/3 - (x + y)/3, (19 - y - (x+2)%3)/3);
+    check((x + y )/3 - (x + 7)/3, ((x+1)%3 + y + -7)/3);
+    check( x      /3 - (x + y)/3, (2 - y - x % 3)/3);
+    check((x + y )/3 -  x     /3, (x%3 + y)/3);
+    check( x      /3 - (x + 7)/3, (-5 - x%3)/3);
+    check((x + 17)/3 -  x     /3, (x%3 + 17)/3);
+    check((x + 17)/3 - (x - y)/3, (y - (x+2)%3 + 19)/3);
+    check((x - y )/3 - (x + 7)/3, ((x+1)%3 - y + (-7))/3);
+    check( x      /3 - (x - y)/3, (y - x%3 + 2)/3);
+    check((x - y )/3 -  x     /3, (x%3 - y)/3);
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
@@ -3719,6 +4029,16 @@ void check_bounds() {
     check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), make_const(Int(8), -127)));
 
     // Some quaternary rules with cancellations
+    check((x + y) - (z + y), x - z);
+    check((x + y) - (y + z), x - z);
+    check((y + x) - (z + y), x - z);
+    check((y + x) - (y + z), x - z);
+
+    check((x - y) - (z - y), x - z);
+    check((y - z) - (y - x), x - z);
+
+    check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1)/4);
+
     check(x - min(x + y, z), max(-y, x-z));
     check(x - min(y + x, z), max(-y, x-z));
     check(x - min(z, x + y), max(-y, x-z));
@@ -3932,6 +4252,8 @@ void check_boolean() {
     check(max(x, y) <= y, x <= y);
     check(min(x, y) >= y, y <= x);
 
+    check((1 < y) && (2 < y), 2 < y);
+
     check(x*5 < 4, x < 1);
     check(x*5 < 5, x < 1);
     check(x*5 < 6, x < 2);
@@ -3945,11 +4267,15 @@ void check_boolean() {
     check(x*5 >= 5, 1 <= x);
     check(x*5 >= 6, 2 <= x);
 
+    check(x/4 < 3, x < 12);
+    check(3 < x/4, 15 < x);
+
     check(4 - x <= 0, 4 <= x);
 
     check((x/8)*8 < x - 8, f);
     check((x/8)*8 < x - 9, f);
-    check((x/8)*8 < x - 7, (x/8)*8 < x + (-7));
+    check((x/8)*8 < x - 7, f);
+    check((x/8)*8 < x - 6, 6 < x % 8);
     check(ramp(x*4, 1, 4) < broadcast(y*4, 4), broadcast(x < y, 4));
     check(ramp(x*8, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
     check(ramp(x*8 + 1, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
@@ -4121,11 +4447,11 @@ void simplify_test() {
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     // Check that constant args to a stringify get combined
-    check(Call::make(Handle(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
           string("3 4"));
 
-    check(Call::make(Handle(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
-          Call::make(Handle(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
+          Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
