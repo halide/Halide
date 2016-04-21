@@ -15,6 +15,7 @@
 #include "HexagonOptimize.h"
 #include "AlignLoads.h"
 #include "CSE.h"
+#include "LoopCarry.h"
 
 #ifdef WITH_HEXAGON
 
@@ -113,6 +114,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = common_subexpression_elimination(body);
     body = simplify(body);
     debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
+
+    debug(1) << "Forwarding stores across loop iterations...\n";
+    body = loop_carry(body, 16);
+    body = simplify(body);
+    debug(2) << "Lowering after forwarding stores:\n" << body << "\n\n";
 
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
