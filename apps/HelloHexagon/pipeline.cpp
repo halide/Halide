@@ -51,8 +51,10 @@ int main(int argc, char **argv) {
             .vectorize(x, vector_size);
     } else {
         const int vector_size = target.natural_vector_size<uint8_t>();
-        blur.compute_root() .vectorize(x, vector_size);
-        blur_y.compute_at(blur, y) .vectorize(x, vector_size);
+        blur.compute_root()
+            .vectorize(x, vector_size);
+        blur_y.compute_at(blur, y)
+            .vectorize(x, vector_size);
     }
 
     blur.compile_to_header("pipeline.h", {input}, "pipeline");
