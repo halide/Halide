@@ -301,7 +301,8 @@ Func process(Func raw, Type result_type,
 
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        const int tile_size = 128;
+        const int tile_width = 512;
+        const int tile_height = 64;
         const int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
         denoised.compute_at(processed, tx)
             .align_storage(x, vector_size)
@@ -317,14 +318,14 @@ Func process(Func raw, Type result_type,
             .unroll(c);
         processed.compute_root()
             .hexagon()
-            .tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
+            .tile(x, y, tx, ty, xi, yi, tile_width, tile_height)
             .reorder(xi, yi, c, tx, ty)
             .parallel(ty);
 
         // We can generate slightly better code if we know the output is a whole number of tiles.
         processed
-            .bound(x, 0, (out_width/tile_size)*tile_size)
-            .bound(y, 0, (out_height/tile_size)*tile_size);
+            .bound(x, 0, (out_width/tile_width)*tile_width)
+            .bound(y, 0, (out_height/tile_height)*tile_height);
     } else if (target.arch == Target::ARM) {
         // Compute in chunks over tiles, vectorized by 8
         const int tile_size = 32;
