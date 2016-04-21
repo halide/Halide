@@ -77,6 +77,7 @@ void *memset(void *s, int val, size_t n);
 int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
 void exit(int);
 void abort();

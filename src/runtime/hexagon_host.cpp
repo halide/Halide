@@ -113,28 +113,31 @@ namespace {
 // TODO: Try writing this in a way that doesn't actually touch the file system (named pipe?)
 WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
                              char *filename, size_t filename_size) {
+    static int next = 0;
+    int temp_index = __atomic_fetch_add(&next, 1, __ATOMIC_ACQUIRE);
+
     const char *tmp_paths[] = {
         "/data/local/tmp/",
         "/tmp/"
     };
     Printer<StringStreamPrinter> path(user_context);
-    for (int i = 0; i < 1000; i++) {
-        for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
-            path.clear();
-            path << tmp_paths[j] << "halide_kernels" << i << ".so";
-            strncpy(filename, path.str(), filename_size);
+    for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
+        path.clear();
+        // Put the code size in the path in an attempt to make the
+        // filename more unique.
+        path << tmp_paths[j] << "halide_kernels_" << (int)size << "_" << temp_index << ".so";
+        strncpy(filename, path.str(), filename_size);
 
-            int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT | O_EXCL, 0755);
-            if (so_fd == -1) continue;
-            ssize_t written = write(so_fd, data, size);
-            close(so_fd);
-            if (written < (ssize_t)size) {
-                error(user_context) << "Failed to write shared object file " << filename << "\n";
-                return -1;
-            }
-            debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
-            return 0;
+        int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT | O_EXCL, 0755);
+        if (so_fd == -1) continue;
+        ssize_t written = write(so_fd, data, size);
+        close(so_fd);
+        if (written < (ssize_t)size) {
+            error(user_context) << "Failed to write shared object file " << filename << "\n";
+            return -1;
         }
+        debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
+        return 0;
     }
     error(user_context) << "Unable to write temporary shared object file.\n";
     return -1;
@@ -192,6 +195,15 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
             debug(user_context) << "        " << result << "\n";
             error(user_context) << "Initialization of Hexagon kernels failed\n";
         }
+
+        // Unfortunately, dlopen on the Hexagon side doesn't keep the
+        // shared object alive in the file system. To work around
+        // this, we open the shared object, then remove the file. The
+        // file will still exist until our process exits, at which
+        // time the file handle will be closed, and then the file will
+        // be removed from the file system.
+        open(filename, O_RDONLY, 0);
+        remove(filename);
     } else {
         debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
     }
@@ -253,7 +265,7 @@ WEAK int halide_hexagon_run(void *user_context,
 
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
-        debug(user_context) << "    halide_hexagon_remote_get_symbol " << name << " -> \n";
+        debug(user_context) << "    halide_hexagon_remote_get_symbol " << name << " -> ";
         *function = remote_get_symbol(module, name, strlen(name) + 1);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {
@@ -296,7 +308,7 @@ WEAK int halide_hexagon_run(void *user_context,
     #endif
 
     // Call the pipeline on the device side.
-    debug(user_context) << "    halide_hexagon_remote_run -> \n";
+    debug(user_context) << "    halide_hexagon_remote_run -> ";
     result = remote_run(module, *function,
                         input_buffers, input_buffer_count,
                         output_buffers, output_buffer_count,
