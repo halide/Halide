@@ -236,6 +236,8 @@ class LoopCarryOverLoop : public IRMutator {
     // to lift out.
     const Scope<int> &in_consume;
 
+    int max_carried_values;
+
     using IRMutator::visit;
 
     void visit(const LetStmt *op) {
@@ -390,13 +392,12 @@ class LoopCarryOverLoop : public IRMutator {
         // spray stack spills everywhere. This is ugly, because we're
         // relying on a heuristic.
         vector<vector<int>> trimmed;
-        const int max_carried_values = 8;
         size_t sz = 0;
         for (const vector<int> &c : chains) {
-            if (sz + c.size() > max_carried_values) {
-                if (sz < max_carried_values - 1) {
+            if (sz + c.size() > (size_t)max_carried_values) {
+                if (sz < (size_t)max_carried_values - 1) {
                     // Take a partial chain
-                    trimmed.emplace_back(c.begin(), c.begin() + 8 - sz);
+                    trimmed.emplace_back(c.begin(), c.begin() + max_carried_values - sz);
                 }
                 break;
             }
@@ -420,7 +421,7 @@ class LoopCarryOverLoop : public IRMutator {
 
         vector<Stmt> not_first_iteration_scratch_stores;
         vector<Stmt> scratch_shuffles;
-        Stmt core = orig_stmt;
+        Stmt core = graph_stmt;
 
         for (const vector<int> &c : chains) {
             string scratch = unique_name('c');
@@ -515,7 +516,8 @@ class LoopCarryOverLoop : public IRMutator {
     }
 
 public:
-    LoopCarryOverLoop(const string &var, const Scope<int> &s) : in_consume(s) {
+    LoopCarryOverLoop(const string &var, const Scope<int> &s, int max_carried_values)
+        : in_consume(s), max_carried_values(max_carried_values) {
         linear.push(var, 1);
     }
 
@@ -532,6 +534,7 @@ public:
 class LoopCarry : public IRMutator {
     using IRMutator::visit;
 
+    int max_carried_values;
     Scope<int> in_consume;
 
     void visit(const ProducerConsumer *op) {
@@ -546,7 +549,7 @@ class LoopCarry : public IRMutator {
     void visit(const For *op) {
         if (op->for_type == ForType::Serial && !is_one(op->extent)) {
             Stmt body = mutate(op->body);
-            LoopCarryOverLoop carry(op->name, in_consume);
+            LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
             body = carry.mutate(body);
             if (body.same_as(op->body)) {
                 stmt = op;
@@ -567,13 +570,16 @@ class LoopCarry : public IRMutator {
             IRMutator::visit(op);
         }
     }
+
+public:
+    LoopCarry(int max_carried_values) : max_carried_values(max_carried_values) {}
 };
 
 }
 
 
-Stmt loop_carry(Stmt s) {
-    s = LoopCarry().mutate(s);
+Stmt loop_carry(Stmt s, int max_carried_values) {
+    s = LoopCarry(max_carried_values).mutate(s);
     return s;
 }
 
