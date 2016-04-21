@@ -1048,16 +1048,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
-        } else if (op->is_intrinsic(Call::get_high_register)) {
-            // TODO: This implementation should probably be in CodeGen_LLVM.
-            internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
-            value = slice_vector(codegen(op->args[0]), op->type.lanes(), op->type.lanes());
-            return;
-        } else if (op->is_intrinsic(Call::get_low_register)) {
-            // TODO: This implementation should probably be in CodeGen_LLVM.
-            internal_assert(op->type.lanes()*2 == op->args[0].type().lanes());
-            value = slice_vector(codegen(op->args[0]), 0, op->type.lanes());
-            return;
         }
     }
     CodeGen_Posix::visit(op);
