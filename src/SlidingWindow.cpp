@@ -6,7 +6,7 @@
 #include "Substitute.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
-#include "Derivative.h"
+#include "Monotonic.h"
 #include "Bounds.h"
 
 namespace Halide {

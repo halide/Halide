@@ -38,13 +38,8 @@ int static_sign(Expr x) {
     }
     return 0;
 }
+}
 
-
-// Given a varying expression, try to find a constant that is either:
-// An upper bound (always greater than or equal to the expression), or
-// A lower bound (always less than or equal to the expression)
-// If it fails, returns an undefined Expr.
-enum Direction {Upper, Lower};
 Expr find_constant_bound(Expr e, Direction d) {
     // We look through casts, so we only handle ops that can't
     // overflow. E.g. if A >= a and B >= b, then you can't assume that
@@ -56,9 +51,9 @@ Expr find_constant_bound(Expr e, Direction d) {
         Expr b = find_constant_bound(min->b, d);
         if (a.defined() && b.defined()) {
             return simplify(Min::make(a, b));
-        } else if (a.defined() && d == Upper) {
+        } else if (a.defined() && d == Direction::Upper) {
             return a;
-        } else if (b.defined() && d == Upper) {
+        } else if (b.defined() && d == Direction::Upper) {
             return b;
         }
     } else if (const Max *max = e.as<Max>()) {
@@ -66,9 +61,9 @@ Expr find_constant_bound(Expr e, Direction d) {
         Expr b = find_constant_bound(max->b, d);
         if (a.defined() && b.defined()) {
             return simplify(Max::make(a, b));
-        } else if (a.defined() && d == Lower) {
+        } else if (a.defined() && d == Direction::Lower) {
             return a;
-        } else if (b.defined() && d == Lower) {
+        } else if (b.defined() && d == Direction::Lower) {
             return b;
         }
     } else if (const Cast *cast = e.as<Cast>()) {
@@ -80,7 +75,6 @@ Expr find_constant_bound(Expr e, Direction d) {
     return Expr();
 }
 
-}
 
 class Bounds : public IRVisitor {
 public:
@@ -177,8 +171,8 @@ private:
             // can only really prove that this is the case if they're
             // constants, so try to make the constants first.
 
-            Expr lower_bound = find_constant_bound(min_a, Lower);
-            Expr upper_bound = find_constant_bound(max_a, Upper);
+            Expr lower_bound = find_constant_bound(min_a, Direction::Lower);
+            Expr upper_bound = find_constant_bound(max_a, Direction::Upper);
 
             if (lower_bound.defined() && upper_bound.defined()) {
                 // Cast them to the narrow type and back and see if
@@ -645,14 +639,20 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
+        bool const_condition = !expr_uses_vars(op->condition, scope);
+
         if (min_a.same_as(min_b)) {
             min = min_a;
+        } else if (const_condition) {
+            min = select(op->condition, min_a, min_b);
         } else {
             min = Min::make(min_a, min_b);
         }
 
         if (max_a.same_as(max_b)) {
             max = max_a;
+        } else if (const_condition) {
+            max = select(op->condition, max_a, max_b);
         } else {
             max = Max::make(max_a, max_b);
         }
@@ -1576,6 +1576,10 @@ void bounds_test() {
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
+
+    check(scope, select(y == 5, 0, 3), select(y == 5, 0, 3), select(y == 5, 0, 3));
+    check(scope, select(y == 5, x, -3*x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
+    check(scope, select(y == x, x, -3*x + 8), -22, 10);
 
     check(scope, cast<int32_t>(abs(cast<int16_t>(x/y))), 0, 32768);
     check(scope, cast<float>(x), 0.0f, 10.0f);
