@@ -842,6 +842,14 @@ class AndConditionOverDomain : public IRMutator {
 
     Scope<Interval> scope;
     Scope<Expr> bound_vars;
+
+    // We're looking for a condition which implies the original, but
+    // does not depend on the vars in the scope.  This is a sufficient
+    // condition - one which is conservatively false. If we traverse
+    // into a Not node, however, we need to flip the direction in
+    // which we're being conservative, and look for a necessary
+    // condition instead - one which is conservatively true. This bool
+    // tracks that.
     bool flipped = false;
 
     Interval get_bounds(Expr a) {
@@ -866,6 +874,18 @@ class AndConditionOverDomain : public IRMutator {
         expr = mutate(op->value);
     }
 
+    void fail() {
+        if (flipped) {
+            // True is a necessary condition for anything. Any
+            // predicate implies true.
+            expr = const_true();
+        } else {
+            // False is a sufficient condition for anything. False
+            // implies any predicate.
+            expr = const_false();
+        }
+    }
+
     template<typename Cmp, bool is_lt_or_le>
     void visit_cmp(const Cmp *op) {
         Expr a, b;
@@ -877,11 +897,7 @@ class AndConditionOverDomain : public IRMutator {
             b = make_bigger(op->b);
         }
         if (!a.defined() || !b.defined()) {
-            if (flipped) {
-                expr = const_true();
-            } else {
-                expr = const_false();
-            }
+            fail();
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -907,29 +923,24 @@ class AndConditionOverDomain : public IRMutator {
 
     void visit(const EQ *op) {
         if (op->type.is_vector()) {
-            if (flipped) {
-                expr = const_true();
-            } else {
-                expr = const_false();
-            }
+            fail();
         } else {
+            // Rewrite to the difference is zero.
             Expr delta = simplify(op->a - op->b);
             Interval i = get_bounds(delta);
             if (!i.min.defined() || !i.max.defined()) {
-                if (flipped) {
-                    expr = const_true();
-                } else {
-                    expr = const_false();
-                }
+                fail();
                 return;
             }
             if (is_one(simplify(i.min == i.max))) {
+                // The expression does not vary, so an equivalent condition is:
                 expr = (i.min == 0);
             } else {
                 if (flipped) {
                     // Necessary condition: zero is in the range of i.min and i.max
                     expr = (i.min <= 0) && (i.max >= 0);
                 } else {
+                    // Sufficient condition: the entire range is zero
                     expr = (i.min == 0) && (i.max == 0);
                 }
             }
@@ -951,25 +962,23 @@ class AndConditionOverDomain : public IRMutator {
             Interval i = scope.get(op->name);
             if (!flipped) {
                 if (interval_has_lower_bound(i) && i.min.defined()) {
-                    // Be conservative
+                    // Sufficient condition: if this boolean var
+                    // could ever be false, then return false.
                     expr = i.min;
                 } else {
                     expr = const_false();
                 }
             } else {
                 if (interval_has_upper_bound(i) && i.max.defined()) {
+                    // Necessary condition: if this boolean var could
+                    // ever be true, return true.
                     expr = i.max;
                 } else {
                     expr = const_true();
                 }
             }
         } else if (op->type.is_vector()) {
-            // Be conservative
-            if (!flipped) {
-                expr = const_false();
-            } else {
-                expr = const_true();
-            }
+            fail();
         } else {
             expr = op;
         }
