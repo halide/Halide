@@ -845,11 +845,6 @@ class AndConditionOverDomain : public IRMutator {
     bool flipped = false;
 
     Interval get_bounds(Expr a) {
-        if (!expr_uses_vars(a, scope)) {
-            // If expr doesn't use any of the vars in scope, it is a constant.
-            // Both max and min are equal to the expr itself in this case.
-            return Interval(a, a);
-        }
         Interval bounds = bounds_of_expr_in_scope(a, scope);
         if (!bounds.min.same_as(bounds.max) ||
             !bounds.min.defined() ||
