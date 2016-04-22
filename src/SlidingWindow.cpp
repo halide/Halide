@@ -161,14 +161,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             bool can_slide_up = false;
             bool can_slide_down = false;
 
-            MonotonicResult monotonic_min = is_monotonic(min_required, loop_var);
-            MonotonicResult monotonic_max = is_monotonic(max_required, loop_var);
+            Monotonic monotonic_min = is_monotonic(min_required, loop_var);
+            Monotonic monotonic_max = is_monotonic(max_required, loop_var);
 
-            if (monotonic_min == MonotonicIncreasing || monotonic_min == Constant) {
+            if (monotonic_min == Monotonic::Increasing ||
+                monotonic_min == Monotonic::Constant) {
                 can_slide_up = true;
             }
 
-            if (monotonic_max == MonotonicDecreasing || monotonic_max == Constant) {
+            if (monotonic_max == Monotonic::Decreasing ||
+                monotonic_max == Monotonic::Constant) {
                 can_slide_down = true;
             }
 
@@ -271,8 +273,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             const LetStmt *l = s.as<LetStmt>();
             internal_assert(l);
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
-        } else if (is_monotonic(min, loop_var) != Constant ||
-                   is_monotonic(extent, loop_var) != Constant) {
+        } else if (is_monotonic(min, loop_var) != Monotonic::Constant ||
+                   is_monotonic(extent, loop_var) != Monotonic::Constant) {
             debug(3) << "Not entering loop over " << op->name
                      << " because the bounds depend on the var we're sliding over: "
                      << min << ", " << extent << "\n";

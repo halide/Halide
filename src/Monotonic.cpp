@@ -10,21 +10,21 @@ namespace Internal {
 
 using std::string;
 
-class Monotonic : public IRVisitor {
+class MonotonicVisitor : public IRVisitor {
     const string &var;
 
-    Scope<MonotonicResult> scope;
+    Scope<Monotonic> scope;
 
     void visit(const IntImm *) {
-        result = Constant;
+        result = Monotonic::Constant;
     }
 
     void visit(const UIntImm *) {
-        result = Constant;
+        result = Monotonic::Constant;
     }
 
     void visit(const FloatImm *) {
-        result = Constant;
+        result = Monotonic::Constant;
     }
 
     void visit(const StringImm *) {
@@ -46,73 +46,73 @@ class Monotonic : public IRVisitor {
 
         // A narrowing cast. There may be more cases we can catch, but
         // for now we punt.
-        if (result != Constant) {
-            result = Unknown;
+        if (result != Monotonic::Constant) {
+            result = Monotonic::Unknown;
         }
     }
 
     void visit(const Variable *op) {
         if (op->name == var) {
-            result = MonotonicIncreasing;
+            result = Monotonic::Increasing;
         } else if (scope.contains(op->name)) {
             result = scope.get(op->name);
         } else {
-            result = Constant;
+            result = Monotonic::Constant;
         }
     }
 
-    MonotonicResult flip(MonotonicResult r) {
+    Monotonic flip(Monotonic r) {
         switch (r) {
-        case MonotonicIncreasing: return MonotonicDecreasing;
-        case MonotonicDecreasing: return MonotonicIncreasing;
+        case Monotonic::Increasing: return Monotonic::Decreasing;
+        case Monotonic::Decreasing: return Monotonic::Increasing;
         default: return r;
         }
     }
 
-    MonotonicResult unify(MonotonicResult a, MonotonicResult b) {
+    Monotonic unify(Monotonic a, Monotonic b) {
         if (a == b) {
             return a;
         }
 
-        if (a == Unknown || b == Unknown) {
-            return Unknown;
+        if (a == Monotonic::Unknown || b == Monotonic::Unknown) {
+            return Monotonic::Unknown;
         }
 
-        if (a == Constant) {
+        if (a == Monotonic::Constant) {
             return b;
         }
 
-        if (b == Constant) {
+        if (b == Monotonic::Constant) {
             return a;
         }
 
-        return Unknown;
+        return Monotonic::Unknown;
     }
 
     void visit(const Add *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(ra, rb);
     }
 
     void visit(const Sub *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(ra, flip(rb));
     }
 
     void visit(const Mul *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
 
-        if (ra == Constant && rb == Constant) {
-            result = Constant;
+        if (ra == Monotonic::Constant && rb == Monotonic::Constant) {
+            result = Monotonic::Constant;
         } else if (is_positive_const(op->a)) {
             result = rb;
         } else if (is_positive_const(op->b)) {
@@ -122,57 +122,57 @@ class Monotonic : public IRVisitor {
         } else if (is_negative_const(op->b)) {
             result = flip(ra);
         } else {
-            result = Unknown;
+            result = Monotonic::Unknown;
         }
 
     }
 
     void visit(const Div *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
 
-        if (ra == Constant && rb == Constant) {
-            result = Constant;
+        if (ra == Monotonic::Constant && rb == Monotonic::Constant) {
+            result = Monotonic::Constant;
         } else if (is_positive_const(op->b)) {
             result = ra;
         } else if (is_negative_const(op->b)) {
             result = flip(ra);
         } else {
-            result = Unknown;
+            result = Monotonic::Unknown;
         }
     }
 
     void visit(const Mod *op) {
-        result = Unknown;
+        result = Monotonic::Unknown;
     }
 
     void visit(const Min *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(ra, rb);
     }
 
     void visit(const Max *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(ra, rb);
     }
 
     void visit_eq(Expr a, Expr b) {
         a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         b.accept(this);
-        MonotonicResult rb = result;
-        if (ra == Constant && rb == Constant) {
-            result = Constant;
+        Monotonic rb = result;
+        if (ra == Monotonic::Constant && rb == Monotonic::Constant) {
+            result = Monotonic::Constant;
         } else {
-            result = Unknown;
+            result = Monotonic::Unknown;
         }
     }
 
@@ -186,9 +186,9 @@ class Monotonic : public IRVisitor {
 
     void visit_lt(Expr a, Expr b) {
         a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(flip(ra), rb);
     }
 
@@ -210,17 +210,17 @@ class Monotonic : public IRVisitor {
 
     void visit(const And *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(ra, rb);
     }
 
     void visit(const Or *op) {
         op->a.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->b.accept(this);
-        MonotonicResult rb = result;
+        Monotonic rb = result;
         result = unify(ra, rb);
     }
 
@@ -231,15 +231,15 @@ class Monotonic : public IRVisitor {
 
     void visit(const Select *op) {
         op->condition.accept(this);
-        MonotonicResult rcond = result;
+        Monotonic rcond = result;
 
         op->true_value.accept(this);
-        MonotonicResult ra = result;
+        Monotonic ra = result;
         op->false_value.accept(this);
-        MonotonicResult rb = result;
-        MonotonicResult unified = unify(ra, rb);
+        Monotonic rb = result;
+        Monotonic unified = unify(ra, rb);
 
-        if (rcond == Constant) {
+        if (rcond == Monotonic::Constant) {
             result = unified;
             return;
         }
@@ -247,32 +247,32 @@ class Monotonic : public IRVisitor {
         bool true_value_ge_false_value = is_one(simplify(op->true_value >= op->false_value));
         bool true_value_le_false_value = is_one(simplify(op->true_value <= op->false_value));
 
-        bool switches_from_true_to_false = rcond == MonotonicDecreasing;
-        bool switches_from_false_to_true = rcond == MonotonicIncreasing;
+        bool switches_from_true_to_false = rcond == Monotonic::Decreasing;
+        bool switches_from_false_to_true = rcond == Monotonic::Increasing;
 
-        if (rcond == Constant) {
+        if (rcond == Monotonic::Constant) {
             result = unify(ra, rb);
-        } else if ((unified == MonotonicIncreasing || unified == Constant) &&
+        } else if ((unified == Monotonic::Increasing || unified == Monotonic::Constant) &&
                    ((switches_from_false_to_true && true_value_ge_false_value) ||
                     (switches_from_true_to_false && true_value_le_false_value))) {
             // Both paths increase, and the condition makes it switch
             // from the lesser path to the greater path.
-            result = MonotonicIncreasing;
-        } else if ((unified == MonotonicDecreasing || unified == Constant) &&
+            result = Monotonic::Increasing;
+        } else if ((unified == Monotonic::Decreasing || unified == Monotonic::Constant) &&
                    ((switches_from_false_to_true && true_value_le_false_value) ||
                     (switches_from_true_to_false && true_value_ge_false_value))) {
             // Both paths decrease, and the condition makes it switch
             // from the greater path to the lesser path.
-            result = MonotonicDecreasing;
+            result = Monotonic::Decreasing;
         } else {
-            result = Unknown;
+            result = Monotonic::Unknown;
         }
     }
 
     void visit(const Load *op) {
         op->index.accept(this);
-        if (result != Constant) {
-            result = Unknown;
+        if (result != Monotonic::Constant) {
+            result = Monotonic::Unknown;
         }
     }
 
@@ -293,18 +293,18 @@ class Monotonic : public IRVisitor {
 
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
-            if (result != Constant) {
-                result = Unknown;
+            if (result != Monotonic::Constant) {
+                result = Monotonic::Unknown;
                 return;
             }
         }
-        result = Constant;
+        result = Monotonic::Constant;
     }
 
     void visit(const Let *op) {
         op->value.accept(this);
 
-        if (result == Constant) {
+        if (result == Monotonic::Constant) {
             // No point pushing it if it's constant w.r.t the var,
             // because unknown variables are treated as constant.
             op->body.accept(this);
@@ -364,36 +364,36 @@ class Monotonic : public IRVisitor {
     }
 
 public:
-    MonotonicResult result;
+    Monotonic result;
 
-    Monotonic(const std::string &v) : var(v), result(Unknown) {}
+    MonotonicVisitor(const std::string &v) : var(v), result(Monotonic::Unknown) {}
 };
 
-MonotonicResult is_monotonic(Expr e, const std::string &var) {
-    if (!e.defined()) return Unknown;
-    Monotonic m(var);
+Monotonic is_monotonic(Expr e, const std::string &var) {
+    if (!e.defined()) return Monotonic::Unknown;
+    MonotonicVisitor m(var);
     e.accept(&m);
     return m.result;
 }
 
 namespace {
 void check_increasing(Expr e) {
-    internal_assert(is_monotonic(e, "x") == MonotonicIncreasing)
+    internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
         << "Was supposed to be increasing: " << e << "\n";
 }
 
 void check_decreasing(Expr e) {
-    internal_assert(is_monotonic(e, "x") == MonotonicDecreasing)
+    internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
         << "Was supposed to be decreasing: " << e << "\n";
 }
 
 void check_constant(Expr e) {
-    internal_assert(is_monotonic(e, "x") == Constant)
+    internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
         << "Was supposed to be constant: " << e << "\n";
 }
 
 void check_unknown(Expr e) {
-    internal_assert(is_monotonic(e, "x") == Unknown)
+    internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
         << "Was supposed to be unknown: " << e << "\n";
 }
 }
