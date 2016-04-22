@@ -914,15 +914,15 @@ class AndConditionOverDomain : public IRMutator {
                 expr = const_false();
             }
         } else {
-            IRMutator::visit(op);
+            //IRMutator::visit(op);
             //expr = mutate((op->a <= op->b) && (op->a >= op->b));
-            /*Expr delta = simplify(op->a - op->b);
+            Expr delta = simplify(op->a - op->b);
             Interval i = get_bounds(delta);
             if (is_one(simplify(i.min == i.max))) {
                 expr = (i.min == 0);
             } else {
                 expr = (i.min == 0) && (i.max == 0);
-            }*/
+            }
         }
         //debug(0) << "\tResult: " << expr << "\n";
     }
