@@ -250,11 +250,9 @@ class MonotonicVisitor : public IRVisitor {
         bool switches_from_true_to_false = rcond == Monotonic::Decreasing;
         bool switches_from_false_to_true = rcond == Monotonic::Increasing;
 
-        if (rcond == Monotonic::Constant) {
-            result = unify(ra, rb);
-        } else if ((unified == Monotonic::Increasing || unified == Monotonic::Constant) &&
-                   ((switches_from_false_to_true && true_value_ge_false_value) ||
-                    (switches_from_true_to_false && true_value_le_false_value))) {
+        if ((unified == Monotonic::Increasing || unified == Monotonic::Constant) &&
+            ((switches_from_false_to_true && true_value_ge_false_value) ||
+             (switches_from_true_to_false && true_value_le_false_value))) {
             // Both paths increase, and the condition makes it switch
             // from the lesser path to the greater path.
             result = Monotonic::Increasing;
