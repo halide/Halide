@@ -804,7 +804,7 @@ Stmt bounds_inference(Stmt s,
     }
 
     // Add an outermost bounds inference marker
-    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
+    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
     s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
