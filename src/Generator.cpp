@@ -47,10 +47,10 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] "
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string [generator_arg=value [...]]\n\n"
-                          "  -e  A comma separated list of optional files to emit. Accepted values are "
-                          "[assembly, bitcode, stmt, html, cpp]\n"
+                          "  -e  A comma separated list of files to emit. Accepted values are "
+                          "[o, h, assembly, bitcode, stmt, html, cpp]. If omitted, default value is [o, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -58,6 +58,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                                                       { "-g", "" },
                                                       { "-o", "" },
                                                       { "-e", "" },
+                                                      { "-n", "" },
                                                       { "-x", "" },
                                                       { "-r", "" }};
     std::map<std::string, std::string> generator_args;
@@ -125,22 +126,38 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
+    // it's OK for file_base_name to be empty: filename will be based on function name
+    std::string file_base_name = flags_info["-n"];
+
     GeneratorBase::EmitOptions emit_options;
+    // Ensure all flags start as false.
+    emit_options.emit_o = emit_options.emit_h = false;
+
     std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
-    for (const std::string &opt : emit_flags) {
-        if (opt == "assembly") {
-            emit_options.emit_assembly = true;
-        } else if (opt == "bitcode") {
-            emit_options.emit_bitcode = true;
-        } else if (opt == "stmt") {
-            emit_options.emit_stmt = true;
-        } else if (opt == "html") {
-            emit_options.emit_stmt_html = true;
-        } else if (opt == "cpp") {
-            emit_options.emit_cpp = true;
-        } else if (!opt.empty()) {
-            cerr << "Unrecognized emit option: " << opt
-                 << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+    if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
+        // If omitted or empty, assume .o and .h
+        emit_options.emit_o = emit_options.emit_h = true;
+    } else {
+        // If anything specified, only emit what is enumerated
+        for (const std::string &opt : emit_flags) {
+            if (opt == "assembly") {
+                emit_options.emit_assembly = true;
+            } else if (opt == "bitcode") {
+                emit_options.emit_bitcode = true;
+            } else if (opt == "stmt") {
+                emit_options.emit_stmt = true;
+            } else if (opt == "html") {
+                emit_options.emit_stmt_html = true;
+            } else if (opt == "cpp") {
+                emit_options.emit_cpp = true;
+            } else if (opt == "o") {
+                emit_options.emit_o = true;
+            } else if (opt == "h") {
+                emit_options.emit_h = true;
+            } else if (!opt.empty()) {
+                cerr << "Unrecognized emit option: " << opt
+                     << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+            }
         }
     }
 
@@ -173,7 +190,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name, "", emit_options);
+    gen->emit_filter(output_dir, function_name, file_base_name, emit_options);
     return 0;
 }
 
