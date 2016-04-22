@@ -113,8 +113,9 @@ namespace {
 // TODO: Try writing this in a way that doesn't actually touch the file system (named pipe?)
 WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
                              char *filename, size_t filename_size) {
-    static int next = 0;
-    int temp_index = __atomic_fetch_add(&next, 1, __ATOMIC_ACQUIRE);
+    // Attempt to provide a unique filename token by hashing the
+    // module data.
+    size_t token = hash(data, data + size);
 
     const char *tmp_paths[] = {
         "/data/local/tmp/",
@@ -123,9 +124,7 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
     Printer<StringStreamPrinter> path(user_context);
     for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
         path.clear();
-        // Put the code size in the path in an attempt to make the
-        // filename more unique.
-        path << tmp_paths[j] << "halide_kernels_" << (int)size << "_" << temp_index << ".so";
+        path << tmp_paths[j] << "halide_kernels_" << (int)token << ".so";
         strncpy(filename, path.str(), filename_size);
 
         int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT | O_EXCL, 0755);
