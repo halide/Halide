@@ -56,16 +56,8 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     }
     options_processed = true;
 
-    string hvx_setting = "+hvx,-hvx-double";
-    if (module.target().has_feature(Halide::Target::HVX_128)) {
-        hvx_setting = "+hvx,+hvx-double";
-        if (module.target().has_feature(Halide::Target::HVX_64))
-                internal_error << "Both HVX_64 and HVX_128 set at same time\n";
-    }
-    for (llvm::Function &fn : llvm_module->functions()) {
-        if (fn.isDeclaration()) {
-            fn.addFnAttr("target-features", hvx_setting);
-        }
+    if (module.target().features_all_of({Halide::Target::HVX_128, Halide::Target::HVX_64})) {
+            internal_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
 
     return llvm_module;
@@ -833,7 +825,10 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
-  return "+hvx";
+  if (target.has_feature(Halide::Target::HVX_128))
+      return "+hvx,+hvx-double";
+  else
+      return "+hvx";
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {

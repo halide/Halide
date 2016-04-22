@@ -2,13 +2,16 @@ CXX-host ?= c++
 CXX-arm-64-android ?= $(ANDROID_NDK_HOME)/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_NDK_HOME)/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-c++
 CXX-hexagon-32-qurt-hvx_64 ?= $(HEX_TOOLS)/bin/hexagon-clang++
+CXX-hexagon-32-qurt-hvx_128 ?= $(HEX_TOOLS)/bin/hexagon-clang++
 
 CXXFLAGS-arm-64-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm64 -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm -llog -fPIE -pie
 CXXFLAGS-hexagon-32-qurt-hvx_64 ?= -m$* -G0 -mG0lib
+CXXFLAGS-hexagon-32-qurt-hvx_128 ?= -m$* -G0 -mG0lib
 
 LDFLAGS-host ?= -lpthread
 LDFLAGS-hexagon-32-qurt-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt
+LDFLAGS-hexagon-32-qurt-hvx_128 ?= -L../../tools/sim_qurt -lsim_qurt
 
 
 all: driver-host driver-arm-64-android driver-arm-32-android
