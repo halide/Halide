@@ -280,7 +280,6 @@ SOURCE_FILES = \
   Debug.cpp \
   DebugToFile.cpp \
   Deinterleave.cpp \
-  Derivative.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
@@ -317,8 +316,8 @@ SOURCE_FILES = \
   Memoization.cpp \
   Module.cpp \
   ModulusRemainder.cpp \
+  Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
-  OneToOne.cpp \
   Output.cpp \
   ParallelRVar.cpp \
   Param.cpp \
@@ -403,7 +402,6 @@ HEADER_FILES = \
   Debug.h \
   DebugToFile.h \
   Deinterleave.h \
-  Derivative.h \
   DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
@@ -447,8 +445,8 @@ HEADER_FILES = \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \
+  Monotonic.h \
   ObjectInstanceRegistry.h \
-  OneToOne.h \
   Output.h \
   ParallelRVar.h \
   Parameter.h \
