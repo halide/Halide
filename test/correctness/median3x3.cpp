@@ -18,15 +18,6 @@ Expr min3(Expr a, Expr b, Expr c) {
 Expr mid3(Expr a, Expr b, Expr c) {
     return max(min(max(a, b), c), min(a, b));
 }
-uint8_t max3(uint8_t a, uint8_t b, uint8_t c) {
-    return std::max(std::max(a, b), c);
-}
-uint8_t min3(uint8_t a, uint8_t b, uint8_t c) {
-    return std::min(std::min(a, b), c);
-}
-uint8_t mid3(uint8_t a, uint8_t b, uint8_t c) {
-    return std::max(std::min(std::max(a, b), c), std::min(a, b));
-}
 
 int main(int arch, char **argv) {
     const int W = 256, H = 256;
