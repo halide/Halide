@@ -259,7 +259,7 @@ struct ExprCompare {
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
 enum class DeviceAPI {
-    Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+    None, /// Used to denote for loops that run on the same device as the containing code.
     Host,
     Default_GPU,
     CUDA,
@@ -273,7 +273,7 @@ enum class DeviceAPI {
 
 /** An array containing all the device apis. Useful for iterating
  * through them. */
-const DeviceAPI all_device_apis[] = {DeviceAPI::Parent,
+const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::Host,
                                      DeviceAPI::Default_GPU,
                                      DeviceAPI::CUDA,

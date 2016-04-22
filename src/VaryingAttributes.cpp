@@ -104,7 +104,7 @@ protected:
         bool old_in_glsl_loops = in_glsl_loops;
         // Check if the loop variable is a GPU variable thread variable and for GLSL
         if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) ||
-            (in_glsl_loops && op->device_api == DeviceAPI::Parent)) {
+            (in_glsl_loops && op->device_api == DeviceAPI::None)) {
             loop_vars.push_back(op->name);
             in_glsl_loops = true;
         }
@@ -1040,7 +1040,7 @@ public:
             // Add a let statement for the for-loop name variable
             Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
 
-            stmt = For::make(name, 0, (int)dim.size(), ForType::Serial, DeviceAPI::Parent, loop_var);
+            stmt = For::make(name, 0, (int)dim.size(), ForType::Serial, DeviceAPI::None, loop_var);
 
         } else {
             IRFilter::visit(op);
