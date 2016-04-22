@@ -73,23 +73,11 @@ int main(int arch, char **argv) {
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {
-            uint8_t max_y = max3(in(x-1, y), in(x, y), in(x+1, y));
-            uint8_t min_y = min3(in(x-1, y), in(x, y), in(x+1, y));
-            uint8_t mid_y = mid3(in(x-1, y), in(x, y), in(x+1, y));
-
-            uint8_t max_u = max3(in(x-1, y-1), in(x, y-1), in(x+1, y-1));
-            uint8_t min_u = min3(in(x-1, y-1), in(x, y-1), in(x+1, y-1));
-            uint8_t mid_u = mid3(in(x-1, y-1), in(x, y-1), in(x+1, y-1));
-
-            uint8_t max_d = max3(in(x-1, y+1), in(x, y+1), in(x+1, y+1));
-            uint8_t min_d = min3(in(x-1, y+1), in(x, y+1), in(x+1, y+1));
-            uint8_t mid_d = mid3(in(x-1, y+1), in(x, y+1), in(x+1, y+1));
-
-            uint8_t min_max = min3(max_u, max_y, max_d);
-            uint8_t max_min = max3(min_u, min_y, min_d);
-            uint8_t mid_mid = mid3(mid_u, mid_y, mid_d);
-
-            uint8_t correct = mid3(min_max, max_min, mid_mid);
+            uint8_t inp[9] = {in(x-1, y-1), in(x, y-1), in(x+1, y-1),
+                             in(x-1, y), in(x, y), in(x+1, y),
+                             in(x-1, y+1), in(x, y+1), in(x+1, y+1)};
+            std::nth_element(&inp[0], &inp[4], &inp[9]);
+            uint8_t correct = inp[4];
             if (correct != out(x, y)) {
                 std::cout << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << correct << "\n";
                 return -1;
