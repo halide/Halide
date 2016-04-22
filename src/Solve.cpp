@@ -804,14 +804,28 @@ class SolveForInterval : public IRVisitor {
     }
 
     void visit(const EQ *op) {
-        // Normalize to le and ge
-        Expr cond = (op->a <= op->b) && (op->a >= op->b);
+        Expr cond;
+        if (op->a.type().is_bool()) {
+            internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
+            // Boolean (A == B) <=> (A and B) || (~A and ~B)
+            cond = (op->a && op->b) && (!op->a && !op->b);
+        } else {
+            // Normalize to le and ge
+            cond = (op->a <= op->b) && (op->a >= op->b);
+        }
         cond.accept(this);
     }
 
     void visit(const NE *op) {
-        // Normalize to lt and gt
-        Expr cond = (op->a < op->b) || (op->a > op->b);
+        Expr cond;
+        if (op->a.type().is_bool()) {
+            internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
+            // Boolean (A != B) <=> (A and ~B) || (~A and B)
+            cond = (op->a && !op->b) && (!op->a && op->b);
+        } else {
+            // Normalize to lt and gt
+            cond = (op->a < op->b) || (op->a > op->b);
+        }
         cond.accept(this);
     }
 
@@ -892,6 +906,7 @@ class AndConditionOverDomain : public IRMutator {
     }
 
     void visit(const EQ *op) {
+        //debug(0) << "-------------Trying to solve EQ: " << op->a << " == " << op->b << "\n";
         if (op->type.is_vector()) {
             if (flipped) {
                 expr = const_true();
@@ -900,7 +915,16 @@ class AndConditionOverDomain : public IRMutator {
             }
         } else {
             IRMutator::visit(op);
+            //expr = mutate((op->a <= op->b) && (op->a >= op->b));
+            /*Expr delta = simplify(op->a - op->b);
+            Interval i = get_bounds(delta);
+            if (is_one(simplify(i.min == i.max))) {
+                expr = (i.min == 0);
+            } else {
+                expr = (i.min == 0) && (i.max == 0);
+            }*/
         }
+        //debug(0) << "\tResult: " << expr << "\n";
     }
 
     void visit(const NE *op) {
@@ -1081,7 +1105,11 @@ bool interval_is_everything(const Interval &i) {
 
 Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
     AndConditionOverDomain r(varying);
-    return simplify(r.mutate(e));
+    Expr res = r.mutate(e);
+    //debug(0) << "RESULT OF and_condition_over_domain: " << res << "\n";
+    res = simplify(res);
+    //debug(0) << "After SIMPLIFY: " << res << "\n";
+    return res;
 }
 
 // Testing code

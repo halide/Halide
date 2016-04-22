@@ -5,17 +5,25 @@ using namespace Halide;
 class CountConditionals : public Internal::IRVisitor {
 public:
     int count = 0;
+    int count_if = 0;
+    int count_select = 0;
     bool in_produce = false;
 private:
     using Internal::IRVisitor::visit;
 
     void visit(const Internal::Select *op) {
-        if (in_produce) count++;
+        if (in_produce) {
+            count++;
+            count_select++;
+        }
         Internal::IRVisitor::visit(op);
     }
 
     void visit(const Internal::IfThenElse *op) {
-        if (in_produce) count++;
+        if (in_produce) {
+            count++;
+            count_if++;
+        }
         Internal::IRVisitor::visit(op);
     }
 
@@ -37,9 +45,9 @@ int main(int argc, char **argv) {
         f(x) += select(x < 10, 0, 1);
         f(x) *= select(x > 20 && x < 30, 2, 1);
         f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
-        Module m = f.compile_to_module({});
 
         // There should be no selects after trim_no_ops runs
+        Module m = f.compile_to_module({});
         CountConditionals s;
         m.functions[0].body.accept(&s);
         if (s.count != 0) {
@@ -155,6 +163,52 @@ int main(int argc, char **argv) {
         if (s.count != 0) {
             std::cerr << "There were selects or ifs in the lowered code: " << m.functions[0].body << "\n";
             return -1;
+        }
+    }
+
+    // Test tiled iteration on the gpu. The gpu loop variable should not depend
+    // on outer gpu loop var.
+    {
+        Func f;
+        Var x, y;
+        f(x, y) = x + y;
+
+        RDom r(0, 100, 0, 100);
+        f(r.x, r.y) += select((r.x < r.y) && (r.x == 10), 3, undef<int>());
+
+        f.update(0).gpu_tile(r.x, r.y, 4, 4);
+
+        Image<int> im = f.realize(200, 200);
+
+        // There should be no selects after trim_no_ops runs. The select should
+        // be lifted out as if condition. We can't trim gpu loop r.x based on the
+        // if condition since it depends on gpu outer loop r.y
+        Target gpu_target(get_host_target());
+        gpu_target.set_feature(Target::CUDA);
+        Module m = f.compile_to_module({}, "", gpu_target);
+        CountConditionals s;
+        m.functions[0].body.accept(&s);
+        if (s.count_select != 0) {
+            std::cerr << "There were selects in the lowered code: " << m.functions[0].body << "\n";
+            return -1;
+        }
+        if (s.count_if != 1) {
+            std::cerr << "There should be 1 if in the lowered code: " << m.functions[0].body << "\n";
+            return -1;
+        }
+
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                int correct = x + y;
+                if ((x == 10) && (0 <= y && y <= 99)) {
+                    correct += (x < y) ? 3 : 0;
+                }
+                if (im(x, y) != correct) {
+                    printf("im(%d, %d) = %d instead of %d\n",
+                           x, y, im(x, y), correct);
+                    return -1;
+                }
+            }
         }
     }
 

@@ -279,6 +279,7 @@ private:
     }
 
     void visit(const IfThenElse *op) {
+        debug(0) << "Encounter IfThenElse with condition: " << op->condition << "\n";
         // For select statements, mins, and maxes, you can mark the
         // likely branch with likely. For if statements there's no way
         // to mark the likely stmt. So if the condition of an if
@@ -292,16 +293,25 @@ private:
     }
 
     void visit(const For *op) {
+        debug(0) << "Encounter For loop: " << op->name << "\n";
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
 
         // Relax all the new conditions using the loop bounds
         for (Simplification &s : simplifications) {
+            debug(0) << "     simplification of condition: " << s.condition << "; likely_val: "
+                     << s.likely_value << "; unlikely_val: " << s.unlikely_value << "; tight: "
+                     << s.tight << "; interval: [" << s.interval.min << ", " << s.interval.max << "\n";
             if (expr_uses_var(s.condition, op->name)) {
                 Scope<Interval> varying;
                 varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
                 Expr relaxed = and_condition_over_domain(s.condition, varying);
+                /*internal_assert(!expr_uses_var(relaxed, op->name))
+                    << "Should not have had used the loop var (" << op->name
+                    << ") any longer; before: " << s.condition << "; after: "
+                    << relaxed << "\n";*/
+                debug(0) << "before: " << s.condition << "; after: " << relaxed << "\n";
                 if (!equal(relaxed, s.condition)) {
                     s.tight = false;
                 }
@@ -404,7 +414,7 @@ class PartitionLoops : public IRMutator {
             return;
         }
 
-        debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
+        debug(0) << "\n\n**** Partitioning loop over " << op->name << "\n";
 
         vector<Expr> min_vals, max_vals;
         vector<Simplification> middle_simps, prologue_simps, epilogue_simps;
@@ -419,12 +429,13 @@ class PartitionLoops : public IRMutator {
                 s.tight &= equal(outer.min, s.interval.min) && equal(outer.max, s.interval.max);
             }
 
-            debug(3) << "\nSimplification: \n"
+            debug(0) << "\nSimplification: \n"
                      << "  condition: " << s.condition << "\n"
                      << "  old: " << s.old_expr << "\n"
                      << "  new: " << s.likely_value << "\n"
                      << "  min: " << s.interval.min << "\n"
-                     << "  max: " << s.interval.max << "\n";
+                     << "  max: " << s.interval.max << "\n"
+                     << "  tight: " << s.tight << "\n";
 
             // Accept all non-empty intervals
             if (!interval_is_empty(s.interval)) {
@@ -621,6 +632,10 @@ class PartitionLoops : public IRMutator {
         }
 
         in_gpu_loop = old_in_gpu_loop;
+
+        debug(0) << "Partition loop.\n"
+                 << "Old: " << Stmt(op) << "\n"
+                 << "New: " << stmt << "\n";
     }
 };
 
@@ -873,7 +888,9 @@ class CollapseSelects : public IRMutator {
 Stmt partition_loops(Stmt s) {
     s = MarkClampedRampsAsLikely().mutate(s);
     s = ExpandSelects().mutate(s);
+    debug(0) << "...............before PartitionLoops: \n" << s << "\n";
     s = PartitionLoops().mutate(s);
+    debug(0) << "...............after PartitionLoops: \n" << s << "\n";
     s = RenormalizeGPULoops().mutate(s);
     s = RemoveLikelyTags().mutate(s);
     s = CollapseSelects().mutate(s);

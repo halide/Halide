@@ -298,7 +298,12 @@ class TrimNoOps : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        // TODO: bounds of GPU loops can't depend on outer gpu loop vars
+        // Bounds of GPU loops can't depend on outer gpu loop vars
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
+            IRMutator::visit(op);
+            return;
+        }
 
         Stmt body = mutate(op->body);
 
