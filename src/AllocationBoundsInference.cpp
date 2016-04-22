@@ -71,16 +71,18 @@ class AllocationInference : public IRMutator {
                            << f.args()[i] << "\n";
             }
             Expr min, max, extent;
+            b[i].min = simplify(b[i].min);
+            b[i].max = simplify(b[i].max);
             if (bound.min.defined()) {
                 min = bound.min;
             } else {
-                min = simplify(b[i].min);
+                min = b[i].min;
             }
             if (bound.extent.defined()) {
                 extent = bound.extent;
-                max = min + extent - 1;
+                max = simplify(min + extent - 1);
             } else {
-                max = simplify(b[i].max);
+                max = b[i].max;
                 extent = simplify((max - min) + 1);
             }
 
