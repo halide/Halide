@@ -62,11 +62,6 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
         if (module.target().has_feature(Halide::Target::HVX_64))
                 internal_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
-    for (llvm::Function &fn : llvm_module->functions()) {
-        if (fn.isDeclaration()) {
-            fn.addFnAttr("target-features", hvx_setting);
-        }
-    }
 
     return llvm_module;
 }
@@ -833,7 +828,10 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
-  return "+hvx";
+  if (target.has_feature(Halide::Target::HVX_128))
+      return "+hvx,+hvx-double";
+  else
+      return "+hvx";
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
