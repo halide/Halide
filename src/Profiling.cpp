@@ -206,7 +206,7 @@ private:
 
     void visit(const For *op) {
         // We profile by storing a token to global memory, so don't enter GPU loops
-        if (op->device_api == DeviceAPI::Parent ||
+        if (op->device_api == DeviceAPI::None ||
             op->device_api == DeviceAPI::Host) {
             IRMutator::visit(op);
         } else {
