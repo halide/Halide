@@ -432,7 +432,9 @@ private:
                     min = Expr(); max = Expr(); return;
                 }
 
-                // Sign of b is unknown
+                // Sign of b is unknown. Note that this might divide
+                // by zero, but only in cases where the original code
+                // divides by zero.
                 Expr a = min_a / min_b;
                 Expr b = max_a / max_b;
                 Expr cmp = min_b > make_zero(min_b.type().element_of());
