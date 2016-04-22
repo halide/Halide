@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     Func g = lambda(x, y, x*y);
 
     // Use lambdas and implicit args in the one line
-    Image<int32_t> im = lambda(f - g + lambda(x, y, x+y)).realize(10, 10);
+    Image<int32_t> im = lambda(f(_) - g(_) + lambda(x, y, x+y)(_)).realize(10, 10);
 
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
