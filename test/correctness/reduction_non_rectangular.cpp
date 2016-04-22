@@ -525,7 +525,6 @@ int init_on_cpu_update_on_gpu_test(int index) {
     r.where(!(r.x != 10));
     r.where(r.x < r.y);
     f(r.x, r.y) += 3;
-    //f(r.x, r.y) += select((r.x < r.y) && (r.x == 10), 3, undef<int>());
 
     f.update(0).gpu_tile(r.x, r.y, 4, 4);
 
@@ -543,72 +542,6 @@ int init_on_cpu_update_on_gpu_test(int index) {
             }
         }
     }
-
-    /*int **out = new int*[200];
-    for (int i = 0; i < 200; ++i) {
-        out[i] = new int[200];
-    }
-    for (int i = 0; i < 200; ++i) {
-        for (int j = 0; j < 200; ++j) {
-            out[i][j] = i + j;
-        }
-    }
-    for (int by = 0; by < 25; by++) {
-        for (int bx = 0; bx < 25; bx++) {
-            for (int ty = 0; ty < 4; ty++) {
-                for (int tx = 0; tx < 4; tx++) {
-                    int t4 = std::min(std::max((((9 - tx)/4) + 1), 0), 25);
-                    int t5 = std::max(std::min((((10 - tx)/4) + 1), by), (((9 - tx)/4) + 1));
-
-                    if (((t4 < bx) && (bx < t5))) {
-                        out[bx*4+tx][by*4+ty] += 3;
-                    } else if ((((bx*4) + tx) == 10)) {
-                        if (((bx*4) < (((by*4) + ty) - tx))) {
-                            out[10][by*4+ty] += 3;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    //NOTE: INCORRECT
-    for (int by = 0; by < 25; by++) {
-        for (int bx = 0; bx < 25; bx++) {
-            for (int ty = 0; ty < 4; ty++) {
-                for (int tx = 0; tx < 4; tx++) {
-                    if ((bx < by)) {
-                        int t4 = (10 - std::max(std::min((bx*4), 10), 6));
-                        int t5 = std::max((11 - std::max((bx*4), 7)), (10 - std::max(std::min((bx*4), 10), 6)));
-                        printf("bx: %d, by: %d, t4: %d, t5: %d\n", bx, by, t4, t5);
-                        if (((t4 < bx) && (bx < t5))) {
-                            out[bx*4+tx][by*4+ty] += 3;
-                        }
-                    } else if ((((bx*4) + tx) == 10)) {
-                        if (((bx*4) < (((by*4) + ty) - tx))) {
-                            out[10][by*4+ty] += 3;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            if (im(x, y) != out[x][y]) {
-                printf("out(%d, %d) = %d instead of im(%d, %d) = %d\n",
-                       x, y, out[x][y], x, y, im(x, y));
-                return -1;
-            }
-        }
-    }
-
-    for (int i = 0; i < 200; ++i) {
-        delete [] out[i];
-    }
-    delete [] out;*/
-
     return 0;
 }
 
@@ -684,12 +617,12 @@ int gpu_intermediate_computed_if_param_test(int index) {
 
 
 int main(int argc, char **argv) {
-    /*printf("Running equality inequality bound test\n");
+    printf("Running equality inequality bound test\n");
     if (equality_inequality_bound_test(0) != 0) {
         return -1;
-    }*/
+    }
 
-    /*printf("Running split fuse test\n");
+    printf("Running split fuse test\n");
     if (split_fuse_test(1) != 0) {
         return -1;
     }
@@ -739,18 +672,17 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
-    if (gpu_intermediate_computed_if_param_test(11) != 0) {
-        return -1;
-    }*/
-
     printf("Running initialization on cpu and update on gpu test\n");
     if (init_on_cpu_update_on_gpu_test(10) != 0) {
+        return -1;
+    }
+
+    printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
+    if (gpu_intermediate_computed_if_param_test(11) != 0) {
         return -1;
     }
 
     printf("Success!\n");
 
     return 0;
-
 }

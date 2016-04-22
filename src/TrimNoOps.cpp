@@ -71,6 +71,10 @@ class IsNoOp : public IRVisitor {
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, Buffer(), Parameter());
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
+            // We need to call CSE since sometimes we have "let" stmt on the RHS
+            // that makes the expr harder to solve, i.e. the solver will just give up
+            // and return a conservative false on call to and_condition_over_domain().
+            is_no_op = simplify(common_subexpression_elimination(is_no_op));
             debug(3) << "Anding condition over domain... " << is_no_op << "\n";
             is_no_op = and_condition_over_domain(is_no_op, Scope<Interval>::empty_scope());
             condition = make_and(condition, is_no_op);

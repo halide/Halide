@@ -845,6 +845,11 @@ class AndConditionOverDomain : public IRMutator {
     bool flipped = false;
 
     Interval get_bounds(Expr a) {
+        if (!expr_uses_vars(a, scope)) {
+            // If expr doesn't use any of the vars in scope, it is a constant.
+            // Both max and min are equal to the expr itself in this case.
+            return Interval(a, a);
+        }
         Interval bounds = bounds_of_expr_in_scope(a, scope);
         if (!bounds.min.same_as(bounds.max) ||
             !bounds.min.defined() ||
@@ -906,7 +911,6 @@ class AndConditionOverDomain : public IRMutator {
     }
 
     void visit(const EQ *op) {
-        //debug(0) << "-------------Trying to solve EQ: " << op->a << " == " << op->b << "\n";
         if (op->type.is_vector()) {
             if (flipped) {
                 expr = const_true();
@@ -914,17 +918,27 @@ class AndConditionOverDomain : public IRMutator {
                 expr = const_false();
             }
         } else {
-            //IRMutator::visit(op);
-            //expr = mutate((op->a <= op->b) && (op->a >= op->b));
             Expr delta = simplify(op->a - op->b);
             Interval i = get_bounds(delta);
+            if (!i.min.defined() || !i.max.defined()) {
+                if (flipped) {
+                    expr = const_true();
+                } else {
+                    expr = const_false();
+                }
+                return;
+            }
             if (is_one(simplify(i.min == i.max))) {
                 expr = (i.min == 0);
             } else {
-                expr = (i.min == 0) && (i.max == 0);
+                if (flipped) {
+                    // Necessary condition: zero is in the range of i.min and i.max
+                    expr = (i.min <= 0) && (i.max >= 0);
+                } else {
+                    expr = (i.min == 0) && (i.max == 0);
+                }
             }
         }
-        //debug(0) << "\tResult: " << expr << "\n";
     }
 
     void visit(const NE *op) {
@@ -1105,11 +1119,7 @@ bool interval_is_everything(const Interval &i) {
 
 Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
     AndConditionOverDomain r(varying);
-    Expr res = r.mutate(e);
-    //debug(0) << "RESULT OF and_condition_over_domain: " << res << "\n";
-    res = simplify(res);
-    //debug(0) << "After SIMPLIFY: " << res << "\n";
-    return res;
+    return simplify(r.mutate(e));
 }
 
 // Testing code
@@ -1273,6 +1283,18 @@ void solve_test() {
 
     check_and_condition(x <= 0 || y > 2, const_true(), Interval(-100, 0));
     check_and_condition(x > 0 || y > 2, 2 < y, Interval(-100, 0));
+
+    check_and_condition(x == 0, const_true(), Interval(0, 0));
+    check_and_condition(x == 0, const_false(), Interval(-10, 10));
+    check_and_condition(x != 0, const_false(), Interval(-10, 10));
+    check_and_condition(x != 0, const_true(), Interval(-20, -10));
+
+    check_and_condition(y == 0, y == 0, Interval(-10, 10));
+    check_and_condition(y != 0, y != 0, Interval(-10, 10));
+    check_and_condition((x == 5) && (y != 0), const_false(), Interval(-10, 10));
+    check_and_condition((x == 5) && (y != 3), y != 3, Interval(5, 5));
+    check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
+    check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
 
     debug(0) << "Solve test passed\n";
 
