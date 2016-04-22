@@ -569,7 +569,7 @@ class InjectBufferCopies : public IRMutator {
             BufferInfo merged_state;
 
             internal_assert(then_state.loop_level == else_state.loop_level)
-                << "then and else should have the same loop level for " << buf_name;
+                << "then_state and else_state should have the same loop level for " << buf_name;
 
             merged_state.loop_level = then_state.loop_level;
             merged_state.host_touched   = then_state.host_touched || else_state.host_touched;
@@ -580,9 +580,11 @@ class InjectBufferCopies : public IRMutator {
 
             // Merge the device read/write set of then and else case
             merged_state.devices_reading = then_state.devices_reading;
-            merged_state.devices_reading.insert(else_state.devices_reading.begin(), else_state.devices_reading.end());
+            merged_state.devices_reading.insert(else_state.devices_reading.begin(),
+                                                else_state.devices_reading.end());
             merged_state.devices_writing = then_state.devices_writing;
-            merged_state.devices_writing.insert(else_state.devices_writing.begin(), else_state.devices_writing.end());
+            merged_state.devices_writing.insert(else_state.devices_writing.begin(),
+                                                else_state.devices_writing.end());
 
             state[buf_name] = merged_state;
         }

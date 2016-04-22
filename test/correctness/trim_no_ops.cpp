@@ -42,16 +42,16 @@ int main(int argc, char **argv) {
         Var x;
         f(x) = x;
         f(x) += select(x > 10 && x < 20, 1, 0);
-        //f(x) += select(x < 10, 0, 1);
-        //f(x) *= select(x > 20 && x < 30, 2, 1);
-        //f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
+        f(x) += select(x < 10, 0, 1);
+        f(x) *= select(x > 20 && x < 30, 2, 1);
+        f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
 
         // There should be no selects after trim_no_ops runs
         Module m = f.compile_to_module({});
         CountConditionals s;
         m.functions[0].body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: " << m.functions[0].body << "\n";
+            std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
             return -1;
         }
 
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    /*{
+    {
         // Loop iterations that would be no-ops should be trimmed off. trim_no_ops
         // should be able to handle equality as well.
         Func f;
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions[0].body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: " << m.functions[0].body << "\n";
+            std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
             return -1;
         }
 
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
             CountConditionals s;
             m.functions[0].body.accept(&s);
             if (s.count != 0) {
-                std::cerr << "There were selects in the lowered code: " << m.functions[0].body << "\n";
+                std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
                 return -1;
             }
         }
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions[0].body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects or ifs in the lowered code: " << m.functions[0].body << "\n";
+            std::cerr << "There were selects or ifs in the lowered code: \n" << m.functions[0].body << "\n";
             return -1;
         }
     }
@@ -189,11 +189,11 @@ int main(int argc, char **argv) {
         CountConditionals s;
         m.functions[0].body.accept(&s);
         if (s.count_select != 0) {
-            std::cerr << "There were selects in the lowered code: " << m.functions[0].body << "\n";
+            std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
             return -1;
         }
         if (s.count_if != 1) {
-            std::cerr << "There should be 1 if in the lowered code: " << m.functions[0].body << "\n";
+            std::cerr << "There should be 1 if in the lowered code: \n" << m.functions[0].body << "\n";
             return -1;
         }
 
@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
-    }*/
+    }
 
     printf("Success!\n");
     return 0;
