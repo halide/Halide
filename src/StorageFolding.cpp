@@ -94,10 +94,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                      << "Max: " << max << '\n';
 
             bool min_monotonic_increasing =
-                (is_monotonic(min, op->name) == MonotonicIncreasing);
+                (is_monotonic(min, op->name) == Monotonic::Increasing);
 
             bool max_monotonic_decreasing =
-                (is_monotonic(max, op->name) == MonotonicDecreasing);
+                (is_monotonic(max, op->name) == Monotonic::Decreasing);
 
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.

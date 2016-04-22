@@ -15,8 +15,8 @@ namespace Internal {
  * Detect whether an expression is monotonic increasing in a variable,
  * decreasing, or unknown.
  */
-enum MonotonicResult {Constant, MonotonicIncreasing, MonotonicDecreasing, Unknown};
-EXPORT MonotonicResult is_monotonic(Expr e, const std::string &var);
+enum class Monotonic {Constant, Increasing, Decreasing, Unknown};
+EXPORT Monotonic is_monotonic(Expr e, const std::string &var);
 
 EXPORT void is_monotonic_test();
 
