@@ -14,7 +14,12 @@ LDFLAGS-hexagon-32-qurt-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt
 LDFLAGS-hexagon-32-qurt-hvx_128 ?= -L../../tools/sim_qurt -lsim_qurt
 
 
-all: driver-host driver-arm-64-android driver-arm-32-android
+all: \
+	driver-host \
+	driver-arm-64-android \
+	driver-arm-32-android \
+	driver-hexagon-32-qurt-hvx_64 \
+	driver-hexagon-32-qurt-hvx_128 \
 
 %/filters.h:
 	mkdir -p $*
@@ -29,7 +34,10 @@ driver-%: driver.cpp %/filters.h
 	$(CXX-$*) $(CXXFLAGS-$*) -O3 -I $* driver.cpp $*/test_*.o $*/simd_op_check_runtime.o -o driver-$* $(LDFLAGS-$*)
 
 clean:
-	rm -rf filters.h filter_headers.h driver-* arm-32-android arm-64-android host
+	rm -rf filters.h filter_headers.h
+	rm -rf driver-*
+	rm -rf arm-32-android arm-64-android host
+	rm -rf hexagon-32-qurt-hvx_64 hexagon-32-qurt-hvx_128
 	find . -iname "test_*.h" -type f -exec rm {} +
 	find . -iname "check_*.s" -type f -exec rm {} +
 	find . -iname "test_*.o" -type f -exec rm {} +
