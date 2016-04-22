@@ -230,7 +230,6 @@ set(HEADER_FILES
   Debug.h
   DebugToFile.h
   Deinterleave.h
-  Derivative.h
   DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
@@ -272,8 +271,8 @@ set(HEADER_FILES
   Memoization.h
   Module.h
   ModulusRemainder.h
+  Monotonic.h
   ObjectInstanceRegistry.h
-  OneToOne.h
   Output.h
   ParallelRVar.h
   Param.h
@@ -378,7 +377,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   DebugToFile.cpp
   Deinterleave.cpp
-  Derivative.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
@@ -415,8 +413,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
+  Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  OneToOne.cpp
   Output.cpp
   ParallelRVar.cpp
   Param.cpp

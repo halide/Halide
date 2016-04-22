@@ -20,7 +20,7 @@ CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
     metal_c(src_stream), target(t) {
 }
 
-static string print_type_maybe_storage(Type type, bool storage) {
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {
     ostringstream oss;
 
     // Storage uses packed vector types.
@@ -73,15 +73,18 @@ static string print_type_maybe_storage(Type type, bool storage) {
             user_error <<  "Unsupported vector width in Metal C: " << type << "\n";
         }
     }
+    if (space == AppendSpace) {
+        oss << ' ';
+    }
     return oss.str();
 }
 
-string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type, AppendSpaceIfNeeded) {
-    return print_type_maybe_storage(type, false);
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type, AppendSpaceIfNeeded space) {
+    return print_type_maybe_storage(type, false, space);
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_storage_type(Type type) {
-    return print_type_maybe_storage(type, true);
+    return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) {
