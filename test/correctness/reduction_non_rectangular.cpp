@@ -667,6 +667,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Run GPU tests now if there is support for GPU.
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Not running test because no gpu feature enabled in target.\n");
+        printf("Success!\n");
+        return 0;
+    }
+
     printf("Running initialization on gpu and update on cpu test\n");
     if (init_on_gpu_update_on_cpu_test(9) != 0) {
         return -1;
