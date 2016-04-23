@@ -36,6 +36,7 @@ private:
 };
 
 int main(int argc, char **argv) {
+    printf("Running inequality condition test\n");
     {
         // Loop iterations that would be no-ops should be trimmed off.
         Func f;
@@ -71,6 +72,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Running equality condition test\n");
     {
         // Loop iterations that would be no-ops should be trimmed off. trim_no_ops
         // should be able to handle equality as well.
@@ -103,6 +105,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Running tiled histogram test\n");
     {
         // Test a tiled histogram
         Func f;
@@ -146,9 +149,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Test tiled iteration over a triangle, where the condition is an
-    // if statement instead of a select.
+    printf("Running tiled iteration over triangle test\n");
     {
+        // Test tiled iteration over a triangle, where the condition is an
+        // if statement instead of a select.
         Func f;
         Var x, y;
         f(x, y) = select(2*x < y, 5, undef<int>());
@@ -166,8 +170,15 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Test tiled iteration on the gpu. The gpu loop variable should not depend
-    // on outer gpu loop var.
+    // Test tiled iteration on the gpuif there is support for GPU.
+    // The gpu loop variable should not depend on outer gpu loop var.
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Not running the GPU test because no gpu feature enabled in target.\n");
+        printf("Success!\n");
+        return 0;
+    }
+
+    printf("Running select is not simplified on gpu test\n");
     {
         Func f;
         Var x, y;
