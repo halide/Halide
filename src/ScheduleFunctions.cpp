@@ -21,10 +21,13 @@ using std::pair;
 using std::make_pair;
 
 namespace {
-// A structure representing a containing LetStmt or For loop. Used in
-// build_provide_loop_nest below.
+// A structure representing a containing LetStmt, IfThenElse, or For
+// loop. Used in build_provide_loop_nest below.
 struct Container {
-    int dim_idx; // index in the dims list. -1 for let statements. -2 for predicate guard.
+    enum Type {For, Let, If};
+    Type type;
+    // If it's a for loop, the index in the dims list.
+    int dim_idx;
     string name;
     Expr value;
 };
@@ -292,13 +295,13 @@ Stmt build_provide_loop_nest(Function f,
     // Put the desired loop nest into the containers vector.
     for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = s.dims()[i];
-        Container c = {i, prefix + dim.var, Expr()};
+        Container c = {Container::For, i, prefix + dim.var, Expr()};
         nest.push_back(c);
     }
 
     // Strip off the lets into the containers vector.
     while (const LetStmt *let = stmt.as<LetStmt>()) {
-        Container c = {-1, let->name, let->value};
+        Container c = {Container::Let, 0, let->name, let->value};
         nest.push_back(c);
         stmt = let->body;
     }
@@ -309,7 +312,7 @@ Stmt build_provide_loop_nest(Function f,
         n_predicates = rdom.predicates().size();
         for (Expr pred : rdom.predicates()) {
             pred = qualify(prefix, pred);
-            Container c = {-2, "", pred};
+            Container c = {Container::If, 0, "", pred};
             nest.push_back(c);
         }
     }
@@ -319,7 +322,7 @@ Stmt build_provide_loop_nest(Function f,
     for (int i = (int)s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
-        internal_assert(nest[i].dim_idx == -1);
+        internal_assert(nest[i].type == Container::Let);
 
         for (int j = i-1; j >= 0; j--) {
             // Try to push it up by one.
@@ -336,7 +339,7 @@ Stmt build_provide_loop_nest(Function f,
     for (int i = (int)nest.size() - n_predicates; i < (int)nest.size(); i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
-        internal_assert(nest[i].dim_idx == -2);
+        internal_assert(nest[i].type == Container::If);
 
         // Cannot lift out the predicate guard if it contains call to non-pure function
         if (!is_expr_pure(nest[i].value)) {
@@ -356,13 +359,14 @@ Stmt build_provide_loop_nest(Function f,
 
     // Rewrap the statement in the containing lets and fors.
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
-        if (nest[i].dim_idx == -1) { // let stmt
+        if (nest[i].type == Container::Let) {
             internal_assert(nest[i].value.defined());
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
-        } else if (nest[i].dim_idx == -2) { // predicate guard
+        } else if (nest[i].type == Container::If) {
             internal_assert(nest[i].value.defined());
             stmt = IfThenElse::make(likely(nest[i].value), stmt, Stmt());
         } else {
+            internal_assert(nest[i].type == Container::For);
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
