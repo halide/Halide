@@ -1273,12 +1273,20 @@ private:
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
                         if (bi.max.defined()) {
-                            if (lt)       i.max = min(likely_i.max, bi.max - 1);
-                            if (le || eq) i.max = min(likely_i.max, bi.max);
+                            if (lt) {
+                                i.max = min(likely_i.max, bi.max - 1);
+                            }
+                            if (le || eq) {
+                                i.max = min(likely_i.max, bi.max);
+                            }
                         }
                         if (bi.min.defined()) {
-                            if (gt)       i.min = max(likely_i.min, bi.min + 1);
-                            if (ge || eq) i.min = max(likely_i.min, bi.min);
+                            if (gt) {
+                                i.min = max(likely_i.min, bi.min + 1);
+                            }
+                            if (ge || eq) {
+                                i.min = max(likely_i.min, bi.min);
+                            }
                         }
                         scope.push(var_a->name, i);
                         var_to_pop = var_a->name;
@@ -1293,12 +1301,20 @@ private:
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
                         if (ai.max.defined()) {
-                            if (gt)       i.max = min(likely_i.max, ai.max - 1);
-                            if (ge || eq) i.max = min(likely_i.max, ai.max);
+                            if (gt) {
+                                i.max = min(likely_i.max, ai.max - 1);
+                            }
+                            if (ge || eq) {
+                                i.max = min(likely_i.max, ai.max);
+                            }
                         }
                         if (ai.min.defined()) {
-                            if (lt)       i.min = max(likely_i.min, ai.min + 1);
-                            if (le || eq) i.min = max(likely_i.min, ai.min);
+                            if (lt) {
+                                i.min = max(likely_i.min, ai.min + 1);
+                            }
+                            if (le || eq) {
+                                i.min = max(likely_i.min, ai.min);
+                            }
                         }
                         scope.push(var_b->name, i);
                         var_to_pop = var_b->name;
