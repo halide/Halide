@@ -127,7 +127,9 @@ public:
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
                 if (r.domain.defined()) {
-                    exprs.insert(exprs.end(), r.domain.predicates().begin(), r.domain.predicates().end());
+                    exprs.insert(exprs.end(),
+                                 r.domain.predicates().begin(),
+                                 r.domain.predicates().end());
                 }
             }
         }
