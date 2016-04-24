@@ -440,7 +440,7 @@ void mangled_names(const LoweredFunc &f, const Target &target, std::string &simp
     simple_name = extract_namespaces(f.name, namespaces);
     argv_name = simple_name + "_argv";
     metadata_name = simple_name + "_metadata";
-    const std::vector<Argument> &args = f.args;
+    const std::vector<LoweredArgument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
         target.has_feature(Target::CPlusPlusMangling) &&
@@ -584,7 +584,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
 
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
-                              const std::string& extern_name, const std::vector<Argument>& args) {
+                              const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -624,12 +624,16 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
                 push_buffer(args[i].name, &arg);
             }
 
+            if (args[i].alignment.modulus != 0) {
+                alignment_info.push(args[i].name, args[i].alignment);
+            }
+
             i++;
         }
     }
 }
 
-void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
+void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
@@ -637,6 +641,10 @@ void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
         sym_pop(args[i].name);
         if (args[i].is_buffer()) {
             pop_buffer(args[i].name);
+        }
+
+        if (args[i].alignment.modulus != 0) {
+            alignment_info.pop(args[i].name);
         }
     }
 
@@ -829,7 +837,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
 }
 
 llvm::Constant *CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<Argument> &args) {
+        const std::string &function_name, const std::vector<LoweredArgument> &args) {
     Constant *zero = ConstantInt::get(i32, 0);
 
     const int num_args = (int) args.size();
