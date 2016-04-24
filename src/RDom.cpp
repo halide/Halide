@@ -209,7 +209,7 @@ void RDom::where(Expr predicate) {
     user_assert(!dom.frozen())
         << (*this) << " cannot be given a new predicate, because it has already"
         << " been used in the update definition of some function.\n";
-    user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n"
+    user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n";
     dom.where(predicate);
 }
 
