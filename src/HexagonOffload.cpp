@@ -28,6 +28,10 @@ class InjectHexagonRpc : public IRMutator {
 
     Module device_code;
 
+    /** Alignment info for Int(32) variables in scope, so we don't
+     * lose the information when creating Hexagon kernels. */
+    Scope<ModulusRemainder> alignment_info;
+
     Expr state_var(const std::string& name, Type type) {
         Expr& var = state_vars[name];
         if (!var.defined()) {
@@ -91,22 +95,25 @@ public:
             // output buffers, input scalars).  There's a huge hack
             // here, in that the scalars must be last for the scalar
             // arguments to shadow the symbols of the buffer.
-            std::vector<Argument> args;
+            std::vector<LoweredArgument> args;
             for (const auto& i : c.buffers) {
-                if (i.second.write) {
-                    continue;
+                if (!i.second.write) {
+                    Argument::Kind kind = Argument::InputBuffer;
+                    args.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
                 }
-                Argument::Kind kind = Argument::InputBuffer;
-                args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
             }
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
                     Argument::Kind kind = Argument::OutputBuffer;
-                    args.push_back(Argument(i.first, kind, i.second.type, i.second.dimensions));
+                    args.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
                 }
             }
             for (const auto& i : c.vars) {
-                args.push_back(Argument(i.first, Argument::InputScalar, i.second, 0));
+                LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0);
+                if (alignment_info.contains(i.first)) {
+                    arg.alignment = alignment_info.get(i.first);
+                }
+                args.push_back(arg);
             }
             device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::External));
 
@@ -148,6 +155,30 @@ public:
 
         } else {
             IRMutator::visit(loop);
+        }
+    }
+
+    void visit(const Let *op) {
+        if (op->value.type() == Int(32)) {
+            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+        }
+
+        IRMutator::visit(op);
+
+        if (op->value.type() == Int(32)) {
+            alignment_info.pop(op->name);
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        if (op->value.type() == Int(32)) {
+            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+        }
+
+        IRMutator::visit(op);
+
+        if (op->value.type() == Int(32)) {
+            alignment_info.pop(op->name);
         }
     }
 
