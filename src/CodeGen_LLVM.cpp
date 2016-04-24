@@ -2053,7 +2053,23 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (op->type.is_scalar()) {
             value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
         }
+    } else if (op->is_intrinsic(Call::slice_vector)) {
+        internal_assert(op->args.size() == 4);
+        const int64_t *start = as_const_int(op->args[1]);
+        const int64_t *stride = as_const_int(op->args[2]);
+        const int64_t *lanes = as_const_int(op->args[3]);
+        internal_assert(start && stride && lanes) << "argument to slice_vector must be a constant.\n";
 
+        vector<int> indices(op->type.lanes());
+        for (int i = 0; i < *lanes; i++) {
+            indices[i] = *start + *stride * i;
+        }
+
+        value = shuffle_vectors(codegen(op->args[0]), indices);
+
+        if (op->type.is_scalar()) {
+            value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+        }
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
         vector<Value *> args;
         args.reserve(op->args.size());
