@@ -21,9 +21,42 @@ namespace {
 
 Target hexagon_remote_target(Target::NoOS, Target::Hexagon, 32);
 
-class InjectHexagonRpc : public IRMutator {
+// Replace the parameter objects of loads/stores witha new parameter
+// object.
+class ReplaceParams : public IRMutator {
+    const std::map<std::string, Parameter> &replacements;
+
     using IRMutator::visit;
 
+    void visit(const Load *op) {
+        auto i = replacements.find(op->name);
+        if (i != replacements.end()) {
+            expr = Load::make(op->type, op->name, mutate(op->index), op->image, i->second);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Store *op) {
+        auto i = replacements.find(op->name);
+        if (i != replacements.end()) {
+            stmt = Store::make(op->name, mutate(op->value), mutate(op->index), i->second);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    ReplaceParams(const std::map<std::string, Parameter> &replacements)
+        : replacements(replacements) {}
+};
+
+Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements) {
+    return ReplaceParams(replacements).mutate(s);
+}
+
+
+class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_vars;
 
     Module device_code;
@@ -73,8 +106,7 @@ class InjectHexagonRpc : public IRMutator {
                              AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
     }
 
-public:
-    InjectHexagonRpc(const Target &target) : device_code("hexagon", target) {}
+    using IRMutator::visit;
 
     void visit(const For *loop) {
         if (loop->device_api == DeviceAPI::Hexagon) {
@@ -95,19 +127,45 @@ public:
             // output buffers, input scalars).  There's a huge hack
             // here, in that the scalars must be last for the scalar
             // arguments to shadow the symbols of the buffer.
-            std::vector<LoweredArgument> args;
-            for (const auto& i : c.buffers) {
-                if (!i.second.write) {
-                    Argument::Kind kind = Argument::InputBuffer;
-                    args.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
-                }
-            }
+            std::vector<LoweredArgument> input_buffers, output_buffers;
+            std::map<std::string, Parameter> replacement_params;
             for (const auto& i : c.buffers) {
                 if (i.second.write) {
                     Argument::Kind kind = Argument::OutputBuffer;
-                    args.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                    output_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                } else {
+                    Argument::Kind kind = Argument::InputBuffer;
+                    input_buffers.push_back(LoweredArgument(i.first, kind, i.second.type, i.second.dimensions));
+                }
+
+                // Build a parameter to replace.
+                Parameter p(i.second.type, true, i.second.dimensions);
+                // Assert that buffers are aligned to one HVX
+                // vector. Generally, they should be page aligned ION
+                // buffers, so this should be a reasonable
+                // requirement.
+                const int alignment = 128;
+                p.set_host_alignment(alignment);
+                // The other parameter constraints are already
+                // accounted for by the closure grabbing those
+                // arguments, so we only need to provide the host
+                // alignment.
+                replacement_params[i.first] = p;
+
+                // Add an assert to the body that validates the
+                // alignment of the buffer.
+                if (!device_code.target().has_feature(Target::NoAsserts)) {
+                    Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first + ".host"));
+                    Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
+                                            {i.first, alignment}, Call::Extern);
+                    body = Block::make(AssertStmt::make(host_ptr % alignment == 0, error), body);
                 }
             }
+            body = replace_params(body, replacement_params);
+
+            std::vector<LoweredArgument> args;
+            args.insert(args.end(), input_buffers.begin(), input_buffers.end());
+            args.insert(args.end(), output_buffers.begin(), output_buffers.end());
             for (const auto& i : c.vars) {
                 LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0);
                 if (alignment_info.contains(i.first)) {
@@ -182,6 +240,9 @@ public:
         }
     }
 
+public:
+    InjectHexagonRpc(const Target &target) : device_code("hexagon", target) {}
+
     Stmt inject(Stmt s) {
         s = mutate(s);
 
@@ -224,7 +285,7 @@ public:
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     Target target = hexagon_remote_target;
-    for (Target::Feature i : {Target::Debug, Target::HVX_64, Target::HVX_128}) {
+    for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128}) {
         if (host_target.has_feature(i)) {
             target = target.with_feature(i);
         }
