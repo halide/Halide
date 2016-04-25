@@ -41,14 +41,42 @@ int main(int argc, char **argv) {
                           blur_y(x + 2, y, c));
 
     // Schedule.
+
+    // Require the input and output to have 3 channels.
+    blur.bound(c, 0, 3);
+    input.set_min(2, 0).set_extent(2, 3);
+
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+
+        // The strategy here is to split each scanline of the result
+        // into chunks of multiples of the vector size, computing the
+        // blur in y at each chunk. We use the RoundUp tail strategy to
+        // keep the last chunk's memory accesses aligned.
+        Var xo("xo"), xi("xi");
         blur.compute_root()
             .hexagon()
-            .vectorize(x, vector_size);
-        blur_y.compute_at(blur, y)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
+            .split(x, xo, xi, vector_size*4, TailStrategy::RoundUp)
+            .vectorize(xi, vector_size);
+        blur_y.compute_at(blur, xo)
+            .vectorize(x, vector_size, TailStrategy::RoundUp);
+
+        // Require scanlines of the input and output to be aligned.
+        auto blur_buffer = blur.output_buffer();
+
+        input.set_host_alignment(vector_size);
+        blur_buffer.set_host_alignment(vector_size);
+
+        input.set_min(0, 0).set_extent(0, (input.extent(0)/vector_size)*vector_size);
+        blur_buffer.set_min(0, 0).set_extent(0, (blur_buffer.extent(0)/vector_size)*vector_size);
+
+        for (int i = 1; i < 3; i++) {
+            input.set_stride(i, (input.stride(i)/vector_size)*vector_size);
+            blur_buffer.set_stride(i, (blur_buffer.stride(i)/vector_size)*vector_size);
+        }
+
+        // Hack until the compute_root on input_bounded can be removed.
+        input_bounded.align_storage(input_bounded.args()[0], vector_size);
     } else {
         const int vector_size = target.natural_vector_size<uint8_t>();
         blur.compute_root()
