@@ -48,11 +48,11 @@ WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_register_buf_fn remote_register_buf = NULL;
 
 template <typename T>
-T get_symbol(void *user_context, void *host_lib, const char* name, bool optional = false) {
+T get_symbol(void *user_context, void *host_lib, const char* name) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
     T sym = (T)halide_get_library_symbol(host_lib, name);
     debug(user_context) << "        " << (void *)sym << "\n";
-    if (!optional && !sym) {
+    if (!sym) {
         error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
     }
     return sym;
@@ -93,7 +93,10 @@ WEAK int init_hexagon_runtime(void *user_context) {
     void *adsprpc_lib = halide_load_library("libadsprpc.so");
     debug(user_context) << "        " << adsprpc_lib << "\n";
     if (adsprpc_lib) {
-        remote_register_buf = get_symbol<remote_register_buf_fn>(user_context, host_lib, "remote_register_buf", true);
+        debug(user_context) << "    halide_get_library_symbol('remote_register_buf') -> \n";
+        remote_register_buf = (remote_register_buf_fn)halide_get_library_symbol(adsprpc_lib, "remote_register_buf");
+        debug(user_context) << "        " << (void *)remote_register_buf << "\n";
+        // This symbol is optional, don't error if it isn't available.
     }
 
     return 0;
