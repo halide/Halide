@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <malloc.h>
 
+#include "../support/benchmark.h"
+
 #include "pipeline.h"
 
 #include "HalideRuntimeHexagonHost.h"
@@ -56,14 +58,15 @@ int main(int argc, char **argv) {
         in.host[i] = static_cast<uint8_t>(rand());
     }
 
-    printf("Running pipeline... ");
-    int result = pipeline(&in, &out);
-    printf("done: %d\n", result);
-    if (result != 0) {
-        halide_device_free(NULL, &in);
-        halide_device_free(NULL, &out);
-        return result;
-    }
+    printf("Running pipeline...\n");
+    double time = benchmark(20, 1, [&]() {
+        int result = pipeline(&in, &out);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    });
+
+    printf("Done, time: %g s\n", time);
 
     // Validate that the algorithm did what we expect.
     const uint16_t gaussian5[] = { 1, 4, 6, 4, 1 };
@@ -100,5 +103,5 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
 
-    return result;
+    return 0;
 }
