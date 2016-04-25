@@ -45,12 +45,11 @@ class ContainsImpureCall : public IRVisitor {
     }
 
 public:
-    bool result;
-    ContainsImpureCall() : result(false) {}
-
+    bool result = false;
+    ContainsImpureCall() {}
 };
 
-bool is_expr_pure(const Expr &expr) {
+bool contains_impure_call(const Expr &expr) {
     ContainsImpureCall is_not_pure;
     expr.accept(&is_not_pure);
     return !is_not_pure.result;
@@ -342,7 +341,7 @@ Stmt build_provide_loop_nest(Function f,
         internal_assert(nest[i].type == Container::If);
 
         // Cannot lift out the predicate guard if it contains call to non-pure function
-        if (!is_expr_pure(nest[i].value)) {
+        if (contains_impure_call(nest[i].value)) {
             continue;
         }
 
