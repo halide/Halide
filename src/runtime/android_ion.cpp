@@ -133,6 +133,7 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id) {
     // Store a record of the ION allocation data before the pointer we return.
     allocation_record rec = { dev_ion, ion_h, buf_fd, mem, len };
     mem = reinterpret_cast<char *>(mem) + align;
+    halide_assert(user_context, sizeof(allocation_record) <= align);
     memcpy(reinterpret_cast<allocation_record *>(mem) - 1, &rec, sizeof(rec));
     return mem;
 }
@@ -140,10 +141,10 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id) {
 // Free a previously allocated ION buffer.
 WEAK void ion_free(void *user_context, void *ion) {
     if (!ion) return;
-    allocation_record *rec = reinterpret_cast<allocation_record *>(ion) - 1;
-    munmap(rec->mapped, rec->size);
+    allocation_record rec = *(reinterpret_cast<allocation_record *>(ion) - 1);
+    munmap(rec.mapped, rec.size);
 
-    ion_free(rec->dev_ion, rec->handle);
+    ion_free(rec.dev_ion, rec.handle);
 }
 
 }}}}  // namespace Halide::Runtime::Internal::Ion
