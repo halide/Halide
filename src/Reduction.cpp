@@ -168,10 +168,6 @@ Expr ReductionDomain::predicate() const {
 
 std::vector<Expr> ReductionDomain::split_predicate() const {
     std::vector<Expr> predicates = split_predicate_helper(contents.ptr->predicate);
-    debug(0) << "**********Split predicates: " << contents.ptr->predicate << " INTO: \n";
-    for (const auto &p : predicates) {
-        debug(0) << "  " << p << "\n";
-    }
     return predicates;
 }
 
