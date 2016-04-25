@@ -90,7 +90,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     #if LLVM_VERSION < 37
     options.TrapFuncName = "";
     #endif
-    options.PositionIndependentExecutable = true;
     options.FunctionSections = true;
     #ifdef WITH_NATIVE_CLIENT
     options.UseInitArray = true;
