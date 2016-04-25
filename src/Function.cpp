@@ -66,9 +66,7 @@ struct FunctionContents {
                     rv.min.accept(visitor);
                     rv.extent.accept(visitor);
                 }
-                for (const auto &predicate : update.domain.predicates()) {
-                    predicate.accept(visitor);
-                }
+                update.domain.predicate().accept(visitor);
             }
 
             update.schedule.accept(visitor);

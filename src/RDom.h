@@ -305,23 +305,6 @@ public:
      f(r.x, r.y) += 1;
      \endcode
      *
-     * This produces the following loop nest:
-     *
-     \code
-     for (int r.y = 0; r.y < 20; r.y++) {
-       for (int r.x = 0; r.x < 20; r.x++) {
-         if ((r.x < r.y) && (r.x == 10) && (r.y > 13)) {
-           f[r.x, r.y] += 1;
-         }
-       }
-     }
-     \endcode
-     *
-     * Using separate RDom::where calls is preferable however, since
-     * we place each if condition as far outwards as possible in the
-     * loop nest, which has lower overhead in cases where we cannot
-     * successfully restrict the loop range to remove the if
-     * statement.
      */
     EXPORT void where(Expr predicate);
 
