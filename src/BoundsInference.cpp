@@ -132,6 +132,7 @@ public:
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            string producing_stage,
+                           string loop_level,
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
@@ -266,21 +267,33 @@ public:
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
                 string prefix = name + ".s" + std::to_string(stage) + ".";
+
+                LoopLevel compute_at = func.schedule().compute_level();
+                LoopLevel store_at = func.schedule().store_level();
+
                 for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
-                    const Bound &bound = func.schedule().bounds()[i];
+                    Bound bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_required = Variable::make(Int(32), min_var);
                     Expr max_required = Variable::make(Int(32), max_var);
 
-                    Expr min_bound = bound.min;
-                    if (!min_bound.defined()) {
-                        min_bound = min_required;
+                    // If the Func is compute_at some inner loop, and
+                    // only extent is bounded, then the min could
+                    // actually move around, which makes the extent
+                    // bound not actually useful for determining the
+                    // max required from the point of view of
+                    // producers.
+                    if (bound.min.defined() ||
+                        compute_at.is_root() ||
+                        (compute_at.match(loop_level) &&
+                         store_at.match(loop_level))) {
+                        if (!bound.min.defined()) {
+                            bound.min = min_required;
+                        }
+                        s = LetStmt::make(min_var, bound.min, s);
+                        s = LetStmt::make(max_var, bound.min + bound.extent - 1, s);
                     }
-                    Expr max_bound = (min_bound + bound.extent) - 1;
-
-                    s = LetStmt::make(min_var, min_bound, s);
-                    s = LetStmt::make(max_var, max_bound, s);
 
                     // Save the unbounded values to use in bounds-checking assertions
                     s = LetStmt::make(min_var + "_unbounded", min_required, s);
@@ -707,7 +720,7 @@ public:
                     for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                         bounds_needed[stages[i].consumers[j]] = true;
                     }
-                    body = stages[i].define_bounds(body, stage_name, in_stages, in_pipeline, inner_productions);
+                    body = stages[i].define_bounds(body, stage_name, op->name, in_stages, in_pipeline, inner_productions);
                 }
             }
 

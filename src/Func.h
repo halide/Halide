@@ -1519,24 +1519,6 @@ public:
     EXPORT std::vector<OutputImageParam> output_buffers() const;
     // @}
 
-    /** Casting a function to an expression is equivalent to calling
-     * the function with zero arguments. Implicit variables will be
-     * injected according to the function's dimensionality
-     * (see \ref Var::implicit).
-     *
-     * This lets you write things like:
-     *
-     \code
-     Func f, g;
-     Var x;
-     g(x) = ...
-     f(_) = g * 2;
-     \endcode
-    */
-    operator Expr() const {
-        return (*this)(_);
-    }
-
     /** Use a Func as an argument to an external stage. */
     operator ExternFuncArgument() const {
         return ExternFuncArgument(func);
