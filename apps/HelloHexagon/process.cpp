@@ -6,7 +6,7 @@
 
 #include "pipeline.h"
 
-#include "HalideRuntime.h"
+#include "HalideRuntimeHexagonHost.h"
 
 // Helper function to access element (x, y, z, w) of a buffer_t.
 template <typename T>
@@ -33,13 +33,8 @@ int main(int argc, char **argv) {
     const int W = 1024;
     const int H = 1024;
 
-    // Allocate buffers for the input and output image.
-    uint8_t* in_host = (uint8_t*)memalign(4096, W*H*3);
-    uint8_t* out_host = (uint8_t*)memalign(4096, W*H*3);
-
     // Set up the buffer_t describing the input buffer.
     buffer_t in = { 0 };
-    in.host = in_host;
     in.elem_size = 1;
     in.extent[0] = W;
     in.extent[1] = H;
@@ -48,34 +43,25 @@ int main(int argc, char **argv) {
     in.stride[1] = W;
     in.stride[2] = W * H;
 
-    // The output buffer has the same description, but a different
-    // host pointer.
+    // The output buffer has the same description.
     buffer_t out = in;
-    out.host = out_host;
+
+    // Hexagon's device_malloc implementation will also set the host
+    // pointer if it is null, giving a zero copy buffer.
+    halide_device_malloc(nullptr, &in, halide_hexagon_device_interface());
+    halide_device_malloc(nullptr, &out, halide_hexagon_device_interface());
 
     // Fill the input buffer with random data.
     for (int i = 0; i < W * H * 3; i++) {
-        in_host[i] = static_cast<uint8_t>(rand());
+        in.host[i] = static_cast<uint8_t>(rand());
     }
-
-    // Indicate that we've replaced the data in the input buffer.
-    in.host_dirty = true;
 
     printf("Running pipeline... ");
     int result = pipeline(&in, &out);
     printf("done: %d\n", result);
     if (result != 0) {
-        free(in_host);
-        free(out_host);
-        return result;
-    }
-
-    printf("halide_copy_to_host... ");
-    result = halide_copy_to_host(NULL, &out);
-    printf("done: %d\n", result);
-    if (result != 0) {
-        free(in_host);
-        free(out_host);
+        halide_device_free(NULL, &in);
+        halide_device_free(NULL, &out);
         return result;
     }
 
@@ -109,7 +95,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    free(in_host);
-    free(out_host);
+    halide_device_free(NULL, &in);
+    halide_device_free(NULL, &out);
+
+    printf("Success!\n");
+
     return result;
 }
