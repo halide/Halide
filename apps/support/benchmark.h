@@ -1,8 +1,6 @@
 #ifndef BENCHMARK_H
 #define BENCHMARK_H
 
-#include <limits>
-
 // Benchmark the operation 'op'. The number of iterations refers to
 // how many times the operation is run for each time measurement, the
 // result is the minimum over a number of samples runs. The result is the
@@ -19,7 +17,7 @@ double benchmark(int samples, int iterations, F op) {
     int64_t freq;
     QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 
-    double best = std::numeric_limits<double>::infinity();
+    double best = 1e100;
     for (int i = 0; i < samples; i++) {
         int64_t t1;
         QueryPerformanceCounter((LARGE_INTEGER*)&t1);
@@ -36,18 +34,21 @@ double benchmark(int samples, int iterations, F op) {
 
 #else
 
-#include <chrono>
+#include <sys/time.h>
 
 template <typename F>
 double benchmark(int samples, int iterations, F op) {
-    double best = std::numeric_limits<double>::infinity();
+    double best = 1e100;
     for (int i = 0; i < samples; i++) {
-        auto t1 = std::chrono::high_resolution_clock::now();
+        timeval t1;
+        gettimeofday(&t1, NULL);
         for (int j = 0; j < iterations; j++) {
             op();
         }
-        auto t2 = std::chrono::high_resolution_clock::now();
-        double dt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
+        timeval t2;
+        gettimeofday(&t2, NULL);
+
+        double dt = (t2.tv_usec - t1.tv_usec)*1e-6 + (t2.tv_sec - t1.tv_sec);
         if (dt < best) best = dt;
     }
     return best / iterations;
