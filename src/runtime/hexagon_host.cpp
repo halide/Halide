@@ -39,19 +39,21 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
                              remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
+typedef void (*remote_register_buf_fn)(void *, int, int);
 
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
+WEAK remote_register_buf_fn remote_register_buf = NULL;
 
 template <typename T>
-T get_symbol(void *user_context, void *host_lib, const char* name) {
+T get_symbol(void *user_context, void *host_lib, const char* name, bool optional = false) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
     T sym = (T)halide_get_library_symbol(host_lib, name);
     debug(user_context) << "        " << (void *)sym << "\n";
-    if (!sym) {
-        error(user_context) << "Hexagon runtime symbol '" << name << "' not found.\n";
+    if (!optional && !sym) {
+        error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
     }
     return sym;
 }
@@ -84,6 +86,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     if (!remote_run) return -1;
     remote_release_kernels = get_symbol<remote_release_kernels_fn>(user_context, host_lib, "halide_hexagon_remote_release_kernels");
     if (!remote_release_kernels) return -1;
+    remote_register_buf = get_symbol<remote_register_buf_fn>(user_context, host_lib, "halide_hexagon_remote_register_buf", true);
 
     return 0;
 }
@@ -347,6 +350,9 @@ WEAK int halide_hexagon_device_release(void *user_context) {
 }
 
 WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
     debug(user_context)
         << "Ion: halide_hexagon_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -382,11 +388,17 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
     #endif
 
     debug(user_context) << "    ion_alloc len=" << (uint64_t)size << ", heap_id=" << heap_id << " -> ";
-    void *ion = ion_alloc(user_context, size, heap_id);
-    debug(user_context) << "        " << ion << "\n";
+    int ion_fd;
+    void *ion = ion_alloc(user_context, size, heap_id, &ion_fd);
+    debug(user_context) << "        " << ion << ", " << ion_fd << "\n";
     if (!ion) {
         error(user_context) << "ion_alloc failed\n";
         return -1;
+    }
+
+    if (remote_register_buf) {
+        debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=" << ion_fd << "\n";
+        remote_register_buf(ion, size, ion_fd);
     }
 
     int err = halide_hexagon_wrap_device_handle(user_context, buf, ion, size);
