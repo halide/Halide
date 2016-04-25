@@ -1,7 +1,7 @@
 include ../support/Makefile.inc
 
-# This app requires a separate toolchain to be built from the Android
-# NDK, using the make-standalone-toolchain.sh script:
+# This app requires a separate toolchain to be built from the Android NDK, 
+# using the make-standalone-toolchain.sh script:
 #$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
 #$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
 CXX-host ?= $(CXX)
