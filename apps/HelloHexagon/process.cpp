@@ -30,8 +30,8 @@ T clamp(T x, T min, T max) {
 }
 
 int main(int argc, char **argv) {
-    const int W = 128;
-    const int H = 128;
+    const int W = 1024;
+    const int H = 1024;
 
     // Allocate buffers for the input and output image.
     uint8_t* in_host = (uint8_t*)memalign(4096, W*H*3);
