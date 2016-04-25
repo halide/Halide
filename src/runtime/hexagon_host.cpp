@@ -186,14 +186,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
         result = remote_initialize_kernels((uint8_t*)filename, strlen(filename) + 1, &module);
-        if (result == 0) {
-            debug(user_context) << "        " << module << "\n";
-            (*state)->module = module;
-            (*state)->size = code_size;
-        } else {
-            debug(user_context) << "        " << result << "\n";
-            error(user_context) << "Initialization of Hexagon kernels failed\n";
-        }
 
         // Unfortunately, dlopen on the Hexagon side doesn't keep the
         // shared object alive in the file system. To work around
@@ -203,6 +195,15 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         // be removed from the file system.
         open(filename, O_RDONLY, 0);
         remove(filename);
+
+        if (result == 0) {
+            debug(user_context) << "        " << module << "\n";
+            (*state)->module = module;
+            (*state)->size = code_size;
+        } else {
+            debug(user_context) << "        " << result << "\n";
+            error(user_context) << "Initialization of Hexagon kernels failed\n";
+        }
     } else {
         debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
     }
@@ -273,10 +274,6 @@ WEAK int halide_hexagon_run(void *user_context,
         }
     }
 
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
     // Allocate some remote_buffer objects on the stack.
     int arg_count = 0;
     while(arg_sizes[arg_count] > 0) arg_count++;
@@ -303,7 +300,7 @@ WEAK int halide_hexagon_run(void *user_context,
     if (input_scalar_count < 0) return input_scalar_count;
 
     #ifdef DEBUG_RUNTIME
-    uint64_t t_before_run = halide_current_time_ns(user_context);
+    uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
     // Call the pipeline on the device side.
@@ -319,13 +316,8 @@ WEAK int halide_hexagon_run(void *user_context,
     }
 
     #ifdef DEBUG_RUNTIME
-    uint64_t t_after_run = halide_current_time_ns(user_context);
-    debug(user_context) << "    remote time: " << (t_after_run - t_before_run) / 1.0e6 << " ms\n";
-    #endif
-
-    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    total time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << "    time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return result != 0 ? -1 : 0;
