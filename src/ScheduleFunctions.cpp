@@ -52,7 +52,7 @@ public:
 bool contains_impure_call(const Expr &expr) {
     ContainsImpureCall is_not_pure;
     expr.accept(&is_not_pure);
-    return !is_not_pure.result;
+    return is_not_pure.result;
 }
 
 // Build a loop nest about a provide node using a schedule
