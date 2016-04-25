@@ -180,6 +180,40 @@ int func_call_inside_bound_test(int index) {
     return 0;
 }
 
+int func_call_inside_bound_inline_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+    Func h("h_" + std::to_string(index));
+    Var x("x"), y("y");
+
+    g(x) = x;
+    h(x) = 2*x;
+
+    f(x, y) = x + y;
+
+    RDom r(0, 100, 0, 100, "r");
+    r.where(r.x < g(r.y) + h(r.x));
+    f(r.x, r.y) += 1;
+
+    Image<int> im = f.realize(200, 200);
+
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            int correct = x + y;
+            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+                correct += (x < y + 2*x) ? 1 : 0;
+            }
+            if (im(x, y) != correct) {
+                printf("im(%d, %d) = %d instead of %d\n",
+                       x, y, im(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 int two_linear_bounds_test(int index) {
     buffer_index = index;
 
@@ -194,8 +228,7 @@ int two_linear_bounds_test(int index) {
     r.where(r.y >= 100 - r.x);
     f(r.x, r.y) += 2*g(r.x, r.y);
 
-    // Expect g to be still computed over x=[0,99] and y=[0,99] since the bound
-    // inference is done in term of boxes (i.e. can't represent polytopes)
+    // Expect g to be computed over x=[0,99] and y=[1,99].
     g.compute_root();
 
     f.set_custom_trace(&box_bound_trace);
@@ -203,7 +236,7 @@ int two_linear_bounds_test(int index) {
     g.trace_realizations();
 
     run_tracer = false;
-    niters_expected = 100*100;
+    niters_expected = 99*100;
     niters = 0;
     Image<int> im = f.realize(200, 200);
     for (int y = 0; y < im.height(); y++) {
@@ -617,7 +650,7 @@ int gpu_intermediate_computed_if_param_test(int index) {
 
 
 int main(int argc, char **argv) {
-    printf("Running equality inequality bound test\n");
+    /*printf("Running equality inequality bound test\n");
     if (equality_inequality_bound_test(0) != 0) {
         return -1;
     }
@@ -637,28 +670,33 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Running function call inside bound inline test\n");
+    if (func_call_inside_bound_inline_test(4) != 0) {
+        return -1;
+    }
+
     printf("Running two linear bounds test\n");
-    if (two_linear_bounds_test(4) != 0) {
+    if (two_linear_bounds_test(5) != 0) {
         return -1;
     }
 
     printf("Running circular bound test\n");
-    if (circle_bound_test(5) != 0) {
+    if (circle_bound_test(6) != 0) {
         return -1;
     }
 
     printf("Running intermediate only computed if param is bigger than certain value test\n");
-    if (intermediate_computed_if_param_test(6) != 0) {
+    if (intermediate_computed_if_param_test(7) != 0) {
         return -1;
     }
 
     printf("Running tile intermediate stage depend on output bound test\n");
-    if (tile_intermediate_bound_depend_on_output_test(7) != 0) {
+    if (tile_intermediate_bound_depend_on_output_test(8) != 0) {
         return -1;
     }
 
     printf("Running intermediate stage depend on output bound\n");
-    if (intermediate_bound_depend_on_output_test(8) != 0) {
+    if (intermediate_bound_depend_on_output_test(9) != 0) {
         return -1;
     }
 
@@ -675,17 +713,22 @@ int main(int argc, char **argv) {
     }
 
     printf("Running initialization on gpu and update on cpu test\n");
-    if (init_on_gpu_update_on_cpu_test(9) != 0) {
+    if (init_on_gpu_update_on_cpu_test(19) != 0) {
         return -1;
     }
 
     printf("Running initialization on cpu and update on gpu test\n");
-    if (init_on_cpu_update_on_gpu_test(10) != 0) {
+    if (init_on_cpu_update_on_gpu_test(11) != 0) {
         return -1;
     }
 
     printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
-    if (gpu_intermediate_computed_if_param_test(11) != 0) {
+    if (gpu_intermediate_computed_if_param_test(12) != 0) {
+        return -1;
+    }*/
+
+    printf("Running two linear bounds test\n");
+    if (two_linear_bounds_test(5) != 0) {
         return -1;
     }
 

@@ -12,54 +12,18 @@ namespace Internal {
 namespace {
 
 /* Split AND predicate into vector of ANDs. */
-class SplitAndPredicate : public IRVisitor {
-public:
-    std::vector<Expr> predicates;
-
-    using IRVisitor::visit;
-
-    void visit(const And *op) {
-        std::vector<Expr> old;
-        old.swap(predicates);
-
-        const And *and_a = op->a.as<And>();
-        const And *and_b = op->b.as<And>();
-
-        std::vector<Expr> predicates_a;
-        if (and_a) {
-            op->a.accept(this);
-            predicates_a.swap(predicates);
-        } else {
-            predicates_a.push_back(op->a);
-        }
-
-        if (and_b) {
-            op->b.accept(this);
-        } else {
-            predicates.push_back(op->b);
-        }
-
-        predicates.insert(predicates.end(), predicates_a.begin(), predicates_a.end());
-        predicates.insert(predicates.end(), old.begin(), old.end());
+void split_predicate_helper(Expr pred, std::vector<Expr> &result) {
+    if (const And *a = pred.as<And>()) {
+        split_predicate_helper(a->a, result);
+        split_predicate_helper(a->b, result);
+    } else if (!is_one(pred)) {
+        result.push_back(pred);
     }
-};
-
-std::vector<Expr> split_predicate_helper(Expr pred) {
-    pred = simplify(pred);
-    if (equal(const_true(), pred)) {
-        return {};
-    }
-    if (!pred.as<And>()) {
-        return {pred};
-    }
-    SplitAndPredicate split;
-    pred.accept(&split);
-    return split.predicates;
 }
 
-
 void check(Expr pred, std::vector<Expr> &expected) {
-    std::vector<Expr> result = split_predicate_helper(pred);
+    std::vector<Expr> result;
+    split_predicate_helper(pred, result);
     bool is_equal = true;
 
     if (result.size() != expected.size()) {
@@ -105,16 +69,16 @@ void split_predicate_test() {
 
     {
         std::vector<Expr> expected;
-        expected.push_back(x == 10);
         expected.push_back(x < y);
+        expected.push_back(x == 10);
         check((x < y) && (x == 10), expected);
     }
 
     {
         std::vector<Expr> expected;
-        expected.push_back(y == z);
-        expected.push_back(x == 10);
         expected.push_back(x < y);
+        expected.push_back(x == 10);
+        expected.push_back(y == z);
         check((x < y) && (x == 10) && (y == z), expected);
     }
 
@@ -126,8 +90,8 @@ void split_predicate_test() {
 
     {
         std::vector<Expr> expected;
-        expected.push_back((w == 1) || ((x == 10) && (y == z)));
         expected.push_back(x < y);
+        expected.push_back((w == 1) || ((x == 10) && (y == z)));
         check((x < y) && ((w == 1) || ((x == 10) && (y == z))), expected);
     }
 
@@ -167,7 +131,8 @@ Expr ReductionDomain::predicate() const {
 }
 
 std::vector<Expr> ReductionDomain::split_predicate() const {
-    std::vector<Expr> predicates = split_predicate_helper(contents.ptr->predicate);
+    std::vector<Expr> predicates;
+    split_predicate_helper(contents.ptr->predicate, predicates);
     return predicates;
 }
 
