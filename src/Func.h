@@ -795,6 +795,12 @@ public:
     }
     // @}
 
+    /** Replace every call to 'f' (including call in RDom's predicate) to call to
+     * its Func wrapper and return the wrapper. This method only replaces
+     * 'f' in the current definition of this function when wrap() is called. Any
+     * subsequent call to 'f' after wrap() is called is not mutated. */
+    EXPORT Func wrap(const Func& f);
+
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
      * factor-1. The inner and outer subdimensions can then be dealt

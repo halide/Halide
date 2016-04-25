@@ -5,6 +5,8 @@
  * Defines the internal representation of a halide function and related classes
  */
 
+#include <map>
+
 #include "Expr.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
@@ -204,6 +206,10 @@ public:
     /** Check if a function has been frozen. If so, it is an error to
      * add new definitions. */
     EXPORT bool frozen() const;
+
+    /** Replace every call to wrapped functions (including calls in RDom's
+     * predicate) as defined in wrapped_funcs() to call to their wrappers */
+    EXPORT Function &wrap_func_calls(const Function &f, const Function &wrapper);
 };
 
 }}

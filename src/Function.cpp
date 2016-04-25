@@ -19,6 +19,30 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::set;
+using std::map;
+
+// Replace all calls to wrapped functions with their wrappers.
+class WrapFuncCalls : public IRMutator {
+    using IRMutator::visit;
+
+    const Function func;
+    const Function wrapper;
+
+    void visit(const Call *c) {
+        debug(0) << "VISIT CALL:" << c->name << "\n";
+        debug(0) << "....SHOULD replace :" << func.name() << " with " << wrapper.name() << "\n";
+        IRMutator::visit(c);
+        c = expr.as<Call>();
+        internal_assert(c);
+        if ((c->call_type == Call::Halide) && func.same_as(c->func)) {
+            debug(0) << "....replace :" << func.name() << " with " << wrapper.name() << "\n";
+            expr = Call::make(c->type, c->name, c->args, c->call_type,
+                              wrapper, c->value_index, c->image, c->param);
+        }
+    }
+public:
+    WrapFuncCalls(const Function &f, const Function &w) : func(f), wrapper(w) {}
+};
 
 struct FunctionContents {
     mutable RefCount ref_count;
@@ -91,6 +115,41 @@ struct FunctionContents {
                 }
                 if (i.extent_constraint(j).defined()) {
                     i.extent_constraint(j).accept(visitor);
+                }
+            }
+        }
+    }
+
+    // Replace every call to 'f' with call to 'wrapper'
+    void wrap_func_calls(const Function &f, const Function &wrapper) {
+        debug(0) << "Func \"" << name() << "\": Replacing call to \"" << f.name() << "\" with " << " \"" << wrapper.name() << "\"\n";
+        WrapFuncCalls wrap_calls(f, wrapper);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = wrap_calls.mutate(values[i]);
+        }
+
+        for (UpdateDefinition update : updates) {
+            for (size_t i = 0; i < update.values.size(); ++i) {
+                update.values[i] = wrap_calls.mutate(update.values[i]);
+            }
+
+            if (update.domain.defined()) {
+                for (ReductionVariable rv : update.domain.domain()) {
+                    rv.min.accept(visitor);
+                    rv.extent.accept(visitor);
+                }
+            }
+
+            update.schedule.accept(visitor);
+        }
+
+        if (!extern_function_name.empty()) {
+            for (ExternFuncArgument i : extern_arguments) {
+                if (i.is_func()) {
+                    i.func.ptr->accept(visitor);
+                } else if (i.is_expr()) {
+                    i.expr.accept(visitor);
                 }
             }
         }
@@ -240,6 +299,31 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         user_assert(values[i].defined())
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
+    }
+
+    if (values.size() == 1) {
+        const Call *call = values[0].as<Call>();
+        if (call && (call->call_type == Call::Halide) && (call->args.size() == args.size())) {
+            bool print_func = (call->args.size() == args.size());
+            for (size_t i = 0; print_func && i < call->args.size(); ++i) {
+                const Variable *var = call->args[i].as<Variable>();
+                if (!var) {
+                    print_func = false;
+                } else if (var->name != args[i]) {
+                    print_func = false;
+                }
+            }
+            if (print_func) {
+                std::cout << "********************SIMPLE ASSIGNMENT: " << name() << "(";
+                for (size_t i = 0; i < call->args.size(); ++i) {
+                    std::cout << call->args[i];
+                    if (i != call->args.size()-1) {
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << ") = " << values[0] << "\n";
+            }
+        }
     }
 
     // Make sure all the vars in the value are either args or are
@@ -649,6 +733,11 @@ void Function::freeze() {
 
 bool Function::frozen() const {
     return contents.ptr->frozen;
+}
+
+Function &Function::wrap_func_calls(const Function &f, const Function &wrapper) {
+    contents.ptr->wrap_func_calls(f, wrapper);
+    return *this;
 }
 
 }
