@@ -86,7 +86,15 @@ WEAK int init_hexagon_runtime(void *user_context) {
     if (!remote_run) return -1;
     remote_release_kernels = get_symbol<remote_release_kernels_fn>(user_context, host_lib, "halide_hexagon_remote_release_kernels");
     if (!remote_release_kernels) return -1;
-    remote_register_buf = get_symbol<remote_register_buf_fn>(user_context, host_lib, "halide_hexagon_remote_register_buf", true);
+
+    // There's an optional symbol in libadsprpc.so that enables
+    // buffers to be zero copy that we *try* to load.
+    debug(user_context) << "    halide_load_library('libadsprpc.so') -> \n";
+    void *adsprpc_lib = halide_load_library("libadsprpc.so");
+    debug(user_context) << "        " << adsprpc_lib << "\n";
+    if (adsprpc_lib) {
+        remote_register_buf = get_symbol<remote_register_buf_fn>(user_context, host_lib, "remote_register_buf", true);
+    }
 
     return 0;
 }
@@ -397,6 +405,8 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
     }
 
     if (remote_register_buf) {
+        // If we have this symbol, it means that we can register the
+        // buffer to get zero copy behavior with the DSP.
         debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=" << ion_fd << "\n";
         remote_register_buf(ion, size, ion_fd);
     }
@@ -407,9 +417,9 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
         return err;
     }
 
-    // If the host pointer has also not been allocated yet, set it to
-    // the ion buffer. This buffer will be zero copy.
     if (!buf->host) {
+        // If the host pointer has also not been allocated yet, set it to
+        // the ion buffer. This buffer will be zero copy.
         buf->host = (uint8_t *)ion;
         debug(user_context) << "    host <- " << buf->host << "\n";
     }
@@ -434,8 +444,16 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     void *ion = halide_hexagon_detach_device_handle(user_context, buf);
     ion_free(user_context, ion);
 
-    // If we also set the host pointer, reset it.
+    if (remote_register_buf) {
+        // If we have this symbol, we registered the buffer, so now we
+        // unregister it (by setting fd = -1).
+        size_t size = buf_size(user_context, buf);
+        debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=-1\n";
+        remote_register_buf(ion, size, -1);
+    }
+
     if (buf->host == ion) {
+        // If we also set the host pointer, reset it.
         buf->host = NULL;
         debug(user_context) << "    host <- 0x0\n";
     }
