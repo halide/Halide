@@ -395,6 +395,13 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
         return err;
     }
 
+    // If the host pointer has also not been allocated yet, set it to
+    // the ion buffer. This buffer will be zero copy.
+    if (!buf->host) {
+        buf->host = (uint8_t *)ion;
+        debug(user_context) << "    host <- " << buf->host << "\n";
+    }
+
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -415,6 +422,12 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     void *ion = halide_hexagon_detach_device_handle(user_context, buf);
     ion_free(user_context, ion);
 
+    // If we also set the host pointer, reset it.
+    if (buf->host == ion) {
+        buf->host = NULL;
+        debug(user_context) << "    host <- 0x0\n";
+    }
+
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -427,6 +440,10 @@ namespace {
 
 // Implement a device copy using memcpy.
 WEAK void device_memcpy(void *user_context, device_copy c) {
+    if (c.src == c.dst) {
+        // This is a zero copy buffer, copy is a no-op.
+        return;
+    }
     // TODO: Is this 32-bit or 64-bit? Leaving signed for now
     // in case negative strides.
     for (int w = 0; w < (int)c.extent[3]; w++) {
