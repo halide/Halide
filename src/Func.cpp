@@ -323,6 +323,7 @@ std::string Stage::dump_argument_list() const {
     return oss.str();
 }
 
+
 void Stage::split(const string &old, const string &outer, const string &inner, Expr factor, bool exact, TailStrategy tail) {
     vector<Dim> &dims = schedule.dims();
 
@@ -858,6 +859,13 @@ void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
     }
+}
+
+Func Func::wrap(const Func& f) {
+    Func wrapper(f.name() + "_in_" + name());
+    wrapper(args()) = (*this)(args());
+    func.wrap_func_calls(f.func, wrapper.func);
+    return wrapper;
 }
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
