@@ -1346,7 +1346,7 @@ private:
                 else_boxes.swap(boxes);
             }
 
-            // debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
@@ -1360,7 +1360,7 @@ private:
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
 
-                // debug(0) << " Merging boxes for " << iter->first << "\n";
+                //debug(0) << " Merging boxes for " << i.first << "\n";
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;

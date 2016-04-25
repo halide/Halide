@@ -126,9 +126,9 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
-                if (r.domain.defined()) {
+                /*if (r.domain.defined()) {
                     exprs.push_back(r.domain.predicate());
-                }
+                }*/
             }
         }
 
@@ -567,7 +567,10 @@ public:
                 if (consumer.stage > 0) {
                     const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
                     if (r.domain.defined()) {
-                        wrapped = IfThenElse::make(r.domain.predicate(), wrapped);
+                        vector<Expr> predicates = r.domain.split_predicate();
+                        for (const Expr &pred : predicates) {
+                            wrapped = IfThenElse::make(likely(pred), wrapped);
+                        }
                     }
                 }
 
