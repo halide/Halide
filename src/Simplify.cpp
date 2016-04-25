@@ -1373,6 +1373,15 @@ private:
             // (y - x*4) / 2 -> y/2 - x*2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((sub_a->a / b) - (mul_a_b->a * ratio));
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   const_int(add_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // (y + 8) / 2 -> y/2 + 4
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((add_a->a / b) + ratio);
         } else if (b.type().is_float() && is_simple_const(b)) {
             // Convert const float division to multiplication
             // x / 2 -> x * 0.5
@@ -3881,6 +3890,7 @@ void check_algebra() {
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
+    check((x + 8)/2, x/2 + 4);
     check((x - y)*-2, (y - x)*2);
     check((xf - yf)*-2.0f, (yf - xf)*2.0f);
 
