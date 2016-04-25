@@ -171,11 +171,15 @@ class SimplifyUsingBounds : public IRMutator {
             }  else if (is_one(simplify(loop.i.min == loop.i.max)) && expr_uses_var(test, loop.var)) {
                 // If min == max then either the domain only has one correct value, which we
                 // can substitute directly.
+                // Need to call CSE here since simplify() is sometimes unable to simplify expr with
+                // non-trivial 'let' value, e.g. (let x = min(10, y-1) in (x < y))
                 test = common_subexpression_elimination(Let::make(loop.var, loop.i.min, test));
             } else if (is_one(simplify(loop.i.min >= loop.i.max)) && expr_uses_var(test, loop.var)) {
                 // If min >= max then either the domain only has one correct value,
                 // or the domain is empty, which implies both min/max are true under
                 // the domain.
+                // Need to call CSE here since simplify() is sometimes unable to simplify expr with
+                // non-trivial 'let' value, e.g. (let x = 10 in x < y) || (let x = min(10, y-1) in (x < y))
                 test = common_subexpression_elimination(Let::make(loop.var, loop.i.min, test) ||
                                                         Let::make(loop.var, loop.i.max, test));
             } else {

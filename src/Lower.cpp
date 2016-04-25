@@ -245,7 +245,6 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
 
-    s = simplify(s);
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);

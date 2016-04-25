@@ -56,8 +56,8 @@ public:
 
     /** Return AND of predicates defined on this reducation domain as one Expr.
      * If there is no predicate (i.e. all iteration domain in this reduction domain
-     * is valid), this returns an undefined Expr. */
-    EXPORT Expr and_predicates() const;
+     * is valid), this returns a const_true(). */
+    EXPORT Expr fold_predicates() const;
 
     /** Mark RDom as frozen, which means it cannot accept new predicates. An
      * RDom is frozen once it is used in a Func's update definition. */

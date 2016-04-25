@@ -37,9 +37,9 @@ const std::vector<Expr> &ReductionDomain::predicates() const {
     return contents.ptr->predicates;
 }
 
-Expr ReductionDomain::and_predicates() const {
+Expr ReductionDomain::fold_predicates() const {
     if (contents.ptr->predicates.empty()) {
-        return Expr();
+        return const_true();
     }
     Expr and_pred = contents.ptr->predicates[0];
     for (size_t i = 1; i < contents.ptr->predicates.size(); ++i) {

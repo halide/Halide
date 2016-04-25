@@ -137,8 +137,8 @@ bool can_parallelize_rvar(const string &v,
         }
         // Add the reduction domain's predicates
         if (r.domain.predicates().size() > 0) {
-            Expr this_pred = r.domain.and_predicates();
-            Expr other_pred = renamer.mutate(r.domain.and_predicates());
+            Expr this_pred = r.domain.fold_predicates();
+            Expr other_pred = renamer.mutate(r.domain.fold_predicates());
             debug(3) << "......this thread predicates: " << this_pred << "\n";
             debug(3) << "......other thread predicates: " << other_pred << "\n";
             hazard = hazard && this_pred && other_pred;
