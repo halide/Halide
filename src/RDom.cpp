@@ -1,7 +1,9 @@
 #include "RDom.h"
 #include "Util.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 
 namespace Halide {
 
@@ -226,13 +228,9 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
         stream << "  " << dom[i] << "\n";
     }
     stream << ")";
-    const auto &predicates = dom.domain().predicates();
-    if (!predicates.empty()) {
-        stream << " where (\n";
-        for (const auto &pred : predicates) {
-            stream << "  " << pred << "\n";
-        }
-        stream << ")";
+    Expr pred = simplify(dom.domain().predicate());
+    if (!equal(const_true(), pred)) {
+        stream << " where (\n  " << pred << ")";
     }
     stream << "\n";
     return stream;

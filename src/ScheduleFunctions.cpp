@@ -308,8 +308,9 @@ Stmt build_provide_loop_nest(Function f,
     // Put all the reduction domain predicate into the containers vector.
     int n_predicates = 0;
     if (rdom.defined()) {
-        n_predicates = rdom.predicates().size();
-        for (Expr pred : rdom.predicates()) {
+        vector<Expr> predicates = rdom.split_predicate();
+        n_predicates = predicates.size();
+        for (Expr pred : predicates) {
             pred = qualify(prefix, pred);
             Container c = {Container::If, 0, "", pred};
             nest.push_back(c);

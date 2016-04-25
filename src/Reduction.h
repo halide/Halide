@@ -51,13 +51,13 @@ public:
      * for more details. */
     EXPORT void where(Expr predicate);
 
-    /** Get the predicates defined on this reducation demain if there is any. */
-    EXPORT const std::vector<Expr> &predicates() const;
+    /** Return the predicate defined on this reducation demain. */
+    EXPORT Expr predicate() const;
 
-    /** Return AND of predicates defined on this reducation domain as one Expr.
-     * If there is no predicate (i.e. all iteration domain in this reduction domain
-     * is valid), this returns a const_true(). */
-    EXPORT Expr fold_predicates() const;
+    /** Split predicate into vector of ANDs. If there is no predicate (i.e. all
+     * iteration domain in this reduction domain is valid), this returns an
+     * empty vector. */
+    EXPORT std::vector<Expr> split_predicate() const;
 
     /** Mark RDom as frozen, which means it cannot accept new predicates. An
      * RDom is frozen once it is used in a Func's update definition. */
@@ -67,6 +67,8 @@ public:
      * predicates. */
     EXPORT bool frozen() const;
 };
+
+EXPORT void split_predicate_test();
 
 }
 }

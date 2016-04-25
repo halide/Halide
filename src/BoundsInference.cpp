@@ -127,9 +127,7 @@ public:
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
                 if (r.domain.defined()) {
-                    exprs.insert(exprs.end(),
-                                 r.domain.predicates().begin(),
-                                 r.domain.predicates().end());
+                    exprs.push_back(r.domain.predicate());
                 }
             }
         }
@@ -563,13 +561,13 @@ public:
                 const vector<Expr> &exprs = consumer.exprs;
                 // We wrap the consumer exprs inside a "dummy" Call stmt so that we can take advantage
                 // of the IfThenElse stmt handler inside boxes_required() to determine the appropriate
-                // box bound size given some predicates on the RDom. Otherwise, we will need to update
-                // the scope to take into account of the predicates.
+                // box bound size given some predicate on the RDom. Otherwise, we will need to update
+                // the scope to take into account of the predicate.
                 Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
                 if (consumer.stage > 0) {
                     const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
-                    if (r.domain.defined() && r.domain.predicates().size() > 0) {
-                        wrapped = IfThenElse::make(r.domain.fold_predicates(), wrapped);
+                    if (r.domain.defined()) {
+                        wrapped = IfThenElse::make(r.domain.predicate(), wrapped);
                     }
                 }
 

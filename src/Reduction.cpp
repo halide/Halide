@@ -1,17 +1,146 @@
+#include "Var.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Reduction.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
 
+namespace {
+
+/* Split AND predicate into vector of ANDs. */
+class SplitAndPredicate : public IRVisitor {
+public:
+    std::vector<Expr> predicates;
+
+    using IRVisitor::visit;
+
+    void visit(const And *op) {
+        std::vector<Expr> old;
+        old.swap(predicates);
+
+        const And *and_a = op->a.as<And>();
+        const And *and_b = op->b.as<And>();
+
+        std::vector<Expr> predicates_a;
+        if (and_a) {
+            op->a.accept(this);
+            predicates_a.swap(predicates);
+        } else {
+            predicates_a.push_back(op->a);
+        }
+
+        if (and_b) {
+            op->b.accept(this);
+        } else {
+            predicates.push_back(op->b);
+        }
+
+        predicates.insert(predicates.end(), predicates_a.begin(), predicates_a.end());
+        predicates.insert(predicates.end(), old.begin(), old.end());
+    }
+};
+
+std::vector<Expr> split_predicate_helper(Expr pred) {
+    pred = simplify(pred);
+    if (equal(const_true(), pred)) {
+        return {};
+    }
+    if (!pred.as<And>()) {
+        return {pred};
+    }
+    SplitAndPredicate split;
+    pred.accept(&split);
+    return split.predicates;
+}
+
+
+void check(Expr pred, std::vector<Expr> &expected) {
+    std::vector<Expr> result = split_predicate_helper(pred);
+    bool is_equal = true;
+
+    if (result.size() != expected.size()) {
+        is_equal = false;
+    } else {
+        for (size_t i = 0; i < expected.size(); ++i) {
+            if (!equal(simplify(result[i]), simplify(expected[i]))) {
+                is_equal = false;
+                break;
+            }
+        }
+    }
+
+    if (!is_equal) {
+        std::cout << "Expect predicate " << pred << " to be split into:\n";
+        for (const auto &e : expected) {
+            std::cout << "  " << e << "\n";
+        }
+        std::cout << "Got:\n";
+        for (const auto &e : result) {
+            std::cout << "  " << e << "\n";
+        }
+        internal_error << "\n";
+    }
+}
+
+}
+
+void split_predicate_test() {
+    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
+
+    {
+        std::vector<Expr> expected;
+        expected.push_back(z < 10);
+        check(z < 10, expected);
+    }
+
+    {
+        std::vector<Expr> expected;
+        expected.push_back((x < y) || (x == 10));
+        check((x < y) || (x == 10), expected);
+    }
+
+    {
+        std::vector<Expr> expected;
+        expected.push_back(x == 10);
+        expected.push_back(x < y);
+        check((x < y) && (x == 10), expected);
+    }
+
+    {
+        std::vector<Expr> expected;
+        expected.push_back(y == z);
+        expected.push_back(x == 10);
+        expected.push_back(x < y);
+        check((x < y) && (x == 10) && (y == z), expected);
+    }
+
+    {
+        std::vector<Expr> expected;
+        expected.push_back((w == 1) || ((x == 10) && (y == z)));
+        check((w == 1) || ((x == 10) && (y == z)), expected);
+    }
+
+    {
+        std::vector<Expr> expected;
+        expected.push_back((w == 1) || ((x == 10) && (y == z)));
+        expected.push_back(x < y);
+        check((x < y) && ((w == 1) || ((x == 10) && (y == z))), expected);
+    }
+
+    std::cout << "Split predicate test passed" << std::endl;
+}
+
 struct ReductionDomainContents {
     mutable RefCount ref_count;
     std::vector<ReductionVariable> domain;
-    std::vector<Expr> predicates;
+    Expr predicate;
     bool frozen;
 
-    ReductionDomainContents() : frozen(false) {}
+    ReductionDomainContents() : predicate(const_true()), frozen(false) {}
 };
 
 template<>
@@ -30,22 +159,20 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 }
 
 void ReductionDomain::where(Expr predicate) {
-    contents.ptr->predicates.push_back(predicate);
+    contents.ptr->predicate = simplify(contents.ptr->predicate && predicate);
 }
 
-const std::vector<Expr> &ReductionDomain::predicates() const {
-    return contents.ptr->predicates;
+Expr ReductionDomain::predicate() const {
+    return contents.ptr->predicate;
 }
 
-Expr ReductionDomain::fold_predicates() const {
-    if (contents.ptr->predicates.empty()) {
-        return const_true();
+std::vector<Expr> ReductionDomain::split_predicate() const {
+    std::vector<Expr> predicates = split_predicate_helper(contents.ptr->predicate);
+    debug(0) << "**********Split predicates: " << contents.ptr->predicate << " INTO: \n";
+    for (const auto &p : predicates) {
+        debug(0) << "  " << p << "\n";
     }
-    Expr and_pred = contents.ptr->predicates[0];
-    for (size_t i = 1; i < contents.ptr->predicates.size(); ++i) {
-        and_pred = (and_pred && contents.ptr->predicates[i]);
-    }
-    return and_pred;
+    return predicates;
 }
 
 void ReductionDomain::freeze() {
