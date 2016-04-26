@@ -151,12 +151,12 @@ LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\/
 
 UNAME = $(shell uname)
 
-TEST_LD_FLAGS=$(LLVM_LD_FLAGS) -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
 TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS)
+TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
