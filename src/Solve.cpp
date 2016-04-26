@@ -829,6 +829,19 @@ class SolveForInterval : public IRVisitor {
         cond.accept(this);
     }
 
+    // Other unhandled sources of bools
+    void visit(const Cast *op) {
+        fail();
+    }
+
+    void visit(const Load *op) {
+        fail();
+    }
+
+    void visit(const Call *op) {
+        fail();
+    }
+
 public:
     Interval result;
 
