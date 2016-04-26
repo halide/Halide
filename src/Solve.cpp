@@ -750,17 +750,25 @@ class SolveForInterval : public IRVisitor {
             // Rewrite (max(a, b) <= c) <==> (a <= c && (b <= c || a >= b))
             // Also allow re-solving the new equations.
             Expr a = max_a->a, b = max_a->b, c = le->b;
-            Expr cond = (a <= c) && (b <= c || a >= b);
-            already_solved = false;
-            cond.accept(this);
-            already_solved = true;
+            Expr cond = simplify((a <= c) && (b <= c || a >= b));
+            if (equal(cond, le)) {
+                fail();
+            } else {
+                already_solved = false;
+                cond.accept(this);
+                already_solved = true;
+            }
         } else if (const Min *min_a = le->a.as<Min>()) {
             // Rewrite (min(a, b) <= c) <==> (a <= c || (b <= c && a >= b))
             Expr a = min_a->a, b = min_a->b, c = le->b;
-            Expr cond = (a <= c) || (b <= c && a >= b);
-            already_solved = false;
-            cond.accept(this);
-            already_solved = true;
+            Expr cond = simplify((a <= c) || (b <= c && a >= b));
+            if (equal(cond, le)) {
+                fail();
+            } else {
+                already_solved = false;
+                cond.accept(this);
+                already_solved = true;
+            }
         } else {
             fail();
         }
