@@ -21,13 +21,38 @@ using std::pair;
 using std::make_pair;
 
 namespace {
-// A structure representing a containing LetStmt or For loop. Used in
-// build_provide_loop_nest below.
+// A structure representing a containing LetStmt, IfThenElse, or For
+// loop. Used in build_provide_loop_nest below.
 struct Container {
-    int dim_idx; // index in the dims list. -1 for let statements.
+    enum Type {For, Let, If};
+    Type type;
+    // If it's a for loop, the index in the dims list.
+    int dim_idx;
     string name;
     Expr value;
 };
+}
+
+class ContainsImpureCall : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    bool result = false;
+    ContainsImpureCall() {}
+};
+
+bool contains_impure_call(const Expr &expr) {
+    ContainsImpureCall is_not_pure;
+    expr.accept(&is_not_pure);
+    return is_not_pure.result;
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -269,22 +294,57 @@ Stmt build_provide_loop_nest(Function f,
     // Put the desired loop nest into the containers vector.
     for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = s.dims()[i];
-        Container c = {i, prefix + dim.var, Expr()};
+        Container c = {Container::For, i, prefix + dim.var, Expr()};
         nest.push_back(c);
     }
 
     // Strip off the lets into the containers vector.
     while (const LetStmt *let = stmt.as<LetStmt>()) {
-        Container c = {-1, let->name, let->value};
+        Container c = {Container::Let, 0, let->name, let->value};
         nest.push_back(c);
         stmt = let->body;
     }
 
+    // Put all the reduction domain predicate into the containers vector.
+    int n_predicates = 0;
+    if (rdom.defined()) {
+        vector<Expr> predicates = rdom.split_predicate();
+        n_predicates = predicates.size();
+        for (Expr pred : predicates) {
+            pred = qualify(prefix, pred);
+            Container c = {Container::If, 0, "", pred};
+            nest.push_back(c);
+        }
+    }
+
     // Resort the containers vector so that lets are as far outwards
     // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)s.dims().size(); i < (int)nest.size(); i++) {
+    for (int i = (int)s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
+        internal_assert(nest[i].type == Container::Let);
+
+        for (int j = i-1; j >= 0; j--) {
+            // Try to push it up by one.
+            internal_assert(nest[j+1].value.defined());
+            if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
+                std::swap(nest[j+1], nest[j]);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Sort the predicate guards so they are as far outwards as possible.
+    for (int i = (int)nest.size() - n_predicates; i < (int)nest.size(); i++) {
+        // Only push up LetStmts.
+        internal_assert(nest[i].value.defined());
+        internal_assert(nest[i].type == Container::If);
+
+        // Cannot lift out the predicate guard if it contains call to non-pure function
+        if (contains_impure_call(nest[i].value)) {
+            continue;
+        }
 
         for (int j = i-1; j >= 0; j--) {
             // Try to push it up by one.
@@ -299,9 +359,14 @@ Stmt build_provide_loop_nest(Function f,
 
     // Rewrap the statement in the containing lets and fors.
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
-        if (nest[i].value.defined()) {
+        if (nest[i].type == Container::Let) {
+            internal_assert(nest[i].value.defined());
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
+        } else if (nest[i].type == Container::If) {
+            internal_assert(nest[i].value.defined());
+            stmt = IfThenElse::make(likely(nest[i].value), stmt, Stmt());
         } else {
+            internal_assert(nest[i].type == Container::For);
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
@@ -550,13 +615,14 @@ vector<Stmt> build_update(Function f) {
             Expr v = r.values[i];
             v = qualify(prefix, v);
             values[i] = v;
+            debug(3) << "Update value " << i << " = " << v << "\n";
         }
 
         for (size_t i = 0; i < r.args.size(); i++) {
             Expr s = r.args[i];
             s = qualify(prefix, s);
             site[i] = s;
-            debug(2) << "Update site " << i << " = " << s << "\n";
+            debug(3) << "Update site " << i << " = " << s << "\n";
         }
 
         Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
@@ -1139,37 +1205,6 @@ class RemoveLoopsOverOutermost : public IRMutator {
     }
 };
 
-
-class PropagateLoopDeviceAPI : public IRMutator {
-    using IRMutator::visit;
-
-    DeviceAPI for_device;
-
-    void visit(const For *op) {
-        DeviceAPI save_device = for_device;
-        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
-
-        Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
-        Stmt body = mutate(op->body);
-
-        if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
-            body.same_as(op->body) &&
-            for_device == op->device_api) {
-            stmt = op;
-        } else {
-            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
-        }
-
-        for_device = save_device;
-    }
-
-public:
-    PropagateLoopDeviceAPI() : for_device(DeviceAPI::Host) {
-    }
-};
-
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
@@ -1213,9 +1248,6 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost().mutate(s);
-
-    // And finally we can propagate loop device types.
-    s = PropagateLoopDeviceAPI().mutate(s);
 
     return s;
 

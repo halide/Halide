@@ -302,6 +302,7 @@ set(HEADER_FILES
   Substitute.h
   Target.h
   Tracing.h
+  TrimNoOps.h
   Tuple.h
   Type.h
   UnifyDuplicateLets.h
@@ -444,6 +445,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Substitute.cpp
   Target.cpp
   Tracing.cpp
+  TrimNoOps.cpp
   Tuple.cpp
   Type.cpp
   UnifyDuplicateLets.cpp

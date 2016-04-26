@@ -60,9 +60,7 @@ ostream &operator<<(ostream &stream, const Module &m) {
 ostream &operator<<(ostream &out, const DeviceAPI &api) {
     switch (api) {
     case DeviceAPI::Host:
-        break;
-    case DeviceAPI::Parent:
-        out << "<Parent>";
+    case DeviceAPI::None:
         break;
     case DeviceAPI::Default_GPU:
         out << "<Default_GPU>";

@@ -126,12 +126,16 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
+                /*if (r.domain.defined()) {
+                    exprs.push_back(r.domain.predicate());
+                }*/
             }
         }
 
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            string producing_stage,
+                           string loop_level,
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
@@ -266,21 +270,33 @@ public:
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
                 string prefix = name + ".s" + std::to_string(stage) + ".";
+
+                LoopLevel compute_at = func.schedule().compute_level();
+                LoopLevel store_at = func.schedule().store_level();
+
                 for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
-                    const Bound &bound = func.schedule().bounds()[i];
+                    Bound bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_required = Variable::make(Int(32), min_var);
                     Expr max_required = Variable::make(Int(32), max_var);
 
-                    Expr min_bound = bound.min;
-                    if (!min_bound.defined()) {
-                        min_bound = min_required;
+                    // If the Func is compute_at some inner loop, and
+                    // only extent is bounded, then the min could
+                    // actually move around, which makes the extent
+                    // bound not actually useful for determining the
+                    // max required from the point of view of
+                    // producers.
+                    if (bound.min.defined() ||
+                        compute_at.is_root() ||
+                        (compute_at.match(loop_level) &&
+                         store_at.match(loop_level))) {
+                        if (!bound.min.defined()) {
+                            bound.min = min_required;
+                        }
+                        s = LetStmt::make(min_var, bound.min, s);
+                        s = LetStmt::make(max_var, bound.min + bound.extent - 1, s);
                     }
-                    Expr max_bound = (min_bound + bound.extent) - 1;
-
-                    s = LetStmt::make(min_var, min_bound, s);
-                    s = LetStmt::make(max_var, max_bound, s);
 
                     // Save the unbounded values to use in bounds-checking assertions
                     s = LetStmt::make(min_var + "_unbounded", min_required, s);
@@ -556,11 +572,24 @@ public:
 
             } else {
                 const vector<Expr> &exprs = consumer.exprs;
-                for (size_t j = 0; j < exprs.size(); j++) {
-                    map<string, Box> new_boxes = boxes_required(exprs[j], scope, func_bounds);
-                    for (const pair<string, Box> &i : new_boxes) {
-                        merge_boxes(boxes[i.first], i.second);
+                // We wrap the consumer exprs inside a "dummy" Call stmt so that we can take advantage
+                // of the IfThenElse stmt handler inside boxes_required() to determine the appropriate
+                // box bound size given some predicate on the RDom. Otherwise, we will need to update
+                // the scope to take into account of the predicate.
+                Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
+                if (consumer.stage > 0) {
+                    const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
+                    if (r.domain.defined()) {
+                        vector<Expr> predicates = r.domain.split_predicate();
+                        for (const Expr &pred : predicates) {
+                            wrapped = IfThenElse::make(likely(pred), wrapped);
+                        }
                     }
+                }
+
+                map<string, Box> new_boxes = boxes_required(wrapped, scope, func_bounds);
+                for (const pair<string, Box> &i : new_boxes) {
+                    merge_boxes(boxes[i.first], i.second);
                 }
             }
 
@@ -588,6 +617,7 @@ public:
                     }
 
                     // Dump out the region required of each stage for debugging.
+
                     /*
                     debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
@@ -597,6 +627,7 @@ public:
                     }
                     debug(0) << "\n";
                     */
+
 
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
                     producer.consumers.push_back((int)i);
@@ -707,7 +738,7 @@ public:
                     for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                         bounds_needed[stages[i].consumers[j]] = true;
                     }
-                    body = stages[i].define_bounds(body, stage_name, in_stages, in_pipeline, inner_productions);
+                    body = stages[i].define_bounds(body, stage_name, op->name, in_stages, in_pipeline, inner_productions);
                 }
             }
 
@@ -804,7 +835,7 @@ Stmt bounds_inference(Stmt s,
     }
 
     // Add an outermost bounds inference marker
-    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
+    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
     s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
