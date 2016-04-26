@@ -641,11 +641,13 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
-        bool const_condition = !expr_uses_vars(op->condition, scope);
+        bool const_scalar_condition =
+            (op->condition.type().is_scalar() &&
+             !expr_uses_vars(op->condition, scope));
 
         if (min_a.same_as(min_b)) {
             min = min_a;
-        } else if (const_condition) {
+        } else if (const_scalar_condition) {
             min = select(op->condition, min_a, min_b);
         } else {
             min = Min::make(min_a, min_b);
@@ -653,7 +655,7 @@ private:
 
         if (max_a.same_as(max_b)) {
             max = max_a;
-        } else if (const_condition) {
+        } else if (const_scalar_condition) {
             max = select(op->condition, max_a, max_b);
         } else {
             max = Max::make(max_a, max_b);
