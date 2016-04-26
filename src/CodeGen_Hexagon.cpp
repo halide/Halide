@@ -743,7 +743,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 }
 
-Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx) {
+Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     llvm::Type *idx_ty = idx->getType();
@@ -781,11 +781,10 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx) {
     // operations.
 
     // Split up the LUT into native vectors.
-    int lut_elements = lut_ty->getVectorNumElements();
     int native_idx_elements = native_vector_bits()/8;
 
     vector<Value *> native_lut;
-    for (int i = 0; i < lut_elements; i += native_lut_elements) {
+    for (int i = 0; i <= max_index; i += native_lut_elements) {
         native_lut.push_back(slice_vector(lut, i, native_lut_elements));
     }
     internal_assert(!native_lut.empty());
@@ -854,10 +853,17 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const std::vector<int> &indices) {
     // at compile time.
     vector<Constant *>llvm_indices;
     llvm_indices.reserve(indices.size());
+    int min_index = lut->getType()->getVectorNumElements();
+    int max_index = 0;
     for (int i : indices) {
+        if (i != -1) {
+            min_index = std::min(min_index, i);
+            max_index = std::max(max_index, i);
+        }
         llvm_indices.push_back(ConstantInt::get(i8, i));
     }
-    return vlut(lut, ConstantVector::get(llvm_indices));
+
+    return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
 }
 
 namespace {
