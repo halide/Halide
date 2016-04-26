@@ -42,6 +42,7 @@
 #include "StorageFolding.h"
 #include "Substitute.h"
 #include "Tracing.h"
+#include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
@@ -216,6 +217,10 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = partition_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
+
+    debug(1) << "Trimming loops to the region over which they do something...\n";
+    s = trim_no_ops(s);
+    debug(2) << "Lowering after loop trimming:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
