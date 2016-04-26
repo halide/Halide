@@ -29,14 +29,12 @@ class WrapFuncCalls : public IRMutator {
     const Function wrapper;
 
     void visit(const Call *c) {
-        debug(0) << "VISIT CALL:" << c->name << "\n";
-        debug(0) << "....SHOULD replace :" << func.name() << " with " << wrapper.name() << "\n";
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
         if ((c->call_type == Call::Halide) && func.same_as(c->func)) {
-            debug(0) << "....replace :" << func.name() << " with " << wrapper.name() << "\n";
-            expr = Call::make(c->type, c->name, c->args, c->call_type,
+            internal_assert(c->name == func.name()) << "Should have had the same name\n";
+            expr = Call::make(c->type, wrapper.name(), c->args, c->call_type,
                               wrapper, c->value_index, c->image, c->param);
         }
     }
@@ -122,35 +120,83 @@ struct FunctionContents {
     }
 
     // Replace every call to 'f' with call to 'wrapper'
-    void wrap_func_calls(const Function &f, const Function &wrapper) {
-        debug(0) << "Func \"" << name() << "\": Replacing call to \"" << f.name() << "\" with " << " \"" << wrapper.name() << "\"\n";
-        WrapFuncCalls wrap_calls(f, wrapper);
-
+    void mutate(IRMutator *mutator) {
         for (size_t i = 0; i < values.size(); ++i) {
-            values[i] = wrap_calls.mutate(values[i]);
+            values[i] = mutator->mutate(values[i]);
         }
 
-        for (UpdateDefinition update : updates) {
+        // Mutate schedule
+        for (Split &s : schedule.splits()) {
+            if (s.factor.defined()) {
+                s.factor = mutator->mutate(s.factor);
+            }
+        }
+        for (Bound &b : schedule.bounds()) {
+            if (b.min.defined()) {
+                b.min = mutator->mutate(b.min);
+            }
+            if (b.extent.defined()) {
+                b.extent = mutator->mutate(b.extent);
+            }
+        }
+        for (Specialization &s : schedule.specializations()) {
+            s.condition = mutator->mutate(s.condition);
+        }
+
+        // Mutate update definition
+        for (UpdateDefinition &update : updates) {
             for (size_t i = 0; i < update.values.size(); ++i) {
-                update.values[i] = wrap_calls.mutate(update.values[i]);
+                update.values[i] = mutator->mutate(update.values[i]);
+            }
+            for (size_t i = 0; i < update.args.size(); ++i) {
+                update.args[i] = mutator->mutate(update.args[i]);
             }
 
             if (update.domain.defined()) {
-                for (ReductionVariable rv : update.domain.domain()) {
-                    rv.min.accept(visitor);
-                    rv.extent.accept(visitor);
-                }
+                // We don't need to mutate the domain since it can't have
+                // function call in the domain expression.
+                update.domain.set_predicate(mutator->mutate(update.domain.predicate()));
             }
 
-            update.schedule.accept(visitor);
+            // Mutate update definition's schedule
+            for (Split &s : update.schedule.splits()) {
+                if (s.factor.defined()) {
+                    s.factor = mutator->mutate(s.factor);
+                }
+            }
+            for (Bound &b : update.schedule.bounds()) {
+                if (b.min.defined()) {
+                    b.min = mutator->mutate(b.min);
+                }
+                if (b.extent.defined()) {
+                    b.extent = mutator->mutate(b.extent);
+                }
+            }
+            for (Specialization &s : update.schedule.specializations()) {
+                s.condition = mutator->mutate(s.condition);
+            }
         }
 
         if (!extern_function_name.empty()) {
-            for (ExternFuncArgument i : extern_arguments) {
+            for (ExternFuncArgument &i : extern_arguments) {
                 if (i.is_func()) {
-                    i.func.ptr->accept(visitor);
+                    i.func.ptr->mutate(mutator);
                 } else if (i.is_expr()) {
-                    i.expr.accept(visitor);
+                    i.expr = mutator->mutate(i.expr);
+                }
+            }
+        }
+
+        for (Parameter &i : output_buffers) {
+            for (size_t j = 0; j < args.size() && j < 4; j++) {
+                if (i.min_constraint(j).defined()) {
+                    i.set_min_constraint(j, mutator->mutate(i.min_constraint(j)));
+                }
+                if (i.stride_constraint(j).defined()) {
+                    i.set_stride_constraint(j, mutator->mutate(i.stride_constraint(j)));
+                }
+                if (i.extent_constraint(j).defined()) {
+                    i.set_extent_constraint(j, mutator->mutate(i.extent_constraint(j)));
                 }
             }
         }
@@ -302,7 +348,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
             << "Undefined expression in right-hand-side of definition.\n";
     }
 
-    if (values.size() == 1) {
+    /*if (values.size() == 1) {
         const Call *call = values[0].as<Call>();
         if (call && (call->call_type == Call::Halide) && (call->args.size() == args.size())) {
             bool print_func = (call->args.size() == args.size());
@@ -325,7 +371,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
                 std::cout << ") = " << values[0] << "\n";
             }
         }
-    }
+    }*/
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
@@ -742,7 +788,10 @@ bool Function::frozen() const {
 }
 
 Function &Function::wrap_func_calls(const Function &f, const Function &wrapper) {
-    contents.ptr->wrap_func_calls(f, wrapper);
+    debug(3) << "Func \"" << name() << "\": Replacing call to \"" << f.name()
+             << "\" with " << " \"" << wrapper.name() << "\"\n";
+    WrapFuncCalls wrap_calls(f, wrapper);
+    contents.ptr->mutate(&wrap_calls);
     return *this;
 }
 

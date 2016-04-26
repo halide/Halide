@@ -232,6 +232,7 @@ public:
      * true. See \ref Func::specialize */
     // @{
     const std::vector<Specialization> &specializations() const;
+    std::vector<Specialization> &specializations();
     const Specialization &add_specialization(Expr condition);
     //std::vector<Specialization> &specializations();
     // @}
