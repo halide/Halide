@@ -156,7 +156,11 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -f
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS)
-TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
+TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz
+
+ifeq ($(UNAME), Linux)
+TEST_LD_FLAGS += -rdynamic -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
+endif
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -186,7 +190,6 @@ endif
 endif
 
 ifeq ($(UNAME), Linux)
-TEST_CXX_FLAGS += -rdynamic
 ifneq ($(TEST_PTX), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
@@ -609,6 +612,9 @@ endif
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(LIB_DIR)/libHalide.a
 	@-mkdir -p $(BIN_DIR)
 	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LD_FLAGS) $(LLVM_SHARED_LIBS) $(LIBDL) -lz -lpthread -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
+endif
 
 $(INCLUDE_DIR)/Halide.h: $(HEADERS) $(SRC_DIR)/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p $(INCLUDE_DIR)
