@@ -90,6 +90,10 @@ const std::vector<Specialization> &Schedule::specializations() const {
     return contents.ptr->specializations;
 }
 
+std::vector<Specialization> &Schedule::specializations() {
+    return contents.ptr->specializations;
+}
+
 const Specialization &Schedule::add_specialization(Expr condition) {
     Specialization s;
     s.condition = condition;

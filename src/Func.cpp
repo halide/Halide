@@ -863,7 +863,7 @@ void Func::invalidate_cache() {
 
 Func Func::wrap(const Func& f) {
     Func wrapper(f.name() + "_in_" + name());
-    wrapper(args()) = (*this)(args());
+    wrapper(args()) = f(args());
     func.wrap_func_calls(f.func, wrapper.func);
     return wrapper;
 }

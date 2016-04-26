@@ -126,6 +126,10 @@ void ReductionDomain::where(Expr predicate) {
     contents.ptr->predicate = simplify(contents.ptr->predicate && predicate);
 }
 
+void ReductionDomain::set_predicate(Expr predicate) {
+    contents.ptr->predicate = predicate;
+}
+
 Expr ReductionDomain::predicate() const {
     return contents.ptr->predicate;
 }
