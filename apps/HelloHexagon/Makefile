@@ -1,12 +1,16 @@
 include ../support/Makefile.inc
 
+# This app requires a separate toolchain to be built from the Android NDK, 
+# using the make-standalone-toolchain.sh script:
+#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
+#$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
 CXX-host ?= $(CXX)
-CXX-arm-64-android ?= $(ANDROID_NDK_HOME)/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-c++
-CXX-arm-32-android ?= $(ANDROID_NDK_HOME)/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-c++
+CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
+CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-android-c++
 
 CXXFLAGS-host ?=
-CXXFLAGS-arm-64-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm64
-CXXFLAGS-arm-32-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm
+CXXFLAGS-arm-64-android ?=
+CXXFLAGS-arm-32-android ?=
 
 LDFLAGS-host ?= -lpthread -ldl -lm
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie

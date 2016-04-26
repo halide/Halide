@@ -3,8 +3,13 @@
 namespace Halide { namespace Runtime { namespace Internal { namespace Ion {
 
 // Allocate an ION buffer, and map it, returning the mapped pointer.
-WEAK void *ion_alloc(void *user_context, size_t len, int heap_id) {
-    return halide_malloc(user_context, len);
+WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
+    void *ret = halide_malloc(user_context, len);
+    if (ret && out_fd) {
+        *out_fd = -1;
+    }
+
+    return ret;
 }
 
 // Free a previously allocated ION buffer.
