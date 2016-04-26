@@ -1139,37 +1139,6 @@ class RemoveLoopsOverOutermost : public IRMutator {
     }
 };
 
-
-class PropagateLoopDeviceAPI : public IRMutator {
-    using IRMutator::visit;
-
-    DeviceAPI for_device;
-
-    void visit(const For *op) {
-        DeviceAPI save_device = for_device;
-        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
-
-        Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
-        Stmt body = mutate(op->body);
-
-        if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
-            body.same_as(op->body) &&
-            for_device == op->device_api) {
-            stmt = op;
-        } else {
-            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
-        }
-
-        for_device = save_device;
-    }
-
-public:
-    PropagateLoopDeviceAPI() : for_device(DeviceAPI::Host) {
-    }
-};
-
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
@@ -1213,9 +1182,6 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost().mutate(s);
-
-    // And finally we can propagate loop device types.
-    s = PropagateLoopDeviceAPI().mutate(s);
 
     return s;
 
