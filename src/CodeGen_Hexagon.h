@@ -107,7 +107,7 @@ protected:
 
     /** Generate a LUT lookup using vlut instructions. */
     ///@{
-    llvm::Value *vlut(llvm::Value *lut, llvm::Value *indices);
+    llvm::Value *vlut(llvm::Value *lut, llvm::Value *indices, int min_index, int max_index);
     llvm::Value *vlut(llvm::Value *lut, const std::vector<int> &indices);
     ///@}
 
