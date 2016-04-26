@@ -1230,7 +1230,6 @@ private:
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
-
         if (expr_uses_vars(op->condition, scope)) {
             if (!op->else_case.defined()) {
                 // Trim the scope down to represent the fact that the
@@ -1273,10 +1272,22 @@ private:
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
-                        if (lt)       i.max = min(likely_i.max, bi.max - 1);
-                        if (le || eq) i.max = min(likely_i.max, bi.max);
-                        if (gt)       i.min = max(likely_i.min, bi.min + 1);
-                        if (ge || eq) i.min = max(likely_i.min, bi.min);
+                        if (bi.max.defined()) {
+                            if (lt) {
+                                i.max = min(likely_i.max, bi.max - 1);
+                            }
+                            if (le || eq) {
+                                i.max = min(likely_i.max, bi.max);
+                            }
+                        }
+                        if (bi.min.defined()) {
+                            if (gt) {
+                                i.min = max(likely_i.min, bi.min + 1);
+                            }
+                            if (ge || eq) {
+                                i.min = max(likely_i.min, bi.min);
+                            }
+                        }
                         scope.push(var_a->name, i);
                         var_to_pop = var_a->name;
                     } else if (var_b && scope.contains(var_b->name)) {
@@ -1289,10 +1300,22 @@ private:
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
-                        if (gt)       i.max = min(likely_i.max, ai.max - 1);
-                        if (ge || eq) i.max = min(likely_i.max, ai.max);
-                        if (lt)       i.min = max(likely_i.min, ai.min + 1);
-                        if (le || eq) i.min = max(likely_i.min, ai.min);
+                        if (ai.max.defined()) {
+                            if (gt) {
+                                i.max = min(likely_i.max, ai.max - 1);
+                            }
+                            if (ge || eq) {
+                                i.max = min(likely_i.max, ai.max);
+                            }
+                        }
+                        if (ai.min.defined()) {
+                            if (lt) {
+                                i.min = max(likely_i.min, ai.min + 1);
+                            }
+                            if (le || eq) {
+                                i.min = max(likely_i.min, ai.min);
+                            }
+                        }
                         scope.push(var_b->name, i);
                         var_to_pop = var_b->name;
                     }
@@ -1323,7 +1346,7 @@ private:
                 else_boxes.swap(boxes);
             }
 
-            // debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
@@ -1337,7 +1360,7 @@ private:
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
 
-                // debug(0) << " Merging boxes for " << iter->first << "\n";
+                //debug(0) << " Merging boxes for " << i.first << "\n";
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
@@ -1355,7 +1378,6 @@ private:
                 merge_boxes(orig_box, then_box);
             }
         }
-
     }
 
     void visit(const For *op) {
