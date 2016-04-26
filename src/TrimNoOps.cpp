@@ -39,6 +39,29 @@ class StripIdentities : public IRMutator {
     }
 };
 
+/** Check if an Expr loads from the given buffer. */
+class LoadsFromBuffer : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Load *op) {
+        if (op->name == buffer) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    string buffer;
+public:
+    bool result = false;
+    LoadsFromBuffer(const string &b) : buffer(b) {}
+};
+
+bool loads_from_buffer(Expr e, string buf) {
+    LoadsFromBuffer l(buf);
+    e.accept(&l);
+    return l.result;
+}
 
 /** Construct a sufficient condition for the visited stmt to be a no-op. */
 class IsNoOp : public IRVisitor {
@@ -66,6 +89,14 @@ class IsNoOp : public IRVisitor {
             // If the value being stored is the same as the value loaded,
             // this is a no-op
             debug(3) << "Considering store: " << Stmt(op) << "\n";
+
+            // Early-out: There's no way for that to be true if the
+            // RHS does not load from the buffer being stored to.
+            if (!loads_from_buffer(op->value, op->name)) {
+                condition = const_false();
+                return;
+            }
+
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, Buffer(), Parameter());
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
