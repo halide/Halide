@@ -303,7 +303,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::Parent, true};
+        Dim d = {args[i], ForType::Serial, DeviceAPI::None, true};
         contents.ptr->schedule.dims().push_back(d);
         StorageDim sd = {args[i]};
         contents.ptr->schedule.storage_dims().push_back(sd);
@@ -311,7 +311,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
         contents.ptr->schedule.dims().push_back(d);
     }
 
@@ -481,7 +481,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
-            Dim d = {v, ForType::Serial, DeviceAPI::Parent, pure};
+            Dim d = {v, ForType::Serial, DeviceAPI::None, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -489,14 +489,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::Parent, true};
+            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, true};
             r.schedule.dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
         r.schedule.dims().push_back(d);
     }
 
