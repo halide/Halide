@@ -429,7 +429,8 @@ struct Call : public ExprNode<Call> {
         make_float64,
         register_destructor,
         div_round_to_zero,
-        mod_round_to_zero;
+        mod_round_to_zero,
+        slice_vector;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

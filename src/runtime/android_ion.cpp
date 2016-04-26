@@ -102,7 +102,7 @@ struct allocation_record {
 };
 
 // Allocate an ION buffer, and map it, returning the mapped pointer.
-WEAK void *ion_alloc(void *user_context, size_t len, int heap_id) {
+WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
     int dev_ion = -1;
     int result = halide_ion_get_descriptor(user_context, &dev_ion);
     if (result != 0) return NULL;
@@ -135,6 +135,11 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id) {
     mem = reinterpret_cast<char *>(mem) + align;
     halide_assert(user_context, sizeof(allocation_record) <= align);
     memcpy(reinterpret_cast<allocation_record *>(mem) - 1, &rec, sizeof(rec));
+
+    if (out_fd) {
+        *out_fd = buf_fd;
+    }
+
     return mem;
 }
 

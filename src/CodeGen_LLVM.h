@@ -92,8 +92,8 @@ protected:
      * appropriate cleanup code. */
     // @{
     virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
-                            const std::string &extern_name, const std::vector<Argument> &args);
-    virtual void end_func(const std::vector<Argument> &args);
+                            const std::string &extern_name, const std::vector<LoweredArgument> &args);
+    virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
@@ -484,7 +484,7 @@ private:
      * as extern "C" linkage.
      */
     llvm::Constant* embed_metadata(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<Argument> &args);
+        const std::string &function_name, const std::vector<LoweredArgument> &args);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);

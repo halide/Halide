@@ -6,10 +6,17 @@
 #include "ModulusRemainder.h"
 #include "Simplify.h"
 
+using std::vector;
+
 namespace Halide {
 namespace Internal {
 
-using std::vector;
+namespace {
+
+Expr slice_vector(Expr vec, Expr start, Expr stride, int lanes) {
+    return Call::make(vec.type().with_lanes(lanes), Call::slice_vector,
+                      { vec, start, stride, lanes }, Call::PureIntrinsic);
+}
 
 class AlignLoads : public IRMutator {
 public:
@@ -97,11 +104,7 @@ private:
             Expr dense = make_load(op, dense_index);
 
             // Shuffle the dense load.
-            vector<Expr> args = { dense };
-            for (int i = 0; i < lanes; ++i) {
-                args.push_back(i*stride + shift);
-            }
-            expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
+            expr = slice_vector(dense, shift, stride, lanes);
             return;
         }
 
@@ -113,11 +116,7 @@ private:
             Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes));
 
             // Slice the native load.
-            vector<Expr> args = { native_load };
-            for (int i = 0; i < lanes; i++) {
-                args.push_back(i);
-            }
-            expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
+            expr = slice_vector(native_load, 0, 1, lanes);
             return;
         } else if (lanes > native_lanes) {
             // This load is larger than a native vector. Load native
@@ -137,11 +136,7 @@ private:
             Expr aligned_base = simplify(ramp->base - aligned_offset);
             Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2));
 
-            vector<Expr> args = { aligned_load };
-            for (int i = 0; i < lanes; i++) {
-                args.push_back(aligned_offset + i);
-            }
-            expr = Call::make(op->type, Call::shuffle_vector, args, Call::PureIntrinsic);
+            expr = slice_vector(aligned_load, aligned_offset, 1, lanes);
             return;
         }
         IRMutator::visit(op);
@@ -170,6 +165,8 @@ private:
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
 };
+
+}  // namespace
 
 Stmt align_loads(Stmt s, int alignment) {
     return AlignLoads(alignment).mutate(s);
