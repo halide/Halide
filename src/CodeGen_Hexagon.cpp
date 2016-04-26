@@ -689,6 +689,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             }
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
     } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
@@ -735,9 +736,129 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here.
 
-    return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    if (element_bits <= 16) {
+        return vlut(concat_vectors({a, b}), indices);
+    } else {
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    }
 }
 
+Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx) {
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+    llvm::Type *lut_ty = lut->getType();
+    llvm::Type *idx_ty = idx->getType();
+
+    internal_assert(isa<VectorType>(lut_ty));
+    internal_assert(isa<VectorType>(idx_ty));
+    internal_assert(idx_ty->getScalarSizeInBits() == 8);
+
+    int native_lut_elements = 0;
+    Intrinsic::ID vlut_id = Intrinsic::not_intrinsic;
+    Intrinsic::ID vlut_acc_id = Intrinsic::not_intrinsic;
+    if (lut_ty->getScalarSizeInBits() == 8) {
+        // We can use vlut32.
+        native_lut_elements = 32;
+        vlut_id = IPICK(Intrinsic::hexagon_V6_vlutvvb);
+        vlut_acc_id = IPICK(Intrinsic::hexagon_V6_vlutvvb_oracc);
+    } else {
+        // We can use vlut16. If the LUT has greater than 16 bit
+        // elements, we replicate the LUT indices.
+        int replicate = lut_ty->getScalarSizeInBits() / 16;
+        if (replicate > 1) {
+            // TODO: Reinterpret this as a LUT lookup of 16 bit entries.
+            internal_error << "LUT with greater than 16 bit entries not implemented.\n";
+        }
+        native_lut_elements = 16;
+        vlut_id = IPICK(Intrinsic::hexagon_V6_vlutvwh);
+        vlut_acc_id = IPICK(Intrinsic::hexagon_V6_vlutvwh_oracc);
+    }
+
+    // There are two dimensions in which we need to slice up the
+    // inputs. First, if the index is larger than a native vector, we
+    // need to slice up the operation into native vectors of
+    // indices. Second, the LUT may need to be broken into several
+    // stages, and that may need to be further broken up into vmux
+    // operations.
+
+    // Split up the LUT into native vectors.
+    int lut_elements = lut_ty->getVectorNumElements();
+    int native_idx_elements = native_vector_bits()/8;
+
+    vector<Value *> native_lut;
+    for (int i = 0; i < lut_elements; i += native_lut_elements) {
+        native_lut.push_back(slice_vector(lut, i, native_lut_elements));
+    }
+    internal_assert(!native_lut.empty());
+    llvm::Type *native_lut_ty = native_lut.front()->getType();
+
+    // The vlut instructions work on pairs of LUTs interleaved, with
+    // each lut containing native_lut_elements. We need to interleave
+    // pairs of the native LUTs to make a full set of native LUTs.
+    if (native_lut.size()%2 != 0) {
+        // If there are an odd number of LUTs, add an undef LUT to the end.
+        native_lut.push_back(UndefValue::get(native_lut_ty));
+    }
+    for (int i = 0; i < static_cast<int>(native_lut.size())/2; i++) {
+        native_lut[i] = interleave_vectors({native_lut[2*i + 0], native_lut[2*i + 1]});
+    }
+    native_lut.resize(native_lut.size()/2);
+    native_lut_ty = native_lut.front()->getType();
+
+    llvm::Type *native_result_ty =
+        llvm::VectorType::get(native_lut_ty->getVectorElementType(), native_idx_elements);
+
+    // The result will have the same number of elements as idx.
+    int idx_elements = idx_ty->getVectorNumElements();
+
+    vector<Value *> result;
+    for (int i = 0; i < idx_elements; i += native_idx_elements) {
+        Value *idx_i = slice_vector(idx, i, native_idx_elements);
+
+        Value *result_i;
+        for (int j = 0; j < static_cast<int>(native_lut.size()); j++) {
+            for (int k = 0; k < 2; k++) {
+                if (j == 0 && k == 0) {
+                    result_i = call_intrin_cast(native_result_ty, vlut_id,
+                                                {idx_i, native_lut[j], codegen(2*j + k)});
+                } else {
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
+                                                {result_i, idx_i, native_lut[j], codegen(2*j + k)});
+                }
+            }
+        }
+
+        if (native_result_ty->getScalarSizeInBits() == 16) {
+            // If we used vlut16, the result is a deinterleaved double
+            // vector. Reinterleave it.
+            // TODO: We might be able to do this to the indices
+            // instead of the result. However, I think that requires a
+            // non-native vector width deinterleave, so it's probably
+            // not faster, except where the indices are compile time
+            // constants.
+            result_i = call_intrin(native_result_ty, "halide.hexagon.interleave.vh", {result_i});
+        }
+
+        result.push_back(result_i);
+    }
+
+    return slice_vector(concat_vectors(result), 0, idx_elements);
+}
+
+Value *CodeGen_Hexagon::vlut(Value *lut, const std::vector<int> &indices) {
+    // TODO: We can take advantage of the fact that we know the
+    // indices at compile time to implement a few
+    // optimizations. First, we can avoid running the vlut
+    // instructions for ranges of the LUT for which we know we don't
+    // have any indices. This wil happen often for strided
+    // ramps. Second, we can do the shuffling of the indices necessary
+    // at compile time.
+    vector<Constant *>llvm_indices;
+    llvm_indices.reserve(indices.size());
+    for (int i : indices) {
+        llvm_indices.push_back(ConstantInt::get(i8, i));
+    }
+    return vlut(lut, ConstantVector::get(llvm_indices));
+}
 
 namespace {
 std::string type_suffix(Type type, bool signed_variants = true) {
