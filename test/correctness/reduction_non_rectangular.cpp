@@ -32,6 +32,27 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     return 0;
 }
 
+int func_call_bound_trace(void *user_context, const halide_trace_event *e) {
+    std::string buffer_name = "g_" + std::to_string(buffer_index);
+    if (std::string(e->func) == buffer_name) {
+        if (e->event == halide_trace_produce) {
+            run_tracer = true;
+        } else if (e->event == halide_trace_consume) {
+            run_tracer = false;
+        }
+
+        if (run_tracer && (e->event == halide_trace_store)) {
+            if (!((e->coordinates[0] >= 10) && (e->coordinates[0] <= 109))) {
+                printf("Bounds on store of g were supposed to be x=[10, 109]\n"
+                       "Instead it is: %d\n", e->coordinates[0]);
+                exit(-1);
+            }
+            niters++;
+        }
+    }
+    return 0;
+}
+
 int box_bound_trace(void *user_context, const halide_trace_event *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
@@ -157,18 +178,26 @@ int func_call_inside_bound_test(int index) {
     f(x, y) = x + y;
 
     RDom r(0, 100, 0, 100, "r");
-    r.where(r.x < g(r.y));
+    r.where(r.x < g(r.y+10));
     f(r.x, r.y) += 1;
 
+    // Expect g to be computed over x=[10, 109].
     g.compute_root();
 
+    f.set_custom_trace(&func_call_bound_trace);
+    g.trace_stores();
+    g.trace_realizations();
+
+    run_tracer = false;
+    niters_expected = 100;
+    niters = 0;
     Image<int> im = f.realize(200, 200);
 
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
             if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += (x < y) ? 1 : 0;
+                correct += (x < y+10) ? 1 : 0;
             }
             if (im(x, y) != correct) {
                 printf("im(%d, %d) = %d instead of %d\n",
@@ -176,6 +205,11 @@ int func_call_inside_bound_test(int index) {
                 return -1;
             }
         }
+    }
+    if (niters_expected != niters) {
+        printf("func_call_inside_bound_test : Expect niters on g to be %d but got %d instead\n",
+               niters_expected, niters);
+        return -1;
     }
     return 0;
 }
@@ -345,7 +379,7 @@ int intermediate_computed_if_param_test(int index) {
             }
         }
         if (niters_expected != niters) {
-            printf("two_linear_bounds_test : Expect niters on g to be %d but got %d instead\n",
+            printf("intermediate_computed_if_param_test : Expect niters on g to be %d but got %d instead\n",
                    niters_expected, niters);
             return -1;
         }
@@ -369,7 +403,7 @@ int intermediate_computed_if_param_test(int index) {
             }
         }
         if (niters_expected != niters) {
-            printf("two_linear_bounds_test : Expect niters on g to be %d but got %d instead\n",
+            printf("intermediate_computed_if_param_test : Expect niters on g to be %d but got %d instead\n",
                    niters_expected, niters);
             return -1;
         }
@@ -650,7 +684,7 @@ int gpu_intermediate_computed_if_param_test(int index) {
 
 
 int main(int argc, char **argv) {
-    /*printf("Running equality inequality bound test\n");
+    printf("Running equality inequality bound test\n");
     if (equality_inequality_bound_test(0) != 0) {
         return -1;
     }
@@ -724,11 +758,6 @@ int main(int argc, char **argv) {
 
     printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
     if (gpu_intermediate_computed_if_param_test(12) != 0) {
-        return -1;
-    }*/
-
-    printf("Running two linear bounds test\n");
-    if (two_linear_bounds_test(5) != 0) {
         return -1;
     }
 
