@@ -1224,6 +1224,15 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
             return;
+        } else if (op->is_intrinsic("dynamic_shuffle")) {
+            internal_assert(op->args.size() == 4);
+            const int64_t *min_index = as_const_int(op->args[2]);
+            const int64_t *max_index = as_const_int(op->args[3]);
+            internal_assert(min_index && max_index);
+            Value *lut = codegen(op->args[0]);
+            Value *idx = codegen(op->args[1]);
+            value = vlut(lut, idx, *min_index, *max_index);
+            return;
         }
     }
     CodeGen_Posix::visit(op);
