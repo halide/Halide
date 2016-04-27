@@ -22,24 +22,26 @@ using std::set;
 using std::map;
 
 // Replace all calls to wrapped functions with their wrappers.
-class WrapFuncCalls : public IRMutator {
+class WrapCalls : public IRMutator {
     using IRMutator::visit;
 
-    const Function func;
+    const std::string wrapped;
     const Function wrapper;
+    Call::CallType call_type; // Either ImageParam or Halide func
 
     void visit(const Call *c) {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
-        if ((c->call_type == Call::Halide) && func.same_as(c->func)) {
-            internal_assert(c->name == func.name()) << "Should have had the same name\n";
-            expr = Call::make(c->type, wrapper.name(), c->args, c->call_type,
-                              wrapper, c->value_index, c->image, c->param);
+        if ((c->call_type == call_type) && (wrapped == c->name)) {
+            expr = Call::make(wrapper, c->args, c->value_index);
         }
     }
 public:
-    WrapFuncCalls(const Function &f, const Function &w) : func(f), wrapper(w) {}
+    WrapCalls(const std::string &wrapped, const Function &wrapper, bool is_image)
+        : wrapped(wrapped)
+        , wrapper(wrapper)
+        , call_type(is_image ? Call::Image : Call::Halide) {}
 };
 
 struct FunctionContents {
@@ -347,31 +349,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
     }
-
-    /*if (values.size() == 1) {
-        const Call *call = values[0].as<Call>();
-        if (call && (call->call_type == Call::Halide) && (call->args.size() == args.size())) {
-            bool print_func = (call->args.size() == args.size());
-            for (size_t i = 0; print_func && i < call->args.size(); ++i) {
-                const Variable *var = call->args[i].as<Variable>();
-                if (!var) {
-                    print_func = false;
-                } else if (var->name != args[i]) {
-                    print_func = false;
-                }
-            }
-            if (print_func) {
-                std::cout << "********************SIMPLE ASSIGNMENT: " << name() << "(";
-                for (size_t i = 0; i < call->args.size(); ++i) {
-                    std::cout << call->args[i];
-                    if (i != call->args.size()-1) {
-                        std::cout << ", ";
-                    }
-                }
-                std::cout << ") = " << values[0] << "\n";
-            }
-        }
-    }*/
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
@@ -787,10 +764,11 @@ bool Function::frozen() const {
     return contents.ptr->frozen;
 }
 
-Function &Function::wrap_func_calls(const Function &f, const Function &wrapper) {
-    debug(3) << "Func \"" << name() << "\": Replacing call to \"" << f.name()
+Function &Function::wrap_calls(const std::string &wrapped,
+                               const Function &wrapper, bool is_image) {
+    debug(3) << "Func \"" << name() << "\": Replacing call to \"" << wrapped
              << "\" with " << " \"" << wrapper.name() << "\"\n";
-    WrapFuncCalls wrap_calls(f, wrapper);
+    WrapCalls wrap_calls(wrapped, wrapper, is_image);
     contents.ptr->mutate(&wrap_calls);
     return *this;
 }

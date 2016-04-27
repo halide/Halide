@@ -861,10 +861,22 @@ void Func::invalidate_cache() {
     }
 }
 
-Func Func::wrap(const Func& f) {
-    Func wrapper(f.name() + "_in_" + name());
-    wrapper(args()) = f(args());
-    func.wrap_func_calls(f.func, wrapper.func);
+Func Func::wrap(const Func& wrapped) {
+    string wrapper_name = wrapped.name() + "_in_" + name();
+    wrapper_name = replace_all(wrapper_name, "$", "");
+    Func wrapper(wrapper_name);
+    wrapper(wrapped.args()) = wrapped(wrapped.args());
+    func.wrap_calls(wrapped.name(), wrapper.func, false);
+    return wrapper;
+}
+
+Func Func::wrap(const ImageParam& wrapped) {
+    internal_assert(wrapped.defined()) << "Trying to wrap undefined ImageParam\n";
+    string wrapper_name = wrapped.name() + "_in_" + name();
+    wrapper_name = replace_all(wrapper_name, "$", "");
+    Func wrapper(wrapper_name);
+    wrapper(_) = wrapped(_);
+    func.wrap_calls(wrapped.name(), wrapper.func, true);
     return wrapper;
 }
 
