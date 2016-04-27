@@ -6,7 +6,8 @@
 
 #include "../support/benchmark.h"
 
-#include "pipeline.h"
+#include "pipeline_cpu.h"
+#include "pipeline_hvx64.h"
 
 #include "HalideRuntimeHexagonHost.h"
 
@@ -32,6 +33,18 @@ T clamp(T x, T min, T max) {
 }
 
 int main(int argc, char **argv) {
+    int (*pipeline)(buffer_t *, buffer_t*);
+    if (strcmp(argv[1], "cpu") == 0) {
+        pipeline = pipeline_cpu;
+        printf("Using CPU schedule\n");
+    } else if (strcmp(argv[1], "hvx64") == 0) {
+        pipeline = pipeline_hvx64;
+        printf("Using HVX 64 schedule\n");
+    } else {
+        printf("Unknown schedule, valid schedules are cpu or hvx64\n");
+        return -1;
+    }
+
     const int W = 1024;
     const int H = 1024;
 
@@ -59,7 +72,7 @@ int main(int argc, char **argv) {
     }
 
     printf("Running pipeline...\n");
-    double time = benchmark(20, 1, [&]() {
+    double time = benchmark(10, 10, [&]() {
         int result = pipeline(&in, &out);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);

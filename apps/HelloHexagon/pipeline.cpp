@@ -23,8 +23,6 @@ int main(int argc, char **argv) {
     // Apply a boundary condition to the input.
     Func input_bounded = BoundaryConditions::repeat_edge(input);
 
-    input_bounded.compute_root();
-
     // Implement this as a separable blur in y followed by x.
     Func blur_y("blur_y");
     blur_y(x, y, c) = blur5(input_bounded(x, y - 2, c),
@@ -57,7 +55,8 @@ int main(int argc, char **argv) {
         blur.compute_root()
             .hexagon()
             .split(x, xo, xi, vector_size*4, TailStrategy::RoundUp)
-            .vectorize(xi, vector_size);
+            .vectorize(xi, vector_size)
+            .parallel(y, 16);
         blur_y.compute_at(blur, xo)
             .vectorize(x, vector_size, TailStrategy::RoundUp);
 
@@ -74,21 +73,22 @@ int main(int argc, char **argv) {
             input.set_stride(i, (input.stride(i)/vector_size)*vector_size);
             blur_buffer.set_stride(i, (blur_buffer.stride(i)/vector_size)*vector_size);
         }
-
-        // Hack until the compute_root on input_bounded can be removed.
-        input_bounded.align_storage(input_bounded.args()[0], vector_size);
     } else {
         const int vector_size = target.natural_vector_size<uint8_t>();
+
         blur.compute_root()
+            .parallel(y, 16)
             .vectorize(x, vector_size);
         blur_y.compute_at(blur, y)
             .vectorize(x, vector_size);
     }
 
-    blur.compile_to_header("pipeline.h", {input}, "pipeline");
+    std::stringstream hdr;
+    hdr << argv[2] << ".h";
+    blur.compile_to_header(hdr.str(), {input}, argv[2], target);
     std::stringstream obj;
-    obj << "pipeline-" << argv[1] << ".o";
-    blur.compile_to_object(obj.str(), {input}, "pipeline", target);
+    obj << argv[1] << ".o";
+    blur.compile_to_object(obj.str(), {input}, argv[2], target);
 
     return 0;
 }

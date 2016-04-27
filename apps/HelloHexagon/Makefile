@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-# This app requires a separate toolchain to be built from the Android NDK, 
+# This app requires a separate toolchain to be built from the Android NDK,
 # using the make-standalone-toolchain.sh script:
 #$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
 #$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
@@ -22,16 +22,20 @@ pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) pipeline.cpp -g $(LIB_HALIDE) -o pipeline \
 	$(LDFLAGS) $(LLVM_SHARED_LIBS)
 
-pipeline-%.o: pipeline
-	HL_TARGET=$*-debug-hvx_64 ./pipeline $*
+pipeline_cpu-%.o: pipeline
+	HL_TARGET=$* ./pipeline pipeline_cpu-$* pipeline_cpu
 
-process-%: process.cpp pipeline-%.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline-$*.o -o process-$* $(LDFLAGS-$*)
+pipeline_hvx64-%.o: pipeline
+	HL_TARGET=$*-debug-hvx_64 ./pipeline pipeline_hvx64-$* pipeline_hvx64
+
+process-%: process.cpp pipeline_cpu-%.o pipeline_hvx64-%.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline_cpu-$*.o pipeline_hvx64-$*.o -o process-$* $(LDFLAGS-$*)
 
 run-%: process-%
 	adb push process-$* /data/
 	adb shell chmod +x /data/process-$*
-	adb shell /data/process-$*
+	adb shell /data/process-$* cpu
+	adb shell /data/process-$* hvx64
 
 clean:
 	rm -f process-* pipeline-*.o pipeline pipeline.h
