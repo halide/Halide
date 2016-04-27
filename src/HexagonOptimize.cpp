@@ -2,7 +2,9 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRMatch.h"
+#include "IREquality.h"
 #include "ExprUsesVar.h"
+#include "CSE.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Scope.h"
@@ -814,28 +816,66 @@ private:
     using IRMutator::visit;
 };
 
+// Find a conservative upper bound of an expression.
+class UpperBound : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Sub *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        const Min *min_a = a.as<Min>();
+        const Min *min_b = b.as<Min>();
+        const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
+
+        if (max_a && max_b) {
+            if (equal(max_a->b, max_b->b)) {
+                expr = mutate(simplify(max_a->a - max_b->a));
+                return;
+            }
+        }
+
+        if (min_a && min_b) {
+            if (equal(min_a->b, min_b->b)) {
+                expr = mutate(simplify(min_a->a - min_b->a));
+                return;
+            }
+        }
+
+        if (!a.same_as(op->a) || !b.same_as(op->b)) {
+            expr = Sub::make(a, b);
+        } else {
+            expr = op;
+        }
+    }
+};
+
+Expr upper_bound(Expr x) {
+    return UpperBound().mutate(x);
+}
+
+// Replace indirect loads with dynamic_shuffle intrinsics where
+// possible.
 class OptimizeShuffles : public IRMutator {
     Scope<Interval> bounds;
 
     using IRMutator::visit;
 
-    void visit(const Let *op) {
-        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+    template <typename T>
+    void visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
         IRMutator::visit(op);
-        bounds.pop(op->name);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
     }
 
-    void visit(const LetStmt *op) {
-        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
-        IRMutator::visit(op);
-        bounds.pop(op->name);
-    }
-
-    void visit(const For *op) {
-        bounds.push(op->name, Interval(op->min, op->min + op->extent - 1));
-        IRMutator::visit(op);
-        bounds.pop(op->name);
-    }
+    void visit(const Let *op) { visit_let(op); }
+    void visit(const LetStmt *op) { visit_let(op); }
 
     void visit(const Load *op) {
         if (!op->type.is_vector() || op->index.as<Ramp>()) {
@@ -846,17 +886,27 @@ class OptimizeShuffles : public IRMutator {
 
         Expr index = mutate(op->index);
         Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
-        Expr index_extent = simplify(index_bounds.max - index_bounds.min + 1);
-        if (is_one(simplify(index_extent <= 256))) {
-            // This is a lookup within a 256 element array. We can use
-            // dynamic_shuffle for this.
+        Expr index_span = index_bounds.max - index_bounds.min;
+        index_span = common_subexpression_elimination(index_span);
+        index_span = simplify(index_span);
+        index_span = upper_bound(index_span);
+
+        if (is_one(simplify(index_span < 256))) {
+            // This is a lookup within an up to 256 element array. We
+            // can use dynamic_shuffle for this.
+            int const_extent = as_const_int(index_span) ? *as_const_int(index_span) : 256;
             Expr base = index_bounds.min;
-            int const_extent = as_const_int(index_extent) ? *as_const_int(index_extent) : 256;
+
+            // Load all of the possible indices loaded from the LUT.
             Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                   Ramp::make(base, 1, const_extent),
                                   op->image, op->param);
-            Expr idx = cast(UInt(8).with_lanes(op->type.lanes()), simplify(index - base));
-            expr = Call::make(op->type, "dynamic_shuffle", {lut, idx, 0, const_extent}, Call::PureIntrinsic);
+
+            // We know the size of the LUT is not more than 256, so we
+            // can safely cast the index to 8 bit, which
+            // dynamic_shuffle requires.
+            index = cast(UInt(8).with_lanes(op->type.lanes()), simplify(index - base));
+            expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent}, Call::PureIntrinsic);
             return;
         }
 
@@ -867,7 +917,6 @@ class OptimizeShuffles : public IRMutator {
         }
     }
 };
-
 
 }  // namespace
 
