@@ -27,7 +27,7 @@ class WrapCalls : public IRMutator {
 
     const std::string wrapped;
     const Function wrapper;
-    Call::CallType call_type; // Either ImageParam or Halide func
+    Call::CallType call_type; // Either Image or Halide func
 
     void visit(const Call *c) {
         IRMutator::visit(c);
@@ -349,6 +349,31 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
     }
+
+    /*if (values.size() == 1) {
+        const Call *call = values[0].as<Call>();
+        if (call && (call->call_type == Call::Halide) && (call->args.size() == args.size())) {
+            bool print_func = (call->args.size() == args.size());
+            for (size_t i = 0; print_func && i < call->args.size(); ++i) {
+                const Variable *var = call->args[i].as<Variable>();
+                if (!var) {
+                    print_func = false;
+                } else if (var->name != args[i]) {
+                    print_func = false;
+                }
+            }
+            if (print_func) {
+                std::cout << "********************SIMPLE ASSIGNMENT: " << name() << "(";
+                for (size_t i = 0; i < call->args.size(); ++i) {
+                    std::cout << call->args[i];
+                    if (i != call->args.size()-1) {
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << ") = " << values[0] << "\n";
+            }
+        }
+    }*/
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter

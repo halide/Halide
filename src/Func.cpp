@@ -862,6 +862,7 @@ void Func::invalidate_cache() {
 }
 
 Func Func::wrap(const Func& wrapped) {
+    internal_assert(name() != wrapped.name()) << "Cannot call wrap on itself\n";
     string wrapper_name = wrapped.name() + "_in_" + name();
     wrapper_name = replace_all(wrapper_name, "$", "");
     Func wrapper(wrapper_name);

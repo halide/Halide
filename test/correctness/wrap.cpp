@@ -134,6 +134,44 @@ int image_param_wrap_test() {
     return 0;
 }
 
+int rdom_wrapper() {
+	// Scheduling initialization + update on the same compute level using wrapper
+	Func f("f"), g("g"), result("result");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    g(x, y) = 10;
+    g(x, y) += 2 * f(x, x);
+    g(x, y) += 3 * f(y, y);
+    result(x, y) = g(x, y) + 20;
+    Func wrapper = result.wrap(g).compute_at(result, x);
+
+    result.set_custom_trace(&my_trace);
+    wrapper.trace_realizations();
+
+    results.clear();
+    results[wrapper.name()] = false;
+
+    Image<int> im = result.realize(200, 200);
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            int correct = 4*x + 6* y + 30;
+            if (im(x, y) != correct) {
+                printf("im(%d, %d) = %d instead of %d\n",
+                       x, y, im(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    if (!results[wrapper.name()]) {
+    	std::cerr << "Expect " << wrapper.name() << " to be realized\n";
+    	return -1;
+    }
+    return 0;
+}
+
 
 int main(int argc, char **argv) {
 	printf("Running func wrap test\n");
@@ -148,6 +186,11 @@ int main(int argc, char **argv) {
 
     printf("Running image param wrap test\n");
     if (image_param_wrap_test() != 0) {
+        return -1;
+    }
+
+    printf("Running rdom wrapper test\n");
+    if (rdom_wrapper() != 0) {
         return -1;
     }
 
