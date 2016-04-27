@@ -6,6 +6,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Scope.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -813,9 +814,68 @@ private:
     using IRMutator::visit;
 };
 
+class OptimizeShuffles : public IRMutator {
+    Scope<Interval> bounds;
+
+    using IRMutator::visit;
+
+    void visit(const Let *op) {
+        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        IRMutator::visit(op);
+        bounds.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {
+        bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        IRMutator::visit(op);
+        bounds.pop(op->name);
+    }
+
+    void visit(const For *op) {
+        bounds.push(op->name, Interval(op->min, op->min + op->extent - 1));
+        IRMutator::visit(op);
+        bounds.pop(op->name);
+    }
+
+    void visit(const Load *op) {
+        if (!op->type.is_vector() || op->index.as<Ramp>()) {
+            // Don't handle scalar or simple vector loads.
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr index = mutate(op->index);
+        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
+        Expr index_extent = simplify(index_bounds.max - index_bounds.min + 1);
+        if (is_one(simplify(index_extent <= 256))) {
+            // This is a lookup within a 256 element array. We can use
+            // dynamic_shuffle for this.
+            Expr base = index_bounds.min;
+            int const_extent = as_const_int(index_extent) ? *as_const_int(index_extent) : 256;
+            Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
+                                  Ramp::make(base, 1, const_extent),
+                                  op->image, op->param);
+            Expr idx = cast(UInt(8).with_lanes(op->type.lanes()), simplify(index - base));
+            expr = Call::make(op->type, "dynamic_shuffle", {lut, idx, 0, const_extent}, Call::PureIntrinsic);
+            return;
+        }
+
+        if (!index.same_as(op->index)) {
+            expr = Load::make(op->type, op->name, index, op->image, op->param);
+        } else {
+            expr = op;
+        }
+    }
+};
+
+
 }  // namespace
 
 Stmt optimize_hexagon(Stmt s) {
+    // Replace indirect and other complicated loads with
+    // dynamic_shuffle (vlut) calls.
+    s = OptimizeShuffles().mutate(s);
+
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);
