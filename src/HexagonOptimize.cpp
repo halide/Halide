@@ -894,7 +894,7 @@ class OptimizeShuffles : public IRMutator {
         if (is_one(simplify(index_span < 256))) {
             // This is a lookup within an up to 256 element array. We
             // can use dynamic_shuffle for this.
-            int const_extent = as_const_int(index_span) ? *as_const_int(index_span) : 256;
+            int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
             Expr base = index_bounds.min;
 
             // Load all of the possible indices loaded from the LUT.
