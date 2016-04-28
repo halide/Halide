@@ -54,6 +54,16 @@ struct UpdateDefinition {
     std::vector<Expr> values, args;
     Schedule schedule;
     ReductionDomain domain;
+
+    /** Return a deep copy of this UpdateDefinition. */
+    UpdateDefinition deep_copy() const {
+        UpdateDefinition copy;
+        copy.values = values;
+        copy.args = args;
+        copy.schedule = schedule.deep_copy();
+        copy.domain = domain.deep_copy();
+        return copy;
+    }
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -74,6 +84,10 @@ public:
 
     /** Construct a new function with the given name */
     EXPORT Function(const std::string &n);
+
+    /** Return a deep copy of this Function. Note: this method does not deep-copy
+     * the 'output_buffers'. */
+    EXPORT Function deep_copy() const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must

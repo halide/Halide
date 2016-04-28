@@ -41,6 +41,43 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
 
 Schedule::Schedule() : contents(new ScheduleContents) {}
 
+Schedule Schedule::deep_copy() const {
+    if (!contents.defined()) {
+        return Schedule();
+    }
+    Schedule copy;
+    copy.contents.ptr->store_level = store_level();
+    copy.contents.ptr->compute_level = compute_level();
+    copy.contents.ptr->splits = splits();
+    copy.contents.ptr->dims = dims();
+    copy.contents.ptr->storage_dims = storage_dims();
+    copy.contents.ptr->bounds = bounds();
+    copy.contents.ptr->wrappers = wrappers();
+    copy.contents.ptr->reduction_domain = reduction_domain();
+    copy.contents.ptr->memoized = memoized();
+    copy.contents.ptr->touched = touched();
+    copy.contents.ptr->allow_race_conditions = allow_race_conditions();
+
+    for (const auto &s : specializations()) {
+        Specialization s_copy;
+        s_copy.condition = s.condition;
+        s_copy.schedule = IntrusivePtr<ScheduleContents>(new ScheduleContents);
+        s_copy.schedule.ptr->store_level      = s.schedule.ptr->store_level;
+        s_copy.schedule.ptr->compute_level    = s.schedule.ptr->compute_level;
+        s_copy.schedule.ptr->splits           = s.schedule.ptr->splits;
+        s_copy.schedule.ptr->dims             = s.schedule.ptr->dims;
+        s_copy.schedule.ptr->storage_dims     = s.schedule.ptr->storage_dims;
+        s_copy.schedule.ptr->bounds           = s.schedule.ptr->bounds;
+        s_copy.schedule.ptr->reduction_domain = s.schedule.ptr->reduction_domain;
+        s_copy.schedule.ptr->memoized         = s.schedule.ptr->memoized;
+        s_copy.schedule.ptr->touched          = s.schedule.ptr->touched;
+        s_copy.schedule.ptr->allow_race_conditions = s.schedule.ptr->allow_race_conditions;
+        copy.contents.ptr->specializations.push_back(std::move(s_copy));
+    }
+
+    return copy;
+}
+
 bool &Schedule::memoized() {
     return contents.ptr->memoized;
 }
