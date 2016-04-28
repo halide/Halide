@@ -19,7 +19,6 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::set;
-using std::map;
 
 // Replace all calls to wrapped functions with their wrappers.
 class WrapCalls : public IRMutator {
@@ -27,21 +26,18 @@ class WrapCalls : public IRMutator {
 
     const std::string wrapped;
     const Function wrapper;
-    Call::CallType call_type; // Either Image or Halide func
 
     void visit(const Call *c) {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
-        if ((c->call_type == call_type) && (wrapped == c->name)) {
+        if ((c->call_type == Call::Halide) && (wrapped == c->name)) {
             expr = Call::make(wrapper, c->args, c->value_index);
         }
     }
 public:
-    WrapCalls(const std::string &wrapped, const Function &wrapper, bool is_image)
-        : wrapped(wrapped)
-        , wrapper(wrapper)
-        , call_type(is_image ? Call::Image : Call::Halide) {}
+    WrapCalls(const std::string &wrapped, const Function &wrapper)
+        : wrapped(wrapped), wrapper(wrapper) {}
 };
 
 struct FunctionContents {
@@ -121,7 +117,6 @@ struct FunctionContents {
         }
     }
 
-    // Replace every call to 'f' with call to 'wrapper'
     void mutate(IRMutator *mutator) {
         for (size_t i = 0; i < values.size(); ++i) {
             values[i] = mutator->mutate(values[i]);
@@ -155,8 +150,10 @@ struct FunctionContents {
             }
 
             if (update.domain.defined()) {
-                // We don't need to mutate the domain since it can't have
-                // function call in the domain expression.
+                for (ReductionVariable &rv : update.domain.domain()) {
+                    rv.min = mutator->mutate(rv.min);
+                    rv.extent = mutator->mutate(rv.extent);
+                }
                 update.domain.set_predicate(mutator->mutate(update.domain.predicate()));
             }
 
@@ -789,11 +786,15 @@ bool Function::frozen() const {
     return contents.ptr->frozen;
 }
 
-Function &Function::wrap_calls(const std::string &wrapped,
-                               const Function &wrapper, bool is_image) {
+void Function::add_wrapper(const Function &wrapper, const std::string &f) {
+    contents.ptr->schedule.add_wrapper(wrapper.contents, f);
+}
+
+Function &Function::wrap_calls(const Function &wrapper, const std::string &wrapped) {
+    internal_assert(!wrapped.empty());
     debug(3) << "Func \"" << name() << "\": Replacing call to \"" << wrapped
              << "\" with " << " \"" << wrapper.name() << "\"\n";
-    WrapCalls wrap_calls(wrapped, wrapper, is_image);
+    WrapCalls wrap_calls(wrapped, wrapper);
     contents.ptr->mutate(&wrap_calls);
     return *this;
 }

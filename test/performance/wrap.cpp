@@ -4,6 +4,7 @@
 using namespace Halide;
 
 Func build_wrap() {
+    //TODO: fix this to use the wrapped version
     Func staged;
     Var x, y;
     staged(x, y) = x + y;
@@ -38,7 +39,7 @@ Func build_wrap() {
     // If we allow staged to use one thread per value loaded, then
     // it forces up the total number of threads used by the
     // kernel, because stencils. So we unroll.
-    final.wrap(staged).compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
+    staged.compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
 
     return final;
 }

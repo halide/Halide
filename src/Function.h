@@ -5,8 +5,6 @@
  * Defines the internal representation of a halide function and related classes
  */
 
-#include <map>
-
 #include "Expr.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
@@ -207,13 +205,15 @@ public:
      * add new definitions. */
     EXPORT bool frozen() const;
 
-    /** Replace every call to function/image param 'wrapped' (including calls
-     * in RDom's predicate) to call to its wrapper function 'wrapper'. If
-     * 'is_image' is set to true, 'wrapped' is of type image param; otherwise,
-     * it is a Halide function. See \ref Func::wrap for more details.*/
-    EXPORT Function &wrap_calls(const std::string &wrapped,
-                                const Function &wrapper, bool is_image);
+    /** Mark calls of this function by 'f' to be replaced with its wrapper
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to this function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. See \ref Func::wrap for more details. */
+    EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "");
 
+    /** Replace every call to function 'wrapped' (including calls in RDom's
+     * predicate) to call to its wrapper function 'wrapper'. */
+    EXPORT Function &wrap_calls(const Function &wrapper, const std::string &wrapped);
 };
 
 }}

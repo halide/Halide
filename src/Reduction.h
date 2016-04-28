@@ -47,6 +47,9 @@ public:
     /** Immutable access to the reduction variables. */
     EXPORT const std::vector<ReductionVariable> &domain() const;
 
+    /** Mutable access to the reduction variables. */
+    EXPORT std::vector<ReductionVariable> &domain();
+
     /** Add predicate to the reduction domain. See \ref RDom::where
      * for more details. */
     EXPORT void where(Expr predicate);
