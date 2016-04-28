@@ -904,6 +904,8 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
+llvm::TargetMachine *get_target_machine(const llvm::Module &module);
+
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
@@ -924,21 +926,25 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.add(new DataLayoutPass());
     #endif
 
-    // Make sure things marked as always-inline get inlined
-    module_pass_manager.add(createAlwaysInlinerPass());
+    std::unique_ptr<TargetMachine> TM(get_target_machine(*module));
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
+    function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
 
     PassManagerBuilder b;
     b.OptLevel = 3;
+    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
+    b.LoopVectorize = true;
+    b.SLPVectorize = true;
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
-    module_pass_manager.run(*module);
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
+    module_pass_manager.run(*module);
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level >= 2) {
