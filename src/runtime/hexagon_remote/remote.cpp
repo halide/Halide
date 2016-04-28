@@ -138,10 +138,26 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         request.hvx.power_up = TRUE;
         int retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
-            halide_print(NULL, "dspCV unable to power on HVX!");
+            halide_print(NULL, "unable to power on HVX!");
+            return -1;
+        }
+
+        request.type = HAP_power_set_mips_bw;
+        request.mips_bw.set_mips = TRUE;
+        request.mips_bw.mipsPerThread = 500;
+        request.mips_bw.mipsTotal = 1000;
+        request.mips_bw.set_bus_bw = TRUE;
+        request.mips_bw.bwBytePerSec = 12000;
+        request.mips_bw.busbwUsagePercentage = 100;
+        request.mips_bw.set_latency = FALSE;
+        request.mips_bw.latency=0;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            halide_print(NULL, "unable to tune power on HVX!");
             return -1;
         }
     }
+
     context_count++;
 
     return 0;
