@@ -566,20 +566,28 @@ class InjectBufferCopies : public IRMutator {
 
         for (const pair<string, BufferInfo> &i : copy) {
             const string &buf_name = i.first;
-            if (loop_level != i.second.loop_level) {
-                continue;
-            }
 
             const BufferInfo &then_state = i.second;
             const BufferInfo &else_state = state[buf_name];
             BufferInfo merged_state;
 
-            merged_state.loop_level = loop_level;
+            internal_assert(then_state.loop_level == else_state.loop_level)
+                << "then_state and else_state should have the same loop level for " << buf_name;
+
+            merged_state.loop_level = then_state.loop_level;
             merged_state.host_touched   = then_state.host_touched || else_state.host_touched;
             merged_state.dev_touched    = then_state.dev_touched || else_state.dev_touched;
             merged_state.host_current = then_state.host_current && else_state.host_current;
             merged_state.dev_current  = then_state.dev_current && else_state.dev_current &&
                                         then_state.current_device == else_state.current_device;
+
+            // Merge the device read/write set of then and else case
+            merged_state.devices_reading = then_state.devices_reading;
+            merged_state.devices_reading.insert(else_state.devices_reading.begin(),
+                                                else_state.devices_reading.end());
+            merged_state.devices_writing = then_state.devices_writing;
+            merged_state.devices_writing.insert(else_state.devices_writing.begin(),
+                                                else_state.devices_writing.end());
 
             state[buf_name] = merged_state;
         }

@@ -12,6 +12,7 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -641,11 +642,13 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
-        bool const_condition = !expr_uses_vars(op->condition, scope);
+        bool const_scalar_condition =
+            (op->condition.type().is_scalar() &&
+             !expr_uses_vars(op->condition, scope));
 
         if (min_a.same_as(min_b)) {
             min = min_a;
-        } else if (const_condition) {
+        } else if (const_scalar_condition) {
             min = select(op->condition, min_a, min_b);
         } else {
             min = Min::make(min_a, min_b);
@@ -653,7 +656,7 @@ private:
 
         if (max_a.same_as(max_b)) {
             max = max_a;
-        } else if (const_condition) {
+        } else if (const_scalar_condition) {
             max = select(op->condition, max_a, max_b);
         } else {
             max = Max::make(max_a, max_b);
@@ -1187,11 +1190,13 @@ private:
             op->value.accept(this);
         }
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
+
+        bool fixed = value_bounds.min.same_as(value_bounds.max);
         value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = simplify(value_bounds.max);
+        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
 
         if (is_small_enough_to_substitute(value_bounds.min) &&
-            is_small_enough_to_substitute(value_bounds.max)) {
+            (fixed || is_small_enough_to_substitute(value_bounds.max))) {
             scope.push(op->name, value_bounds);
             op->body.accept(this);
             scope.pop(op->name);
@@ -1208,12 +1213,20 @@ private:
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
-                        box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                        box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        if (expr_uses_var(box[i].min, max_name)) {
+                            box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                        }
+                        if (expr_uses_var(box[i].min, min_name)) {
+                            box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        }
                     }
                     if (box[i].max.defined()) {
-                        box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                        box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        if (expr_uses_var(box[i].max, max_name)) {
+                            box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                        }
+                        if (expr_uses_var(box[i].max, min_name)) {
+                            box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        }
                     }
                 }
             }
@@ -1230,7 +1243,6 @@ private:
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
-
         if (expr_uses_vars(op->condition, scope)) {
             if (!op->else_case.defined()) {
                 // Trim the scope down to represent the fact that the
@@ -1273,10 +1285,22 @@ private:
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
-                        if (lt)       i.max = min(likely_i.max, bi.max - 1);
-                        if (le || eq) i.max = min(likely_i.max, bi.max);
-                        if (gt)       i.min = max(likely_i.min, bi.min + 1);
-                        if (ge || eq) i.min = max(likely_i.min, bi.min);
+                        if (bi.max.defined()) {
+                            if (lt) {
+                                i.max = min(likely_i.max, bi.max - 1);
+                            }
+                            if (le || eq) {
+                                i.max = min(likely_i.max, bi.max);
+                            }
+                        }
+                        if (bi.min.defined()) {
+                            if (gt) {
+                                i.min = max(likely_i.min, bi.min + 1);
+                            }
+                            if (ge || eq) {
+                                i.min = max(likely_i.min, bi.min);
+                            }
+                        }
                         scope.push(var_a->name, i);
                         var_to_pop = var_a->name;
                     } else if (var_b && scope.contains(var_b->name)) {
@@ -1289,10 +1313,22 @@ private:
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
-                        if (gt)       i.max = min(likely_i.max, ai.max - 1);
-                        if (ge || eq) i.max = min(likely_i.max, ai.max);
-                        if (lt)       i.min = max(likely_i.min, ai.min + 1);
-                        if (le || eq) i.min = max(likely_i.min, ai.min);
+                        if (ai.max.defined()) {
+                            if (gt) {
+                                i.max = min(likely_i.max, ai.max - 1);
+                            }
+                            if (ge || eq) {
+                                i.max = min(likely_i.max, ai.max);
+                            }
+                        }
+                        if (ai.min.defined()) {
+                            if (lt) {
+                                i.min = max(likely_i.min, ai.min + 1);
+                            }
+                            if (le || eq) {
+                                i.min = max(likely_i.min, ai.min);
+                            }
+                        }
                         scope.push(var_b->name, i);
                         var_to_pop = var_b->name;
                     }
@@ -1323,7 +1359,7 @@ private:
                 else_boxes.swap(boxes);
             }
 
-            // debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
@@ -1337,7 +1373,7 @@ private:
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
 
-                // debug(0) << " Merging boxes for " << iter->first << "\n";
+                //debug(0) << " Merging boxes for " << i.first << "\n";
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
@@ -1355,7 +1391,6 @@ private:
                 merge_boxes(orig_box, then_box);
             }
         }
-
     }
 
     void visit(const For *op) {
@@ -1518,12 +1553,14 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
                 result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
 
+                // These can expand combinatorially as we go down the
+                // pipeline if we don't run CSE on them.
                 if (result.min.defined()) {
-                    result.min = simplify(result.min);
+                    result.min = simplify(common_subexpression_elimination(result.min));
                 }
 
                 if (result.max.defined()) {
-                    result.max = simplify(result.max);
+                    result.max = simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;

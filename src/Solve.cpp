@@ -751,16 +751,24 @@ class SolveForInterval : public IRVisitor {
             // Also allow re-solving the new equations.
             Expr a = max_a->a, b = max_a->b, c = le->b;
             Expr cond = simplify((a <= c) && (b <= c || a >= b));
-            already_solved = false;
-            cond.accept(this);
-            already_solved = true;
+            if (equal(cond, le)) {
+                fail();
+            } else {
+                already_solved = false;
+                cond.accept(this);
+                already_solved = true;
+            }
         } else if (const Min *min_a = le->a.as<Min>()) {
             // Rewrite (min(a, b) <= c) <==> (a <= c || (b <= c && a >= b))
             Expr a = min_a->a, b = min_a->b, c = le->b;
             Expr cond = simplify((a <= c) || (b <= c && a >= b));
-            already_solved = false;
-            cond.accept(this);
-            already_solved = true;
+            if (equal(cond, le)) {
+                fail();
+            } else {
+                already_solved = false;
+                cond.accept(this);
+                already_solved = true;
+            }
         } else {
             fail();
         }
@@ -804,10 +812,41 @@ class SolveForInterval : public IRVisitor {
     }
 
     void visit(const EQ *op) {
-        fail();
+        Expr cond;
+        if (op->a.type().is_bool()) {
+            internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
+            // Boolean (A == B) <=> (A and B) || (~A and ~B)
+            cond = (op->a && op->b) && (!op->a && !op->b);
+        } else {
+            // Normalize to le and ge
+            cond = (op->a <= op->b) && (op->a >= op->b);
+        }
+        cond.accept(this);
     }
 
     void visit(const NE *op) {
+        Expr cond;
+        if (op->a.type().is_bool()) {
+            internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
+            // Boolean (A != B) <=> (A and ~B) || (~A and B)
+            cond = (op->a && !op->b) && (!op->a && op->b);
+        } else {
+            // Normalize to lt and gt
+            cond = (op->a < op->b) || (op->a > op->b);
+        }
+        cond.accept(this);
+    }
+
+    // Other unhandled sources of bools
+    void visit(const Cast *op) {
+        fail();
+    }
+
+    void visit(const Load *op) {
+        fail();
+    }
+
+    void visit(const Call *op) {
         fail();
     }
 
@@ -824,6 +863,14 @@ class AndConditionOverDomain : public IRMutator {
 
     Scope<Interval> scope;
     Scope<Expr> bound_vars;
+
+    // We're looking for a condition which implies the original, but
+    // does not depend on the vars in the scope.  This is a sufficient
+    // condition - one which is conservatively false. If we traverse
+    // into a Not node, however, we need to flip the direction in
+    // which we're being conservative, and look for a necessary
+    // condition instead - one which is conservatively true. This bool
+    // tracks that.
     bool flipped = false;
 
     Interval get_bounds(Expr a) {
@@ -848,6 +895,18 @@ class AndConditionOverDomain : public IRMutator {
         expr = mutate(op->value);
     }
 
+    void fail() {
+        if (flipped) {
+            // True is a necessary condition for anything. Any
+            // predicate implies true.
+            expr = const_true();
+        } else {
+            // False is a sufficient condition for anything. False
+            // implies any predicate.
+            expr = const_false();
+        }
+    }
+
     template<typename Cmp, bool is_lt_or_le>
     void visit_cmp(const Cmp *op) {
         Expr a, b;
@@ -859,11 +918,7 @@ class AndConditionOverDomain : public IRMutator {
             b = make_bigger(op->b);
         }
         if (!a.defined() || !b.defined()) {
-            if (flipped) {
-                expr = const_true();
-            } else {
-                expr = const_false();
-            }
+            fail();
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -889,13 +944,27 @@ class AndConditionOverDomain : public IRMutator {
 
     void visit(const EQ *op) {
         if (op->type.is_vector()) {
-            if (flipped) {
-                expr = const_true();
-            } else {
-                expr = const_false();
-            }
+            fail();
         } else {
-            IRMutator::visit(op);
+            // Rewrite to the difference is zero.
+            Expr delta = simplify(op->a - op->b);
+            Interval i = get_bounds(delta);
+            if (!i.min.defined() || !i.max.defined()) {
+                fail();
+                return;
+            }
+            if (is_one(simplify(i.min == i.max))) {
+                // The expression does not vary, so an equivalent condition is:
+                expr = (i.min == 0);
+            } else {
+                if (flipped) {
+                    // Necessary condition: zero is in the range of i.min and i.max
+                    expr = (i.min <= 0) && (i.max >= 0);
+                } else {
+                    // Sufficient condition: the entire range is zero
+                    expr = (i.min == 0) && (i.max == 0);
+                }
+            }
         }
     }
 
@@ -914,25 +983,23 @@ class AndConditionOverDomain : public IRMutator {
             Interval i = scope.get(op->name);
             if (!flipped) {
                 if (interval_has_lower_bound(i) && i.min.defined()) {
-                    // Be conservative
+                    // Sufficient condition: if this boolean var
+                    // could ever be false, then return false.
                     expr = i.min;
                 } else {
                     expr = const_false();
                 }
             } else {
                 if (interval_has_upper_bound(i) && i.max.defined()) {
+                    // Necessary condition: if this boolean var could
+                    // ever be true, return true.
                     expr = i.max;
                 } else {
                     expr = const_true();
                 }
             }
         } else if (op->type.is_vector()) {
-            // Be conservative
-            if (!flipped) {
-                expr = const_false();
-            } else {
-                expr = const_true();
-            }
+            fail();
         } else {
             expr = op;
         }
@@ -1038,6 +1105,11 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_inner_interval returned undefined Exprs: " << c << "\n";
+    if (is_one(simplify(s.result.min > s.result.max))) {
+        // Empty interval
+        s.result.min = pos_inf;
+        s.result.max = neg_inf;
+    }
     return s.result;
 }
 
@@ -1046,6 +1118,11 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_outer_interval returned undefined Exprs: " << c << "\n";
+    if (is_one(simplify(s.result.min > s.result.max))) {
+        // Empty interval
+        s.result.min = pos_inf;
+        s.result.max = neg_inf;
+    }
     return s.result;
 }
 
@@ -1204,6 +1281,12 @@ void solve_test() {
     check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
     check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, pos_inf, neg_inf);
 
+    check_inner_interval(x == 10, 10, 10);
+    check_outer_interval(x == 10, 10, 10);
+
+    check_inner_interval(!(x != 10), 10, 10);
+    check_outer_interval(!(x != 10), 10, 10);
+
     check_inner_interval(3*x + 4 < 27, neg_inf, 7);
     check_outer_interval(3*x + 4 < 27, neg_inf, 7);
 
@@ -1225,6 +1308,18 @@ void solve_test() {
 
     check_and_condition(x <= 0 || y > 2, const_true(), Interval(-100, 0));
     check_and_condition(x > 0 || y > 2, 2 < y, Interval(-100, 0));
+
+    check_and_condition(x == 0, const_true(), Interval(0, 0));
+    check_and_condition(x == 0, const_false(), Interval(-10, 10));
+    check_and_condition(x != 0, const_false(), Interval(-10, 10));
+    check_and_condition(x != 0, const_true(), Interval(-20, -10));
+
+    check_and_condition(y == 0, y == 0, Interval(-10, 10));
+    check_and_condition(y != 0, y != 0, Interval(-10, 10));
+    check_and_condition((x == 5) && (y != 0), const_false(), Interval(-10, 10));
+    check_and_condition((x == 5) && (y != 3), y != 3, Interval(5, 5));
+    check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
+    check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
 
     debug(0) << "Solve test passed\n";
 

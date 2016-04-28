@@ -66,6 +66,7 @@ struct FunctionContents {
                     rv.min.accept(visitor);
                     rv.extent.accept(visitor);
                 }
+                update.domain.predicate().accept(visitor);
             }
 
             update.schedule.accept(visitor);
@@ -422,6 +423,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&freezer);
+    }
+
+    // Freeze the reduction domain if defined
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.freeze();
     }
 
     // Tag calls to random() with the free vars

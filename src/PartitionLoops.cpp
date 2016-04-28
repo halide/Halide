@@ -302,6 +302,10 @@ private:
                 Scope<Interval> varying;
                 varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
                 Expr relaxed = and_condition_over_domain(s.condition, varying);
+                internal_assert(!expr_uses_var(relaxed, op->name))
+                    << "Should not have had used the loop var (" << op->name
+                    << ") any longer\n  before: " << s.condition << "\n  after: "
+                    << relaxed << "\n";
                 if (!equal(relaxed, s.condition)) {
                     s.tight = false;
                 }
@@ -424,7 +428,8 @@ class PartitionLoops : public IRMutator {
                      << "  old: " << s.old_expr << "\n"
                      << "  new: " << s.likely_value << "\n"
                      << "  min: " << s.interval.min << "\n"
-                     << "  max: " << s.interval.max << "\n";
+                     << "  max: " << s.interval.max << "\n"
+                     << "  tight: " << s.tight << "\n";
 
             // Accept all non-empty intervals
             if (!interval_is_empty(s.interval)) {
@@ -621,6 +626,10 @@ class PartitionLoops : public IRMutator {
         }
 
         in_gpu_loop = old_in_gpu_loop;
+
+        debug(3) << "Partition loop.\n"
+                 << "Old: " << Stmt(op) << "\n"
+                 << "New: " << stmt << "\n";
     }
 };
 
