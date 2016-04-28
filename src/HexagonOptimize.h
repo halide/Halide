@@ -10,12 +10,16 @@
 namespace Halide {
 namespace Internal {
 
+/** Replace indirect and other loads with simple loads + vlut
+ * calls. */
+EXPORT Stmt optimize_hexagon_shuffles(Stmt s);
+
 /** Hexagon deinterleaves when performing widening operations, and
  * interleaves when performing narrowing operations. This pass
  * rewrites widenings/narrowings to be explicit in the IR, and
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
-EXPORT Stmt optimize_hexagon(Stmt s);
+EXPORT Stmt optimize_hexagon_instructions(Stmt s);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */

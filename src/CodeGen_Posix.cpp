@@ -49,6 +49,13 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     return codegen(total_size);
 }
 
+int CodeGen_Posix::allocation_padding(Type type) const {
+    // We potentially load one scalar value past the end of the
+    // buffer, so pad the allocation with an extra instance of the
+    // scalar type.
+    return type.bytes();
+}
+
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
                                                            Expr new_expr, std::string free_function) {
@@ -72,13 +79,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     // Only allocate memory if the condition is true, otherwise 0.
     Value *llvm_condition = codegen(condition);
     if (llvm_size != nullptr) {
-        // We potentially load one scalar value past the end of the
-        // buffer, so pad the allocation with an extra instance of the
-        // scalar type. If the allocation is on the stack, we can just
-        // read one past the top of the stack, so we only need this
-        // for heap allocations.
-        llvm_size = builder->CreateAdd(llvm_size,
-                                       ConstantInt::get(llvm_size->getType(), type.bytes()));
+        // Add the requested padding to the allocation size. If the
+        // allocation is on the stack, we can just read past the top
+        // of the stack, so we only need this for heap allocations.
+        Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
+        llvm_size = builder->CreateAdd(llvm_size, padding);
+
 
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,

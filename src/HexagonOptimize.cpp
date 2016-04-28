@@ -852,7 +852,7 @@ class UpperBound : public IRMutator {
 };
 
 Expr upper_bound(Expr x) {
-    return UpperBound().mutate(x);
+    return simplify(UpperBound().mutate(x));
 }
 
 // Replace indirect loads with dynamic_shuffle intrinsics where
@@ -895,22 +895,27 @@ class OptimizeShuffles : public IRMutator {
             // This is a lookup within an up to 256 element array. We
             // can use dynamic_shuffle for this.
             int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
-            Expr base = index_bounds.min;
+            Expr base = simplify(index_bounds.min);
 
-            // Load all of the possible indices loaded from the LUT.
+            // Load all of the possible indices loaded from the
+            // LUT. Note that for clamped ramps, this loads up to 1
+            // vector past the max. CodeGen_Hexagon::allocation_padding
+            // returns a native vector size to account for this.
             Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                   Ramp::make(base, 1, const_extent),
                                   op->image, op->param);
 
+            index = simplify(index - base);
             // We know the size of the LUT is not more than 256, so we
             // can safely cast the index to 8 bit, which
-            // dynamic_shuffle requires.
-            index = cast(UInt(8).with_lanes(op->type.lanes()), simplify(index - base));
+            // dynamic_shuffle requires. Rather than let this get
+            // handled by the generic intrinsic handling, we generate
+            // specific vpack instructions to avoid extra
+            // interleaves/deinterleaves we know are unnecessary.
+            index = Call::make(index.type().with_bits(16), "halide.hexagon.pack.vw", {index}, Call::PureExtern);
+            index = Call::make(index.type().with_bits(8), "halide.hexagon.pack.vh", {index}, Call::PureExtern);
             expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent}, Call::PureIntrinsic);
-            return;
-        }
-
-        if (!index.same_as(op->index)) {
+        } else if (!index.same_as(op->index)) {
             expr = Load::make(op->type, op->name, index, op->image, op->param);
         } else {
             expr = op;
@@ -920,11 +925,13 @@ class OptimizeShuffles : public IRMutator {
 
 }  // namespace
 
-Stmt optimize_hexagon(Stmt s) {
+Stmt optimize_hexagon_shuffles(Stmt s) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
-    s = OptimizeShuffles().mutate(s);
+    return OptimizeShuffles().mutate(s);
+}
 
+Stmt optimize_hexagon_instructions(Stmt s) {
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);

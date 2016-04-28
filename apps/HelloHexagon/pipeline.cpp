@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         Var xo("xo"), xi("xi");
         blur.compute_root()
             .hexagon()
-            .split(x, xo, xi, vector_size, TailStrategy::RoundUp)
+            .split(x, xo, xi, vector_size*2, TailStrategy::RoundUp)
             .vectorize(xi, vector_size)
             .parallel(y, 16);
         blur_y.compute_at(blur, xo)
