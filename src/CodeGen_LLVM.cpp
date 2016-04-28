@@ -904,8 +904,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
-llvm::TargetMachine *get_target_machine(const llvm::Module &module);
-
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
