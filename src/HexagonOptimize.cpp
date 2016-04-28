@@ -234,7 +234,6 @@ std::vector<Pattern> casts = {
     // (vsat). Because we don't know which one we prefer during
     // pattern matching, we match these for now and replace them with
     // the instructions that interleave later if it makes sense.
-    // TODO: We can also do this with the non-saturating casts below.
     { "halide.hexagon.pack_satub.vh", u8c(wild_i16x) },
     { "halide.hexagon.pack_satuh.vw", u16c(wild_i32x) },
     { "halide.hexagon.pack_satb.vh", i8c(wild_i16x) },
@@ -251,14 +250,17 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_shr.vw.w",  i16(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
     { "halide.hexagon.trunc_shr.vw.w",  i16(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-    { "halide.hexagon.trunc.vh", u8(wild_u16x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vh", u8(wild_i16x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vh", i8(wild_u16x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vh", i8(wild_i16x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vw", u16(wild_u32x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vw", u16(wild_i32x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vw", i16(wild_u32x), Pattern::DeinterleaveOp0 },
-    { "halide.hexagon.trunc.vw", i16(wild_i32x), Pattern::DeinterleaveOp0 },
+
+    // Similar to saturating narrows above, we have the choice of
+    // non-interleaving or interleaving instructions.
+    { "halide.hexagon.pack.vh", u8(wild_u16x) },
+    { "halide.hexagon.pack.vh", u8(wild_i16x) },
+    { "halide.hexagon.pack.vh", i8(wild_u16x) },
+    { "halide.hexagon.pack.vh", i8(wild_i16x) },
+    { "halide.hexagon.pack.vw", u16(wild_u32x) },
+    { "halide.hexagon.pack.vw", u16(wild_i32x) },
+    { "halide.hexagon.pack.vw", i16(wild_u32x) },
+    { "halide.hexagon.pack.vw", i16(wild_i32x) },
 
     // Widening casts
     { "halide.hexagon.zxt.vub", u16(wild_u8x), Pattern::InterleaveResult },
@@ -770,6 +772,8 @@ private:
             vector<Expr> extra_args;
         };
         static std::map<string, DeinterleavingAlternative> deinterleaving_alts = {
+            { "halide.hexagon.pack.vh", { "halide.hexagon.trunc.vh" } },
+            { "halide.hexagon.pack.vw", { "halide.hexagon.trunc.vw" } },
             { "halide.hexagon.pack_satub.vh", { "halide.hexagon.trunc_satub.vh" } },
             { "halide.hexagon.pack_sath.vw", { "halide.hexagon.trunc_sath.vw" } },
             // For this one, we don't have a simple alternative. But,
@@ -906,14 +910,12 @@ class OptimizeShuffles : public IRMutator {
                                   op->image, op->param);
 
             index = simplify(index - base);
+
             // We know the size of the LUT is not more than 256, so we
             // can safely cast the index to 8 bit, which
-            // dynamic_shuffle requires. Rather than let this get
-            // handled by the generic intrinsic handling, we generate
-            // specific vpack instructions to avoid extra
-            // interleaves/deinterleaves we know are unnecessary.
-            index = Call::make(index.type().with_bits(16), "halide.hexagon.pack.vw", {index}, Call::PureExtern);
-            index = Call::make(index.type().with_bits(8), "halide.hexagon.pack.vh", {index}, Call::PureExtern);
+            // dynamic_shuffle requires.
+            index = cast(UInt(8).with_lanes(op->type.lanes()), index);
+
             expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent}, Call::PureIntrinsic);
         } else if (!index.same_as(op->index)) {
             expr = Load::make(op->type, op->name, index, op->image, op->param);
