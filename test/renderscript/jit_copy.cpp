@@ -91,8 +91,8 @@ protected:
             for_nest_level++;
             if (for_nest_level <= 3) {
                 assert(op->for_type == ForType::Parallel);
+                assert(op->device_api == DeviceAPI::Renderscript);
             }
-            assert(op->device_api == DeviceAPI::Renderscript);
         }
         IRMutator::visit(op);
     }

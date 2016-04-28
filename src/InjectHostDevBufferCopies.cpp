@@ -35,7 +35,7 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
 static bool different_device_api(DeviceAPI device_api, DeviceAPI stmt_api, const Target &target) {
     device_api = fixup_device_api(device_api, target);
     stmt_api = fixup_device_api(stmt_api, target);
-    return (stmt_api != DeviceAPI::Parent) && (device_api != stmt_api);
+    return (stmt_api != DeviceAPI::None) && (device_api != stmt_api);
 }
 
 // If a buffer never makes it outside of Halide (i.e. if it is not
@@ -64,10 +64,10 @@ class FindBuffersToTrack : public IRVisitor {
                 " to " << static_cast<int>(op->device_api) << " for loop " << op->name << "\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
-            if (device_api == DeviceAPI::Parent) {
+            if (device_api == DeviceAPI::None) {
                 device_api = old_device_api;
             }
-            internal_assert(device_api != DeviceAPI::Parent);
+            internal_assert(device_api != DeviceAPI::None);
             IRVisitor::visit(op);
             device_api = old_device_api;
         } else {
@@ -144,7 +144,7 @@ class InjectBufferCopies : public IRMutator {
                        dev_current(false),
                        internal(false),
                        dev_allocated(true),  // This is true unless we know for sure it is not allocated (this BufferInfo is from an Allocate node).
-                       device_first_touched(DeviceAPI::Parent), // Meaningless initial value
+                       device_first_touched(DeviceAPI::None), // Meaningless initial value
                        current_device(DeviceAPI::Host) {}
     };
 
@@ -239,10 +239,10 @@ class InjectBufferCopies : public IRMutator {
                      << "Internal: " << buf.internal << " Device touching first: "
                      << static_cast<int>(buf.device_first_touched) << "\n"
                      << "Current device: " << static_cast<int>(buf.current_device) << "\n";
-            DeviceAPI touching_device = DeviceAPI::Parent;
+            DeviceAPI touching_device = DeviceAPI::None;
             bool host_read = false;
             size_t non_host_devices_reading_count = 0;
-            DeviceAPI reading_device = DeviceAPI::Parent;
+            DeviceAPI reading_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_reading) {
                 debug(4) << "Device " << static_cast<int>(dev) << " read buffer\n";
                 if (dev != DeviceAPI::Host) {
@@ -255,7 +255,7 @@ class InjectBufferCopies : public IRMutator {
             }
             bool host_wrote = false;
             size_t non_host_devices_writing_count = 0;
-            DeviceAPI writing_device = DeviceAPI::Parent;
+            DeviceAPI writing_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_writing) {
                 debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer\n";
                 if (dev != DeviceAPI::Host) {
@@ -339,7 +339,7 @@ class InjectBufferCopies : public IRMutator {
             }
 
             // Inject a dev_malloc if needed.
-            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::Parent) {
+            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::None) {
                 debug(4) << "Injecting device malloc for " << i.first << " on " <<
                     static_cast<int>(buf.device_first_touched) << "\n";
                 Stmt dev_malloc = make_dev_malloc(i.first, buf.device_first_touched);
@@ -562,20 +562,28 @@ class InjectBufferCopies : public IRMutator {
 
         for (const pair<string, BufferInfo> &i : copy) {
             const string &buf_name = i.first;
-            if (loop_level != i.second.loop_level) {
-                continue;
-            }
 
             const BufferInfo &then_state = i.second;
             const BufferInfo &else_state = state[buf_name];
             BufferInfo merged_state;
 
-            merged_state.loop_level = loop_level;
+            internal_assert(then_state.loop_level == else_state.loop_level)
+                << "then_state and else_state should have the same loop level for " << buf_name;
+
+            merged_state.loop_level = then_state.loop_level;
             merged_state.host_touched   = then_state.host_touched || else_state.host_touched;
             merged_state.dev_touched    = then_state.dev_touched || else_state.dev_touched;
             merged_state.host_current = then_state.host_current && else_state.host_current;
             merged_state.dev_current  = then_state.dev_current && else_state.dev_current &&
                                         then_state.current_device == else_state.current_device;
+
+            // Merge the device read/write set of then and else case
+            merged_state.devices_reading = then_state.devices_reading;
+            merged_state.devices_reading.insert(else_state.devices_reading.begin(),
+                                                else_state.devices_reading.end());
+            merged_state.devices_writing = then_state.devices_writing;
+            merged_state.devices_writing.insert(else_state.devices_writing.begin(),
+                                                else_state.devices_writing.end());
 
             state[buf_name] = merged_state;
         }
@@ -616,10 +624,10 @@ class InjectBufferCopies : public IRMutator {
                 static_cast<int>(op->device_api) << " in for loop " << op->name <<"\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
-            if (device_api == DeviceAPI::Parent) {
+            if (device_api == DeviceAPI::None) {
                 device_api = old_device_api;
             }
-            internal_assert(device_api != DeviceAPI::Parent);
+            internal_assert(device_api != DeviceAPI::None);
             IRMutator::visit(op);
             device_api = old_device_api;
         } else {
