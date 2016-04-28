@@ -27,10 +27,10 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
         debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty is true\n";
         const halide_device_interface_t *interface = buf->device_interface;
         if (buf->host_dirty()) {
-            debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
+            error(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
             result = halide_error_code_copy_to_host_failed;
         } else if (interface == NULL) {
-            debug(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
+            error(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
             result = halide_error_code_no_device_interface;
         } else {
             result = interface->copy_to_host(user_context, buf);
@@ -204,8 +204,6 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
             halide_assert(user_context, buf->device == 0);
             if (result) {
                 return halide_error_code_device_free_failed;
-            } else {
-                return 0;
             }
         }
     }

@@ -1110,9 +1110,9 @@ void CodeGen_LLVM::buffer_set_flag(Value *buffer, halide_buffer_t::buffer_flags 
     Value *flags_ptr = buffer_flags_ptr(buffer);
     Value *flags = builder->CreateLoad(flags_ptr);
     if (value) {
-        flags = builder->CreateOr(flags, ConstantInt::get(i64, 1 << flag));
+        flags = builder->CreateOr(flags, ConstantInt::get(i64, flag));
     } else {
-        flags = builder->CreateAnd(flags, ConstantInt::get(i64, ~(1 << flag)));
+        flags = builder->CreateAnd(flags, ConstantInt::get(i64, ~(flag)));
     }
     builder->CreateStore(flags, flags_ptr);
 }
