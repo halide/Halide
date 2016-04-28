@@ -8,3 +8,5 @@
 - common scheduling patterns
 - parallel reductions
 - scheduling rvars
+- tail strategies
+- RDom::where

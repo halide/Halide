@@ -126,6 +126,9 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
+                if (r.domain.defined()) {
+                    exprs.push_back(r.domain.predicate());
+                }
             }
         }
 
@@ -569,11 +572,24 @@ public:
 
             } else {
                 const vector<Expr> &exprs = consumer.exprs;
-                for (size_t j = 0; j < exprs.size(); j++) {
-                    map<string, Box> new_boxes = boxes_required(exprs[j], scope, func_bounds);
-                    for (const pair<string, Box> &i : new_boxes) {
-                        merge_boxes(boxes[i.first], i.second);
+                // We wrap the consumer exprs inside a "dummy" Call stmt so that we can take advantage
+                // of the IfThenElse stmt handler inside boxes_required() to determine the appropriate
+                // box bound size given some predicate on the RDom. Otherwise, we will need to update
+                // the scope to take into account of the predicate.
+                Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
+                if (consumer.stage > 0) {
+                    const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
+                    if (r.domain.defined()) {
+                        vector<Expr> predicates = r.domain.split_predicate();
+                        for (const Expr &pred : predicates) {
+                            wrapped = IfThenElse::make(likely(pred), wrapped);
+                        }
                     }
+                }
+
+                map<string, Box> new_boxes = boxes_required(wrapped, scope, func_bounds);
+                for (const pair<string, Box> &i : new_boxes) {
+                    merge_boxes(boxes[i.first], i.second);
                 }
             }
 
@@ -601,6 +617,7 @@ public:
                     }
 
                     // Dump out the region required of each stage for debugging.
+
                     /*
                     debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
@@ -610,6 +627,7 @@ public:
                     }
                     debug(0) << "\n";
                     */
+
 
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
                     producer.consumers.push_back((int)i);

@@ -6,6 +6,7 @@
 #include "IROperator.h"
 #include "Substitute.h"
 #include "CSE.h"
+#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {
@@ -135,6 +136,15 @@ bool can_parallelize_rvar(const string &v,
             Interval in = Interval(rv.min, simplify(rv.min + rv.extent - 1));
             bounds.push(rv.var, in);
             bounds.push(renamer.get_new_name(rv.var), in);
+        }
+        // Add the reduction domain's predicate
+        Expr pred = simplify(r.domain.predicate());
+        if (!equal(const_true(), pred)) {
+            Expr this_pred = pred;
+            Expr other_pred = renamer.mutate(pred);
+            debug(3) << "......this thread predicate: " << this_pred << "\n";
+            debug(3) << "......other thread predicate: " << other_pred << "\n";
+            hazard = hazard && this_pred && other_pred;
         }
     }
 
