@@ -70,17 +70,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     }
 
     // Substitute in wrapper funcs. This will mutate the Funcs.
-    debug(0) << "******************BEFORE WRAP CALLS:\n";
-    for (const auto &iter : env) {
-        debug(0) << iter.first << "\n";
-    }
-
     env = wrap_func_calls(env);
-
-    debug(0) << "******************AFTER WRAP CALLS:\n";
-    for (const auto &iter : env) {
-        debug(0) << iter.first << "\n";
-    }
 
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
@@ -89,7 +79,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     debug(1) << "Creating initial loop nests...\n";
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
-    debug(0) << "Lowering after creating initial loop nests:\n" << s << '\n';
+    debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";

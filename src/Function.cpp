@@ -24,20 +24,22 @@ using std::set;
 class WrapCalls : public IRMutator {
     using IRMutator::visit;
 
-    const std::string wrapped;
     const Function wrapper;
+    const std::string wrapped;
 
     void visit(const Call *c) {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
         if ((c->call_type == Call::Halide) && (wrapped == c->name)) {
+            debug(4) << "...Replace call to Func \"" << wrapped << "\" with "
+                     << "\"" << wrapper.name() << "\"\n";
             expr = Call::make(wrapper, c->args, c->value_index);
         }
     }
 public:
-    WrapCalls(const std::string &wrapped, const Function &wrapper)
-        : wrapped(wrapped), wrapper(wrapper) {}
+    WrapCalls(const Function &wrapper, const std::string &wrapped)
+        : wrapper(wrapper), wrapped(wrapped) {}
 };
 
 struct FunctionContents {
@@ -346,31 +348,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
     }
-
-    /*if (values.size() == 1) {
-        const Call *call = values[0].as<Call>();
-        if (call && (call->call_type == Call::Halide) && (call->args.size() == args.size())) {
-            bool print_func = (call->args.size() == args.size());
-            for (size_t i = 0; print_func && i < call->args.size(); ++i) {
-                const Variable *var = call->args[i].as<Variable>();
-                if (!var) {
-                    print_func = false;
-                } else if (var->name != args[i]) {
-                    print_func = false;
-                }
-            }
-            if (print_func) {
-                std::cout << "********************SIMPLE ASSIGNMENT: " << name() << "(";
-                for (size_t i = 0; i < call->args.size(); ++i) {
-                    std::cout << call->args[i];
-                    if (i != call->args.size()-1) {
-                        std::cout << ", ";
-                    }
-                }
-                std::cout << ") = " << values[0] << "\n";
-            }
-        }
-    }*/
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
@@ -792,9 +769,9 @@ void Function::add_wrapper(const Function &wrapper, const std::string &f) {
 
 Function &Function::wrap_calls(const Function &wrapper, const std::string &wrapped) {
     internal_assert(!wrapped.empty());
-    debug(3) << "Func \"" << name() << "\": Replacing call to \"" << wrapped
-             << "\" with " << " \"" << wrapper.name() << "\"\n";
-    WrapCalls wrap_calls(wrapped, wrapper);
+    debug(4) << "Func \"" << name() << "\": attempting to replace call to \""
+             << wrapped << "\" with " << " \"" << wrapper.name() << "\"\n";
+    WrapCalls wrap_calls(wrapper, wrapped);
     contents.ptr->mutate(&wrap_calls);
     return *this;
 }
