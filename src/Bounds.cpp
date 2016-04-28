@@ -505,7 +505,7 @@ private:
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                min = 0;
+                min = make_zero(t);
                 max = Max::make(abs(min_b), abs(max_b));
             }
         }
