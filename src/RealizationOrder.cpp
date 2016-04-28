@@ -50,15 +50,6 @@ vector<string> realization_order(const vector<Function> &outputs,
         }
     }
 
-    debug(0) << "FINDING DIRECT CALLS: \n";
-    for (const auto &iter : graph) {
-        debug(0) << "****direct call of func: " << iter.first << "\n";
-        for (const auto &f : iter.second) {
-            debug(0) << f << ", ";
-        }
-        debug(0) << "\n";
-    }
-
     vector<string> order;
     set<string> result_set;
     set<string> visited;

@@ -206,13 +206,15 @@ public:
     EXPORT bool frozen() const;
 
     /** Mark calls of this function by 'f' to be replaced with its wrapper
-     * during the lowering stage. If the string 'f' is empty, it means replace
-     * all calls to this function by all other functions (excluding itself) in
-     * the pipeline with the wrapper. See \ref Func::wrap for more details. */
-    EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "");
+     * during the lowering stage. If the string 'f' is set to '$global', it
+     * means replace all calls to this function by all other functions
+     * (excluding itself) in the pipeline with the wrapper. See \ref Func::wrap
+     * for more details. */
+    EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "$global");
 
-    /** Replace every call to function 'wrapped' (including calls in RDom's
-     * predicate) to call to its wrapper function 'wrapper'. */
+    /** Replace every call to function 'wrapped' (including calls in the RDom's
+     * predicates) to call to its wrapper function 'wrapper'. See \ref Func::wrap
+     * for more details. */
     EXPORT Function &wrap_calls(const Function &wrapper, const std::string &wrapped);
 };
 

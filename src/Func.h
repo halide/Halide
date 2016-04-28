@@ -798,14 +798,16 @@ public:
     }
     // @}
 
-    /** Store a wrapper of this function. Every call to this function by 'f'
-     * will be replaced to call to the wrapper, which happens during the
+    /** Store a custom wrapper of this function. Every call to this function by
+     * 'f' will be replaced to call to the wrapper, which happens during the
      * lowering stage. */
     EXPORT Func in(const Func& f);
 
-    /** Store a wrapper of this function. Every call to this function by all
-     * functions (excluding by itself) in the pipeline will be replaced to call
-     * to the wrapper, which happens during the lowering stage. */
+    /** Store a global wrapper of this function. Every call to this function by
+     * all functions (excluding by itself) in the pipeline will be replaced to call
+     * to the wrapper, which happens during the lowering stage. Custom wrapper
+     * always takes precedence over the global wrapper, i.e. if both are defined,
+     * then we replace it with the custom wrapper. */
     EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
