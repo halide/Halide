@@ -129,6 +129,7 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     }
 }
 
+namespace Internal {
 
 llvm::TargetMachine *get_target_machine(const llvm::Module &module) {
     std::string error_string;
@@ -153,13 +154,15 @@ llvm::TargetMachine *get_target_machine(const llvm::Module &module) {
                                        llvm::CodeGenOpt::Aggressive);
 }
 
+}
+
 #if LLVM_VERSION < 37
 void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file_legacy.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
 
     // Get the target specific parser.
-    llvm::TargetMachine *target_machine = get_target_machine(module);
+    llvm::TargetMachine *target_machine = Internal::get_target_machine(module);
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     // Build up all of the passes that we want to do to the module.
@@ -210,7 +213,7 @@ void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMa
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
 
     // Get the target specific parser.
-    llvm::TargetMachine *target_machine = get_target_machine(module);
+    llvm::TargetMachine *target_machine = Internal::get_target_machine(module);
     internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     #if LLVM_VERSION == 37
