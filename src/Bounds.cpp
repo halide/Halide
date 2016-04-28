@@ -12,6 +12,7 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -1189,11 +1190,13 @@ private:
             op->value.accept(this);
         }
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
+
+        bool fixed = value_bounds.min.same_as(value_bounds.max);
         value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = simplify(value_bounds.max);
+        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
 
         if (is_small_enough_to_substitute(value_bounds.min) &&
-            is_small_enough_to_substitute(value_bounds.max)) {
+            (fixed || is_small_enough_to_substitute(value_bounds.max))) {
             scope.push(op->name, value_bounds);
             op->body.accept(this);
             scope.pop(op->name);
@@ -1210,12 +1213,20 @@ private:
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
-                        box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                        box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        if (expr_uses_var(box[i].min, max_name)) {
+                            box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                        }
+                        if (expr_uses_var(box[i].min, min_name)) {
+                            box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        }
                     }
                     if (box[i].max.defined()) {
-                        box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                        box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        if (expr_uses_var(box[i].max, max_name)) {
+                            box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                        }
+                        if (expr_uses_var(box[i].max, min_name)) {
+                            box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        }
                     }
                 }
             }
@@ -1542,12 +1553,14 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
                 result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
 
+                // These can expand combinatorially as we go down the
+                // pipeline if we don't run CSE on them.
                 if (result.min.defined()) {
-                    result.min = simplify(result.min);
+                    result.min = simplify(common_subexpression_elimination(result.min));
                 }
 
                 if (result.max.defined()) {
-                    result.max = simplify(result.max);
+                    result.max = simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;
