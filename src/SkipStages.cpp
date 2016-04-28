@@ -1,12 +1,14 @@
 #include "SkipStages.h"
+#include "CSE.h"
 #include "Debug.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -74,8 +76,8 @@ private:
         if (should_pop) {
             varying.pop(op->name);
             //internal_assert(!expr_uses_var(predicate, op->name));
-        } else {
-            predicate = substitute(op->name, op->min, predicate);
+        } else if (expr_uses_var(predicate, op->name)) {
+            predicate = Let::make(op->name, op->min, predicate);
         }
     }
 
@@ -93,7 +95,9 @@ private:
         if (value_varies) {
             varying.pop(name);
         }
-        predicate = substitute(name, value, predicate);
+        if (expr_uses_var(predicate, name)) {
+            predicate = Let::make(name, value, predicate);
+        }
     }
 
     void visit(const LetStmt *op) {
@@ -116,6 +120,59 @@ private:
         in_pipeline.pop(op->name);
     }
 
+    // Logical operators with eager constant folding
+    Expr make_and(Expr a, Expr b) {
+        if (is_zero(a) || is_one(b)) {
+            return a;
+        } else if (is_zero(b) || is_one(a)) {
+            return b;
+        } else if (equal(a, b)) {
+            return a;
+        } else {
+            return a && b;
+        }
+    }
+
+    Expr make_or(Expr a, Expr b) {
+        if (is_zero(a) || is_one(b)) {
+            return b;
+        } else if (is_zero(b) || is_one(a)) {
+            return a;
+        } else if (equal(a, b)) {
+            return a;
+        } else {
+            return a || b;
+        }
+    }
+
+    Expr make_select(Expr a, Expr b, Expr c) {
+        if (is_one(a)) {
+            return b;
+        } else if (is_zero(a)) {
+            return c;
+        } else if (is_one(b)) {
+            return make_or(a, c);
+        } else if (is_zero(b)) {
+            return make_and(make_not(a), c);
+        } else if (is_one(c)) {
+            return make_or(make_not(a), b);
+        } else if (is_zero(c)) {
+            return make_and(a, b);
+        } else {
+            return select(a, b, c);
+        }
+    }
+
+    Expr make_not(Expr a) {
+        if (is_one(a)) {
+            return make_zero(a.type());
+        } else if (is_zero(a)) {
+            return make_one(a.type());
+        } else {
+            return !a;
+        }
+    }
+
     template<typename T>
     void visit_conditional(Expr condition, T true_case, T false_case) {
         Expr old_predicate = predicate;
@@ -133,19 +190,11 @@ private:
         varies = false;
         condition.accept(this);
 
-        if (is_one(predicate) || is_one(old_predicate)) {
-            predicate = const_true();
-        } else if (varies) {
-            if (is_one(true_predicate) || is_one(false_predicate)) {
-                predicate = const_true();
-            } else {
-                predicate = (old_predicate || predicate ||
-                             true_predicate || false_predicate);
-            }
+        predicate = make_or(predicate, old_predicate);
+        if (varies) {
+            predicate = make_or(predicate, make_or(true_predicate, false_predicate));
         } else {
-            predicate = (old_predicate || predicate ||
-                         (condition && true_predicate) ||
-                         ((!condition) && false_predicate));
+            predicate = make_or(predicate, make_select(condition, true_predicate, false_predicate));
         }
 
         varies = varies || old_varies;
@@ -328,9 +377,14 @@ private:
 
     void visit(const Realize *op) {
         if (op->name == func) {
+            debug(3) << "Finding compute predicate for " << op->name << "\n";
             PredicateFinder find_compute(op->name, true);
             op->body.accept(&find_compute);
-            Expr compute_predicate = simplify(find_compute.predicate);
+
+            debug(3) << "Simplifying compute predicate for " << op->name << ": " << find_compute.predicate << "\n";
+            Expr compute_predicate = simplify(common_subexpression_elimination(find_compute.predicate));
+
+            debug(3) << "Compute predicate for " << op->name << " : " << compute_predicate << "\n";
 
             if (expr_uses_vars(compute_predicate, vector_vars)) {
                 // Don't try to skip stages if the predicate may vary
@@ -341,12 +395,19 @@ private:
             }
 
             if (!is_one(compute_predicate)) {
+
+                debug(3) << "Finding allocate predicate for " << op->name << "\n";
                 PredicateFinder find_alloc(op->name, false);
                 op->body.accept(&find_alloc);
-                Expr alloc_predicate = simplify(find_alloc.predicate);
+                debug(3) << "Simplifying allocate predicate for " << op->name << "\n";
+                Expr alloc_predicate = simplify(common_subexpression_elimination(find_alloc.predicate));
+
+                debug(3) << "Allocate predicate for " << op->name << " : " << alloc_predicate << "\n";
 
                 ProductionGuarder g(op->name, compute_predicate, alloc_predicate);
                 Stmt body = g.mutate(op->body);
+
+                debug(3) << "Done guarding computation for " << op->name << "\n";
 
                 stmt = Realize::make(op->name, op->types, op->bounds,
                                      alloc_predicate, body);
