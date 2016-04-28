@@ -455,6 +455,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WrapCalls.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

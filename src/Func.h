@@ -324,6 +324,9 @@ class Func {
 
     EXPORT void invalidate_cache();
 
+    // Helper function to add wrapper to 'f'
+    EXPORT void wrap_func_call(const Func &f, const Func &wrapper);
+
 public:
 
     /** Declare a new undefined function with the given name */
@@ -795,12 +798,15 @@ public:
     }
     // @}
 
-    /** Replace every call to 'wrapper' (including call in RDom's predicate) to
-     * call to its Func wrapper and return the wrapper. This method only replaces
-     * 'wrapped' in the current definition of this function when wrap() is called.
-     * Any subsequent call to 'wrapped' after wrap() is called is not mutated. */
-    EXPORT Func wrap(const Func& wrapped);
-    EXPORT Func wrap(const ImageParam& wrapped);
+    /** Store a wrapper of this function. Every call to this function by 'f'
+     * will be replaced to call to the wrapper, which happens during the
+     * lowering stage. */
+    EXPORT Func in(const Func& f);
+
+    /** Store a wrapper of this function. Every call to this function by all
+     * functions (excluding by itself) in the pipeline will be replaced to call
+     * to the wrapper, which happens during the lowering stage. */
+    EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to

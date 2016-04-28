@@ -2,6 +2,8 @@
 #include "Schedule.h"
 #include "Reduction.h"
 
+#include <map>
+
 namespace Halide {
 namespace Internal {
 
@@ -17,6 +19,7 @@ struct ScheduleContents {
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Specialization> specializations;
+    std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     ReductionDomain reduction_domain;
     bool memoized;
     bool touched;
@@ -114,6 +117,26 @@ const Specialization &Schedule::add_specialization(Expr condition) {
     contents.ptr->specializations.push_back(s);
     return contents.ptr->specializations.back();
 }
+
+const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() const {
+    return contents.ptr->wrappers;
+}
+
+void Schedule::add_wrapper(const IntrusivePtr<Internal::FunctionContents> &wrapper,
+                           const std::string &f) {
+    if (f.empty() && (contents.ptr->wrappers.size() > 0)) {
+        user_warning << "Overriding all previous definitions of wrappers with a global wrapper\n";
+        contents.ptr->wrappers.clear();
+        contents.ptr->wrappers["__global"] = wrapper;
+        return;
+    }
+    if (contents.ptr->wrappers.count(f)) {
+        user_warning << "Replacing previous definition of wrapper in function "
+                     << f << "\n";
+    }
+    contents.ptr->wrappers[f] = wrapper;
+}
+
 
 LoopLevel &Schedule::store_level() {
     return contents.ptr->store_level;

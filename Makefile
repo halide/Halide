@@ -356,7 +356,8 @@ SOURCE_FILES = \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \
-  VectorizeLoops.cpp
+  VectorizeLoops.cpp \
+  WrapCalls.cpp
 
 ifeq ($(LLVM_VERSION_TIMES_10),35)
 BITWRITER_VERSION=.35
@@ -484,7 +485,8 @@ HEADER_FILES = \
   UnrollLoops.h \
   Util.h \
   Var.h \
-  VectorizeLoops.h
+  VectorizeLoops.h \
+  WrapCalls.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
