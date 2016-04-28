@@ -57,8 +57,8 @@ protected:
 
     using CodeGen_Posix::visit;
 
-    /* /\** Nodes for which we want to emit specific hexagon intrinsics *\/ */
-    /* // @{ */
+    /** Nodes for which we want to emit specific hexagon intrinsics */
+    ///@{
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Broadcast *);
@@ -75,7 +75,13 @@ protected:
     void visit(const GT *);
     void visit(const EQ *);
     void visit(const Select *);
-    /* // @} */
+    ///@}
+
+    /** We ask for an extra vector on each allocation to enable fast
+     * clamped ramp loads. */
+    int allocation_padding(Type type) const {
+        return CodeGen_Posix::allocation_padding(type) + native_vector_bits()/8;
+    }
 
     /** Call an LLVM intrinsic, potentially casting the operands to
      * match the type of the function. */
@@ -103,6 +109,13 @@ protected:
     llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &v);
     llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                  const std::vector<int> &indices);
+    using CodeGen_Posix::shuffle_vectors;
+    ///@}
+
+    /** Generate a LUT lookup using vlut instructions. */
+    ///@{
+    llvm::Value *vlut(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 1 << 30);
+    llvm::Value *vlut(llvm::Value *lut, const std::vector<int> &indices);
     ///@}
 
     /** Because HVX intrinsics operate on vectors of i32, using them

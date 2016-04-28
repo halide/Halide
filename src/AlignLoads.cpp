@@ -62,13 +62,11 @@ private:
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
 
-        if (!(*const_stride == 1 || *const_stride == 2)) {
-            // If the ramp isn't stride 1 or 2, don't handle it.
+        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
+            // If the ramp isn't stride 1, 2, or 3, don't handle it.
 
             // TODO: We should handle reverse vector loads (stride ==
-            // -1), maybe others as well. Stride 3 might be
-            // particularly important. The code below probably handles
-            // stride 3 already.
+            // -1), maybe others as well.
             IRMutator::visit(op);
             return;
         }

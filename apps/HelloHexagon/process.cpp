@@ -33,6 +33,11 @@ T clamp(T x, T min, T max) {
 }
 
 int main(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: %s (cpu|hvx64) timing_iterations\n", argv[0]);
+        return 0;
+    }
+
     int (*pipeline)(buffer_t *, buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
@@ -44,6 +49,8 @@ int main(int argc, char **argv) {
         printf("Unknown schedule, valid schedules are cpu or hvx64\n");
         return -1;
     }
+
+    int iterations = atoi(argv[2]);
 
     const int W = 1024;
     const int H = 1024;
@@ -72,7 +79,7 @@ int main(int argc, char **argv) {
     }
 
     printf("Running pipeline...\n");
-    double time = benchmark(10, 10, [&]() {
+    double time = benchmark(iterations, 10, [&]() {
         int result = pipeline(&in, &out);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
