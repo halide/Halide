@@ -1435,14 +1435,29 @@ void check_hvx_all() {
     check("vasl(v*.h,r*)", hvx_width/2, i16_1 << clamp(in_i16(0), 0, 15));
     check("vasl(v*.w,r*)", hvx_width/4, i32_1 << clamp(in_i32(0), 0, 31));
 
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16_1));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16_1));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(u16_1));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16_1));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32_1));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32_1));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(u32_1));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32_1));
+    check("vpacke(v*.h,v*.h)", hvx_width/1, u8(u16_1));
+    check("vpacke(v*.h,v*.h)", hvx_width/1, u8(i16_1));
+    check("vpacke(v*.h,v*.h)", hvx_width/1, i8(u16_1));
+    check("vpacke(v*.h,v*.h)", hvx_width/1, i8(i16_1));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, u16(u32_1));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, u16(i32_1));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, i16(u32_1));
+    check("vpacke(v*.w,v*.w)", hvx_width/2, i16(i32_1));
+
+    // vpack doesn't interleave its inputs, which means it doesn't
+    // simplify with widening. This is preferable for when the
+    // pipeline doesn't widen to begin with, as in the above
+    // tests. However, if the pipeline does widen, we want to generate
+    // different instructions that have a built in interleaving that
+    // we can cancel with the deinterleaving from widening.
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16(u8_1) << 4));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16(i8_1) << 4));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(u16(u8_1) << 4));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16(i8_1) << 4));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32(u16_1) << 8));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32(i16_1) << 8));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(u32(u16_1) << 8));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32(i16_1) << 8));
 
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(i16_1 >> 8));
