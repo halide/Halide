@@ -378,6 +378,11 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
 
     size_t size = buf_size(user_context, buf);
 
+    // Hexagon code generation generates clamped ramp loads in a way
+    // that requires up to an extra vector beyond the end of the
+    // buffer to be legal to access.
+    size += 128;
+
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
 

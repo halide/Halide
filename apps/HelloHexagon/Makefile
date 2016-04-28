@@ -26,16 +26,20 @@ pipeline_cpu-%.o: pipeline
 	HL_TARGET=$* ./pipeline pipeline_cpu-$* pipeline_cpu
 
 pipeline_hvx64-%.o: pipeline
-	HL_TARGET=$*-debug-hvx_64 ./pipeline pipeline_hvx64-$* pipeline_hvx64
+	HL_TARGET=$*-hvx_64 ./pipeline pipeline_hvx64-$* pipeline_hvx64
 
 process-%: process.cpp pipeline_cpu-%.o pipeline_hvx64-%.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline_cpu-$*.o pipeline_hvx64-$*.o -o process-$* $(LDFLAGS-$*)
 
-run-%: process-%
-	adb push process-$* /data/
-	adb shell chmod +x /data/process-$*
-	adb shell /data/process-$* cpu
-	adb shell /data/process-$* hvx64
+run-%-android: process-%-android
+	adb push process-$*-android /data/
+	adb shell chmod +x /data/process-$*-android
+	adb shell /data/process-$*-android cpu 10
+	adb shell /data/process-$*-android hvx64 10
+
+run-host: process-host
+	./process-host cpu 10
+	./process-host hvx64 1
 
 clean:
 	rm -f process-* pipeline-*.o pipeline pipeline.h

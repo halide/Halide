@@ -101,6 +101,10 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     Stmt body = f.body;
 
+    debug(1) << "Optimizing shuffles...\n";
+    body = optimize_hexagon_shuffles(body);
+    debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
+
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
@@ -118,8 +122,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
 
     // Optimize the IR for Hexagon.
-    debug(1) << "Optimizing Hexagon code...\n";
-    body = optimize_hexagon(body);
+    debug(1) << "Optimizing Hexagon instructions...\n";
+    body = optimize_hexagon_instructions(body);
 
     if (uses_hvx(body)) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
@@ -219,6 +223,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "pack_satuh.vw", {i32x2} },
         { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "pack_satb.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "pack_sath.vw",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackeb),      i8x1,  "pack.vh",       {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackeh),      i16x1, "pack.vw",       {i32x2} },
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
@@ -541,35 +547,84 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 Value *CodeGen_Hexagon::interleave_vectors(const std::vector<llvm::Value *> &v) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
     if (v.size() == 2) {
-        llvm::Type *v_ty = v[0]->getType();
-        // Interleaving two vectors. Break them into native vectors,
-        // use vshuffvdd, and concatenate the shuffled results.
-        llvm::Type *element_ty = v_ty->getVectorElementType();
-        int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
-        llvm::Type *native2_ty = llvm::VectorType::get(element_ty, native_elements*2);
-        int result_elements = v_ty->getVectorNumElements()*2;
-
         Value *a = v[0];
         Value *b = v[1];
-        Value *bytes = codegen(-static_cast<int>(element_ty->getScalarSizeInBits()/8));
-        vector<Value *> ret;
-        for (int i = 0; i < result_elements/2; i += native_elements) {
-            Value *a_i = slice_vector(a, i, native_elements);
-            Value *b_i = slice_vector(b, i, native_elements);
-            Value *ret_i = call_intrin_cast(native2_ty,
-                                            IPICK(Intrinsic::hexagon_V6_vshuffvdd),
-                                            {b_i, a_i, bytes});
-            if ((i + native_elements)*2 > result_elements) {
-                // This is the last vector, and it has some extra
-                // elements. Slice it down.
-                ret_i = slice_vector(ret_i, 0, (i + native_elements)*2 - result_elements);
+        // Interleaving two vectors.
+        llvm::Type *v_ty = v[0]->getType();
+        llvm::Type *element_ty = v_ty->getVectorElementType();
+        int element_bits = element_ty->getScalarSizeInBits();
+        int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
+        int result_elements = v_ty->getVectorNumElements()*2;
+
+        if (result_elements == native_elements && (element_bits == 8 || element_bits == 16)) {
+            llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
+            // This is an interleave of two half native vectors, use
+            // vshuff.
+            Intrinsic::ID vshuff =
+                element_bits == 8 ? IPICK(Intrinsic::hexagon_V6_vshuffb) : IPICK(Intrinsic::hexagon_V6_vshuffh);
+            return call_intrin_cast(native_ty, vshuff, {concat_vectors({a, b})});
+        } else {
+            // Break them into native vectors, use vshuffvdd, and
+            // concatenate the shuffled results.
+            llvm::Type *native2_ty = llvm::VectorType::get(element_ty, native_elements*2);
+            Value *bytes = codegen(-static_cast<int>(element_bits/8));
+            vector<Value *> ret;
+            for (int i = 0; i < result_elements/2; i += native_elements) {
+                Value *a_i = slice_vector(a, i, native_elements);
+                Value *b_i = slice_vector(b, i, native_elements);
+                Value *ret_i = call_intrin_cast(native2_ty,
+                                                IPICK(Intrinsic::hexagon_V6_vshuffvdd),
+                                                {b_i, a_i, bytes});
+                if ((i + native_elements)*2 > result_elements) {
+                    // This is the last vector, and it has some extra
+                    // elements. Slice it down.
+                    ret_i = slice_vector(ret_i, 0, (i + native_elements)*2 - result_elements);
+                }
+                ret.push_back(ret_i);
             }
-            ret.push_back(ret_i);
+            return concat_vectors(ret);
         }
-        return concat_vectors(ret);
     }
     return CodeGen_Posix::interleave_vectors(v);
 }
+
+namespace {
+
+bool is_strided_ramp(const std::vector<int> &indices, int &stride) {
+    stride = indices.size() > 1 ? indices[1] - indices[0] : 1;
+    for (int i = 1; i + 1 < static_cast<int>(indices.size()); i++) {
+        if (indices[i] + stride != indices[i + 1]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_concat_or_slice(const std::vector<int> &indices) {
+    std::vector<int> defined_indices;
+    defined_indices.reserve(indices.size());
+
+    // Skip undef elements at the beginning and the end.
+    size_t begin = 0;
+    while (begin < indices.size() && indices[begin] == -1) {
+        ++begin;
+    }
+    size_t end = indices.size();
+    while (end > 1 && indices[end - 1] == -1) {
+        --end;
+    }
+
+    // Check that the remaining elements are a dense ramp.
+    for (size_t i = begin; i + 1 < end; i++) {
+        if (indices[i] + 1 != indices[i + 1]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+}  // namespace
 
 Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                                         const std::vector<int> &indices) {
@@ -634,18 +689,15 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 
     // Try to rewrite shuffles of (maybe strided) ramps.
-    bool is_strided_ramp = true;
-    int stride = indices.size() > 1 ? indices[1] - indices[0] : 1;
-    for (int i = 1; i + 1 < static_cast<int>(indices.size()); i++) {
-        if (indices[i] + stride != indices[i + 1]) {
-            is_strided_ramp = false;
-            break;
+    int stride;
+    if (!is_strided_ramp(indices, stride)) {
+        if (is_concat_or_slice(indices) || element_bits > 16) {
+            // Let LLVM handle concat or slices.
+            return CodeGen_Posix::shuffle_vectors(a, b, indices);
+        } else {
+            // This is something else, use a vlut.
+            return vlut(concat_vectors({a, b}), indices);
         }
-    }
-
-    if (!is_strided_ramp) {
-        // This is not a strided ramp, let LLVM handle it.
-        return CodeGen_Posix::shuffle_vectors(a, b, indices);
     }
 
     int start = indices[0];
@@ -689,6 +741,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             }
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
     } else if (stride == 2 && result_elements*2 == a_elements + b_elements) {
         internal_assert(start == 0 || start == 1);
         // For stride 2 shuffles, we can use vpack or vdeal.
@@ -735,9 +788,143 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here.
 
-    return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    if (element_bits <= 16) {
+        return vlut(concat_vectors({a, b}), indices);
+    } else {
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    }
 }
 
+Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
+    bool B128 = target.has_feature(Halide::Target::HVX_128);
+    llvm::Type *lut_ty = lut->getType();
+    llvm::Type *idx_ty = idx->getType();
+
+    internal_assert(isa<VectorType>(lut_ty));
+    internal_assert(isa<VectorType>(idx_ty));
+    internal_assert(idx_ty->getScalarSizeInBits() == 8);
+
+    int native_lut_elements = 0;
+    Intrinsic::ID vlut_id = Intrinsic::not_intrinsic;
+    Intrinsic::ID vlut_acc_id = Intrinsic::not_intrinsic;
+    if (lut_ty->getScalarSizeInBits() == 8) {
+        // We can use vlut32.
+        native_lut_elements = 32;
+        vlut_id = IPICK(Intrinsic::hexagon_V6_vlutvvb);
+        vlut_acc_id = IPICK(Intrinsic::hexagon_V6_vlutvvb_oracc);
+    } else {
+        // We can use vlut16. If the LUT has greater than 16 bit
+        // elements, we replicate the LUT indices.
+        int replicate = lut_ty->getScalarSizeInBits() / 16;
+        if (replicate > 1) {
+            // TODO: Reinterpret this as a LUT lookup of 16 bit entries.
+            internal_error << "LUT with greater than 16 bit entries not implemented.\n";
+        }
+        native_lut_elements = 16;
+        vlut_id = IPICK(Intrinsic::hexagon_V6_vlutvwh);
+        vlut_acc_id = IPICK(Intrinsic::hexagon_V6_vlutvwh_oracc);
+    }
+
+    // There are two dimensions in which we need to slice up the
+    // inputs. First, if the index is larger than a native vector, we
+    // need to slice up the operation into native vectors of
+    // indices. Second, the LUT may need to be broken into several
+    // stages, and that may need to be further broken up into vmux
+    // operations.
+
+    // Split up the LUT into native vectors, using the max_index to
+    // indicate how many we need.
+    max_index = std::min(max_index, static_cast<int>(lut_ty->getVectorNumElements()) - 1);
+    int native_idx_elements = native_vector_bits()/8;
+
+    vector<Value *> native_lut;
+    for (int i = 0; i <= max_index; i += native_lut_elements) {
+        native_lut.push_back(slice_vector(lut, i, native_lut_elements));
+    }
+    internal_assert(!native_lut.empty());
+    llvm::Type *native_lut_ty = native_lut.front()->getType();
+
+    // The vlut instructions work on pairs of LUTs interleaved, with
+    // each lut containing native_lut_elements. We need to interleave
+    // pairs of the native LUTs to make a full set of native LUTs.
+    // TODO: It would be better to apply the inverse of this to the
+    // indices for constant index LUT lookups (shuffles).
+    if (native_lut.size()%2 != 0) {
+        // If there are an odd number of LUTs, add an undef LUT to the end.
+        native_lut.push_back(UndefValue::get(native_lut_ty));
+    }
+    for (int i = 0; i < static_cast<int>(native_lut.size())/2; i++) {
+        native_lut[i] = interleave_vectors({native_lut[2*i + 0], native_lut[2*i + 1]});
+    }
+    native_lut.resize(native_lut.size()/2);
+    native_lut_ty = native_lut.front()->getType();
+
+    llvm::Type *native_result_ty =
+        llvm::VectorType::get(native_lut_ty->getVectorElementType(), native_idx_elements);
+
+    // The result will have the same number of elements as idx.
+    int idx_elements = idx_ty->getVectorNumElements();
+
+    vector<Value *> result;
+    for (int i = 0; i < idx_elements; i += native_idx_elements) {
+        Value *idx_i = slice_vector(idx, i, native_idx_elements);
+
+        Value *result_i = nullptr;
+        for (int j = 0; j < static_cast<int>(native_lut.size()); j++) {
+            for (int k = 0; k < 2; k++) {
+                Value *mask = ConstantInt::get(i32, 2*j + k);
+                if (result_i == nullptr) {
+                    // The first native LUT, use vlut.
+                    result_i = call_intrin_cast(native_result_ty, vlut_id,
+                                                {idx_i, native_lut[j], mask});
+                } else {
+                    // Not the first native LUT, accumulate the LUT
+                    // with the previous result.
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
+                                                {result_i, idx_i, native_lut[j], mask});
+                }
+            }
+        }
+
+        if (native_result_ty->getScalarSizeInBits() == 16) {
+            // If we used vlut16, the result is a deinterleaved double
+            // vector. Reinterleave it.
+            // TODO: We might be able to do this to the indices
+            // instead of the result. However, I think that requires a
+            // non-native vector width deinterleave, so it's probably
+            // not faster, except where the indices are compile time
+            // constants.
+            result_i = call_intrin(native_result_ty, "halide.hexagon.interleave.vh", {result_i});
+        }
+
+        result.push_back(result_i);
+    }
+
+    return slice_vector(concat_vectors(result), 0, idx_elements);
+}
+
+Value *CodeGen_Hexagon::vlut(Value *lut, const std::vector<int> &indices) {
+    // TODO: We can take advantage of the fact that we know the
+    // indices at compile time to implement a few
+    // optimizations. First, we can avoid running the vlut
+    // instructions for ranges of the LUT for which we know we don't
+    // have any indices. This wil happen often for strided
+    // ramps. Second, we can do the shuffling of the indices necessary
+    // at compile time.
+    vector<Constant *>llvm_indices;
+    llvm_indices.reserve(indices.size());
+    int min_index = lut->getType()->getVectorNumElements();
+    int max_index = 0;
+    for (int i : indices) {
+        if (i != -1) {
+            min_index = std::min(min_index, i);
+            max_index = std::max(max_index, i);
+        }
+        llvm_indices.push_back(ConstantInt::get(i8, i));
+    }
+
+    return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
+}
 
 namespace {
 std::string type_suffix(Type type, bool signed_variants = true) {
@@ -1042,6 +1229,15 @@ void CodeGen_Hexagon::visit(const Call *op) {
             value = call_intrin(op->type,
                                 instr + type_suffix(op->args[0], b),
                                 {op->args[0], b});
+            return;
+        } else if (op->is_intrinsic("dynamic_shuffle")) {
+            internal_assert(op->args.size() == 4);
+            const int64_t *min_index = as_const_int(op->args[2]);
+            const int64_t *max_index = as_const_int(op->args[3]);
+            internal_assert(min_index && max_index);
+            Value *lut = codegen(op->args[0]);
+            Value *idx = codegen(op->args[1]);
+            value = vlut(lut, idx, *min_index, *max_index);
             return;
         }
     }
