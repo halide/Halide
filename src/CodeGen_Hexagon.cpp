@@ -101,6 +101,10 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     Stmt body = f.body;
 
+    debug(1) << "Optimizing shuffles...\n";
+    body = optimize_hexagon_shuffles(body);
+    debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
+
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
@@ -118,8 +122,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
 
     // Optimize the IR for Hexagon.
-    debug(1) << "Optimizing Hexagon code...\n";
-    body = optimize_hexagon(body);
+    debug(1) << "Optimizing Hexagon instructions...\n";
+    body = optimize_hexagon_instructions(body);
 
     if (uses_hvx(body)) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
@@ -219,6 +223,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "pack_satuh.vw", {i32x2} },
         { IPICK(Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "pack_satb.vh",  {i16x2} },
         { IPICK(Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "pack_sath.vw",  {i32x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackeb),      i8x1,  "pack.vh",       {i16x2} },
+        { IPICK(Intrinsic::hexagon_V6_vpackeh),      i16x1, "pack.vw",       {i32x2} },
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
