@@ -248,7 +248,7 @@ public:
     // @{
     const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
     EXPORT void add_wrapper(const IntrusivePtr<Internal::FunctionContents> &wrapper,
-                            const std::string &f);
+                            std::string f);
     // @}
 
     /** At what sites should we inject the allocation and the

@@ -8,26 +8,42 @@ using std::map;
 using std::string;
 
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
-    map<string, Function> res = env;
+    map<string, Function> res(env);
+    map<string, Function> wrappers;
+
+    for (const auto &iter : res) {
+        debug(0) << "....FUNC: " << iter.first << "\n"  ;
+    }
+
 
     for (const auto &it : env) {
-        string fname = it.first;
-        Function &func = res[fname]; // Function being wrapped if applicable
-        for (const auto &iter : func.schedule().wrappers()) {
+        string wrapped_fname = it.first;
+        debug(0) << "\n***********Wrapping call of function: " << wrapped_fname << "\n";
+        Function &wrapped_func = res[wrapped_fname]; // Function being wrapped if applicable
+        for (const auto &iter : wrapped_func.schedule().wrappers()) {
+            string in_func = iter.first;
             const Function &wrapper = iter.second;
-            res[wrapper.name()] = wrapper;
-            if (iter.first == "__global") { // Global wrapper
+            wrappers[wrapper.name()] = wrapper;
+            debug(0) << "   Adding wrapper: " << wrapper.name() << "  to func: " << in_func << "\n";
+            if (in_func == "$global") { // Global wrapper
                 debug(0) << "GLOBAL WRAPPER\n";
-                internal_assert(func.schedule().wrappers().size() == 1);
-                for (auto &res_iter : res) {
-                    res_iter.second = res_iter.second.wrap_calls(wrapper, fname);
+                for (const auto &res_iter : res) {
+                    in_func = res_iter.first;
+                    if (wrapped_func.schedule().wrappers().count(in_func)) {
+                        debug(0) << "+++++++SKIPPING " << in_func << " global wrapper\n";
+                        continue;
+                    }
+                    debug(0) << "....in_func: " << res_iter.first << "\n"  ;
+                    res[in_func] = res[in_func].wrap_calls(wrapper, wrapped_fname);
+                    debug(0) << "       Replacing reference of '" << wrapped_fname <<  "' in '" << in_func << "' with '" << wrapper.name() << "'\n";
                 }
-                break;
             } else {
-                res[iter.first] = res[iter.first].wrap_calls(wrapper, fname);
+                res[in_func] = res[in_func].wrap_calls(wrapper, wrapped_fname);
+                debug(0) << "       Replacing reference of '" << wrapped_fname <<  "' in '" << in_func << "' with '" << wrapper.name() << "'\n";
             }
         }
     }
+    res.insert(wrappers.begin(), wrappers.end());
     return res;
 }
 

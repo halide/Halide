@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
 
     g(x, y) = f(x);
     Func wrapper = f.in(g).compute_root();
-    f.in();
+    f.in().compute_root();
 
     Image<int> im = g.realize(200, 200);
 
