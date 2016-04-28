@@ -187,20 +187,6 @@ struct FunctionContents {
                 }
             }
         }
-
-        for (Parameter &i : output_buffers) {
-            for (size_t j = 0; j < args.size() && j < 4; j++) {
-                if (i.min_constraint(j).defined()) {
-                    i.set_min_constraint(j, mutator->mutate(i.min_constraint(j)));
-                }
-                if (i.stride_constraint(j).defined()) {
-                    i.set_stride_constraint(j, mutator->mutate(i.stride_constraint(j)));
-                }
-                if (i.extent_constraint(j).defined()) {
-                    i.set_extent_constraint(j, mutator->mutate(i.extent_constraint(j)));
-                }
-            }
-        }
     }
 };
 
@@ -333,6 +319,45 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
             << "as it is used internally by Halide as a separator\n";
     }
     contents.ptr->name = n;
+}
+
+Function Function::deep_copy() const {
+    Function copy;
+    if (!contents.defined()) {
+        return copy;
+    }
+    copy.contents.ptr->name = contents.ptr->name;
+    copy.contents.ptr->args = contents.ptr->args;
+    copy.contents.ptr->values = contents.ptr->values;
+    copy.contents.ptr->output_types = contents.ptr->output_types;
+    copy.contents.ptr->debug_file = contents.ptr->debug_file;
+    copy.contents.ptr->extern_function_name = contents.ptr->extern_function_name;
+    copy.contents.ptr->extern_is_c_plus_plus = contents.ptr->extern_is_c_plus_plus;
+    copy.contents.ptr->trace_loads = contents.ptr->trace_loads;
+    copy.contents.ptr->trace_stores = contents.ptr->trace_stores;
+    copy.contents.ptr->trace_realizations = contents.ptr->trace_realizations;
+    copy.contents.ptr->frozen = contents.ptr->frozen;
+    copy.contents.ptr->output_buffers = contents.ptr->output_buffers;
+
+    //TODO: Perform deep copy
+    copy.contents.ptr->schedule = schedule().deep_copy();
+    for (const auto &u : contents.ptr->updates) {
+        copy.contents.ptr->updates.push_back(u.deep_copy());
+    }
+    for (const auto &e : contents.ptr->extern_arguments) {
+        ExternFuncArgument e_copy;
+        e_copy.arg_type = e.arg_type;
+        e_copy.buffer = e.buffer;
+        e_copy.expr = e.expr;
+        e_copy.image_param = e.image_param;
+
+        if (e.func.defined()) {
+            //TODO: need to handle this
+        }
+        copy.contents.ptr->extern_arguments.push_back(std::move(e_copy));
+    }
+
+    return copy;
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {

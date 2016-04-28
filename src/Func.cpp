@@ -47,6 +47,11 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
 
 Func::Func(Function f) : func(f) {}
 
+Func Func::deep_copy() const {
+    Func copy(func.deep_copy());
+    return copy;
+}
+
 const string &Func::name() const {
     return func.name();
 }

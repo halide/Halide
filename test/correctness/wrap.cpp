@@ -366,12 +366,12 @@ int global_and_custom_wrap_test() {
 }
 
 int main(int argc, char **argv) {
-	/*printf("Running func wrap test\n");
+	printf("Running func wrap test\n");
     if (func_wrap_test() != 0) {
         return -1;
     }
 
-    printf("Running global wrap test\n");
+    /*printf("Running global wrap test\n");
     if (func_wrap_test() != 0) {
         return -1;
     }
@@ -386,10 +386,10 @@ int main(int argc, char **argv) {
         return -1;
     }*/
 
-    printf("Running global + custom wrapper test\n");
+    /*printf("Running global + custom wrapper test\n");
     if (global_and_custom_wrap_test() != 0) {
         return -1;
-    }
+    }*/
 
     printf("Success!\n");
     return 0;

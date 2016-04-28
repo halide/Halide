@@ -1,15 +1,31 @@
-#include "FindCalls.h"
+#include "WrapCalls.h"
 #include "IRVisitor.h"
+
+#include <set>
 
 namespace Halide{
 namespace Internal {
 
 using std::map;
+using std::set;
 using std::string;
+
+// If we haven't made deep-copy of 'in_func', create one first and mutate the copy.
+// Otherwise, mutate the existing copy.
+void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
+                            const Function &wrapper, const string &wrapped_fname,
+                            set<string> &copied) {
+    if (copied.find(in_func) == copied.end()) {
+        debug(0) << "  Deep copying function \"" << in_func << "\"\n";
+        //env[in_func] = Function(env[in_func]); // Replace with deep-copy
+    }
+    env[in_func] = env[in_func].wrap_calls(wrapper, wrapped_fname);
+}
 
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> res(env);
     map<string, Function> wrappers;
+    set<string> copied;
 
     for (const auto &it : env) {
         string wrapped_fname = it.first;
@@ -29,13 +45,13 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                     debug(4) << "Global wrapper: replacing reference of \""
                              << wrapped_fname <<  "\" in \"" << in_func
                              << "\" with \"" << wrapper.name() << "\"\n";
-                    res[in_func] = res[in_func].wrap_calls(wrapper, wrapped_fname);
+                    wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied);
                 }
             } else {
                 debug(4) << "Custom wrapper: replacing reference of \""
                          << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
                          << wrapper.name() << "\"\n";
-                res[in_func] = res[in_func].wrap_calls(wrapper, wrapped_fname);
+                wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied);
             }
         }
     }

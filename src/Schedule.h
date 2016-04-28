@@ -174,6 +174,9 @@ public:
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
 
+    /** Return a deep copy of this Schedule. */
+    EXPORT Schedule deep_copy() const;
+
     /** This flag is set to true if the schedule is memoized. */
     // @{
     bool &memoized();

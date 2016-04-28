@@ -345,6 +345,9 @@ public:
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
+    /** Return a deep copy of this Func. */
+    EXPORT Func deep_copy() const;
+
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer or buffers. Performs compilation if the
      * Func has not previously been realized and jit_compile has not

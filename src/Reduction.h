@@ -32,6 +32,9 @@ public:
      * the vector being outermost. */
     EXPORT ReductionDomain(const std::vector<ReductionVariable> &domain);
 
+    /** Return a deep copy of this ReductionDomain. */
+    EXPORT ReductionDomain deep_copy() const;
+
     /** Is this handle non-nullptr */
     bool defined() const {
         return contents.defined();
