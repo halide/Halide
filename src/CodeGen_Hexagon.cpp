@@ -590,10 +590,45 @@ Value *CodeGen_Hexagon::interleave_vectors(const std::vector<llvm::Value *> &v) 
 
 namespace {
 
-bool is_strided_ramp(const std::vector<int> &indices, int &stride) {
-    stride = indices.size() > 1 ? indices[1] - indices[0] : 1;
-    for (int i = 1; i + 1 < static_cast<int>(indices.size()); i++) {
-        if (indices[i] + stride != indices[i + 1]) {
+// Check if indices form a strided ramp, allowing undef elements to
+// pretend to be part of the ramp.
+bool is_strided_ramp(const std::vector<int> &indices, int &start, int &stride) {
+    int size = static_cast<int>(indices.size());
+
+    // To find the proposed start and stride, find two non-undef elements.
+    int x0 = -1;
+    int x1 = -1;
+    for (int i = 0; i < size; i++) {
+        if (indices[i] != -1) {
+            if (x0 == -1) {
+                x0 = i;
+            } else {
+                x1 = i;
+                break;
+            }
+        }
+    }
+
+    if (x1 == -1) {
+        if (x0 == -1) {
+            // Didn't find any non-undef elements.
+            return false;
+        }
+
+        // If we only had a single non-undef element, just assume it is stride 1.
+        stride = 1;
+        start = indices[x0] - x0;
+        return true;
+    }
+
+    int dx = x1 - x0;
+    int dy = indices[x1] - indices[x0];
+    stride = dy/dx;
+    start = indices[x0] - stride*x0;
+
+    // Verify that all of the non-undef elements are part of the strided ramp.
+    for (int i = 0; i < size; i++) {
+        if (indices[i] != -1 && indices[i] != start + i*stride) {
             return false;
         }
     }
@@ -689,8 +724,8 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 
     // Try to rewrite shuffles of (maybe strided) ramps.
-    int stride;
-    if (!is_strided_ramp(indices, stride)) {
+    int start, stride;
+    if (!is_strided_ramp(indices, start, stride)) {
         if (is_concat_or_slice(indices) || element_bits > 16) {
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
@@ -699,8 +734,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return vlut(concat_vectors({a, b}), indices);
         }
     }
-
-    int start = indices[0];
 
     if (stride == 1) {
         if (result_ty == native2_ty && a_ty == native_ty && b_ty == native_ty) {

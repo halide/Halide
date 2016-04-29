@@ -247,12 +247,25 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
 }
 
 
-Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
+Func apply_curve(Func input, Type result_type, Expr gamma, Expr contrast,
+                 Expr blackLevel, Expr whiteLevel) {
     // copied from FCam
     Func curve("curve");
 
     Expr minRaw = 0 + blackLevel;
     Expr maxRaw = whiteLevel;
+
+    // How much to upsample the LUT by when sampling it.
+    int lutResample = 1;
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // On HVX, LUT lookups are much faster if they are to LUTs not
+        // greater than 256 elements, so we reduce the tonemap to 256
+        // elements and use linear interpolation to upsample it.
+        lutResample = 4;
+    }
+
+    minRaw /= lutResample;
+    maxRaw /= lutResample;
 
     Expr invRange = 1.0f/(maxRaw - minRaw);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
@@ -275,8 +288,19 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
     curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
     Func curved;
-    // Use clamp to restrict size of LUT as allocated by compute_root
-    curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
+
+    if (lutResample == 1) {
+        // Use clamp to restrict size of LUT as allocated by compute_root
+        curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
+    } else {
+        // Use linear interpolation to sample the LUT.
+        Expr in = input(x, y, c);
+        Expr u0 = in/lutResample;
+        Expr u = in - u0*lutResample;
+        Expr y0 = curve(clamp(u0, 0, 255));
+        Expr y1 = curve(clamp(u0 + 1, 0, 255));
+        curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0)*lutResample + (y1 - y0)*u)/lutResample);
+    }
 
     return curved;
 }
@@ -303,23 +327,25 @@ Func process(Func raw, Type result_type,
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int tile_width = 512;
         const int tile_height = 64;
-        const int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
+        const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+        const int vector_size_16 = vector_size/2;
         denoised.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
+            .align_storage(x, vector_size_16)
+            .vectorize(x, vector_size_16);
         deinterleaved.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size)
+            .align_storage(x, vector_size_16)
+            .vectorize(x, vector_size_16)
             .reorder(c, x, y)
             .unroll(c);
         corrected.compute_at(processed, tx)
-            .vectorize(x, vector_size)
+            .vectorize(x, vector_size_16)
             .reorder(c, x, y)
             .unroll(c);
         processed.compute_root()
             .hexagon()
             .tile(x, y, tx, ty, xi, yi, tile_width, tile_height)
             .reorder(xi, yi, c, tx, ty)
+            .vectorize(xi, vector_size)
             .parallel(ty);
 
         // We can generate slightly better code if we know the output is a whole number of tiles.
