@@ -19,6 +19,8 @@
 #include "Module.h"
 #include "Pipeline.h"
 
+#include <map>
+
 namespace Halide {
 
 /** A class that can represent Vars or RVars. Used for reorder calls
@@ -345,8 +347,10 @@ public:
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
-    /** Return a deep copy of this Func. */
-    EXPORT Func deep_copy() const;
+    /** Return a deep copy of this Func. 'copied' is a map of Functions that have
+     * been deep copied so far. We need it to update any reference to the old
+     * Function accordingly, e.g. in Func's values, etc. */
+    EXPORT Func deep_copy(std::map<Func, Func> &copied) const;
 
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer or buffers. Performs compilation if the
@@ -1547,6 +1551,9 @@ public:
      */
     EXPORT std::vector<Argument> infer_arguments() const;
 
+    bool operator < (const Func &other) const {
+        return func < other.func;
+    }
 };
 
  /** JIT-Compile and run enough code to evaluate a Halide

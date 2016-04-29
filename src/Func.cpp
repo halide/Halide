@@ -47,8 +47,22 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
 
 Func::Func(Function f) : func(f) {}
 
-Func Func::deep_copy() const {
-    Func copy(func.deep_copy());
+Func Func::deep_copy(std::map<Func, Func> &copied) const {
+    std::map<Function, Function> copied_funcs;
+    for (const auto &iter : copied) {
+        copied_funcs[iter.first.func] = iter.second.func;
+    }
+    Func copy(func.deep_copy(copied_funcs));
+
+    for (const auto &iter : copied_funcs) {
+        Func old_func = Func(iter.first);
+        if (copied.count(old_func)) {
+            internal_assert(copied[old_func].func.same_as(iter.second));
+            continue;
+        }
+        copied[old_func] = Func(iter.second);
+    }
+
     return copy;
 }
 

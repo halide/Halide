@@ -11,6 +11,8 @@
 #include "Schedule.h"
 #include "Reduction.h"
 
+#include <map>
+
 namespace Halide {
 
 namespace Internal {
@@ -54,16 +56,6 @@ struct UpdateDefinition {
     std::vector<Expr> values, args;
     Schedule schedule;
     ReductionDomain domain;
-
-    /** Return a deep copy of this UpdateDefinition. */
-    UpdateDefinition deep_copy() const {
-        UpdateDefinition copy;
-        copy.values = values;
-        copy.args = args;
-        copy.schedule = schedule.deep_copy();
-        copy.domain = domain.deep_copy();
-        return copy;
-    }
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -72,6 +64,7 @@ struct UpdateDefinition {
 class Function {
 private:
     IntrusivePtr<FunctionContents> contents;
+
 public:
     /** Construct a new function with no definitions and no name. This
      * constructor only exists so that you can make vectors of
@@ -87,7 +80,7 @@ public:
 
     /** Return a deep copy of this Function. Note: this method does not deep-copy
      * the 'output_buffers'. */
-    EXPORT Function deep_copy() const;
+    EXPORT Function deep_copy(std::map<Function, Function> &copied) const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -230,6 +223,10 @@ public:
      * predicates) to call to its wrapper function 'wrapper'. See \ref Func::wrap
      * for more details. */
     EXPORT Function &wrap_calls(const Function &wrapper, const std::string &wrapped);
+
+    bool operator < (const Function &other) const {
+        return contents.ptr < other.contents.ptr;
+    }
 };
 
 }}

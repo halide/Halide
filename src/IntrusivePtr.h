@@ -127,6 +127,10 @@ public:
         return ptr == other.ptr;
     }
 
+    bool operator < (const IntrusivePtr &other) const {
+        return ptr < other.ptr;
+    }
+
 };
 
 }

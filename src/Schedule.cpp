@@ -7,6 +7,9 @@
 namespace Halide {
 namespace Internal {
 
+IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
+    const IntrusivePtr<FunctionContents> &src,
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -39,39 +42,51 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
     delete p;
 }
 
+namespace {
+
+// Deep-copy data from 'src' to 'dst'. Ignore copying 'specialization' over.
+void deep_copy_schedule_contents_helper(
+            IntrusivePtr<ScheduleContents> &dst, const IntrusivePtr<ScheduleContents> &src,
+            std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied) {
+    dst.ptr->store_level = src.ptr->store_level;
+    dst.ptr->compute_level = src.ptr->compute_level;
+    dst.ptr->splits = src.ptr->splits;
+    dst.ptr->dims = src.ptr->dims;
+    dst.ptr->storage_dims = src.ptr->storage_dims;
+    dst.ptr->bounds = src.ptr->bounds;
+    dst.ptr->reduction_domain = src.ptr->reduction_domain.deep_copy();
+    dst.ptr->memoized = src.ptr->memoized;
+    dst.ptr->touched = src.ptr->touched;
+    dst.ptr->allow_race_conditions = src.ptr->allow_race_conditions;
+
+    // Deep-copy wrapper functions
+    for (const auto &iter : src.ptr->wrappers) {
+        if (copied.count(iter.second)) {
+            dst.ptr->wrappers[iter.first] = copied[iter.second];
+        } else {
+            //TODO: call deep copy on FunctionContents;
+            dst.ptr->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied);
+            copied[iter.second] = dst.ptr->wrappers[iter.first];
+        }
+    }
+}
+
+}
+
 Schedule::Schedule() : contents(new ScheduleContents) {}
 
-Schedule Schedule::deep_copy() const {
+Schedule Schedule::deep_copy(DeepCopyMap &copied) const {
     if (!contents.defined()) {
         return Schedule();
     }
     Schedule copy;
-    copy.contents.ptr->store_level = store_level();
-    copy.contents.ptr->compute_level = compute_level();
-    copy.contents.ptr->splits = splits();
-    copy.contents.ptr->dims = dims();
-    copy.contents.ptr->storage_dims = storage_dims();
-    copy.contents.ptr->bounds = bounds();
-    copy.contents.ptr->wrappers = wrappers();
-    copy.contents.ptr->reduction_domain = reduction_domain();
-    copy.contents.ptr->memoized = memoized();
-    copy.contents.ptr->touched = touched();
-    copy.contents.ptr->allow_race_conditions = allow_race_conditions();
+    deep_copy_schedule_contents_helper(copy.contents, contents, copied);
 
     for (const auto &s : specializations()) {
         Specialization s_copy;
         s_copy.condition = s.condition;
         s_copy.schedule = IntrusivePtr<ScheduleContents>(new ScheduleContents);
-        s_copy.schedule.ptr->store_level      = s.schedule.ptr->store_level;
-        s_copy.schedule.ptr->compute_level    = s.schedule.ptr->compute_level;
-        s_copy.schedule.ptr->splits           = s.schedule.ptr->splits;
-        s_copy.schedule.ptr->dims             = s.schedule.ptr->dims;
-        s_copy.schedule.ptr->storage_dims     = s.schedule.ptr->storage_dims;
-        s_copy.schedule.ptr->bounds           = s.schedule.ptr->bounds;
-        s_copy.schedule.ptr->reduction_domain = s.schedule.ptr->reduction_domain;
-        s_copy.schedule.ptr->memoized         = s.schedule.ptr->memoized;
-        s_copy.schedule.ptr->touched          = s.schedule.ptr->touched;
-        s_copy.schedule.ptr->allow_race_conditions = s.schedule.ptr->allow_race_conditions;
+        deep_copy_schedule_contents_helper(s_copy.schedule, s.schedule, copied);
         copy.contents.ptr->specializations.push_back(std::move(s_copy));
     }
 

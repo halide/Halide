@@ -168,6 +168,8 @@ struct FunctionContents;
  * innards. In the future it may become more encapsulated. */
 class Schedule {
     IntrusivePtr<ScheduleContents> contents;
+
+    typedef std::map<IntrusivePtr<Internal::FunctionContents>, IntrusivePtr<Internal::FunctionContents>> DeepCopyMap;
 public:
 
     Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
@@ -175,7 +177,7 @@ public:
     EXPORT Schedule();
 
     /** Return a deep copy of this Schedule. */
-    EXPORT Schedule deep_copy() const;
+    EXPORT Schedule deep_copy(DeepCopyMap &copied) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
