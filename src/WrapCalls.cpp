@@ -19,6 +19,7 @@ void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
     if (copied.find(in_func) == copied.end()) {
         debug(0) << "  Deep copying function \"" << in_func << "\"\n";
         env[in_func] = env[in_func].deep_copy(deep_copied); // Replace with deep-copy
+        copied.insert(in_func);
     }
     env[in_func] = env[in_func].wrap_calls(wrapper, wrapped_fname);
 }
