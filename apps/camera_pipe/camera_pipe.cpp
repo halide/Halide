@@ -327,17 +327,18 @@ Func process(Func raw, Type result_type,
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int tile_width = 512;
         const int tile_height = 64;
-        const int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
+        const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+        const int vector_size_16 = vector_size/2;
         denoised.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size);
+            .align_storage(x, vector_size_16)
+            .vectorize(x, vector_size_16);
         deinterleaved.compute_at(processed, tx)
-            .align_storage(x, vector_size)
-            .vectorize(x, vector_size)
+            .align_storage(x, vector_size_16)
+            .vectorize(x, vector_size_16)
             .reorder(c, x, y)
             .unroll(c);
         corrected.compute_at(processed, tx)
-            .vectorize(x, vector_size)
+            .vectorize(x, vector_size_16)
             .reorder(c, x, y)
             .unroll(c);
         processed.compute_root()
