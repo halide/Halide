@@ -595,28 +595,35 @@ namespace {
 bool is_strided_ramp(const std::vector<int> &indices, int &start, int &stride) {
     int size = static_cast<int>(indices.size());
 
-    // To find the proposed start and stride, find two adjacent non-undef elements.
-    int non_undef[2] = { -1, -1 };
+    // To find the proposed start and stride, find two non-undef elements.
+    int x0 = -1;
+    int x1 = -1;
     for (int i = 0; i < size; i++) {
         if (indices[i] != -1) {
-            if (non_undef[0] == -1) {
-                non_undef[0] = i;
+            if (x0 == -1) {
+                x0 = i;
             } else {
-                non_undef[1] = i;
+                x1 = i;
                 break;
             }
         }
     }
-    if (non_undef[0] == -1 || non_undef[1] == -1) {
-        // Didn't find two non-undef elements.
-        return false;
+
+    if (x1 == -1) {
+        if (x0 == -1) {
+            // Didn't find any non-undef elements.
+            return false;
+        }
+
+        // If we only had a single non-undef element, just assume it is stride 1.
+        stride = 1;
+        start = indices[x0] - x0;
+        return true;
     }
 
-    int x0 = non_undef[0];
-    int x1 = non_undef[1];
     int dx = x1 - x0;
     int dy = indices[x1] - indices[x0];
-    stride = dy / dx;
+    stride = dy/dx;
     start = indices[x0] - stride*x0;
 
     // Verify that all of the non-undef elements are part of the strided ramp.
