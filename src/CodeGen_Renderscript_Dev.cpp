@@ -560,9 +560,6 @@ static inline size_t writeAndroidBitcodeWrapper(AndroidBitcodeWrapper *wrapper,
 
 vector<char> CodeGen_Renderscript_Dev::compile_to_src() {
 
-    // Generic llvm optimizations on the module.
-    optimize_module();
-
     debug(2) << "CodeGen_Renderscript_Dev::compile_to_src resultant module:\n";
     if (debug::debug_level >= 2) {
         module->dump();
