@@ -20,6 +20,23 @@ using std::vector;
 using std::string;
 using std::set;
 
+typedef std::map<IntrusivePtr<Internal::FunctionContents>, IntrusivePtr<Internal::FunctionContents>> DeepCopyMap;
+void deep_copy_update_definition_helper(
+    UpdateDefinition &dst, const UpdateDefinition &src,
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
+
+void deep_copy_extern_func_argument_helper(
+    ExternFuncArgument &dst, const ExternFuncArgument &src,
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
+
+void deep_copy_function_contents_helper(
+    IntrusivePtr<FunctionContents> &dst, const IntrusivePtr<FunctionContents> &src,
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
+
+IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
+    const IntrusivePtr<FunctionContents> &src,
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
+
 // Replace all calls to wrapped functions with their wrappers.
 class WrapCalls : public IRMutator {
     using IRMutator::visit;
@@ -321,40 +338,86 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
     contents.ptr->name = n;
 }
 
-Function Function::deep_copy() const {
+void deep_copy_update_definition_helper(UpdateDefinition &dst,
+                                        const UpdateDefinition &src,
+                                        DeepCopyMap &copied) {
+    dst.values = src.values;
+    dst.args = src.args;
+    dst.schedule = src.schedule.deep_copy(copied);
+    dst.domain = src.domain.deep_copy();
+}
+
+void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
+                                           const ExternFuncArgument &src,
+                                           DeepCopyMap &copied) {
+    dst.arg_type = src.arg_type;
+    dst.buffer = src.buffer;
+    dst.expr = src.expr;
+    dst.image_param = src.image_param;
+    if (copied.count(src.func)) {
+        dst.func = copied[src.func];
+    } else {
+        deep_copy_function_contents_helper(dst.func, src.func, copied);
+        copied[src.func] = dst.func;
+    }
+}
+
+IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
+                                        const IntrusivePtr<FunctionContents> &src,
+                                        DeepCopyMap &copied) {
+    IntrusivePtr<FunctionContents> copy(new FunctionContents);
+    deep_copy_function_contents_helper(copy, src, copied);
+    return copy;
+}
+
+void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
+                                        const IntrusivePtr<FunctionContents> &src,
+                                        DeepCopyMap &copied) {
+    dst.ptr->name = src.ptr->name;
+    dst.ptr->args = src.ptr->args;
+    dst.ptr->values = src.ptr->values;
+    dst.ptr->output_types = src.ptr->output_types;
+    dst.ptr->debug_file = src.ptr->debug_file;
+    dst.ptr->extern_function_name = src.ptr->extern_function_name;
+    dst.ptr->extern_is_c_plus_plus = src.ptr->extern_is_c_plus_plus;
+    dst.ptr->trace_loads = src.ptr->trace_loads;
+    dst.ptr->trace_stores = src.ptr->trace_stores;
+    dst.ptr->trace_realizations = src.ptr->trace_realizations;
+    dst.ptr->frozen = src.ptr->frozen;
+    dst.ptr->output_buffers = src.ptr->output_buffers;
+
+    dst.ptr->schedule = src.ptr->schedule.deep_copy(copied);
+    for (const auto &u : src.ptr->updates) {
+        UpdateDefinition u_copy;
+        deep_copy_update_definition_helper(u_copy, u, copied);
+        dst.ptr->updates.push_back(std::move(u_copy));
+    }
+    for (const auto &e : src.ptr->extern_arguments) {
+        ExternFuncArgument e_copy;
+        deep_copy_extern_func_argument_helper(e_copy, e, copied);
+        dst.ptr->extern_arguments.push_back(std::move(e_copy));
+    }
+}
+
+Function Function::deep_copy(std::map<Function, Function> &copied) const {
+    DeepCopyMap copied_funcs;
+    for (const auto &iter : copied) {
+        copied_funcs[iter.first.contents] = iter.second.contents;
+    }
+
     Function copy;
     if (!contents.defined()) {
         return copy;
     }
-    copy.contents.ptr->name = contents.ptr->name;
-    copy.contents.ptr->args = contents.ptr->args;
-    copy.contents.ptr->values = contents.ptr->values;
-    copy.contents.ptr->output_types = contents.ptr->output_types;
-    copy.contents.ptr->debug_file = contents.ptr->debug_file;
-    copy.contents.ptr->extern_function_name = contents.ptr->extern_function_name;
-    copy.contents.ptr->extern_is_c_plus_plus = contents.ptr->extern_is_c_plus_plus;
-    copy.contents.ptr->trace_loads = contents.ptr->trace_loads;
-    copy.contents.ptr->trace_stores = contents.ptr->trace_stores;
-    copy.contents.ptr->trace_realizations = contents.ptr->trace_realizations;
-    copy.contents.ptr->frozen = contents.ptr->frozen;
-    copy.contents.ptr->output_buffers = contents.ptr->output_buffers;
+    deep_copy_function_contents_helper(copy.contents, contents, copied_funcs);
 
-    //TODO: Perform deep copy
-    copy.contents.ptr->schedule = schedule().deep_copy();
-    for (const auto &u : contents.ptr->updates) {
-        copy.contents.ptr->updates.push_back(u.deep_copy());
-    }
-    for (const auto &e : contents.ptr->extern_arguments) {
-        ExternFuncArgument e_copy;
-        e_copy.arg_type = e.arg_type;
-        e_copy.buffer = e.buffer;
-        e_copy.expr = e.expr;
-        e_copy.image_param = e.image_param;
-
-        if (e.func.defined()) {
-            //TODO: need to handle this
+    for (const auto &iter : copied_funcs) {
+        Function old_func = Function(iter.first);
+        if (copied.count(old_func)) {
+            internal_assert(copied[old_func].contents.same_as(iter.second));
+            continue;
         }
-        copy.contents.ptr->extern_arguments.push_back(std::move(e_copy));
+        copied[old_func] = Function(iter.second);
     }
 
     return copy;

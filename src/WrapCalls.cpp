@@ -14,10 +14,11 @@ using std::string;
 // Otherwise, mutate the existing copy.
 void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
                             const Function &wrapper, const string &wrapped_fname,
-                            set<string> &copied) {
+                            set<string> &copied,
+                            map<Function, Function> &deep_copied) {
     if (copied.find(in_func) == copied.end()) {
         debug(0) << "  Deep copying function \"" << in_func << "\"\n";
-        //env[in_func] = Function(env[in_func]); // Replace with deep-copy
+        env[in_func] = env[in_func].deep_copy(deep_copied); // Replace with deep-copy
     }
     env[in_func] = env[in_func].wrap_calls(wrapper, wrapped_fname);
 }
@@ -26,6 +27,8 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> res(env);
     map<string, Function> wrappers;
     set<string> copied;
+
+    map<Function, Function> deep_copied;
 
     for (const auto &it : env) {
         string wrapped_fname = it.first;
@@ -45,13 +48,13 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                     debug(4) << "Global wrapper: replacing reference of \""
                              << wrapped_fname <<  "\" in \"" << in_func
                              << "\" with \"" << wrapper.name() << "\"\n";
-                    wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied);
+                    wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied, deep_copied);
                 }
             } else {
                 debug(4) << "Custom wrapper: replacing reference of \""
                          << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
                          << wrapper.name() << "\"\n";
-                wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied);
+                wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied, deep_copied);
             }
         }
     }
