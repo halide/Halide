@@ -909,12 +909,10 @@ class OptimizeShuffles : public IRMutator {
                                   Ramp::make(base, 1, const_extent),
                                   op->image, op->param);
 
-            index = simplify(index - base);
-
             // We know the size of the LUT is not more than 256, so we
             // can safely cast the index to 8 bit, which
             // dynamic_shuffle requires.
-            index = cast(UInt(8).with_lanes(op->type.lanes()), index);
+            index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
 
             expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent}, Call::PureIntrinsic);
         } else if (!index.same_as(op->index)) {
