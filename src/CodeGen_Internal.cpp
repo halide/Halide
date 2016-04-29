@@ -236,20 +236,30 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
 }
 
 bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+    if (!value) {
+        return false;
+    }
     #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
     #else
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
+    if (!cam) {
+        return false;
+    }
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
     #endif
-    if (c) {
-        result = !c->isZero();
-        return true;
+    if (!c) {
+        return false;
     }
-    return false;
+    result = !c->isZero();
+    return true;
 }
 
 bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+    if (!value) {
+        result = "";
+        return false;
+    }
     #if LLVM_VERSION < 36
     if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
         result = "";
