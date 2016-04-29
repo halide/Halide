@@ -610,14 +610,10 @@ bool is_strided_ramp(const std::vector<int> &indices, int &start, int &stride) {
     }
 
     if (x1 == -1) {
-        if (x0 == -1) {
-            // Didn't find any non-undef elements.
-            return false;
-        }
-
-        // If we only had a single non-undef element, just assume it is stride 1.
+        // If we don't have enough non-undef elements, we can pretend
+        // the ramp is anything we want!
         stride = 1;
-        start = indices[x0] - x0;
+        start = x0 != -1 ? indices[x0] - x0 : 0;
         return true;
     }
 
