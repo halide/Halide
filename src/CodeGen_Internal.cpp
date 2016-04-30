@@ -289,10 +289,12 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options = llvm::TargetOptions();
     options.LessPreciseFPMADOption = true;
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-    // Disabled on x86 because it makes LLVM compile vector division
-    // to multiplication by approx reciprocal, which is too inaccurate
-    // even for us.
-    options.UnsafeFPMath = !starts_with(module.getTargetTriple(), "x86");
+    options.UnsafeFPMath = true;
+
+    // Turn off approximate reciprocals for division. It's too
+    // inaccurate even for us.
+    options.Reciprocals.setDefaults("all", false, 0);
+
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
