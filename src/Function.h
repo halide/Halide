@@ -78,9 +78,9 @@ public:
     /** Construct a new function with the given name */
     EXPORT Function(const std::string &n);
 
-    /** Return a deep copy of this Function. Note: this method does not deep-copy
-     * the 'output_buffers'. */
-    EXPORT Function deep_copy(std::map<Function, Function> &copied) const;
+    /** Deep copy this Function into 'copy'. Note: this method does not deep-copy
+     * the Parameter objects. */
+    EXPORT void deep_copy(Function &copy, std::map<Function, Function> &copied_map) const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -213,16 +213,15 @@ public:
     EXPORT bool frozen() const;
 
     /** Mark calls of this function by 'f' to be replaced with its wrapper
-     * during the lowering stage. If the string 'f' is set to '$global', it
-     * means replace all calls to this function by all other functions
-     * (excluding itself) in the pipeline with the wrapper. See \ref Func::wrap
-     * for more details. */
-    EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "$global");
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to this function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. See \ref Func::in for more details. */
+    EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "");
 
-    /** Replace every call to function 'wrapped' (including calls in the RDom's
-     * predicates) to call to its wrapper function 'wrapper'. See \ref Func::wrap
-     * for more details. */
-    EXPORT Function &wrap_calls(const Function &wrapper, const std::string &wrapped);
+    /** Replace every call to function in 'substitutions' keys (including calls
+     * in the RDom's predicates) to call to function in 'substitutions' values. */
+    EXPORT Function &substitute_calls(const std::map<Function, Function> &substitutions);
+    EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
 
     bool operator < (const Function &other) const {
         return contents.ptr < other.contents.ptr;

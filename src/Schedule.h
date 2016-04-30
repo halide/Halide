@@ -169,15 +169,16 @@ struct FunctionContents;
 class Schedule {
     IntrusivePtr<ScheduleContents> contents;
 
-    typedef std::map<IntrusivePtr<Internal::FunctionContents>, IntrusivePtr<Internal::FunctionContents>> DeepCopyMap;
 public:
 
     Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
 
-    /** Return a deep copy of this Schedule. */
-    EXPORT Schedule deep_copy(DeepCopyMap &copied) const;
+    /** Deep copy this Schedule into 'copy'. */
+    EXPORT void deep_copy(
+        Schedule &copy,
+        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
@@ -247,10 +248,9 @@ public:
     // @}
 
     /** Mark calls of this function by 'f' to be replaced with its wrapper
-     * during the lowering stage. If the string 'f' is set to '$global', it
-     * means replace all calls to this function by all other functions
-     * (excluding itself) in the pipeline with the wrapper. See \ref Func::wrap
-     * for more details. */
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to this function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. See \ref Func::in for more details. */
     // @{
     const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
     EXPORT void add_wrapper(const IntrusivePtr<Internal::FunctionContents> &wrapper,

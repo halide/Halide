@@ -7,41 +7,77 @@ namespace Halide{
 namespace Internal {
 
 using std::map;
+using std::pair;
 using std::set;
 using std::string;
+using std::vector;
 
-// If we haven't made deep-copy of 'in_func', create one first and mutate the copy.
-// Otherwise, mutate the existing copy.
 void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
-                            const Function &wrapper, const string &wrapped_fname,
-                            set<string> &copied,
-                            map<Function, Function> &deep_copied) {
-    if (copied.find(in_func) == copied.end()) {
-        debug(0) << "  Deep copying function \"" << in_func << "\"\n";
-        env[in_func] = env[in_func].deep_copy(deep_copied); // Replace with deep-copy
-        copied.insert(in_func);
-    }
-    env[in_func] = env[in_func].wrap_calls(wrapper, wrapped_fname);
+                            const Function &orig, const Function &substitute) {
+    env[in_func] = env[in_func].substitute_calls(orig, substitute);
 }
 
-map<string, Function> wrap_func_calls(const map<string, Function> &env) {
-    map<string, Function> res(env);
-    map<string, Function> wrappers;
-    set<string> copied;
+// Return true if 'func' exists as copy of one of the Function in 'copied_map'
+bool is_copy(const Function& func, const map<Function, Function> copied_map) {
+    for (const auto &iter : copied_map) {
+        if (iter.second.same_as(func)) {
+            return true;
+        }
+    }
+    return false;
+}
 
-    map<Function, Function> deep_copied;
+pair<vector<Function>, map<string, Function>> wrap_func_calls(
+            const vector<Function> &outputs, const map<string, Function> &env) {
+    vector<Function> wrapped_outputs;
+    map<string, Function> wrapped_env;
 
-    for (const auto &it : env) {
-        string wrapped_fname = it.first;
-        Function &wrapped_func = res[wrapped_fname];
-        for (const auto &iter : wrapped_func.schedule().wrappers()) {
+    // Create empty copy of Func in env.
+    map<Function, Function> copied_map;
+    for (const auto &iter : env) {
+        copied_map[iter.second] = Function(iter.second.name());
+    }
+    // Deep copy the Func in env into its corresponding empty copy.
+    for (const auto &iter : env) {
+        iter.second.deep_copy(copied_map[iter.second], copied_map);
+    }
+    // Need to substitute-in the old reference within the Func with the
+    // deep-copy version.
+    for (auto &iter : copied_map) {
+        iter.second.substitute_calls(copied_map);
+    }
+
+    // Populate the env with the deep-copy version.
+    for (const auto &iter : copied_map) {
+        wrapped_env.emplace(iter.first.name(), iter.second);
+    }
+
+    for (const auto &it : copied_map) {
+        string wrapped_fname = it.first.name();
+        const Function &wrapped_func = it.second;
+        const auto &wrappers = wrapped_func.schedule().wrappers();
+
+        // Put names of all wrappers of this Function into the set for
+        // faster comparison during the substitution.
+        set<string> all_func_wrappers;
+        for (const auto &iter : wrappers) {
+            all_func_wrappers.insert(Function(iter.second).name());
+        }
+
+        for (const auto &iter : wrappers) {
             string in_func = iter.first;
-            const Function &wrapper = iter.second;
-            wrappers[wrapper.name()] = wrapper;
-            if (in_func == "$global") { // Global wrapper
-                for (const auto &res_iter : res) {
-                    in_func = res_iter.first;
-                    if (wrapped_func.schedule().wrappers().count(in_func)) {
+            const Function &wrapper = Function(iter.second); // This is already the deep-copy version
+            internal_assert(is_copy(wrapper, copied_map)); // Make sure it's indeed the copy
+
+            if (in_func.empty()) { // Global wrapper
+                for (const auto &wrapped_env_iter : wrapped_env) {
+                    in_func = wrapped_env_iter.first;
+                    if ((wrapper.name() == in_func) || (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
+                        // Should not substitute itself or custom wrapper of the same func
+                        debug(4) << "Skip over replacing \"" << in_func << "\" with \"" << wrapper.name() << "\"\n";
+                        continue;
+                    }
+                    if (wrappers.count(in_func)) {
                         // If the 'in_func' already has custom wrapper for 'wrapped_func',
                         // don't substitute in the global wrapper.
                         continue;
@@ -49,18 +85,28 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                     debug(4) << "Global wrapper: replacing reference of \""
                              << wrapped_fname <<  "\" in \"" << in_func
                              << "\" with \"" << wrapper.name() << "\"\n";
-                    wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied, deep_copied);
+                    wrap_func_calls_helper(wrapped_env, in_func, wrapped_func, wrapper);
                 }
             } else {
                 debug(4) << "Custom wrapper: replacing reference of \""
                          << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
                          << wrapper.name() << "\"\n";
-                wrap_func_calls_helper(res, in_func, wrapper, wrapped_fname, copied, deep_copied);
+                wrap_func_calls_helper(wrapped_env, in_func, wrapped_func, wrapper);
             }
         }
     }
-    res.insert(wrappers.begin(), wrappers.end());
-    return res;
+
+    for (const auto &func : outputs) {
+        if (copied_map.count(func)) {
+            debug(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
+            wrapped_outputs.push_back(copied_map[func]);
+        } else {
+            debug(4) << "Adding original version to outputs: " << func.name() << "\n";
+            wrapped_outputs.push_back(func);
+        }
+    }
+
+    return std::make_pair(wrapped_outputs, wrapped_env);
 }
 
 }

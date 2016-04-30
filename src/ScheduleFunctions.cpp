@@ -1059,8 +1059,6 @@ public:
 
 void validate_schedule(Function f, Stmt s, const Target &target, bool is_output) {
 
-    debug(0) << "VALIDATING Schedule for func: " << f.name() << "\n" << s << "\n";
-
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
@@ -1143,13 +1141,6 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
 
     bool store_at_ok = false, compute_at_ok = false;
     const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
-
-    debug(0) << "***********Legal sites size: " << sites.size() << "\n";
-    for (const auto &site : sites) {
-        debug(0) << "LoopLevel: " << site.loop_level.func << ", " << site.loop_level.var << "\n";
-    }
-    debug(0) << "\n";
-
     size_t store_idx = 0, compute_idx = 0;
     for (size_t i = 0; i < sites.size(); i++) {
         if (sites[i].loop_level.match(store_at)) {

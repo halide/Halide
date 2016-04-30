@@ -19,44 +19,41 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::set;
+using std::map;
 
-typedef std::map<IntrusivePtr<Internal::FunctionContents>, IntrusivePtr<Internal::FunctionContents>> DeepCopyMap;
-void deep_copy_update_definition_helper(
-    UpdateDefinition &dst, const UpdateDefinition &src,
-    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
-
-void deep_copy_extern_func_argument_helper(
-    ExternFuncArgument &dst, const ExternFuncArgument &src,
-    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
-
-void deep_copy_function_contents_helper(
-    IntrusivePtr<FunctionContents> &dst, const IntrusivePtr<FunctionContents> &src,
-    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
-
+typedef map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
+void deep_copy_update_definition_helper(UpdateDefinition &dst,
+                                        const UpdateDefinition &src,
+                                        DeepCopyMap &copied_map);
+void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
+                                           const ExternFuncArgument &src,
+                                           DeepCopyMap &copied_map);
+void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
+                                        const IntrusivePtr<FunctionContents> &src,
+                                        DeepCopyMap &copied_map);
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-    const IntrusivePtr<FunctionContents> &src,
-    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied);
+    const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied);
 
 // Replace all calls to wrapped functions with their wrappers.
-class WrapCalls : public IRMutator {
+class SubstituteCalls : public IRMutator {
     using IRMutator::visit;
 
-    const Function wrapper;
-    const std::string wrapped;
+    map<Function, Function> substitutions;
 
     void visit(const Call *c) {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
-        if ((c->call_type == Call::Halide) && (wrapped == c->name)) {
-            debug(4) << "...Replace call to Func \"" << wrapped << "\" with "
-                     << "\"" << wrapper.name() << "\"\n";
-            expr = Call::make(wrapper, c->args, c->value_index);
+        if ((c->call_type == Call::Halide) && (substitutions.count(c->func))) {
+            const Function &subs = substitutions[c->func];
+            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                     << "\"" << subs.name() << "\"\n";
+            expr = Call::make(subs, c->args, c->value_index);
         }
     }
 public:
-    WrapCalls(const Function &wrapper, const std::string &wrapped)
-        : wrapper(wrapper), wrapped(wrapped) {}
+    SubstituteCalls(const map<Function, Function> &substitutions)
+        : substitutions(substitutions) {}
 };
 
 struct FunctionContents {
@@ -340,31 +337,33 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
 
 void deep_copy_update_definition_helper(UpdateDefinition &dst,
                                         const UpdateDefinition &src,
-                                        DeepCopyMap &copied) {
+                                        DeepCopyMap &copied_map) {
     dst.values = src.values;
     dst.args = src.args;
-    dst.schedule = src.schedule.deep_copy(copied);
+    dst.schedule = Schedule();
+    src.schedule.deep_copy(dst.schedule, copied_map);
     dst.domain = src.domain.deep_copy();
 }
 
 void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
                                            const ExternFuncArgument &src,
-                                           DeepCopyMap &copied) {
+                                           DeepCopyMap &copied_map) {
     dst.arg_type = src.arg_type;
     dst.buffer = src.buffer;
     dst.expr = src.expr;
     dst.image_param = src.image_param;
-    if (copied.count(src.func)) {
-        dst.func = copied[src.func];
+    if (copied_map.count(src.func)) {
+        dst.func = copied_map[src.func];
     } else {
-        deep_copy_function_contents_helper(dst.func, src.func, copied);
-        copied[src.func] = dst.func;
+        dst.func = IntrusivePtr<FunctionContents>(new FunctionContents);
+        deep_copy_function_contents_helper(dst.func, src.func, copied_map);
+        copied_map[src.func] = dst.func;
     }
 }
 
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-                                        const IntrusivePtr<FunctionContents> &src,
-                                        DeepCopyMap &copied) {
+        const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied) {
+
     IntrusivePtr<FunctionContents> copy(new FunctionContents);
     deep_copy_function_contents_helper(copy, src, copied);
     return copy;
@@ -372,7 +371,11 @@ IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
 
 void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
                                         const IntrusivePtr<FunctionContents> &src,
-                                        DeepCopyMap &copied) {
+                                        DeepCopyMap &copied_map) {
+    debug(4) << "Deep-copy function contents: \"" << src.ptr->name << "\"\n";
+
+    internal_assert(dst.defined() && src.defined()) << "Cannot deep-copy undefined Function\n";
+
     dst.ptr->name = src.ptr->name;
     dst.ptr->args = src.ptr->args;
     dst.ptr->values = src.ptr->values;
@@ -386,41 +389,42 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
     dst.ptr->frozen = src.ptr->frozen;
     dst.ptr->output_buffers = src.ptr->output_buffers;
 
-    dst.ptr->schedule = src.ptr->schedule.deep_copy(copied);
+    dst.ptr->schedule = Schedule();
+    src.ptr->schedule.deep_copy(dst.ptr->schedule, copied_map);
+
     for (const auto &u : src.ptr->updates) {
         UpdateDefinition u_copy;
-        deep_copy_update_definition_helper(u_copy, u, copied);
+        deep_copy_update_definition_helper(u_copy, u, copied_map);
         dst.ptr->updates.push_back(std::move(u_copy));
+
+        //TODO(psuriana): need to update the reference counter for cyclic reference
     }
     for (const auto &e : src.ptr->extern_arguments) {
         ExternFuncArgument e_copy;
-        deep_copy_extern_func_argument_helper(e_copy, e, copied);
+        deep_copy_extern_func_argument_helper(e_copy, e, copied_map);
         dst.ptr->extern_arguments.push_back(std::move(e_copy));
     }
 }
 
-Function Function::deep_copy(std::map<Function, Function> &copied) const {
-    DeepCopyMap copied_funcs;
-    for (const auto &iter : copied) {
-        copied_funcs[iter.first.contents] = iter.second.contents;
+void Function::deep_copy(Function &copy, std::map<Function, Function> &copied_map) const {
+    internal_assert(copy.contents.defined() && contents.defined()) << "Cannot deep-copy undefined Function\n";
+    DeepCopyMap copied_funcs_map;
+    for (const auto &iter : copied_map) {
+        copied_funcs_map[iter.first.contents] = iter.second.contents;
     }
+    // Add reference to its copy in case of self-reference.
+    copied_funcs_map[contents] = copy.contents;
 
-    Function copy;
-    if (!contents.defined()) {
-        return copy;
-    }
-    deep_copy_function_contents_helper(copy.contents, contents, copied_funcs);
+    deep_copy_function_contents_helper(copy.contents, contents, copied_funcs_map);
 
-    for (const auto &iter : copied_funcs) {
+    for (const auto &iter : copied_funcs_map) {
         Function old_func = Function(iter.first);
-        if (copied.count(old_func)) {
-            internal_assert(copied[old_func].contents.same_as(iter.second));
+        if (copied_map.count(old_func)) {
+            internal_assert(copied_map[old_func].contents.same_as(iter.second));
             continue;
         }
-        copied[old_func] = Function(iter.second);
+        copied_map[old_func] = Function(iter.second);
     }
-
-    return copy;
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
@@ -855,13 +859,20 @@ void Function::add_wrapper(const Function &wrapper, const std::string &f) {
     contents.ptr->schedule.add_wrapper(wrapper.contents, f);
 }
 
-Function &Function::wrap_calls(const Function &wrapper, const std::string &wrapped) {
-    internal_assert(!wrapped.empty());
-    debug(4) << "Func \"" << name() << "\": attempting to replace call to \""
-             << wrapped << "\" with " << " \"" << wrapper.name() << "\"\n";
-    WrapCalls wrap_calls(wrapper, wrapped);
-    contents.ptr->mutate(&wrap_calls);
+Function &Function::substitute_calls(const map<Function, Function> &substitutions) {
+    if (substitutions.empty()) {
+        return *this;
+    }
+    debug(4) << "Substituting calls in " << name() << "\n";
+    SubstituteCalls subs_calls(substitutions);
+    contents.ptr->mutate(&subs_calls);
     return *this;
+}
+
+Function &Function::substitute_calls(const Function &orig, const Function &substitute) {
+    map<Function, Function> substitutions;
+    substitutions.emplace(orig, substitute);
+    return substitute_calls(substitutions);
 }
 
 }
