@@ -20,35 +20,35 @@ private:
     using IRVisitor::visit;
 
     void visit(const ProducerConsumer *op) {
-    	string old_producer = producer;
+        string old_producer = producer;
         producer = op->name;
         calls[producer]; // Make sure each producer is allocated a slot
         op->produce.accept(this);
         producer = old_producer;
 
-    	if (op->update.defined()) {
-    		// Just lump all the update stages together
-	        producer = op->name + ".update(" + std::to_string(0) + ")";
-    	    calls[producer]; // Make sure each producer is allocated a slot
-    		op->update.accept(this);
-	        producer = old_producer;
-    	}
-    	op->consume.accept(this);
+        if (op->update.defined()) {
+            // Just lump all the update stages together
+            producer = op->name + ".update(" + std::to_string(0) + ")";
+            calls[producer]; // Make sure each producer is allocated a slot
+            op->update.accept(this);
+            producer = old_producer;
+        }
+        op->consume.accept(this);
         producer = old_producer;
     }
 
     void visit(const Load *op) {
-    	IRVisitor::visit(op);
+        IRVisitor::visit(op);
         if (!producer.empty()) {
-        	assert(calls.count(producer) > 0);
-        	vector<string> &callees = calls[producer];
-        	if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
-		    	callees.push_back(op->name);
-		    	// Sort the callees after every insertion to make our life easier
-		    	// during correctness check
-				std::sort(callees.begin(), callees.end());
-			}
-    	}
+            assert(calls.count(producer) > 0);
+            vector<string> &callees = calls[producer];
+            if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
+                callees.push_back(op->name);
+                // Sort the callees after every insertion to make our life easier
+                // during correctness check
+                std::sort(callees.begin(), callees.end());
+            }
+        }
     }
 };
 
@@ -69,24 +69,24 @@ int func_wrap_test() {
     m.functions[0].body.accept(&c);
 
     if (c.calls.size() != 3) {
-    	printf("Expect 3 callers instead of %d\n", (int)c.calls.size());
-    	return -1;
+        printf("Expect 3 callers instead of %d\n", (int)c.calls.size());
+        return -1;
     }
     if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-    	printf("Expect \"f\" to call nothing\n");
-    	return -1;
+        printf("Expect \"f\" to call nothing\n");
+        return -1;
     }
     if (!(c.calls.count(wrapper.name()) &&
-    	  (c.calls[wrapper.name()].size() == 1) &&
-    	  (c.calls[wrapper.name()][0] == f.name()))) {
-    	printf("Expect \"wrapper\" to call \"f\"\n");
-    	return -1;
+          (c.calls[wrapper.name()].size() == 1) &&
+          (c.calls[wrapper.name()][0] == f.name()))) {
+        printf("Expect \"wrapper\" to call \"f\"\n");
+        return -1;
     }
     if (!(c.calls.count(g.name()) &&
-    	  (c.calls[g.name()].size() == 1) &&
-    	  (c.calls[g.name()][0] == wrapper.name()))) {
-    	printf("Expect \"g\" to call wrapper\n");
-    	return -1;
+          (c.calls[g.name()].size() == 1) &&
+          (c.calls[g.name()][0] == wrapper.name()))) {
+        printf("Expect \"g\" to call wrapper\n");
+        return -1;
     }
 
     Image<int> im = g.realize(200, 200);
@@ -120,24 +120,24 @@ int global_wrap_test() {
     m.functions[0].body.accept(&c);
 
     if (c.calls.size() != 3) {
-    	printf("Expect 3 callers instead of %d\n", (int)c.calls.size());
-    	return -1;
+        printf("Expect 3 callers instead of %d\n", (int)c.calls.size());
+        return -1;
     }
     if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-    	printf("Expect \"f\" to call nothing\n");
-    	return -1;
+        printf("Expect \"f\" to call nothing\n");
+        return -1;
     }
     if (!(c.calls.count(wrapper.name()) &&
-    	  (c.calls[wrapper.name()].size() == 1) &&
-    	  (c.calls[wrapper.name()][0] == f.name()))) {
-    	printf("Expect \"wrapper\" to call \"f\"\n");
-    	return -1;
+          (c.calls[wrapper.name()].size() == 1) &&
+          (c.calls[wrapper.name()][0] == f.name()))) {
+        printf("Expect \"wrapper\" to call \"f\"\n");
+        return -1;
     }
     if (!(c.calls.count(g.name()) &&
-    	  (c.calls[g.name()].size() == 1) &&
-    	  (c.calls[g.name()][0] == wrapper.name()))) {
-    	printf("Expect \"g\" to call wrapper\n");
-    	return -1;
+          (c.calls[g.name()].size() == 1) &&
+          (c.calls[g.name()][0] == wrapper.name()))) {
+        printf("Expect \"g\" to call wrapper\n");
+        return -1;
     }
 
     Image<int> im = g.realize(200, 200);
@@ -178,31 +178,31 @@ int update_defined_after_wrap_test() {
     m.functions[0].body.accept(&c);
 
     if (c.calls.size() != 4) {
-    	printf("Expect 4 callers instead of %d\n", (int)c.calls.size());
-    	return -1;
+        printf("Expect 4 callers instead of %d\n", (int)c.calls.size());
+        return -1;
     }
     if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-    	printf("Expect \"f\" to call nothing\n");
-    	return -1;
+        printf("Expect \"f\" to call nothing\n");
+        return -1;
     }
     if (!(c.calls.count(wrapper.name()) &&
-    	  (c.calls[wrapper.name()].size() == 1) &&
-    	  (c.calls[wrapper.name()][0] == f.name()))) {
-    	printf("Expect \"wrapper\" to call \"f\"\n");
-    	return -1;
+          (c.calls[wrapper.name()].size() == 1) &&
+          (c.calls[wrapper.name()][0] == f.name()))) {
+        printf("Expect \"wrapper\" to call \"f\"\n");
+        return -1;
     }
     if (!(c.calls.count(g.name()) &&
-    	  (c.calls[g.name()].size() == 1) &&
-    	  (c.calls[g.name()][0] == wrapper.name()))) {
-    	printf("Expect \"g\" to call \"wrapper\"\n");
-    	return -1;
+          (c.calls[g.name()].size() == 1) &&
+          (c.calls[g.name()][0] == wrapper.name()))) {
+        printf("Expect \"g\" to call \"wrapper\"\n");
+        return -1;
     }
     if (!(c.calls.count(g.update(0).name()) &&
-    	  (c.calls[g.update(0).name()].size() == 2) &&
-    	  (c.calls[g.update(0).name()][0] == wrapper.name()) &&
-    	  (c.calls[g.update(0).name()][1] == g.name()))) {
-    	printf("Expect \"g_update\" to call \"wrapper\" and \"g\"\n");
-    	return -1;
+          (c.calls[g.update(0).name()].size() == 2) &&
+          (c.calls[g.update(0).name()][0] == wrapper.name()) &&
+          (c.calls[g.update(0).name()][1] == g.name()))) {
+        printf("Expect \"g_update\" to call \"wrapper\" and \"g\"\n");
+        return -1;
     }
 
     Image<int> im = g.realize(200, 200);
@@ -223,8 +223,8 @@ int update_defined_after_wrap_test() {
 }
 
 int rdom_wrapper_test() {
-	// Scheduling initialization + update on the same compute level using wrapper
-	Func f("f"), g("g"), result("result");
+    // Scheduling initialization + update on the same compute level using wrapper
+    Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
     f(x, y) = x + y;
@@ -244,35 +244,35 @@ int rdom_wrapper_test() {
     m.functions[0].body.accept(&c);
 
     if (c.calls.size() != 5) {
-    	printf("Expect 5 callers instead of %d\n", (int)c.calls.size());
-    	return -1;
+        printf("Expect 5 callers instead of %d\n", (int)c.calls.size());
+        return -1;
     }
     if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-    	printf("Expect \"f\" to call nothing\n");
-    	return -1;
+        printf("Expect \"f\" to call nothing\n");
+        return -1;
     }
     if (!(c.calls.count(wrapper.name()) &&
-    	  (c.calls[wrapper.name()].size() == 1) &&
-    	  (c.calls[wrapper.name()][0] == g.name()))) {
-    	printf("Expect \"wrapper\" to call \"g\"\n");
-    	return -1;
+          (c.calls[wrapper.name()].size() == 1) &&
+          (c.calls[wrapper.name()][0] == g.name()))) {
+        printf("Expect \"wrapper\" to call \"g\"\n");
+        return -1;
     }
     if (!(c.calls.count(result.name()) &&
-    	  (c.calls[result.name()].size() == 1) &&
-    	  (c.calls[result.name()][0] == wrapper.name()))) {
-    	printf("Expect \"result\" to call \"wrapper\"\n");
-    	return -1;
+          (c.calls[result.name()].size() == 1) &&
+          (c.calls[result.name()][0] == wrapper.name()))) {
+        printf("Expect \"result\" to call \"wrapper\"\n");
+        return -1;
     }
     if (!(c.calls.count(g.name()) && (c.calls[g.name()].size() == 0))) {
-    	printf("Expect \"g\" to call nothing\n");
-    	return -1;
+        printf("Expect \"g\" to call nothing\n");
+        return -1;
     }
     if (!(c.calls.count(g.update(0).name()) &&
-    	  (c.calls[g.update(0).name()].size() == 2) &&
-    	  (c.calls[g.update(0).name()][0] == f.name()) &&
-    	  (c.calls[g.update(0).name()][1] == g.name()))) {
-    	printf("Expect \"g_update\" to call \"f\" and \"g\"\n");
-    	return -1;
+          (c.calls[g.update(0).name()].size() == 2) &&
+          (c.calls[g.update(0).name()][0] == f.name()) &&
+          (c.calls[g.update(0).name()][1] == g.name()))) {
+        printf("Expect \"g_update\" to call \"f\" and \"g\"\n");
+        return -1;
     }
 
     Image<int> im = result.realize(200, 200);
@@ -290,8 +290,8 @@ int rdom_wrapper_test() {
 }
 
 int global_and_custom_wrap_test() {
-	// Scheduling initialization + update on the same compute level using wrapper
-	Func f("f"), g("g"), result("result");
+    // Scheduling initialization + update on the same compute level using wrapper
+    Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
     f(x) = x;
@@ -307,49 +307,42 @@ int global_and_custom_wrap_test() {
     // Expect 'result' to call 'g' and 'f_wrapper', 'g' to call 'f_in_g',
     // 'f_wrapper' to call 'f', f_in_g' to call 'f', 'f' to call nothing
     Module m = result.compile_to_module({});
-    /*CheckCalls c;
+    CheckCalls c;
     m.functions[0].body.accept(&c);
 
-    for (const auto &iter : c.calls) {
-    	std::cout << "Producer: " << iter.first << "\n";
-    	for (const auto &callees : iter.second) {
-    		std::cout << "     Callees: " << callees << "\n";
-    	}
-    }
-
     if (c.calls.size() != 5) {
-    	printf("Expect 5 callers instead of %d\n", (int)c.calls.size());
-    	return -1;
+        printf("Expect 5 callers instead of %d\n", (int)c.calls.size());
+        return -1;
     }
     if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-    	printf("Expect \"f\" to call nothing\n");
-    	return -1;
+        printf("Expect \"f\" to call nothing\n");
+        return -1;
     }
     if (!(c.calls.count(f_in_g.name()) &&
-    	  (c.calls[f_in_g.name()].size() == 1) &&
-    	  (c.calls[f_in_g.name()][0] == f.name()))) {
-    	printf("Expect \"f_in_g\" to call \"f\"\n");
-    	return -1;
+          (c.calls[f_in_g.name()].size() == 1) &&
+          (c.calls[f_in_g.name()][0] == f.name()))) {
+        printf("Expect \"f_in_g\" to call \"f\"\n");
+        return -1;
     }
     if (!(c.calls.count(f_wrapper.name()) &&
-    	  (c.calls[f_wrapper.name()].size() == 1) &&
-    	  (c.calls[f_wrapper.name()][0] == f.name()))) {
-    	printf("Expect \"f_wrapper\" to call \"f\"\n");
-    	return -1;
+          (c.calls[f_wrapper.name()].size() == 1) &&
+          (c.calls[f_wrapper.name()][0] == f.name()))) {
+        printf("Expect \"f_wrapper\" to call \"f\"\n");
+        return -1;
     }
     if (!(c.calls.count(g.name()) &&
-    	  (c.calls[g.name()].size() == 1) &&
-    	  (c.calls[g.name()][0] == f_in_g.name()))) {
-    	printf("Expect \"g\" to call \"f_in_g\"\n");
-    	return -1;
+          (c.calls[g.name()].size() == 1) &&
+          (c.calls[g.name()][0] == f_in_g.name()))) {
+        printf("Expect \"g\" to call \"f_in_g\"\n");
+        return -1;
     }
     if (!(c.calls.count(result.name()) &&
-    	  (c.calls[result.name()].size() == 2) &&
-    	  (c.calls[result.name()][0] == f_wrapper.name()) &&
-    	  (c.calls[result.name()][1] == g.name()))) {
-    	printf("Expect \"result\" to call \"f_wrapper\" and \"g\"\n");
-    	return -1;
-    }*/
+          (c.calls[result.name()].size() == 2) &&
+          (c.calls[result.name()][0] == f_wrapper.name()) &&
+          (c.calls[result.name()][1] == g.name()))) {
+        printf("Expect \"result\" to call \"f_wrapper\" and \"g\"\n");
+        return -1;
+    }
 
     Image<int> im = result.realize(200, 200);
     for (int y = 0; y < im.height(); y++) {
@@ -365,18 +358,96 @@ int global_and_custom_wrap_test() {
     return 0;
 }
 
+
+int wrapper_depend_on_mutated_func_test() {
+    // Scheduling initialization + update on the same compute level using wrapper
+    Func e("e"), f("f"), g("g"), h("h");
+    Var x("x"), y("y");
+
+    e(x, y) = x + y;
+    f(x, y) = e(x, y);
+    g(x, y) = f(x, y);
+    h(x, y) = g(x, y);
+
+    e.compute_root();
+    f.compute_root();
+    g.compute_root();
+
+    Func e_in_f = e.in(f).compute_root();
+    Func g_in_h = g.in(h).compute_root();
+
+    // Check the call graphs.
+    // Expect 'h' to call 'g_in_h', 'g_in_h' to call 'g', 'g' to call 'f',
+    // 'f' to call 'e_in_f', e_in_f' to call 'e', 'e' to call nothing
+    Module m = h.compile_to_module({});
+    CheckCalls c;
+    m.functions[0].body.accept(&c);
+
+    if (c.calls.size() != 6) {
+        printf("Expect 6 callers instead of %d\n", (int)c.calls.size());
+        return -1;
+    }
+    if (!(c.calls.count(e.name()) && (c.calls[e.name()].size() == 0))) {
+        printf("Expect \"e\" to call nothing\n");
+        return -1;
+    }
+    if (!(c.calls.count(e_in_f.name()) &&
+          (c.calls[e_in_f.name()].size() == 1) &&
+          (c.calls[e_in_f.name()][0] == e.name()))) {
+        printf("Expect \"e_in_f\" to call \"e\"\n");
+        return -1;
+    }
+    if (!(c.calls.count(f.name()) &&
+          (c.calls[f.name()].size() == 1) &&
+          (c.calls[f.name()][0] == e_in_f.name()))) {
+        printf("Expect \"f\" to call \"e_in_f\"\n");
+        return -1;
+    }
+    if (!(c.calls.count(g.name()) &&
+          (c.calls[g.name()].size() == 1) &&
+          (c.calls[g.name()][0] == f.name()))) {
+        printf("Expect \"g\" to call \"f\"\n");
+        return -1;
+    }
+    if (!(c.calls.count(g_in_h.name()) &&
+          (c.calls[g_in_h.name()].size() == 1) &&
+          (c.calls[g_in_h.name()][0] == g.name()))) {
+        printf("Expect \"g_in_h\" to call \"g\"\n");
+        return -1;
+    }
+    if (!(c.calls.count(h.name()) &&
+          (c.calls[h.name()].size() == 1) &&
+          (c.calls[h.name()][0] == g_in_h.name()))) {
+        printf("Expect \"h\" to call \"g_in_h\"\n");
+        return -1;
+    }
+
+    Image<int> im = h.realize(200, 200);
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            int correct = x + y;
+            if (im(x, y) != correct) {
+                printf("im(%d, %d) = %d instead of %d\n",
+                       x, y, im(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
-	printf("Running func wrap test\n");
+    printf("Running func wrap test\n");
     if (func_wrap_test() != 0) {
         return -1;
     }
 
-    /*printf("Running global wrap test\n");
-    if (func_wrap_test() != 0) {
+    printf("Running global wrap test\n");
+    if (global_wrap_test() != 0) {
         return -1;
     }
 
-	printf("Running update is defined after wrap test\n");
+    printf("Running update is defined after wrap test\n");
     if (update_defined_after_wrap_test() != 0) {
         return -1;
     }
@@ -384,16 +455,20 @@ int main(int argc, char **argv) {
     printf("Running rdom wrapper test\n");
     if (rdom_wrapper_test() != 0) {
         return -1;
-    }*/
+    }
 
-    /*printf("Running global + custom wrapper test\n");
+    printf("Running global + custom wrapper test\n");
     if (global_and_custom_wrap_test() != 0) {
         return -1;
-    }*/
+    }
+
+    printf("Running wrapper depend on mutated func test\n");
+    if (wrapper_depend_on_mutated_func_test() != 0) {
+        return -1;
+    }
+
+    //TODO(psuriana): add test calling wrapper on the wrapper itself
 
     printf("Success!\n");
     return 0;
 }
-
-
-

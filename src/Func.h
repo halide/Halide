@@ -326,9 +326,6 @@ class Func {
 
     EXPORT void invalidate_cache();
 
-    // Helper function to add wrapper to 'f'
-    EXPORT void wrap_func_call(const Func &f, const Func &wrapper);
-
 public:
 
     /** Declare a new undefined function with the given name */
@@ -346,11 +343,6 @@ public:
     /** Construct a new Func to wrap an existing, already-define
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
-
-    /** Return a deep copy of this Func. 'copied' is a map of Functions that have
-     * been deep copied so far. We need it to update any reference to the old
-     * Function accordingly, e.g. in Func's values, etc. */
-    EXPORT Func deep_copy(std::map<Func, Func> &copied) const;
 
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer or buffers. Performs compilation if the

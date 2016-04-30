@@ -63,35 +63,37 @@ using std::make_pair;
 
 Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
 
-    // Compute an environment
+    // Compute an wrapped_environment
     map<string, Function> env;
     for (Function f : outputs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
-    // Substitute in wrapper funcs. This will mutate the Funcs.
-    env = wrap_func_calls(env);
+    // Substitute in wrapper funcs. Create a deep-copy of the Func if mutated.
+    const auto &wrapped = wrap_func_calls(outputs, env);
+    const vector<Function> &wrapped_outputs = wrapped.first;
+    const map<string, Function> &wrapped_env = wrapped.second;
 
     // Compute a realization order
-    vector<string> order = realization_order(outputs, env);
+    vector<string> order = realization_order(wrapped_outputs, wrapped_env);
 
     bool any_memoized = false;
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
+    Stmt s = schedule_functions(wrapped_outputs, order, wrapped_env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
-        s = inject_memoization(s, env, pipeline_name, outputs);
+        s = inject_memoization(s, wrapped_env, pipeline_name, wrapped_outputs);
         debug(2) << "Lowering after injecting memoization:\n" << s << '\n';
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, pipeline_name, env, outputs);
+    s = inject_tracing(s, pipeline_name, wrapped_env, wrapped_outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
@@ -101,27 +103,27 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
     debug(1) << "Computing bounds of each function's value\n";
-    FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+    FuncValueBounds func_bounds = compute_function_value_bounds(order, wrapped_env);
 
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, outputs, t, order, env, func_bounds);
+    s = add_image_checks(s, wrapped_outputs, t, order, wrapped_env, func_bounds);
     debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, outputs, order, env, func_bounds);
+    s = bounds_inference(s, wrapped_outputs, order, wrapped_env, func_bounds);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
-    s = sliding_window(s, env);
+    s = sliding_window(s, wrapped_env);
     debug(2) << "Lowering after sliding window:\n" << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
-    s = allocation_bounds_inference(s, env, func_bounds);
+    s = allocation_bounds_inference(s, wrapped_env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
     debug(1) << "Removing code that depends on undef values...\n";
@@ -140,7 +142,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
-    s = debug_to_file(s, outputs, env);
+    s = debug_to_file(s, wrapped_outputs, wrapped_env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
@@ -158,12 +160,12 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, outputs, env);
+    s = storage_flattening(s, wrapped_outputs, wrapped_env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
-        s = rewrite_memoized_allocations(s, env);
+        s = rewrite_memoized_allocations(s, wrapped_env);
         debug(2) << "Lowering after rewriting memoized allocations:\n" << s << "\n\n";
     } else {
         debug(1) << "Skipping rewriting memoized allocations...\n";
