@@ -313,7 +313,7 @@ private:
         if (func.has_extern_definition()) {
             for (const ExternFuncArgument &extern_arg : func.extern_arguments()) {
                 if (extern_arg.is_func()) {
-                    visit_function(extern_arg.func);
+                    visit_function(Function(extern_arg.func));
                 } else if (extern_arg.is_buffer()) {
                     include_buffer(extern_arg.buffer);
                 } else if (extern_arg.is_image_param()) {
