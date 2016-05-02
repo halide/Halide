@@ -833,12 +833,12 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     internal_assert(isa<VectorType>(idx_ty));
     internal_assert(idx_ty->getScalarSizeInBits() == 8);
 
-    int native_lut_elements = 0;
+    int lut_slice_elements = 0;
     Intrinsic::ID vlut_id = Intrinsic::not_intrinsic;
     Intrinsic::ID vlut_acc_id = Intrinsic::not_intrinsic;
     if (lut_ty->getScalarSizeInBits() == 8) {
         // We can use vlut32.
-        native_lut_elements = 32;
+        lut_slice_elements = 32;
         vlut_id = IPICK(Intrinsic::hexagon_V6_vlutvvb);
         vlut_acc_id = IPICK(Intrinsic::hexagon_V6_vlutvvb_oracc);
     } else {
@@ -849,7 +849,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
             // TODO: Reinterpret this as a LUT lookup of 16 bit entries.
             internal_error << "LUT with greater than 16 bit entries not implemented.\n";
         }
-        native_lut_elements = 16;
+        lut_slice_elements = 16;
         vlut_id = IPICK(Intrinsic::hexagon_V6_vlutvwh);
         vlut_acc_id = IPICK(Intrinsic::hexagon_V6_vlutvwh_oracc);
     }
@@ -865,31 +865,40 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // indicate how many we need.
     max_index = std::min(max_index, static_cast<int>(lut_ty->getVectorNumElements()) - 1);
     int native_idx_elements = native_vector_bits()/8;
+    int native_lut_elements = native_vector_bits()/lut_ty->getScalarSizeInBits();
 
-    vector<Value *> native_lut;
-    for (int i = 0; i <= max_index; i += native_lut_elements) {
-        native_lut.push_back(slice_vector(lut, i, native_lut_elements));
+    vector<Value *> lut_slices;
+    for (int i = 0; i <= max_index; i += lut_slice_elements) {
+        Value *slice_i = slice_vector(lut, i, lut_slice_elements);
+        // On HVX128, the lut slices are 1/4 the width of a native
+        // vector, so we concat with an undef vector of the same type
+        // (pairs of these are later interleaved, forming a full width
+        // vector).
+        if (lut_slice_elements*2 < native_lut_elements) {
+            slice_i = concat_vectors({slice_i, UndefValue::get(slice_i->getType())});
+        }
+        lut_slices.push_back(slice_i);
     }
-    internal_assert(!native_lut.empty());
-    llvm::Type *native_lut_ty = native_lut.front()->getType();
+    internal_assert(!lut_slices.empty());
+    llvm::Type *lut_slice_ty = lut_slices.front()->getType();
 
     // The vlut instructions work on pairs of LUTs interleaved, with
-    // each lut containing native_lut_elements. We need to interleave
+    // each lut containing lut_slice_elements. We need to interleave
     // pairs of the native LUTs to make a full set of native LUTs.
     // TODO: It would be better to apply the inverse of this to the
     // indices for constant index LUT lookups (shuffles).
-    if (native_lut.size()%2 != 0) {
+    if (lut_slices.size()%2 != 0) {
         // If there are an odd number of LUTs, add an undef LUT to the end.
-        native_lut.push_back(UndefValue::get(native_lut_ty));
+        lut_slices.push_back(UndefValue::get(lut_slice_ty));
     }
-    for (int i = 0; i < static_cast<int>(native_lut.size())/2; i++) {
-        native_lut[i] = interleave_vectors({native_lut[2*i + 0], native_lut[2*i + 1]});
+    for (int i = 0; i < static_cast<int>(lut_slices.size())/2; i++) {
+        lut_slices[i] = interleave_vectors({lut_slices[2*i + 0], lut_slices[2*i + 1]});
     }
-    native_lut.resize(native_lut.size()/2);
-    native_lut_ty = native_lut.front()->getType();
+    lut_slices.resize(lut_slices.size()/2);
+    lut_slice_ty = lut_slices.front()->getType();
 
     llvm::Type *native_result_ty =
-        llvm::VectorType::get(native_lut_ty->getVectorElementType(), native_idx_elements);
+        llvm::VectorType::get(lut_slice_ty->getVectorElementType(), native_idx_elements);
 
     // The result will have the same number of elements as idx.
     int idx_elements = idx_ty->getVectorNumElements();
@@ -899,18 +908,18 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         Value *idx_i = slice_vector(idx, i, native_idx_elements);
 
         Value *result_i = nullptr;
-        for (int j = 0; j < static_cast<int>(native_lut.size()); j++) {
+        for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < 2; k++) {
                 Value *mask = ConstantInt::get(i32, 2*j + k);
                 if (result_i == nullptr) {
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut_id,
-                                                {idx_i, native_lut[j], mask});
+                                                {idx_i, lut_slices[j], mask});
                 } else {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
                     result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
-                                                {result_i, idx_i, native_lut[j], mask});
+                                                {result_i, idx_i, lut_slices[j], mask});
                 }
             }
         }
