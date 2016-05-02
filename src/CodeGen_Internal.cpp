@@ -291,9 +291,13 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
+    #if LLVM_VERSION >= 37
+    #ifndef WITH_NATIVE_CLIENT
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     options.Reciprocals.setDefaults("all", false, 0);
+    #endif
+    #endif
 
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
