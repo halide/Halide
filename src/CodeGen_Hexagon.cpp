@@ -407,6 +407,8 @@ void CodeGen_Hexagon::init_module() {
         // Bit counting
         { IPICK(Intrinsic::hexagon_V6_vcl0h), u16x1, "clz.vh", {u16x1} },
         { IPICK(Intrinsic::hexagon_V6_vcl0w), u32x1, "clz.vw", {u32x1} },
+        { IPICK(Intrinsic::hexagon_V6_vnormamth), u16x1, "cls.vh", {u16x1} },
+        { IPICK(Intrinsic::hexagon_V6_vnormamtw), u32x1, "cls.vw", {u32x1} },
         { IPICK(Intrinsic::hexagon_V6_vpopcounth), u16x1, "popcount.vh", {u16x1} },
         // TODO: If we need it, we could implement a popcountw in the
         // runtime module that uses popcounth, and horizontally add
