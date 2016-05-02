@@ -1688,6 +1688,8 @@ void check_hvx_all() {
 
     check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
     check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
+    check("vnormamt(v*.h)", hvx_width/2, max(count_leading_zeros(i16_1), count_leading_zeros(~i16_1)));
+    check("vnormamt(v*.w)", hvx_width/4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
     check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));
 }
 
