@@ -367,7 +367,10 @@ private:
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-        visit_function(op->func);
+        if (op->func.defined()) {
+            Function fn(op->func);
+            visit_function(fn);
+        }
         include_buffer(op->image);
         include_parameter(op->param);
     }
