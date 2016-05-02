@@ -847,17 +847,17 @@ int main(int argc, char **argv) {
     }
 
     printf("Running initialization on gpu and update on cpu test\n");
-    if (init_on_gpu_update_on_cpu_test(19) != 0) {
+    if (init_on_gpu_update_on_cpu_test(12) != 0) {
         return -1;
     }
 
     printf("Running initialization on cpu and update on gpu test\n");
-    if (init_on_cpu_update_on_gpu_test(11) != 0) {
+    if (init_on_cpu_update_on_gpu_test(13) != 0) {
         return -1;
     }
 
     printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
-    if (gpu_intermediate_computed_if_param_test(12) != 0) {
+    if (gpu_intermediate_computed_if_param_test(14) != 0) {
         return -1;
     }
 
