@@ -425,6 +425,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&check);
     }
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.predicate().accept(&check);
+    }
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
@@ -437,6 +440,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // Freeze the reduction domain if defined
     if (check.reduction_domain.defined()) {
+        check.reduction_domain.predicate().accept(&freezer);
         check.reduction_domain.freeze();
     }
 
@@ -459,6 +463,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
     for (size_t i = 0; i < values.size(); i++) {
         values[i] = lower_random(values[i], free_vars, tag);
+    }
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.set_predicate(lower_random(check.reduction_domain.predicate(), free_vars, tag));
     }
 
     UpdateDefinition r;
