@@ -467,6 +467,27 @@ private:
         IRMutator::visit(op);
     }
 
+    void visit(const Max *op) {
+        IRMutator::visit(op);
+
+        if (op->type.is_vector()) {
+            // This pattern is weird (wo operands must match, result
+            // needs 1 added) and we're unlikely to need another
+            // pattern for max, so just match it directly.
+            static std::pair<std::string, Expr> cl[] = {
+                { "halide.hexagon.cls.vh", max(count_leading_zeros(wild_i16x), count_leading_zeros(~wild_i16x)) },
+                { "halide.hexagon.cls.vw", max(count_leading_zeros(wild_i32x), count_leading_zeros(~wild_i32x)) },
+            };
+            std::vector<Expr> matches;
+            for (const auto &i : cl) {
+                if (expr_match(i.second, expr, matches) && equal(matches[0], matches[1])) {
+                    expr = Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
+                    return;
+                }
+            }
+        }
+    }
+
     void visit(const Cast *op) {
         // To hit more of the patterns we want, rewrite "double casts"
         // as two stage casts. This also avoids letting vector casts
