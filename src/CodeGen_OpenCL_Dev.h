@@ -23,7 +23,7 @@ public:
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
@@ -47,11 +47,11 @@ protected:
         CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
-                        const std::vector<GPU_Argument> &args);
+                        const std::vector<DeviceArgument> &args);
 
     protected:
         using CodeGen_C::visit;
-        std::string print_type(Type type);
+        std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace);
         std::string print_reinterpret(Type type, Expr e);
 
         std::string get_memory_space(const std::string &);
@@ -72,6 +72,7 @@ protected:
         void visit(const GE *);
         void visit(const Allocate *op);
         void visit(const Free *op);
+        void visit(const AssertStmt *op);
     };
 
     std::ostringstream src_stream;

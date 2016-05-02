@@ -11,16 +11,18 @@
 #include "LLVM_Output.h"
 
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #define NOMINMAX
+#endif
+#ifdef _WIN32
 #include <windows.h>
 static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
+    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
 }
 #else
 #include <dlfcn.h>
 static bool have_symbol(const char *s) {
-    return dlsym(NULL, s) != NULL;
+    return dlsym(nullptr, s) != nullptr;
 }
 #endif
 
@@ -57,7 +59,7 @@ struct SharedOpenCLContext {
     cl_command_queue command_queue;
     volatile int lock;
 
-    SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
+    SharedOpenCLContext() : context(nullptr), command_queue(nullptr), lock(0) {
     }
 
     // We never free the context, for the same reason as above.
@@ -115,22 +117,19 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() : execution_engine(NULL),
-                          module(NULL) {
+    JITModuleContents() : execution_engine(nullptr) {
     }
 
     ~JITModuleContents() {
-        if (execution_engine != NULL) {
+        if (execution_engine != nullptr) {
             execution_engine->runStaticConstructorsDestructors(true);
             delete execution_engine;
-            // No need to delete the module - deleting the execution engine should take care of that.
         }
     }
 
     std::map<std::string, JITModule::Symbol> exports;
     llvm::LLVMContext context;
     ExecutionEngine *execution_engine;
-    llvm::Module *module;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -153,25 +152,12 @@ char *start, *end;
 #endif
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
-JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, llvm::Module *mod, const string &name, bool optional = false) {
-    internal_assert(mod && ee);
-
-    debug(2) << "Retrieving " << name << " from module\n";
-    llvm::Function *fn = mod->getFunction(name);
-    if (!fn) {
-        if (optional) {
-            return JITModule::Symbol();
-        }
-        internal_error << "Could not find function " << name << " in module\n";
-    }
-
+JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    void *f = ee->getPointerToFunction(fn);
+    llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
+    void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
-        if (optional) {
-            return JITModule::Symbol();
-        }
-        internal_error << "Compiling " << name << " returned NULL\n";
+        internal_error << "Compiling " << name << " returned nullptr\n";
     }
 
     JITModule::Symbol symbol(f, fn->getFunctionType());
@@ -179,7 +165,7 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, llvm::Module *mo
     debug(2) << "Function " << name << " is at " << f << "\n";
 
 #ifdef __arm__
-    if (start == NULL) {
+    if (start == nullptr) {
         start = (char *)f;
         end = (char *)f;
     } else {
@@ -223,14 +209,14 @@ JITModule::JITModule() {
 JITModule::JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies) {
     jit_module = new JITModuleContents();
-    llvm::Module *llvm_module = compile_module_to_llvm_module(m, jit_module.ptr->context);
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, jit_module.ptr->context));
     std::vector<JITModule> deps_with_runtime = dependencies;
-    std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module, m.target());
+    std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
-    compile_module(llvm_module, fn.name, m.target(), deps_with_runtime);
+    compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
 }
 
-void JITModule::compile_module(llvm::Module *m, const string &function_name, const Target &target,
+void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
@@ -242,12 +228,17 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     string mcpu;
     string mattrs;
     llvm::TargetOptions options;
-    get_target_options(m, options, mcpu, mattrs);
+    get_target_options(*m, options, mcpu, mattrs);
+
+    #if LLVM_VERSION >= 37
+    DataLayout initial_module_data_layout = m->getDataLayout();
+    #endif
+    string module_name = m->getModuleIdentifier();
 
     #if LLVM_VERSION > 35
-    llvm::EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));
+    llvm::EngineBuilder engine_builder((std::move(m)));
     #else
-    llvm::EngineBuilder engine_builder(m);
+    llvm::EngineBuilder engine_builder(m.release());
     #endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
@@ -278,23 +269,22 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
         #else
             DataLayout target_data_layout(tm->createDataLayout());
         #endif
-        if (m->getDataLayout() != target_data_layout) {
-                debug(0) << "Warning: data layout mismatch between module ("
-                             << m->getDataLayout().getStringRepresentation()
-                                 << ") and what the execution engine expects ("
-                                 << target_data_layout.getStringRepresentation() << ")\n";
-                m->setDataLayout(target_data_layout);
+        if (initial_module_data_layout != target_data_layout) {
+                internal_error << "Warning: data layout mismatch between module ("
+                               << initial_module_data_layout.getStringRepresentation()
+                               << ") and what the execution engine expects ("
+                               << target_data_layout.getStringRepresentation() << ")\n";
         }
-    ExecutionEngine *ee = engine_builder.create(tm);
+        ExecutionEngine *ee = engine_builder.create(tm);
     #else
-    ExecutionEngine *ee = engine_builder.create();
+        ExecutionEngine *ee = engine_builder.create();
     #endif
 
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
     #ifdef __arm__
-    start = end = NULL;
+    start = end = nullptr;
     #endif
 
     // Do any target-specific initialization
@@ -312,21 +302,21 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling " << m->getModuleIdentifier() << "\n";
+    debug(1) << "JIT compiling " << module_name << "\n";
 
     std::map<std::string, Symbol> exports;
 
     Symbol entrypoint;
     Symbol argv_entrypoint;
     if (!function_name.empty()) {
-        entrypoint = compile_and_get_function(ee, m, function_name);
+        entrypoint = compile_and_get_function(*ee, function_name);
         exports[function_name] = entrypoint;
-        argv_entrypoint = compile_and_get_function(ee, m, function_name + "_argv");
+        argv_entrypoint = compile_and_get_function(*ee, function_name + "_argv");
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
     for (size_t i = 0; i < requested_exports.size(); i++) {
-        exports[requested_exports[i]] = compile_and_get_function(ee, m, requested_exports[i]);
+        exports[requested_exports[i]] = compile_and_get_function(*ee, requested_exports[i]);
     }
 
     debug(2) << "Finalizing object\n";
@@ -360,7 +350,6 @@ void JITModule::compile_module(llvm::Module *m, const string &function_name, con
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module.ptr->exports = exports;
     jit_module.ptr->execution_engine = ee;
-    jit_module.ptr->module = m;
     jit_module.ptr->dependencies = dependencies;
     jit_module.ptr->entrypoint = entrypoint;
     jit_module.ptr->argv_entrypoint = argv_entrypoint;
@@ -434,7 +423,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module.ptr->context);
     llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
-    if (buffer_t == NULL) {
+    if (buffer_t == nullptr) {
         buffer_t = llvm::StructType::create(jit_module.ptr->context, "struct.buffer_t");
     }
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
@@ -468,8 +457,7 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
 }
 
 bool JITModule::compiled() const {
-    // TODO: Track down all uses and make sure changing this to not include "module != NULL" doesn't break anything.
-  return jit_module.ptr->module != NULL;
+  return jit_module.ptr->execution_engine != nullptr;
 }
 
 namespace {
@@ -612,7 +600,8 @@ enum RuntimeKind {
 };
 
 JITModule &shared_runtimes(RuntimeKind k) {
-    static JITModule *m = NULL;
+    // We're already guarded by the shared_runtimes_mutex
+    static JITModule *m = nullptr;
     if (!m) {
         // Note that this is never freed. On windows this would invoke
         // static destructors that use threading objects, and these
@@ -627,9 +616,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                        bool create) {
     JITModule &runtime = shared_runtimes(runtime_kind);
     if (!runtime.compiled() && create) {
-        // If the module has not yet been compiled, we need a module to clone the target options from.
-        internal_assert(for_module != NULL);
-
         // Ensure that JIT feature is set on target as it must be in
         // order for the right runtime components to be added.
         target.set_feature(Target::JIT);
@@ -671,24 +657,24 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         }
 
         // This function is protected by a mutex so this is thread safe.
-        llvm::Module *module =
-            get_initial_module_for_target(one_gpu, &runtime.jit_module.ptr->context, true, runtime_kind != MainShared);
-        clone_target_options(for_module, module);
+        std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
+            &runtime.jit_module.ptr->context, true, runtime_kind != MainShared));
+        clone_target_options(*for_module, *module);
         module->setModuleIdentifier(module_name);
 
         std::set<std::string> halide_exports_unique;
 
         // Enumerate the functions.
-        for (llvm::Module::const_iterator iter = module->begin(); iter != module->end(); iter++) {
-            const llvm::Function *gv = cast<llvm::Function>(iter);
-            if (gv->hasWeakLinkage() && starts_with(gv->getName(), "halide_")) {
-                halide_exports_unique.insert(gv->getName());
+        for (auto &f : *module) {
+            // LLVM_Runtime_Linker has marked everything that should be exported as weak
+            if (f.hasWeakLinkage()) {
+                halide_exports_unique.insert(f.getName());
             }
         }
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        runtime.compile_module(module, "", target, deps, halide_exports);
+        runtime.compile_module(std::move(module), "", target, deps, halide_exports);
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =

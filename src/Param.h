@@ -150,6 +150,10 @@ public:
     }
     // @}
 
+    void set_default_value(const T &value) {
+        param.set_default(value);
+    }
+
     /** You can use this parameter as an expression in a halide
      * function definition */
     operator Expr() const {
@@ -195,7 +199,7 @@ protected:
                                           bool *placeholder_seen) const;
 public:
 
-    /** Construct a NULL image parameter handle. */
+    /** Construct a nullptr image parameter handle. */
     OutputImageParam() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
@@ -207,7 +211,7 @@ public:
     /** Get the type of the image data this Param refers to */
     EXPORT Type type() const;
 
-    /** Is this parameter handle non-NULL */
+    /** Is this parameter handle non-nullptr */
     EXPORT bool defined() const;
 
     /** Get an expression representing the minimum coordinates of this image
@@ -221,6 +225,10 @@ public:
     /** Get an expression representing the stride of this image in the
      * given dimension */
     EXPORT Expr stride(int x) const;
+
+    /** Get the ailgnment of the host pointer. Use set_host_alignment
+     * to change the default value of 1. */
+    EXPORT int host_alignment() const;
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
@@ -255,6 +263,14 @@ public:
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
     EXPORT OutputImageParam &set_stride(int dim, Expr stride);
+
+    /** Set the alignment of the host pointer. On some architectures
+     * an unaligned load/store is significantly more expensive in
+     * terms of performance than an aligned load/store. This allows
+     * the user to align external buffers favorably so that halide
+     * can generate aligned loads/stores as appropriate. The alignment
+     * should be a power of 2. */
+    EXPORT OutputImageParam &set_host_alignment(int bytes);
 
     /** Set the min and extent in one call. */
     EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
@@ -308,7 +324,7 @@ class ImageParam : public OutputImageParam {
 
 public:
 
-    /** Construct a NULL image parameter handle. */
+    /** Construct a nullptr image parameter handle. */
     ImageParam() : OutputImageParam() {}
 
     /** Construct an image parameter of the given type and

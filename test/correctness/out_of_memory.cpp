@@ -14,10 +14,10 @@ std::map<void *, size_t> allocation_sizes;
 
 extern "C" void *test_malloc(void *user_context, size_t x) {
     if (total_allocated + x > mem_limit)
-        return NULL;
+        return nullptr;
 
     void * result = malloc(x);
-    if (result != NULL) {
+    if (result != nullptr) {
         total_allocated += x;
         allocation_sizes[result] = x;
     }

@@ -1,19 +1,17 @@
-#define time_it(code)                               \
-    double elapsed = 0;                             \
-    for (int iters = 20; ; iters *= 2) {            \
-        double start = current_time();              \
-        for (int i = 0; i < iters; i++) {           \
-            code;                                   \
-        }                                           \
-        double end = current_time();                \
-        elapsed = 1000 * (end - start);             \
-        if (elapsed > 100000) {                     \
-            elapsed /= iters;                       \
-            break;                                  \
-        }                                           \
+#include "../support/benchmark.h"
+
+#define time_it(code)                                        \
+    double elapsed = 0;                                      \
+    for (int iters = 1; ; iters *= 2) {                      \
+        /* Best of 5 */                                      \
+        elapsed = 1e6 * benchmark(5, iters, [&]() {code;});  \
+        /* spend at least 5x20ms benchmarking */             \
+        if (elapsed * iters > 20000) {                       \
+            break;                                           \
+        }                                                    \
     }
 
-#define L1GFLOPS(N) 2 * N * 1e-3 / elapsed
+#define L1GFLOPS(N) 2.0 * N * 1e-3 / elapsed
 #define L1Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
@@ -31,7 +29,7 @@
                   << std::endl;                                         \
     }
 
-#define L2GFLOPS(N) (2 + N) * N * 1e-3 / elapsed
+#define L2GFLOPS(N) (2.0 + N) * N * 1e-3 / elapsed
 #define L2Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \
@@ -52,7 +50,7 @@
                   << std::endl;                                         \
     }
 
-#define L3GFLOPS(N) (3 + N) * N * N * 1e-3 / elapsed
+#define L3GFLOPS(N) (3.0 + N) * N * N * 1e-3 / elapsed
 #define L3Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = random_scalar();                                 \

@@ -27,6 +27,7 @@ set(RUNTIME_CPP
   cuda
   destructors
   device_interface
+  errors
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -37,6 +38,7 @@ set(RUNTIME_CPP
   linux_opengl_context
   matlab
   metadata
+  mingw_math
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
@@ -207,6 +209,7 @@ set(HEADER_FILES
   BoundsInference.h
   Buffer.h
   CSE.h
+  Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
   CodeGen_GPU_Dev.h
@@ -218,16 +221,19 @@ set(HEADER_FILES
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
+  CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
   Deinterleave.h
-  Derivative.h
+  DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
+  EliminateBoolVectors.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -265,8 +271,8 @@ set(HEADER_FILES
   Memoization.h
   Module.h
   ModulusRemainder.h
+  Monotonic.h
   ObjectInstanceRegistry.h
-  OneToOne.h
   Output.h
   ParallelRVar.h
   Param.h
@@ -296,6 +302,7 @@ set(HEADER_FILES
   Substitute.h
   Target.h
   Tracing.h
+  TrimNoOps.h
   Tuple.h
   Type.h
   UnifyDuplicateLets.h
@@ -347,7 +354,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Bounds.cpp
   BoundsInference.cpp
   Buffer.cpp
-  CSE.cpp
+  Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
   CodeGen_GPU_Dev.cpp
@@ -360,17 +367,21 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
+  CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
+  CPlusPlusMangle.cpp
+  CSE.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
   Deinterleave.cpp
-  Derivative.cpp
+  DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
+  EliminateBoolVectors.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
@@ -403,8 +414,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
+  Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  OneToOne.cpp
   Output.cpp
   ParallelRVar.cpp
   Param.cpp
@@ -434,6 +445,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Substitute.cpp
   Target.cpp
   Tracing.cpp
+  TrimNoOps.cpp
   Tuple.cpp
   Type.cpp
   UnifyDuplicateLets.cpp
@@ -448,6 +460,14 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
+   if (WIN32)
+     if (MSVC)
+           # empty
+     else()
+       set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
+     endif()
+   endif()
 
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
@@ -530,12 +550,14 @@ else()
   # FIXME: These defines should come from ``llvm-config --cppflags``
   target_compile_definitions(Halide PRIVATE "-D__STDC_LIMIT_MACROS" "-D__STDC_CONSTANT_MACROS" "-D__STDC_FORMAT_MACROS")
   target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
-  target_compile_options(Halide PUBLIC "-fno-rtti")
+  if(NOT HALIDE_ENABLE_RTTI)
+    target_compile_options(Halide PUBLIC "-fno-rtti")
+  endif()
 endif()
 
 # Get the LLVM libraries we need
 set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
-if(WIN32)
+if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
   execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
@@ -550,7 +572,7 @@ endif()
 # PRIVATE scope is the correct choice here.
 target_link_libraries(Halide PRIVATE ${LIBS})
 
-if (NOT WIN32)
+if (NOT MSVC)
   if (${LLVM_VERSION} GREATER 34)
     execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   else()

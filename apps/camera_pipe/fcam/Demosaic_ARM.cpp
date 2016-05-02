@@ -7,7 +7,7 @@
 namespace FCam {
 
 // Make a linear luminance -> pixel value lookup table
-extern void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut);
+extern void makeLUT(float contrast, int blackLevel, int whiteLevel, float gamma, unsigned char *lut);
 extern void makeColorMatrix(float colorMatrix[], float colorTemp);
 
 // Some functions used by demosaic
@@ -15,7 +15,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
+void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
 
 #ifdef __arm__ // only build on arm
     const int BLOCK_WIDTH  = 40;
@@ -153,8 +153,8 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 #define G_GB_NOISY B_GB
 
     // Prepare the lookup table
-    unsigned char lut[4096];
-    makeLUT(contrast, blackLevel, gamma, lut);
+    unsigned char lut[whiteLevel+1];
+    makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
 
     // For each block in the input
 #if 0
@@ -216,8 +216,8 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
             // A pixel can't be brighter than its brightest neighbor
 
             if (denoise) {
-                register int16_t *__restrict__ ptr_in = NULL;
-                register int16_t *__restrict__ ptr_out = NULL;
+                register int16_t *__restrict__ ptr_in = nullptr;
+                register int16_t *__restrict__ ptr_out = nullptr;
                 asm volatile("#Stage 1.5: Denoise\n\t");
                 for (int b=0; b<4; b++) {
                     if (b==0) { ptr_in = G_GR_NOISY(0); }
@@ -244,20 +244,15 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
                             int16x8_t under = vld1q_s16(ptr_in - VEC_WIDTH*4);
                             int16x8_t right = vld1q_s16(ptr_in + 1);
                             int16x8_t left  = vld1q_s16(ptr_in - 1);
-                            int16x8_t max, min;
+                            int16x8_t max;
 
-                            // find the max and min of the neighbors
+                            // find the max of the neighbors
                             max = vmaxq_s16(left, right);
                             max = vmaxq_s16(above, max);
                             max = vmaxq_s16(under, max);
 
-                            min = vminq_s16(left, right);
-                            min = vminq_s16(above, min);
-                            min = vminq_s16(under, min);
-
-                            // clamp here to be within this range
+                            // clamp here to be less than the max.
                             here  = vminq_s16(max, here);
-                            here  = vmaxq_s16(min, here);
 
                             vst1q_s16(ptr_out, here);
                             ptr_in += 8;
@@ -528,7 +523,7 @@ void demosaic_ARM(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uin
 
                 int i = 2*VEC_WIDTH*4;
 
-                const uint16x4_t bound = vdup_n_u16(1023);
+                const uint16x4_t bound = vdup_n_u16(whiteLevel);
 
                 for (int y = 2; y < VEC_HEIGHT-2; y++) {
 
