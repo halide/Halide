@@ -175,9 +175,12 @@ struct CheckVars : public IRGraphVisitor {
     }
 };
 
-struct CountSelfReferences : public IRMutator {
-    int count;
-    const Function *func;
+struct DeleteSelfReferences : public IRMutator {
+    IntrusivePtr<FunctionContents> func;
+
+    // Also count the number of self references so we know if a Func
+    // has a recursive definition.
+    int count = 0;
 
     using IRMutator::visit;
 
@@ -185,9 +188,9 @@ struct CountSelfReferences : public IRMutator {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
-        if (c->func.same_as(*func)) {
+        if (c->func.same_as(func)) {
             expr = Call::make(c->type, c->name, c->args, c->call_type,
-                              c->func, c->value_index,
+                              nullptr, c->value_index,
                               c->image, c->param);
             count++;
         }
@@ -202,8 +205,10 @@ class FreezeFunctions : public IRGraphVisitor {
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-        if (op->call_type == Call::Halide && op->name != func) {
-            Function f = op->func;
+        if (op->call_type == Call::Halide &&
+            op->func.defined() &&
+            op->name != func) {
+            Function f(op->func);
             f.freeze();
         }
     }
@@ -217,6 +222,11 @@ static std::atomic<int> rand_counter;
 }
 
 Function::Function() : contents(new FunctionContents) {
+}
+
+Function::Function(const IntrusivePtr<FunctionContents> &ptr) : contents(ptr) {
+    internal_assert(ptr.defined())
+        << "Can't construct Function from undefined FunctionContents ptr\n";
 }
 
 Function::Function(const std::string &n) : contents(new FunctionContents) {
@@ -459,21 +469,18 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // The update value and args probably refer back to the
     // function itself, introducing circular references and hence
-    // memory leaks. We need to count the number of unique call nodes
-    // that point back to this function in order to break the cycles.
-    CountSelfReferences counter;
-    counter.func = this;
-    counter.count = 0;
+    // memory leaks. We need to break these cycles.
+    DeleteSelfReferences deleter;
+    deleter.func = contents;
+    deleter.count = 0;
     for (size_t i = 0; i < args.size(); i++) {
-        r.args[i] = counter.mutate(r.args[i]);
+        r.args[i] = deleter.mutate(r.args[i]);
     }
     for (size_t i = 0; i < values.size(); i++) {
-        r.values[i] = counter.mutate(r.values[i]);
+        r.values[i] = deleter.mutate(r.values[i]);
     }
-
-    for (int i = 0; i < counter.count; i++) {
-        int count = contents.ptr->ref_count.decrement();
-        internal_assert(count != 0);
+    if (r.domain.defined()) {
+        r.domain.set_predicate(deleter.mutate(r.domain.predicate()));
     }
 
     // First add any reduction domain
@@ -510,7 +517,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // the args are pure, then this definition completely hides
     // earlier ones!
     if (!r.domain.defined() &&
-        counter.count == 0 &&
+        deleter.count == 0 &&
         pure) {
         user_warning
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"

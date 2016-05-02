@@ -122,8 +122,12 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
     return contents.ptr->domain;
 }
 
+void ReductionDomain::set_predicate(Expr p) {
+    contents.ptr->predicate = p;
+}
+
 void ReductionDomain::where(Expr predicate) {
-    contents.ptr->predicate = simplify(contents.ptr->predicate && predicate);
+    set_predicate(simplify(contents.ptr->predicate && predicate));
 }
 
 Expr ReductionDomain::predicate() const {
