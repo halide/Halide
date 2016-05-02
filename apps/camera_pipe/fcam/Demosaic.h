@@ -22,6 +22,7 @@ void demosaic(Halide::Tools::Image<uint16_t> input,
               float colorTemp = 3700.0f,
               float contrast = 50.0f,
               bool denoise = true, int blackLevel = 25,
+              int whiteLevel = 1023,
               float gamma = 2.2f);
 }
 

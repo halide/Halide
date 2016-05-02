@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         std::string msg = "hello!\n";
         Func f, g, h;
         Var x;
-        f(x) = msg;
+        f(x) = cast<char *>(msg);
         f.compute_root().vectorize(x, 4);
         g(x) = f(x);
         g.compute_root();
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         Image<char *> im = h.realize(100);
 
         uint64_t handle = (uint64_t)(im(0));
-        if (sizeof(handle) == 4) {
+        if (sizeof(char *) == 4) {
             // On 32-bit systems, the upper four bytes should be zero
             if (handle >> 32) {
                 printf("The upper four bytes of a handle should have been zero on a 32-bit system\n");

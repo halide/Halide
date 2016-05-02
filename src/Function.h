@@ -153,11 +153,15 @@ public:
     /** Check if the function has an extern definition */
     EXPORT bool has_extern_definition() const;
 
+    /** Check if the function has an extern definition */
+    EXPORT bool extern_definition_is_c_plus_plus() const;
+
     /** Add an external definition of this Func */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
-                              int dimensionality);
+                              int dimensionality,
+                              bool is_c_plus_plus);
 
     /** Retrive the arguments of the extern definition */
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;

@@ -52,7 +52,7 @@ Type map_type(const Type &type) {
 }
 }
 
-string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type) {
+  string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
         return mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.lanes());
@@ -128,7 +128,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) 
         int index = thread_loop_workgroup_index(loop->name);
         if (index >= 0) {
             const IntImm *int_limit = loop->extent.as<IntImm>();
-            user_assert(int_limit != NULL) << "For OpenGLCompute workgroup size must be a constant integer.\n";
+            user_assert(int_limit != nullptr) << "For OpenGLCompute workgroup size must be a constant integer.\n";
             int new_workgroup_size = int_limit->value;
             user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_workgroup_size) <<
                 "OpenGLCompute requires all gpu kernels have same workgroup size, "
@@ -178,7 +178,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
     string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
         user_assert(stride && stride->value == 1 && ramp->lanes == 4) <<
             "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute.";
 
@@ -201,7 +201,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) 
     string id_index;
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
         user_assert(stride && stride->value == 1 && ramp->lanes == 4)
             << "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute."
             << " Got integer stride "
@@ -243,7 +243,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Select *op)
 
 void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
                                            const string &name,
-                                           const vector<GPU_Argument> &args) {
+                                           const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenGLCompute_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -270,7 +270,7 @@ public:
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     Target target,
                                                                     const string &name,
-                                                                    const vector<GPU_Argument> &args) {
+                                                                    const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding OpenGLCompute kernel " << name << "\n";
     cache.clear();

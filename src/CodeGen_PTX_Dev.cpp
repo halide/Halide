@@ -10,7 +10,11 @@
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
+#if LLVM_VERSION >= 39
+namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+#else
 namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+#endif
 #endif
 
 namespace Halide {
@@ -31,13 +35,19 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
 }
 
 CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
+    // This is required as destroying the context before the module
+    // results in a crash. Really, reponsbility for destruction
+    // should be entirely in the parent class.
+    // TODO: Figure out how to better manage the context -- e.g. allow using
+    // same one as the host.
+    module.reset();
     delete context;
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
-                                 const std::vector<GPU_Argument> &args) {
-    internal_assert(module != NULL);
+                                 const std::vector<DeviceArgument> &args) {
+    internal_assert(module != nullptr);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 
@@ -53,7 +63,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
+    function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -136,7 +146,6 @@ void CodeGen_PTX_Dev::init_module() {
     init_context();
 
     #ifdef WITH_PTX
-    delete module;
     module = get_initial_module_for_ptx_device(target, context);
     #endif
 }
@@ -194,9 +203,8 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = 0;
-        bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
-        user_assert(is_constant)
+        int32_t size = alloc->constant_allocation_size();
+        user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
@@ -213,6 +221,12 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
     sym_pop(f->name + ".host");
+}
+
+void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
+    // Discard the error message for now.
+    Expr trap = Call::make(Int(32), "halide_ptx_trap", {}, Call::Extern);
+    codegen(IfThenElse::make(!op->condition, Evaluate::make(trap)));
 }
 
 string CodeGen_PTX_Dev::march() const {
@@ -265,9 +279,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*char* argv[] = { "llc", "-print-before-all" };*/
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
-
-    // Generic llvm optimizations on the module.
-    optimize_module();
 
     llvm::Triple triple(module->getTargetTriple());
 
@@ -359,14 +370,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (TD) {
         PM.add(new DataLayout(*TD));
     } else {
-        PM.add(new DataLayout(module));
+        PM.add(new DataLayout(module.get()));
     }
     #else
     if (TD) {
         module->setDataLayout(TD);
     }
     #if LLVM_VERSION == 35
-    PM.add(new DataLayoutPass(module));
+    PM.add(new DataLayoutPass(module.get()));
     #else // llvm >= 3.6
     PM.add(new DataLayoutPass);
     #endif

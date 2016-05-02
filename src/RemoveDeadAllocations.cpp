@@ -12,7 +12,8 @@ class RemoveDeadAllocations : public IRMutator {
     Scope<int> allocs;
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Extern) {
+        if (op->call_type == Call::Extern ||
+            op->call_type == Call::ExternCPlusPlus) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
                 if (var && ends_with(var->name, ".buffer")) {
@@ -48,7 +49,7 @@ class RemoveDeadAllocations : public IRMutator {
         Stmt body = mutate(op->body);
 
         if (allocs.contains(op->name)) {
-            stmt = op->body;
+            stmt = body;
             allocs.pop(op->name);
         } else if (body.same_as(op->body)) {
             stmt = op;

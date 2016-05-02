@@ -33,11 +33,16 @@ int main(int argc, char **argv) {
 
     for (const std::string &t : targets) {
         Target target = parse_target_string(t);
+        if (!target.supported()) continue;
         f.compile_to_file("test_object_" + t, std::vector<Argument>(), target);
 
         #ifndef _MSC_VER
-        std::string object_name = "test_object_" + t + ".o";
-        if (target.os == Target::Windows) object_name += "bj";
+        std::string object_name = "test_object_" + t;
+        if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+            object_name += ".obj";
+        } else {
+            object_name += ".o";
+        }
         assert(access(object_name.c_str(), F_OK) == 0 && "Output file not created.");
         #endif
     }

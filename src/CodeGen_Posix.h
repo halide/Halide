@@ -41,6 +41,9 @@ protected:
         /** Function to accomplish the destruction. */
         llvm::Function *destructor_function;
 
+        /** The (Halide) type of the allocation. */
+        Type type;
+
         /** How many bytes this allocation is, or 0 if not
          * constant. */
         int constant_bytes;
@@ -48,11 +51,18 @@ protected:
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
         int stack_bytes;
+
+        /** A unique name for this allocation. May not be equal to the
+         * Allocate node name in cases where we detect multiple
+         * Allocate nodes can share a single allocation. */
+        std::string name;
     };
 
     /** The allocations currently in scope. The stack gets pushed when
      * we enter a new function. */
     Scope<Allocation> allocations;
+
+    std::string get_allocation_name(const std::string &n);
 
 private:
 

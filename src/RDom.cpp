@@ -1,7 +1,9 @@
 #include "RDom.h"
 #include "Util.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 
 namespace Halide {
 
@@ -72,6 +74,29 @@ RDom::RDom(ReductionDomain d) : dom(d) {
     }
 }
 
+namespace {
+class CheckRDomBounds : public IRGraphVisitor {
+
+    using IRGraphVisitor::visit;
+
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
+        if (op->call_type == Call::Halide) {
+            offending_func = op->name;
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (!op->param.defined() && !op->image.defined()) {
+            offending_free_var = op->name;
+        }
+    }
+public:
+    string offending_func;
+    string offending_free_var;
+};
+}
+
 void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
     if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
@@ -79,6 +104,24 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
 
     std::vector<ReductionVariable> vars;
     for (size_t i = 0; i < ranges.size(); i++) {
+        CheckRDomBounds checker;
+        ranges[i].first.accept(&checker);
+        ranges[i].second.accept(&checker);
+        user_assert(checker.offending_func.empty())
+            << "The bounds of the RDom " << name
+            << " in dimension " << i
+            << " are:\n"
+            << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
+            << "These depend on a call to the Func " << checker.offending_func << ".\n"
+            << "The bounds of an RDom may not depend on a call to a Func.\n";
+        user_assert(checker.offending_free_var.empty())
+            << "The bounds of the RDom " << name
+            << " in dimension " << i
+            << " are:\n"
+            << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
+            << "These depend on the variable " << checker.offending_free_var << ".\n"
+            << "The bounds of an RDom may not depend on a free variable.\n";
+
         std::string rvar_uniquifier;
         switch (i) {
             case 0: rvar_uniquifier = "x"; break;
@@ -164,6 +207,14 @@ RDom::operator RVar() const {
     return x;
 }
 
+void RDom::where(Expr predicate) {
+    user_assert(!dom.frozen())
+        << (*this) << " cannot be given a new predicate, because it has already"
+        << " been used in the update definition of some function.\n";
+    user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n";
+    dom.where(predicate);
+}
+
 /** Emit an RVar in a human-readable form */
 std::ostream &operator<<(std::ostream &stream, RVar v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
@@ -176,7 +227,12 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";
     }
-    stream << ")\n";
+    stream << ")";
+    Expr pred = simplify(dom.domain().predicate());
+    if (!equal(const_true(), pred)) {
+        stream << " where (\n  " << pred << ")";
+    }
+    stream << "\n";
     return stream;
 }
 

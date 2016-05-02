@@ -7,7 +7,7 @@ extern "C" {
     void *my_malloc(void *ctx, size_t sz) {
         printf("There weren't supposed to be heap allocations!\n");
         exit(-1);
-        return NULL;
+        return nullptr;
     }
 
     void my_free(void *ctx, void *ptr) {

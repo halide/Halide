@@ -104,7 +104,7 @@ protected:
         bool old_in_glsl_loops = in_glsl_loops;
         // Check if the loop variable is a GPU variable thread variable and for GLSL
         if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) ||
-            (in_glsl_loops && op->device_api == DeviceAPI::Parent)) {
+            (in_glsl_loops && op->device_api == DeviceAPI::None)) {
             loop_vars.push_back(op->name);
             in_glsl_loops = true;
         }
@@ -929,14 +929,14 @@ public:
             Expr offset_expression = Variable::make(Int(32), "gpu.vertex_offset") +
                                      attribute_order[attribute_name];
 
-            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression);
+            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression, Parameter());
         } else {
             IRFilter::visit(op);
         }
 
     }
     virtual void visit(const Let *op) {
-        stmt = NULL;
+        stmt = nullptr;
 
         Stmt mutated_value = mutate(op->value);
         Stmt mutated_body = mutate(op->body);
@@ -1028,12 +1028,12 @@ public:
                 // order
                 mutated_body = Block::make(Store::make(vertex_buffer_name,
                                                        coord1,
-                                                       gpu_varying_offset + 1),
+                                                       gpu_varying_offset + 1, Parameter()),
                                            mutated_body);
 
                 mutated_body = Block::make(Store::make(vertex_buffer_name,
                                                        coord0,
-                                                       gpu_varying_offset + 0),
+                                                       gpu_varying_offset + 0, Parameter()),
                                            mutated_body);
 
                 // TODO: The value 2 in this expression must be changed to reflect
@@ -1050,7 +1050,7 @@ public:
             // Add a let statement for the for-loop name variable
             Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
 
-            stmt = For::make(name, 0, (int)dim.size(), ForType::Serial, DeviceAPI::Parent, loop_var);
+            stmt = For::make(name, 0, (int)dim.size(), ForType::Serial, DeviceAPI::None, loop_var);
 
         } else {
             IRFilter::visit(op);

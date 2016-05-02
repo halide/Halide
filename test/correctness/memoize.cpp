@@ -6,7 +6,7 @@
 
 using namespace Halide;
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -59,7 +59,7 @@ extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *ou
 int call_count_staged[4];
 
 extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t *in, buffer_t *out) {
-    if (in->host == NULL) {
+    if (in->host == nullptr) {
         for (int i = 0; i < 4; i++) {
             in->min[i] = out->min[i];
             in->extent[i] = out->extent[i];
@@ -85,7 +85,7 @@ void simple_free(void *user_context, void *ptr) {
 
 void *flakey_malloc(void */* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
-        return NULL;
+        return nullptr;
     } else {
         return malloc(x);
     }
