@@ -69,8 +69,19 @@ EXPORT std::string running_program_name();
 
 /** Generate a unique name starting with the given prefix. It's unique
  * relative to all other strings returned by unique_name in this
- * process. Will either return the input as-is, or some mangling of
- * it.
+ * process.
+ *
+ * The single-character version always appends a numeric suffix to the
+ * character.
+ *
+ * The string version will either return the input as-is (with high
+ * probability on the first time it is called with that input), or
+ * replace any existing '$' characters with underscores, then add a
+ * '$' sign and a numeric suffix to it.
+ *
+ * Note that unique_name('f') therefore differs from
+ * unique_name("f"). The former returns something like f123, and the
+ * latter returns either f or f$123.
  */
 // @{
 EXPORT std::string unique_name(char prefix);

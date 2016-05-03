@@ -64,6 +64,12 @@ string running_program_name() {
 }
 
 namespace {
+// We use 64K of memory to store unique counters. Using less memory
+// increases the likelihood of hash collisions. This wouldn't break
+// anything, but makes pipelines pseudocode slightly confusing to read
+// because names that are actually unique will get suffixes that
+// falsely hint that they are not.
+
 const int num_unique_name_counters = (1 << 14);
 std::atomic<int> unique_name_counters[num_unique_name_counters];
 
@@ -74,9 +80,9 @@ int unique_count(size_t h) {
 }
 
 // There are three possible families of names returned by the methods below:
-// 1) (char that isn't '$') + number (e.g. v234)
-// 2) (string without '$') + '$' + number (e.g. fr#nk82$42)
-// 3) string that does not match the patterns above
+// 1) char pattern: (char that isn't '$') + number (e.g. v234)
+// 2) string pattern: (string without '$') + '$' + number (e.g. fr#nk82$42)
+// 3) a string that does not match the patterns above
 // There are no collisions within each family, due to the unique_count
 // done above, and there can be no collisions across families by
 // construction.
