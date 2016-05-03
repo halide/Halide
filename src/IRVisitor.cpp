@@ -129,12 +129,14 @@ void IRVisitor::visit(const Call *op) {
     }
 
     // Consider extern call args
-    Function f = op->func;
-    if (op->call_type == Call::Halide && f.has_extern_definition()) {
-        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-            ExternFuncArgument arg = f.extern_arguments()[i];
-            if (arg.is_expr()) {
-                arg.expr.accept(this);
+    if (op->func.defined()) {
+        Function f(op->func);
+        if (op->call_type == Call::Halide && f.has_extern_definition()) {
+            for (size_t i = 0; i < f.extern_arguments().size(); i++) {
+                ExternFuncArgument arg = f.extern_arguments()[i];
+                if (arg.is_expr()) {
+                    arg.expr.accept(this);
+                }
             }
         }
     }

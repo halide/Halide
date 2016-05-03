@@ -21,7 +21,7 @@ void my_print(void *, const char *msg) {
     int this_num_mallocs, this_malloc_avg, this_stack_peak;
     int val;
 
-    printf("%s\n", msg);
+    //printf("%s", msg);
     val = sscanf(msg, " g_%d: %fms (%d%%) peak: %d num: %d avg: %d",
         &idx, &this_ms, &this_percentage, &this_heap_peak,
         &this_num_mallocs, &this_malloc_avg);

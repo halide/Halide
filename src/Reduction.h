@@ -60,8 +60,8 @@ public:
     /** Return the predicate defined on this reducation demain. */
     EXPORT Expr predicate() const;
 
-    /** Set the predicate defined on this reducation demain. */
-    EXPORT void set_predicate(Expr predicate);
+    /** Set the predicate, replacing any previously set predicate. */
+    EXPORT void set_predicate(Expr);
 
     /** Split predicate into vector of ANDs. If there is no predicate (i.e. all
      * iteration domain in this reduction domain is valid), this returns an
