@@ -23,19 +23,20 @@ int main(int argc, char **argv) {
     grand_total.set_error_handler(&halide_error);
 
     Target t = get_jit_target_from_environment();
+    t.set_feature(Target::LargeBuffers);
     grand_total.compile_jit(t);
 
-    if (t.bits == 32) {
-        // On 32-bit targets try an internal allocation of size just larger than 2^31
-        extent.set(1 << 8);
-    } else {
-        // On 64-bit targets try an internal allocation of size just larger than 2^63
-        extent.set(1 << 16);
-    }
-
+    // On large-buffer targets try an internal allocation of size just larger than 2^63
+    extent.set(1 << 16);
     Image<uint8_t> result = grand_total.realize();
-
     assert(error_occurred);
+
+    // On small-buffer targets try an internal allocation of size just larger than 2^31
+    extent.set(1 << 8);
+    grand_total.compile_jit(t.without_feature(Target::LargeBuffers));
+    result = grand_total.realize();
+    assert(error_occurred);
+
     printf("Success!\n");
 
 }

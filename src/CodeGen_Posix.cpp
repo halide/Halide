@@ -31,12 +31,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 
     Expr no_overflow = const_true(1);
     Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
-    Expr max_size;
-    if (target.bits < 64) {
-        max_size = cast<int64_t>(0x7fffffff);
-    } else {
-        max_size = Expr(0x7fffffffffffffff);
-    }
+    Expr max_size = Expr(target.maximum_buffer_size());
     for (size_t i = 0; i < extents.size(); i++) {
         total_size *= extents[i];
         no_overflow = no_overflow && (total_size <= max_size);
@@ -59,14 +54,13 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                                                            Expr new_expr, std::string free_function) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
-    const int64_t max_size = target.bits == 64 ? 0x7fffffffffffffff : 0x7fffffff;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
     if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
 
-        if (stack_bytes > max_size) {
-            const string str_max_size = target.bits == 64 ? "2^63 - 1" : "2^31 - 1";
+        if (stack_bytes > target.maximum_buffer_size()) {
+            const string str_max_size = target.has_feature(Target::LargeBuffers) ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;
