@@ -429,6 +429,52 @@ int wrapper_on_wrapper_test() {
     return 0;
 }
 
+int wrapper_on_rdom_predicate_test() {
+    Func f("f"), g("g"), h("h");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    g(x, y) = 10;
+    h(x, y) = 5;
+
+    RDom r(0, 100, 0, 100);
+    r.where(f(r.x, r.y) + h(r.x, r.y) < 50);
+    g(r.x, r.y) += h(r.x, r.y);
+
+    Func h_wrapper = h.in().store_root().compute_at(g, r.y);
+    Func f_in_g = f.in(g).compute_at(g, r.x);
+    f.compute_root();
+    h.compute_root();
+
+    // Check the call graphs.
+    // Expect 'g' to call nothing, update of 'g' to call 'g', f_in_g', and 'h_wrapper',
+    // 'f_in_g' to call 'f', 'f' to call nothing, 'h_wrapper' to call 'h', 'h' to call nothing
+    Module m = g.compile_to_module({});
+    CheckCalls c;
+    m.functions[0].body.accept(&c);
+
+    CallGraphs expected = {
+        {g.name(), {}},
+        {g.update(0).name(), {g.name(), f_in_g.name(), h_wrapper.name()}},
+        {f_in_g.name(), {f.name()}},
+        {f.name(), {}},
+        {h_wrapper.name(), {h.name()}},
+        {h.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
+    }
+
+    Image<int> im = g.realize(200, 200);
+    auto func = [](int x, int y) {
+        return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x + y + 5 < 50)) ? 15 : 10;
+    };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("Running func wrap test\n");
     if (func_wrap_test() != 0) {
@@ -462,6 +508,11 @@ int main(int argc, char **argv) {
 
     printf("Running wrapper on wrapper test\n");
     if (wrapper_on_wrapper_test() != 0) {
+        return -1;
+    }
+
+    printf("Running wrapper on rdom predicate test\n");
+    if (wrapper_on_rdom_predicate_test() != 0) {
         return -1;
     }
 

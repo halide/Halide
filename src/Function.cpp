@@ -34,29 +34,6 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
     const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied);
 
-// Replace all calls to wrapped functions with their wrappers.
-class SubstituteCalls : public IRMutator {
-    using IRMutator::visit;
-
-    map<Function, Function> substitutions;
-
-    void visit(const Call *c) {
-        IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-        if (substitutions.count(c->func)) {
-            internal_assert(c->call_type == Call::Halide);
-            const Function &subs = substitutions[c->func];
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << subs.name() << "\"\n";
-            expr = Call::make(subs, c->args, c->value_index);
-        }
-    }
-public:
-    SubstituteCalls(const map<Function, Function> &substitutions)
-        : substitutions(substitutions) {}
-};
-
 struct FunctionContents {
     mutable RefCount ref_count;
     std::string name;
@@ -191,6 +168,12 @@ struct FunctionContents {
             for (Specialization &s : update.schedule.specializations()) {
                 s.condition = mutator->mutate(s.condition);
             }
+
+            // Don't need to mutate the schedule's reduction domain since it is
+            // the same as UpdateDefinition's domain. Do the check to make sure
+            // it is the case.
+            internal_assert(update.domain.same_as(update.schedule.reduction_domain()))
+                << "UpdateDefinition should point to the same reduction domain as its schedule\n";
         }
 
         if (!extern_function_name.empty()) {
@@ -363,7 +346,10 @@ void deep_copy_update_definition_helper(IntrusivePtr<FunctionContents> &contents
     dst.args = src.args;
     dst.schedule = Schedule();
     src.schedule.deep_copy(dst.schedule, copied_map);
-    dst.domain = src.domain.deep_copy();
+    // UpdateDefinition's domain is the same as the one pointed by its schedule
+    internal_assert(src.schedule.reduction_domain().same_as(src.domain))
+        << "UpdateDefinition should point to the same reduction domain as its schedule\n";
+    dst.domain = dst.schedule.reduction_domain();
 }
 
 void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
@@ -416,6 +402,8 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
     for (const auto &u : src.ptr->updates) {
         UpdateDefinition u_copy;
         deep_copy_update_definition_helper(dst, u_copy, u, copied_map);
+        internal_assert(u_copy.domain.same_as(u_copy.schedule.reduction_domain()))
+            << "UpdateDefinition should point to the same reduction domain as its schedule\n";
         dst.ptr->updates.push_back(std::move(u_copy));
     }
     for (const auto &e : src.ptr->extern_arguments) {
@@ -423,7 +411,7 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
         deep_copy_extern_func_argument_helper(e_copy, e, copied_map);
         dst.ptr->extern_arguments.push_back(std::move(e_copy));
     }
- }
+}
 
 void Function::deep_copy(Function &copy, std::map<Function, Function> &copied_map) const {
     internal_assert(copy.contents.defined() && contents.defined()) << "Cannot deep-copy undefined Function\n";
@@ -885,10 +873,34 @@ void Function::add_wrapper(const Function &wrapper, const std::string &f) {
 }
 
 Function &Function::substitute_calls(const map<Function, Function> &substitutions) {
+    // Replace all calls to functions listed in 'substitutions' with their wrappers.
+    class SubstituteCalls : public IRMutator {
+        using IRMutator::visit;
+
+        map<Function, Function> substitutions;
+
+        void visit(const Call *c) {
+            IRMutator::visit(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+
+            if ((c->call_type == Call::Halide) && c->func.defined() && substitutions.count(Function(c->func))) {
+                const Function &subs = substitutions[Function(c->func)];
+                debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                         << "\"" << subs.name() << "\"\n";
+                expr = Call::make(subs, c->args, c->value_index);
+            }
+        }
+    public:
+        SubstituteCalls(const map<Function, Function> &substitutions)
+            : substitutions(substitutions) {}
+    };
+
+    debug(4) << "Substituting calls in " << name() << "\n";
+
     if (substitutions.empty()) {
         return *this;
     }
-    debug(4) << "Substituting calls in " << name() << "\n";
     SubstituteCalls subs_calls(substitutions);
     contents.ptr->mutate(&subs_calls);
     return *this;
