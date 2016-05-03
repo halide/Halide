@@ -797,16 +797,77 @@ public:
     }
     // @}
 
-    /** Store a custom wrapper of this function. Every call to this function by
-     * 'f' will be replaced to call to the wrapper, which happens during the
-     * lowering stage. */
+    /** Store a custom wrapper of this function for 'f' and return the wrapper.
+     * Every call to this function by 'f' will be replaced to call to the wrapper,
+     * which happens during the lowering stage. The wrapper function returned can
+     * then be scheduled as in typical function.
+     * Consider a simple example:
+     \code
+     f(x, y) = x + y;
+     g(x, y) = f(x, y);
+     f.compute_root();
+     f.in(g).compute_at(g, y);
+     g.realize(20, 20);
+     \endcode
+     * This is equivalent to:
+     \code
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         f(x, y) = x + y;
+       }
+     }
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         f_in_g(x, y) = x + y;
+       }
+       for (int x = 0; x < 20; x++) {
+         g(x, y) = f_in_g(x, y);
+       }
+     }
+     \endcode
+     */
     EXPORT Func in(const Func& f);
 
-    /** Store a global wrapper of this function. Every call to this function by
-     * all functions (excluding by itself) in the pipeline will be replaced to call
-     * to the wrapper, which happens during the lowering stage. Custom wrapper
-     * always takes precedence over the global wrapper, i.e. if both are defined,
-     * then we replace it with the custom wrapper. */
+    /** Store a global wrapper of this function and return the wrapper.
+     * Every call to this function by all functions (excluding by itself) in the
+     * pipeline will be replaced to call to the wrapper, which happens during the
+     * lowering stage. Custom wrapper always takes precedence over the global
+     * wrapper, i.e. if both are defined, then we replace it with the custom
+     * wrapper.
+     * Consider a simple example:
+     \code
+     f(x, y) = x + y;
+     g(x, y) = f(x, y);
+     h(x, y) = f(x, y) + g(x, y);
+     f.compute_root();
+     f.in().compute_root();
+     g.compute_root();
+     h.realize(20, 20);
+     \endcode
+     * This is equivalent to:
+     \code
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         f(x, y) = x + y;
+       }
+     }
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         f_wrapper(x, y) = x + y;
+       }
+     }
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         g(x, y) = f_wrapper(x, y);
+       }
+     }
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         h(x, y) = f_wrapper(x, y) + g(x, y);
+       }
+     }
+     \endcode
+     */
     EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
