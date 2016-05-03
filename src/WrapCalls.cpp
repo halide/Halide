@@ -37,6 +37,7 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
     for (const auto &iter : env) {
         copied_map[iter.second] = Function(iter.second.name());
     }
+
     // Deep copy the Func in env into its corresponding empty copy.
     for (const auto &iter : env) {
         iter.second.deep_copy(copied_map[iter.second], copied_map);
@@ -67,7 +68,7 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
         for (const auto &iter : wrappers) {
             string in_func = iter.first;
             const Function &wrapper = Function(iter.second); // This is already the deep-copy version
-            internal_assert(is_copy(wrapper, copied_map)); // Make sure it's indeed the copy
+            internal_assert(is_copy(wrapper, copied_map));   // Make sure it's indeed the copy
 
             if (in_func.empty()) { // Global wrapper
                 for (const auto &wrapped_env_iter : wrapped_env) {

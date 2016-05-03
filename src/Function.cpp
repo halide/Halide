@@ -44,7 +44,8 @@ class SubstituteCalls : public IRMutator {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
-        if ((c->call_type == Call::Halide) && (substitutions.count(c->func))) {
+        if (substitutions.count(c->func)) {
+            internal_assert(c->call_type == Call::Halide);
             const Function &subs = substitutions[c->func];
             debug(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << subs.name() << "\"\n";
@@ -335,7 +336,8 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
     contents.ptr->name = n;
 }
 
-void deep_copy_update_definition_helper(UpdateDefinition &dst,
+void deep_copy_update_definition_helper(IntrusivePtr<FunctionContents> &contents,
+                                        UpdateDefinition &dst,
                                         const UpdateDefinition &src,
                                         DeepCopyMap &copied_map) {
     dst.values = src.values;
@@ -394,17 +396,15 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
 
     for (const auto &u : src.ptr->updates) {
         UpdateDefinition u_copy;
-        deep_copy_update_definition_helper(u_copy, u, copied_map);
+        deep_copy_update_definition_helper(dst, u_copy, u, copied_map);
         dst.ptr->updates.push_back(std::move(u_copy));
-
-        //TODO(psuriana): need to update the reference counter for cyclic reference
     }
     for (const auto &e : src.ptr->extern_arguments) {
         ExternFuncArgument e_copy;
         deep_copy_extern_func_argument_helper(e_copy, e, copied_map);
         dst.ptr->extern_arguments.push_back(std::move(e_copy));
     }
-}
+ }
 
 void Function::deep_copy(Function &copy, std::map<Function, Function> &copied_map) const {
     internal_assert(copy.contents.defined() && contents.defined()) << "Cannot deep-copy undefined Function\n";
@@ -420,7 +420,8 @@ void Function::deep_copy(Function &copy, std::map<Function, Function> &copied_ma
     for (const auto &iter : copied_funcs_map) {
         Function old_func = Function(iter.first);
         if (copied_map.count(old_func)) {
-            internal_assert(copied_map[old_func].contents.same_as(iter.second));
+            internal_assert(copied_map[old_func].contents.same_as(iter.second))
+                << old_func.name() << " is deep-copied twice\n";
             continue;
         }
         copied_map[old_func] = Function(iter.second);
