@@ -34,7 +34,8 @@ public:
     /** Construct an RVar with the given name */
     explicit RVar(const std::string &n) : _name(n) {
         // Make sure we don't get a unique name with the same name as
-        // this later:
+        // this later. TODO: This uses more and more memory over time
+        // to track the used names.
         Internal::unique_name(n, false);
     }
 
