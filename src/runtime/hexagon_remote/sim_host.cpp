@@ -29,6 +29,15 @@ int init_sim() {
         return -1;
     }
 
+    const char *timing = getenv("HL_HEX_TIMING");
+    if (timing && timing[0] != 0) {
+        status = sim->ConfigureTimingMode(HEX_TIMING);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigureTimingMode failed: %d\n", status);
+            return -1;
+        }
+    }
+
     // Configue tracing.
     const char *T = getenv("HL_HEX_SIM_MIN_TRACE");
     if (T && T[0] != 0) {
@@ -60,7 +69,6 @@ int init_sim() {
         }
     }
 
-
     status = sim->EndOfConfiguration();
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::EndOfConfiguration failed: %d\n", status);
@@ -72,7 +80,6 @@ int init_sim() {
         printf("HexagonWrapper::LoadExecutableBinary failed: %d\n", status);
         return -1;
     }
-
     return 0;
 }
 
@@ -317,6 +324,17 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+    // Print out sim statistics if desired.
+    if (getenv("HL_HEX_SIM_STATS")) {
+        char Buf[4096];
+        HEXAPI_Status status = sim->EmitPerfStatistics(0, 0, 0, 0, Buf, sizeof(Buf));
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::EmitStatistics failed: %d\n", status);
+        } else {
+            // Print out the full stats
+            printf("%s\n", Buf);
+        }
+    }
     return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), codeLen});
 }
 
