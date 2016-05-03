@@ -19,8 +19,6 @@ using std::vector;
 
 namespace {
 
-Target hexagon_remote_target(Target::NoOS, Target::Hexagon, 32);
-
 // Replace the parameter objects of loads/stores witha new parameter
 // object.
 class ReplaceParams : public IRMutator {
@@ -284,7 +282,7 @@ public:
 }
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
-    Target target = hexagon_remote_target;
+    Target target(Target::NoOS, Target::Hexagon, 32);
     for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128}) {
         if (host_target.has_feature(i)) {
             target = target.with_feature(i);
