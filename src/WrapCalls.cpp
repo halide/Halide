@@ -17,7 +17,7 @@ void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
     env[in_func] = env[in_func].substitute_calls(orig, substitute);
 }
 
-// Return true if 'func' exists as copy of one of the Function in 'copied_map'
+// Return true if 'func' exists as a copy of one of the function in 'copied_map'
 bool is_copy(const Function& func, const map<Function, Function> copied_map) {
     for (const auto &iter : copied_map) {
         if (iter.second.same_as(func)) {
@@ -32,7 +32,7 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
     vector<Function> wrapped_outputs;
     map<string, Function> wrapped_env;
 
-    // Create empty copy of Func in env.
+    // Create empty copies of all functions in env.
     map<Function, Function> copied_map;
     for (const auto &iter : env) {
         copied_map[iter.second] = Function(iter.second.name());
