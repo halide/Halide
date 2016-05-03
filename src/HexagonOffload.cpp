@@ -259,7 +259,16 @@ public:
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         compile_module_to_llvm_bitcode(device_code, "hex.bc");
-        int result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so");
+
+        int result = 0;
+        string S64 = "${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
+        string S128 = S64 +" -mhvx-double";
+        Target target = hexagon_remote_target;
+        if (target.has_feature( Target::HVX_128))
+            result = system(S128.c_str());
+        else
+            result = system(S64.c_str());
+//          result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so");
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
@@ -284,7 +293,7 @@ public:
 }
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
-    Target target = hexagon_remote_target;
+    Target &target = hexagon_remote_target;
     for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128}) {
         if (host_target.has_feature(i)) {
             target = target.with_feature(i);
