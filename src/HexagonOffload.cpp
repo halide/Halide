@@ -257,7 +257,12 @@ public:
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         compile_module_to_llvm_bitcode(device_code, "hex.bc");
-        int result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so");
+
+        string hex_command = "${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
+        if (device_code.target().has_feature(Target::HVX_128)) {
+            hex_command += " -mhvx-double";
+        }
+        int result = system(hex_command.c_str());
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
