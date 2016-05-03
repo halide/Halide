@@ -2,8 +2,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <algorithm>
+#include <functional>
 #include <map>
-#include <set>
+#include <numeric>
 
 using std::map;
 using std::vector;
@@ -12,9 +13,11 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
+typedef map<string, vector<string>> CallGraphs;
+
 class CheckCalls : public IRVisitor {
 public:
-    map<string, vector<string>> calls; // Caller -> set of callees
+    CallGraphs calls; // Caller -> vector of callees
     string producer = "";
 private:
     using IRVisitor::visit;
@@ -44,55 +47,51 @@ private:
             vector<string> &callees = calls[producer];
             if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
                 callees.push_back(op->name);
-                // Sort the callees after every insertion to make our life easier
-                // during correctness check
-                std::sort(callees.begin(), callees.end());
             }
         }
     }
 };
 
-int func_wrap_test() {
-    Func f("f"), g("g");
-    Var x("x"), y("y");
 
-    f(x) = x;
-    f.compute_root();
-
-    g(x, y) = f(x);
-    Func wrapper = f.in(g).compute_root();
-
-    // Check the call graphs.
-    // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing
-    Module m = g.compile_to_module({});
-    CheckCalls c;
-    m.functions[0].body.accept(&c);
-
-    if (c.calls.size() != 3) {
-        printf("Expect 3 callers instead of %d\n", (int)c.calls.size());
+int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
+    if (result.size() != expected.size()) {
+        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
         return -1;
     }
-    if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-        printf("Expect \"f\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(wrapper.name()) &&
-          (c.calls[wrapper.name()].size() == 1) &&
-          (c.calls[wrapper.name()][0] == f.name()))) {
-        printf("Expect \"wrapper\" to call \"f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.name()) &&
-          (c.calls[g.name()].size() == 1) &&
-          (c.calls[g.name()][0] == wrapper.name()))) {
-        printf("Expect \"g\" to call wrapper\n");
-        return -1;
-    }
+    for (auto &iter : expected) {
+        if (result.count(iter.first) == 0) {
+            printf("Expect %s to be in the call graphs\n", iter.first.c_str());
+            return -1;
+        }
+        vector<string> &expected_callees = iter.second;
+        vector<string> &result_callees = result[iter.first];
+        std::sort(expected_callees.begin(), expected_callees.end());
+        std::sort(result_callees.begin(), result_callees.end());
+        if (expected_callees != result_callees) {
+            string expected_str = std::accumulate(
+                expected_callees.begin(), expected_callees.end(), std::string{},
+                [](const string &a, const string &b) {
+                    return a.empty() ? b : a + ", " + b;
+                });
+            string result_str = std::accumulate(
+                result_callees.begin(), result_callees.end(), std::string{},
+                [](const string &a, const string &b) {
+                    return a.empty() ? b : a + ", " + b;
+                });
 
-    Image<int> im = g.realize(200, 200);
+            printf("Expect calless of %s to be (%s); got (%s) instead\n",
+                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
+            return -1;
+        }
+
+    }
+    return 0;
+}
+
+int check_image(const Image<int> &im, const std::function<int(int,int)> &func) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
-            int correct = x;
+            int correct = func(x, y);
             if (im(x, y) != correct) {
                 printf("im(%d, %d) = %d instead of %d\n",
                        x, y, im(x, y), correct);
@@ -103,15 +102,15 @@ int func_wrap_test() {
     return 0;
 }
 
-int global_wrap_test() {
+int func_wrap_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
     f(x) = x;
-    f.compute_root();
-
     g(x, y) = f(x);
-    Func wrapper = f.in().compute_root();
+
+    Func wrapper = f.in(g).compute_root();
+    f.compute_root();
 
     // Check the call graphs.
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing
@@ -119,37 +118,59 @@ int global_wrap_test() {
     CheckCalls c;
     m.functions[0].body.accept(&c);
 
-    if (c.calls.size() != 3) {
-        printf("Expect 3 callers instead of %d\n", (int)c.calls.size());
-        return -1;
-    }
-    if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-        printf("Expect \"f\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(wrapper.name()) &&
-          (c.calls[wrapper.name()].size() == 1) &&
-          (c.calls[wrapper.name()][0] == f.name()))) {
-        printf("Expect \"wrapper\" to call \"f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.name()) &&
-          (c.calls[g.name()].size() == 1) &&
-          (c.calls[g.name()][0] == wrapper.name()))) {
-        printf("Expect \"g\" to call wrapper\n");
+    CallGraphs expected = {
+        {g.name(), {wrapper.name()}},
+        {wrapper.name(), {f.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Image<int> im = g.realize(200, 200);
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x;
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return -1;
-            }
-        }
+    auto func = [](int x, int y) { return x; };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
+int global_wrap_test() {
+    Func f("f"), g("g"), h("h"), i("i");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    g(x, y) = f(x, y);
+    h(x, y) = g(x, y) + f(x, y);
+
+    Var xi("xi"), yi("yi"), t("t");
+    Func wrapper = f.in();
+    f.compute_root();
+    h.compute_root().tile(x, y, xi, yi, 16, 16).fuse(x, y, t).parallel(t);
+    g.compute_at(h, yi);
+    wrapper.compute_at(h, yi).tile(x, y, xi, yi, 8, 8).fuse(xi, yi, t).vectorize(t, 4);
+
+    // Check the call graphs.
+    // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing,
+    // 'h' to call 'wrapper' and 'g'
+    Module m = h.compile_to_module({});
+    CheckCalls c;
+    m.functions[0].body.accept(&c);
+
+    CallGraphs expected = {
+        {h.name(), {g.name(), wrapper.name()}},
+        {g.name(), {wrapper.name()}},
+        {wrapper.name(), {f.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
+    }
+
+    Image<int> im = h.realize(200, 200);
+    auto func = [](int x, int y) { return 2*(x + y); };
+    if (check_image(im, func)) {
+        return -1;
     }
     return 0;
 }
@@ -159,10 +180,9 @@ int update_defined_after_wrap_test() {
     Var x("x"), y("y");
 
     f(x, y) = x + y;
-    f.compute_root();
-
     g(x, y) = f(x, y);
-    Func wrapper = f.in(g).compute_root();
+
+    Func wrapper = f.in(g);
 
     // Update of 'g' is defined after f.in(g) is called. g's updates should
     // still call f's wrapper.
@@ -170,55 +190,73 @@ int update_defined_after_wrap_test() {
     r.where(r.x < r.y);
     g(r.x, r.y) += 2*f(r.x, r.y);
 
-    // Check the call graphs.
-    // Expect both initialization of 'g' and its update to call 'wrapper' and 'g',
-    // wrapper' to call 'f', 'f' to call nothing
-    Module m = g.compile_to_module({});
-    CheckCalls c;
-    m.functions[0].body.accept(&c);
+    Param<bool> param;
 
-    if (c.calls.size() != 4) {
-        printf("Expect 4 callers instead of %d\n", (int)c.calls.size());
-        return -1;
-    }
-    if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-        printf("Expect \"f\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(wrapper.name()) &&
-          (c.calls[wrapper.name()].size() == 1) &&
-          (c.calls[wrapper.name()][0] == f.name()))) {
-        printf("Expect \"wrapper\" to call \"f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.name()) &&
-          (c.calls[g.name()].size() == 1) &&
-          (c.calls[g.name()][0] == wrapper.name()))) {
-        printf("Expect \"g\" to call \"wrapper\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.update(0).name()) &&
-          (c.calls[g.update(0).name()].size() == 2) &&
-          (c.calls[g.update(0).name()][0] == wrapper.name()) &&
-          (c.calls[g.update(0).name()][1] == g.name()))) {
-        printf("Expect \"g_update\" to call \"wrapper\" and \"g\"\n");
-        return -1;
-    }
+    Var xi("xi");
+    RVar rxo("rxo"), rxi("rxi");
+    g.specialize(param).vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
+    g.update(0).split(r.x, rxo, rxi, 2).unroll(rxi);
+    f.compute_root();
+    wrapper.compute_root().vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    Image<int> im = g.realize(200, 200);
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += (x < y) ? 2*correct : 0;
-            }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return -1;
-            }
+    {
+        param.set(true);
+
+        // Check the call graphs.
+        // Expect initialization of 'g' to call 'wrapper' and its update to call
+        // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
+        Module m = g.compile_to_module({g.infer_arguments()});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {g.name(), {wrapper.name()}},
+            {g.update(0).name(), {wrapper.name(), g.name()}},
+            {wrapper.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = g.realize(200, 200);
+        auto func = [](int x, int y) {
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+        };
+        if (check_image(im, func)) {
+            return -1;
         }
     }
+
+    {
+        param.set(false);
+
+        // Check the call graphs.
+        // Expect initialization of 'g' to call 'wrapper' and its update to call
+        // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
+        Module m = g.compile_to_module({g.infer_arguments()});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {g.name(), {wrapper.name()}},
+            {g.update(0).name(), {wrapper.name(), g.name()}},
+            {wrapper.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = g.realize(200, 200);
+        auto func = [](int x, int y) {
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+        };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+
     return 0;
 }
 
@@ -228,13 +266,13 @@ int rdom_wrapper_test() {
     Var x("x"), y("y");
 
     f(x, y) = x + y;
-    f.compute_root();
-
     g(x, y) = 10;
     g(x, y) += 2 * f(x, x);
     g(x, y) += 3 * f(y, y);
     result(x, y) = g(x, y) + 20;
+
     Func wrapper = g.in(result).compute_at(result, x);
+    f.compute_root();
 
     // Check the call graphs.
     // Expect 'result' to call 'wrapper', initialization of 'g' to call nothing
@@ -243,64 +281,36 @@ int rdom_wrapper_test() {
     CheckCalls c;
     m.functions[0].body.accept(&c);
 
-    if (c.calls.size() != 5) {
-        printf("Expect 5 callers instead of %d\n", (int)c.calls.size());
-        return -1;
-    }
-    if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-        printf("Expect \"f\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(wrapper.name()) &&
-          (c.calls[wrapper.name()].size() == 1) &&
-          (c.calls[wrapper.name()][0] == g.name()))) {
-        printf("Expect \"wrapper\" to call \"g\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(result.name()) &&
-          (c.calls[result.name()].size() == 1) &&
-          (c.calls[result.name()][0] == wrapper.name()))) {
-        printf("Expect \"result\" to call \"wrapper\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.name()) && (c.calls[g.name()].size() == 0))) {
-        printf("Expect \"g\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.update(0).name()) &&
-          (c.calls[g.update(0).name()].size() == 2) &&
-          (c.calls[g.update(0).name()][0] == f.name()) &&
-          (c.calls[g.update(0).name()][1] == g.name()))) {
-        printf("Expect \"g_update\" to call \"f\" and \"g\"\n");
+    CallGraphs expected = {
+        {result.name(), {wrapper.name()}},
+        {g.name(), {}},
+        {g.update(0).name(), {f.name(), g.name()}},
+        {wrapper.name(), {g.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Image<int> im = result.realize(200, 200);
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = 4*x + 6* y + 30;
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return -1;
-            }
-        }
+    auto func = [](int x, int y) { return 4*x + 6* y + 30; };
+    if (check_image(im, func)) {
+        return -1;
     }
     return 0;
 }
 
 int global_and_custom_wrap_test() {
-    // Scheduling initialization + update on the same compute level using wrapper
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
     f(x) = x;
-    f.compute_root();
-
     g(x, y) = f(x);
     result(x, y) = f(x) + g(x, y);
+
     Func f_in_g = f.in(g).compute_at(g, x);
     Func f_wrapper = f.in().compute_at(result, y);
+    f.compute_root();
     g.compute_at(result, y);
 
     // Check the call graphs.
@@ -310,57 +320,27 @@ int global_and_custom_wrap_test() {
     CheckCalls c;
     m.functions[0].body.accept(&c);
 
-    if (c.calls.size() != 5) {
-        printf("Expect 5 callers instead of %d\n", (int)c.calls.size());
-        return -1;
-    }
-    if (!(c.calls.count(f.name()) && (c.calls[f.name()].size() == 0))) {
-        printf("Expect \"f\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(f_in_g.name()) &&
-          (c.calls[f_in_g.name()].size() == 1) &&
-          (c.calls[f_in_g.name()][0] == f.name()))) {
-        printf("Expect \"f_in_g\" to call \"f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(f_wrapper.name()) &&
-          (c.calls[f_wrapper.name()].size() == 1) &&
-          (c.calls[f_wrapper.name()][0] == f.name()))) {
-        printf("Expect \"f_wrapper\" to call \"f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.name()) &&
-          (c.calls[g.name()].size() == 1) &&
-          (c.calls[g.name()][0] == f_in_g.name()))) {
-        printf("Expect \"g\" to call \"f_in_g\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(result.name()) &&
-          (c.calls[result.name()].size() == 2) &&
-          (c.calls[result.name()][0] == f_wrapper.name()) &&
-          (c.calls[result.name()][1] == g.name()))) {
-        printf("Expect \"result\" to call \"f_wrapper\" and \"g\"\n");
+    CallGraphs expected = {
+        {result.name(), {g.name(), f_wrapper.name()}},
+        {g.name(), {f_in_g.name()}},
+        {f_wrapper.name(), {f.name()}},
+        {f_in_g.name(), {f.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Image<int> im = result.realize(200, 200);
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = 2*x;
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return -1;
-            }
-        }
+    auto func = [](int x, int y) { return 2*x; };
+    if (check_image(im, func)) {
+        return -1;
     }
     return 0;
 }
 
 
 int wrapper_depend_on_mutated_func_test() {
-    // Scheduling initialization + update on the same compute level using wrapper
     Func e("e"), f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -369,12 +349,14 @@ int wrapper_depend_on_mutated_func_test() {
     g(x, y) = f(x, y);
     h(x, y) = g(x, y);
 
+    Var xo("xo"), xi("xi");
     e.compute_root();
-    f.compute_root();
+    f.compute_at(g, y).vectorize(x, 8);
     g.compute_root();
-
-    Func e_in_f = e.in(f).compute_root();
+    Func e_in_f = e.in(f);
     Func g_in_h = g.in(h).compute_root();
+    g_in_h.compute_at(h, y).vectorize(x, 8);
+    e_in_f.compute_at(f, y).split(x, xo, xi, 8);
 
     // Check the call graphs.
     // Expect 'h' to call 'g_in_h', 'g_in_h' to call 'g', 'g' to call 'f',
@@ -383,55 +365,66 @@ int wrapper_depend_on_mutated_func_test() {
     CheckCalls c;
     m.functions[0].body.accept(&c);
 
-    if (c.calls.size() != 6) {
-        printf("Expect 6 callers instead of %d\n", (int)c.calls.size());
-        return -1;
-    }
-    if (!(c.calls.count(e.name()) && (c.calls[e.name()].size() == 0))) {
-        printf("Expect \"e\" to call nothing\n");
-        return -1;
-    }
-    if (!(c.calls.count(e_in_f.name()) &&
-          (c.calls[e_in_f.name()].size() == 1) &&
-          (c.calls[e_in_f.name()][0] == e.name()))) {
-        printf("Expect \"e_in_f\" to call \"e\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(f.name()) &&
-          (c.calls[f.name()].size() == 1) &&
-          (c.calls[f.name()][0] == e_in_f.name()))) {
-        printf("Expect \"f\" to call \"e_in_f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g.name()) &&
-          (c.calls[g.name()].size() == 1) &&
-          (c.calls[g.name()][0] == f.name()))) {
-        printf("Expect \"g\" to call \"f\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(g_in_h.name()) &&
-          (c.calls[g_in_h.name()].size() == 1) &&
-          (c.calls[g_in_h.name()][0] == g.name()))) {
-        printf("Expect \"g_in_h\" to call \"g\"\n");
-        return -1;
-    }
-    if (!(c.calls.count(h.name()) &&
-          (c.calls[h.name()].size() == 1) &&
-          (c.calls[h.name()][0] == g_in_h.name()))) {
-        printf("Expect \"h\" to call \"g_in_h\"\n");
+    CallGraphs expected = {
+        {h.name(), {g_in_h.name()}},
+        {g_in_h.name(), {g.name()}},
+        {g.name(), {f.name()}},
+        {f.name(), {e_in_f.name()}},
+        {e_in_f.name(), {e.name()}},
+        {e.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Image<int> im = h.realize(200, 200);
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return -1;
-            }
-        }
+    auto func = [](int x, int y) { return x + y; };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
+int wrapper_on_wrapper_test() {
+    Func e("e"), f("f"), g("g"), h("h");
+    Var x("x"), y("y");
+
+    e(x, y) = x + y;
+    f(x, y) = e(x, y);
+    g(x, y) = f(x, y) + e(x, y);
+    Func f_in_g = f.in(g).compute_root();
+    Func f_in_f_in_g = f.in(f_in_g).compute_root();
+    h(x, y) = g(x, y) + f(x, y) + f_in_f_in_g(x, y);
+
+    e.compute_root();
+    f.compute_root();
+    g.compute_root();
+    Func f_in_h = f.in(h).compute_root();
+    Func g_in_h = g.in(h).compute_root();
+
+    // Check the call graphs.
+    Module m = h.compile_to_module({});
+    CheckCalls c;
+    m.functions[0].body.accept(&c);
+
+    CallGraphs expected = {
+        {h.name(), {f_in_h.name(), g_in_h.name(), f_in_f_in_g.name()}},
+        {f_in_h.name(), {f.name()}},
+        {g_in_h.name(), {g.name()}},
+        {g.name(), {e.name(), f_in_g.name()}},
+        {f_in_g.name(), {f_in_f_in_g.name()}},
+        {f_in_f_in_g.name(), {f.name()}},
+        {f.name(), {e.name()}},
+        {e.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
+    }
+
+    Image<int> im = h.realize(200, 200);
+    auto func = [](int x, int y) { return 4*(x + y); };
+    if (check_image(im, func)) {
+        return -1;
     }
     return 0;
 }
@@ -467,7 +460,10 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    //TODO(psuriana): add test calling wrapper on the wrapper itself
+    printf("Running wrapper on wrapper test\n");
+    if (wrapper_on_wrapper_test() != 0) {
+        return -1;
+    }
 
     printf("Success!\n");
     return 0;

@@ -65,8 +65,12 @@ void deep_copy_schedule_contents_helper(
 
     // Deep-copy wrapper functions
     for (const auto &iter : src.ptr->wrappers) {
-        dst.ptr->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
-        copied_map[iter.second] = dst.ptr->wrappers[iter.first];
+        if (copied_map.count(iter.second)) {
+            dst.ptr->wrappers[iter.first] = copied_map[iter.second];
+        } else {
+            dst.ptr->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
+            copied_map[iter.second] = dst.ptr->wrappers[iter.first];
+        }
     }
     internal_assert(dst.ptr->wrappers.size() == src.ptr->wrappers.size());
 }
