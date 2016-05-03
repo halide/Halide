@@ -137,6 +137,7 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 
 std::vector<ReductionVariable> &ReductionDomain::domain() {
     return contents.ptr->domain;
+}
 
 void ReductionDomain::set_predicate(Expr p) {
     // The predicate can refer back to the RDom. We need to break
