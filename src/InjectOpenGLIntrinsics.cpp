@@ -73,7 +73,7 @@ private:
 
             Expr load_call = Call::make(load_type, Call::glsl_texture_load,
                                         vector<Expr>(&args[0], &args[4]),
-                                        Call::Intrinsic, Function(), 0,
+                                        Call::Intrinsic, nullptr, 0,
                                         call->image, call->param);
 
             // Add a shuffle_vector intrinsic to swizzle a single channel
