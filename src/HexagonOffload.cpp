@@ -268,7 +268,6 @@ public:
             result = system(S128.c_str());
         else
             result = system(S64.c_str());
-//          result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so");
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
