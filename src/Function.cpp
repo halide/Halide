@@ -117,6 +117,7 @@ struct CheckVars : public IRGraphVisitor {
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
     const std::string name;
+    bool unbound_reduction_vars_ok = false;
 
     CheckVars(const std::string &n) :
         name(n) {}
@@ -168,6 +169,14 @@ struct CheckVars : public IRGraphVisitor {
                 return;
             } else {
                 user_error << "Multiple reduction domains found in definition of Func \"" << name << "\"\n";
+            }
+        } else if (reduction_domain.defined() && unbound_reduction_vars_ok) {
+            // Is it one of the RVars from the reduction domain we already
+            // know about (this can happen in the RDom predicate).
+            for (const ReductionVariable &rv : reduction_domain.domain()) {
+                if (rv.var == var->name) {
+                    return;
+                }
             }
         }
 
@@ -426,6 +435,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         values[i].accept(&check);
     }
     if (check.reduction_domain.defined()) {
+        check.unbound_reduction_vars_ok = true;
         check.reduction_domain.predicate().accept(&check);
     }
 

@@ -3,6 +3,7 @@
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IRMutator.h"
 #include "Reduction.h"
 #include "Simplify.h"
 
@@ -104,7 +105,9 @@ struct ReductionDomainContents {
     Expr predicate;
     bool frozen;
 
-    ReductionDomainContents() : predicate(const_true()), frozen(false) {}
+    ReductionDomainContents() : predicate(const_true()), frozen(false) {
+    }
+
 };
 
 template<>
@@ -123,7 +126,30 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 }
 
 void ReductionDomain::set_predicate(Expr p) {
-    contents.ptr->predicate = p;
+    // The predicate can refer back to the RDom. We need to break
+    // those cycles to prevent a leak.
+    class DropSelfReferences : public IRMutator {
+        using IRMutator::visit;
+
+        void visit(const Variable *op) {
+            if (op->reduction_domain.defined()) {
+                user_assert(op->reduction_domain.same_as(domain))
+                    << "An RDom's predicate may only refer to its own RVars, "
+                    << " not the RVars of some other RDom. "
+                    << "Cannot set the predicate to : " << predicate << "\n";
+                expr = Variable::make(op->type, op->name);
+            } else {
+                expr = op;
+            }
+        }
+    public:
+        Expr predicate;
+        const ReductionDomain &domain;
+        DropSelfReferences(Expr p, const ReductionDomain &d) :
+            predicate(p), domain(d) {}
+    };
+
+    contents.ptr->predicate = DropSelfReferences(p, *this).mutate(p);
 }
 
 void ReductionDomain::where(Expr predicate) {
