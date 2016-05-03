@@ -33,9 +33,6 @@ public:
 
     /** Construct an RVar with the given name */
     explicit RVar(const std::string &n) : _name(n) {
-        // Make sure we don't get a unique name with the same name as
-        // this later:
-        Internal::unique_name(n, false);
     }
 
     /** Construct a reduction variable with the given name and
