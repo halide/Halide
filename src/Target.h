@@ -237,7 +237,8 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     int natural_vector_size(Halide::Type t) const {
-        user_assert(*this != Target()) << "natural_vector_size cannot be used on an uninitialized Target.\n";
+        user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0) 
+            << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
         const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
