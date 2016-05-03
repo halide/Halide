@@ -221,11 +221,12 @@ struct Simplification {
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
-public:
-    vector<Simplification> simplifications;
+    Scope<int> depends_on_loop_var;
 
-private:
     void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
+        if (!expr_uses_vars(condition, depends_on_loop_var)) {
+            return;
+        }
         condition = RemoveLikelyTags().mutate(condition);
         Simplification s = {condition, old, likely_val, unlikely_val, true};
         if (s.condition.type().is_vector()) {
@@ -318,6 +319,10 @@ private:
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
+        bool varying = expr_uses_vars(op->value, depends_on_loop_var);
+        if (varying) {
+            depends_on_loop_var.push(op->name, 0);
+        }
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -327,6 +332,9 @@ private:
             }
         }
         simplifications.insert(simplifications.end(), old.begin(), old.end());
+        if (varying) {
+            depends_on_loop_var.pop(op->name);
+        }
     }
 
     void visit(const LetStmt *op) {
@@ -335,6 +343,12 @@ private:
 
     void visit(const Let *op) {
         visit_let(op);
+    }
+public:
+    vector<Simplification> simplifications;
+
+    FindSimplifications(const std::string &v) {
+        depends_on_loop_var.push(v, 0);
     }
 };
 
@@ -400,7 +414,7 @@ class PartitionLoops : public IRMutator {
         }
 
         // Find simplifications in this loop body
-        FindSimplifications finder;
+        FindSimplifications finder(op->name);
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
