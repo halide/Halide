@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t;
 
-    // Calling natural_vector_size() on an uninitialized / default Target
+    // Calling natural_vector_size() on a Target with Unknown fields
     // should generate user_error.
     (void) t.natural_vector_size<float>();
 
