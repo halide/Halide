@@ -1072,6 +1072,19 @@ class AndConditionOverDomain : public IRMutator {
         }
     }
 
+    // Other unhandled sources of bools
+    void visit(const Cast *op) {
+        fail();
+    }
+
+    void visit(const Load *op) {
+        fail();
+    }
+
+    void visit(const Call *op) {
+        fail();
+    }
+
 public:
     bool relaxed = false;
 
