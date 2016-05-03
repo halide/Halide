@@ -67,14 +67,15 @@ EXPORT std::string get_env_variable(char const *env_var_name, size_t &var_define
  * If program name cannot be retrieved, function returns an empty string. */
 EXPORT std::string running_program_name();
 
-/** Generate a unique name starting with the given character. It's
- * unique relative to all other calls to unique_name done by this
- * process. Not thread-safe. */
+/** Generate a unique name starting with the given prefix. It's unique
+ * relative to all other strings returned by unique_name in this
+ * process. Will either return the input as-is, or some mangling of
+ * it.
+ */
+// @{
 EXPORT std::string unique_name(char prefix);
-
-/** Generate a unique name starting with the given string.  Not
- * thread-safe. */
-EXPORT std::string unique_name(const std::string &name, bool user = true);
+EXPORT std::string unique_name(const std::string &prefix);
+// @}
 
 /** Test if the first string starts with the second string */
 EXPORT bool starts_with(const std::string &str, const std::string &prefix);
