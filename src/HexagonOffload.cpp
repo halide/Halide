@@ -19,8 +19,6 @@ using std::vector;
 
 namespace {
 
-Target hexagon_remote_target(Target::NoOS, Target::Hexagon, 32);
-
 // Replace the parameter objects of loads/stores witha new parameter
 // object.
 class ReplaceParams : public IRMutator {
@@ -259,7 +257,12 @@ public:
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         compile_module_to_llvm_bitcode(device_code, "hex.bc");
-        int result = system("${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so");
+
+        string hex_command = "${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
+        if (device_code.target().has_feature(Target::HVX_128)) {
+            hex_command += " -mhvx-double";
+        }
+        int result = system(hex_command.c_str());
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
         std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
@@ -284,7 +287,7 @@ public:
 }
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
-    Target target = hexagon_remote_target;
+    Target target(Target::NoOS, Target::Hexagon, 32);
     for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128}) {
         if (host_target.has_feature(i)) {
             target = target.with_feature(i);
