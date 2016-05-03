@@ -309,14 +309,9 @@ Stmt add_image_checks(Stmt s,
             // And that no product of extents overflows 2^31 - 1. This
             // second test is likely only needed if a fuse directive
             // is used in the schedule to combine multiple extents,
-            // but it is here for extra safety. On 64-bit systems the
-            // maximum size is 2^63 - 1.
-            Expr max_size, max_extent = cast<int64_t>(0x7fffffff);
-            if (t.bits < 64) {
-                max_size = cast<int64_t>(0x7fffffff);
-            } else {
-                max_size = Expr(0x7fffffffffffffff);
-            }
+            // but it is here for extra safety. On targets with the
+            // LargeBuffers feature, the maximum size is 2^63 - 1.
+            Expr max_size = Expr(t.maximum_buffer_size()), max_extent = cast<int64_t>(0x7fffffff);
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);

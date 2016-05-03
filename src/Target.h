@@ -82,6 +82,8 @@ struct Target {
 
         CPlusPlusMangling, ///< Generate C++ mangled names for result function, et al
 
+        LargeBuffers, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+
         FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
     };
 
@@ -256,6 +258,13 @@ struct Target {
     template <typename data_t>
     int natural_vector_size() const {
         return natural_vector_size(type_of<data_t>());
+    }
+
+    /** Return the maximum buffer size in bytes supported on this
+     * Target. This is 2^31 - 1 except when the LargeBuffers feature
+     * is enabled, which expands the maximum to 2^63 - 1. */
+    int64_t maximum_buffer_size() const {
+        return has_feature(Halide::Target::LargeBuffers) ? 0x7fffffffffffffff : 0x7fffffff;
     }
 
     /** Was libHalide compiled with support for this target? */

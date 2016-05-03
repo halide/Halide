@@ -10,8 +10,9 @@ namespace Internal {
 
 namespace {
 void check_buffer_size(uint64_t bytes, const std::string &name) {
-    Target t = get_target_from_environment();
-    if (t.bits == 64) {
+    // This should be a check for the Target feature LargeBuffers, but we don't
+    // have access to a Target here.
+    if (sizeof(void *) == 8) {
         user_assert(bytes < (1UL << 63)) << "Total size of buffer " << name << " exceeds 2^63 - 1\n";
     } else {
         user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
