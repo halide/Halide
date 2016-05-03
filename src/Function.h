@@ -60,20 +60,20 @@ struct UpdateDefinition {
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
 class Function {
-private:
-    IntrusivePtr<FunctionContents> contents;
 public:
+    IntrusivePtr<FunctionContents> contents;
+
     /** Construct a new function with no definitions and no name. This
      * constructor only exists so that you can make vectors of
      * functions, etc.
      */
     EXPORT Function();
 
-    /** Reconstruct a Function from a FunctionContents pointer. */
-    EXPORT Function(const IntrusivePtr<FunctionContents> &c) : contents(c) {}
-
     /** Construct a new function with the given name */
     EXPORT Function(const std::string &n);
+
+    /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
+    EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
