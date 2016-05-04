@@ -870,8 +870,6 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     builder->CreateRet(metadata_storage);
-    // LoadInst *result = builder->CreateLoad(metadata);
-    // return builder->CreateLoad(buffer_host_ptr(buffer));
     llvm::verifyFunction(*metadata_getter);
 
     return metadata_getter;
