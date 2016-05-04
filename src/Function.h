@@ -218,7 +218,8 @@ public:
     EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "");
 
     /** Replace every call to function in 'substitutions' keys (including calls
-     * in the RDom's predicates) to call to function in 'substitutions' values. */
+     * in each of its update's RDom's predicates) to call to function in
+     * 'substitutions' values. */
     EXPORT Function &substitute_calls(const std::map<Function, Function> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
 

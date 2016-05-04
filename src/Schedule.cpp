@@ -5,9 +5,11 @@
 namespace Halide {
 namespace Internal {
 
+typedef std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
+
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
     const IntrusivePtr<FunctionContents> &src,
-    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map);
+    DeepCopyMap &copied_map);
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -45,7 +47,7 @@ namespace {
 // Deep-copy data from 'src' to 'dst'. Ignore copying 'specialization' over.
 void deep_copy_schedule_contents_helper(
         IntrusivePtr<ScheduleContents> &dst, const IntrusivePtr<ScheduleContents> &src,
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) {
+        DeepCopyMap &copied_map) {
 
     if (!src.defined()) {
         dst = src;
@@ -79,10 +81,10 @@ void deep_copy_schedule_contents_helper(
 
 Schedule::Schedule() : contents(new ScheduleContents) {}
 
-void Schedule::deep_copy(
-        Schedule &copy,
+Schedule Schedule::deep_copy(
         std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
 
+    Schedule copy;
     internal_assert(copy.contents.defined() && contents.defined()) << "Cannot deep-copy undefined Schedule\n";
 
     deep_copy_schedule_contents_helper(copy.contents, contents, copied_map);
@@ -96,6 +98,7 @@ void Schedule::deep_copy(
         deep_copy_schedule_contents_helper(s_copy.schedule, s.schedule, copied_map);
         copy.contents.ptr->specializations.push_back(std::move(s_copy));
     }
+    return copy;
 }
 
 bool &Schedule::memoized() {

@@ -344,8 +344,7 @@ void deep_copy_update_definition_helper(IntrusivePtr<FunctionContents> &contents
                                         DeepCopyMap &copied_map) {
     dst.values = src.values;
     dst.args = src.args;
-    dst.schedule = Schedule();
-    src.schedule.deep_copy(dst.schedule, copied_map);
+    dst.schedule = src.schedule.deep_copy(copied_map);
     // UpdateDefinition's domain is the same as the one pointed by its schedule
     internal_assert(src.schedule.reduction_domain().same_as(src.domain))
         << "UpdateDefinition should point to the same reduction domain as its schedule\n";
@@ -359,8 +358,9 @@ void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
     dst.buffer = src.buffer;
     dst.expr = src.expr;
     dst.image_param = src.image_param;
-    if (copied_map.count(src.func)) {
-        dst.func = copied_map[src.func];
+    IntrusivePtr<FunctionContents> &copied_func = copied_map[src.func];
+    if (copied_func.defined()) {
+        dst.func = copied_func;
     } else {
         dst.func = IntrusivePtr<FunctionContents>(new FunctionContents);
         deep_copy_function_contents_helper(dst.func, src.func, copied_map);
@@ -396,8 +396,7 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
     dst.ptr->frozen = src.ptr->frozen;
     dst.ptr->output_buffers = src.ptr->output_buffers;
 
-    dst.ptr->schedule = Schedule();
-    src.ptr->schedule.deep_copy(dst.ptr->schedule, copied_map);
+    dst.ptr->schedule = src.ptr->schedule.deep_copy(copied_map);
 
     for (const auto &u : src.ptr->updates) {
         UpdateDefinition u_copy;

@@ -475,6 +475,45 @@ int wrapper_on_rdom_predicate_test() {
     return 0;
 }
 
+int two_fold_wrapper_test() {
+    Func input("input"), input_in_output_in_output, input_in_output, output("output");
+    Var x("x"), y("y");
+
+    input(x, y) = 2*x + 3*y;
+    input.compute_root();
+
+    output(x, y) = input(y, x);
+
+    Var xi("xi"), yi("yi");
+    output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+
+    // Do 8 vectorized loads from the input.
+    input_in_output = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
+    input_in_output_in_output = input_in_output.in(output).compute_at(output, x).unroll(x).unroll(y);
+
+    // Check the call graphs.
+    Module m = output.compile_to_module({});
+    CheckCalls c;
+    m.functions[0].body.accept(&c);
+
+    CallGraphs expected = {
+        {output.name(), {input_in_output_in_output.name()}},
+        {input_in_output_in_output.name(), {input_in_output.name()}},
+        {input_in_output.name(), {input.name()}},
+        {input.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
+    }
+
+    Image<int> im = output.realize(1024, 1024);
+    auto func = [](int x, int y) { return 3*x + 2*y; };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("Running func wrap test\n");
     if (func_wrap_test() != 0) {
@@ -515,6 +554,11 @@ int main(int argc, char **argv) {
     if (wrapper_on_rdom_predicate_test() != 0) {
         return -1;
     }
+
+    /*printf("Running two fold wrapper test\n");
+    if (two_fold_wrapper_test() != 0) {
+        return -1;
+    }*/
 
     printf("Success!\n");
     return 0;

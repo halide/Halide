@@ -818,7 +818,7 @@ public:
      }
      for (int y = 0; y < 20; y++) {
        for (int x = 0; x < 20; x++) {
-         f_in_g(x, y) = x + y;
+         f_in_g(x, y) = f(x, y);
        }
        for (int x = 0; x < 20; x++) {
          g(x, y) = f_in_g(x, y);
@@ -853,7 +853,7 @@ public:
      }
      for (int y = 0; y < 20; y++) {
        for (int x = 0; x < 20; x++) {
-         f_wrapper(x, y) = x + y;
+         f_wrapper(x, y) = f(x, y);
        }
      }
      for (int y = 0; y < 20; y++) {

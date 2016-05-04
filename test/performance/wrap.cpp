@@ -3,6 +3,23 @@
 
 using namespace Halide;
 
+/* Both 'build' and 'build_wrap' run the same stencil algorithm, albeit with different
+ * schedules. 'build(true)' stages the input data (the compute_root() 'host' Func) into
+ * the GPU shared memory in tiles before being used for the stencil computation.
+ * 'build(false)', on the other hand, forgoes the staging of the input data into the
+ * GPU shared memory; the data is loaded per compute. To do the staging, we need to
+ * create a dummy Func 'staged', and have 'staged' computed as needed per GPU tile,
+ * which loads the input data from 'host' into the GPU shared memory.
+ *
+ * 'build_wrap' run on the same schedule as 'build(true)', however, instead of
+ * creating a dummy Func to stage the input data from 'host', we take advantage
+ * of the 'in()' scheduling directive. Calling 'host.in()' returns a global
+ * wrapper Func for 'host', which then can be scheduled as appropriate. The global
+ * wrapper is essentialy the same as the dummy Func 'staged' in 'build(true)'.
+ * The 'in()' scheduling directive provides an easy way to schedule one Func in
+ * different ways.
+ */
+
 Func build(bool use_shared) {
     Func host;
     Var x, y;
@@ -51,12 +68,12 @@ Func build(bool use_shared) {
 }
 
 
-/* Same logic as in build(true), but with using a wrapper instead of a dummy func. */
+// Same schedule as in 'build(true)', but with using a wrapper instead of a dummy Func.
 Func build_wrap() {
-    Func staged;
+    Func host;
     Var x, y;
-    staged(x, y) = x + y;
-    staged.compute_root();
+    host(x, y) = x + y;
+    host.compute_root();
 
     const int stages = 10;
     Func f[stages];
@@ -65,7 +82,7 @@ Func build_wrap() {
         Expr stencil = 0;
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
-                stencil += staged(select(prev > 0, x, x+dx),
+                stencil += host(select(prev > 0, x, x+dx),
                                   select(prev > 0, y, y+dy));
             }
         }
@@ -83,8 +100,9 @@ Func build_wrap() {
         f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
     }
 
-    // Create a global wrapper for staged and schedule it.
-    staged.in().compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
+    // Create a global wrapper for the input data 'host' and schedule it to load
+    // the data into the GPU shared memory as needed per GPU tile.
+    host.in().compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
 
     return final;
 }
@@ -96,6 +114,7 @@ int main(int argc, char **argv) {
 
     use_shared.compile_jit();
     use_l1.compile_jit();
+    use_wrap_for_shared.compile_jit();
 
     Image<int> out1(1000, 1000);
     Image<int> out2(1000, 1000);

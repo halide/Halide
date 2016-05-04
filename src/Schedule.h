@@ -176,8 +176,7 @@ public:
     EXPORT Schedule();
 
     /** Deep copy this Schedule into 'copy'. */
-    EXPORT void deep_copy(
-        Schedule &copy,
+    EXPORT Schedule deep_copy(
         std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied) const;
 
     /** This flag is set to true if the schedule is memoized. */
