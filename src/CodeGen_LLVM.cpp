@@ -856,14 +856,13 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         /* name */ create_string_constant(function_name)
     };
 
-    const std::string metadata_storage_name = metadata_name + "_storage";
     GlobalVariable *metadata_storage = new GlobalVariable(
         *module,
         metadata_t_type,
         /*isConstant*/ true,
         GlobalValue::PrivateLinkage,
         ConstantStruct::get(metadata_t_type, metadata_fields),
-        metadata_storage_name);
+        metadata_name + "_storage");
 
     llvm::FunctionType *func_t = llvm::FunctionType::get(metadata_t_type->getPointerTo(), false);
     llvm::Function *metadata_getter = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, metadata_name, module.get());
