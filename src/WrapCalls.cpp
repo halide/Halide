@@ -18,7 +18,7 @@ void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
 }
 
 // Return true if 'func' exists as a copy of one of the function in 'copied_map'
-bool is_copy(const Function& func, const map<Function, Function> copied_map) {
+bool is_copy(const Function& func, const map<Function, Function> &copied_map) {
     for (const auto &iter : copied_map) {
         if (iter.second.same_as(func)) {
             return true;
