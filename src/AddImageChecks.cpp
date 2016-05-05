@@ -345,7 +345,7 @@ Stmt add_image_checks(Stmt s,
             args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
             args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
         }
-        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, Function(), 0, image, param);
+        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, nullptr, 0, image, param);
         Stmt rewrite = Evaluate::make(call);
         rewrite = IfThenElse::make(inference_mode, rewrite);
         buffer_rewrites.push_back(rewrite);

@@ -1947,6 +1947,13 @@ WEAK void halide_opengl_context_lost(void *user_context) {
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uintptr_t texture_id) {
+  if (!global_state.initialized) {
+      // Must initialize here: if not, we risk having the TextureInfo
+      // blown away when global state really is inited.
+      if (int error = halide_opengl_init(user_context)) {
+          return error;
+      }
+    }
     if (texture_id == 0) {
         error(user_context) << "Texture " << texture_id << " is not a valid texture name.";
         return -3;
@@ -1955,6 +1962,11 @@ WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, ui
     if (buf->device != 0) {
         return -2;
     }
+    if (find_texture_info(texture_id)) {
+        error(user_context) << "Internal error: texture " << texture_id << " is already wrapped.";
+        return -3;
+    }
+    (void) new_texture_info(texture_id, buf, /* halide_allocated */ false);
     buf->device = texture_id;
     buf->device_interface = &opengl_device_interface;
     buf->device_interface->use_module();

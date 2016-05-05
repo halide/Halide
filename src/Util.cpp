@@ -6,6 +6,7 @@
 #include <map>
 #include <atomic>
 #include <mutex>
+#include <string>
 
 #ifdef __linux__
 #include <unistd.h>
@@ -62,18 +63,81 @@ string running_program_name() {
     #endif
 }
 
-// TODO: Rationalize the two different versions of unique_name,
-// possibly changing the name of one of them as they are used
-// for different things, and in fact the two versions can end
-// up returning the same name, thus they are not collectively
-// unique.
-string unique_name(char prefix) {
-    // arrays with static storage duration should be initialized to zero automatically
-    static std::atomic<int> instances[256];
-    ostringstream str;
-    str << prefix << instances[(unsigned char)prefix]++;
-    return str.str();
+namespace {
+// We use 64K of memory to store unique counters for the purpose of
+// making names unique. Using less memory increases the likelihood of
+// hash collisions. This wouldn't break anything, but makes stmts
+// slightly confusing to read because names that are actually unique
+// will get suffixes that falsely hint that they are not.
+
+const int num_unique_name_counters = (1 << 14);
+std::atomic<int> unique_name_counters[num_unique_name_counters];
+
+int unique_count(size_t h) {
+    h = h & (num_unique_name_counters - 1);
+    return unique_name_counters[h]++;
 }
+}
+
+// There are three possible families of names returned by the methods below:
+// 1) char pattern: (char that isn't '$') + number (e.g. v234)
+// 2) string pattern: (string without '$') + '$' + number (e.g. fr#nk82$42)
+// 3) a string that does not match the patterns above
+// There are no collisions within each family, due to the unique_count
+// done above, and there can be no collisions across families by
+// construction.
+
+string unique_name(char prefix) {
+    if (prefix == '$') prefix = '_';
+    return prefix + std::to_string(unique_count((size_t)(prefix)));
+}
+
+string unique_name(const std::string &prefix) {
+    string sanitized = prefix;
+
+    // Does the input string look like something returned from unique_name(char)?
+    bool matches_char_pattern = true;
+
+    // Does the input string look like something returned from unique_name(string)?
+    bool matches_string_pattern = true;
+
+    // Rewrite '$' to '_'. This is a many-to-one mapping, but that's
+    // OK, we're about to hash anyway. It just means that some names
+    // will share the same counter.
+    int num_dollars = 0;
+    for (size_t i = 0; i < sanitized.size(); i++) {
+        if (sanitized[i] == '$') {
+            num_dollars++;
+            sanitized[i] = '_';
+        }
+        if (i > 0 && !isdigit(sanitized[i])) {
+            // Found a non-digit after the first char
+            matches_char_pattern = false;
+            if (num_dollars) {
+                // Found a non-digit after a '$'
+                matches_string_pattern = false;
+            }
+        }
+    }
+    matches_string_pattern &= num_dollars == 1;
+    matches_char_pattern &= prefix.size() > 1;
+
+    // Then add a suffix that's globally unique relative to the hash
+    // of the sanitized name.
+    int count = unique_count(std::hash<std::string>()(sanitized));
+    if (count == 0) {
+        // We can return the name as-is if there's no risk of it
+        // looking like something unique_name has ever returned in the
+        // past or will ever return in the future.
+        if (!matches_char_pattern && !matches_string_pattern) {
+            return prefix;
+        }
+    }
+
+    return sanitized + "$" + std::to_string(count);
+}
+
+
 
 bool starts_with(const string &str, const string &prefix) {
     if (str.size() < prefix.size()) return false;
@@ -99,43 +163,6 @@ string replace_all(string &str, const string &find, const string &replace) {
         pos += replace.length();
     }
     return str;
-}
-
-string unique_name(const string &name, bool user) {
-    static std::mutex known_names_lock;
-    static map<string, int> *known_names = new map<string, int>();
-    {
-        std::lock_guard<std::mutex> lock(known_names_lock);
-
-        // An empty string really does not make sense, but use 'z' as prefix.
-        if (name.length() == 0) {
-            return unique_name('z');
-        }
-
-        // Check the '$' character doesn't appear in the prefix. This lets
-        // us separate the name from the number using '$' as a delimiter,
-        // which guarantees uniqueness of the generated name, without
-        // having to track all names generated so far.
-        if (user) {
-            for (size_t i = 0; i < name.length(); i++) {
-                user_assert(name[i] != '$')
-                    << "Name \"" << name << "\" is invalid. "
-                    << "Halide names may not contain the character '$'\n";
-            }
-        }
-
-        int &count = (*known_names)[name];
-        count++;
-        if (count == 1) {
-            // The very first unique name is the original function name itself.
-            return name;
-        } else {
-            // Use the programmer-specified name but append a number to make it unique.
-            ostringstream oss;
-            oss << name << '$' << count;
-            return oss.str();
-        }
-    }
 }
 
 string base_name(const string &name, char delim) {

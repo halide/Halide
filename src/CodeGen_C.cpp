@@ -581,7 +581,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
 
     if (is_header()) {
         // Declare the metadata.
-        stream << "extern const struct halide_filter_metadata_t " << simple_name << "_metadata;\n";
+        stream << "// Result is never null and points to constant static data\n";
+        stream << "extern const struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
     }
 }
 

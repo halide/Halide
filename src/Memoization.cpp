@@ -50,13 +50,14 @@ public:
             if (call->args.size() == 1) {
                 record(call->args[0]);
             } else {
+                // Do not look at anything inside a memoize_expr bracket.
                 for (size_t i = 1; i < call->args.size(); i++) {
                     record(call->args[i]);
                 }
             }
-        } else {
-            // Do not look at anything inside a memoize_expr bracket.
-            visit_function(call->func);
+        } else if (call->func.defined()) {
+            Function fn(call->func);
+            visit_function(fn);
             IRGraphVisitor::visit(call);
         }
     }
@@ -106,7 +107,7 @@ public:
         info.type = expr.type();
         info.size_expr = info.type.bytes();
         info.value_expr = expr;
-        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag", false))] = info;
+        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag"))] = info;
     }
 
     // Used to make sure larger parameters come before smaller ones
