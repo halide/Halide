@@ -25,7 +25,7 @@ struct PipelineContents;
 
 namespace Internal {
 class IRMutator;
-}
+}  // namespace Internal
 
 /**
  * Used to determine if the output printed to file should be as a normal string
@@ -42,7 +42,7 @@ template<typename T>
 void delete_lowering_pass(T *pass) {
     delete pass;
 }
-}
+}  // namespace
 
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
 struct CustomLoweringPass {
@@ -65,6 +65,10 @@ struct Outputs {
      * output is desired. */
     std::string bitcode_name;
 
+    /** The name of the emitted llvm assembly. Empty if no llvm assembly
+     * output is desired. */
+    std::string llvm_assembly_name;
+
     /** Make a new Outputs struct that emits everything this one does
      * and also an object file with the given name. */
     Outputs object(const std::string &object_name) {
@@ -86,6 +90,14 @@ struct Outputs {
     Outputs bitcode(const std::string &bitcode_name) {
         Outputs updated = *this;
         updated.bitcode_name = bitcode_name;
+        return updated;
+    }
+
+    /** Make a new Outputs struct that emits everything this one does
+     * and also an llvm assembly file with the given name. */
+    Outputs llvm_assembly(const std::string &llvm_assembly_name) {
+        Outputs updated = *this;
+        updated.llvm_assembly_name = llvm_assembly_name;
         return updated;
     }
 };
@@ -495,6 +507,6 @@ struct JITExtern {
     }
 };
 
-}
+}  // namespace Halide
 
 #endif
