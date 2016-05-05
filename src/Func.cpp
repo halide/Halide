@@ -241,6 +241,9 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
 
 namespace {
 bool var_name_match(string candidate, string var) {
+    internal_assert(var.find('.') == string::npos)
+        << "var_name_match expects unqualified names for the second argument. "
+        << "Name passed: " << var << "\n";
     if (candidate == var) return true;
     return Internal::ends_with(candidate, "." + var);
 }
