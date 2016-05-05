@@ -18,11 +18,11 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
         // TODO(dsharlet): Check for naming collisions, maybe rename
         // internal linkage declarations in the case of collision.
-        for (size_t i = 0; i < input.buffers.size(); i++) {
-            output.append(input.buffers[i]);
+        for (const auto &b : input.buffers()) {
+            output.append(b);
         }
-        for (size_t i = 0; i < input.functions.size(); i++) {
-            output.append(input.functions[i]);
+        for (const auto &f : input.functions()) {
+            output.append(f);
         }
     }
 

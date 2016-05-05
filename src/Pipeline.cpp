@@ -489,13 +489,13 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     Stmt private_body;
 
     const Module &old_module = contents.ptr->module;
-    if (!old_module.functions.empty() &&
+    if (!old_module.functions().empty() &&
         old_module.target() == target) {
-        internal_assert(old_module.functions.size() == 2);
+        internal_assert(old_module.functions().size() == 2);
         // We can avoid relowering and just reuse the private body
         // from the old module. We expect two functions in the old
         // module: the private one then the public one.
-        private_body = old_module.functions[0].body;
+        private_body = old_module.functions().front().body;
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
@@ -623,11 +623,11 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, name, target);
 
     // Make sure we're not embedding any images
-    internal_assert(module.buffers.empty());
+    internal_assert(module.buffers().empty());
 
     std::map<std::string, JITExtern> lowered_externs = contents.ptr->jit_externs;
     // Compile to jit module
-    JITModule jit_module(module, module.functions.back(),
+    JITModule jit_module(module, module.functions().back(),
                          make_externs_jit_module(target_arg, lowered_externs));
 
     // Dump bitcode to a file if the environment variable
