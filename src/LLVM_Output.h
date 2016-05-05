@@ -15,10 +15,6 @@ class LLVMContext;
 
 namespace Halide {
 
-/** Get given an llvm Module, get the target options by extracting the Halide metadata. */
-EXPORT void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
-EXPORT void clone_target_options(const llvm::Module &from, llvm::Module &to);
-
 /** Generate an LLVM module. */
 EXPORT std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context);
 
