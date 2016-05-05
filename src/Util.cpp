@@ -64,11 +64,11 @@ string running_program_name() {
 }
 
 namespace {
-// We use 64K of memory to store unique counters. Using less memory
-// increases the likelihood of hash collisions. This wouldn't break
-// anything, but makes pipelines pseudocode slightly confusing to read
-// because names that are actually unique will get suffixes that
-// falsely hint that they are not.
+// We use 64K of memory to store unique counters for the purpose of
+// making names unique. Using less memory increases the likelihood of
+// hash collisions. This wouldn't break anything, but makes stmts
+// slightly confusing to read because names that are actually unique
+// will get suffixes that falsely hint that they are not.
 
 const int num_unique_name_counters = (1 << 14);
 std::atomic<int> unique_name_counters[num_unique_name_counters];
