@@ -29,6 +29,17 @@ int init_sim() {
         return -1;
     }
 
+    // memfill defaults to 0x1f on the simulator.
+    // example: HL_HEX_MEMFILL=0
+    const char *memfill = getenv("HL_HEX_MEMFILL");
+    if (memfill && memfill[0] != 0) {
+        status = sim->ConfigureMemFill(atoi(memfill));
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigureMemFill failed: %d\n", status);
+            return -1;
+        }
+    }
+
     const char *timing = getenv("HL_HEX_TIMING");
     if (timing && timing[0] != 0) {
         status = sim->ConfigureTimingMode(HEX_TIMING);
