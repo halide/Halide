@@ -345,14 +345,15 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const EmitOptions &options) {
     build_params();
 
-    Pipeline pipeline = build_pipeline();
-
     std::vector<Halide::Argument> inputs = get_filter_arguments();
     
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(function_name, namespaces);
 
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? simple_name : file_base_name);
+
+    Module m = build_pipeline().compile_to_module(inputs, function_name, target);
+
     if (options.emit_o || options.emit_assembly || options.emit_bitcode) {
         Outputs output_files;
         if (options.emit_o) {
@@ -377,19 +378,19 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
             // and passed to LLVM, for both the pnacl and ordinary archs
             output_files.bitcode_name = base_path + get_extension(".bc", options);
         }
-        pipeline.compile_to(output_files, inputs, function_name, target);
+        compile_module_to(m, output_files);
     }
     if (options.emit_h) {
-        pipeline.compile_to_header(base_path + get_extension(".h", options), inputs, function_name, target);
+        compile_module_to_c_header(m, base_path + get_extension(".h", options));
     }
     if (options.emit_cpp) {
-        pipeline.compile_to_c(base_path + get_extension(".cpp", options), inputs, function_name, target);
+        compile_module_to_c_source(m, base_path + get_extension(".cpp", options));
     }
     if (options.emit_stmt) {
-        pipeline.compile_to_lowered_stmt(base_path + get_extension(".stmt", options), inputs, Halide::Text, target);
+        compile_module_to_text(m, base_path + get_extension(".stmt", options));
     }
     if (options.emit_stmt_html) {
-        pipeline.compile_to_lowered_stmt(base_path + get_extension(".html", options), inputs, Halide::HTML, target);
+        compile_module_to_html(m, base_path + get_extension(".html", options));
     }
 }
 

@@ -9,6 +9,32 @@
 
 namespace Halide {
 
+void compile_module_to(const Module &module, const Outputs &output_files) {
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(module, context));
+
+    if (!output_files.object_name.empty()) {
+        if (module.target().arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.object_name);
+        } else {
+            compile_llvm_module_to_object(*llvm_module, output_files.object_name);
+        }
+    }
+    if (!output_files.assembly_name.empty()) {
+        if (module.target().arch == Target::PNaCl) {
+            compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.assembly_name);
+        } else {
+            compile_llvm_module_to_assembly(*llvm_module, output_files.assembly_name);
+        }
+    }
+    if (!output_files.bitcode_name.empty()) {
+        compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.bitcode_name);
+    }
+    if (!output_files.llvm_assembly_name.empty()) {
+        compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.llvm_assembly_name);
+    }
+}
+
 void compile_module_to_object(const Module &module, std::string filename) {
     if (filename.empty()) {
         if (module.target().os == Target::Windows &&
@@ -19,17 +45,13 @@ void compile_module_to_object(const Module &module, std::string filename) {
         }
     }
 
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_object(*llvm, filename);
+    compile_module_to(module, Outputs().object(filename));
 }
 
 void compile_module_to_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".s";
 
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_assembly(*llvm, filename);
+    compile_module_to(module, Outputs().assembly(filename));
 }
 
 void compile_module_to_native(const Module &module,
@@ -47,26 +69,19 @@ void compile_module_to_native(const Module &module,
         assembly_filename = module.name() + ".s";
     }
 
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_object(*llvm, object_filename);
-    compile_llvm_module_to_assembly(*llvm, assembly_filename);
+    compile_module_to(module, Outputs().object(object_filename).assembly(assembly_filename));
 }
 
 void compile_module_to_llvm_bitcode(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".bc";
 
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_llvm_bitcode(*llvm, filename);
+    compile_module_to(module, Outputs().bitcode(filename));
 }
 
 void compile_module_to_llvm_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".ll";
 
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_llvm_assembly(*llvm, filename);
+    compile_module_to(module, Outputs().llvm_assembly(filename));
 }
 
 void compile_module_to_llvm(const Module &module,
@@ -75,10 +90,7 @@ void compile_module_to_llvm(const Module &module,
     if (bitcode_filename.empty()) bitcode_filename = module.name() + ".bc";
     if (llvm_assembly_filename.empty()) llvm_assembly_filename = module.name() + ".ll";
 
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm(compile_module_to_llvm_module(module, context));
-    compile_llvm_module_to_llvm_bitcode(*llvm, bitcode_filename);
-    compile_llvm_module_to_llvm_assembly(*llvm, llvm_assembly_filename);
+    compile_module_to(module, Outputs().bitcode(bitcode_filename).llvm_assembly(llvm_assembly_filename));
 }
 
 void compile_module_to_html(const Module &module, std::string filename) {

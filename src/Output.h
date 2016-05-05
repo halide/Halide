@@ -8,8 +8,17 @@
  */
 
 #include "Module.h"
+#include "Pipeline.h"
 
 namespace Halide {
+
+/** Compile a halide Module to a native target (object file, native
+ * assembly) or an LLVM Target (bitcode file, llvm assembly), depending on 
+ * the target setting of the Module. The function that compiles both is more efficient
+ * because it re-uses internal results. The default filename is the
+ * name of the module with the default extension for the target type
+ * (.o for objects, .s for assembly). */
+EXPORT void compile_module_to(const Module &module, const Outputs &output_files);
 
 /** Compile a halide Module to a native target (object file, native
  * assembly). The function that compiles both is more efficient
