@@ -156,13 +156,14 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-string replace_all(string &str, const string &find, const string &replace) {
+string replace_all(const string &str, const string &find, const string &replace) {
     size_t pos = 0;
-    while ((pos = str.find(find, pos)) != string::npos) {
-        str.replace(pos, find.length(), replace);
+    string result = str;
+    while ((pos = result.find(find, pos)) != string::npos) {
+        result.replace(pos, find.length(), replace);
         pos += replace.length();
     }
-    return str;
+    return result;
 }
 
 string base_name(const string &name, char delim) {
