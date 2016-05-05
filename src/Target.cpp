@@ -50,7 +50,6 @@ static void cpuid(int info[4], int infoType, int extra) {
 #endif
 #endif
 #endif
-}
 
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
@@ -140,6 +139,8 @@ Target calculate_host_target() {
 #endif
 #endif
 }
+
+}  // namespace
 
 Target get_host_target() {
     // Calculating the host target isn't slow but it isn't free,
