@@ -526,12 +526,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
-    for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile_buffer(input.buffers[i]);
+    for (const auto &b : input.buffers()) {
+        compile_buffer(b);
     }
-    for (size_t i = 0; i < input.functions.size(); i++) {
-        const LoweredFunc &f = input.functions[i];
-
+    for (const auto &f : input.functions()) {
         std::string simple_name;
         std::string extern_name;
         std::string argv_name;
