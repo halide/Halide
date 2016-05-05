@@ -30,6 +30,7 @@ namespace Halide {
 using std::max;
 using std::min;
 using std::make_pair;
+using std::map;
 using std::string;
 using std::vector;
 using std::pair;
@@ -861,23 +862,101 @@ void Func::invalidate_cache() {
     }
 }
 
-Func Func::in(const Func& f) {
-    internal_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
-    string wrapper_name = name() + "_in_" + f.name();
-    wrapper_name = replace_all(wrapper_name, "$", "");
-    Func wrapper(wrapper_name);
-    wrapper(args()) = (*this)(args());
-    func.add_wrapper(wrapper.func, f.name());
-    return wrapper;
+Func Func::in(const Func &f) {
+    user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
+    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const auto &iter = wrappers.find(f.name());
+    if (iter == wrappers.end()) {
+        string wrapper_name = name() + "_in_" + f.name();
+        wrapper_name = replace_all(wrapper_name, "$", "");
+        Func wrapper(wrapper_name);
+        wrapper(args()) = (*this)(args());
+        func.add_wrapper(wrapper.func, f.name());
+        return wrapper;
+    }
+
+    IntrusivePtr<FunctionContents> wfunc = iter->second;
+    internal_assert(wfunc.defined());
+
+    // Make sure that no other Func shares the same wrapper as 'f'
+    for (const auto &it : wrappers) {
+        if (it.first == f.name()) {
+            continue;
+        }
+        user_assert(!it.second.same_as(wfunc))
+            << "Redefinition of shared wrapper with " << it.first << " [" << name() << " -> "
+            << Function(wfunc).name() << "] in " << f.name() << " is not allowed\n";
+    }
+    return Func(Function(wfunc));
+}
+
+Func Func::in(const vector<Func>& fs) {
+    if (fs.empty()) {
+        return in(); // Make a global wrapper
+    }
+
+    // Either all Funcs have the same wrapper or they don't already have any wrappers.
+    // Otherwise, throw an error.
+    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+
+    const auto &iter = wrappers.find(fs[0].name());
+    if (iter == wrappers.end()) {
+        // Make sure the other Funcs also don't have any wrappers
+        for (size_t i = 1; i < fs.size(); ++i) {
+            user_assert(wrappers.count(fs[i].name()) == 0)
+                << "Cannot define the wrapper since " << fs[i].name()
+                << " already has a wrapper while " << fs[0].name() << " doesn't \n";
+        }
+        string wrapper_name = name() + "_wrapper";
+        wrapper_name = replace_all(wrapper_name, "$", "");
+        Func wrapper(wrapper_name);
+        wrapper(args()) = (*this)(args());
+        for (const Func &f : fs) {
+            user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
+            func.add_wrapper(wrapper.func, f.name());
+        }
+        return wrapper;
+    }
+
+    IntrusivePtr<FunctionContents> wfunc = iter->second;
+    // Make sure all the other Funcs in 'fs' share the same wrapper and no other
+    // Func not in 'fs' share the same wrapper.
+    for (const auto &it : wrappers) {
+        if (it.first == fs[0].name()) {
+            continue;
+        }
+        const auto &fs_iter = std::find_if(
+            fs.begin(), fs.end(), [&it](const Func& f) { return f.name() == it.first; });
+        bool in_fs = fs_iter != fs.end();
+
+        if (in_fs) {
+            user_assert(it.second.same_as(wfunc))
+                << it.first << " should have shared the same wrapper as " << fs[0].name() << "\n";
+        } else {
+            user_assert(!it.second.same_as(wfunc))
+                << "Redefinition of shared wrapper [" << name() << " -> "
+                << Function(wfunc).name() << "] in " << fs[0].name() << " is illegal since "
+                << it.first << " shares the same wrapper but not part of the redefinition\n";
+        }
+    }
+    return Func(Function(wfunc));
 }
 
 Func Func::in() {
-    string wrapper_name = name() + "_wrapper";
-    wrapper_name = replace_all(wrapper_name, "$", "");
-    Func wrapper(wrapper_name);
-    wrapper(args()) = (*this)(args());
-    func.add_wrapper(wrapper.func);
-    return wrapper;
+    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const auto &iter = wrappers.find("");
+    if (iter == wrappers.end()) {
+        string wrapper_name = name() + "_global_wrapper";
+        wrapper_name = replace_all(wrapper_name, "$", "");
+        Func wrapper(wrapper_name);
+        wrapper(args()) = (*this)(args());
+        func.add_wrapper(wrapper.func, "");
+        return wrapper;
+    }
+
+    IntrusivePtr<FunctionContents> wfunc = iter->second;
+    internal_assert(wfunc.defined());
+    return Func(Function(wfunc));
 }
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {

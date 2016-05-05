@@ -74,12 +74,12 @@ public:
     /** Construct a new function with the given name */
     EXPORT Function(const std::string &n);
 
+    /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
+    EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
+
     /** Deep copy this Function into 'copy'. Note: this method does not deep-copy
      * the Parameter objects. */
     EXPORT void deep_copy(Function &copy, std::map<Function, Function> &copied_map) const;
-
-    /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
-    EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -106,6 +106,11 @@ public:
 
     /** Get the pure arguments */
     EXPORT const std::vector<std::string> &args() const;
+
+    /** Return true if contents is not NULL. */
+    EXPORT bool defined() const {
+        return contents.defined();
+    }
 
     /** Get the dimensionality */
     int dimensions() const {
@@ -215,7 +220,10 @@ public:
      * during the lowering stage. If the string 'f' is empty, it means replace
      * all calls to this function by all other functions (excluding itself) in
      * the pipeline with the wrapper. See \ref Func::in for more details. */
-    EXPORT void add_wrapper(const Function &wrapper, const std::string &f = "");
+    EXPORT void add_wrapper(const Function &wrapper, const std::string &f);
+
+    /* Return map of wrappers defined on this function. */
+    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
 
     /** Replace every call to function in 'substitutions' keys (including calls
      * in each of its update's RDom's predicates) to call to function in

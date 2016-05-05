@@ -70,7 +70,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
-    // Substitute in wrapper funcs. Create a deep-copy of the Func if mutated.
+    // Create a deep-copy of the Func and substitute in wrapper funcs.
     const auto &wrapped = wrap_func_calls(outputs, env);
     const vector<Function> &wrapped_outputs = wrapped.first;
     const map<string, Function> &wrapped_env = wrapped.second;

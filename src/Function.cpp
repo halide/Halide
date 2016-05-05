@@ -867,6 +867,10 @@ bool Function::frozen() const {
     return contents.ptr->frozen;
 }
 
+const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
+    return contents.ptr->schedule.wrappers();
+}
+
 void Function::add_wrapper(const Function &wrapper, const std::string &f) {
     contents.ptr->schedule.add_wrapper(wrapper.contents, f);
 }
