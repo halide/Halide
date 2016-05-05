@@ -826,7 +826,11 @@ public:
      }
      \endcode
      */
-    EXPORT Func in(const Func& f);
+    EXPORT Func in(const Func &f);
+
+    /* Each Func in 'fs' will share the same wrapper to this function. If any of
+     * the Func in 'fs' already has a custom wrapper, this will throw an error. */
+    EXPORT Func in(const std::vector<Func> &fs);
 
     /** Store a global wrapper of this function and return the wrapper.
      * Every call to this function by all functions (excluding by itself) in the

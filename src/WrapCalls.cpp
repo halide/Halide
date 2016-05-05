@@ -12,11 +12,6 @@ using std::set;
 using std::string;
 using std::vector;
 
-void wrap_func_calls_helper(map<string, Function> &env, const string &in_func,
-                            const Function &orig, const Function &substitute) {
-    env[in_func] = env[in_func].substitute_calls(orig, substitute);
-}
-
 // Return true if 'func' exists as a copy of one of the function in 'copied_map'
 bool is_copy(const Function& func, const map<Function, Function> &copied_map) {
     for (const auto &iter : copied_map) {
@@ -27,13 +22,40 @@ bool is_copy(const Function& func, const map<Function, Function> &copied_map) {
     return false;
 }
 
+void insert_func_wrapper_helper(map<Function, map<Function, Function>> &func_wrappers_map,
+                                const Function &in_func, const Function &wrapped_func,
+                                const Function &wrapper) {
+    internal_assert(in_func.defined() && wrapped_func.defined() && wrapper.defined());
+    internal_assert(func_wrappers_map[in_func].count(wrapped_func) == 0)
+        << "Should only have one wrapper for each function call in a Func\n";
+
+    map<Function, Function> &wrappers_map = func_wrappers_map[in_func];
+    for (auto iter = wrappers_map.begin(); iter != wrappers_map.end(); ++iter) {
+        if (iter->second.same_as(wrapped_func)) {
+            debug(4) << "Merging wrapper of " << in_func.name() << " [" << iter->first.name()
+                     << ", " << iter->second.name() << "] with [" << wrapped_func.name() << ", "
+                     << wrapper.name() << "]\n";
+            iter->second = wrapper;
+            return;
+        } else if (wrapper.same_as(iter->first)) {
+            debug(4) << "Merging wrapper of " << in_func.name() << " [" << wrapped_func.name()
+                     << ", " << wrapper.name() << "] with [" << iter->first.name() << ", "
+                     << iter->second.name() << "]\n";
+            wrappers_map.emplace(wrapped_func, iter->second);
+            wrappers_map.erase(iter);
+            return;
+        }
+    }
+    wrappers_map[wrapped_func] = wrapper;
+}
+
 pair<vector<Function>, map<string, Function>> wrap_func_calls(
             const vector<Function> &outputs, const map<string, Function> &env) {
     vector<Function> wrapped_outputs;
     map<string, Function> wrapped_env;
 
     // Create empty copies of all functions in env.
-    map<Function, Function> copied_map;
+    map<Function, Function> copied_map; // Original Func -> Copy
     for (const auto &iter : env) {
         copied_map[iter.second] = Function(iter.second.name());
     }
@@ -42,15 +64,19 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
     for (const auto &iter : env) {
         iter.second.deep_copy(copied_map[iter.second], copied_map);
     }
+
     // Need to substitute-in the old reference within the Func with the
     // deep-copy version.
     for (auto &iter : copied_map) {
         iter.second.substitute_calls(copied_map);
     }
 
+    map<Function, map<Function, Function>> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
+
     // Populate the env with the deep-copy version.
     for (const auto &iter : copied_map) {
         wrapped_env.emplace(iter.first.name(), iter.second);
+        func_wrappers_map[iter.second];
     }
 
     for (const auto &it : copied_map) {
@@ -86,21 +112,37 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
                     debug(4) << "Global wrapper: replacing reference of \""
                              << wrapped_fname <<  "\" in \"" << in_func
                              << "\" with \"" << wrapper.name() << "\"\n";
-                    wrap_func_calls_helper(wrapped_env, in_func, wrapped_func, wrapper);
+                    insert_func_wrapper_helper(func_wrappers_map, wrapped_env_iter.second, wrapped_func, wrapper);
                 }
             } else {
                 debug(4) << "Custom wrapper: replacing reference of \""
                          << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
                          << wrapper.name() << "\"\n";
-                wrap_func_calls_helper(wrapped_env, in_func, wrapped_func, wrapper);
+
+                const auto &in_func_iter = wrapped_env.find(in_func);
+                if (in_func_iter == wrapped_env.end()) {
+                    debug(4) << "    skip custom wrapper for " << in_func << " [" << wrapped_fname
+                             << " -> " << wrapper.name() << "] since it's not in the pipeline\n";
+                    continue;
+                }
+                insert_func_wrapper_helper(func_wrappers_map, wrapped_env[in_func], wrapped_func, wrapper);
             }
         }
     }
 
+    // Perform the substitution.
+    for (auto &iter : wrapped_env) {
+        const auto &substitutions = func_wrappers_map[iter.second];
+        if (!substitutions.empty()) {
+            iter.second.substitute_calls(substitutions);
+        }
+    }
+
     for (const auto &func : outputs) {
-        if (copied_map.count(func)) {
+        const auto &iter = copied_map.find(func);
+        if (iter != copied_map.end()) {
             debug(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
-            wrapped_outputs.push_back(copied_map[func]);
+            wrapped_outputs.push_back(iter->second);
         } else {
             debug(4) << "Adding original version to outputs: " << func.name() << "\n";
             wrapped_outputs.push_back(func);

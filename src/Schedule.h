@@ -246,9 +246,9 @@ public:
     //std::vector<Specialization> &specializations();
     // @}
 
-    /** Mark calls of this function by 'f' to be replaced with its wrapper
+    /** Mark calls of a function by 'f' to be replaced with its wrapper
      * during the lowering stage. If the string 'f' is empty, it means replace
-     * all calls to this function by all other functions (excluding itself) in
+     * all calls to the function by all other functions (excluding itself) in
      * the pipeline with the wrapper. See \ref Func::in for more details. */
     // @{
     const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;

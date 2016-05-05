@@ -102,6 +102,59 @@ int check_image(const Image<int> &im, const std::function<int(int,int)> &func) {
     return 0;
 }
 
+int calling_wrap_no_op_test() {
+    Var x("x"), y("y");
+
+    {
+        Func f("f"), g("g");
+        f(x, y) = x + y;
+        g(x, y) = f(x, y);
+
+        // Calling wrap on the same Func for the same Func multiple times should
+        // return the same wrapper
+        Func wrapper = f.in(g);
+        for (int i = 0; i < 5; ++i) {
+            Func temp = f.in(g);
+            if (wrapper.name() != temp.name()) {
+                std::cerr << "Expect " << wrapper.name() << "; got " << temp.name() << " instead\n";
+                return -1;
+            }
+        }
+    }
+
+    {
+        Func f("f"), g("g");
+        f(x, y) = x + y;
+        g(x, y) = f(x, y);
+
+        // Should return the same global wrapper
+        Func wrapper1 = f.in();
+        Func wrapper2 = f.in();
+        if (wrapper1.name() != wrapper2.name()) {
+            std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
+            return -1;
+        }
+    }
+
+    {
+        Func d("d"), e("e"), f("f"), g("g"), h("h");
+        d(x, y) = x + y;
+        e(x, y) = d(x, y);
+        f(x, y) = d(x, y);
+        g(x, y) = d(x, y);
+        h(x, y) = d(x, y);
+
+        Func wrapper1 = d.in({e, f, g});
+        Func wrapper2 = d.in({g, f, e});
+        if (wrapper1.name() != wrapper2.name()) {
+            std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int func_wrap_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
@@ -131,6 +184,89 @@ int func_wrap_test() {
     auto func = [](int x, int y) { return x; };
     if (check_image(im, func)) {
         return -1;
+    }
+    return 0;
+}
+
+int multiple_funcs_sharing_wrapper_test() {
+    Func f("f"), g1("g1"), g2("g2"), g3("g3");
+    Var x("x"), y("y");
+
+    f(x) = x;
+    g1(x, y) = f(x);
+    g2(x, y) = f(x);
+    g3(x, y) = f(x);
+
+    f.compute_root();
+    Func f_wrapper = f.in({g1, g2, g3}).compute_root();
+
+    {
+        // Check the call graphs.
+        // Expect 'g1' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
+        Module m = g1.compile_to_module({});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {g1.name(), {f_wrapper.name()}},
+            {f_wrapper.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = g1.realize(200, 200);
+        auto func = [](int x, int y) { return x; };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+
+    {
+        // Check the call graphs.
+        // Expect 'g2' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
+        Module m = g2.compile_to_module({});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {g2.name(), {f_wrapper.name()}},
+            {f_wrapper.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = g2.realize(200, 200);
+        auto func = [](int x, int y) { return x; };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+
+    {
+        // Check the call graphs.
+        // Expect 'g3' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
+        Module m = g3.compile_to_module({});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {g3.name(), {f_wrapper.name()}},
+            {f_wrapper.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = g3.realize(200, 200);
+        auto func = [](int x, int y) { return x; };
+        if (check_image(im, func)) {
+            return -1;
+        }
     }
     return 0;
 }
@@ -487,7 +623,6 @@ int two_fold_wrapper_test() {
     Var xi("xi"), yi("yi");
     output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
 
-    // Do 8 vectorized loads from the input.
     input_in_output = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
     input_in_output_in_output = input_in_output.in(output).compute_at(output, x).unroll(x).unroll(y);
 
@@ -514,9 +649,90 @@ int two_fold_wrapper_test() {
     return 0;
 }
 
+int multi_folds_wrapper_test() {
+    Func f("f"), f_in_g_in_g, f_in_g, f_in_g_in_g_in_h, f_in_g_in_g_in_h_in_h, g("g"), h("h");
+    Var x("x"), y("y");
+
+    f(x, y) = 2*x + 3*y;
+    f.compute_root();
+
+    g(x, y) = f(y, x);
+
+    Var xi("xi"), yi("yi");
+    g.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+
+    f_in_g = f.in(g).compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    f_in_g_in_g = f_in_g.in(g).compute_root().tile(x, y, xi, yi, 8, 8).unroll(xi).unroll(yi);
+
+    h(x, y) = f_in_g_in_g(y, x);
+    f_in_g_in_g_in_h = f_in_g_in_g.in(h).compute_at(h, x).vectorize(x).unroll(y);
+    f_in_g_in_g_in_h_in_h = f_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(x).unroll(y);
+    h.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+
+    {
+        // Check the call graphs.
+        Module m = g.compile_to_module({});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {g.name(), {f_in_g_in_g.name()}},
+            {f_in_g_in_g.name(), {f_in_g.name()}},
+            {f_in_g.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = g.realize(1024, 1024);
+        auto func = [](int x, int y) { return 3*x + 2*y; };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+
+    {
+        // Check the call graphs.
+        Module m = h.compile_to_module({});
+        CheckCalls c;
+        m.functions[0].body.accept(&c);
+
+        CallGraphs expected = {
+            {h.name(), {f_in_g_in_g_in_h_in_h.name()}},
+            {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
+            {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
+            {f_in_g_in_g.name(), {f_in_g.name()}},
+            {f_in_g.name(), {f.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(c.calls, expected) != 0) {
+            return -1;
+        }
+
+        Image<int> im = h.realize(1024, 1024);
+        auto func = [](int x, int y) { return 3*x + 2*y; };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
+    printf("Running calling wrap no op test\n");
+    if (calling_wrap_no_op_test() != 0) {
+        return -1;
+    }
+
     printf("Running func wrap test\n");
     if (func_wrap_test() != 0) {
+        return -1;
+    }
+
+    printf("Running multiple funcs sharing wrapper test\n");
+    if (multiple_funcs_sharing_wrapper_test() != 0) {
         return -1;
     }
 
@@ -555,10 +771,15 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /*printf("Running two fold wrapper test\n");
+    printf("Running two fold wrapper test\n");
     if (two_fold_wrapper_test() != 0) {
         return -1;
-    }*/
+    }
+
+    printf("Running multi folds wrapper test\n");
+    if (multi_folds_wrapper_test() != 0) {
+        return -1;
+    }
 
     printf("Success!\n");
     return 0;

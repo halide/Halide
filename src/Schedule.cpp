@@ -185,8 +185,12 @@ const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule:
 void Schedule::add_wrapper(const IntrusivePtr<Internal::FunctionContents> &wrapper,
                            const std::string &f) {
     if (contents.ptr->wrappers.count(f)) {
-        user_warning << "Replacing previous definition of wrapper in function "
-                     << f << "\n";
+        if (f.empty()) {
+            user_warning << "Replacing previous definition of global wrapper in function \""
+                         << f << "\"\n";
+        } else {
+            internal_error << "Wrapper redefinition in function \"" << f << "\" is not allowed\n";
+        }
     }
     contents.ptr->wrappers[f] = wrapper;
 }
