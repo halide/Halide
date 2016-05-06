@@ -423,7 +423,7 @@ int main(int argc, char **argv) {
 
             // Again we compute the producer per x coordinate of the
             // consumer. This places producer code inside the update
-            // step of the producer, because that's the only step that
+            // step of the consumer, because that's the only step that
             // uses the producer.
             producer.compute_at(consumer, x);
 
@@ -474,7 +474,7 @@ int main(int argc, char **argv) {
 
             // Again we compute the producer per x coordinate of the
             // consumer. This places producer code inside both the
-            // pure and the update step of the producer. So there end
+            // pure and the update step of the consumer. So there end
             // up being two separate realizations of the producer, and
             // redundant work occurs.
             producer.compute_at(consumer, x);

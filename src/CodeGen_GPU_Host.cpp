@@ -246,7 +246,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                  << bounds.num_blocks[3] << ") blocks\n";
 
         // compile the kernel
-        string kernel_name = unique_name("kernel_" + loop->name, false);
+        string kernel_name = unique_name("kernel_" + loop->name);
         for (size_t i = 0; i < kernel_name.size(); i++) {
             if (!isalnum(kernel_name[i])) {
                 kernel_name[i] = '_';
