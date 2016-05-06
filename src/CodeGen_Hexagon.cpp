@@ -727,10 +727,11 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         if (is_concat_or_slice(indices) || element_bits > 16) {
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
-        } else {
-            // This is something else, use a vlut.
+        } else if (max < 256) {
+            // This is something else and the indices fit in 8 bits, use a vlut.
             return vlut(concat_vectors({a, b}), indices);
         }
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
     }
 
     if (stride == 1) {
@@ -819,7 +820,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here.
 
-    if (element_bits <= 16) {
+    if (element_bits <= 16 && max < 256) {
         return vlut(concat_vectors({a, b}), indices);
     } else {
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
@@ -834,6 +835,8 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     internal_assert(isa<VectorType>(lut_ty));
     internal_assert(isa<VectorType>(idx_ty));
     internal_assert(idx_ty->getScalarSizeInBits() == 8);
+    internal_assert(min_index >= 0);
+    internal_assert(max_index <= 255);
 
     Intrinsic::ID vlut_id = Intrinsic::not_intrinsic;
     Intrinsic::ID vlut_acc_id = Intrinsic::not_intrinsic;
