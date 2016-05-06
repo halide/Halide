@@ -35,14 +35,17 @@ int main(int argc, char **argv) {
     grand_total() = cast<uint64_t>(sum(cast<uint64_t>(input(r.x, r.y, r.z))));
     grand_total.set_error_handler(&halide_error);
 
-    Image<uint64_t> result = grand_total.realize();
-
     Target t = get_jit_target_from_environment();
-    if (t.bits == 64) {
-        assert(!error_occurred);
-        assert(result(0) == (uint64_t)4096*4096*256*42);
-    } else {
-        assert(error_occurred);
-    }
+    t.set_feature(Target::LargeBuffers);
+
+    grand_total.compile_jit(t);
+    Image<uint64_t> result = grand_total.realize();
+    assert(!error_occurred);
+    assert(result(0) == (uint64_t)4096*4096*256*42);
+
+    grand_total.compile_jit(t.without_feature(Target::LargeBuffers));
+    result = grand_total.realize();
+    assert(error_occurred);
+
     printf("Success!\n");
 }

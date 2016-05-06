@@ -35,7 +35,7 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
 static bool different_device_api(DeviceAPI device_api, DeviceAPI stmt_api, const Target &target) {
     device_api = fixup_device_api(device_api, target);
     stmt_api = fixup_device_api(stmt_api, target);
-    return (stmt_api != DeviceAPI::Parent) && (device_api != stmt_api);
+    return (stmt_api != DeviceAPI::None) && (device_api != stmt_api);
 }
 
 // If a buffer never makes it outside of Halide (i.e. if it is not
@@ -64,10 +64,10 @@ class FindBuffersToTrack : public IRVisitor {
                 " to " << static_cast<int>(op->device_api) << " for loop " << op->name << "\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
-            if (device_api == DeviceAPI::Parent) {
+            if (device_api == DeviceAPI::None) {
                 device_api = old_device_api;
             }
-            internal_assert(device_api != DeviceAPI::Parent);
+            internal_assert(device_api != DeviceAPI::None);
             IRVisitor::visit(op);
             device_api = old_device_api;
         } else {
@@ -105,7 +105,7 @@ class FindBuffersToTrack : public IRVisitor {
     }
 
     void visit(const Variable *op) {
-        if (op->type == Handle() && ends_with(op->name, ".buffer")) {
+        if (op->type.is_handle() && ends_with(op->name, ".buffer")) {
             buffers_to_track.insert(op->name.substr(0, op->name.size() - 7));
         }
     }
@@ -144,7 +144,7 @@ class InjectBufferCopies : public IRMutator {
                        dev_current(false),
                        internal(false),
                        dev_allocated(true),  // This is true unless we know for sure it is not allocated (this BufferInfo is from an Allocate node).
-                       device_first_touched(DeviceAPI::Parent), // Meaningless initial value
+                       device_first_touched(DeviceAPI::None), // Meaningless initial value
                        current_device(DeviceAPI::Host) {}
     };
 
@@ -180,11 +180,11 @@ class InjectBufferCopies : public IRMutator {
             break;
         }
         std::vector<Expr> no_args;
-        return Call::make(Handle(), interface_name, no_args, Call::Extern);
+        return Call::make(type_of<const char *>(), interface_name, no_args, Call::Extern);
     }
 
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
-        Expr buf = Variable::make(Handle(), buf_name + ".buffer");
+        Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Expr call = Call::make(Int(32), "halide_device_malloc", {buf, device_interface}, Call::Extern);
         string call_result_name = unique_name("device_malloc_result");
@@ -202,7 +202,7 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_buffer_copy(CopyDirection direction, string buf_name, DeviceAPI target_device_api) {
         internal_assert(direction == ToHost || direction == ToDevice) << "make_buffer_copy caller logic error.\n";
         std::vector<Expr> args;
-        Expr buffer = Variable::make(Handle(), buf_name + ".buffer");
+        Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         args.push_back(buffer);
         if (direction == ToDevice) {
             args.push_back(make_device_interface_call(target_device_api));
@@ -239,10 +239,10 @@ class InjectBufferCopies : public IRMutator {
                      << "Internal: " << buf.internal << " Device touching first: "
                      << static_cast<int>(buf.device_first_touched) << "\n"
                      << "Current device: " << static_cast<int>(buf.current_device) << "\n";
-            DeviceAPI touching_device = DeviceAPI::Parent;
+            DeviceAPI touching_device = DeviceAPI::None;
             bool host_read = false;
             size_t non_host_devices_reading_count = 0;
-            DeviceAPI reading_device = DeviceAPI::Parent;
+            DeviceAPI reading_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_reading) {
                 debug(4) << "Device " << static_cast<int>(dev) << " read buffer\n";
                 if (dev != DeviceAPI::Host) {
@@ -255,7 +255,7 @@ class InjectBufferCopies : public IRMutator {
             }
             bool host_wrote = false;
             size_t non_host_devices_writing_count = 0;
-            DeviceAPI writing_device = DeviceAPI::Parent;
+            DeviceAPI writing_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_writing) {
                 debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer\n";
                 if (dev != DeviceAPI::Host) {
@@ -315,7 +315,7 @@ class InjectBufferCopies : public IRMutator {
                 debug(4) << "Invalidating host_current\n";
             }
 
-            Expr buffer = Variable::make(Handle(), i.first + ".buffer");
+            Expr buffer = Variable::make(type_of<struct buffer_t *>(), i.first + ".buffer");
             Expr t = make_one(UInt(8));
 
             if (host_wrote) {
@@ -340,7 +340,7 @@ class InjectBufferCopies : public IRMutator {
             }
 
             // Inject a dev_malloc if needed.
-            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::Parent) {
+            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::None) {
                 debug(4) << "Injecting device malloc for " << i.first << " on " <<
                     static_cast<int>(buf.device_first_touched) << "\n";
                 Stmt dev_malloc = make_dev_malloc(i.first, buf.device_first_touched);
@@ -381,7 +381,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Call *op) {
-        if (op->name == Call::address_of && op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::address_of)) {
             // We're after storage flattening, so the sole arg should be a load.
             internal_assert(op->args.size() == 1);
             const Load *l = op->args[0].as<Load>();
@@ -393,7 +393,7 @@ class InjectBufferCopies : public IRMutator {
                 Expr new_load = Load::make(l->type, l->name, new_index, Buffer(), Parameter());
                 expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
             }
-        } else if (op->name == Call::image_load && op->call_type == Call::Intrinsic) {
+        } else if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
@@ -403,7 +403,7 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "Adding image read via image_load for " << buffer_var->name << "\n";
             state[buf_name].devices_reading.insert(device_api);
             IRMutator::visit(op);
-        } else if (op->name == Call::image_store && op->call_type == Call::Intrinsic) {
+        } else if (op->is_intrinsic(Call::image_store)) {
             // counts as a device store
             internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
             internal_assert(op->args.size() >= 2);
@@ -533,7 +533,7 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
                 vector<Expr> args = create_buffer_t->args;
                 args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                Expr val = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);
+                Expr val = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
 
                 stmt = LetStmt::make(op->name, val, op->body);
             }
@@ -563,20 +563,28 @@ class InjectBufferCopies : public IRMutator {
 
         for (const pair<string, BufferInfo> &i : copy) {
             const string &buf_name = i.first;
-            if (loop_level != i.second.loop_level) {
-                continue;
-            }
 
             const BufferInfo &then_state = i.second;
             const BufferInfo &else_state = state[buf_name];
             BufferInfo merged_state;
 
-            merged_state.loop_level = loop_level;
+            internal_assert(then_state.loop_level == else_state.loop_level)
+                << "then_state and else_state should have the same loop level for " << buf_name;
+
+            merged_state.loop_level = then_state.loop_level;
             merged_state.host_touched   = then_state.host_touched || else_state.host_touched;
             merged_state.dev_touched    = then_state.dev_touched || else_state.dev_touched;
             merged_state.host_current = then_state.host_current && else_state.host_current;
             merged_state.dev_current  = then_state.dev_current && else_state.dev_current &&
                                         then_state.current_device == else_state.current_device;
+
+            // Merge the device read/write set of then and else case
+            merged_state.devices_reading = then_state.devices_reading;
+            merged_state.devices_reading.insert(else_state.devices_reading.begin(),
+                                                else_state.devices_reading.end());
+            merged_state.devices_writing = then_state.devices_writing;
+            merged_state.devices_writing.insert(else_state.devices_writing.begin(),
+                                                else_state.devices_writing.end());
 
             state[buf_name] = merged_state;
         }
@@ -617,10 +625,10 @@ class InjectBufferCopies : public IRMutator {
                 static_cast<int>(op->device_api) << " in for loop " << op->name <<"\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
-            if (device_api == DeviceAPI::Parent) {
+            if (device_api == DeviceAPI::None) {
                 device_api = old_device_api;
             }
-            internal_assert(device_api != DeviceAPI::Parent);
+            internal_assert(device_api != DeviceAPI::None);
             IRMutator::visit(op);
             device_api = old_device_api;
         } else {

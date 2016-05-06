@@ -5,7 +5,7 @@ using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -17,7 +17,7 @@ extern "C" DLLEXPORT int my_func(int counter, int x) {
     call_counter[counter]++;
     return x;
 }
-HalideExtern_2(int, my_func, int, int);
+HalidePureExtern_2(int, my_func, int, int);
 
 // A parallel for loop runner that isn't actually parallel
 int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min, int extent, uint8_t *closure) {

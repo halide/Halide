@@ -2,6 +2,7 @@
 #include "Target.h"
 #include "IRVisitor.h"
 #include "Substitute.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -108,6 +109,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_constrained;
     vector<Stmt> asserts_proposed;
     vector<Stmt> asserts_elem_size;
+    vector<Stmt> asserts_host_alignment;
     vector<Stmt> buffer_rewrites;
 
     // Inject the code that conditionally returns if we're in inference mode
@@ -129,7 +131,7 @@ Stmt add_image_checks(Stmt s,
             replace_with_required[name + ".min." + dim] = min_required;
 
             Expr extent_required = Variable::make(Int(32), name + ".extent." + dim + ".required");
-            replace_with_required[name + ".extent." + dim] = extent_required;
+            replace_with_required[name + ".extent." + dim] = simplify(extent_required);
 
             Expr stride_required = Variable::make(Int(32), name + ".stride." + dim + ".required");
             replace_with_required[name + ".stride." + dim] = stride_required;
@@ -196,7 +198,8 @@ Stmt add_image_checks(Stmt s,
             for (size_t i = 0; i < extern_users.size(); i++) {
                 const string &extern_user = extern_users[i];
                 Box query_box;
-                Expr query_buf = Variable::make(Handle(), param.name() + ".bounds_query." + extern_user);
+                Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
+                                                param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::extract_buffer_min,
                                           {query_buf, j}, Call::Intrinsic);
@@ -306,14 +309,9 @@ Stmt add_image_checks(Stmt s,
             // And that no product of extents overflows 2^31 - 1. This
             // second test is likely only needed if a fuse directive
             // is used in the schedule to combine multiple extents,
-            // but it is here for extra safety. On 64-bit systems the
-            // maximum size is 2^63 - 1.
-            Expr max_size, max_extent = cast<int64_t>(0x7fffffff);
-            if (t.bits < 64) {
-                max_size = cast<int64_t>(0x7fffffff);
-            } else {
-                max_size = Expr(0x7fffffffffffffff);
-            }
+            // but it is here for extra safety. On targets with the
+            // LargeBuffers feature, the maximum size is 2^63 - 1.
+            Expr max_size = Expr(t.maximum_buffer_size()), max_extent = cast<int64_t>(0x7fffffff);
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
@@ -338,7 +336,7 @@ Stmt add_image_checks(Stmt s,
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
+        Expr buffer_name_expr = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
         vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
@@ -346,7 +344,7 @@ Stmt add_image_checks(Stmt s,
             args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
             args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
         }
-        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, Function(), 0, image, param);
+        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, nullptr, 0, image, param);
         Stmt rewrite = Evaluate::make(call);
         rewrite = IfThenElse::make(inference_mode, rewrite);
         buffer_rewrites.push_back(rewrite);
@@ -481,8 +479,24 @@ Stmt add_image_checks(Stmt s,
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
+        if (param.defined() && param.host_alignment() != param.type().bytes()) {
+            string host_name = name + ".host";
+            int alignment_required = param.host_alignment();
+            Expr host_ptr = Variable::make(Handle(), host_name);
+            Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
+            Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
+            Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
+                                    {name, alignment_required}, Call::Extern);
+            asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
+        }
     }
 
+    // Inject the code that check for the alignment of the host pointers.
+    if (!no_asserts) {
+        for (size_t i = asserts_host_alignment.size(); i > 0; i--) {
+            s = Block::make(asserts_host_alignment[i-1], s);
+        }
+    }
     // Inject the code that checks that no dimension math overflows
     if (!no_asserts) {
         for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {

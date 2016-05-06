@@ -1,5 +1,6 @@
 #include <set>
 #include <stdlib.h>
+#include <atomic>
 
 #include "IR.h"
 #include "Function.h"
@@ -35,12 +36,15 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
+    bool extern_is_c_plus_plus;
 
     bool trace_loads, trace_stores, trace_realizations;
 
     bool frozen;
 
-    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
+    FunctionContents() : extern_is_c_plus_plus(false), trace_loads(false),
+                         trace_stores(false), trace_realizations(false),
+                         frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
         for (Expr i : values) {
@@ -62,6 +66,7 @@ struct FunctionContents {
                     rv.min.accept(visitor);
                     rv.extent.accept(visitor);
                 }
+                update.domain.predicate().accept(visitor);
             }
 
             update.schedule.accept(visitor);
@@ -112,6 +117,7 @@ struct CheckVars : public IRGraphVisitor {
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
     const std::string name;
+    bool unbound_reduction_vars_ok = false;
 
     CheckVars(const std::string &n) :
         name(n) {}
@@ -164,15 +170,26 @@ struct CheckVars : public IRGraphVisitor {
             } else {
                 user_error << "Multiple reduction domains found in definition of Func \"" << name << "\"\n";
             }
+        } else if (reduction_domain.defined() && unbound_reduction_vars_ok) {
+            // Is it one of the RVars from the reduction domain we already
+            // know about (this can happen in the RDom predicate).
+            for (const ReductionVariable &rv : reduction_domain.domain()) {
+                if (rv.var == var->name) {
+                    return;
+                }
+            }
         }
 
         user_error << "Undefined variable \"" << var->name << "\" in definition of Func \"" << name << "\"\n";
     }
 };
 
-struct CountSelfReferences : public IRMutator {
-    int count;
-    const Function *func;
+struct DeleteSelfReferences : public IRMutator {
+    IntrusivePtr<FunctionContents> func;
+
+    // Also count the number of self references so we know if a Func
+    // has a recursive definition.
+    int count = 0;
 
     using IRMutator::visit;
 
@@ -180,9 +197,9 @@ struct CountSelfReferences : public IRMutator {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
-        if (c->func.same_as(*func)) {
+        if (c->func.same_as(func)) {
             expr = Call::make(c->type, c->name, c->args, c->call_type,
-                              c->func, c->value_index,
+                              nullptr, c->value_index,
                               c->image, c->param);
             count++;
         }
@@ -197,8 +214,10 @@ class FreezeFunctions : public IRGraphVisitor {
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-        if (op->call_type == Call::Halide && op->name != func) {
-            Function f = op->func;
+        if (op->call_type == Call::Halide &&
+            op->func.defined() &&
+            op->name != func) {
+            Function f(op->func);
             f.freeze();
         }
     }
@@ -208,10 +227,15 @@ public:
 
 // A counter to use in tagging random variables
 namespace {
-static int rand_counter = 0;
+static std::atomic<int> rand_counter;
 }
 
 Function::Function() : contents(new FunctionContents) {
+}
+
+Function::Function(const IntrusivePtr<FunctionContents> &ptr) : contents(ptr) {
+    internal_assert(ptr.defined())
+        << "Can't construct Function from undefined FunctionContents ptr\n";
 }
 
 Function::Function(const std::string &n) : contents(new FunctionContents) {
@@ -299,14 +323,15 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::Parent, true};
+        Dim d = {args[i], ForType::Serial, DeviceAPI::None, true};
         contents.ptr->schedule.dims().push_back(d);
-        contents.ptr->schedule.storage_dims().push_back(args[i]);
+        StorageDim sd = {args[i]};
+        contents.ptr->schedule.storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
         contents.ptr->schedule.dims().push_back(d);
     }
 
@@ -409,6 +434,10 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&check);
     }
+    if (check.reduction_domain.defined()) {
+        check.unbound_reduction_vars_ok = true;
+        check.reduction_domain.predicate().accept(&check);
+    }
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
@@ -417,6 +446,12 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&freezer);
+    }
+
+    // Freeze the reduction domain if defined
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.predicate().accept(&freezer);
+        check.reduction_domain.freeze();
     }
 
     // Tag calls to random() with the free vars
@@ -439,6 +474,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (size_t i = 0; i < values.size(); i++) {
         values[i] = lower_random(values[i], free_vars, tag);
     }
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.set_predicate(lower_random(check.reduction_domain.predicate(), free_vars, tag));
+    }
 
     UpdateDefinition r;
     r.args = args;
@@ -448,21 +486,18 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // The update value and args probably refer back to the
     // function itself, introducing circular references and hence
-    // memory leaks. We need to count the number of unique call nodes
-    // that point back to this function in order to break the cycles.
-    CountSelfReferences counter;
-    counter.func = this;
-    counter.count = 0;
+    // memory leaks. We need to break these cycles.
+    DeleteSelfReferences deleter;
+    deleter.func = contents;
+    deleter.count = 0;
     for (size_t i = 0; i < args.size(); i++) {
-        r.args[i] = counter.mutate(r.args[i]);
+        r.args[i] = deleter.mutate(r.args[i]);
     }
     for (size_t i = 0; i < values.size(); i++) {
-        r.values[i] = counter.mutate(r.values[i]);
+        r.values[i] = deleter.mutate(r.values[i]);
     }
-
-    for (int i = 0; i < counter.count; i++) {
-        contents.ptr->ref_count.decrement();
-        internal_assert(!contents.ptr->ref_count.is_zero());
+    if (r.domain.defined()) {
+        r.domain.set_predicate(deleter.mutate(r.domain.predicate()));
     }
 
     // First add any reduction domain
@@ -476,7 +511,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
-            Dim d = {v, ForType::Serial, DeviceAPI::Parent, pure};
+            Dim d = {v, ForType::Serial, DeviceAPI::None, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -484,14 +519,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::Parent, true};
+            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, true};
             r.schedule.dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::Parent, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
         r.schedule.dims().push_back(d);
     }
 
@@ -499,7 +534,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // the args are pure, then this definition completely hides
     // earlier ones!
     if (!r.domain.defined() &&
-        counter.count == 0 &&
+        deleter.count == 0 &&
         pure) {
         user_warning
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
@@ -516,7 +551,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
-                             int dimensionality) {
+                             int dimensionality,
+                             bool is_c_plus_plus) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -529,6 +565,7 @@ void Function::define_extern(const std::string &function_name,
     contents.ptr->extern_function_name = function_name;
     contents.ptr->extern_arguments = args;
     contents.ptr->output_types = types;
+    contents.ptr->extern_is_c_plus_plus = is_c_plus_plus;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -544,7 +581,8 @@ void Function::define_extern(const std::string &function_name,
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
         contents.ptr->args[i] = arg;
-        contents.ptr->schedule.storage_dims().push_back(arg);
+        StorageDim sd = {arg};
+        contents.ptr->schedule.storage_dims().push_back(sd);
     }
 }
 
@@ -594,6 +632,10 @@ bool Function::has_update_definition() const {
 
 bool Function::has_extern_definition() const {
     return !contents.ptr->extern_function_name.empty();
+}
+
+bool Function::extern_definition_is_c_plus_plus() const {
+    return contents.ptr->extern_is_c_plus_plus;
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {

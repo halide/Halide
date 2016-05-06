@@ -14,8 +14,7 @@ public:
     using IRVisitor::visit;
 
     void visit(const Call *op) {
-        if (op->name == Call::interleave_vectors &&
-            op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::interleave_vectors)) {
             result++;
         }
         IRVisitor::visit(op);
@@ -273,7 +272,7 @@ int main(int argc, char **argv) {
 
     for (int elements = 1; elements <= 5; elements++) {
         // Make sure we don't interleave when the reordering would change the meaning.
-        Realization* refs = NULL;
+        Realization* refs = nullptr;
         for (int i = 0; i < 2; i++) {
             Func output6;
             define(output6(x, y), cast<uint8_t>(x), elements);

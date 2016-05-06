@@ -6,6 +6,7 @@
   useful tricks, e.g., `Image<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);`
 - extern functions and extern stages
 - common scheduling patterns
-- specialize
 - parallel reductions
-- constraints
+- scheduling rvars
+- tail strategies
+- RDom::where

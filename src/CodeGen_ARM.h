@@ -18,6 +18,8 @@ public:
 
 protected:
 
+    Expr sorted_avg(Expr a, Expr b);
+
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific neon intrinsics */

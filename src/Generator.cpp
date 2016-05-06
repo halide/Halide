@@ -33,6 +33,7 @@ namespace Internal {
 
 const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
     static const std::map<std::string, Halide::Type> halide_type_enum_map{
+        {"bool", Halide::Bool()},
         {"int8", Halide::Int(8)},
         {"int16", Halide::Int(16)},
         {"int32", Halide::Int(32)},
@@ -46,15 +47,19 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] "
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string [generator_arg=value [...]]\n\n"
-                          "  -e  A comma separated list of optional files to emit. Accepted values are "
-                          "[assembly, bitcode, stmt, html]\n";
+                          "  -e  A comma separated list of files to emit. Accepted values are "
+                          "[o, h, assembly, bitcode, stmt, html, cpp]. If omitted, default value is [o, h].\n"
+                          "  -x  A comma separated list of file extension pairs to substitute during file naming, "
+                          "in the form [.old=.new[,.old2=.new2]]\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
                                                       { "-g", "" },
                                                       { "-o", "" },
                                                       { "-e", "" },
+                                                      { "-n", "" },
+                                                      { "-x", "" },
                                                       { "-r", "" }};
     std::map<std::string, std::string> generator_args;
 
@@ -121,21 +126,53 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
+    // it's OK for file_base_name to be empty: filename will be based on function name
+    std::string file_base_name = flags_info["-n"];
+
     GeneratorBase::EmitOptions emit_options;
+    // Ensure all flags start as false.
+    emit_options.emit_o = emit_options.emit_h = false;
+
     std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
-    for (const std::string &opt : emit_flags) {
-        if (opt == "assembly") {
-            emit_options.emit_assembly = true;
-        } else if (opt == "bitcode") {
-            emit_options.emit_bitcode = true;
-        } else if (opt == "stmt") {
-            emit_options.emit_stmt = true;
-        } else if (opt == "html") {
-            emit_options.emit_stmt_html = true;
-        } else if (!opt.empty()) {
-            cerr << "Unrecognized emit option: " << opt
-                 << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+    if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
+        // If omitted or empty, assume .o and .h
+        emit_options.emit_o = emit_options.emit_h = true;
+    } else {
+        // If anything specified, only emit what is enumerated
+        for (const std::string &opt : emit_flags) {
+            if (opt == "assembly") {
+                emit_options.emit_assembly = true;
+            } else if (opt == "bitcode") {
+                emit_options.emit_bitcode = true;
+            } else if (opt == "stmt") {
+                emit_options.emit_stmt = true;
+            } else if (opt == "html") {
+                emit_options.emit_stmt_html = true;
+            } else if (opt == "cpp") {
+                emit_options.emit_cpp = true;
+            } else if (opt == "o") {
+                emit_options.emit_o = true;
+            } else if (opt == "h") {
+                emit_options.emit_h = true;
+            } else if (!opt.empty()) {
+                cerr << "Unrecognized emit option: " << opt
+                     << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+            }
         }
+    }
+
+    auto extension_flags = split_string(flags_info["-x"], ",");
+    for (const std::string &x : extension_flags) {
+        if (x.empty()) {
+            continue;
+        }
+        auto ext_pair = split_string(x, "=");
+        if (ext_pair.size() != 2) {
+            cerr << "Malformed -x option: " << x << "\n";
+            cerr << kUsage;
+            return 1;
+        }
+        emit_options.extensions[ext_pair[0]] = ext_pair[1];
     }
 
     if (!runtime_name.empty()) {
@@ -153,7 +190,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name, function_name, emit_options);
+    gen->emit_filter(output_dir, function_name, file_base_name, emit_options);
     return 0;
 }
 
@@ -294,6 +331,14 @@ std::vector<Argument> GeneratorBase::get_filter_output_types() {
     return output_types;
 }
 
+std::string get_extension(const std::string& def, const GeneratorBase::EmitOptions &options) {
+    auto it = options.extensions.find(def);
+    if (it != options.extensions.end()) {
+        return it->second;
+    }
+    return def;
+}
+
 void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const std::string &function_name,
                                 const std::string &file_base_name,
@@ -303,43 +348,48 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     Pipeline pipeline = build_pipeline();
 
     std::vector<Halide::Argument> inputs = get_filter_arguments();
-    std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
+    
+    std::vector<std::string> namespaces;
+    std::string simple_name = extract_namespaces(function_name, namespaces);
+
+    std::string base_path = output_dir + "/" + (file_base_name.empty() ? simple_name : file_base_name);
     if (options.emit_o || options.emit_assembly || options.emit_bitcode) {
         Outputs output_files;
         if (options.emit_o) {
             // If the target arch is pnacl, then the output "object" file is
             // actually a pnacl bitcode file.
             if (Target(target).arch == Target::PNaCl) {
-                output_files.object_name = base_path + ".bc";
-            } else if (Target(target).os == Target::Windows) {
+                output_files.object_name = base_path + get_extension(".bc", options);
+            } else if (Target(target).os == Target::Windows &&
+                       !Target(target).has_feature(Target::MinGW)) {
                 // If it's windows, then we're emitting a COFF file
-                output_files.object_name = base_path + ".obj";
+                output_files.object_name = base_path + get_extension(".obj", options);
             } else {
                 // Otherwise it is an ELF or Mach-o
-                output_files.object_name = base_path + ".o";
+                output_files.object_name = base_path + get_extension(".o", options);
             }
         }
         if (options.emit_assembly) {
-            output_files.assembly_name = base_path + ".s";
+            output_files.assembly_name = base_path + get_extension(".s", options);
         }
         if (options.emit_bitcode) {
             // In this case, bitcode refers to the LLVM IR generated by Halide
             // and passed to LLVM, for both the pnacl and ordinary archs
-            output_files.bitcode_name = base_path + ".bc";
+            output_files.bitcode_name = base_path + get_extension(".bc", options);
         }
         pipeline.compile_to(output_files, inputs, function_name, target);
     }
     if (options.emit_h) {
-        pipeline.compile_to_header(base_path + ".h", inputs, function_name, target);
+        pipeline.compile_to_header(base_path + get_extension(".h", options), inputs, function_name, target);
     }
     if (options.emit_cpp) {
-        pipeline.compile_to_c(base_path + ".cpp", inputs, function_name, target);
+        pipeline.compile_to_c(base_path + get_extension(".cpp", options), inputs, function_name, target);
     }
     if (options.emit_stmt) {
-        pipeline.compile_to_lowered_stmt(base_path + ".stmt", inputs, Halide::Text, target);
+        pipeline.compile_to_lowered_stmt(base_path + get_extension(".stmt", options), inputs, Halide::Text, target);
     }
     if (options.emit_stmt_html) {
-        pipeline.compile_to_lowered_stmt(base_path + ".html", inputs, Halide::HTML, target);
+        pipeline.compile_to_lowered_stmt(base_path + get_extension(".html", options), inputs, Halide::HTML, target);
     }
 }
 

@@ -69,7 +69,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
         if (index.same_as(op->index) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index);
+            stmt = Store::make(op->name, value, index, op->param);
         }
     }
 
@@ -81,7 +81,7 @@ class RemoveLikelyTags : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Call *op) {
-        if (op->name == Call::likely && op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::likely)) {
             internal_assert(op->args.size() == 1);
             expr = mutate(op->args[0]);
         } else {
@@ -94,8 +94,7 @@ class RemoveLikelyTags : public IRMutator {
 class HasLikelyTag : public IRVisitor {
     using IRVisitor::visit;
     void visit(const Call *op) {
-        if (op->name == Call::likely &&
-            op->call_type == Call::Intrinsic) {
+        if (op->is_intrinsic(Call::likely)) {
             result = true;
         } else {
             IRVisitor::visit(op);
@@ -279,6 +278,19 @@ private:
         }
     }
 
+    void visit(const IfThenElse *op) {
+        // For select statements, mins, and maxes, you can mark the
+        // likely branch with likely. For if statements there's no way
+        // to mark the likely stmt. So if the condition of an if
+        // statement is marked as likely, treat it as likely true and
+        // partition accordingly.
+        IRVisitor::visit(op);
+        const Call *call = op->condition.as<Call>();
+        if (call && call->is_intrinsic(Call::likely)) {
+            new_simplification(op->condition, op->condition, const_true(), const_false());
+        }
+    }
+
     void visit(const For *op) {
         vector<Simplification> old;
         old.swap(simplifications);
@@ -290,6 +302,10 @@ private:
                 Scope<Interval> varying;
                 varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
                 Expr relaxed = and_condition_over_domain(s.condition, varying);
+                internal_assert(!expr_uses_var(relaxed, op->name))
+                    << "Should not have had used the loop var (" << op->name
+                    << ") any longer\n  before: " << s.condition << "\n  after: "
+                    << relaxed << "\n";
                 if (!equal(relaxed, s.condition)) {
                     s.tight = false;
                 }
@@ -344,15 +360,53 @@ public:
 
 };
 
+class ContainsThreadBarrier : public IRVisitor {
+public:
+    bool result = false;
+
+protected:
+    using IRVisitor::visit;
+    void visit(const Call *op) {
+        if (op->name == "halide_gpu_thread_barrier") {
+            result = true;
+        }
+        IRVisitor::visit(op);
+    }
+};
+
+bool contains_thread_barrier(Stmt s) {
+    ContainsThreadBarrier c;
+    s.accept(&c);
+    return c.result;
+}
+
 class PartitionLoops : public IRMutator {
     using IRMutator::visit;
+
+    bool in_gpu_loop = false;
 
     void visit(const For *op) {
         Stmt body = op->body;
 
+        bool old_in_gpu_loop = in_gpu_loop;
+        in_gpu_loop |= CodeGen_GPU_Dev::is_gpu_var(op->name);
+
+        // If we're inside GPU kernel, and the body contains thread
+        // barriers, it's not safe to duplicate code.
+        if (in_gpu_loop && contains_thread_barrier(body)) {
+            IRMutator::visit(op);
+            in_gpu_loop = old_in_gpu_loop;
+            return;
+        }
+
         // Find simplifications in this loop body
         FindSimplifications finder;
         body.accept(&finder);
+
+        if (finder.simplifications.empty()) {
+            IRMutator::visit(op);
+            return;
+        }
 
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
 
@@ -374,7 +428,8 @@ class PartitionLoops : public IRMutator {
                      << "  old: " << s.old_expr << "\n"
                      << "  new: " << s.likely_value << "\n"
                      << "  min: " << s.interval.min << "\n"
-                     << "  max: " << s.interval.max << "\n";
+                     << "  max: " << s.interval.max << "\n"
+                     << "  tight: " << s.tight << "\n";
 
             // Accept all non-empty intervals
             if (!interval_is_empty(s.interval)) {
@@ -536,7 +591,7 @@ class PartitionLoops : public IRMutator {
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
-                stmt = IfThenElse::make(min_steady < loop_var && loop_var < max_steady, stmt, prologue);
+                stmt = IfThenElse::make(min_steady <= loop_var && loop_var < max_steady, stmt, prologue);
             } else {
                 if (make_epilogue) {
                     stmt = IfThenElse::make(loop_var < max_steady, stmt, epilogue);
@@ -552,12 +607,29 @@ class PartitionLoops : public IRMutator {
             // Uncomment to include code that prints the epilogue value
             //epilogue_val = print(epilogue_val, op->name, "epilogue");
             stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
+        } else {
+            epilogue_val = op->min + op->extent;
         }
         if (make_prologue) {
             // Uncomment to include code that prints the prologue value
             //prologue_val = print(prologue_val, op->name, "prologue");
             stmt = LetStmt::make(prologue_name, prologue_val, stmt);
+        } else {
+            prologue_val = op->min;
         }
+
+        if (is_one(simplify(epilogue_val <= prologue_val))) {
+            // The steady state is empty. I've made a huge
+            // mistake. Try to partition a loop further in.
+            IRMutator::visit(op);
+            return;
+        }
+
+        in_gpu_loop = old_in_gpu_loop;
+
+        debug(3) << "Partition loop.\n"
+                 << "Old: " << Stmt(op) << "\n"
+                 << "New: " << stmt << "\n";
     }
 };
 
