@@ -1,7 +1,9 @@
 #include "RDom.h"
 #include "Util.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 
 namespace Halide {
 
@@ -205,6 +207,14 @@ RDom::operator RVar() const {
     return x;
 }
 
+void RDom::where(Expr predicate) {
+    user_assert(!dom.frozen())
+        << (*this) << " cannot be given a new predicate, because it has already"
+        << " been used in the update definition of some function.\n";
+    user_assert(dom.defined()) << "Error: Can't add predicate to undefined RDom.\n";
+    dom.where(predicate);
+}
+
 /** Emit an RVar in a human-readable form */
 std::ostream &operator<<(std::ostream &stream, RVar v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
@@ -217,7 +227,12 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";
     }
-    stream << ")\n";
+    stream << ")";
+    Expr pred = simplify(dom.domain().predicate());
+    if (!equal(const_true(), pred)) {
+        stream << " where (\n  " << pred << ")";
+    }
+    stream << "\n";
     return stream;
 }
 

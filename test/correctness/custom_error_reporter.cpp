@@ -37,10 +37,10 @@ int main(int argc, char **argv) {
     MyCustomErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::ErrorReport("", 0, NULL, false, true, true, false) << "Here is a warning.";
+    Halide::Internal::ErrorReport("", 0, nullptr, false, true, true, false) << "Here is a warning.";
 
     // This call should not return.
-    Halide::Internal::ErrorReport("", 0, NULL, false, true, false, false) << "Here is an error.";
+    Halide::Internal::ErrorReport("", 0, nullptr, false, true, false, false) << "Here is an error.";
 
     printf("CompileTimeErrorReporter::error() must not return.\n");
     return -1;

@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
         // gpu schedule
-        output.compute_root().gpu_tile(x, y, 16, 8, DeviceAPI::Default_GPU);
+        output.compute_root().gpu_tile(x, y, 16, 8);
         for (int j = 0; j < J; j++) {
             int blockw = 16, blockh = 8;
             if (j > 3) {
@@ -127,10 +127,10 @@ int main(int argc, char **argv) {
                 blockh = 2;
             }
             if (j > 0) {
-                inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
-                gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
+                inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh);
+                gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh);
             }
-            outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, DeviceAPI::Default_GPU);
+            outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh);
         }
     } else {
         // cpu schedule

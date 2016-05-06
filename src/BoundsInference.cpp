@@ -26,9 +26,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::extract_buffer_min ||
-             op->name == Call::extract_buffer_max)) {
+        if (op->is_intrinsic(Call::extract_buffer_min) ||
+            op->is_intrinsic(Call::extract_buffer_max)) {
             result = true;
         } else {
             IRVisitor::visit(op);
@@ -127,12 +126,16 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
+                if (r.domain.defined()) {
+                    exprs.push_back(r.domain.predicate());
+                }
             }
         }
 
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            string producing_stage,
+                           string loop_level,
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
@@ -206,19 +209,19 @@ public:
                 if (!in_pipeline.empty()) {
                     // 3)
                     string outer_query_name = func.name() + ".outer_bounds_query";
-                    Expr outer_query = Variable::make(Handle(), outer_query_name);
+                    Expr outer_query = Variable::make(type_of<struct buffer_t *>(), outer_query_name);
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(Handle(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    {outer_query, i}, Call::Intrinsic);
+                                                    {outer_query, i}, Call::PureIntrinsic);
                         Expr outer_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    {outer_query, i}, Call::Intrinsic);
+                                                    {outer_query, i}, Call::PureIntrinsic);
 
                         Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    {inner_query, i}, Call::Intrinsic);
+                                                    {inner_query, i}, Call::PureIntrinsic);
                         Expr inner_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    {inner_query, i}, Call::Intrinsic);
+                                                    {inner_query, i}, Call::PureIntrinsic);
                         Expr inner_extent = inner_max - inner_min + 1;
 
                         // Push 'inner' inside of 'outer'
@@ -236,7 +239,7 @@ public:
 
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
-                                      Variable::make(Handle(), func.name() + ".o0.bounds_query"), s);
+                                      Variable::make(type_of<struct buffer_t *>(), func.name() + ".o0.bounds_query"), s);
                 } else {
                     // If we're at the outermost loop, there is no
                     // bounds query result from one level up, but we
@@ -247,12 +250,12 @@ public:
 
                     // 2)
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(Handle(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  {inner_query, i}, Call::Intrinsic);
+                                                  {inner_query, i}, Call::PureIntrinsic);
                         Expr new_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  {inner_query, i}, Call::Intrinsic);
+                                                  {inner_query, i}, Call::PureIntrinsic);
 
                         s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
                         s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".min", new_min, s);
@@ -267,18 +270,35 @@ public:
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
                 string prefix = name + ".s" + std::to_string(stage) + ".";
+
+                LoopLevel compute_at = func.schedule().compute_level();
+                LoopLevel store_at = func.schedule().store_level();
+
                 for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
-                    const Bound &bound = func.schedule().bounds()[i];
+                    Bound bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
-                    Expr min_bound = bound.min;
-                    Expr max_bound = (bound.min + bound.extent) - 1;
-                    s = LetStmt::make(min_var, min_bound, s);
-                    s = LetStmt::make(max_var, max_bound, s);
-
-                    // Save the unbounded values to use in bounds-checking assertions
                     Expr min_required = Variable::make(Int(32), min_var);
                     Expr max_required = Variable::make(Int(32), max_var);
+
+                    // If the Func is compute_at some inner loop, and
+                    // only extent is bounded, then the min could
+                    // actually move around, which makes the extent
+                    // bound not actually useful for determining the
+                    // max required from the point of view of
+                    // producers.
+                    if (bound.min.defined() ||
+                        compute_at.is_root() ||
+                        (compute_at.match(loop_level) &&
+                         store_at.match(loop_level))) {
+                        if (!bound.min.defined()) {
+                            bound.min = min_required;
+                        }
+                        s = LetStmt::make(min_var, bound.min, s);
+                        s = LetStmt::make(max_var, bound.min + bound.extent - 1, s);
+                    }
+
+                    // Save the unbounded values to use in bounds-checking assertions
                     s = LetStmt::make(min_var + "_unbounded", min_required, s);
                     s = LetStmt::make(max_var + "_unbounded", max_required, s);
                 }
@@ -323,7 +343,7 @@ public:
             // extern function call.  We need a query buffer_t per
             // producer and a query buffer_t for the output
 
-            Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+            Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::PureIntrinsic);
 
             for (size_t j = 0; j < args.size(); j++) {
                 if (args[j].is_expr()) {
@@ -332,24 +352,24 @@ public:
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
-                        Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                        Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                               {null_handle, make_zero(input.output_types()[k])},
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
-                        bounds_inference_args.push_back(Variable::make(Handle(), name));
+                        bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
                     Buffer b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
 
-                    Expr in_buf = Variable::make(Handle(), name + ".buffer");
+                    Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
+                    Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
-                    Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
+                    Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
@@ -372,18 +392,18 @@ public:
                     output_buffer_t_args.push_back(0); // stride
                 }
 
-                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                                   output_buffer_t_args, Call::Intrinsic);
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
-                bounds_inference_args.push_back(Variable::make(Handle(), buf_name));
+                bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
 
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
 
             // Make the extern call
-            Expr e = Call::make(Int(32), extern_name,
-                                bounds_inference_args, Call::Extern);
+            Expr e = Call::make(Int(32), extern_name, bounds_inference_args,
+                                func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern);
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
@@ -539,11 +559,11 @@ public:
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
-                            Expr buf = Variable::make(Handle(), buf_name);
+                            Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  {buf, d}, Call::Intrinsic);
+                                                  {buf, d}, Call::PureIntrinsic);
                             Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  {buf, d}, Call::Intrinsic);
+                                                  {buf, d}, Call::PureIntrinsic);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);
@@ -552,11 +572,24 @@ public:
 
             } else {
                 const vector<Expr> &exprs = consumer.exprs;
-                for (size_t j = 0; j < exprs.size(); j++) {
-                    map<string, Box> new_boxes = boxes_required(exprs[j], scope, func_bounds);
-                    for (const pair<string, Box> &i : new_boxes) {
-                        merge_boxes(boxes[i.first], i.second);
+                // We wrap the consumer exprs inside a "dummy" Call stmt so that we can take advantage
+                // of the IfThenElse stmt handler inside boxes_required() to determine the appropriate
+                // box bound size given some predicate on the RDom. Otherwise, we will need to update
+                // the scope to take into account of the predicate.
+                Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
+                if (consumer.stage > 0) {
+                    const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
+                    if (r.domain.defined()) {
+                        vector<Expr> predicates = r.domain.split_predicate();
+                        for (const Expr &pred : predicates) {
+                            wrapped = IfThenElse::make(likely(pred), wrapped);
+                        }
                     }
+                }
+
+                map<string, Box> new_boxes = boxes_required(wrapped, scope, func_bounds);
+                for (const pair<string, Box> &i : new_boxes) {
+                    merge_boxes(boxes[i.first], i.second);
                 }
             }
 
@@ -584,6 +617,7 @@ public:
                     }
 
                     // Dump out the region required of each stage for debugging.
+
                     /*
                     debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
@@ -593,6 +627,7 @@ public:
                     }
                     debug(0) << "\n";
                     */
+
 
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
                     producer.consumers.push_back((int)i);
@@ -655,7 +690,7 @@ public:
         }
 
         // If there are no pipelines at this loop level, we can skip most of the work.
-        bool no_pipelines = body.as<For>() != NULL;
+        bool no_pipelines = body.as<For>() != nullptr;
 
         // Figure out which stage of which function we're producing
         int producing = -1;
@@ -703,7 +738,7 @@ public:
                     for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                         bounds_needed[stages[i].consumers[j]] = true;
                     }
-                    body = stages[i].define_bounds(body, stage_name, in_stages, in_pipeline, inner_productions);
+                    body = stages[i].define_bounds(body, stage_name, op->name, in_stages, in_pipeline, inner_productions);
                 }
             }
 
@@ -800,7 +835,7 @@ Stmt bounds_inference(Stmt s,
     }
 
     // Add an outermost bounds inference marker
-    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::Parent, s);
+    s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
     s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }

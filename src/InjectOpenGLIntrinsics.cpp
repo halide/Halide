@@ -24,11 +24,7 @@ private:
     using IRMutator::visit;
 
     void visit(const Call *call) {
-        if (call->call_type != Call::Intrinsic) {
-            IRMutator::visit(call);
-            return;
-        }
-        if (call->name == Call::image_load) {
+        if (call->is_intrinsic(Call::image_load)) {
             vector<Expr> call_args = call->args;
             //
             // Create
@@ -77,7 +73,7 @@ private:
 
             Expr load_call = Call::make(load_type, Call::glsl_texture_load,
                                         vector<Expr>(&args[0], &args[4]),
-                                        Call::Intrinsic, Function(), 0,
+                                        Call::Intrinsic, nullptr, 0,
                                         call->image, call->param);
 
             // Add a shuffle_vector intrinsic to swizzle a single channel
@@ -86,7 +82,7 @@ private:
             // during vectorization.
             expr = Call::make(call->type, Call::shuffle_vector,
                               {load_call, c_coordinate}, Call::Intrinsic);
-        } else if (call->name == Call::image_store) {
+        } else if (call->is_intrinsic(Call::image_store)) {
             user_assert(call->args.size() == 6)
                 << "GLSL stores require three coordinates.\n";
 

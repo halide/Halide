@@ -33,7 +33,7 @@ public:
      * subexpressions, it's worth passing in a cache to use.
      * Currently this is only done in common-subexpression
      * elimination. */
-    IRComparer(IRCompareCache *c = NULL) : result(Equal), cache(c) {}
+    IRComparer(IRCompareCache *c = nullptr) : result(Equal), cache(c) {}
 
 private:
     Expr expr;

@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         {"repeat_image", repeat_image(input), 0.0},
         {"mirror_image", mirror_image(input), 0.0},
         {"mirror_interior", mirror_interior(input), 0.0},
-        {NULL, Func(), 0.0}}; // Sentinel
+        {nullptr, Func(), 0.0}}; // Sentinel
 
     // Time each
     for (int i = 0; tests[i].name; i++) {

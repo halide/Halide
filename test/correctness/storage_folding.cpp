@@ -34,8 +34,10 @@ int main(int argc, char **argv) {
         Image<int> im = g.realize(1000, 1000);
 
         // Should fold by a factor of two, but sliding window analysis makes it round up to 4.
-        if (custom_malloc_size == 0 || custom_malloc_size > 1002*4*sizeof(int)) {
-            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)(1002*4*sizeof(int)));
+        // Halide allocates one extra scalar, so we account for that.
+        size_t expected_size = 1002*4*sizeof(int) + sizeof(int);
+        if (custom_malloc_size == 0 || custom_malloc_size > expected_size) {
+            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
         }
     }
@@ -126,8 +128,10 @@ int main(int argc, char **argv) {
 
         Image<int> im = f.realize(1000, 1000);
 
-        if (custom_malloc_size == 0 || custom_malloc_size > 2*1002*4*sizeof(int)) {
-            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)(1002*4*sizeof(int)));
+        // Halide allocates one extra scalar, so we account for that.
+        size_t expected_size = 2*1002*4*sizeof(int) + sizeof(int);
+        if (custom_malloc_size == 0 || custom_malloc_size > expected_size) {
+            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
         }
 
@@ -163,8 +167,10 @@ int main(int argc, char **argv) {
 
         Image<int> im = f.realize(1000, 1000);
 
-        if (custom_malloc_size == 0 || custom_malloc_size > 1000*8*sizeof(int)) {
-            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)(1000*8*sizeof(int)));
+        // Halide allocates one extra scalar, so we account for that.
+        size_t expected_size = 1000*8*sizeof(int) + sizeof(int);
+        if (custom_malloc_size == 0 || custom_malloc_size > expected_size) {
+            printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
         }
 

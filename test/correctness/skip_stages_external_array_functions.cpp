@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -12,7 +12,7 @@ using namespace Halide;
 int bounds_query_count[4];
 int call_count[4];
 extern "C" DLLEXPORT int call_counter(buffer_t *input, int x, int idx, buffer_t *output) {
-    if (input->host == NULL) {
+    if (input->host == nullptr) {
         bounds_query_count[idx]++;
         input->min[0] = output->min[0];
         input->extent[0] = output->extent[0];

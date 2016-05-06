@@ -4,8 +4,10 @@
 #include "Simplify.h"
 #include "Bounds.h"
 #include "IRPrinter.h"
+#include "Substitute.h"
 #include "Debug.h"
-#include "Derivative.h"
+#include "Monotonic.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -91,10 +93,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n';
 
+            bool min_monotonic_increasing =
+                (is_monotonic(min, op->name) == Monotonic::Increasing);
+
+            bool max_monotonic_decreasing =
+                (is_monotonic(max, op->name) == Monotonic::Decreasing);
+
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
-            if (is_monotonic(min, op->name) == MonotonicIncreasing ||
-                is_monotonic(max, op->name) == MonotonicDecreasing) {
+            if (min_monotonic_increasing ||
+                max_monotonic_decreasing) {
 
                 // The max of the extent over all values of the loop variable must be a constant
                 Expr extent = simplify(max - min);
@@ -104,14 +112,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr max_extent = bounds_of_expr_in_scope(extent, scope).max;
                 scope.pop(op->name);
 
-                max_extent = simplify(max_extent);
+                max_extent = find_constant_bound(simplify(max_extent), Direction::Upper);
 
-                const IntImm *max_extent_int = max_extent.as<IntImm>();
-                if (max_extent_int) {
-                    int extent = max_extent_int->value;
+                if (const int64_t *extent = as_const_int(max_extent)) {
 
                     int factor = 1;
-                    while (factor <= extent) factor *= 2;
+                    while (factor <= *extent && factor < 1024) factor *= 2;
 
                     debug(3) << "Proceeding with factor " << factor << "\n";
 
@@ -119,9 +125,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     dims_folded.push_back(fold);
                     result = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
 
-                    Expr step = finite_difference(min, op->name);
-
-                    if (is_one(simplify(extent < step))) {
+                    Expr next_var = Variable::make(Int(32), op->name) + 1;
+                    Expr next_min = substitute(op->name, next_var, min);
+                    if (is_one(simplify(max < next_min))) {
                         // There's no overlapping usage between loop
                         // iterations, so we can continue to search
                         // for further folding opportinities
@@ -173,16 +179,16 @@ public:
 class IsBufferSpecial : public IRVisitor {
 public:
     string func;
-    bool special;
+    bool special = false;
 
-    IsBufferSpecial(string f) : func(f), special(false) {}
+    IsBufferSpecial(string f) : func(f) {}
 private:
 
     using IRVisitor::visit;
 
-    void visit(const Call *call) {
-        if (call->call_type == Call::Intrinsic &&
-            call->name == func) {
+    void visit(const Variable *var) {
+        if (var->type.is_handle() &&
+            var->name == func + ".buffer") {
             special = true;
         }
     }
@@ -200,7 +206,7 @@ class StorageFolding : public IRMutator {
         op->accept(&special);
 
         if (special.special) {
-            debug(3) << "Not attempting to fold " << op->name << " because it is referenced by an intrinsic\n";
+            debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {

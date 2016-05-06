@@ -7,6 +7,7 @@
 
 #include "Var.h"
 #include "Tuple.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -48,7 +49,7 @@ protected:
                                           bool placeholder_seen) const;
 public:
     /** Construct an undefined image handle */
-    ImageBase() : origin(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
+    ImageBase() : origin(nullptr), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
     EXPORT ImageBase(Type t, int x, int y = 0, int z = 0, int w = 0, const std::string &name = "");
@@ -65,7 +66,7 @@ public:
     EXPORT ImageBase(Type t, const buffer_t *b, const std::string &name = "");
 
     /** Get the name of this image. */
-    EXPORT const std::string &name();
+    EXPORT const std::string &name() const;
 
     /** Manually copy-back data to the host, if it's on a device. This
      * is done for you if you construct an image from a buffer, but
@@ -157,8 +158,13 @@ public:
     /** Get the address of a particular pixel. */
     void *address_of(int x, int y = 0, int z = 0, int w = 0) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = (ssize_t)x*stride_0 + (ssize_t)y*stride_1 +
-            (ssize_t)z*stride_2 + (ssize_t)w*stride_3;
+        size_t offset = 0;
+        if (get_target_from_environment().has_feature(Target::LargeBuffers)) {
+            offset = (ssize_t)x*stride_0 + (ssize_t)y*stride_1 +
+                (ssize_t)z*stride_2 + (ssize_t)w*stride_3;
+        } else {
+            offset = x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3;
+        }
         return (void *)(ptr + offset * elem_size);
     }
 };

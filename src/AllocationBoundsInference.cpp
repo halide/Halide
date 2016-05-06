@@ -51,7 +51,17 @@ class AllocationInference : public IRMutator {
         stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
 
         internal_assert(b.size() == op->bounds.size());
+
         for (size_t i = 0; i < b.size(); i++) {
+            // Get any applicable bound on this dimension
+            Bound bound;
+            for (size_t j = 0; j < f.schedule().bounds().size(); j++) {
+                Bound b = f.schedule().bounds()[j];
+                if (f.args()[i] == b.var) {
+                    bound = b;
+                }
+            }
+
             string prefix = op->name + "." + f.args()[i];
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
@@ -60,9 +70,36 @@ class AllocationInference : public IRMutator {
                 user_error << op->name << " is accessed over an unbounded domain in dimension "
                            << f.args()[i] << "\n";
             }
-            Expr min = simplify(b[i].min);
-            Expr max = simplify(b[i].max);
-            Expr extent = simplify((max - min) + 1);
+            Expr min, max, extent;
+            b[i].min = simplify(b[i].min);
+            b[i].max = simplify(b[i].max);
+            if (bound.min.defined()) {
+                min = bound.min;
+            } else {
+                min = b[i].min;
+            }
+            if (bound.extent.defined()) {
+                extent = bound.extent;
+                max = simplify(min + extent - 1);
+            } else {
+                max = b[i].max;
+                extent = simplify((max - min) + 1);
+            }
+
+            Expr min_var = Variable::make(Int(32), min_name);
+            Expr max_var = Variable::make(Int(32), max_name);
+
+            Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
+                                        {f.args()[i], f.name(), min_var, max_var, b[i].min, b[i].max},
+                                        Call::Extern);
+
+            if (bound.min.defined()) {
+                stmt = Block::make(AssertStmt::make(min_var <= b[i].min, error_msg), stmt);
+            }
+            if (bound.extent.defined()) {
+                stmt = Block::make(AssertStmt::make(max_var >= b[i].max, error_msg), stmt);
+            }
+
             stmt = LetStmt::make(extent_name, extent, stmt);
             stmt = LetStmt::make(min_name, min, stmt);
             stmt = LetStmt::make(max_name, max, stmt);

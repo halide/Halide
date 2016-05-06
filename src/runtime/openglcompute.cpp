@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeOpenGLCompute.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "mini_opengl.h"
 

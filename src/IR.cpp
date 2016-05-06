@@ -7,33 +7,33 @@ namespace Internal {
 
 namespace {
 
-IntImm make_immortal_int(int x) {
-    IntImm i;
-    i.ref_count.increment();
-    i.type = Int(32);
-    i.value = x;
+const IntImm *make_immortal_int(int x) {
+    IntImm *i = new IntImm;
+    i->ref_count.increment();
+    i->type = Int(32);
+    i->value = x;
     return i;
 }
 
 }
 
-IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
-                                    make_immortal_int(-7),
-                                    make_immortal_int(-6),
-                                    make_immortal_int(-5),
-                                    make_immortal_int(-4),
-                                    make_immortal_int(-3),
-                                    make_immortal_int(-2),
-                                    make_immortal_int(-1),
-                                    make_immortal_int(0),
-                                    make_immortal_int(1),
-                                    make_immortal_int(2),
-                                    make_immortal_int(3),
-                                    make_immortal_int(4),
-                                    make_immortal_int(5),
-                                    make_immortal_int(6),
-                                    make_immortal_int(7),
-                                    make_immortal_int(8)};
+const IntImm *IntImm::small_int_cache[] = {make_immortal_int(-8),
+                                           make_immortal_int(-7),
+                                           make_immortal_int(-6),
+                                           make_immortal_int(-5),
+                                           make_immortal_int(-4),
+                                           make_immortal_int(-3),
+                                           make_immortal_int(-2),
+                                           make_immortal_int(-1),
+                                           make_immortal_int(0),
+                                           make_immortal_int(1),
+                                           make_immortal_int(2),
+                                           make_immortal_int(3),
+                                           make_immortal_int(4),
+                                           make_immortal_int(5),
+                                           make_immortal_int(6),
+                                           make_immortal_int(7),
+                                           make_immortal_int(8)};
 
 
 Expr Cast::make(Type t, Expr v) {
@@ -364,7 +364,7 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index) {
+Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
 
@@ -372,6 +372,7 @@ Stmt Store::make(std::string name, Expr value, Expr index) {
     node->name = name;
     node->value = value;
     node->index = index;
+    node->param = param;
     return node;
 }
 
@@ -411,6 +412,41 @@ Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extent
     node->condition = condition;
     node->body = body;
     return node;
+}
+
+int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
+    int64_t result = 1;
+
+    for (size_t i = 0; i < extents.size(); i++) {
+        if (const IntImm *int_size = extents[i].as<IntImm>()) {
+            // Check if the individual dimension is > 2^31 - 1. Not
+            // currently necessary because it's an int32_t, which is
+            // always smaller than 2^31 - 1. If we ever upgrade the
+            // type of IntImm but not the maximum allocation size, we
+            // should re-enable this.
+            /*
+            if ((int64_t)int_size->value > (((int64_t)(1)<<31) - 1)) {
+                user_error
+                    << "Dimension " << i << " for allocation " << name << " has size " <<
+                    int_size->value << " which is greater than 2^31 - 1.";
+            }
+            */
+            result *= int_size->value;
+            if (result > (static_cast<int64_t>(1)<<31) - 1) {
+                user_error
+                    << "Total size for allocation " << name
+                    << " is constant but exceeds 2^31 - 1.\n";
+            }
+        } else {
+            return 0;
+        }
+    }
+
+    return static_cast<int32_t>(result);
+}
+
+int32_t Allocate::constant_allocation_size() const {
+    return Allocate::constant_allocation_size(extents, name);
 }
 
 Stmt Free::make(std::string name) {
@@ -470,24 +506,22 @@ Stmt Evaluate::make(Expr v) {
 }
 
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
-                Function func, int value_index,
+                IntrusivePtr<FunctionContents> func, int value_index,
                 Buffer image, Parameter param) {
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of undefined\n";
     }
     if (call_type == Halide) {
-        internal_assert(value_index >= 0 &&
-                        value_index < func.outputs())
-            << "Value index out of range in call to halide function\n";
-        internal_assert((func.has_pure_definition() || func.has_extern_definition())) << "Call to undefined halide function\n";
-        internal_assert((int)args.size() <= func.dimensions()) << "Call node with too many arguments.\n";
         for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32)) << "Args to call to halide function must be type Int(32)\n";
+            internal_assert(args[i].type() == Int(32))
+            << "Args to call to halide function must be type Int(32)\n";
         }
     } else if (call_type == Image) {
-        internal_assert((param.defined() || image.defined())) << "Call node to undefined image\n";
+        internal_assert((param.defined() || image.defined()))
+            << "Call node to undefined image\n";
         for (size_t i = 0; i < args.size(); i++) {
-            internal_assert(args[i].type() == Int(32)) << "Args to load from image must be type Int(32)\n";
+            internal_assert(args[i].type() == Int(32))
+                << "Args to load from image must be type Int(32)\n";
         }
     }
 
@@ -641,6 +675,9 @@ Call::ConstString Call::likely = "likely";
 Call::ConstString Call::make_int64 = "make_int64";
 Call::ConstString Call::make_float64 = "make_float64";
 Call::ConstString Call::register_destructor = "register_destructor";
+Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
+Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
+
 
 }
 }

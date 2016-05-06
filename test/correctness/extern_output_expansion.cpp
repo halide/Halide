@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -11,7 +11,7 @@
 extern "C" DLLEXPORT int extern_stage(buffer_t *in, buffer_t *out) {
     assert(in->elem_size == 4);
     assert(out->elem_size == 4);
-    if (in->host == NULL || out->host == NULL) {
+    if (in->host == nullptr || out->host == nullptr) {
         // We require input size = output size, and just for fun,
         // we'll require that the output size must be a multiple of 17
 
@@ -21,10 +21,10 @@ extern "C" DLLEXPORT int extern_stage(buffer_t *in, buffer_t *out) {
                out->min[0], out->extent[0]);
         */
 
-        if (out->host == NULL) {
+        if (out->host == nullptr) {
             out->extent[0] = ((out->extent[0] + 16)/17)*17;
         }
-        if (in->host == NULL) {
+        if (in->host == nullptr) {
             in->extent[0] = out->extent[0];
             in->min[0] = out->min[0];
         }

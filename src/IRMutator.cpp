@@ -36,7 +36,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     } else {
         *expr = T::make(a, b);
     }
-    *stmt = NULL;
+    *stmt = nullptr;
 }
 }
 
@@ -201,7 +201,7 @@ void IRMutator::visit(const Store *op) {
     if (value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
     } else {
-        stmt = Store::make(op->name, value, index);
+        stmt = Store::make(op->name, value, index, op->param);
     }
 }
 
