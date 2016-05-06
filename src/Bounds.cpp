@@ -90,11 +90,11 @@ public:
 private:
 
     // Compute the intrinsic bounds of a function.
-    void bounds_of_func(Function f, int value_index) {
+    void bounds_of_func(string name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
-        bounds_of_type(f.output_types()[value_index]);
+        bounds_of_type(t);
 
-        pair<string, int> key = make_pair(f.name(), value_index);
+        pair<string, int> key = make_pair(name, value_index);
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -505,7 +505,7 @@ private:
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                min = 0;
+                min = make_zero(t);
                 max = Max::make(abs(min_b), abs(max_b));
             }
         }
@@ -792,8 +792,8 @@ private:
             // trace_expr returns argument 4
             internal_assert(op->args.size() >= 5);
             op->args[4].accept(this);
-        } else if (op->func.has_pure_definition()) {
-            bounds_of_func(op->func, op->value_index);
+        } else if (op->call_type == Call::Halide) {
+            bounds_of_func(op->name, op->value_index, op->type);
         } else {
             // Just use the bounds of the type
             bounds_of_type(t);

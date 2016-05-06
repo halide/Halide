@@ -416,9 +416,8 @@ class ExtractSharedAllocations : public IRMutator {
         }
         alloc.size = simplify(alloc.size);
         allocations.push_back(alloc);
-        stmt = op->body;
-
         shared.erase(op->name);
+        stmt = op->body;
     }
 
     void visit(const Load *op) {
