@@ -797,10 +797,10 @@ public:
     }
     // @}
 
-    /** Store a custom wrapper of this function for 'f' and return the wrapper.
-     * Every call to this function by 'f' will be replaced to call to the wrapper,
-     * which happens during the lowering stage. The wrapper function returned can
-     * then be scheduled as in typical function.
+    /** Store a custom wrapper of this Func for 'f' and return the wrapper Func.
+     * Every call to this Func by 'f' will be replaced to call to the wrapper,
+     * which happens during the lowering stage. The wrapper Func returned can
+     * then be scheduled as with typical Func.
      * Consider a simple example:
      \code
      f(x, y) = x + y;
@@ -825,15 +825,28 @@ public:
        }
      }
      \endcode
+     * The 'in(...)' scheduling directive provides an easy way to create a wrapper
+     * of a Func which allows us to schedule a Func in different ways. One case
+     * where this might be useful is when we are loading data from a compute_root()
+     * Func which is too big to fit in the GPU memory. To get around this problem,
+     * we need to create a dummy identity Func which loads the data in tiles
+     * into the GPU memory before computation. Assuming that we load from 'input'
+     * and use the data in 'output', with the 'in(...)' directive, we could simply
+     * call input.in(output).compute_at(output, Var::gpu_blocks()) which will
+     * do the load staging. See the global wrapper scheduling directive, \ref Func::in()
+     * for other possible use case.
+     *
+     * See test/performance/block_transpose.cpp, test/performance/wrap.cpp, and
+     * apps/interpolate/interpolate.cpp for more examples on how 'in()' might be used.
      */
     EXPORT Func in(const Func &f);
 
-    /* Each Func in 'fs' will share the same wrapper to this function. If any of
+    /* Each Func in 'fs' will share the same custom wrapper to this Func. If any of
      * the Func in 'fs' already has a custom wrapper, this will throw an error. */
     EXPORT Func in(const std::vector<Func> &fs);
 
-    /** Store a global wrapper of this function and return the wrapper.
-     * Every call to this function by all functions (excluding by itself) in the
+    /** Store a global wrapper of this Func and return the wrapper Func.
+     * Every call to this Func by all Funcs (excluding by itself) in the
      * pipeline will be replaced to call to the wrapper, which happens during the
      * lowering stage. Custom wrapper always takes precedence over the global
      * wrapper, i.e. if both are defined, then we replace it with the custom
@@ -868,6 +881,25 @@ public:
      for (int y = 0; y < 20; y++) {
        for (int x = 0; x < 20; x++) {
          h(x, y) = f_wrapper(x, y) + g(x, y);
+       }
+     }
+     \endcode
+     * Some possible use case with the global wrapper scheduling directive is
+     * to schedule an initialization and update definition of a Func in the same
+     * compute level. Consider the following example:
+     \code
+     f(x, y) = 10;
+     f(x, y) += 2;
+     Func wrapper = f.in().compute_root();
+     f.compute_at(wrapper, x);
+     wrapper.realize(20, 20);
+     \endcode
+     * This is equivalent to:
+     \code
+     for (int y = 0; y < 20; y++) {
+       for (int x = 0; x < 20; x++) {
+         f(x, y) = 10;
+         f(x, y) += 2;
        }
      }
      \endcode
