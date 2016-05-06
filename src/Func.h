@@ -797,113 +797,105 @@ public:
     }
     // @}
 
-    /** Store a custom wrapper of this Func for 'f' and return the wrapper Func.
-     * Every call to this Func by 'f' will be replaced to call to the wrapper,
-     * which happens during the lowering stage. The wrapper Func returned can
-     * then be scheduled as with typical Func.
-     * Consider a simple example:
+    /** Creates and returns a new Func that wraps this Func. During
+     * compilation, Halide replaces all calls to this Func done by 'f'
+     * with calls to the wrapper. If this Func is already wrapped for
+     * use in 'f', will return the existing wrapper.
+     *
+     * For example, g.in(f) would rewrite a pipeline like this:
+     \code
+     g(x, y) = ...
+     f(x, y) = ... g(x, y) ...
+     \endcode
+     * into a pipeline like this:
+     \code
+     g(x, y) = ...
+     g_wrap(x, y) = g(x, y)
+     f(x, y) = ... g_wrap(x, y)
+     \endcode
+     *
+     * This has a variety of uses. You can use it to schedule this
+     * Func differently in the different places it is used:
+     \code
+     g(x, y) = ...
+     f1(x, y) = ... g(x, y) ...
+     f2(x, y) = ... g(x, y) ...
+     g.in(f1).compute_at(f1, y).vectorize(x, 8);
+     g.in(f2).compute_at(f2, x).unroll(x);
+     \endcode
+     *
+     * You can also use it to stage loads from this Func via some
+     * intermediate buffer (perhaps on the stack as in
+     * test/performance/block_transpose.cpp, or in shared GPU memory
+     * as in test/performance/wrap.cpp). In this we compute the
+     * wrapper at tiles of the consuming Funcs like so:
+     \code
+     g.compute_root()...
+     g.in(f).compute_at(f, tiles)...
+     \endcode
+     *
+     * Func::in() can also be used to compute pieces of a Func into a
+     * smaller scratch buffer (perhaps on the GPU) and then copy them
+     * into a larger output buffer one tile at a time. See
+     * apps/interpolate/interpolate.cpp for an example of this. In
+     * this case we compute the Func at tiles of its own wrapper:
+     \code
+     f.in(g).compute_root().gpu_tile(...)...
+     f.compute_at(f.in(g), tiles)...
+     \endcode
+     *
+     * A similar use of Func::in() wrapping Funcs with multiple update
+     * stages in a pure wrapper. The following code:
      \code
      f(x, y) = x + y;
+     f(x, y) += 5;
      g(x, y) = f(x, y);
      f.compute_root();
-     f.in(g).compute_at(g, y);
-     g.realize(20, 20);
      \endcode
-     * This is equivalent to:
-     \code
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         f(x, y) = x + y;
-       }
-     }
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         f_in_g(x, y) = f(x, y);
-       }
-       for (int x = 0; x < 20; x++) {
-         g(x, y) = f_in_g(x, y);
-       }
-     }
-     \endcode
-     * The 'in(...)' scheduling directive provides an easy way to create a wrapper
-     * of a Func which allows us to schedule a Func in different ways. One case
-     * where this might be useful is when we are loading data from a compute_root()
-     * Func which is too big to fit in the GPU memory. To get around this problem,
-     * we need to create a dummy identity Func which loads the data in tiles
-     * into the GPU memory before computation. Assuming that we load from 'input'
-     * and use the data in 'output', with the 'in(...)' directive, we could simply
-     * call input.in(output).compute_at(output, Var::gpu_blocks()) which will
-     * do the load staging. See the global wrapper scheduling directive, \ref Func::in()
-     * for other possible use case.
      *
-     * See test/performance/block_transpose.cpp, test/performance/wrap.cpp, and
-     * apps/interpolate/interpolate.cpp for more examples on how 'in()' might be used.
+     * Is equivalent to:
+     \code
+     for y:
+       for x:
+         f(x, y) = x + y;
+     for y:
+       for x:
+         f(x, y) += 5
+     for y:
+       for x:
+         g(x, y) = f(x, y)
+     \endcode
+     * using Func::in(), we can write:
+     \code
+     f(x, y) = x + y;
+     f(x, y) += 5;
+     g(x, y) = f(x, y);
+     f.in(g).compute_root();
+     \endcode
+     * which instead produces:
+     \code
+     for y:
+       for x:
+         f(x, y) = x + y;
+         f(x, y) += 5
+         f_wrap(x, y) = f(x, y)
+     for y:
+       for x:
+         g(x, y) = f_wrap(x, y)
+     \endcode
      */
     EXPORT Func in(const Func &f);
 
-    /* Each Func in 'fs' will share the same custom wrapper to this Func. If any of
-     * the Func in 'fs' already has a custom wrapper, this will throw an error. */
+    /** Create and return a wrapper shared by all the Funcs in
+     * 'fs'. If any of the Funcs in 'fs' already have a custom
+     * wrapper, this will throw an error. */
     EXPORT Func in(const std::vector<Func> &fs);
 
-    /** Store a global wrapper of this Func and return the wrapper Func.
-     * Every call to this Func by all Funcs (excluding by itself) in the
-     * pipeline will be replaced to call to the wrapper, which happens during the
-     * lowering stage. Custom wrapper always takes precedence over the global
-     * wrapper, i.e. if both are defined, then we replace it with the custom
-     * wrapper.
-     * Consider a simple example:
-     \code
-     f(x, y) = x + y;
-     g(x, y) = f(x, y);
-     h(x, y) = f(x, y) + g(x, y);
-     f.compute_root();
-     f.in().compute_root();
-     g.compute_root();
-     h.realize(20, 20);
-     \endcode
-     * This is equivalent to:
-     \code
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         f(x, y) = x + y;
-       }
-     }
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         f_wrapper(x, y) = f(x, y);
-       }
-     }
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         g(x, y) = f_wrapper(x, y);
-       }
-     }
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         h(x, y) = f_wrapper(x, y) + g(x, y);
-       }
-     }
-     \endcode
-     * Some possible use case with the global wrapper scheduling directive is
-     * to schedule an initialization and update definition of a Func in the same
-     * compute level. Consider the following example:
-     \code
-     f(x, y) = 10;
-     f(x, y) += 2;
-     Func wrapper = f.in().compute_root();
-     f.compute_at(wrapper, x);
-     wrapper.realize(20, 20);
-     \endcode
-     * This is equivalent to:
-     \code
-     for (int y = 0; y < 20; y++) {
-       for (int x = 0; x < 20; x++) {
-         f(x, y) = 10;
-         f(x, y) += 2;
-       }
-     }
-     \endcode
-     */
+    /** Create and return a global wrapper, which wraps all calls to
+     * this Func by any other Func. If a global wrapper already
+     * exists, returns it. The global wrapper is only used by callers
+     * for which no custom wrapper has been specified.
+    */
     EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
