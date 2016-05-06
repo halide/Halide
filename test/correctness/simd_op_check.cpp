@@ -1411,37 +1411,37 @@ void check_hvx_all() {
 
     // The behavior of shifts larger than the type behave differently
     // on HVX vs. the scalar processor, so we clamp.
-    check("vlsr(v*.h,v*.h)", hvx_width/1, u8_1 >> clamp(u8_2, 0, 7));
-    check("vlsr(v*.h,v*.h)", hvx_width/2, u16_1 >> clamp(u16_2, 0, 15));
-    check("vlsr(v*.w,v*.w)", hvx_width/4, u32_1 >> clamp(u32_2, 0, 31));
-    check("vasr(v*.h,v*.h)", hvx_width/1, i8_1 >> clamp(i16_2, 0, 7));
-    check("vasr(v*.h,v*.h)", hvx_width/2, i16_1 >> clamp(i16_2, 0, 15));
-    check("vasr(v*.w,v*.w)", hvx_width/4, i32_1 >> clamp(i32_2, 0, 31));
+    check("vlsr(v*.h,v*.h)", hvx_width/1, u8_1 >> (u8_2 % 8));
+    check("vlsr(v*.h,v*.h)", hvx_width/2, u16_1 >> (u16_2 % 16));
+    check("vlsr(v*.w,v*.w)", hvx_width/4, u32_1 >> (u32_2 % 32));
+    check("vasr(v*.h,v*.h)", hvx_width/1, i8_1 >> (i8_2 % 8));
+    check("vasr(v*.h,v*.h)", hvx_width/2, i16_1 >> (i16_2 % 16));
+    check("vasr(v*.w,v*.w)", hvx_width/4, i32_1 >> (i32_2 % 32));
     check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8c(i16_1 >> 4));
     check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c(i32_1 >> 8));
     check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c(i32_1 >> 8));
     check("vasr(v*.w,v*.w,r*)", hvx_width/2, i16(i32_1 >> 8));
-    check("vasl(v*.h,v*.h)", hvx_width/1, u8_1 << clamp(u8_2, 0, 7));
-    check("vasl(v*.h,v*.h)", hvx_width/2, u16_1 << clamp(u16_2, 0, 15));
-    check("vasl(v*.w,v*.w)", hvx_width/4, u32_1 << clamp(u32_2, 0, 31));
-    check("vasl(v*.h,v*.h)", hvx_width/1, i8_1 << clamp(i8_2, 0, 7));
-    check("vasl(v*.h,v*.h)", hvx_width/2, i16_1 << clamp(i16_2, 0, 15));
-    check("vasl(v*.w,v*.w)", hvx_width/4, i32_1 << clamp(i32_2, 0, 31));
+    check("vasl(v*.h,v*.h)", hvx_width/1, u8_1 << (u8_2 % 8));
+    check("vasl(v*.h,v*.h)", hvx_width/2, u16_1 << (u16_2 % 16));
+    check("vasl(v*.w,v*.w)", hvx_width/4, u32_1 << (u32_2 % 32));
+    check("vasl(v*.h,v*.h)", hvx_width/1, i8_1 << (i8_2 % 8));
+    check("vasl(v*.h,v*.h)", hvx_width/2, i16_1 << (i16_2 % 16));
+    check("vasl(v*.w,v*.w)", hvx_width/4, i32_1 << (i32_2 % 32));
 
     // The scalar lsr generates uh/uw arguments, while the vector
     // version just generates h/w.
-    check("vlsr(v*.uh,r*)", hvx_width/1, u8_1 >> clamp(in_u8(0), 0, 7));
-    check("vlsr(v*.uh,r*)", hvx_width/2, u16_1 >> clamp(in_u16(0), 0, 15));
-    check("vlsr(v*.uw,r*)", hvx_width/4, u32_1 >> clamp(in_u32(0), 0, 31));
-    check("vasr(v*.h,r*)", hvx_width/1, i8_1 >> clamp(in_i8(0), 0, 7));
-    check("vasr(v*.h,r*)", hvx_width/2, i16_1 >> clamp(in_i16(0), 0, 15));
-    check("vasr(v*.w,r*)", hvx_width/4, i32_1 >> clamp(in_i32(0), 0, 31));
-    check("vasl(v*.h,r*)", hvx_width/1, u8_1 << clamp(in_u8(0), 0, 7));
-    check("vasl(v*.h,r*)", hvx_width/2, u16_1 << clamp(in_u16(0), 0, 15));
-    check("vasl(v*.w,r*)", hvx_width/4, u32_1 << clamp(in_u32(0), 0, 31));
-    check("vasl(v*.h,r*)", hvx_width/1, i8_1 << clamp(in_i8(0), 0, 7));
-    check("vasl(v*.h,r*)", hvx_width/2, i16_1 << clamp(in_i16(0), 0, 15));
-    check("vasl(v*.w,r*)", hvx_width/4, i32_1 << clamp(in_i32(0), 0, 31));
+    check("vlsr(v*.uh,r*)", hvx_width/1, u8_1 >> (u8(y) % 8));
+    check("vlsr(v*.uh,r*)", hvx_width/2, u16_1 >> (u16(y) % 16));
+    check("vlsr(v*.uw,r*)", hvx_width/4, u32_1 >> (u32(y) % 32));
+    check("vasr(v*.h,r*)", hvx_width/1, i8_1 >> (i8(y) % 8));
+    check("vasr(v*.h,r*)", hvx_width/2, i16_1 >> (i16(y) % 16));
+    check("vasr(v*.w,r*)", hvx_width/4, i32_1 >> (i32(y) % 32));
+    check("vasl(v*.h,r*)", hvx_width/1, u8_1 << (u8(y) % 8));
+    check("vasl(v*.h,r*)", hvx_width/2, u16_1 << (u16(y) % 16));
+    check("vasl(v*.w,r*)", hvx_width/4, u32_1 << (u32(y) % 32));
+    check("vasl(v*.h,r*)", hvx_width/1, i8_1 << (i8(y) % 8));
+    check("vasl(v*.h,r*)", hvx_width/2, i16_1 << (i16(y) % 16));
+    check("vasl(v*.w,r*)", hvx_width/4, i32_1 << (i32(y) % 32));
 
     check("vpacke(v*.h,v*.h)", hvx_width/1, u8(u16_1));
     check("vpacke(v*.h,v*.h)", hvx_width/1, u8(i16_1));
@@ -1681,8 +1681,8 @@ void check_hvx_all() {
     check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 * 8));
     check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 / 8));
 
-    check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 << clamp(in_i32(0), 0, 31)));
-    check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 >> clamp(in_i32(0), 0, 31)));
+    check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 << (y % 32)));
+    check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 >> (y % 32)));
 
     check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
     check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
