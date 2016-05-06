@@ -39,10 +39,12 @@ run-%-android: process-%-android
 	adb shell chmod +x /data/process-$*-android
 	adb shell /data/process-$*-android cpu 10
 	adb shell /data/process-$*-android hvx64 10
+	adb shell /data/process-$*-android hvx128 10
 
 run-host: process-host
 	./process-host cpu 10
 	./process-host hvx64 1
+	./process-host hvx128 1
 
 clean:
 	rm -f process-* pipeline-*.o pipeline pipeline.h
