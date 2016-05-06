@@ -8,7 +8,7 @@ float ms = 0;
 void my_print(void *, const char *msg) {
     float this_ms;
     int this_percentage;
-    int val = sscanf(msg, " f13: %fms (%d", &this_ms, &this_percentage);
+    int val = sscanf(msg, " fn13: %fms (%d", &this_ms, &this_percentage);
     if (val == 2) {
         ms = this_ms;
         percentage = this_percentage;
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Func f[30];
     Var c, x;
     for (int i = 0; i < 30; i++) {
-        f[i] = Func("f" + std::to_string(i));
+        f[i] = Func("fn" + std::to_string(i));
         if (i == 0) {
             f[i](c, x) = cast<float>(x + c);
         } else if (i == 13) {
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 
     //out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
 
-    printf("Time spent in f13: %fms\n", ms);
+    printf("Time spent in fn13: %fms\n", ms);
 
     if (percentage < 40) {
         printf("Percentage of runtime spent in f13: %d\n"

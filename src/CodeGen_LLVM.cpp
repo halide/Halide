@@ -545,13 +545,13 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
             llvm::Function *wrapper = add_argv_wrapper(module.get(), function, argv_name);
-            llvm::Constant *metadata = embed_metadata(metadata_name, simple_name, f.args);
+            llvm::Function *metadata_getter = embed_metadata_getter(metadata_name, simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(simple_name, metadata, wrapper);
+                register_metadata(simple_name, metadata_getter, wrapper);
             }
 
             if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), wrapper, metadata);
+                define_matlab_wrapper(module.get(), wrapper, metadata_getter);
             }
         }
     }
@@ -815,7 +815,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
         scalar_value_t_type->getPointerTo());
 }
 
-llvm::Constant *CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
+llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
         const std::string &function_name, const std::vector<Argument> &args) {
     Constant *zero = ConstantInt::get(i32, 0);
 
@@ -856,18 +856,25 @@ llvm::Constant *CodeGen_LLVM::embed_metadata(const std::string &metadata_name,
         /* name */ create_string_constant(function_name)
     };
 
-    GlobalVariable *metadata = new GlobalVariable(
+    GlobalVariable *metadata_storage = new GlobalVariable(
         *module,
         metadata_t_type,
         /*isConstant*/ true,
-        GlobalValue::ExternalLinkage,
+        GlobalValue::PrivateLinkage,
         ConstantStruct::get(metadata_t_type, metadata_fields),
-        metadata_name);
+        metadata_name + "_storage");
 
-    return metadata;
+    llvm::FunctionType *func_t = llvm::FunctionType::get(metadata_t_type->getPointerTo(), false);
+    llvm::Function *metadata_getter = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, metadata_name, module.get());
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
+    builder->SetInsertPoint(block);
+    builder->CreateRet(metadata_storage);
+    llvm::verifyFunction(*metadata_getter);
+
+    return metadata_getter;
 }
 
-void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Constant *metadata, llvm::Function *argv_wrapper) {
+void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper) {
     llvm::Function *register_metadata = module->getFunction("halide_runtime_internal_register_metadata");
     internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
 
@@ -876,7 +883,7 @@ void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Constant *me
 
     Constant *list_node_fields[] = {
         Constant::getNullValue(i8->getPointerTo()),
-        metadata,
+        metadata_getter,
         argv_wrapper
     };
 
