@@ -397,7 +397,6 @@ int update_defined_after_wrap_test() {
 }
 
 int rdom_wrapper_test() {
-    // Scheduling initialization + update on the same compute level using wrapper
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
@@ -405,20 +404,21 @@ int rdom_wrapper_test() {
     g(x, y) = 10;
     g(x, y) += 2 * f(x, x);
     g(x, y) += 3 * f(y, y);
-    result(x, y) = g(x, y) + 20;
 
-    Func wrapper = g.in(result).compute_at(result, x);
+    // Make a global wrapper on 'g', so that we can schedule initialization
+    // and the update on the same compute level at the global wrapper
+    Func wrapper = g.in().compute_root();
+    g.compute_at(wrapper, x);
     f.compute_root();
 
     // Check the call graphs.
-    // Expect 'result' to call 'wrapper', initialization of 'g' to call nothing
-    // and its update to call 'f' and 'g', wrapper' to call 'g', 'f' to call nothing
-    Module m = result.compile_to_module({});
+    // Expect 'wrapper' to call 'g', initialization of 'g' to call nothing
+    // and its update to call 'f' and 'g', 'f' to call nothing
+    Module m = wrapper.compile_to_module({});
     CheckCalls c;
     m.functions[0].body.accept(&c);
 
     CallGraphs expected = {
-        {result.name(), {wrapper.name()}},
         {g.name(), {}},
         {g.update(0).name(), {f.name(), g.name()}},
         {wrapper.name(), {g.name()}},
@@ -428,8 +428,8 @@ int rdom_wrapper_test() {
         return -1;
     }
 
-    Image<int> im = result.realize(200, 200);
-    auto func = [](int x, int y) { return 4*x + 6* y + 30; };
+    Image<int> im = wrapper.realize(200, 200);
+    auto func = [](int x, int y) { return 4*x + 6* y + 10; };
     if (check_image(im, func)) {
         return -1;
     }

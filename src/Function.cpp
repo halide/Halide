@@ -358,6 +358,13 @@ void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
     dst.buffer = src.buffer;
     dst.expr = src.expr;
     dst.image_param = src.image_param;
+
+    if (!src.func.defined()) { // No need to copy the func
+        internal_assert(!src.is_func())
+            << "ExternFuncArgument has type FuncArg but has no function definition\n";
+        return;
+    }
+
     IntrusivePtr<FunctionContents> &copied_func = copied_map[src.func];
     if (copied_func.defined()) {
         dst.func = copied_func;
