@@ -338,9 +338,8 @@ private:
                                      Cast::make(op->type.element_of(), ramp_value->stride),
                                      ramp_value->lanes));
         } else if (add &&
-                   op->type.is_int() &&
-                   no_overflow(op->value.type()) &&
-                   no_overflow(op->type) &&
+                   op->type == Int(64) &&
+                   op->value.type() == Int(32) &&
                    is_const(add->b)) {
             // In the interest of moving constants outwards so they
             // can cancel, pull the addition outside of the cast.
