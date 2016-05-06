@@ -1483,10 +1483,8 @@ void check_hvx_all() {
     check("vpacko(v*.w,v*.w)", hvx_width/2, in_u16(2*x + 1));
     check("vdeal(v*,v*,r*)", hvx_width/4, in_u32(2*x + 1));
 
-    check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(3*x + 0));
-    check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(3*x + 2));
-    check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(3*x + 0));
-    check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(3*x + 2));
+    check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(3*x/2));
+    check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(3*x/2));
 
     check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(u8_1));
     check("vlut32(v*.b,v*.b,r*)", hvx_width/1, in_u8(clamp(u16_1, 0, 63)));

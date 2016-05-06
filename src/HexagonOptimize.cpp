@@ -935,7 +935,7 @@ class OptimizeShuffles : public IRMutator {
             // dynamic_shuffle requires.
             index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
 
-            expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent}, Call::PureIntrinsic);
+            expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
         } else if (!index.same_as(op->index)) {
             expr = Load::make(op->type, op->name, index, op->image, op->param);
         } else {
