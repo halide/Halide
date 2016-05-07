@@ -239,7 +239,7 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     int natural_vector_size(Halide::Type t) const {
-        user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0) 
+        user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
             << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
@@ -267,7 +267,7 @@ struct Target {
      * Target. This is 2^31 - 1 except when the LargeBuffers feature
      * is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        return has_feature(Halide::Target::LargeBuffers) ? 0x7fffffffffffffff : 0x7fffffff;
+        return has_feature(Halide::Target::LargeBuffers) ? 0x7fffffffffffffffLL : 0x7fffffff;
     }
 
     /** Was libHalide compiled with support for this target? */
