@@ -1268,7 +1268,7 @@ void CodeGen_LLVM::visit(const Variable *op) {
 void CodeGen_LLVM::visit(const Add *op) {
     if (op->type.is_float()) {
         value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
-    } else if (op->type.is_int()) {
+    } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
         value = builder->CreateNSWAdd(codegen(op->a), codegen(op->b));
@@ -1280,7 +1280,7 @@ void CodeGen_LLVM::visit(const Add *op) {
 void CodeGen_LLVM::visit(const Sub *op) {
     if (op->type.is_float()) {
         value = builder->CreateFSub(codegen(op->a), codegen(op->b));
-    } else if (op->type.is_int()) {
+    } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
         value = builder->CreateNSWSub(codegen(op->a), codegen(op->b));
@@ -1292,7 +1292,7 @@ void CodeGen_LLVM::visit(const Sub *op) {
 void CodeGen_LLVM::visit(const Mul *op) {
     if (op->type.is_float()) {
         value = builder->CreateFMul(codegen(op->a), codegen(op->b));
-    } else if (op->type.is_int()) {
+    } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
         value = builder->CreateNSWMul(codegen(op->a), codegen(op->b));
@@ -1898,8 +1898,10 @@ void CodeGen_LLVM::visit(const Ramp *op) {
             if (i > 0) {
                 if (op->type.is_float()) {
                     base = builder->CreateFAdd(base, stride);
-                } else {
+                } else if (op->type.is_int() && op->type.bits() >= 32) {
                     base = builder->CreateNSWAdd(base, stride);
+                } else {
+                    base = builder->CreateAdd(base, stride);
                 }
             }
             value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
