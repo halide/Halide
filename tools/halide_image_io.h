@@ -11,14 +11,8 @@
 #include <string>
 #include <vector>
 
-#ifndef NOPNG
+#ifndef HALIDE_NOPNG
 #include "png.h"
-#endif
-
-#ifndef NOSTL11
-#define STLDATA(x)      x.data()
-#else
-#define STLDATA(x)      &x[0]
 #endif
 
 namespace Halide {
@@ -124,7 +118,7 @@ struct FileOpener {
     char buf[FILEOPENER_MAX_LINE_LEN];
 };
 
-#ifndef NOPNG
+#ifndef HALIDE_NOPNG
 struct PngRowPointers {
     PngRowPointers(int height, int rowbytes) : p(new png_bytep[height]), height(height) {
         if (p != nullptr) {
@@ -144,16 +138,16 @@ struct PngRowPointers {
     png_bytep* const p;
     int const height;
 };
-#endif // NOPNG
+#endif // HALIDE_NOPNG
 
 }  // namespace Internal
 
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_png(const std::string &filename, ImageType *im) {
-#ifdef NOPNG
+#ifdef HALIDE_NOPNG
     return false;
-#else // NOPNG
+#else // HALIDE_NOPNG
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
@@ -238,15 +232,15 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     im->set_host_dirty();
     return true;
-#endif // NOPNG
+#endif // HALIDE_NOPNG
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
-#ifdef NOPNG
+#ifdef HALIDE_NOPNG
     return false;
-#else // NOPNG
+#else // HALIDE_NOPNG
     png_structp png_ptr;
     png_infop info_ptr;
     png_byte color_type;
@@ -338,7 +332,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;
-#endif // NOPNG
+#endif // HALIDE_NOPNG
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
@@ -378,7 +372,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height);
         if (fmt_binary) {
-            if (!check(fread((void *) STLDATA(data), sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
+            if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
         } else { // fmt_ascii
             unsigned int cnt = height * width, idx = 0;
             char *pos, *ptr;
@@ -405,7 +399,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
         if (fmt_binary) {
-            if (!check(fread((void *) STLDATA(data), sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
+            if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
         } else { // fmt_ascii
             unsigned int cnt = height * width, idx = 0;
             char *pos, *ptr;
@@ -461,7 +455,7 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
                 Internal::convert(im(x, y, channel), *p++);
             }
         }
-        if (!check(fwrite((void *) STLDATA(data), sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
+        if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
@@ -474,7 +468,7 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
                 *p++ = value;
             }
         }
-        if (!check(fwrite((void *) STLDATA(data), sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 16-bit data\n")) return false;
+        if (!check(fwrite((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 16-bit data\n")) return false;
     } else {
         return check(false, "We only support saving 8- and 16-bit images.");
     }
@@ -518,7 +512,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height*3);
         if (fmt_binary) {
-            if (!check(fread((void *) STLDATA(data), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
+            if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
         } else { // fmt_ascii
             unsigned int cnt = height * width * 3, idx = 0;
             char *pos, *ptr;
@@ -547,7 +541,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
         if (fmt_binary) {
-            if (!check(fread((void *) STLDATA(data), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
+            if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
         } else { // fmt_ascii
             unsigned int cnt = height * width * 3, idx = 0;
             char *pos, *ptr;
@@ -621,7 +615,7 @@ bool save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        if (!check(fwrite((void *) STLDATA(data), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
+        if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
@@ -654,7 +648,7 @@ bool save_ppm(ImageType &im, const std::string &filename) {
                 }
             }
         }
-        if (!check(fwrite((void *) STLDATA(data), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n")) return false;
+        if (!check(fwrite((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n")) return false;
     } else {
         return check(false, "We only support saving 8- and 16-bit images.");
     }
