@@ -3874,11 +3874,14 @@ void check_casts() {
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
 
+    check(cast(Int(64, 3), ramp(5.5f, 2.0f, 3)),
+          cast(Int(64, 3), ramp(5.5f, 2.0f, 3)));
     check(cast(Int(64, 3), ramp(x, 2, 3)),
           ramp(cast(Int(64), x), cast(Int(64), 2), 3));
 
     // Check cancellations can occur through casts
     check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
     // But only when overflow is undefined for the type
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
