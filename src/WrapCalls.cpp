@@ -106,14 +106,17 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
                     if ((wrapper.name() == in_func) || (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
-                        // Should not substitute itself or custom wrapper of the same func
+                        // The wrapper should still call the original function,
+                        // so we don't want to rewrite the calls done by the
+                        // wrapper. We also shouldn't rewrite the original
+                        // function itself.
                         debug(4) << "Skip over replacing \"" << in_func << "\" with \"" << wrapper.name() << "\"\n";
                         continue;
                     }
                     if (wrappers.count(in_func)) {
-                        // If the 'in_func' already has custom wrapper for 'wrapped_func',
-                        // don't substitute in the global wrapper. Custom wrapper always
-                        // takes precedence over global wrapper
+                        // If the 'in_func' already has custom wrapper for
+                        // 'wrapped_func', don't substitute in the global wrapper.
+                        // Custom wrapper always takes precedence over global wrapper
                         continue;
                     }
                     debug(4) << "Global wrapper: replacing reference of \""
@@ -133,7 +136,7 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
                     // the substitution since no function in this pipeline will ever
                     // refer to 'in_func'.
                     //
-                    // This condition might arise in the following case below:
+                    // This situation might arise in the following case below:
                     // f(x) = x;
                     // g(x) = f(x) + 1;
                     // f.in(g);
