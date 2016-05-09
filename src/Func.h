@@ -1639,15 +1639,11 @@ public:
      \endcode
      */
     EXPORT std::vector<Argument> infer_arguments() const;
-
-    bool operator < (const Func &other) const {
-        return func < other.func;
-    }
 };
 
- /** JIT-Compile and run enough code to evaluate a Halide
-  * expression. This can be thought of as a scalar version of
-  * \ref Func::realize */
+/** JIT-Compile and run enough code to evaluate a Halide
+ * expression. This can be thought of as a scalar version of
+ * \ref Func::realize */
 template<typename T>
 NO_INLINE T evaluate(Expr e) {
     user_assert(e.type() == type_of<T>())

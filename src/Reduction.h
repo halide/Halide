@@ -50,9 +50,6 @@ public:
     /** Immutable access to the reduction variables. */
     EXPORT const std::vector<ReductionVariable> &domain() const;
 
-    /** Mutable access to the reduction variables. */
-    EXPORT std::vector<ReductionVariable> &domain();
-
     /** Add predicate to the reduction domain. See \ref RDom::where
      * for more details. */
     EXPORT void where(Expr predicate);
@@ -75,6 +72,10 @@ public:
     /** Check if a RDom has been frozen. If so, it is an error to add new
      * predicates. */
     EXPORT bool frozen() const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * ReductionDomain. */
+    void mutate(IRMutator *);
 };
 
 EXPORT void split_predicate_test();

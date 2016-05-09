@@ -108,6 +108,20 @@ struct ReductionDomainContents {
     ReductionDomainContents() : predicate(const_true()), frozen(false) {
     }
 
+    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator *mutator) {
+        for (auto &rvar : domain) {
+            if (rvar.min.defined()) {
+                rvar.min = mutator->mutate(rvar.min);
+            }
+            if (rvar.extent.defined()) {
+                rvar.extent = mutator->mutate(rvar.extent);
+            }
+        }
+        if (predicate.defined()) {
+            predicate = mutator->mutate(predicate);
+        }
+    }
 };
 
 template<>
@@ -132,10 +146,6 @@ ReductionDomain ReductionDomain::deep_copy() const {
 }
 
 const std::vector<ReductionVariable> &ReductionDomain::domain() const {
-    return contents.ptr->domain;
-}
-
-std::vector<ReductionVariable> &ReductionDomain::domain() {
     return contents.ptr->domain;
 }
 
@@ -188,6 +198,12 @@ void ReductionDomain::freeze() {
 
 bool ReductionDomain::frozen() const {
     return contents.ptr->frozen;
+}
+
+void ReductionDomain::mutate(IRMutator *mutator) {
+    if (contents.defined()) {
+        contents.ptr->mutate(mutator);
+    }
 }
 
 }

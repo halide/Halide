@@ -11,8 +11,6 @@
 
 namespace Halide {
 
-
-
 /** Different ways to handle a tail case in a split when the
  * factor does not provably divide the extent. */
 enum class TailStrategy {
@@ -59,6 +57,8 @@ enum class TailStrategy {
 };
 
 namespace Internal {
+
+class IRMutator;
 
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
@@ -175,7 +175,13 @@ public:
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
 
-    /** Deep copy this Schedule into 'copy'. */
+    /** Return a deep copy of this Schedule. It recursively deep copies all called
+     * functions, schedules, specializations, and reduction domains. This method
+     * takes a map of <old FunctionContents, deep-copied version> as input and
+     * would use the deep-copied FunctionContents from the map if exists instead
+     * of creating a new deep-copy to avoid creating deep-copies of the same
+     * FunctionContents multiple times.
+     */
     EXPORT Schedule deep_copy(
         std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied) const;
 
@@ -241,9 +247,7 @@ public:
      * true. See \ref Func::specialize */
     // @{
     const std::vector<Specialization> &specializations() const;
-    std::vector<Specialization> &specializations();
     const Specialization &add_specialization(Expr condition);
-    //std::vector<Specialization> &specializations();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper
@@ -277,6 +281,10 @@ public:
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */
     void accept(IRVisitor *) const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * Schedule. */
+    void mutate(IRMutator *);
 };
 
 }

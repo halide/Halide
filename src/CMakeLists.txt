@@ -312,6 +312,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WrapCalls.h
   runtime/HalideRuntime.h
 )
 
