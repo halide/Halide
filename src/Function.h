@@ -58,6 +58,8 @@ struct UpdateDefinition {
     ReductionDomain domain;
 };
 
+struct FunctionCompare;
+
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
@@ -77,9 +79,15 @@ public:
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
 
-    /** Deep copy this Function into 'copy'. Note: this method does not deep-copy
-     * the Parameter objects. */
-    EXPORT void deep_copy(Function &copy, std::map<Function, Function> &copied_map) const;
+    /** Deep copy this Function into 'copy'. It recursively deep copies all called
+     * functions, schedules, update definitions, extern func arguments, specializations,
+     * and reduction domains. This method does not deep-copy the Parameter objects.
+     * This method also takes a map of <old Function, deep-copied version> as input
+     * and would use the deep-copied Function from the map if exists instead of
+     * creating a new deep-copy to avoid creating deep-copies of the same Function
+     * multiple times.
+     */
+    EXPORT void deep_copy(Function &copy, std::map<Function, Function, FunctionCompare> &copied_map) const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -220,19 +228,25 @@ public:
      * during the lowering stage. If the string 'f' is empty, it means replace
      * all calls to this function by all other functions (excluding itself) in
      * the pipeline with the wrapper. See \ref Func::in for more details. */
+    // @{
     EXPORT void add_wrapper(const Function &wrapper, const std::string &f);
-
-    /* Return map of wrappers defined on this function. */
     const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    // @}
 
-    /** Replace every call to function in 'substitutions' keys (including calls
-     * in each of its update's RDom's predicates) to call to function in
-     * 'substitutions' values. */
-    EXPORT Function &substitute_calls(const std::map<Function, Function> &substitutions);
+    /** Replace every call to Functions in 'substitutions' keys by all Exprs
+     * referenced in this Function to call to their substitute Functions (i.e.
+     * the corresponding values in 'substitutions' map). */
+    // @{
+    EXPORT Function &substitute_calls(const std::map<Function, Function, FunctionCompare> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
+    // @}
+};
 
-    bool operator < (const Function &other) const {
-        return contents.ptr < other.contents.ptr;
+/** This lets you use a Function as a key in a map of the form
+ * map<Function, Foo, FunctionCompare> */
+struct FunctionCompare {
+    bool operator()(const Function &a, const Function &b) const {
+        return a.contents.ptr < b.contents.ptr;
     }
 };
 

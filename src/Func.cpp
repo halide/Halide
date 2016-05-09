@@ -870,9 +870,7 @@ Func Func::in(const Func &f) {
     const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
     const auto &iter = wrappers.find(f.name());
     if (iter == wrappers.end()) {
-        string wrapper_name = name() + "_in_" + f.name();
-        wrapper_name = replace_all(wrapper_name, "$", "");
-        Func wrapper(wrapper_name);
+        Func wrapper(name() + "_in_" + f.name());
         wrapper(args()) = (*this)(args());
         func.add_wrapper(wrapper.func, f.name());
         return wrapper;
@@ -910,9 +908,7 @@ Func Func::in(const vector<Func>& fs) {
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        string wrapper_name = name() + "_wrapper";
-        wrapper_name = replace_all(wrapper_name, "$", "");
-        Func wrapper(wrapper_name);
+        Func wrapper(name() + "_wrapper");
         wrapper(args()) = (*this)(args());
         for (const Func &f : fs) {
             user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
@@ -949,9 +945,7 @@ Func Func::in() {
     const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
     const auto &iter = wrappers.find("");
     if (iter == wrappers.end()) {
-        string wrapper_name = name() + "_global_wrapper";
-        wrapper_name = replace_all(wrapper_name, "$", "");
-        Func wrapper(wrapper_name);
+        Func wrapper(name() + "_global_wrapper");
         wrapper(args()) = (*this)(args());
         func.add_wrapper(wrapper.func, "");
         return wrapper;
