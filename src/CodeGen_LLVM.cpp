@@ -421,12 +421,19 @@ bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
 namespace {
 
-void mangled_names(const LoweredFunc &f, const Target &target, std::string &simple_name,
-                   std::string &extern_name, std::string &argv_name, std::string &metadata_name) {
+struct MangledNames {
+    string simple_name;
+    string extern_name;
+    string argv_name;
+    string metadata_name;
+};
+
+MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     std::vector<std::string> namespaces;
-    simple_name = extract_namespaces(f.name, namespaces);
-    argv_name = simple_name + "_argv";
-    metadata_name = simple_name + "_metadata";
+    string simple_name = extract_namespaces(f.name, namespaces);
+    string extern_name = simple_name;
+    string argv_name = simple_name + "_argv";
+    string metadata_name = simple_name + "_metadata";
     const std::vector<Argument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
@@ -446,9 +453,8 @@ void mangled_names(const LoweredFunc &f, const Target &target, std::string &simp
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
         argv_name = cplusplus_function_mangled_name(argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
-    } else {
-        extern_name = simple_name;
     }
+    return { simple_name, extern_name, argv_name, metadata_name };
 }
 
 // Make a wrapper to call the function with an array of pointer
@@ -531,23 +537,17 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
         const LoweredFunc &f = input.functions[i];
+        const auto names = get_mangled_names(f, get_target());
 
-        std::string simple_name;
-        std::string extern_name;
-        std::string argv_name;
-        std::string metadata_name;
-
-        mangled_names(f, get_target(), simple_name, extern_name, argv_name, metadata_name);
-
-        compile_func(f, simple_name, extern_name);
+        compile_func(f, names.simple_name, names.extern_name);
 
         // If the Func is externally visible, also create the argv wrapper
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
-            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(metadata_name, simple_name, f.args);
+            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, names.argv_name);
+            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(simple_name, metadata_getter, wrapper);
+                register_metadata(names.simple_name, metadata_getter, wrapper);
             }
 
             if (target.has_feature(Target::Matlab)) {
