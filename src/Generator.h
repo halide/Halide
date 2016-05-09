@@ -621,6 +621,7 @@ private:
     virtual const std::string &generator_name() const = 0;
 
     EXPORT void build_params();
+    EXPORT void rebuild_params();
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
