@@ -42,8 +42,10 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         blur.gpu_tile(x, y, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.has_feature(Target::HVX_64)) {
         blur.hexagon().vectorize(x, 32);
+    } else if (target.has_feature(Target::HVX_128)) {
+        blur.hexagon().vectorize(x, 64);
     }
 
     Image<uint16_t> out = blur.realize(W, H, target);
