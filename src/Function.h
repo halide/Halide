@@ -58,14 +58,21 @@ struct UpdateDefinition {
     ReductionDomain domain;
 };
 
-struct FunctionCompare;
-
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
 class Function {
-public:
+
     IntrusivePtr<FunctionContents> contents;
+
+public:
+    /** This lets you use a Function as a key in a map of the form
+     * map<Function, Foo, FunctionCompare> */
+    struct FunctionCompare {
+        bool operator()(const Function &a, const Function &b) const {
+            return a.contents.ptr < b.contents.ptr;
+        }
+    };
 
     /** Construct a new function with no definitions and no name. This
      * constructor only exists so that you can make vectors of
@@ -78,6 +85,12 @@ public:
 
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
+
+    /** Get a handle on the halide function contents that this Function
+     * represents. */
+    IntrusivePtr<FunctionContents> get_contents() const {
+        return contents;
+    }
 
     /** Deep copy this Function into 'copy'. It recursively deep copies all called
      * functions, schedules, update definitions, extern func arguments, specializations,
@@ -114,11 +127,6 @@ public:
 
     /** Get the pure arguments */
     EXPORT const std::vector<std::string> &args() const;
-
-    /** Return true if contents is not NULL. */
-    EXPORT bool defined() const {
-        return contents.defined();
-    }
 
     /** Get the dimensionality */
     int dimensions() const {
@@ -240,14 +248,6 @@ public:
     EXPORT Function &substitute_calls(const std::map<Function, Function, FunctionCompare> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
-};
-
-/** This lets you use a Function as a key in a map of the form
- * map<Function, Foo, FunctionCompare> */
-struct FunctionCompare {
-    bool operator()(const Function &a, const Function &b) const {
-        return a.contents.ptr < b.contents.ptr;
-    }
 };
 
 }}

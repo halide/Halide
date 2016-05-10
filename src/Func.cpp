@@ -889,9 +889,9 @@ Func Func::in(const Func &f) {
             << "Redefinition of shared wrapper with " << it.first << " [" << name() << " -> "
             << Function(wfunc).name() << "] in " << f.name() << " is not allowed\n";
     }
-    Func wrapper = Func(Function(wfunc));
-    internal_assert(wrapper.func.frozen());
-    return wrapper;
+    Function wrapper(wfunc);
+    internal_assert(wrapper.frozen());
+    return Func(wrapper);
 }
 
 Func Func::in(const vector<Func>& fs) {
@@ -944,9 +944,9 @@ Func Func::in(const vector<Func>& fs) {
                 << it.first << " shares the same wrapper but not part of the redefinition\n";
         }
     }
-    Func wrapper = Func(Function(wfunc));
-    internal_assert(wrapper.func.frozen());
-    return wrapper;
+    Function wrapper(wfunc);
+    internal_assert(wrapper.frozen());
+    return Func(wrapper);
 }
 
 Func Func::in() {
@@ -961,9 +961,10 @@ Func Func::in() {
     }
 
     IntrusivePtr<FunctionContents> wfunc = iter->second;
-    Func wrapper = Func(Function(wfunc));
-    internal_assert(wrapper.defined() && wrapper.func.frozen());
-    return wrapper;
+    internal_assert(wfunc.defined());
+    Function wrapper(wfunc);
+    internal_assert(wrapper.frozen());
+    return Func(wrapper);
 }
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
