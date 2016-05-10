@@ -311,7 +311,7 @@ struct Type {
     bool is_handle() const {return code() == Handle;}
 
     /** Check that the type name of two handles matches. */
-    bool same_handle_type(const Type &other) const;
+    EXPORT bool same_handle_type(const Type &other) const;
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
