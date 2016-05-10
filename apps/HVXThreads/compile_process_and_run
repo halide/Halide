@@ -1,0 +1,3 @@
+#!/bin/bash
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/   -Wall -O0 -g process.cpp  pipeline_hvx64-host.o  -o process-host -lpthread -ldl -lm
+./process-host hvx64 1
