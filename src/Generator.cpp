@@ -364,7 +364,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? simple_name : file_base_name);
 
-    Module m = build_pipeline().compile_to_module(inputs, function_name, target);
+    Module m = pipeline.compile_to_module(inputs, function_name, target);
 
     if (options.emit_o || options.emit_assembly || options.emit_bitcode) {
         Outputs output_files;
