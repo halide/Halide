@@ -259,6 +259,13 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper) : si
 
 GeneratorBase::~GeneratorBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
+void GeneratorBase::rebuild_params() {
+    params_built = false;
+    filter_arguments.clear();
+    generator_params.clear();
+    build_params();
+}
+
 void GeneratorBase::build_params() {
     if (!params_built) {
         std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
@@ -345,8 +352,13 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const EmitOptions &options) {
     build_params();
 
+    Pipeline pipeline = build_pipeline();
+
+    // Building the pipeline may mutate the params and imageparams.
+    rebuild_params();
+
     std::vector<Halide::Argument> inputs = get_filter_arguments();
-    
+
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(function_name, namespaces);
 
