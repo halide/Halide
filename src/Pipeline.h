@@ -14,7 +14,6 @@
 #include "Image.h"
 #include "JITModule.h"
 #include "Module.h"
-#include "Output.h"
 #include "Tuple.h"
 #include "Target.h"
 
@@ -22,6 +21,7 @@ namespace Halide {
 
 struct Argument;
 class Func;
+struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
