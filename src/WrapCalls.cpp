@@ -12,7 +12,7 @@ using std::set;
 using std::string;
 using std::vector;
 
-typedef map<Function, Function, FunctionCompare> SubstitutionMap;
+typedef map<Function, Function, Function::FunctionCompare> SubstitutionMap;
 
 namespace {
 
@@ -28,10 +28,11 @@ bool is_copy(const Function& func, const SubstitutionMap &copied_map) {
 
 } // anonymous namespace
 
-void insert_func_wrapper_helper(map<Function, SubstitutionMap, FunctionCompare> &func_wrappers_map,
+void insert_func_wrapper_helper(map<Function, SubstitutionMap, Function::FunctionCompare> &func_wrappers_map,
                                 const Function &in_func, const Function &wrapped_func,
                                 const Function &wrapper) {
-    internal_assert(in_func.defined() && wrapped_func.defined() && wrapper.defined());
+    internal_assert(in_func.get_contents().defined() && wrapped_func.get_contents().defined() &&
+                    wrapper.get_contents().defined());
     internal_assert(func_wrappers_map[in_func].count(wrapped_func) == 0)
         << "Should only have one wrapper for each function call in a Func\n";
 
@@ -77,7 +78,7 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
         iter.second.substitute_calls(copied_map);
     }
 
-    map<Function, SubstitutionMap, FunctionCompare> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
+    map<Function, SubstitutionMap, Function::FunctionCompare> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
 
     // Populate the env with the deep-copy version
     for (const auto &iter : copied_map) {
