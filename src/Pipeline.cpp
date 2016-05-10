@@ -154,7 +154,7 @@ void Pipeline::compile_to(const Outputs &output_files,
             << "Can't compile undefined Func.\n";
     }
 
-    compile_module_to(compile_to_module(args, fn_name, target), output_files);
+    compile_module_to_outputs(compile_to_module(args, fn_name, target), output_files);
 }
 
 

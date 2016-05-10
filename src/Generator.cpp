@@ -390,7 +390,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
             // and passed to LLVM, for both the pnacl and ordinary archs
             output_files.bitcode_name = base_path + get_extension(".bc", options);
         }
-        compile_module_to(m, output_files);
+        compile_module_to_outputs(m, output_files);
     }
     if (options.emit_h) {
         compile_module_to_c_header(m, base_path + get_extension(".h", options));

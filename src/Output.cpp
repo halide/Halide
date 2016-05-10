@@ -9,7 +9,7 @@
 
 namespace Halide {
 
-void compile_module_to(const Module &module, const Outputs &output_files) {
+void compile_module_to_outputs(const Module &module, const Outputs &output_files) {
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(module, context));
 
@@ -45,13 +45,13 @@ void compile_module_to_object(const Module &module, std::string filename) {
         }
     }
 
-    compile_module_to(module, Outputs().object(filename));
+    compile_module_to_outputs(module, Outputs().object(filename));
 }
 
 void compile_module_to_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".s";
 
-    compile_module_to(module, Outputs().assembly(filename));
+    compile_module_to_outputs(module, Outputs().assembly(filename));
 }
 
 void compile_module_to_native(const Module &module,
@@ -69,19 +69,19 @@ void compile_module_to_native(const Module &module,
         assembly_filename = module.name() + ".s";
     }
 
-    compile_module_to(module, Outputs().object(object_filename).assembly(assembly_filename));
+    compile_module_to_outputs(module, Outputs().object(object_filename).assembly(assembly_filename));
 }
 
 void compile_module_to_llvm_bitcode(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".bc";
 
-    compile_module_to(module, Outputs().bitcode(filename));
+    compile_module_to_outputs(module, Outputs().bitcode(filename));
 }
 
 void compile_module_to_llvm_assembly(const Module &module, std::string filename)  {
     if (filename.empty()) filename = module.name() + ".ll";
 
-    compile_module_to(module, Outputs().llvm_assembly(filename));
+    compile_module_to_outputs(module, Outputs().llvm_assembly(filename));
 }
 
 void compile_module_to_llvm(const Module &module,
@@ -90,7 +90,7 @@ void compile_module_to_llvm(const Module &module,
     if (bitcode_filename.empty()) bitcode_filename = module.name() + ".bc";
     if (llvm_assembly_filename.empty()) llvm_assembly_filename = module.name() + ".ll";
 
-    compile_module_to(module, Outputs().bitcode(bitcode_filename).llvm_assembly(llvm_assembly_filename));
+    compile_module_to_outputs(module, Outputs().bitcode(bitcode_filename).llvm_assembly(llvm_assembly_filename));
 }
 
 void compile_module_to_html(const Module &module, std::string filename) {

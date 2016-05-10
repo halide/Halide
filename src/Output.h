@@ -71,7 +71,7 @@ struct Outputs {
  * because it re-uses internal results. The default filename is the
  * name of the module with the default extension for the target type
  * (.o for objects, .s for assembly). */
-EXPORT void compile_module_to(const Module &module, const Outputs &output_files);
+EXPORT void compile_module_to_outputs(const Module &module, const Outputs &output_files);
 
 /** Compile a halide Module to a native target (object file, native
  * assembly). The function that compiles both is more efficient
