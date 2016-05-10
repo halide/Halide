@@ -67,8 +67,8 @@ class Function {
 
 public:
     /** This lets you use a Function as a key in a map of the form
-     * map<Function, Foo, FunctionCompare> */
-    struct FunctionCompare {
+     * map<Function, Foo, Compare> */
+    struct Compare {
         bool operator()(const Function &a, const Function &b) const {
             return a.contents.ptr < b.contents.ptr;
         }
@@ -100,7 +100,7 @@ public:
      * creating a new deep-copy to avoid creating deep-copies of the same Function
      * multiple times.
      */
-    EXPORT void deep_copy(Function &copy, std::map<Function, Function, FunctionCompare> &copied_map) const;
+    EXPORT void deep_copy(Function &copy, std::map<Function, Function, Compare> &copied_map) const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -245,7 +245,7 @@ public:
      * referenced in this Function to call to their substitute Functions (i.e.
      * the corresponding values in 'substitutions' map). */
     // @{
-    EXPORT Function &substitute_calls(const std::map<Function, Function, FunctionCompare> &substitutions);
+    EXPORT Function &substitute_calls(const std::map<Function, Function, Compare> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
 };

@@ -390,7 +390,7 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
 }
 
 void Function::deep_copy(Function &copy,
-                         std::map<Function, Function, Function::FunctionCompare> &copied_map) const {
+                         std::map<Function, Function, Function::Compare> &copied_map) const {
     internal_assert(copy.contents.defined() && contents.defined())
         << "Cannot deep-copy undefined Function\n";
     // Need to copy over the contents of Functions in 'copied_map' since
@@ -869,7 +869,7 @@ namespace {
 class SubstituteCalls : public IRMutator {
     using IRMutator::visit;
 
-    map<Function, Function, Function::FunctionCompare> substitutions;
+    map<Function, Function, Function::Compare> substitutions;
 
     void visit(const Call *c) {
         IRMutator::visit(c);
@@ -884,13 +884,13 @@ class SubstituteCalls : public IRMutator {
         }
     }
 public:
-    SubstituteCalls(const map<Function, Function, Function::FunctionCompare> &substitutions)
+    SubstituteCalls(const map<Function, Function, Function::Compare> &substitutions)
         : substitutions(substitutions) {}
 };
 
 } // anonymous namespace
 
-Function &Function::substitute_calls(const map<Function, Function, FunctionCompare> &substitutions) {
+Function &Function::substitute_calls(const map<Function, Function, Compare> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
 
     if (substitutions.empty()) {
@@ -902,7 +902,7 @@ Function &Function::substitute_calls(const map<Function, Function, FunctionCompa
 }
 
 Function &Function::substitute_calls(const Function &orig, const Function &substitute) {
-    map<Function, Function, FunctionCompare> substitutions;
+    map<Function, Function, Compare> substitutions;
     substitutions.emplace(orig, substitute);
     return substitute_calls(substitutions);
 }
