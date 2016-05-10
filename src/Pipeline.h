@@ -14,6 +14,7 @@
 #include "Image.h"
 #include "JITModule.h"
 #include "Module.h"
+#include "Output.h"
 #include "Tuple.h"
 #include "Target.h"
 
@@ -48,58 +49,6 @@ void delete_lowering_pass(T *pass) {
 struct CustomLoweringPass {
     Internal::IRMutator *pass;
     void (*deleter)(Internal::IRMutator *);
-};
-
-/** A struct specifying a collection of outputs. Used as an argument
- * to Pipeline::compile_to and Func::compile_to */
-struct Outputs {
-    /** The name of the emitted object file. Empty if no object file
-     * output is desired. */
-    std::string object_name;
-
-    /** The name of the emitted text assembly file. Empty if no
-     * assembly file output is desired. */
-    std::string assembly_name;
-
-    /** The name of the emitted llvm bitcode. Empty if no llvm bitcode
-     * output is desired. */
-    std::string bitcode_name;
-
-    /** The name of the emitted llvm assembly. Empty if no llvm assembly
-     * output is desired. */
-    std::string llvm_assembly_name;
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an object file with the given name. */
-    Outputs object(const std::string &object_name) {
-        Outputs updated = *this;
-        updated.object_name = object_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an assembly file with the given name. */
-    Outputs assembly(const std::string &assembly_name) {
-        Outputs updated = *this;
-        updated.assembly_name = assembly_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an llvm bitcode file with the given name. */
-    Outputs bitcode(const std::string &bitcode_name) {
-        Outputs updated = *this;
-        updated.bitcode_name = bitcode_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an llvm assembly file with the given name. */
-    Outputs llvm_assembly(const std::string &llvm_assembly_name) {
-        Outputs updated = *this;
-        updated.llvm_assembly_name = llvm_assembly_name;
-        return updated;
-    }
 };
 
 struct JITExtern;
