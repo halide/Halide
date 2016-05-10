@@ -29,9 +29,9 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
     // does not work with NaCl at the moment.
 
-    Expr no_overflow = const_true(1);
-    Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
-    Expr max_size = Expr(target.maximum_buffer_size());
+    Expr no_overflow = const_true();
+    Expr total_size = make_const(Int(64), type.lanes() * type.bytes());
+    Expr max_size = make_const(Int(64), target.maximum_buffer_size());
     for (size_t i = 0; i < extents.size(); i++) {
         total_size *= extents[i];
         no_overflow = no_overflow && (total_size <= max_size);

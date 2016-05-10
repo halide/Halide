@@ -311,7 +311,8 @@ Stmt add_image_checks(Stmt s,
             // is used in the schedule to combine multiple extents,
             // but it is here for extra safety. On targets with the
             // LargeBuffers feature, the maximum size is 2^63 - 1.
-            Expr max_size = Expr(t.maximum_buffer_size()), max_extent = cast<int64_t>(0x7fffffff);
+            Expr max_size = make_const(Int(64), t.maximum_buffer_size());
+            Expr max_extent = make_const(Int(64), 0x7fffffff);
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
