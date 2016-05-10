@@ -293,6 +293,7 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
   Image.cpp \
+  ImageParam.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
@@ -319,8 +320,8 @@ SOURCE_FILES = \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
   Output.cpp \
+  OutputImageParam.cpp \
   ParallelRVar.cpp \
-  Param.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
@@ -420,6 +421,7 @@ HEADER_FILES = \
   Generator.h \
   runtime/HalideRuntime.h \
   Image.h \
+  ImageParam.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
@@ -449,6 +451,7 @@ HEADER_FILES = \
   Monotonic.h \
   ObjectInstanceRegistry.h \
   Output.h \
+  OutputImageParam.h \
   ParallelRVar.h \
   Parameter.h \
   Param.h \

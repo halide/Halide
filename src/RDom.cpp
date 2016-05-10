@@ -1,5 +1,6 @@
 #include "RDom.h"
 #include "Util.h"
+#include "ImageParam.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"

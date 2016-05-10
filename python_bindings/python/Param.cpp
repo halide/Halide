@@ -7,6 +7,8 @@
 #include "add_operators.h"
 
 #include "../../src/Param.h"
+#include "../../src/OutputImageParam.h"
+#include "../../src/ImageParam.h"
 #include "../../src/IROperator.h" // enables Param + Expr operations (which include is it ?)
 #include "Type.h"
 
