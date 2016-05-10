@@ -252,6 +252,7 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   Image.h
+  ImageParam.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
@@ -274,6 +275,7 @@ set(HEADER_FILES
   Monotonic.h
   ObjectInstanceRegistry.h
   Output.h
+  OutputImageParam.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -399,6 +401,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   Image.cpp
+  ImageParam.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
@@ -418,8 +421,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Monotonic.cpp
   ObjectInstanceRegistry.cpp
   Output.cpp
+  OutputImageParam.cpp
   ParallelRVar.cpp
-  Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
   Pipeline.cpp
