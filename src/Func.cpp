@@ -872,6 +872,7 @@ Func Func::in(const Func &f) {
     if (iter == wrappers.end()) {
         Func wrapper(name() + "_in_" + f.name());
         wrapper(args()) = (*this)(args());
+        wrapper.func.freeze();
         func.add_wrapper(wrapper.func, f.name());
         return wrapper;
     }
@@ -888,7 +889,9 @@ Func Func::in(const Func &f) {
             << "Redefinition of shared wrapper with " << it.first << " [" << name() << " -> "
             << Function(wfunc).name() << "] in " << f.name() << " is not allowed\n";
     }
-    return Func(Function(wfunc));
+    Func wrapper = Func(Function(wfunc));
+    internal_assert(wrapper.func.frozen());
+    return wrapper;
 }
 
 Func Func::in(const vector<Func>& fs) {
@@ -912,12 +915,15 @@ Func Func::in(const vector<Func>& fs) {
         wrapper(args()) = (*this)(args());
         for (const Func &f : fs) {
             user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
+            wrapper.func.freeze();
             func.add_wrapper(wrapper.func, f.name());
         }
         return wrapper;
     }
 
     IntrusivePtr<FunctionContents> wfunc = iter->second;
+    internal_assert(wfunc.defined());
+
     // Make sure all the other Funcs in 'fs' share the same wrapper and no other
     // Func not in 'fs' share the same wrapper.
     for (const auto &it : wrappers) {
@@ -938,7 +944,9 @@ Func Func::in(const vector<Func>& fs) {
                 << it.first << " shares the same wrapper but not part of the redefinition\n";
         }
     }
-    return Func(Function(wfunc));
+    Func wrapper = Func(Function(wfunc));
+    internal_assert(wrapper.func.frozen());
+    return wrapper;
 }
 
 Func Func::in() {
@@ -947,13 +955,15 @@ Func Func::in() {
     if (iter == wrappers.end()) {
         Func wrapper(name() + "_global_wrapper");
         wrapper(args()) = (*this)(args());
+        wrapper.func.freeze();
         func.add_wrapper(wrapper.func, "");
         return wrapper;
     }
 
     IntrusivePtr<FunctionContents> wfunc = iter->second;
-    internal_assert(wfunc.defined());
-    return Func(Function(wfunc));
+    Func wrapper = Func(Function(wfunc));
+    internal_assert(wrapper.defined() && wrapper.func.frozen());
+    return wrapper;
 }
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
