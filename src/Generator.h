@@ -623,6 +623,10 @@ private:
     EXPORT void build_params();
     EXPORT void rebuild_params();
 
+    // Call build() and produce a Module for the result. 
+    // If function_name is empty, generator_name() will be used for the function.
+    EXPORT Module build_module(const std::string &function_name = "");
+
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
     // of the same name by accident: use the get_target() method instead.
