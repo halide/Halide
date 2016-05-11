@@ -1,5 +1,5 @@
 #include "Generator.h"
-#include "Output.h"
+#include "Outputs.h"
 
 namespace {
 
@@ -401,7 +401,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     if (options.emit_stmt_html) {
         output_files.stmt_html_name = base_path + get_extension(".html", options);
     }
-    compile_module_to_outputs(m, output_files);
+    m.compile(output_files);
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,

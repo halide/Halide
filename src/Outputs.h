@@ -9,12 +9,10 @@
 
 #include <string>
 
-#include "Module.h"
-
 namespace Halide {
 
 /** A struct specifying a collection of outputs. Used as an argument
- * to Pipeline::compile_to and Func::compile_to */
+ * to Pipeline::compile_to and Func::compile_to and Module::compile. */
 struct Outputs {
     /** The name of the emitted object file. Empty if no object file
      * output is desired. */
@@ -112,18 +110,6 @@ struct Outputs {
         return updated;
     }
 };
-
-/** Compile a halide Module to a native target (object file, native
- * assembly) or an LLVM Target (bitcode file, llvm assembly), depending on 
- * the target setting of the Module. The function that compiles both is more efficient
- * because it re-uses internal results. The default filename is the
- * name of the module with the default extension for the target type
- * (.o for objects, .s for assembly). */
-EXPORT void compile_module_to_outputs(const Module &module, const Outputs &output_files);
-
-/** Create an object file containing the Halide runtime for a given
- * target. For use with Target::NoRuntime. */
-EXPORT void compile_standalone_runtime(std::string object_filename, Target t);
 
 }
 

@@ -7,7 +7,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
-#include "Output.h"
+#include "Outputs.h"
 #include "PrintLoopNest.h"
 
 using namespace Halide::Internal;
@@ -162,7 +162,7 @@ void Pipeline::compile_to(const Outputs &output_files,
             << "Can't compile undefined Func.\n";
     }
 
-    compile_module_to_outputs(compile_to_module(args, fn_name, target), output_files);
+    compile_to_module(args, fn_name, target).compile(output_files);
 }
 
 
@@ -171,7 +171,7 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const string &fn_name,
                                   const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    compile_module_to_outputs(m, Outputs().bitcode(output_name(filename, m, ".bc")));
+    m.compile(Outputs().bitcode(output_name(filename, m, ".bc")));
 }
 
 void Pipeline::compile_to_llvm_assembly(const string &filename,
@@ -179,7 +179,7 @@ void Pipeline::compile_to_llvm_assembly(const string &filename,
                                         const string &fn_name,
                                         const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    compile_module_to_outputs(m, Outputs().llvm_assembly(output_name(filename, m, ".ll")));
+    m.compile(Outputs().llvm_assembly(output_name(filename, m, ".ll")));
 }
 
 void Pipeline::compile_to_object(const string &filename,
@@ -188,7 +188,7 @@ void Pipeline::compile_to_object(const string &filename,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-    compile_module_to_outputs(m, Outputs().object(output_name(filename, m, ext)));
+    m.compile(Outputs().object(output_name(filename, m, ext)));
 }
 
 void Pipeline::compile_to_header(const string &filename,
@@ -196,7 +196,7 @@ void Pipeline::compile_to_header(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    compile_module_to_outputs(m, Outputs().c_header(output_name(filename, m, ".h")));
+    m.compile(Outputs().c_header(output_name(filename, m, ".h")));
 }
 
 void Pipeline::compile_to_assembly(const string &filename,
@@ -204,7 +204,7 @@ void Pipeline::compile_to_assembly(const string &filename,
                                    const string &fn_name,
                                    const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    compile_module_to_outputs(m, Outputs().assembly(output_name(filename, m, ".s")));
+    m.compile(Outputs().assembly(output_name(filename, m, ".s")));
 }
 
 
@@ -213,7 +213,7 @@ void Pipeline::compile_to_c(const string &filename,
                             const string &fn_name,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    compile_module_to_outputs(m, Outputs().c_source(output_name(filename, m, ".c")));
+    m.compile(Outputs().c_source(output_name(filename, m, ".c")));
 }
 
 void Pipeline::print_loop_nest() {
@@ -232,7 +232,7 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
     } else {
         outputs = Outputs().stmt(output_name(filename, m, ".stmt"));
     }
-    compile_module_to_outputs(m, outputs);
+    m.compile(outputs);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,
@@ -248,7 +248,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     } else {
         outputs = outputs.object(filename_prefix + ".o");
     }
-    compile_module_to_outputs(m, outputs);
+    m.compile(outputs);
 }
 
 namespace Internal {
@@ -643,7 +643,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
         }
         string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
         debug(4) << "Saving bitcode to: " << file_name << "\n";
-        compile_module_to_outputs(module, Outputs().bitcode(file_name));
+        module.compile(Outputs().bitcode(file_name));
     }
 
     contents.ptr->jit_module = jit_module;
