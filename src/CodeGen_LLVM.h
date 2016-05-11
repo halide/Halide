@@ -487,6 +487,8 @@ private:
     llvm::Constant *embed_constant_expr(Expr e);
 
     void register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper);
+
+    llvm::Function *add_argv_wrapper(const std::string &name);
 };
 
 }

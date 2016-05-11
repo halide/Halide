@@ -170,7 +170,8 @@ public:
      * contained Module suitable for further compilation. */
     EXPORT Module compile_to_module(const std::vector<Argument> &args,
                                     const std::string &fn_name,
-                                    const Target &target = get_target_from_environment());
+                                    const Target &target = get_target_from_environment(),
+                                    const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::External);
 
    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -380,8 +381,9 @@ public:
      * been rescheduled. */
     EXPORT void invalidate_cache();
 
-    private:
-        std::string generate_function_name();
+private:
+    std::string generate_function_name() const;
+    std::vector<Argument> build_public_args(const std::vector<Argument> &args, const Target &target) const;
 
 };
 
