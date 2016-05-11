@@ -421,12 +421,21 @@ bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
 
 namespace {
 
-void mangled_names(const LoweredFunc &f, const Target &target, std::string &simple_name,
-                   std::string &extern_name, std::string &argv_name, std::string &metadata_name) {
+struct MangledNames {
+    string simple_name;
+    string extern_name;
+    string argv_name;
+    string metadata_name;
+};
+
+MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     std::vector<std::string> namespaces;
-    simple_name = extract_namespaces(f.name, namespaces);
-    argv_name = simple_name + "_argv";
-    metadata_name = simple_name + "_metadata";
+    MangledNames names;
+    names.simple_name = extract_namespaces(f.name, namespaces);
+    names.extern_name = names.simple_name;
+    names.argv_name = names.simple_name + "_argv";
+    names.metadata_name = names.simple_name + "_metadata";
+    
     const std::vector<Argument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
@@ -441,52 +450,13 @@ void mangled_names(const LoweredFunc &f, const Target &target, std::string &simp
                 mangle_args.push_back(ExternFuncArgument(Buffer()));
             }
         }
-        extern_name = cplusplus_function_mangled_name(simple_name, namespaces, type_of<int>(), mangle_args, target);
+        names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
         halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
-        argv_name = cplusplus_function_mangled_name(argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
-    } else {
-        extern_name = simple_name;
+        names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
     }
-}
-
-// Make a wrapper to call the function with an array of pointer
-// args. This is easier for the JIT to call than a function with an
-// unknown (at compile time) argument list.
-llvm::Function *add_argv_wrapper(llvm::Module *m, llvm::Function *fn, const std::string &name) {
-    llvm::Type *buffer_t_type = m->getTypeByName("struct.buffer_t");
-    llvm::Type *i8 = llvm::Type::getInt8Ty(m->getContext());
-    llvm::Type *i32 = llvm::Type::getInt32Ty(m->getContext());
-
-    llvm::Type *args_t[] = {i8->getPointerTo()->getPointerTo()};
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, args_t, false);
-    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, m);
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", wrapper);
-    llvm::IRBuilder<> builder(m->getContext());
-    builder.SetInsertPoint(block);
-
-    llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
-
-    std::vector<llvm::Value *> wrapper_args;
-    for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
-        // Get the address of the nth argument
-        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, wrapper_args.size());
-        ptr = builder.CreateLoad(ptr);
-        if (i->getType() == buffer_t_type->getPointerTo()) {
-            // Cast the argument to a buffer_t *
-            wrapper_args.push_back(builder.CreatePointerCast(ptr, buffer_t_type->getPointerTo()));
-        } else {
-            // Cast to the appropriate type and load
-            ptr = builder.CreatePointerCast(ptr, i->getType()->getPointerTo());
-            wrapper_args.push_back(builder.CreateLoad(ptr));
-        }
-    }
-    debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::Value *result = builder.CreateCall(fn, wrapper_args);
-    builder.CreateRet(result);
-    llvm::verifyFunction(*wrapper);
-    return wrapper;
+    return names;
 }
 
 }  // namespace
@@ -526,28 +496,21 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
-    for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile_buffer(input.buffers[i]);
+    for (const auto &b : input.buffers()) {
+        compile_buffer(b);
     }
-    for (size_t i = 0; i < input.functions.size(); i++) {
-        const LoweredFunc &f = input.functions[i];
+    for (const auto &f : input.functions()) {
+        const auto names = get_mangled_names(f, get_target());
 
-        std::string simple_name;
-        std::string extern_name;
-        std::string argv_name;
-        std::string metadata_name;
-
-        mangled_names(f, get_target(), simple_name, extern_name, argv_name, metadata_name);
-
-        compile_func(f, simple_name, extern_name);
+        compile_func(f, names.simple_name, names.extern_name);
 
         // If the Func is externally visible, also create the argv wrapper
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
-            llvm::Function *wrapper = add_argv_wrapper(module.get(), function, argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(metadata_name, simple_name, f.args);
+            llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
+            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
             if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(simple_name, metadata_getter, wrapper);
+                register_metadata(names.simple_name, metadata_getter, wrapper);
             }
 
             if (target.has_feature(Target::Matlab)) {
@@ -813,6 +776,39 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
         ConstantExpr::getInBoundsGetElementPtr(storage, zero),
 #endif
         scalar_value_t_type->getPointerTo());
+}
+
+// Make a wrapper to call the function with an array of pointer
+// args. This is easier for the JIT to call than a function with an
+// unknown (at compile time) argument list.
+llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
+    llvm::Type *args_t[] = {i8->getPointerTo()->getPointerTo()};
+    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, args_t, false);
+    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
+    builder->SetInsertPoint(block);
+
+    llvm::Value *arg_array = iterator_to_pointer(wrapper->arg_begin());
+
+    std::vector<llvm::Value *> wrapper_args;
+    for (llvm::Function::arg_iterator i = function->arg_begin(); i != function->arg_end(); i++) {
+        // Get the address of the nth argument
+        llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        ptr = builder->CreateLoad(ptr);
+        if (i->getType() == buffer_t_type->getPointerTo()) {
+            // Cast the argument to a buffer_t *
+            wrapper_args.push_back(builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo()));
+        } else {
+            // Cast to the appropriate type and load
+            ptr = builder->CreatePointerCast(ptr, i->getType()->getPointerTo());
+            wrapper_args.push_back(builder->CreateLoad(ptr));
+        }
+    }
+    debug(4) << "Creating call from wrapper to actual function\n";
+    llvm::Value *result = builder->CreateCall(function, wrapper_args);
+    builder->CreateRet(result);
+    llvm::verifyFunction(*wrapper);
+    return wrapper;
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
@@ -1268,7 +1264,7 @@ void CodeGen_LLVM::visit(const Variable *op) {
 void CodeGen_LLVM::visit(const Add *op) {
     if (op->type.is_float()) {
         value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
-    } else if (op->type.is_int()) {
+    } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
         value = builder->CreateNSWAdd(codegen(op->a), codegen(op->b));
@@ -1280,7 +1276,7 @@ void CodeGen_LLVM::visit(const Add *op) {
 void CodeGen_LLVM::visit(const Sub *op) {
     if (op->type.is_float()) {
         value = builder->CreateFSub(codegen(op->a), codegen(op->b));
-    } else if (op->type.is_int()) {
+    } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
         value = builder->CreateNSWSub(codegen(op->a), codegen(op->b));
@@ -1292,7 +1288,7 @@ void CodeGen_LLVM::visit(const Sub *op) {
 void CodeGen_LLVM::visit(const Mul *op) {
     if (op->type.is_float()) {
         value = builder->CreateFMul(codegen(op->a), codegen(op->b));
-    } else if (op->type.is_int()) {
+    } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
         value = builder->CreateNSWMul(codegen(op->a), codegen(op->b));
@@ -1898,8 +1894,10 @@ void CodeGen_LLVM::visit(const Ramp *op) {
             if (i > 0) {
                 if (op->type.is_float()) {
                     base = builder->CreateFAdd(base, stride);
-                } else {
+                } else if (op->type.is_int() && op->type.bits() >= 32) {
                     base = builder->CreateNSWAdd(base, stride);
+                } else {
+                    base = builder->CreateAdd(base, stride);
                 }
             }
             value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
