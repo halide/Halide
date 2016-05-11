@@ -256,8 +256,8 @@ public:
      * the pipeline with the wrapper. See \ref Func::in for more details. */
     // @{
     const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
-    EXPORT void add_wrapper(const IntrusivePtr<Internal::FunctionContents> &wrapper,
-                            const std::string &f);
+    EXPORT void add_wrapper(const std::string &f,
+                            const IntrusivePtr<Internal::FunctionContents> &wrapper);
     // @}
 
     /** At what sites should we inject the allocation and the
