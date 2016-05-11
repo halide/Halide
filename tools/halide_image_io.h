@@ -345,15 +345,12 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     int width, height, maxval;
     char header[256];
     bool fmt_binary = false;
-    bool fmt_ascii  = false;
 
     f.readLine();
     if (!check(sscanf(f.buf, "%255s", header) == 1, "Could not read PGM header\n")) return false;
     if (header == std::string("P5") || header == std::string("p5"))
         fmt_binary = true;
-    if (header == std::string("P2") || header == std::string("p2"))
-        fmt_ascii = true;
-    if (!check(fmt_binary || fmt_ascii, "Input is not PGM\n")) return false;
+    if (!check(fmt_binary, "Input is not binary PGM\n")) return false;
 
     f.readLine();
     if (!check(sscanf(f.buf, "%d %d\n", &width, &height) == 2, "Could not read PGM width and height\n")) return false;
@@ -371,23 +368,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     // convert the data to ImageType::ElemType
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height);
-        if (fmt_binary) {
-            if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
-        } else { // fmt_ascii
-            unsigned int cnt = height * width, idx = 0;
-            char *pos, *ptr;
-            while (cnt && ((ptr = f.readLine()))) {
-                while ((pos = strtok(ptr, " \t"))) {
-                    uint8_t value;
-                    if (sscanf(pos, "%hhu", &value) == 1) {
-                        data[idx++] = value;
-                        cnt--;
-                    }
-                    ptr = NULL;
-                }
-            }
-            if (!check(cnt == 0, "Could not read PGM 8-bit ASCII data\n")) return false;
-        }
+        if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
         uint8_t *p = &data[0];
         for (int y = 0; y < height; y++) {
@@ -398,30 +379,13 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
-        if (fmt_binary) {
-            if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
-        } else { // fmt_ascii
-            unsigned int cnt = height * width, idx = 0;
-            char *pos, *ptr;
-            while (cnt && ((ptr = f.readLine()))) {
-                while ((pos = strtok(ptr, " \t"))) {
-                    uint16_t value;
-                    if (sscanf(pos, "%hu", &value) == 1) {
-                        data[idx++] = value;
-                        cnt--;
-                    }
-                    ptr = NULL;
-                }
-            }
-            if (!check(cnt == 0, "Could not read PGM 16-bit ASCII data\n")) return false;
-        }
+        if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
         uint16_t *p = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 uint16_t value = *p++;
-                if (fmt_binary)
-                    Internal::swap_endian_16(little_endian, value);
+                Internal::swap_endian_16(little_endian, value);
                 Internal::convert(value, *im_data++);
             }
         }
@@ -485,15 +449,12 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     int width, height, maxval;
     char header[256];
     bool fmt_binary = false;
-    bool fmt_ascii  = false;
 
     f.readLine();
     if (!check(sscanf(f.buf, "%255s", header) == 1, "Could not read PPM header\n")) return false;
     if (header == std::string("P6") || header == std::string("p6"))
         fmt_binary = true;
-    if (header == std::string("P3") || header == std::string("p3"))
-        fmt_ascii = true;
-    if (!check(fmt_binary || fmt_ascii, "Input is not PPM\n")) return false;
+    if (!check(fmt_binary, "Input is not binary PPM\n")) return false;
 
     f.readLine();
     if (!check(sscanf(f.buf, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
@@ -511,23 +472,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     // convert the data to ImageType::ElemType
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height*3);
-        if (fmt_binary) {
-            if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
-        } else { // fmt_ascii
-            unsigned int cnt = height * width * 3, idx = 0;
-            char *pos, *ptr;
-            while (cnt && ((ptr = f.readLine()))) {
-                while ((pos = strtok(ptr, " \t"))) {
-                    uint8_t value;
-                    if (sscanf(pos, "%hhu", &value) == 1) {
-                        data[idx++] = value;
-                        cnt--;
-                    }
-                    ptr = NULL;
-                }
-            }
-            if (!check(cnt == 0, "Could not read PPM 8-bit ASCII data\n")) return false;
-        }
+        if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
         uint8_t *row = &data[0];
         for (int y = 0; y < height; y++) {
@@ -540,39 +485,20 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
-        if (fmt_binary) {
-            if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
-        } else { // fmt_ascii
-            unsigned int cnt = height * width * 3, idx = 0;
-            char *pos, *ptr;
-            while (cnt && ((ptr = f.readLine()))) {
-                while ((pos = strtok(ptr, " \t"))) {
-                    uint16_t value;
-                    if (sscanf(pos, "%hu", &value) == 1) {
-                        data[idx++] = value;
-                        cnt--;
-                    }
-                    ptr = NULL;
-                }
-            }
-            if (!check(cnt == 0, "Could not read PPM 16-bit ASCII data\n")) return false;
-        }
+        if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
         uint16_t *row = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 uint16_t value;
                 value = *row++;
-                if (fmt_binary)
-                    Internal::swap_endian_16(little_endian, value);
+                Internal::swap_endian_16(little_endian, value);
                 Internal::convert(value, im_data[(0*height+y)*width+x]);
                 value = *row++;
-                if (fmt_binary)
-                    Internal::swap_endian_16(little_endian, value);
+                Internal::swap_endian_16(little_endian, value);
                 Internal::convert(value, im_data[(1*height+y)*width+x]);
                 value = *row++;
-                if (fmt_binary)
-                    Internal::swap_endian_16(little_endian, value);
+                Internal::swap_endian_16(little_endian, value);
                 Internal::convert(value, im_data[(2*height+y)*width+x]);
             }
         }
