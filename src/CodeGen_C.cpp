@@ -437,11 +437,11 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
-    for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile(input.buffers[i]);
+    for (const auto &b : input.buffers()) {
+        compile(b);
     }
-    for (size_t i = 0; i < input.functions.size(); i++) {
-        compile(input.functions[i]);
+    for (const auto &f : input.functions()) {
+        compile(f);
     }
 }
 

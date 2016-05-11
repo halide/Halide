@@ -47,6 +47,12 @@ class Module {
     std::string name_;
     Target target_;
 
+    /** The declarations contained in this module. */
+    // @{
+    std::vector<Buffer> buffers_;
+    std::vector<Internal::LoweredFunc> functions_;
+    // @}
+
 public:
     EXPORT Module(const std::string &name, const Target &target) : name_(name), target_(target) {}
 
@@ -57,19 +63,17 @@ public:
      * for output operations. */
     EXPORT const std::string &name() const { return name_; }
 
-    /** The declarations contained in this module. */
-    // @{
-    std::vector<Buffer> buffers;
-    std::vector<Internal::LoweredFunc> functions;
-    // @}
+    EXPORT const std::vector<Buffer> &buffers() const { return buffers_; }
+
+    EXPORT const std::vector<Internal::LoweredFunc> &functions() const { return functions_; }
 
     /** Add a declaration to this module. */
     // @{
     void append(const Buffer &buffer) {
-        buffers.push_back(buffer);
+        buffers_.push_back(buffer);
     }
     void append(const Internal::LoweredFunc &function) {
-        functions.push_back(function);
+        functions_.push_back(function);
     }
     // @}
 };
