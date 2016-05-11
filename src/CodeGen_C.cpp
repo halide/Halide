@@ -354,11 +354,11 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
-    for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile(input.buffers[i], input.target());
+    for (const auto &b : input.buffers()) {
+        compile(b, input.target());
     }
-    for (size_t i = 0; i < input.functions.size(); i++) {
-        compile(input.functions[i], input.target());
+    for (const auto &f : input.functions()) {
+        compile(f, input.target());
     }
 }
 

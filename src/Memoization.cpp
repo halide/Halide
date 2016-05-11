@@ -59,6 +59,8 @@ public:
             Function fn(call->func);
             visit_function(fn);
             IRGraphVisitor::visit(call);
+        } else {
+            IRGraphVisitor::visit(call);
         }
     }
 

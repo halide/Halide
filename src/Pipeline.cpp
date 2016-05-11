@@ -154,28 +154,7 @@ void Pipeline::compile_to(const Outputs &output_files,
             << "Can't compile undefined Func.\n";
     }
 
-    Module m = compile_to_module(args, fn_name, target);
-
-    llvm::LLVMContext context;
-    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, context));
-
-    if (!output_files.object_name.empty()) {
-        if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.object_name);
-        } else {
-            compile_llvm_module_to_object(*llvm_module, output_files.object_name);
-        }
-    }
-    if (!output_files.assembly_name.empty()) {
-        if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.assembly_name);
-        } else {
-            compile_llvm_module_to_assembly(*llvm_module, output_files.assembly_name);
-        }
-    }
-    if (!output_files.bitcode_name.empty()) {
-        compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.bitcode_name);
-    }
+    compile_module_to_outputs(compile_to_module(args, fn_name, target), output_files);
 }
 
 
@@ -463,10 +442,39 @@ vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args) {
     return images_to_embed;
 }
 
+vector<Argument> Pipeline::build_public_args(const vector<Argument> &args, const Target &target) const {
+    // Get all the arguments/global images referenced in this function.
+    vector<Argument> public_args = args;
+
+    // If the target specifies user context but it's not in the args
+    // vector, add it at the start (the jit path puts it in there
+    // explicitly).
+    const bool requires_user_context = target.has_feature(Target::UserContext);
+    bool has_user_context = false;
+    for (Argument arg : args) {
+        if (arg.name == contents.ptr->user_context_arg.arg.name) {
+            has_user_context = true;
+        }
+    }
+    if (requires_user_context && !has_user_context) {
+        public_args.insert(public_args.begin(), contents.ptr->user_context_arg.arg);
+    }
+
+    // Add the output buffer arguments
+    for (Function out : contents.ptr->outputs) {
+        for (Parameter buf : out.output_buffers()) {
+            public_args.push_back(Argument(buf.name(),
+                                           Argument::OutputBuffer,
+                                           buf.type(), buf.dimensions()));
+        }
+    }
+    return public_args;
+}
 
 Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
-                                   const Target &target) {
+                                   const Target &target,
+                                   const Internal::LoweredFunc::LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline\n";
     string new_fn_name(fn_name);
     if (new_fn_name.empty()) {
@@ -489,13 +497,13 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     Stmt private_body;
 
     const Module &old_module = contents.ptr->module;
-    if (!old_module.functions.empty() &&
+    if (!old_module.functions().empty() &&
         old_module.target() == target) {
-        internal_assert(old_module.functions.size() == 2);
+        internal_assert(old_module.functions().size() == 2);
         // We can avoid relowering and just reuse the private body
         // from the old module. We expect two functions in the old
         // module: the private one then the public one.
-        private_body = old_module.functions[0].body;
+        private_body = old_module.functions().front().body;
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
@@ -511,32 +519,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     string private_name = "__" + simple_new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
-    vector<Argument> public_args = args;
-
-    // If the target specifies user context but it's not in the args
-    // vector, add it at the start (the jit path puts it in there
-    // explicitly).
-    bool requires_user_context = target.has_feature(Target::UserContext);
-    bool has_user_context = false;
-    for (Argument arg : args) {
-        if (arg.name == contents.ptr->user_context_arg.arg.name) {
-            has_user_context = true;
-        }
-    }
-    if (requires_user_context && !has_user_context) {
-        public_args.insert(public_args.begin(), contents.ptr->user_context_arg.arg);
-    }
+    vector<Argument> public_args = build_public_args(args, target);
 
     vector<Buffer> global_images = validate_arguments(public_args);
-
-    // Add the output buffer arguments
-    for (Function out : contents.ptr->outputs) {
-        for (Parameter buf : out.output_buffers()) {
-            public_args.push_back(Argument(buf.name(),
-                                           Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions()));
-        }
-    }
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -570,14 +555,14 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
-    module.append(LoweredFunc(new_fn_name, public_args, public_body, LoweredFunc::External));
+    module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
 
     contents.ptr->module = module;
 
     return module;
 }
 
-std::string Pipeline::generate_function_name() {
+std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
     // Come up with a name for a generated function
     string name = contents.ptr->outputs[0].name();
@@ -623,11 +608,11 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, name, target);
 
     // Make sure we're not embedding any images
-    internal_assert(module.buffers.empty());
+    internal_assert(module.buffers().empty());
 
     std::map<std::string, JITExtern> lowered_externs = contents.ptr->jit_externs;
     // Compile to jit module
-    JITModule jit_module(module, module.functions.back(),
+    JITModule jit_module(module, module.functions().back(),
                          make_externs_jit_module(target_arg, lowered_externs));
 
     // Dump bitcode to a file if the environment variable
