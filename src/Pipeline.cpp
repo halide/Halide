@@ -442,10 +442,39 @@ vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args) {
     return images_to_embed;
 }
 
+vector<Argument> Pipeline::build_public_args(const vector<Argument> &args, const Target &target) const {
+    // Get all the arguments/global images referenced in this function.
+    vector<Argument> public_args = args;
+
+    // If the target specifies user context but it's not in the args
+    // vector, add it at the start (the jit path puts it in there
+    // explicitly).
+    const bool requires_user_context = target.has_feature(Target::UserContext);
+    bool has_user_context = false;
+    for (Argument arg : args) {
+        if (arg.name == contents.ptr->user_context_arg.arg.name) {
+            has_user_context = true;
+        }
+    }
+    if (requires_user_context && !has_user_context) {
+        public_args.insert(public_args.begin(), contents.ptr->user_context_arg.arg);
+    }
+
+    // Add the output buffer arguments
+    for (Function out : contents.ptr->outputs) {
+        for (Parameter buf : out.output_buffers()) {
+            public_args.push_back(Argument(buf.name(),
+                                           Argument::OutputBuffer,
+                                           buf.type(), buf.dimensions()));
+        }
+    }
+    return public_args;
+}
 
 Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
-                                   const Target &target) {
+                                   const Target &target,
+                                   const Internal::LoweredFunc::LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline\n";
     string new_fn_name(fn_name);
     if (new_fn_name.empty()) {
@@ -490,32 +519,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     string private_name = "__" + simple_new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
-    vector<Argument> public_args = args;
-
-    // If the target specifies user context but it's not in the args
-    // vector, add it at the start (the jit path puts it in there
-    // explicitly).
-    bool requires_user_context = target.has_feature(Target::UserContext);
-    bool has_user_context = false;
-    for (Argument arg : args) {
-        if (arg.name == contents.ptr->user_context_arg.arg.name) {
-            has_user_context = true;
-        }
-    }
-    if (requires_user_context && !has_user_context) {
-        public_args.insert(public_args.begin(), contents.ptr->user_context_arg.arg);
-    }
+    vector<Argument> public_args = build_public_args(args, target);
 
     vector<Buffer> global_images = validate_arguments(public_args);
-
-    // Add the output buffer arguments
-    for (Function out : contents.ptr->outputs) {
-        for (Parameter buf : out.output_buffers()) {
-            public_args.push_back(Argument(buf.name(),
-                                           Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions()));
-        }
-    }
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -549,14 +555,14 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
-    module.append(LoweredFunc(new_fn_name, public_args, public_body, LoweredFunc::External));
+    module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
 
     contents.ptr->module = module;
 
     return module;
 }
 
-std::string Pipeline::generate_function_name() {
+std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
     // Come up with a name for a generated function
     string name = contents.ptr->outputs[0].name();
