@@ -15,7 +15,9 @@ namespace Halide {
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
 
-    /** Func representation of the ImageParam */
+    /** Func representation of the ImageParam.
+     * All call to ImageParam is equivalent to call to its intrinsic Func
+     * representation. */
     Func func;
 
     // Helper function to initialize the Func representation of this ImageParam
@@ -72,11 +74,40 @@ public:
         return (*this)(_);
     }
 
+    /** Return the intrinsic Func representation of this ImageParam. This allows
+     * an ImageParam to be implicitly converted to Func.
+     */
     operator Func() const;
 
+
+    /** Creates and returns a new Func that wraps this ImageParam. During
+     * compilation, Halide will replace calls to this ImageParam with calls
+     * to the wrapper as appropriate. If this ImageParam is already wrapped
+     * for use in some Func, it will return the existing wrapper.
+     *
+     * For example, img.in(g) would rewrite a pipeline like this:
+     \code
+     ImageParam img(Int(32), 2);
+     Func g;
+     g(x, y) = ... img(x, y) ...
+     \endcode
+     * into a pipeline like this:
+     \code
+     ImageParam img(Int(32), 2);
+     Func img_wrap, g;
+     img_wrap(x, y) = img(x, y);
+     g(x, y) = ... img_wrap(x, y) ...
+     \endcode
+     *
+     * This has a variety of uses. One use case is to stage loads from this
+     * ImageParam via some intermediate buffer (e.g. on the stack or in shared
+     * GPU memory) (See \ref Func::in for more details or use cases).
+     */
+    // @{
     EXPORT Func in(const Func &f);
     EXPORT Func in(const std::vector<Func> &fs);
     EXPORT Func in();
+    // @}
 };
 
 }
