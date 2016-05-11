@@ -70,7 +70,7 @@ public:
      * map<Function, Foo, Compare> */
     struct Compare {
         bool operator()(const Function &a, const Function &b) const {
-            return a.contents.ptr < b.contents.ptr;
+            return a.contents < b.contents;
         }
     };
 

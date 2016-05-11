@@ -138,7 +138,7 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
                 if (i.is_func()) {
-                    i.func.ptr->mutate(mutator);
+                    i.func->mutate(mutator);
                 } else if (i.is_expr()) {
                     i.expr = mutator->mutate(i.expr);
                 }
@@ -355,34 +355,34 @@ IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
 void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
                                         IntrusivePtr<FunctionContents> &dst,
                                         DeepCopyMap &copied_map) {
-    debug(4) << "Deep-copy function contents: \"" << src.ptr->name << "\"\n";
+    debug(4) << "Deep-copy function contents: \"" << src->name << "\"\n";
 
     internal_assert(dst.defined() && src.defined()) << "Cannot deep-copy undefined FunctionContents\n";
 
-    dst.ptr->name = src.ptr->name;
-    dst.ptr->args = src.ptr->args;
-    dst.ptr->values = src.ptr->values;
-    dst.ptr->output_types = src.ptr->output_types;
-    dst.ptr->debug_file = src.ptr->debug_file;
-    dst.ptr->extern_function_name = src.ptr->extern_function_name;
-    dst.ptr->extern_is_c_plus_plus = src.ptr->extern_is_c_plus_plus;
-    dst.ptr->trace_loads = src.ptr->trace_loads;
-    dst.ptr->trace_stores = src.ptr->trace_stores;
-    dst.ptr->trace_realizations = src.ptr->trace_realizations;
-    dst.ptr->frozen = src.ptr->frozen;
-    dst.ptr->output_buffers = src.ptr->output_buffers;
+    dst->name = src->name;
+    dst->args = src->args;
+    dst->values = src->values;
+    dst->output_types = src->output_types;
+    dst->debug_file = src->debug_file;
+    dst->extern_function_name = src->extern_function_name;
+    dst->extern_is_c_plus_plus = src->extern_is_c_plus_plus;
+    dst->trace_loads = src->trace_loads;
+    dst->trace_stores = src->trace_stores;
+    dst->trace_realizations = src->trace_realizations;
+    dst->frozen = src->frozen;
+    dst->output_buffers = src->output_buffers;
 
-    dst.ptr->schedule = src.ptr->schedule.deep_copy(copied_map);
+    dst->schedule = src->schedule.deep_copy(copied_map);
 
-    for (const auto &u : src.ptr->updates) {
+    for (const auto &u : src->updates) {
         UpdateDefinition u_copy = deep_copy_update_definition_helper(u, copied_map);
         internal_assert(u_copy.domain.same_as(u_copy.schedule.reduction_domain()))
             << "UpdateDefinition should point to the same reduction domain as its schedule\n";
-        dst.ptr->updates.push_back(std::move(u_copy));
+        dst->updates.push_back(std::move(u_copy));
     }
-    for (const auto &e : src.ptr->extern_arguments) {
+    for (const auto &e : src->extern_arguments) {
         ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
-        dst.ptr->extern_arguments.push_back(std::move(e_copy));
+        dst->extern_arguments.push_back(std::move(e_copy));
     }
 }
 
@@ -853,12 +853,12 @@ bool Function::frozen() const {
 }
 
 const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
-    return contents.ptr->schedule.wrappers();
+    return contents->schedule.wrappers();
 }
 
 void Function::add_wrapper(const std::string &f, Function &wrapper) {
     wrapper.freeze();
-    contents.ptr->schedule.add_wrapper(f, wrapper.contents);
+    contents->schedule.add_wrapper(f, wrapper.contents);
 }
 
 namespace {
@@ -895,7 +895,7 @@ Function &Function::substitute_calls(const map<Function, Function, Compare> &sub
         return *this;
     }
     SubstituteCalls subs_calls(substitutions);
-    contents.ptr->mutate(&subs_calls);
+    contents->mutate(&subs_calls);
     return *this;
 }
 
