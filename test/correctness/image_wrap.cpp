@@ -556,9 +556,8 @@ int wrapper_depend_on_mutated_func_test() {
     return 0;
 }
 
-//TODO: fix this
 int wrapper_on_wrapper_test() {
-    Func source("source"), f("f"), g("g"), h("h");
+    Func source("source"), g("g"), h("h");
     Var x("x"), y("y");
 
     source(x, y) = x + y;
@@ -566,17 +565,15 @@ int wrapper_on_wrapper_test() {
     Image<int> buf = source.realize(200, 200);
     img.set(buf);
 
-    f(x, y) = img(x, y);
-    g(x, y) = f(x, y) + img(x, y);
-    Func f_in_g = f.in(g).compute_root();
-    Func f_in_f_in_g = f.in(f_in_g).compute_root();
-    h(x, y) = g(x, y) + f(x, y) + f_in_f_in_g(x, y);
+    g(x, y) = img(x, y) + img(x, y);
+    Func img_in_g = img.in(g).compute_root();
+    Func img_in_img_in_g = img.in(img_in_g).compute_root();
+    h(x, y) = g(x, y) + img(x, y) + img_in_img_in_g(x, y);
 
     Func img_f = img;
     img_f.compute_root();
-    f.compute_root();
     g.compute_root();
-    Func f_in_h = f.in(h).compute_root();
+    Func img_in_h = img.in(h).compute_root();
     Func g_in_h = g.in(h).compute_root();
 
     // Check the call graphs.
@@ -585,13 +582,12 @@ int wrapper_on_wrapper_test() {
     m.functions[0].body.accept(&c);
 
     CallGraphs expected = {
-        {h.name(), {f_in_h.name(), g_in_h.name(), f_in_f_in_g.name()}},
-        {f_in_h.name(), {f.name()}},
+        {h.name(), {img_in_h.name(), g_in_h.name(), img_in_img_in_g.name()}},
+        {img_in_h.name(), {img_f.name()}},
         {g_in_h.name(), {g.name()}},
-        {g.name(), {img_f.name(), f_in_g.name()}},
-        {f_in_g.name(), {f_in_f_in_g.name()}},
-        {f_in_f_in_g.name(), {f.name()}},
-        {f.name(), {img_f.name()}},
+        {g.name(), {img_in_g.name()}},
+        {img_in_g.name(), {img_in_img_in_g.name()}},
+        {img_in_img_in_g.name(), {img_f.name()}},
         {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
@@ -664,7 +660,7 @@ int two_fold_wrapper_test() {
 
     source(x, y) = 2*x + 3*y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Image<int> buf = source.realize(1024, 1024);
     img.set(buf);
 
     Func img_f = img;
@@ -707,7 +703,7 @@ int multi_folds_wrapper_test() {
 
     source(x, y) = 2*x + 3*y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Image<int> buf = source.realize(1024, 1024);
     img.set(buf);
 
     Func img_f = img;
@@ -828,7 +824,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /*printf("Running two fold wrapper test\n");
+    printf("Running two fold wrapper test\n");
     if (two_fold_wrapper_test() != 0) {
         return -1;
     }
@@ -836,7 +832,7 @@ int main(int argc, char **argv) {
     printf("Running multi folds wrapper test\n");
     if (multi_folds_wrapper_test() != 0) {
         return -1;
-    }*/
+    }
 
     printf("Success!\n");
     return 0;
