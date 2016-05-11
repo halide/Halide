@@ -22,17 +22,15 @@ using std::set;
 using std::map;
 
 typedef map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
-void deep_copy_update_definition_helper(UpdateDefinition &dst,
-                                        const UpdateDefinition &src,
-                                        DeepCopyMap &copied_map);
-void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
-                                           const ExternFuncArgument &src,
-                                           DeepCopyMap &copied_map);
-void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
-                                        const IntrusivePtr<FunctionContents> &src,
+UpdateDefinition deep_copy_update_definition_helper(const UpdateDefinition &src,
+                                                    DeepCopyMap &copied_map);
+ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgument &src,
+                                                         DeepCopyMap &copied_map);
+void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
+                                        IntrusivePtr<FunctionContents> &dst,
                                         DeepCopyMap &copied_map);
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-    const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied);
+    const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map);
 
 struct FunctionContents {
     mutable RefCount ref_count;
@@ -299,35 +297,36 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
     contents.ptr->name = n;
 }
 
-// Deep-copy UpdateDefinition from 'src' to 'dst'
-void deep_copy_update_definition_helper(UpdateDefinition &dst,
-                                        const UpdateDefinition &src,
-                                        DeepCopyMap &copied_map) {
-    dst.values = src.values;
-    dst.args = src.args;
-    dst.schedule = src.schedule.deep_copy(copied_map);
+// Return deep-copy of UpdateDefinition 'src'
+UpdateDefinition deep_copy_update_definition_helper(const UpdateDefinition &src,
+                                                    DeepCopyMap &copied_map) {
+    UpdateDefinition copy;
+    copy.values = src.values;
+    copy.args = src.args;
+    copy.schedule = src.schedule.deep_copy(copied_map);
 
     // UpdateDefinition's domain is the same as the one pointed by its schedule
     internal_assert(src.schedule.reduction_domain().same_as(src.domain))
         << "UpdateDefinition should point to the same reduction domain as its schedule\n";
     // We don't need to deep-copy the reduction domain since we've already done
     // it when deep-copying the schedule above
-    dst.domain = dst.schedule.reduction_domain();
+    copy.domain = copy.schedule.reduction_domain();
+    return copy;
 }
 
-// Deep-copy ExternFuncArgument from 'src' to 'dst'
-void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
-                                           const ExternFuncArgument &src,
-                                           DeepCopyMap &copied_map) {
-    dst.arg_type = src.arg_type;
-    dst.buffer = src.buffer;
-    dst.expr = src.expr;
-    dst.image_param = src.image_param;
+// Return deep-copy of ExternFuncArgument 'src'
+ExternFuncArgument deep_copy_extern_func_argument_helper(
+        const ExternFuncArgument &src, DeepCopyMap &copied_map) {
+    ExternFuncArgument copy;
+    copy.arg_type = src.arg_type;
+    copy.buffer = src.buffer;
+    copy.expr = src.expr;
+    copy.image_param = src.image_param;
 
     if (!src.func.defined()) { // No need to deep-copy the func if it's undefined
         internal_assert(!src.is_func())
             << "ExternFuncArgument has type FuncArg but has no function definition\n";
-        return;
+        return copy;
     }
 
     // If the FunctionContents has already been deep-copied previously, i.e.
@@ -335,26 +334,26 @@ void deep_copy_extern_func_argument_helper(ExternFuncArgument &dst,
     // of creating a new deep-copy
     IntrusivePtr<FunctionContents> &copied_func = copied_map[src.func];
     if (copied_func.defined()) {
-        dst.func = copied_func;
+        copy.func = copied_func;
     } else {
-        dst.func = IntrusivePtr<FunctionContents>(new FunctionContents);
-        deep_copy_function_contents_helper(dst.func, src.func, copied_map);
-        copied_map[src.func] = dst.func;
+        copy.func = deep_copy_function_contents_helper(src.func, copied_map);
+        copied_map[src.func] = copy.func;
     }
+    return copy;
 }
 
 // Return a deep-copy of FunctionContents 'src'
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-        const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied) {
+        const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map) {
 
     IntrusivePtr<FunctionContents> copy(new FunctionContents);
-    deep_copy_function_contents_helper(copy, src, copied);
+    deep_copy_function_contents_helper(src, copy, copied_map);
     return copy;
 }
 
-// Deep-copy FunctionContents from 'src' to 'dst'
-void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
-                                        const IntrusivePtr<FunctionContents> &src,
+// Return a deep-copy of FunctionContents 'src'
+void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
+                                        IntrusivePtr<FunctionContents> &dst,
                                         DeepCopyMap &copied_map) {
     debug(4) << "Deep-copy function contents: \"" << src.ptr->name << "\"\n";
 
@@ -376,15 +375,13 @@ void deep_copy_function_contents_helper(IntrusivePtr<FunctionContents> &dst,
     dst.ptr->schedule = src.ptr->schedule.deep_copy(copied_map);
 
     for (const auto &u : src.ptr->updates) {
-        UpdateDefinition u_copy;
-        deep_copy_update_definition_helper(u_copy, u, copied_map);
+        UpdateDefinition u_copy = deep_copy_update_definition_helper(u, copied_map);
         internal_assert(u_copy.domain.same_as(u_copy.schedule.reduction_domain()))
             << "UpdateDefinition should point to the same reduction domain as its schedule\n";
         dst.ptr->updates.push_back(std::move(u_copy));
     }
     for (const auto &e : src.ptr->extern_arguments) {
-        ExternFuncArgument e_copy;
-        deep_copy_extern_func_argument_helper(e_copy, e, copied_map);
+        ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
         dst.ptr->extern_arguments.push_back(std::move(e_copy));
     }
 }
@@ -405,7 +402,7 @@ void Function::deep_copy(Function &copy,
     copied_funcs_map[contents] = copy.contents;
 
     // Perform the deep-copies
-    deep_copy_function_contents_helper(copy.contents, contents, copied_funcs_map);
+    deep_copy_function_contents_helper(contents, copy.contents, copied_funcs_map);
 
     // Copy over all new deep-copies of FunctionContents into 'copied_map'.
     for (const auto &iter : copied_funcs_map) {
@@ -859,8 +856,9 @@ const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
     return contents.ptr->schedule.wrappers();
 }
 
-void Function::add_wrapper(const Function &wrapper, const std::string &f) {
-    contents.ptr->schedule.add_wrapper(wrapper.contents, f);
+void Function::add_wrapper(const std::string &f, Function &wrapper) {
+    wrapper.freeze();
+    contents.ptr->schedule.add_wrapper(f, wrapper.contents);
 }
 
 namespace {

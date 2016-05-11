@@ -235,9 +235,11 @@ public:
     /** Mark calls of this function by 'f' to be replaced with its wrapper
      * during the lowering stage. If the string 'f' is empty, it means replace
      * all calls to this function by all other functions (excluding itself) in
-     * the pipeline with the wrapper. See \ref Func::in for more details. */
+     * the pipeline with the wrapper. This will also freeze 'wrapper' to prevent
+     * user from updating the values of the Function it wraps via the wrapper.
+     * See \ref Func::in for more details. */
     // @{
-    EXPORT void add_wrapper(const Function &wrapper, const std::string &f);
+    EXPORT void add_wrapper(const std::string &f, Function &wrapper);
     const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
     // @}
 

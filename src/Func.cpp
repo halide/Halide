@@ -872,8 +872,7 @@ Func Func::in(const Func &f) {
     if (iter == wrappers.end()) {
         Func wrapper(name() + "_in_" + f.name());
         wrapper(args()) = (*this)(args());
-        wrapper.func.freeze();
-        func.add_wrapper(wrapper.func, f.name());
+        func.add_wrapper(f.name(), wrapper.func);
         return wrapper;
     }
 
@@ -915,8 +914,7 @@ Func Func::in(const vector<Func>& fs) {
         wrapper(args()) = (*this)(args());
         for (const Func &f : fs) {
             user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
-            wrapper.func.freeze();
-            func.add_wrapper(wrapper.func, f.name());
+            func.add_wrapper(f.name(), wrapper.func);
         }
         return wrapper;
     }
@@ -955,8 +953,7 @@ Func Func::in() {
     if (iter == wrappers.end()) {
         Func wrapper(name() + "_global_wrapper");
         wrapper(args()) = (*this)(args());
-        wrapper.func.freeze();
-        func.add_wrapper(wrapper.func, "");
+        func.add_wrapper("", wrapper.func);
         return wrapper;
     }
 
