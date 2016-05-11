@@ -22,7 +22,7 @@
 #include "IREquality.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
-#include "Output.h"
+#include "Outputs.h"
 #include "LLVM_Output.h"
 
 namespace Halide {
