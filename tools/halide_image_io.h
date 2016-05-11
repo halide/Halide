@@ -95,9 +95,8 @@ inline void swap_endian_16(bool little_endian, uint16_t &value) {
     }
 }
 
-#define FILEOPENER_MAX_LINE_LEN 1024
-
 struct FileOpener {
+    static constexpr int FileOpener_MaxLineLen = 1024;
     FileOpener(const char* filename, const char* mode) : f(fopen(filename, mode)) {
         // nothing
     }
@@ -107,15 +106,14 @@ struct FileOpener {
         }
     }
     // read a line of data skipping lines that begin with '#"
-    char *readLine() {
+    char *readLine(char *buf, int maxlen) {
         char *status;
         do {
-            status = fgets(buf, FILEOPENER_MAX_LINE_LEN, f);
+            status = fgets(buf, maxlen, f);
         } while(status && buf[0] == '#');
         return(status);
     }
     FILE * const f;
-    char buf[FILEOPENER_MAX_LINE_LEN];
 };
 
 #ifndef HALIDE_NOPNG
@@ -344,18 +342,19 @@ bool load_pgm(const std::string &filename, ImageType *im) {
 
     int width, height, maxval;
     char header[256];
+    char buf[1024];
     bool fmt_binary = false;
 
-    f.readLine();
-    if (!check(sscanf(f.buf, "%255s", header) == 1, "Could not read PGM header\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%255s", header) == 1, "Could not read PGM header\n")) return false;
     if (header == std::string("P5") || header == std::string("p5"))
         fmt_binary = true;
     if (!check(fmt_binary, "Input is not binary PGM\n")) return false;
 
-    f.readLine();
-    if (!check(sscanf(f.buf, "%d %d\n", &width, &height) == 2, "Could not read PGM width and height\n")) return false;
-    f.readLine();
-    if (!check(sscanf(f.buf, "%d", &maxval) == 1, "Could not read PGM max value\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d %d\n", &width, &height) == 2, "Could not read PGM width and height\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d", &maxval) == 1, "Could not read PGM max value\n")) return false;
 
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
@@ -448,18 +447,19 @@ bool load_ppm(const std::string &filename, ImageType *im) {
 
     int width, height, maxval;
     char header[256];
+    char buf[1024];
     bool fmt_binary = false;
 
-    f.readLine();
-    if (!check(sscanf(f.buf, "%255s", header) == 1, "Could not read PPM header\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%255s", header) == 1, "Could not read PPM header\n")) return false;
     if (header == std::string("P6") || header == std::string("p6"))
         fmt_binary = true;
     if (!check(fmt_binary, "Input is not binary PPM\n")) return false;
 
-    f.readLine();
-    if (!check(sscanf(f.buf, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
-    f.readLine();
-    if (!check(sscanf(f.buf, "%d", &maxval) == 1, "Could not read PPM max value\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d", &maxval) == 1, "Could not read PPM max value\n")) return false;
 
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
