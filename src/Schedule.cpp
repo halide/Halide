@@ -51,7 +51,7 @@ struct ScheduleContents {
                 s.condition = mutator->mutate(s.condition);
             }
             internal_assert(s.schedule.defined());
-            s.schedule.ptr->mutate(mutator);
+            s.schedule->mutate(mutator);
         }
         reduction_domain.mutate(mutator);
     }
@@ -80,38 +80,38 @@ void deep_copy_schedule_contents_helper(
         return;
     }
     dst = IntrusivePtr<ScheduleContents>(new ScheduleContents);
-    dst.ptr->store_level = src.ptr->store_level;
-    dst.ptr->compute_level = src.ptr->compute_level;
-    dst.ptr->splits = src.ptr->splits;
-    dst.ptr->dims = src.ptr->dims;
-    dst.ptr->storage_dims = src.ptr->storage_dims;
-    dst.ptr->bounds = src.ptr->bounds;
-    dst.ptr->reduction_domain = src.ptr->reduction_domain.deep_copy();
-    dst.ptr->memoized = src.ptr->memoized;
-    dst.ptr->touched = src.ptr->touched;
-    dst.ptr->allow_race_conditions = src.ptr->allow_race_conditions;
+    dst->store_level = src->store_level;
+    dst->compute_level = src->compute_level;
+    dst->splits = src->splits;
+    dst->dims = src->dims;
+    dst->storage_dims = src->storage_dims;
+    dst->bounds = src->bounds;
+    dst->reduction_domain = src->reduction_domain.deep_copy();
+    dst->memoized = src->memoized;
+    dst->touched = src->touched;
+    dst->allow_race_conditions = src->allow_race_conditions;
 
     // Deep-copy wrapper functions. If function has already been deep-copied before,
     // i.e. it's in the 'copied_map', use the deep-copied version from the map instead
     // of creating a new deep-copy
-    for (const auto &iter : src.ptr->wrappers) {
+    for (const auto &iter : src->wrappers) {
         IntrusivePtr<FunctionContents> &copied_func = copied_map[iter.second];
         if (copied_func.defined()) {
-            dst.ptr->wrappers[iter.first] = copied_func;
+            dst->wrappers[iter.first] = copied_func;
         } else {
-            dst.ptr->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
-            copied_map[iter.second] = dst.ptr->wrappers[iter.first];
+            dst->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
+            copied_map[iter.second] = dst->wrappers[iter.first];
         }
     }
-    internal_assert(dst.ptr->wrappers.size() == src.ptr->wrappers.size());
+    internal_assert(dst->wrappers.size() == src->wrappers.size());
 
     // Deep-copy specializations
-    for (const auto &s : src.ptr->specializations) {
+    for (const auto &s : src->specializations) {
         Specialization s_copy;
         s_copy.condition = s.condition;
         s_copy.schedule = IntrusivePtr<ScheduleContents>(new ScheduleContents);
         deep_copy_schedule_contents_helper(s_copy.schedule, s.schedule, copied_map);
-        dst.ptr->specializations.push_back(std::move(s_copy));
+        dst->specializations.push_back(std::move(s_copy));
     }
 }
 
@@ -202,12 +202,12 @@ const Specialization &Schedule::add_specialization(Expr condition) {
 }
 
 const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() const {
-    return contents.ptr->wrappers;
+    return contents->wrappers;
 }
 
 void Schedule::add_wrapper(const std::string &f,
                            const IntrusivePtr<Internal::FunctionContents> &wrapper) {
-    if (contents.ptr->wrappers.count(f)) {
+    if (contents->wrappers.count(f)) {
         if (f.empty()) {
             user_warning << "Replacing previous definition of global wrapper in function \""
                          << f << "\"\n";
@@ -215,7 +215,7 @@ void Schedule::add_wrapper(const std::string &f,
             internal_error << "Wrapper redefinition in function \"" << f << "\" is not allowed\n";
         }
     }
-    contents.ptr->wrappers[f] = wrapper;
+    contents->wrappers[f] = wrapper;
 }
 
 
@@ -273,7 +273,7 @@ void Schedule::accept(IRVisitor *visitor) const {
 
 void Schedule::mutate(IRMutator *mutator) {
     if (contents.defined()) {
-        contents.ptr->mutate(mutator);
+        contents->mutate(mutator);
     }
 }
 

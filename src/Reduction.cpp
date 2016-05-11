@@ -139,9 +139,9 @@ ReductionDomain ReductionDomain::deep_copy() const {
     if (!contents.defined()) {
         return ReductionDomain();
     }
-    ReductionDomain copy(contents.ptr->domain);
-    copy.contents.ptr->predicate = contents.ptr->predicate;
-    copy.contents.ptr->frozen = contents.ptr->frozen;
+    ReductionDomain copy(contents->domain);
+    copy.contents->predicate = contents->predicate;
+    copy.contents->frozen = contents->frozen;
     return copy;
 }
 
@@ -202,7 +202,7 @@ bool ReductionDomain::frozen() const {
 
 void ReductionDomain::mutate(IRMutator *mutator) {
     if (contents.defined()) {
-        contents.ptr->mutate(mutator);
+        contents->mutate(mutator);
     }
 }
 
