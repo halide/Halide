@@ -75,7 +75,17 @@ public:
     }
 
     /** Return the intrinsic Func representation of this ImageParam. This allows
-     * an ImageParam to be implicitly converted to Func.
+     * an ImageParam to be implicitly converted to a Func.
+     *
+     * Note that we use implicit vars to name the dimensions of Funcs associated
+     * with the ImageParam: both its internal Func representation and wrappers
+     * (See \ref ImageParam::in). For example, to unroll the first and second
+     * dimensions of the associated Func by a factor of 2, we would do the following:
+     \code
+     func.unroll(_0, 2).unroll(_1, 2);
+     \endcode
+     * '_0' represents the first dimension of the Func, while _1 represents the
+     * second dimension of the Func.
      */
     operator Func() const;
 
@@ -99,9 +109,22 @@ public:
      g(x, y) = ... img_wrap(x, y) ...
      \endcode
      *
-     * This has a variety of uses. One use case is to stage loads from this
+     * This has a variety of uses. One use case is to stage loads from an
      * ImageParam via some intermediate buffer (e.g. on the stack or in shared
-     * GPU memory) (See \ref Func::in for more details or use cases).
+     * GPU memory).
+     *
+     * The following example illustrates how you would use the 'in()' directive
+     * to stage loads from an ImageParam into the GPU shared memory:
+     \code
+     ImageParam img(Int(32), 2);
+     output(x, y) = img(y, x);
+     output.compute_root().gpu_tile(x, y, 8, 8);
+     img.in().compute_at(output, Var::gpu_blocks()).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
+     \endcode
+     *
+     * Note that we use implicit vars to name the dimensions of the wrapper Func
+     * (See \ref ImageParam::in for more details). See \ref Func::in for more
+     * possible use cases of the 'in()' directive.
      */
     // @{
     EXPORT Func in(const Func &f);
