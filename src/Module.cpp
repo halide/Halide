@@ -25,32 +25,32 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
 
 Module::Module(const std::string &name, const Target &target) :
     contents(new Internal::ModuleContents) {
-    contents.ptr->name = name;
-    contents.ptr->target = target;
+    contents->name = name;
+    contents->target = target;
 }
 
 const Target &Module::target() const {
-    return contents.ptr->target;
+    return contents->target;
 }
 
 const std::string &Module::name() const {
-    return contents.ptr->name;
+    return contents->name;
 }
 
 const std::vector<Buffer> &Module::buffers() const {
-    return contents.ptr->buffers;
+    return contents->buffers;
 }
 
 const std::vector<Internal::LoweredFunc> &Module::functions() const {
-    return contents.ptr->functions;
+    return contents->functions;
 }
 
 void Module::append(const Buffer &buffer) {
-    contents.ptr->buffers.push_back(buffer);
+    contents->buffers.push_back(buffer);
 }
 
 void Module::append(const Internal::LoweredFunc &function) {
-    contents.ptr->functions.push_back(function);
+    contents->functions.push_back(function);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {

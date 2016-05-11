@@ -147,37 +147,37 @@ Buffer::Buffer(Type t, const buffer_t *buf, const std::string &name) :
 
 void *Buffer::host_ptr() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return (void *)contents.ptr->buf.host;
+    return (void *)contents->buf.host;
 }
 
 buffer_t *Buffer::raw_buffer() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return &(contents.ptr->buf);
+    return &(contents->buf);
 }
 
 uint64_t Buffer::device_handle() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.dev;
+    return contents->buf.dev;
 }
 
 bool Buffer::host_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.host_dirty;
+    return contents->buf.host_dirty;
 }
 
 void Buffer::set_host_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.host_dirty = dirty;
+    contents->buf.host_dirty = dirty;
 }
 
 bool Buffer::device_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.dev_dirty;
+    return contents->buf.dev_dirty;
 }
 
 void Buffer::set_device_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.dev_dirty = dirty;
+    contents->buf.dev_dirty = dirty;
 }
 
 int Buffer::dimensions() const {
@@ -190,32 +190,32 @@ int Buffer::dimensions() const {
 int Buffer::extent(int dim) const {
     user_assert(defined()) << "Buffer is undefined\n";
     user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
-    return contents.ptr->buf.extent[dim];
+    return contents->buf.extent[dim];
 }
 
 int Buffer::stride(int dim) const {
     user_assert(defined());
     user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
-    return contents.ptr->buf.stride[dim];
+    return contents->buf.stride[dim];
 }
 
 int Buffer::min(int dim) const {
     user_assert(defined()) << "Buffer is undefined\n";
     user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
-    return contents.ptr->buf.min[dim];
+    return contents->buf.min[dim];
 }
 
 void Buffer::set_min(int m0, int m1, int m2, int m3) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.min[0] = m0;
-    contents.ptr->buf.min[1] = m1;
-    contents.ptr->buf.min[2] = m2;
-    contents.ptr->buf.min[3] = m3;
+    contents->buf.min[0] = m0;
+    contents->buf.min[1] = m1;
+    contents->buf.min[2] = m2;
+    contents->buf.min[3] = m3;
 }
 
 Type Buffer::type() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->type;
+    return contents->type;
 }
 
 bool Buffer::same_as(const Buffer &other) const {
@@ -227,7 +227,7 @@ bool Buffer::defined() const {
 }
 
 const std::string &Buffer::name() const {
-    return contents.ptr->name;
+    return contents->name;
 }
 
 Buffer::operator Argument() const {
