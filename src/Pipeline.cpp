@@ -624,10 +624,9 @@ void *Pipeline::compile_jit(const Target &target_arg) {
         if (program_name.empty()) {
             program_name = "unknown" + unique_name('_').substr(1);
         }
-
-        string function_name = name + "_" + unique_name('g').substr(1);
-        compile_to_bitcode(program_name + "_" + function_name + ".bc",
-                           infer_arguments(), function_name);
+        string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
+        debug(4) << "Saving bitcode to: " << file_name << "\n";
+        compile_module_to_llvm_bitcode(module, file_name);
     }
 
     contents.ptr->jit_module = jit_module;
