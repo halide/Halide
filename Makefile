@@ -318,7 +318,6 @@ SOURCE_FILES = \
   ModulusRemainder.cpp \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
-  Output.cpp \
   ParallelRVar.cpp \
   Param.cpp \
   Parameter.cpp \
@@ -447,7 +446,7 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
-  Output.h \
+  Outputs.h \
   ParallelRVar.h \
   Parameter.h \
   Param.h \
