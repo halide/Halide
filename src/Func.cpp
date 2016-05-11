@@ -877,26 +877,26 @@ Func Func::in(const Func &f) {
         return wrapper;
     }
 
-    IntrusivePtr<FunctionContents> wfunc = iter->second;
-    internal_assert(wfunc.defined());
+    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    internal_assert(wrapper_contents.defined());
 
     // Make sure that no other Func shares the same wrapper as 'f'
     for (const auto &it : wrappers) {
         if (it.first == f.name()) {
             continue;
         }
-        user_assert(!it.second.same_as(wfunc))
+        user_assert(!it.second.same_as(wrapper_contents))
             << "Redefinition of shared wrapper with " << it.first << " [" << name() << " -> "
-            << Function(wfunc).name() << "] in " << f.name() << " is not allowed\n";
+            << Function(wrapper_contents).name() << "] in " << f.name() << " is not allowed\n";
     }
-    Function wrapper(wfunc);
+    Function wrapper(wrapper_contents);
     internal_assert(wrapper.frozen());
     return Func(wrapper);
 }
 
 Func Func::in(const vector<Func>& fs) {
     if (fs.empty()) {
-        return in(); // Make a global wrapper
+        user_error << "Could not create a wrapper for an empty list of Funcs\n";
     }
 
     // Either all Funcs have the same wrapper or they don't already have any wrappers.
@@ -921,8 +921,8 @@ Func Func::in(const vector<Func>& fs) {
         return wrapper;
     }
 
-    IntrusivePtr<FunctionContents> wfunc = iter->second;
-    internal_assert(wfunc.defined());
+    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    internal_assert(wrapper_contents.defined());
 
     // Make sure all the other Funcs in 'fs' share the same wrapper and no other
     // Func not in 'fs' share the same wrapper.
@@ -935,16 +935,16 @@ Func Func::in(const vector<Func>& fs) {
         bool in_fs = fs_iter != fs.end();
 
         if (in_fs) {
-            user_assert(it.second.same_as(wfunc))
+            user_assert(it.second.same_as(wrapper_contents))
                 << it.first << " should have shared the same wrapper as " << fs[0].name() << "\n";
         } else {
-            user_assert(!it.second.same_as(wfunc))
+            user_assert(!it.second.same_as(wrapper_contents))
                 << "Redefinition of shared wrapper [" << name() << " -> "
-                << Function(wfunc).name() << "] in " << fs[0].name() << " is illegal since "
+                << Function(wrapper_contents).name() << "] in " << fs[0].name() << " is illegal since "
                 << it.first << " shares the same wrapper but not part of the redefinition\n";
         }
     }
-    Function wrapper(wfunc);
+    Function wrapper(wrapper_contents);
     internal_assert(wrapper.frozen());
     return Func(wrapper);
 }
@@ -960,9 +960,9 @@ Func Func::in() {
         return wrapper;
     }
 
-    IntrusivePtr<FunctionContents> wfunc = iter->second;
-    internal_assert(wfunc.defined());
-    Function wrapper(wfunc);
+    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    internal_assert(wrapper_contents.defined());
+    Function wrapper(wrapper_contents);
     internal_assert(wrapper.frozen());
     return Func(wrapper);
 }
