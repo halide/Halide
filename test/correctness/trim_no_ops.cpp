@@ -50,9 +50,9 @@ int main(int argc, char **argv) {
         // There should be no selects after trim_no_ops runs
         Module m = f.compile_to_module({});
         CountConditionals s;
-        m.functions[0].body.accept(&s);
+        m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
+            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
             return -1;
         }
 
@@ -84,9 +84,9 @@ int main(int argc, char **argv) {
 
         // There should be no selects after trim_no_ops runs
         CountConditionals s;
-        m.functions[0].body.accept(&s);
+        m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
+            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
             return -1;
         }
 
@@ -123,9 +123,9 @@ int main(int argc, char **argv) {
 
             Module m = hist.compile_to_module({});
             CountConditionals s;
-            m.functions[0].body.accept(&s);
+            m.functions().front().body.accept(&s);
             if (s.count != 0) {
-                std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
+                std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
                 return -1;
             }
         }
@@ -163,9 +163,9 @@ int main(int argc, char **argv) {
         // Check there are no if statements.
         Module m = f.compile_to_module({});
         CountConditionals s;
-        m.functions[0].body.accept(&s);
+        m.functions().front().body.accept(&s);
         if (s.count != 0) {
-            std::cerr << "There were selects or ifs in the lowered code: \n" << m.functions[0].body << "\n";
+            std::cerr << "There were selects or ifs in the lowered code: \n" << m.functions().front().body << "\n";
             return -1;
         }
     }
@@ -198,13 +198,13 @@ int main(int argc, char **argv) {
         gpu_target.set_feature(Target::CUDA);
         Module m = f.compile_to_module({}, "", gpu_target);
         CountConditionals s;
-        m.functions[0].body.accept(&s);
+        m.functions().front().body.accept(&s);
         if (s.count_select != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions[0].body << "\n";
+            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
             return -1;
         }
         if (s.count_if != 1) {
-            std::cerr << "There should be 1 if in the lowered code: \n" << m.functions[0].body << "\n";
+            std::cerr << "There should be 1 if in the lowered code: \n" << m.functions().front().body << "\n";
             return -1;
         }
 
