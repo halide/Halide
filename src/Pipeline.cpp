@@ -18,6 +18,14 @@ using std::vector;
 using std::string;
 using std::set;
 
+namespace {
+
+std::string output_name(const string &filename, const Module &m, const char* ext) {
+    return !filename.empty() ? filename : (m.name() + ext);
+}
+
+}  // namespace
+
 /** An inferred argument. Inferred args are either Params,
  * ImageParams, or Buffers. The first two are handled by the param
  * field, and global images are tracked via the buf field. These
@@ -162,35 +170,41 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const vector<Argument> &args,
                                   const string &fn_name,
                                   const Target &target) {
-    compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    compile_module_to_outputs(m, Outputs().bitcode(output_name(filename, m, ".bc")));
 }
 
 void Pipeline::compile_to_llvm_assembly(const string &filename,
                                         const vector<Argument> &args,
                                         const string &fn_name,
                                         const Target &target) {
-    compile_module_to_llvm_assembly(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    compile_module_to_outputs(m, Outputs().llvm_assembly(output_name(filename, m, ".ll")));
 }
 
 void Pipeline::compile_to_object(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
                                  const Target &target) {
-    compile_module_to_object(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
+    compile_module_to_outputs(m, Outputs().object(output_name(filename, m, ext)));
 }
 
 void Pipeline::compile_to_header(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
                                  const Target &target) {
-    compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    compile_module_to_outputs(m, Outputs().c_header(output_name(filename, m, ".h")));
 }
 
 void Pipeline::compile_to_assembly(const string &filename,
                                    const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target) {
-    compile_module_to_assembly(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    compile_module_to_outputs(m, Outputs().assembly(output_name(filename, m, ".s")));
 }
 
 
@@ -198,7 +212,8 @@ void Pipeline::compile_to_c(const string &filename,
                             const vector<Argument> &args,
                             const string &fn_name,
                             const Target &target) {
-    compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    compile_module_to_outputs(m, Outputs().c_source(output_name(filename, m, ".c")));
 }
 
 void Pipeline::print_loop_nest() {
@@ -211,27 +226,29 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
+    Outputs outputs;
     if (fmt == HTML) {
-        compile_module_to_html(m, filename);
+        outputs = Outputs().stmt_html(output_name(filename, m, ".html"));
     } else {
-        compile_module_to_text(m, filename);
+        outputs = Outputs().stmt(output_name(filename, m, ".stmt"));
     }
+    compile_module_to_outputs(m, outputs);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,
                                const vector<Argument> &args,
                                const Target &target) {
     Module m = compile_to_module(args, filename_prefix, target);
-    compile_module_to_c_header(m, filename_prefix + ".h");
+    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
     if (target.arch == Target::PNaCl) {
-        compile_module_to_llvm_bitcode(m, filename_prefix + ".bc");
-    } else if (target.os == Target::Windows &&
-               !target.has_feature(Target::MinGW)) {
-        compile_module_to_object(m, filename_prefix + ".obj");
+        outputs = outputs.bitcode(filename_prefix + ".bc");
+    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+        outputs = outputs.object(filename_prefix + ".obj");
     } else {
-        compile_module_to_object(m, filename_prefix + ".o");
+        outputs = outputs.object(filename_prefix + ".o");
     }
+    compile_module_to_outputs(m, outputs);
 }
 
 namespace Internal {
@@ -626,7 +643,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
         }
         string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
         debug(4) << "Saving bitcode to: " << file_name << "\n";
-        compile_module_to_llvm_bitcode(module, file_name);
+        compile_module_to_outputs(module, Outputs().bitcode(file_name));
     }
 
     contents.ptr->jit_module = jit_module;
@@ -740,6 +757,7 @@ Realization Pipeline::realize(int x_size,
 }
 
 namespace {
+
 struct ErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
@@ -838,7 +856,8 @@ struct JITFuncCallContext {
         user_context_param.set_scalar((void *)nullptr); // Don't leave param hanging with pointer to stack.
     }
 };
-}
+
+}  // namespace
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
