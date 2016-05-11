@@ -11,7 +11,6 @@
 #include "Target.h"
 
 namespace Halide {
-
 namespace Internal {
 
 /** Definition of a lowered function. This object provides a concrete
@@ -41,40 +40,34 @@ struct LoweredFunc {
 
 }
 
+namespace Internal {
+struct ModuleContents;
+}
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
-    std::string name_;
-    Target target_;
-
-    /** The declarations contained in this module. */
-    // @{
-    std::vector<Buffer> buffers_;
-    std::vector<Internal::LoweredFunc> functions_;
-    // @}
-
+    Internal::IntrusivePtr<Internal::ModuleContents> contents;
 public:
-    EXPORT Module(const std::string &name, const Target &target) : name_(name), target_(target) {}
+    EXPORT Module(const std::string &name, const Target &target);
 
     /** Get the target this module has been lowered for. */
-    EXPORT const Target &target() const { return target_; }
+    EXPORT const Target &target() const;
 
     /** The name of this module. This is used as the default filename
      * for output operations. */
-    EXPORT const std::string &name() const { return name_; }
+    EXPORT const std::string &name() const;
 
-    EXPORT const std::vector<Buffer> &buffers() const { return buffers_; }
-
-    EXPORT const std::vector<Internal::LoweredFunc> &functions() const { return functions_; }
+    /** The declarations contained in this module. */
+    // @{
+    EXPORT const std::vector<Buffer> &buffers() const;
+    EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
+    // @}
 
     /** Add a declaration to this module. */
     // @{
-    void append(const Buffer &buffer) {
-        buffers_.push_back(buffer);
-    }
-    void append(const Internal::LoweredFunc &function) {
-        functions_.push_back(function);
-    }
+    EXPORT void append(const Buffer &buffer);
+    EXPORT void append(const Internal::LoweredFunc &function);
     // @}
 };
 
