@@ -174,7 +174,7 @@ int func_wrap_test() {
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img'
     Module m = g.compile_to_module({g.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {g.name(), {wrapper.name()}},
@@ -215,7 +215,7 @@ int multiple_funcs_sharing_wrapper_test() {
         // Expect 'g1' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g1.compile_to_module({g1.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {g1.name(), {im_wrapper.name()}},
@@ -238,7 +238,7 @@ int multiple_funcs_sharing_wrapper_test() {
         // Expect 'g2' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
         Module m = g2.compile_to_module({g2.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {g2.name(), {im_wrapper.name()}},
@@ -261,7 +261,7 @@ int multiple_funcs_sharing_wrapper_test() {
         // Expect 'g3' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
         Module m = g3.compile_to_module({g3.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {g3.name(), {im_wrapper.name()}},
@@ -306,7 +306,7 @@ int global_wrap_test() {
     // 'h' to call 'wrapper' and 'g'
     Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {h.name(), {g.name(), wrapper.name()}},
@@ -363,7 +363,7 @@ int update_defined_after_wrap_test() {
         // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {g.name(), {wrapper.name()}},
@@ -392,7 +392,7 @@ int update_defined_after_wrap_test() {
         // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {g.name(), {wrapper.name()}},
@@ -441,7 +441,7 @@ int rdom_wrapper_test() {
     // and its update to call 'img_f' and 'g', 'img_f' to call 'img'
     Module m = wrapper.compile_to_module({wrapper.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {g.name(), {}},
@@ -484,7 +484,7 @@ int global_and_custom_wrap_test() {
     // 'img_wrapper' to call 'f', img_in_g' to call 'img_f', 'f' to call 'img'
     Module m = result.compile_to_module({result.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {result.name(), {g.name(), img_wrapper.name()}},
@@ -534,7 +534,7 @@ int wrapper_depend_on_mutated_func_test() {
     // 'f' to call 'img_in_f', img_in_f' to call 'img_f', 'img_f' to call 'img'
     Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {h.name(), {g_in_h.name()}},
@@ -579,7 +579,7 @@ int wrapper_on_wrapper_test() {
     // Check the call graphs.
     Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {h.name(), {img_in_h.name(), g_in_h.name(), img_in_img_in_g.name()}},
@@ -630,7 +630,7 @@ int wrapper_on_rdom_predicate_test() {
     // 'h' to call nothing
     Module m = g.compile_to_module({g.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {g.name(), {}},
@@ -677,7 +677,7 @@ int two_fold_wrapper_test() {
     // Check the call graphs.
     Module m = output.compile_to_module({output.infer_arguments()});
     CheckCalls c;
-    m.functions[0].body.accept(&c);
+    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {output.name(), {img_in_output_in_output.name()}},
@@ -726,7 +726,7 @@ int multi_folds_wrapper_test() {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {g.name(), {img_in_g_in_g.name()}},
@@ -749,7 +749,7 @@ int multi_folds_wrapper_test() {
         // Check the call graphs.
         Module m = h.compile_to_module({h.infer_arguments()});
         CheckCalls c;
-        m.functions[0].body.accept(&c);
+        m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
             {h.name(), {img_in_g_in_g_in_h_in_h.name()}},
