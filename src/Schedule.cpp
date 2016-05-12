@@ -1,10 +1,16 @@
 #include "IR.h"
+#include "IRMutator.h"
 #include "Schedule.h"
 #include "Reduction.h"
 
 namespace Halide {
 namespace Internal {
 
+typedef std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
+
+IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
+    const IntrusivePtr<FunctionContents> &src,
+    DeepCopyMap &copied_map);
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -17,12 +23,38 @@ struct ScheduleContents {
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Specialization> specializations;
+    std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     ReductionDomain reduction_domain;
     bool memoized;
     bool touched;
     bool allow_race_conditions;
 
     ScheduleContents() : memoized(false), touched(false), allow_race_conditions(false) {};
+
+    // Pass an IRMutator through to all Exprs referenced in the ScheduleContents
+    void mutate(IRMutator *mutator) {
+        for (Split &s : splits) {
+            if (s.factor.defined()) {
+                s.factor = mutator->mutate(s.factor);
+            }
+        }
+        for (Bound &b : bounds) {
+            if (b.min.defined()) {
+                b.min = mutator->mutate(b.min);
+            }
+            if (b.extent.defined()) {
+                b.extent = mutator->mutate(b.extent);
+            }
+        }
+        for (Specialization &s : specializations) {
+            if (s.condition.defined()) {
+                s.condition = mutator->mutate(s.condition);
+            }
+            internal_assert(s.schedule.defined());
+            s.schedule->mutate(mutator);
+        }
+        reduction_domain.mutate(mutator);
+    }
 };
 
 
@@ -36,7 +68,65 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
     delete p;
 }
 
+namespace {
+
+// Deep-copy ScheduleContents from 'src' to 'dst'
+void deep_copy_schedule_contents_helper(
+        IntrusivePtr<ScheduleContents> &dst, const IntrusivePtr<ScheduleContents> &src,
+        DeepCopyMap &copied_map) {
+
+    if (!src.defined()) {
+        dst = src;
+        return;
+    }
+    dst = IntrusivePtr<ScheduleContents>(new ScheduleContents);
+    dst->store_level = src->store_level;
+    dst->compute_level = src->compute_level;
+    dst->splits = src->splits;
+    dst->dims = src->dims;
+    dst->storage_dims = src->storage_dims;
+    dst->bounds = src->bounds;
+    dst->reduction_domain = src->reduction_domain.deep_copy();
+    dst->memoized = src->memoized;
+    dst->touched = src->touched;
+    dst->allow_race_conditions = src->allow_race_conditions;
+
+    // Deep-copy wrapper functions. If function has already been deep-copied before,
+    // i.e. it's in the 'copied_map', use the deep-copied version from the map instead
+    // of creating a new deep-copy
+    for (const auto &iter : src->wrappers) {
+        IntrusivePtr<FunctionContents> &copied_func = copied_map[iter.second];
+        if (copied_func.defined()) {
+            dst->wrappers[iter.first] = copied_func;
+        } else {
+            dst->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
+            copied_map[iter.second] = dst->wrappers[iter.first];
+        }
+    }
+    internal_assert(dst->wrappers.size() == src->wrappers.size());
+
+    // Deep-copy specializations
+    for (const auto &s : src->specializations) {
+        Specialization s_copy;
+        s_copy.condition = s.condition;
+        s_copy.schedule = IntrusivePtr<ScheduleContents>(new ScheduleContents);
+        deep_copy_schedule_contents_helper(s_copy.schedule, s.schedule, copied_map);
+        dst->specializations.push_back(std::move(s_copy));
+    }
+}
+
+}
+
 Schedule::Schedule() : contents(new ScheduleContents) {}
+
+Schedule Schedule::deep_copy(
+        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
+
+    Schedule copy;
+    internal_assert(copy.contents.defined() && contents.defined()) << "Cannot deep-copy undefined Schedule\n";
+    deep_copy_schedule_contents_helper(copy.contents, contents, copied_map);
+    return copy;
+}
 
 bool &Schedule::memoized() {
     return contents->memoized;
@@ -111,6 +201,24 @@ const Specialization &Schedule::add_specialization(Expr condition) {
     return contents->specializations.back();
 }
 
+const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() const {
+    return contents->wrappers;
+}
+
+void Schedule::add_wrapper(const std::string &f,
+                           const IntrusivePtr<Internal::FunctionContents> &wrapper) {
+    if (contents->wrappers.count(f)) {
+        if (f.empty()) {
+            user_warning << "Replacing previous definition of global wrapper in function \""
+                         << f << "\"\n";
+        } else {
+            internal_error << "Wrapper redefinition in function \"" << f << "\" is not allowed\n";
+        }
+    }
+    contents->wrappers[f] = wrapper;
+}
+
+
 LoopLevel &Schedule::store_level() {
     return contents->store_level;
 }
@@ -160,6 +268,12 @@ void Schedule::accept(IRVisitor *visitor) const {
     }
     for (const Specialization &s : specializations()) {
         s.condition.accept(visitor);
+    }
+}
+
+void Schedule::mutate(IRMutator *mutator) {
+    if (contents.defined()) {
+        contents->mutate(mutator);
     }
 }
 
