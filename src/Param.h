@@ -1,6 +1,8 @@
 #ifndef HALIDE_PARAM_H
 #define HALIDE_PARAM_H
 
+#include "IR.h"
+
 /** \file
  *
  * Classes for declaring scalar parameters to halide pipelines
