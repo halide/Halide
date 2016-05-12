@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <limits>
 #include <memory>
-#include <vector>
 #include <stdint.h>  // <cstdint> requires C++11
 
 #include "HalideRuntime.h"
@@ -75,30 +74,6 @@ class Image {
         buf.dev_dirty = false;
         buf.dev = 0;
         contents = new Contents(buf, ptr);
-    }
-
-    // Returns the dimension sizes of a statically sized array from inner to outer.
-    // E.g. ary[2][3][4] returns (4, 3, 2).
-    // Because of the scalar overload below, this will only work if Array is T or T const of
-    // one or more dimensions.
-    template<typename Array, size_t N>
-    static std::vector<int> dimension_sizes(Array (&vals)[N], std::vector<int> dimSizes = std::vector<int>()) {
-        dimSizes = dimension_sizes(vals[0], dimSizes);
-        dimSizes.push_back((int)N);
-        return dimSizes;
-    }
-
-    static std::vector<int> dimension_sizes(T const &, std::vector<int> dimSizes = std::vector<int>() ) {
-        return dimSizes;
-    }
-
-    template<typename Array, size_t N>
-    T const * first_of_array(Array (&vals)[N]) {
-        return first_of_array(vals[0]);
-    }
-
-    T const * first_of_array(T const &val) {
-        return &val;
     }
 
 public:
@@ -173,28 +148,9 @@ public:
         contents->dev_free();
     }
 
-    // Initialize the Image from a statically sized array.
-    // Because of the scalar overload of dimension_sizes, this will only work if Array
-    // is T or T const of zero or more dimensions.
-    template< typename Array >
-    Image(Array &vals) {
-        std::vector<int> dimSizes(dimension_sizes(vals));
-        size_t dims = dimSizes.size();
-        if (dims > 4)
-            halide_error(NULL, "Halide's buffer_t can only have a maximum of 4 dimensions\n");
-        initialize
-            ( dims > 0 ? dimSizes[0] : 1
-            , dims > 1 ? dimSizes[1] : 0
-            , dims > 2 ? dimSizes[2] : 0
-            , dims > 3 ? dimSizes[3] : 0
-            , false);
-        int n = 1;
-        for (size_t i = 0; i < dims; ++i)
-            n *= dimSizes[i];
-        T const *ary = first_of_array(vals);
-        T *host = data();
-        for (int i = 0; i < n; ++i)
-            host[i] = ary[i];
+    Image(T vals[]) {
+        initialize(sizeof(vals)/sizeof(T));
+        for (int i = 0; i < sizeof(vals); i++) (*this)(i) = vals[i];
     }
 
     /** Make sure you've called copy_to_host before you start
