@@ -1032,7 +1032,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
 }
 
 string CodeGen_Hexagon::mcpu() const {
-  if (target.has_feature(Halide::Target::HVX_V62))
+  if (target.has_feature(Halide::Target::HVX_v62))
     return "hexagonv62";
   else
     return "hexagonv60";
@@ -1054,8 +1054,8 @@ int CodeGen_Hexagon::native_vector_bits() const {
   bool DoTrace = ! EmittedOnce;
   EmittedOnce = true;
   if (DoTrace)
-    debug(1) << (target.has_feature(Halide::Target::HVX_V62)
-             ? "V62\n" : "V60\n");
+    debug(1) << (target.has_feature(Halide::Target::HVX_v62)
+             ? "v62\n" : "v60\n");
   if (target.has_feature(Halide::Target::HVX_128)) {
     if (DoTrace) debug(1) << "128 Byte mode\n";
     return 128*8;

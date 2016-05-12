@@ -4,8 +4,7 @@
 #include "Closure.h"
 #include "Param.h"
 #include "Image.h"
-#include "Output.h"
-#include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 #include "RemoveTrivialForLoops.h"
 
 #include <iostream>
@@ -245,7 +244,7 @@ public:
         s = mutate(s);
 
         // Skip if there are no device kernels.
-        if (device_code.functions.empty()) {
+        if (device_code.functions().empty()) {
             return s;
         }
 
@@ -256,7 +255,7 @@ public:
         //compile_module_to_shared_object(device_code, "/tmp/hex.so");
 #else
         debug(1) << "Hexagon device code module: " << device_code << "\n";
-        compile_module_to_llvm_bitcode(device_code, "hex.bc");
+        device_code.compile(Outputs().bitcode("hex.bc"));
 
         string hex_command = "${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
         if (device_code.target().has_feature(Target::HVX_128)) {

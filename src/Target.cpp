@@ -50,9 +50,8 @@ static void cpuid(int info[4], int infoType, int extra) {
 #endif
 #endif
 #endif
-}
 
-Target get_host_target() {
+Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
 #ifdef __linux__
     os = Target::Linux;
@@ -139,6 +138,17 @@ Target get_host_target() {
 #endif
 #endif
 #endif
+}
+
+}  // namespace
+
+Target get_host_target() {
+    // Calculating the host target isn't slow but it isn't free,
+    // and it's pointless to recalculate it every time we (e.g.) parse
+    // an arbitrary Target string. It won't ever change, so cache on first
+    // use.
+    static Target host_target = calculate_host_target();
+    return host_target;
 }
 
 namespace {
@@ -230,7 +240,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"user_context", Target::UserContext},
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
-    {"hvx_v62", Target::HVX_V62},
+    {"hvx_v62", Target::HVX_v62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},

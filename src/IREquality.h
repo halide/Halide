@@ -31,8 +31,8 @@ private:
         // Note this hash is symmetric in a and b, so that a
         // comparison in a and b hashes to the same bucket as
         // a comparison on b and a.
-        uint64_t pa = (uint64_t)(a.ptr);
-        uint64_t pb = (uint64_t)(b.ptr);
+        uint64_t pa = (uint64_t)(a.get());
+        uint64_t pb = (uint64_t)(b.get());
         uint64_t mix = (pa + pb) + (pa ^ pb);
         mix ^= (mix >> bits);
         mix ^= (mix >> (bits*2));
