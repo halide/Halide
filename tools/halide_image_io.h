@@ -96,7 +96,6 @@ inline void swap_endian_16(bool little_endian, uint16_t &value) {
 }
 
 struct FileOpener {
-    static constexpr int FileOpener_MaxLineLen = 1024;
     FileOpener(const char* filename, const char* mode) : f(fopen(filename, mode)) {
         // nothing
     }
@@ -359,7 +358,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
     else if (maxval == 65535) { bit_depth = 16; }
-    else { if (!check(false, "Invalid bit depth in PGM\n")) return false; }
+    else if (!check(false, "Invalid bit depth in PGM\n")) { return false; }
 
     // Graymap
     *im = ImageType(width, height);
@@ -464,7 +463,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
     else if (maxval == 65535) { bit_depth = 16; }
-    else { if (!check(false, "Invalid bit depth in PPM\n")) return false; }
+    else if (!check(false, "Invalid bit depth in PPM\n")) { return false; }
 
     int channels = 3;
     *im = ImageType(width, height, channels);
