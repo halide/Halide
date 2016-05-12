@@ -108,6 +108,12 @@ Func build_wrap() {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_gpu_feature()) {
+        printf("Not running test because no gpu target enabled\n");
+        return 0;
+    }
+
     Func use_shared = build(true);
     Func use_l1 = build(false);
     Func use_wrap_for_shared = build_wrap();
