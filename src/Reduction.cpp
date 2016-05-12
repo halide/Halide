@@ -108,6 +108,20 @@ struct ReductionDomainContents {
     ReductionDomainContents() : predicate(const_true()), frozen(false) {
     }
 
+    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator *mutator) {
+        for (auto &rvar : domain) {
+            if (rvar.min.defined()) {
+                rvar.min = mutator->mutate(rvar.min);
+            }
+            if (rvar.extent.defined()) {
+                rvar.extent = mutator->mutate(rvar.extent);
+            }
+        }
+        if (predicate.defined()) {
+            predicate = mutator->mutate(predicate);
+        }
+    }
 };
 
 template<>
@@ -119,6 +133,16 @@ EXPORT void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDo
 ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
     contents(new ReductionDomainContents) {
     contents->domain = domain;
+}
+
+ReductionDomain ReductionDomain::deep_copy() const {
+    if (!contents.defined()) {
+        return ReductionDomain();
+    }
+    ReductionDomain copy(contents->domain);
+    copy.contents->predicate = contents->predicate;
+    copy.contents->frozen = contents->frozen;
+    return copy;
 }
 
 const std::vector<ReductionVariable> &ReductionDomain::domain() const {
@@ -174,6 +198,12 @@ void ReductionDomain::freeze() {
 
 bool ReductionDomain::frozen() const {
     return contents->frozen;
+}
+
+void ReductionDomain::mutate(IRMutator *mutator) {
+    if (contents.defined()) {
+        contents->mutate(mutator);
+    }
 }
 
 }
