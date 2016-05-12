@@ -8,6 +8,7 @@
 
 #include "IR.h"
 #include "Buffer.h"
+#include "Outputs.h"
 #include "Target.h"
 
 namespace Halide {
@@ -69,10 +70,18 @@ public:
     EXPORT void append(const Buffer &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
     // @}
+
+    /** Compile a halide Module to variety of outputs, depending on 
+     * the fields set in output_files. */
+    EXPORT void compile(const Outputs &output_files) const;
 };
 
 /** Link a set of modules together into one module. */
 EXPORT Module link_modules(const std::string &name, const std::vector<Module> &modules);
+
+/** Create an object file containing the Halide runtime for a given
+ * target. For use with Target::NoRuntime. */
+EXPORT void compile_standalone_runtime(std::string object_filename, Target t);
 
 }
 

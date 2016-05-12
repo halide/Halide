@@ -274,8 +274,8 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Output.h
   OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -420,7 +420,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ModulusRemainder.cpp
   Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  Output.cpp
   OutputImageParam.cpp
   ParallelRVar.cpp
   Parameter.cpp
