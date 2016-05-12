@@ -3,26 +3,6 @@
 
 namespace Halide {
 
-void OutputImageParam::add_implicit_args_if_placeholder(std::vector<Expr> &args,
-                                                        Expr last_arg,
-                                                        int total_args,
-                                                        bool *placeholder_seen) const {
-    const Internal::Variable *var = last_arg.as<Internal::Variable>();
-    bool is_placeholder = var && Var::is_placeholder(var->name);
-    if (is_placeholder) {
-        user_assert(!(*placeholder_seen))
-            << "Only one implicit placeholder ('_') allowed in argument list for ImageParam " << name() << "\n";
-        *placeholder_seen = true;
-
-        // The + 1 in the conditional is because one provided argument is an placeholder
-        for (int i = 0; i < (dimensions() - total_args + 1); i++) {
-            args.push_back(Var::implicit(i));
-        }
-    } else {
-        args.push_back(last_arg);
-    }
-}
-
 OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k) :
     param(p), kind(k) {
 }

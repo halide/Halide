@@ -20,7 +20,7 @@ class ImageParam : public OutputImageParam {
      * representation. */
     Func func;
 
-    // Helper function to initialize the Func representation of this ImageParam
+    /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
 public:
@@ -56,23 +56,6 @@ public:
     EXPORT Expr operator()(std::vector<Expr>) const;
     EXPORT Expr operator()(std::vector<Var>) const;
     // @}
-
-    /** Treating the image parameter as an Expr is equivalent to call
-     * it with no arguments. For example, you can say:
-     *
-     \code
-     ImageParam im(UInt(8), 2);
-     Func f;
-     f = im*2;
-     \endcode
-     *
-     * This will define f as a two-dimensional function with value at
-     * position (x, y) equal to twice the value of the image parameter
-     * at the same location.
-     */
-    operator Expr() const {
-        return (*this)(_);
-    }
 
     /** Return the intrinsic Func representation of this ImageParam. This allows
      * an ImageParam to be implicitly converted to a Func.
