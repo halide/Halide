@@ -449,6 +449,7 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
+  Outputs.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Parameter.h \
