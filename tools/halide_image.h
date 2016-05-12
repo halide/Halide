@@ -175,22 +175,22 @@ public:
 
     // Initialize the Image from a statically sized array.
     // Because of the scalar overload of dimension_sizes, this will only work if Array
-    // is T or T const of zero or more dimensions.
-    template< typename Array >
-    Image(Array &vals) {
-        std::vector<int> dimSizes(dimension_sizes(vals));
-        size_t dims = dimSizes.size();
+    // is T or T const of one or more dimensions.
+    template< typename Array, size_t N >
+    Image(Array (&vals)[N]) {
+        std::vector<int> dimSizes(dimension_sizes(vals[0]));
+        size_t dims = 1 + dimSizes.size();
         if (dims > 4)
             halide_error(NULL, "Halide's buffer_t can only have a maximum of 4 dimensions\n");
+        int n = (int)N;
         initialize
-            ( dims > 0 ? dimSizes[0] : 1
-            , dims > 1 ? dimSizes[1] : 0
-            , dims > 2 ? dimSizes[2] : 0
-            , dims > 3 ? dimSizes[3] : 0
+            ( n
+            , dims > 1 ? dimSizes[0] : 0
+            , dims > 2 ? dimSizes[1] : 0
+            , dims > 3 ? dimSizes[2] : 0
             , false);
-        int n = 1;
-        for (size_t i = 0; i < dims; ++i)
-            n *= dimSizes[i];
+        for (size_t i = 1; i < dims; ++i)
+            n *= dimSizes[i - 1];
         T const *ary = first_of_array(vals);
         T *host = data();
         for (int i = 0; i < n; ++i)
