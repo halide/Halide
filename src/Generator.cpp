@@ -29,6 +29,15 @@ bool is_valid_name(const std::string& n) {
     return true;
 }
 
+std::string compute_base_path(const std::string &output_dir,
+                              const std::string &function_name,
+                              const std::string &file_base_name) {
+    std::vector<std::string> namespaces;
+    std::string simple_name = extract_namespaces(function_name, namespaces);
+    std::string base_path = output_dir + "/" + (file_base_name.empty() ? simple_name : file_base_name);
+    return base_path;
+}
+
 std::string get_extension(const std::string& def, const GeneratorBase::EmitOptions &options) {
     auto it = options.extensions.find(def);
     if (it != options.extensions.end()) {
@@ -38,8 +47,8 @@ std::string get_extension(const std::string& def, const GeneratorBase::EmitOptio
 }
 
 void compile_module_to_filter(const Module &m,
-                 const std::string &base_path,
-                 const GeneratorBase::EmitOptions &options) {
+                              const std::string &base_path,
+                              const GeneratorBase::EmitOptions &options) {
     Outputs output_files;
     if (options.emit_o) {
         // If the target arch is pnacl, then the output "object" file is
@@ -224,9 +233,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         emit_options.extensions[ext_pair[0]] = ext_pair[1];
     }
 
+    const auto target_string = generator_args["target"];
     if (!runtime_name.empty()) {
         compile_standalone_runtime(output_dir + "/" + runtime_name,
-                                   parse_target_string(generator_args["target"]));
+                                   parse_target_string(target_string));
         if (generator_name.empty()) {
             // We're just compiling a runtime
             return 0;
@@ -387,21 +397,20 @@ std::vector<Argument> GeneratorBase::get_filter_output_types() {
     return output_types;
 }
 
-Module GeneratorBase::build_module(const std::string &function_name) {
+Module GeneratorBase::build_module(const std::string &function_name,
+                                   const LoweredFunc::LinkageType linkage_type) {
     build_params();
     Pipeline pipeline = build_pipeline();
     // Building the pipeline may mutate the params and imageparams.
     rebuild_params();
-    return pipeline.compile_to_module(get_filter_arguments(), function_name, target);
+    return pipeline.compile_to_module(get_filter_arguments(), function_name, target, linkage_type);
 }
 
 void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const std::string &function_name,
                                 const std::string &file_base_name,
                                 const EmitOptions &options) {
-    std::vector<std::string> namespaces;
-    std::string simple_name = extract_namespaces(function_name, namespaces);
-    std::string base_path = output_dir + "/" + (file_base_name.empty() ? simple_name : file_base_name);
+    std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
     compile_module_to_filter(build_module(function_name), base_path, options);
 }
 
