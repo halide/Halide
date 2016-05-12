@@ -312,6 +312,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WrapCalls.h
   runtime/HalideRuntime.h
 )
 
@@ -454,6 +455,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WrapCalls.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
