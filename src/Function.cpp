@@ -19,6 +19,18 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::set;
+using std::map;
+
+typedef map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
+UpdateDefinition deep_copy_update_definition_helper(const UpdateDefinition &src,
+                                                    DeepCopyMap &copied_map);
+ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgument &src,
+                                                         DeepCopyMap &copied_map);
+void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
+                                        IntrusivePtr<FunctionContents> &dst,
+                                        DeepCopyMap &copied_map);
+IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
+    const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map);
 
 struct FunctionContents {
     mutable RefCount ref_count;
@@ -75,7 +87,7 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument i : extern_arguments) {
                 if (i.is_func()) {
-                    i.func.ptr->accept(visitor);
+                    i.func->accept(visitor);
                 } else if (i.is_expr()) {
                     i.expr.accept(visitor);
                 }
@@ -92,6 +104,43 @@ struct FunctionContents {
                 }
                 if (i.extent_constraint(j).defined()) {
                     i.extent_constraint(j).accept(visitor);
+                }
+            }
+        }
+    }
+
+    // Pass an IRMutator through to all Exprs referenced in the FunctionContents
+    void mutate(IRMutator *mutator) {
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = mutator->mutate(values[i]);
+        }
+
+        // Mutate schedule
+        schedule.mutate(mutator);
+
+        // Mutate update definition
+        for (UpdateDefinition &update : updates) {
+            for (size_t i = 0; i < update.values.size(); ++i) {
+                update.values[i] = mutator->mutate(update.values[i]);
+            }
+            for (size_t i = 0; i < update.args.size(); ++i) {
+                update.args[i] = mutator->mutate(update.args[i]);
+            }
+
+            if (update.domain.defined()) {
+                update.domain.mutate(mutator);
+            }
+
+            // Mutate update definition's schedule
+            update.schedule.mutate(mutator);
+        }
+
+        if (!extern_function_name.empty()) {
+            for (ExternFuncArgument &i : extern_arguments) {
+                if (i.is_func()) {
+                    i.func->mutate(mutator);
+                } else if (i.is_expr()) {
+                    i.expr = mutator->mutate(i.expr);
                 }
             }
         }
@@ -245,7 +294,129 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
             << "Func names may not contain the character '.', "
             << "as it is used internally by Halide as a separator\n";
     }
-    contents.ptr->name = n;
+    contents->name = n;
+}
+
+// Return deep-copy of UpdateDefinition 'src'
+UpdateDefinition deep_copy_update_definition_helper(const UpdateDefinition &src,
+                                                    DeepCopyMap &copied_map) {
+    UpdateDefinition copy;
+    copy.values = src.values;
+    copy.args = src.args;
+    copy.schedule = src.schedule.deep_copy(copied_map);
+
+    // UpdateDefinition's domain is the same as the one pointed by its schedule
+    internal_assert(src.schedule.reduction_domain().same_as(src.domain))
+        << "UpdateDefinition should point to the same reduction domain as its schedule\n";
+    // We don't need to deep-copy the reduction domain since we've already done
+    // it when deep-copying the schedule above
+    copy.domain = copy.schedule.reduction_domain();
+    return copy;
+}
+
+// Return deep-copy of ExternFuncArgument 'src'
+ExternFuncArgument deep_copy_extern_func_argument_helper(
+        const ExternFuncArgument &src, DeepCopyMap &copied_map) {
+    ExternFuncArgument copy;
+    copy.arg_type = src.arg_type;
+    copy.buffer = src.buffer;
+    copy.expr = src.expr;
+    copy.image_param = src.image_param;
+
+    if (!src.func.defined()) { // No need to deep-copy the func if it's undefined
+        internal_assert(!src.is_func())
+            << "ExternFuncArgument has type FuncArg but has no function definition\n";
+        return copy;
+    }
+
+    // If the FunctionContents has already been deep-copied previously, i.e.
+    // it's in the 'copied_map', use the deep-copied version from the map instead
+    // of creating a new deep-copy
+    IntrusivePtr<FunctionContents> &copied_func = copied_map[src.func];
+    if (copied_func.defined()) {
+        copy.func = copied_func;
+    } else {
+        copy.func = deep_copy_function_contents_helper(src.func, copied_map);
+        copied_map[src.func] = copy.func;
+    }
+    return copy;
+}
+
+// Return a deep-copy of FunctionContents 'src'
+IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
+        const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map) {
+
+    IntrusivePtr<FunctionContents> copy(new FunctionContents);
+    deep_copy_function_contents_helper(src, copy, copied_map);
+    return copy;
+}
+
+// Return a deep-copy of FunctionContents 'src'
+void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
+                                        IntrusivePtr<FunctionContents> &dst,
+                                        DeepCopyMap &copied_map) {
+    debug(4) << "Deep-copy function contents: \"" << src->name << "\"\n";
+
+    internal_assert(dst.defined() && src.defined()) << "Cannot deep-copy undefined FunctionContents\n";
+
+    dst->name = src->name;
+    dst->args = src->args;
+    dst->values = src->values;
+    dst->output_types = src->output_types;
+    dst->debug_file = src->debug_file;
+    dst->extern_function_name = src->extern_function_name;
+    dst->extern_is_c_plus_plus = src->extern_is_c_plus_plus;
+    dst->trace_loads = src->trace_loads;
+    dst->trace_stores = src->trace_stores;
+    dst->trace_realizations = src->trace_realizations;
+    dst->frozen = src->frozen;
+    dst->output_buffers = src->output_buffers;
+
+    dst->schedule = src->schedule.deep_copy(copied_map);
+
+    for (const auto &u : src->updates) {
+        UpdateDefinition u_copy = deep_copy_update_definition_helper(u, copied_map);
+        internal_assert(u_copy.domain.same_as(u_copy.schedule.reduction_domain()))
+            << "UpdateDefinition should point to the same reduction domain as its schedule\n";
+        dst->updates.push_back(std::move(u_copy));
+    }
+    for (const auto &e : src->extern_arguments) {
+        ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
+        dst->extern_arguments.push_back(std::move(e_copy));
+    }
+}
+
+void Function::deep_copy(Function &copy,
+                         std::map<Function, Function, Function::Compare> &copied_map) const {
+    internal_assert(copy.contents.defined() && contents.defined())
+        << "Cannot deep-copy undefined Function\n";
+    // Need to copy over the contents of Functions in 'copied_map' since
+    // deep_copy_function_contents_helper() takes a map of
+    // <FunctionContents, FunctionContents> (DeepCopyMap)
+    DeepCopyMap copied_funcs_map;
+    for (const auto &iter : copied_map) {
+        copied_funcs_map[iter.first.contents] = iter.second.contents;
+    }
+    // Add reference to this Function's deep-copy to the map in case of
+    // self-reference, e.g. self-reference in an UpdateDefinition.
+    copied_funcs_map[contents] = copy.contents;
+
+    // Perform the deep-copies
+    deep_copy_function_contents_helper(contents, copy.contents, copied_funcs_map);
+
+    // Copy over all new deep-copies of FunctionContents into 'copied_map'.
+    for (const auto &iter : copied_funcs_map) {
+        Function old_func = Function(iter.first);
+        if (copied_map.count(old_func)) {
+            // Need to make sure that deep_copy_function_contents_helper() uses
+            // the already existing deep-copy of FunctionContents instead of
+            // creating a new deep-copy
+            internal_assert(copied_map[old_func].contents.same_as(iter.second))
+                << old_func.name() << " is deep-copied twice\n";
+            continue;
+        }
+        copied_map[old_func] = Function(iter.second);
+    }
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
@@ -307,32 +478,32 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     if (!contents.defined()) {
         contents = new FunctionContents;
-        contents.ptr->name = unique_name('f');
+        contents->name = unique_name('f');
     }
 
-    user_assert(contents.ptr->values.empty())
+    user_assert(contents->values.empty())
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func is already defined.\n";
 
-    contents.ptr->values = values;
-    contents.ptr->args = args;
+    contents->values = values;
+    contents->args = args;
 
-    contents.ptr->output_types.resize(values.size());
-    for (size_t i = 0; i < contents.ptr->output_types.size(); i++) {
-        contents.ptr->output_types[i] = values[i].type();
+    contents->output_types.resize(values.size());
+    for (size_t i = 0; i < contents->output_types.size(); i++) {
+        contents->output_types[i] = values[i].type();
     }
 
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, true};
-        contents.ptr->schedule.dims().push_back(d);
+        contents->schedule.dims().push_back(d);
         StorageDim sd = {args[i]};
-        contents.ptr->schedule.storage_dims().push_back(sd);
+        contents->schedule.storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
     {
         Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
-        contents.ptr->schedule.dims().push_back(d);
+        contents->schedule.dims().push_back(d);
     }
 
     for (size_t i = 0; i < values.size(); i++) {
@@ -341,12 +512,12 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
             buffer_name += '.' + std::to_string((int)i);
         }
         Parameter output(values[i].type(), true, args.size(), buffer_name);
-        contents.ptr->output_buffers.push_back(output);
+        contents->output_buffers.push_back(output);
     }
 }
 
 void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
-    int update_idx = static_cast<int>(contents.ptr->updates.size());
+    int update_idx = static_cast<int>(contents->updates.size());
 
     user_assert(!name().empty())
         << "Func has an empty name.\n";
@@ -369,7 +540,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Dimensionality of update definition must match dimensionality of pure definition.\n";
 
-    user_assert(values.size() == contents.ptr->values.size())
+    user_assert(values.size() == contents->values.size())
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Number of tuple elements for update definition must "
         << "match number of tuple elements for pure definition.\n";
@@ -378,7 +549,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         // Check that pure value and the update value have the same
         // type.  Without this check, allocations may be the wrong size
         // relative to what update code expects.
-        Type pure_type = contents.ptr->values[i].type();
+        Type pure_type = contents->values[i].type();
         if (pure_type != values[i].type()) {
             std::ostringstream err;
             err << "In update definition " << update_idx << " of Func \"" << name() << "\":\n";
@@ -412,7 +583,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         if (const Variable *var = args[i].as<Variable>()) {
             if (!var->param.defined() &&
                 !var->reduction_domain.defined() &&
-                var->name == contents.ptr->args[i]) {
+                var->name == contents->args[i]) {
                 pure_args[i] = var->name;
             } else {
                 pure = false;
@@ -544,7 +715,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             << " an already-defined function.\n";
     }
 
-    contents.ptr->updates.push_back(r);
+    contents->updates.push_back(r);
 
 }
 
@@ -562,10 +733,10 @@ void Function::define_extern(const std::string &function_name,
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func already has an extern definition.\n";
 
-    contents.ptr->extern_function_name = function_name;
-    contents.ptr->extern_arguments = args;
-    contents.ptr->output_types = types;
-    contents.ptr->extern_is_c_plus_plus = is_c_plus_plus;
+    contents->extern_function_name = function_name;
+    contents->extern_arguments = args;
+    contents->output_types = types;
+    contents->extern_is_c_plus_plus = is_c_plus_plus;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -573,112 +744,165 @@ void Function::define_extern(const std::string &function_name,
             buffer_name += '.' + std::to_string((int)i);
         }
         Parameter output(types[i], true, dimensionality, buffer_name);
-        contents.ptr->output_buffers.push_back(output);
+        contents->output_buffers.push_back(output);
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
-    contents.ptr->args.resize(dimensionality);
+    contents->args.resize(dimensionality);
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
-        contents.ptr->args[i] = arg;
+        contents->args[i] = arg;
         StorageDim sd = {arg};
-        contents.ptr->schedule.storage_dims().push_back(sd);
+        contents->schedule.storage_dims().push_back(sd);
     }
 }
 
 void Function::accept(IRVisitor *visitor) const {
-    contents.ptr->accept(visitor);
+    contents->accept(visitor);
 }
 
 const std::string &Function::name() const {
-    return contents.ptr->name;
+    return contents->name;
 }
 
 const std::vector<std::string> &Function::args() const {
-    return contents.ptr->args;
+    return contents->args;
 }
 
 const std::vector<Type> &Function::output_types() const {
-    return contents.ptr->output_types;
+    return contents->output_types;
 }
 
 const std::vector<Expr> &Function::values() const {
-    return contents.ptr->values;
+    return contents->values;
 }
 
 Schedule &Function::schedule() {
-    return contents.ptr->schedule;
+    return contents->schedule;
 }
 
 const Schedule &Function::schedule() const {
-    return contents.ptr->schedule;
+    return contents->schedule;
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
-    return contents.ptr->output_buffers;
+    return contents->output_buffers;
 }
 
 Schedule &Function::update_schedule(int idx) {
-    return contents.ptr->updates[idx].schedule;
+    return contents->updates[idx].schedule;
 }
 
 const std::vector<UpdateDefinition> &Function::updates() const {
-    return contents.ptr->updates;
+    return contents->updates;
 }
 
 bool Function::has_update_definition() const {
-    return !contents.ptr->updates.empty();
+    return !contents->updates.empty();
 }
 
 bool Function::has_extern_definition() const {
-    return !contents.ptr->extern_function_name.empty();
+    return !contents->extern_function_name.empty();
 }
 
 bool Function::extern_definition_is_c_plus_plus() const {
-    return contents.ptr->extern_is_c_plus_plus;
+    return contents->extern_is_c_plus_plus;
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
-    return contents.ptr->extern_arguments;
+    return contents->extern_arguments;
 }
 
 const std::string &Function::extern_function_name() const {
-    return contents.ptr->extern_function_name;
+    return contents->extern_function_name;
 }
 
 const std::string &Function::debug_file() const {
-    return contents.ptr->debug_file;
+    return contents->debug_file;
 }
 
 std::string &Function::debug_file() {
-    return contents.ptr->debug_file;
+    return contents->debug_file;
 }
 
 void Function::trace_loads() {
-    contents.ptr->trace_loads = true;
+    contents->trace_loads = true;
 }
 void Function::trace_stores() {
-    contents.ptr->trace_stores = true;
+    contents->trace_stores = true;
 }
 void Function::trace_realizations() {
-    contents.ptr->trace_realizations = true;
+    contents->trace_realizations = true;
 }
 bool Function::is_tracing_loads() const {
-    return contents.ptr->trace_loads;
+    return contents->trace_loads;
 }
 bool Function::is_tracing_stores() const {
-    return contents.ptr->trace_stores;
+    return contents->trace_stores;
 }
 bool Function::is_tracing_realizations() const {
-    return contents.ptr->trace_realizations;
+    return contents->trace_realizations;
 }
 
 void Function::freeze() {
-    contents.ptr->frozen = true;
+    contents->frozen = true;
 }
 
 bool Function::frozen() const {
-    return contents.ptr->frozen;
+    return contents->frozen;
+}
+
+const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
+    return contents->schedule.wrappers();
+}
+
+void Function::add_wrapper(const std::string &f, Function &wrapper) {
+    wrapper.freeze();
+    contents->schedule.add_wrapper(f, wrapper.contents);
+}
+
+namespace {
+
+// Replace all calls to functions listed in 'substitutions' with their wrappers.
+class SubstituteCalls : public IRMutator {
+    using IRMutator::visit;
+
+    map<Function, Function, Function::Compare> substitutions;
+
+    void visit(const Call *c) {
+        IRMutator::visit(c);
+        c = expr.as<Call>();
+        internal_assert(c);
+
+        if ((c->call_type == Call::Halide) && c->func.defined() && substitutions.count(Function(c->func))) {
+            const Function &subs = substitutions[Function(c->func)];
+            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                     << "\"" << subs.name() << "\"\n";
+            expr = Call::make(subs, c->args, c->value_index);
+        }
+    }
+public:
+    SubstituteCalls(const map<Function, Function, Function::Compare> &substitutions)
+        : substitutions(substitutions) {}
+};
+
+} // anonymous namespace
+
+Function &Function::substitute_calls(const map<Function, Function, Compare> &substitutions) {
+    debug(4) << "Substituting calls in " << name() << "\n";
+
+    if (substitutions.empty()) {
+        return *this;
+    }
+    SubstituteCalls subs_calls(substitutions);
+    contents->mutate(&subs_calls);
+    return *this;
+}
+
+Function &Function::substitute_calls(const Function &orig, const Function &substitute) {
+    map<Function, Function, Compare> substitutions;
+    substitutions.emplace(orig, substitute);
+    return substitute_calls(substitutions);
 }
 
 }
