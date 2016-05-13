@@ -72,9 +72,6 @@ int main(int argc, char **argv) {
     Func normalize("normalize");
     normalize(x, y, c) = interpolated[0](x, y, c) / interpolated[0](x, y, 3);
 
-    Func final("final");
-    final(x, y, c) = normalize(x, y, c);
-
     std::cout << "Finished function setup." << std::endl;
 
     int sched;
@@ -93,7 +90,7 @@ int main(int argc, char **argv) {
             downsampled[l].compute_root();
             interpolated[l].compute_root();
         }
-        final.compute_root();
+        normalize.compute_root();
         break;
     }
     case 1:
@@ -103,7 +100,7 @@ int main(int argc, char **argv) {
             downsampled[l].compute_root().vectorize(x,4);
             interpolated[l].compute_root().vectorize(x,4);
         }
-        final.compute_root();
+        normalize.compute_root();
         break;
     }
     case 2:
@@ -122,7 +119,7 @@ int main(int argc, char **argv) {
                 .unroll(y, 2)
                 .vectorize(x, 8);
         }
-        final
+        normalize
             .reorder(c, x, y)
             .bound(c, 0, 3)
             .unroll(c)
@@ -148,7 +145,7 @@ int main(int argc, char **argv) {
                 interpolated[l].compute_root();
             }
         }
-        final.compute_root();
+        normalize.compute_root();
         break;
     }
     case 4:
@@ -158,14 +155,20 @@ int main(int argc, char **argv) {
         // Some gpus don't have enough memory to process the entire
         // image, so we process the image in tiles.
         Var yo, yi, xo, xi;
-        final
+
+        // We can't compute the entire output stage at once on the GPU
+        // - it takes too much GPU memory on some of our build bots,
+        // so we wrap the final stage in a CPU stage.
+        Func cpu_wrapper = normalize.in();
+
+        cpu_wrapper
             .reorder(c, x, y)
             .bound(c, 0, 3)
-            .vectorize(x, 4)
-            .tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4);
+            .tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4)
+            .vectorize(xi, 8);
 
         normalize
-            .compute_at(final, xo)
+            .compute_at(cpu_wrapper, xo)
             .reorder(c, x, y)
             .gpu_tile(x, y, 16, 16)
             .unroll(c);
@@ -180,7 +183,7 @@ int main(int argc, char **argv) {
                 .gpu_tile(x, y, c, tile_size, tile_size, 4);
             if (l == 1 || l == 4) {
                 interpolated[l]
-                    .compute_at(final, xo)
+                    .compute_at(cpu_wrapper, xo)
                     .gpu_tile(x, y, c, 8, 8, 4);
             } else {
                 int parent = l > 4 ? 4 : 1;
@@ -189,6 +192,10 @@ int main(int argc, char **argv) {
                     .gpu_threads(x, y, c);
             }
         }
+
+        // The cpu wrapper is our new output Func
+        normalize = cpu_wrapper;
+
         break;
     }
     default:
@@ -196,7 +203,7 @@ int main(int argc, char **argv) {
     }
 
     // JIT compile the pipeline eagerly, so we don't interfere with timing
-    final.compile_jit(target);
+    normalize.compile_jit(target);
 
     Image<float> in_png = load_image(argv[1]);
     Image<float> out(in_png.width(), in_png.height(), 3);
@@ -204,13 +211,13 @@ int main(int argc, char **argv) {
     input.set(in_png);
 
     std::cout << "Running... " << std::endl;
-    double best = benchmark(20, 1, [&]() { final.realize(out); });
+    double best = benchmark(20, 1, [&]() { normalize.realize(out); });
     std::cout << " took " << best * 1e3 << " msec." << std::endl;
 
     vector<Argument> args;
     args.push_back(input);
-    final.compile_to_assembly("test.s", args, target);
 
     save_image(out, argv[2]);
 
+    return 0;
 }

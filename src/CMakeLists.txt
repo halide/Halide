@@ -273,7 +273,7 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Output.h
+  Outputs.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -312,6 +312,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WrapCalls.h
   runtime/HalideRuntime.h
 )
 
@@ -416,7 +417,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ModulusRemainder.cpp
   Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  Output.cpp
   ParallelRVar.cpp
   Param.cpp
   Parameter.cpp
@@ -455,6 +455,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WrapCalls.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

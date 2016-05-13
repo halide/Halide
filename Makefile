@@ -318,7 +318,6 @@ SOURCE_FILES = \
   ModulusRemainder.cpp \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
-  Output.cpp \
   ParallelRVar.cpp \
   Param.cpp \
   Parameter.cpp \
@@ -356,7 +355,8 @@ SOURCE_FILES = \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \
-  VectorizeLoops.cpp
+  VectorizeLoops.cpp \
+  WrapCalls.cpp
 
 ifeq ($(LLVM_VERSION_TIMES_10),35)
 BITWRITER_VERSION=.35
@@ -447,7 +447,7 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
-  Output.h \
+  Outputs.h \
   ParallelRVar.h \
   Parameter.h \
   Param.h \
@@ -484,7 +484,8 @@ HEADER_FILES = \
   UnrollLoops.h \
   Util.h \
   Var.h \
-  VectorizeLoops.h
+  VectorizeLoops.h \
+  WrapCalls.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
