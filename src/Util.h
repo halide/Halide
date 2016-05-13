@@ -13,6 +13,7 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 #include <string>
