@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 all: process
 
-TIMING_ITERATIONS=5
+TIMING_ITERATIONS ?= 5
 
 camera_pipe: ../../ camera_pipe.cpp
 	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
