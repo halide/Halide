@@ -16,8 +16,11 @@ namespace Internal {
 
 /**
  * Concatenate the list of src_files into dst_file, using Unix ar format.
+ * If deterministic is true, emit 0 for all GID/UID/timestamps, and 0644 for
+ * all modes (equivalent to the ar -D option).
  */
-EXPORT void create_ar_file(const std::vector<std::string> &src_files, const std::string &dst_file);
+EXPORT void create_ar_file(const std::vector<std::string> &src_files, 
+                           const std::string &dst_file, bool deterministic = true);
 
 EXPORT void static_library_test();
 
