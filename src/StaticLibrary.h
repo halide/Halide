@@ -1,0 +1,27 @@
+#ifndef HALIDE_STATIC_LIBRARY_H
+#define HALIDE_STATIC_LIBRARY_H
+
+/** \file
+ * Methods combining object files into static libraries.
+ * TODO(srj): add method for combing .COFF files (.obj -> .lib) for Windows.
+ */
+
+#include <string>
+#include <vector>
+
+#include "Util.h"
+
+namespace Halide {
+namespace Internal {
+
+/**
+ * Concatenate the list of src_files into dst_file, using Unix ar format.
+ */
+EXPORT void create_ar_file(const std::vector<std::string> &src_files, const std::string &dst_file);
+
+EXPORT void static_library_test();
+
+}  // namespace Halide
+}  // namespace Internal
+
+#endif  // HALIDE_STATIC_LIBRARY_H

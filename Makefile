@@ -340,6 +340,7 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
+  StaticLibrary.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -470,6 +471,7 @@ HEADER_FILES = \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
+  StaticLibrary.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
