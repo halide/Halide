@@ -101,7 +101,7 @@ private:
 };
 
 std::string pad_right(std::string s, size_t max) {
-    internal_assert(s.size() <= max) << s.size() << " "<<s;
+    internal_assert(s.size() <= max) << s.size() << " " << s;
     while (s.size() < max) {
         s += " ";
     }
