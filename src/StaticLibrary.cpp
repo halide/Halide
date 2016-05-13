@@ -1,10 +1,13 @@
 #include "StaticLibrary.h"
 
 #include <stdio.h>
-#ifndef _MSC_VER
-#include <sys/stat.h>
+#ifdef _MSC_VER
+#include <io.h>
+#else
 #include <unistd.h>
 #endif
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "Error.h"
 
@@ -72,9 +75,9 @@ public:
     struct Stat {
         off_t file_size;
         time_t mod_time;
-        uid_t uid;
-        gid_t gid;
-        mode_t mode;
+        uint32_t uid;
+        uint32_t gid;
+        uint32_t mode;
     };
 
     static Stat stat(const std::string &name) {
@@ -111,7 +114,11 @@ std::string decimal_string(int value, size_t pad) {
 
 std::string octal_string(int value, size_t pad) {
     char buf[256];
+    #ifdef _MSC_VER
+    _snprintf(buf, sizeof(buf), "%o", value);
+    #else
     snprintf(buf, sizeof(buf), "%o", value);
+    #endif
     return pad_right(buf, pad);
 }
 
