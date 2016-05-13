@@ -621,7 +621,7 @@ int two_fold_wrapper_test() {
     output(x, y) = input(y, x);
 
     Var xi("xi"), yi("yi");
-    output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    output.tile(x, y, xi, yi, 8, 8);
 
     input_in_output = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
     input_in_output_in_output = input_in_output.in(output).compute_at(output, x).unroll(x).unroll(y);
@@ -667,7 +667,7 @@ int multi_folds_wrapper_test() {
     h(x, y) = f_in_g_in_g(y, x);
     f_in_g_in_g_in_h = f_in_g_in_g.in(h).compute_at(h, x).vectorize(x).unroll(y);
     f_in_g_in_g_in_h_in_h = f_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(x).unroll(y);
-    h.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    h.compute_root().tile(x, y, xi, yi, 8, 8);
 
     {
         // Check the call graphs.
