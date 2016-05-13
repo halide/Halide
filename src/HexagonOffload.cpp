@@ -258,7 +258,7 @@ public:
         device_code.compile(Outputs().bitcode("hex.bc"));
 
         string hex_command = "${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
-        if (device_code.target().has_feature(Target::HVX_V62)) {
+        if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
         if (device_code.target().has_feature(Target::HVX_128)) {
@@ -290,7 +290,7 @@ public:
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     Target target(Target::NoOS, Target::Hexagon, 32);
-    for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128, Target::HVX_V62}) {
+    for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128, Target::HVX_v62}) {
         if (host_target.has_feature(i)) {
             target = target.with_feature(i);
         }
