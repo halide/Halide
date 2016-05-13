@@ -35,6 +35,7 @@ protected:
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
+    void visit(const Call *);
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Cast *);

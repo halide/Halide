@@ -11,7 +11,7 @@ enum {
     vec_x_trans
 };
 
-void test_transpose(int mode) {
+Image<uint16_t> test_transpose(int mode) {
     Func input, block, block_transpose, output;
     Var x, y;
 
@@ -57,13 +57,81 @@ void test_transpose(int mode) {
         output.realize(result);
     });
 
-    std::cout << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
+    std::cout << "Dummy Func version: "  << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
+    return result;
 }
+
+/* This illustrates how to achieve the same scheduling behavior using the 'in()'
+ * directive as opposed to creating dummy Funcs as done in 'test_transpose()' */
+Image<uint16_t> test_transpose_wrap(int mode) {
+    Func input, block_transpose, block, output;
+    Var x, y;
+
+    input(x, y) = cast<uint16_t>(x + y);
+    input.compute_root();
+
+    output(x, y) = input(y, x);
+
+    Var xi, yi;
+    output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+
+    // Do 8 vectorized loads from the input.
+    block_transpose = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
+
+    std::string algorithm;
+    switch(mode) {
+        case scalar_trans:
+            block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).unroll(x).unroll(y);
+            algorithm = "Scalar transpose";
+            output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
+            break;
+        case vec_y_trans:
+            block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(y).unroll(x);
+            algorithm = "Transpose vectorized in y";
+            output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
+            break;
+        case vec_x_trans:
+            block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
+            algorithm = "Transpose vectorized in x";
+            output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
+            break;
+    }
+
+
+    Image<uint16_t> result(1024, 1024);
+    output.compile_jit();
+
+    output.realize(result);
+
+    double t = benchmark(1, 10, [&]() {
+        output.realize(result);
+    });
+
+    std::cout << "Wrapper version: "  << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
+    return result;
+}
+
 
 int main(int argc, char **argv) {
     test_transpose(scalar_trans);
+    test_transpose_wrap(scalar_trans);
     test_transpose(vec_y_trans);
-    test_transpose(vec_x_trans);
+    test_transpose_wrap(vec_y_trans);
+
+    Image<uint16_t> im1 = test_transpose(vec_x_trans);
+    Image<uint16_t> im2 = test_transpose_wrap(vec_x_trans);
+
+    // Check correctness of the wrapper version
+    for (int y = 0; y < im2.height(); y++) {
+        for (int x = 0; x < im2.width(); x++) {
+            if (im2(x, y) != im1(x, y)) {
+                printf("wrapper(%d, %d) = %d instead of %d\n",
+                       x, y, im2(x, y), im1(x, y));
+                return -1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

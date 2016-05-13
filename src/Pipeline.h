@@ -21,11 +21,12 @@ namespace Halide {
 
 struct Argument;
 class Func;
+struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
 class IRMutator;
-}
+}  // namespace Internal
 
 /**
  * Used to determine if the output printed to file should be as a normal string
@@ -42,52 +43,12 @@ template<typename T>
 void delete_lowering_pass(T *pass) {
     delete pass;
 }
-}
+}  // namespace
 
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
 struct CustomLoweringPass {
     Internal::IRMutator *pass;
     void (*deleter)(Internal::IRMutator *);
-};
-
-/** A struct specifying a collection of outputs. Used as an argument
- * to Pipeline::compile_to and Func::compile_to */
-struct Outputs {
-    /** The name of the emitted object file. Empty if no object file
-     * output is desired. */
-    std::string object_name;
-
-    /** The name of the emitted text assembly file. Empty if no
-     * assembly file output is desired. */
-    std::string assembly_name;
-
-    /** The name of the emitted llvm bitcode. Empty if no llvm bitcode
-     * output is desired. */
-    std::string bitcode_name;
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an object file with the given name. */
-    Outputs object(const std::string &object_name) {
-        Outputs updated = *this;
-        updated.object_name = object_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an assembly file with the given name. */
-    Outputs assembly(const std::string &assembly_name) {
-        Outputs updated = *this;
-        updated.assembly_name = assembly_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an llvm bitcode file with the given name. */
-    Outputs bitcode(const std::string &bitcode_name) {
-        Outputs updated = *this;
-        updated.bitcode_name = bitcode_name;
-        return updated;
-    }
 };
 
 struct JITExtern;
@@ -497,6 +458,6 @@ struct JITExtern {
     }
 };
 
-}
+}  // namespace Halide
 
 #endif

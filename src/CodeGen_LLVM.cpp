@@ -435,7 +435,7 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     names.extern_name = names.simple_name;
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
-    
+
     const std::vector<Argument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
@@ -504,7 +504,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         compile_func(f, names.simple_name, names.extern_name);
 
-        // If the Func is externally visible, also create the argv wrapper
+        // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::External) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
@@ -805,7 +805,9 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    llvm::Value *result = builder->CreateCall(function, wrapper_args);
+    llvm::CallInst *result = builder->CreateCall(function, wrapper_args);
+    // This call should never inline
+    result->setIsNoInline();
     builder->CreateRet(result);
     llvm::verifyFunction(*wrapper);
     return wrapper;
