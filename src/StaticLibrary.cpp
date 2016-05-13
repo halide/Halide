@@ -37,7 +37,6 @@ std::string octal_string(int value, size_t pad) {
 void create_ar_file(const std::vector<std::string> &src_files, 
                     const std::string &dst_file, bool deterministic) {
     std::ofstream ar(dst_file, std::ofstream::out | std::ofstream::binary);
-    user_assert(ar.good());
     ar << "!<arch>\x0A";
     for (const std::string &src_path : src_files) {
         FileStat stat = file_stat(src_path);
@@ -69,6 +68,7 @@ void create_ar_file(const std::vector<std::string> &src_files,
             ar << src.rdbuf();
         }
     }
+    user_assert(ar.good());
 }
 
 void static_library_test() {
