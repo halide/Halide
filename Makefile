@@ -748,7 +748,7 @@ test_generators:  \
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators test_renderscript
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
-# For static and generator tests they time the compile time only. The times are recorded in CSV files.
+# For generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=time_compilation_opengl_%)
@@ -772,7 +772,7 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=$(BIN_DIR)/renderscript_%)
 
-time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
+time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generators
 
 # Make an empty generator for generating runtimes.
 $(BIN_DIR)/runtime.generator: $(ROOT_DIR)/tools/GenGen.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
@@ -805,11 +805,6 @@ $(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED
 
 $(BIN_DIR)/renderscript_%: $(ROOT_DIR)/test/renderscript/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
-
-$(TMP_DIR)/static/%/%.o: $(BIN_DIR)/static_%_generate
-	@-mkdir -p $(TMP_DIR)/static/$*
-	cd $(TMP_DIR)/static/$*; $(LD_PATH_SETUP) $(CURDIR)/$<
-	@-echo
 
 # TODO(srj): this doesn't auto-delete, why not?
 .INTERMEDIATE: $(FILTERS_DIR)/%.generator
@@ -1045,9 +1040,6 @@ time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 
 time_compilation_renderscript_%: $(BIN_DIR)/renderscript_%
 	$(TIME_COMPILATION) compile_times_renderscript.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_renderscript_%=renderscript_%)
-
-time_compilation_static_%: $(BIN_DIR)/static_%_generate
-	$(TIME_COMPILATION) compile_times_static.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_static_%=$(TMP_DIR)/static/%/%.o)
 
 time_compilation_generator_%: $(FILTERS_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.o)
