@@ -29,10 +29,7 @@ int main(int argc, char **argv) {
     Image<int16_t> im1 = h1.realize(1024);
     Image<int16_t> im2 = h2.realize(1024);
 
-    h1.compile_to_assembly("/dev/stdout", {}, get_jit_target_from_environment());
-
     for (int i = 0; i < im1.width(); i++) {
-        //printf("%d\n", im1(i));
         if (im1(i) != im2(i)) {
             printf("im1(%d) = %d, im2(%d) = %d\n",
                    i, im1(i), i, im2(i));
