@@ -73,7 +73,7 @@ void func_compile_to_bitcode0(h::Func &that, const std::string &filename,
                               const std::string fn_name = "",
                               const h::Target &target = h::get_target_from_environment())
 {
-    that.compile_to_bitcode(filename, args, fn_name, target);
+    that.compile_to(Outputs().bitcode(filename), args, fn_name, target);
     return;
 }
 
@@ -85,7 +85,7 @@ void func_compile_to_object0(h::Func &that, const std::string &filename,
                               const std::string fn_name = "",
                               const h::Target &target = h::get_target_from_environment())
 {
-    that.compile_to_object(filename, args, fn_name, target);
+    that.compile_to(Outputs().object(filename), args, fn_name, target);
     return;
 }
 
@@ -97,7 +97,7 @@ void func_compile_to_header0(h::Func &that, const std::string &filename,
                               const std::string fn_name = "",
                               const h::Target &target = h::get_target_from_environment())
 {
-    that.compile_to_header(filename, args, fn_name, target);
+    that.compile_to(Outputs().c_header(filename), args, fn_name, target);
     return;
 }
 
@@ -109,7 +109,7 @@ void func_compile_to_assembly0(h::Func &that, const std::string &filename,
                               const std::string fn_name = "",
                               const h::Target &target = h::get_target_from_environment())
 {
-    that.compile_to_assembly(filename, args, fn_name, target);
+    that.compile_to(Outputs().assembly(filename), args, fn_name, target);
     return;
 }
 
@@ -121,7 +121,7 @@ void func_compile_to_c0(h::Func &that, const std::string &filename,
                         const std::string fn_name = "",
                         const h::Target &target = h::get_target_from_environment())
 {
-    that.compile_to_c(filename, args, fn_name, target);
+    that.compile_to(Outputs().c_source(filename), args, fn_name, target);
     return;
 }
 
@@ -145,7 +145,11 @@ void func_compile_to_lowered_stmt0(h::Func &that,
                                    h::StmtOutputFormat fmt = h::Text,
                                    const h::Target &target = h::get_target_from_environment())
 {
-    that.compile_to_lowered_stmt(filename, args, fmt, target);
+    if (fmt == h::Text) {
+      that.compile_to(Outputs().stmt(filename), args, target);
+    } else {
+      that.compile_to(Outputs().stmt_html(filename), args, target);
+    }
     return;
 }
 

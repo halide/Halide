@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     std::vector<Argument> args;
     //args.push_back(im);
     //args.push_back(arg);
-    f.compile_to_object("f.o", args, "f");
+    f.compile_to(Outputs().object("f.o"), args, "f");
 
     printf("Success!\n");
     return 0;
