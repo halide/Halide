@@ -435,7 +435,7 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     names.extern_name = names.simple_name;
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
-    
+
     const std::vector<Argument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
