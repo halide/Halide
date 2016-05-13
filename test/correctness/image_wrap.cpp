@@ -669,7 +669,7 @@ int two_fold_wrapper_test() {
     output(x, y) = img(y, x);
 
     Var xi("xi"), yi("yi");
-    output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    output.tile(x, y, xi, yi, 8, 8);
 
     img_in_output = img.in(output).compute_at(output, x).vectorize(_0).unroll(_1);
     img_in_output_in_output = img_in_output.in(output).compute_at(output, x).unroll(_0).unroll(_1);
@@ -712,7 +712,7 @@ int multi_folds_wrapper_test() {
     g(x, y) = img(y, x);
 
     Var xi("xi"), yi("yi");
-    g.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    g.compute_root().tile(x, y, xi, yi, 8, 8);
 
     img_in_g = img.in(g).compute_root().tile(_0, _1, xi, yi, 8, 8).vectorize(xi).unroll(yi);
     img_in_g_in_g = img_in_g.in(g).compute_root().tile(_0, _1, xi, yi, 8, 8).unroll(xi).unroll(yi);
@@ -720,7 +720,7 @@ int multi_folds_wrapper_test() {
     h(x, y) = img_in_g_in_g(y, x);
     img_in_g_in_g_in_h = img_in_g_in_g.in(h).compute_at(h, x).vectorize(_0).unroll(_1);
     img_in_g_in_g_in_h_in_h = img_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(_0).unroll(_1);
-    h.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    h.compute_root().tile(x, y, xi, yi, 8, 8);
 
     {
         // Check the call graphs.
