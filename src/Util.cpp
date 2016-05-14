@@ -16,6 +16,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#ifdef __linux__
+#include <linux/limits.h>  // For PATH_MAX
+#endif
+
 namespace Halide {
 namespace Internal {
 
