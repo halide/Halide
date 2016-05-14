@@ -1,7 +1,7 @@
 #include "halide_image.h"
 
 #include <stdint.h>
-#include <stdio.h>
+#include <iostream>
 #include <limits>
 #include <type_traits>
 #include <vector>
@@ -43,23 +43,24 @@ typename remove_all_extents<Array>::type const * first_of_array(Array (&vals)[N]
 // Verify dimension_sizes() works as intended.
 
 void print_vector(vector<int> const &v) {
-    printf("(");
+    cout << "(";
     for (size_t i = 0, last = v.size(); i < last; ++i) {
         if (i)
-            printf(", ");
-        printf("%d", v[i]);
+            cout << ", ";
+        cout << v[i];
     }
-    printf(")");
+    cout << ")";
 }
+
 void compare_vectors(vector<int> const &under_test, vector<int> const &reference) {
     if (under_test == reference)
         return;
 
-    printf("Vector under test contained ");
+    cout << "Vector under test contained ";
     print_vector(under_test);
-    printf(" instead of ");
+    cout << " instead of ";
     print_vector(reference);
-    printf("\n");
+    cout << "\n";
     exit(-1);
 }
 
@@ -82,54 +83,62 @@ void verify_dimension_sizes() {
 }
 
 //-----------------------------------------------------------------------------
-
-template<typename T>
-void compare_extents(Image<T> const &img, int reference, int dimension) {
-    if (img.extent(dimension) == reference)
-        return;
-    printf("Extent of dimension %d of %d is %d instead of %d\n"
-        , dimension, img.dimensions(), img.extent(dimension), reference);
-    exit(-1);
-}
+// Convert integral values to 64-bit and set the number of digits to print
+// for floating point values.
 
 template<typename T
     , typename Int = typename is_integral<T>::type
     , typename Signed = integral_constant<bool, numeric_limits<T>::is_signed>
 >
-struct print_compared_t;
+struct printable_t;
 
-template<typename T> struct print_compared_t<T, true_type, true_type> {
-    void operator()(T test, T reference) const {
-        printf("%lld instead of %lld\n"
-            , static_cast<int64_t>(test)
-            , static_cast<int64_t>(reference));
+template<typename T> struct printable_t<T, true_type, true_type> {
+    int64_t v;
+    printable_t(T v) : v(static_cast<int64_t>(v)) {}
+    void print(ostream &os) const {
+        os << v;
     }
 };
 
-template<typename T> struct print_compared_t<T, true_type, false_type> {
-    void operator()(T test, T reference) const {
-        printf("%llu instead of %llu\n"
-            , static_cast<uint64_t>(test)
-            , static_cast<uint64_t>(reference));
+template<typename T> struct printable_t<T, true_type, false_type> {
+    uint64_t v;
+    printable_t(T v) : v(static_cast<uint64_t>(v)) {}
+    void print(ostream &os) const {
+        os << v;
     }
 };
 
-template<> struct print_compared_t<float> {
-    void operator()(float test, float reference) const {
-        printf("%0.8g instead of %0.8g\n", test, reference);
-    }
-};
-
-template<> struct print_compared_t<double> {
-    void operator()(double test, double reference) const {
-        printf("%0.17g instead of %0.17g\n", test, reference);
+template<typename T> struct printable_t<T, false_type> {
+    T v;
+    printable_t(T v) : v(v) {}
+    void print(ostream &os) const {
+        streamsize prec = os.precision();
+        os.precision(numeric_limits<T>::digits10 + 2);
+        os << v;
+        os.precision(prec);
     }
 };
 
 template<typename T>
-void print_compared(T test, T reference) {
-    print_compared_t<T> printer;
-    printer(test, reference);
+inline ostream & operator<<(ostream &os, printable_t<T> const &pr) {
+    pr.print(os);
+    return os;
+}
+
+template<typename T>
+inline printable_t<T> printable(T v) {
+    return printable_t<T>(v);
+}
+
+//-----------------------------------------------------------------------------
+
+template<typename T>
+void compare_extents(Image<T> const &img, int reference, int dimension) {
+    if (img.extent(dimension) == reference)
+        return;
+    cout << "Extent of dimension " << dimension << " of " << img.dimensions()
+        << " is " << img.extent(dimension) << " instead of " << reference << "\n";
+    exit(-1);
 }
 
 template<typename Array, typename T = typename remove_all_extents<Array>::type>
@@ -143,13 +152,14 @@ void verify_image_construction_from_array(Array &vals) {
         n *= dimSizes[i];
     }
     T const *reference = first_of_array(vals);
-    T const *under_test = img.data();
+    T  *under_test = img.data();
     for (int i = 0; i < n; ++i) {
         if (under_test[i] == reference[i])
             continue;
 
-        printf("Value at index %d is ", i);
-        print_compared(under_test[i], reference[i]);
+        cout << "Value at index " << i << " is "
+            << printable(under_test[i]) << " instead of "
+            << printable(reference[i]) << "\n";
         exit(-1);
     }
 }
@@ -185,6 +195,7 @@ void construct_various_dimensionalities(T q) {
     verify_image_construction_from_array(a3);
     verify_image_construction_from_array(a4);
 }
+
 //-----------------------------------------------------------------------------
 
 int main()
