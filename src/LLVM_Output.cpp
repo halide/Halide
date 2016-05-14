@@ -12,12 +12,12 @@ namespace Halide {
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
     #if LLVM_VERSION < 35
-    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename.c_str(), error_string));
+    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, error_string));
     #elif LLVM_VERSION == 35
-    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename.c_str(), error_string, llvm::sys::fs::F_None));
+    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, error_string, llvm::sys::fs::F_None));
     #else // llvm 3.6
     std::error_code err;
-    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename.c_str(), err, llvm::sys::fs::F_None));
+    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
     if (err) error_string = err.message();
     #endif
     internal_assert(error_string.empty())
@@ -28,7 +28,7 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
 
 
 #if LLVM_VERSION < 37
-void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file_legacy(llvm::Module &module, llvm::raw_fd_ostream& out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file_legacy.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
 
@@ -61,8 +61,7 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
     // Override default to generate verbose assembly.
     target_machine->setAsmVerbosityDefault(true);
 
-    auto raw_out = make_raw_fd_ostream(filename);
-    std::unique_ptr<llvm::formatted_raw_ostream> out(new llvm::formatted_raw_ostream(*raw_out));
+    std::unique_ptr<llvm::formatted_raw_ostream> out(new llvm::formatted_raw_ostream(out));
 
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
@@ -71,9 +70,9 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
 }
 #endif
 
-void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file(llvm::Module &module, llvm::raw_fd_ostream& out, llvm::TargetMachine::CodeGenFileType file_type) {
 #if LLVM_VERSION < 37
-    emit_file_legacy(module, filename, file_type);
+    emit_file_legacy(module, out, file_type);
 #else
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
@@ -93,8 +92,6 @@ void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMa
                        << module.getDataLayout().getStringRepresentation() << "\n";
     }
 
-    auto out = make_raw_fd_ostream(filename);
-
     // Build up all of the passes that we want to do to the module.
     llvm::legacy::PassManager pass_manager;
 
@@ -107,7 +104,7 @@ void emit_file(llvm::Module &module, const std::string &filename, llvm::TargetMa
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
-    target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
+    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
 
     pass_manager.run(module);
 #endif
@@ -117,22 +114,20 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
     return codegen_llvm(module, context);
 }
 
-void compile_llvm_module_to_object(llvm::Module &module, const std::string &filename) {
-    emit_file(module, filename, llvm::TargetMachine::CGFT_ObjectFile);
+void compile_llvm_module_to_object(llvm::Module &module, llvm::raw_fd_ostream& out) {
+    emit_file(module, out, llvm::TargetMachine::CGFT_ObjectFile);
 }
 
-void compile_llvm_module_to_assembly(llvm::Module &module, const std::string &filename) {
-    emit_file(module, filename, llvm::TargetMachine::CGFT_AssemblyFile);
+void compile_llvm_module_to_assembly(llvm::Module &module, llvm::raw_fd_ostream& out) {
+    emit_file(module, out, llvm::TargetMachine::CGFT_AssemblyFile);
 }
 
-void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, const std::string &filename) {
-    auto file = make_raw_fd_ostream(filename);
-    WriteBitcodeToFile(&module, *file);
+void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, llvm::raw_fd_ostream& out) {
+    WriteBitcodeToFile(&module, out);
 }
 
-void compile_llvm_module_to_llvm_assembly(llvm::Module &module, const std::string &filename) {
-    auto file = make_raw_fd_ostream(filename);
-    module.print(*file, nullptr);
+void compile_llvm_module_to_llvm_assembly(llvm::Module &module, llvm::raw_fd_ostream& out) {
+    module.print(out, nullptr);
 }
 
 }  // namespace Halide
