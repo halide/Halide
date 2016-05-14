@@ -178,18 +178,18 @@ public:
     // is T or T const of one or more dimensions.
     template< typename Array, size_t N >
     Image(Array (&vals)[N]) {
-        std::vector<int> dimSizes(dimension_sizes(vals[0]));
-        size_t dims = 1 + dimSizes.size();
+        std::vector<int> dimSizes(dimension_sizes(vals));
+        size_t dims = dimSizes.size();
         assert(dims <= 4);
-        int n = (int)N;
         initialize
-            ( n
-            , dims > 1 ? dimSizes[0] : 0
-            , dims > 2 ? dimSizes[1] : 0
-            , dims > 3 ? dimSizes[2] : 0
+            ( dims > 0 ? dimSizes[0] : 1
+            , dims > 1 ? dimSizes[1] : 0
+            , dims > 2 ? dimSizes[2] : 0
+            , dims > 3 ? dimSizes[3] : 0
             , false);
-        for (size_t i = 1; i < dims; ++i)
-            n *= dimSizes[i - 1];
+        int n = 1;
+        for (size_t i = 0; i < dims; ++i)
+            n *= dimSizes[i];
         T const *ary = first_of_array(vals);
         T *host = data();
         for (int i = 0; i < n; ++i)
