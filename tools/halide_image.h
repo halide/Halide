@@ -180,8 +180,7 @@ public:
     Image(Array (&vals)[N]) {
         std::vector<int> dimSizes(dimension_sizes(vals[0]));
         size_t dims = 1 + dimSizes.size();
-        if (dims > 4)
-            halide_error(NULL, "Halide's buffer_t can only have a maximum of 4 dimensions\n");
+        assert(dims <= 4);
         int n = (int)N;
         initialize
             ( n
