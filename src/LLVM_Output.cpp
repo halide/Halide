@@ -34,7 +34,7 @@ void emit_file_legacy(llvm::Module &module, const std::string &filename, llvm::T
 
     // Get the target specific parser.
     auto target_machine = Internal::make_target_machine(module);
-    internal_assert(target_machine) << "Could not allocate target machine!\n";
+    internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
     // Build up all of the passes that we want to do to the module.
     llvm::PassManager pass_manager;
