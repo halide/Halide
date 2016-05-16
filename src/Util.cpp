@@ -249,7 +249,11 @@ FileStat file_stat(const std::string &name) {
         user_error << "Could not stat " << name << "\n";
     }
     #endif
-    return { static_cast<uint64_t>(a.st_size), static_cast<uint32_t>(a.st_mtime), a.st_uid, a.st_gid, a.st_mode };
+    return {static_cast<uint64_t>(a.st_size),
+            static_cast<uint32_t>(a.st_mtime),
+            static_cast<uint32_t>(a.st_uid),
+            static_cast<uint32_t>(a.st_gid),
+            static_cast<uint32_t>(a.st_mode)};
 }
 
 }
