@@ -1355,7 +1355,7 @@ public:
      * with an extent in y of 2, alternately storing each computed row
      * of g in row y=0 or y=1.
      */
-    EXPORT Func &fold_storage(Var dim, Expr extent);
+    EXPORT Func &fold_storage(Var dim, Expr extent, bool fold_forward = true);
 
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.

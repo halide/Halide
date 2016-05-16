@@ -158,6 +158,7 @@ struct StorageDim {
     std::string var;
     Expr alignment;
     Expr fold_factor;
+    bool fold_forward;
 };
 
 class ReductionDomain;

@@ -1258,13 +1258,14 @@ Func &Func::align_storage(Var dim, Expr alignment) {
     return *this;
 }
 
-Func &Func::fold_storage(Var dim, Expr factor) {
+Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
     for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, dim.name())) {
             dims[i].fold_factor = factor;
+            dims[i].fold_forward = fold_forward;
             return *this;
         }
     }
