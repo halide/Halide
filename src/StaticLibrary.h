@@ -24,13 +24,12 @@ EXPORT void create_ar_file(const std::vector<std::string> &src_files,
 
 /**
  * Given a list of "files" (really, names and data), create an ar file.
- * Note that 'data' is a string, but may hold binary data; do *not*
- * assume that c_str() will be useful.
  * This always emits 0 for all GID/UID/timestamps, and 0644 for
  * all modes (equivalent to the ar -D option). 
  */
 struct ArInput {
-  std::string name, data;
+  std::string name;
+  std::vector<uint8_t> data;
 };
 EXPORT void create_ar_file(const std::vector<ArInput> &src_files, 
                            const std::string &dst_file);
