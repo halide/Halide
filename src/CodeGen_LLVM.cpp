@@ -951,7 +951,7 @@ void CodeGen_LLVM::optimize_module() {
     #endif
 
     #if (LLVM_VERSION >= 37)
-    std::unique_ptr<TargetMachine> TM(get_target_machine(*module));
+    std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     #endif

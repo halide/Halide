@@ -13,6 +13,7 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 #include <string>
@@ -175,6 +176,23 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+
+struct FileStat {
+    uint64_t file_size;
+    uint32_t mod_time;  // Unix epoch time
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t mode;
+};
+
+/** Wrapper for access(). Asserts upon error. */
+bool file_exists(const std::string &name);
+
+/** Wrapper for unlink(). Asserts upon error. */
+void file_unlink(const std::string &name);
+
+/** Wrapper for stat(). Asserts upon error. */
+FileStat file_stat(const std::string &name);
 
 }
 }

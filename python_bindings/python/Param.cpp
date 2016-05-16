@@ -7,6 +7,8 @@
 #include "add_operators.h"
 
 #include "../../src/Param.h"
+#include "../../src/OutputImageParam.h"
+#include "../../src/ImageParam.h"
 #include "../../src/IROperator.h" // enables Param + Expr operations (which include is it ?)
 #include "Type.h"
 
@@ -124,7 +126,6 @@ void defineImageParam()
             ;
 
     p::implicitly_convertible<ImageParam, h::Argument>();
-    p::implicitly_convertible<ImageParam, h::Expr>();
 
     // "Using a param as the argument to an external stage treats it as an Expr"
     //p::implicitly_convertible<ImageParam, h::ExternFuncArgument>();
