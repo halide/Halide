@@ -117,7 +117,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr loop_var = Variable::make(Int(32), op->name);
                 if (storage_dim.fold_forward) {
                     Expr min_next = substitute(op->name, loop_var + 1, min);
-                    Expr min_increased =
                     condition = min_next >= min;
 
                     // After we assert that the min increased, assume
