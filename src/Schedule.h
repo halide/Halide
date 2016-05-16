@@ -157,6 +157,7 @@ struct Specialization {
 struct StorageDim {
     std::string var;
     Expr alignment;
+    Expr fold_factor;
 };
 
 class ReductionDomain;

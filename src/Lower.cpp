@@ -134,7 +134,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
-    s = storage_folding(s);
+    s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
