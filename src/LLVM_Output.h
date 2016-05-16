@@ -12,6 +12,8 @@ namespace llvm {
 class Module;
 class TargetOptions;
 class LLVMContext;
+class raw_fd_ostream;
+class raw_pwrite_stream;
 }
 
 namespace Halide {
@@ -19,22 +21,19 @@ namespace Halide {
 /** Generate an LLVM module. */
 EXPORT std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context);
 
+/** Construct an llvm output stream for writing to files. */
+std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename);
+
 /** Compile an LLVM module to native targets (objects, native assembly). */
 // @{
-EXPORT void compile_llvm_module_to_object(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_assembly(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_native(llvm::Module &module,
-                                          const std::string &object_filename,
-                                          const std::string &assembly_filename);
+EXPORT void compile_llvm_module_to_object(llvm::Module &module, llvm::raw_pwrite_stream& out);
+EXPORT void compile_llvm_module_to_assembly(llvm::Module &module, llvm::raw_pwrite_stream& out);
 // @}
 
 /** Compile an LLVM module to LLVM targets (bitcode, LLVM assembly). */
 // @{
-EXPORT void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_llvm_assembly(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_llvm(llvm::Module &module,
-                                        const std::string &bitcode_filename,
-                                        const std::string &llvm_assembly_filename);
+EXPORT void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, llvm::raw_pwrite_stream& out);
+EXPORT void compile_llvm_module_to_llvm_assembly(llvm::Module &module, llvm::raw_pwrite_stream& out);
 // @}
 
 }
