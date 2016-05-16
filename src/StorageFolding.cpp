@@ -196,6 +196,8 @@ private:
 
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
+    const map<string, Function> &env;
+
     using IRMutator::visit;
 
     void visit(const Realize *op) {
@@ -204,6 +206,27 @@ class StorageFolding : public IRMutator {
         AttemptStorageFoldingOfFunction folder(op->name);
         IsBufferSpecial special(op->name);
         op->accept(&special);
+
+        // Do explicit storage folding first.
+        auto f = env.find(op->name);
+        if (f != env.end()) {
+            const std::vector<StorageDim> &storage_dims = f->second.schedule().storage_dims();
+            const vector<string> &args = f->second.args();
+            for (size_t i = 0; i < storage_dims.size(); i++) {
+                Expr factor = storage_dims[i].fold_factor;
+                if (!factor.defined()) continue;
+
+                user_assert(!special.special) << "Dimension " << storage_dims[i].var << " of " << op->name
+                                              << " cannot be folded because it is accessed by extern or device stages.\n";
+
+                for (int j = 0; j < static_cast<int>(args.size()); j++) {
+                    if (args[j] == storage_dims[i].var) {
+                        body = FoldStorageOfFunction(op->name, j, factor).mutate(body);
+                        folder.dims_folded.push_back({j, factor});
+                    }
+                }
+            }
+        }
 
         if (special.special) {
             debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
@@ -214,11 +237,19 @@ class StorageFolding : public IRMutator {
             }
         } else {
             debug(3) << "Attempting to fold " << op->name << "\n";
-            Stmt new_body = folder.mutate(body);
+            if (folder.dims_folded.empty()) {
+                // We can only attempt to fold if there were no
+                // explicit folds.
+                // TODO: We could try to use the same logic in
+                // AttemptStorageFoldingOfFunction to detect if the
+                // explicit folds were on a stencil, and if not, allow
+                // further storage folding attempts.
+                body = folder.mutate(body);
+            }
 
-            if (new_body.same_as(op->body)) {
+            if (body.same_as(op->body)) {
                 stmt = op;
-            } else if (new_body.same_as(body)) {
+            } else if (folder.dims_folded.empty()) {
                 stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             } else {
                 Region bounds = op->bounds;
@@ -232,10 +263,13 @@ class StorageFolding : public IRMutator {
                     bounds[d] = Range(0, f);
                 }
 
-                stmt = Realize::make(op->name, op->types, bounds, op->condition, new_body);
+                stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
             }
         }
     }
+
+public:
+    StorageFolding(const map<string, Function> &env) : env(env) {}
 };
 
 // Because storage folding runs before simplification, it's useful to
@@ -272,9 +306,9 @@ class SubstituteInConstants : public IRMutator {
     }
 };
 
-Stmt storage_folding(Stmt s) {
+Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
     s = SubstituteInConstants().mutate(s);
-    s = StorageFolding().mutate(s);
+    s = StorageFolding(env).mutate(s);
     return s;
 }
 
