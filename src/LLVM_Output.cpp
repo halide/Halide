@@ -61,10 +61,10 @@ void emit_file_legacy(llvm::Module &module, llvm::raw_pwrite_stream& out, llvm::
     // Override default to generate verbose assembly.
     target_machine->setAsmVerbosityDefault(true);
 
-    std::unique_ptr<llvm::formatted_raw_ostream> out(new llvm::formatted_raw_ostream(out));
+    std::unique_ptr<llvm::formatted_raw_ostream> formatted_out(new llvm::formatted_raw_ostream(out));
 
     // Ask the target to add backend passes as necessary.
-    target_machine->addPassesToEmitFile(pass_manager, *out, file_type);
+    target_machine->addPassesToEmitFile(pass_manager, *formatted_out, file_type);
 
     pass_manager.run(module);
 }
