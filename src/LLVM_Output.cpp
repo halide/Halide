@@ -28,7 +28,7 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
 
 
 #if LLVM_VERSION < 37
-void emit_file_legacy(llvm::Module &module, llvm::raw_fd_ostream& out, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file_legacy(llvm::Module &module, llvm::raw_pwrite_stream& out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file_legacy.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
 
@@ -70,7 +70,7 @@ void emit_file_legacy(llvm::Module &module, llvm::raw_fd_ostream& out, llvm::Tar
 }
 #endif
 
-void emit_file(llvm::Module &module, llvm::raw_fd_ostream& out, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file(llvm::Module &module, llvm::raw_pwrite_stream& out, llvm::TargetMachine::CodeGenFileType file_type) {
 #if LLVM_VERSION < 37
     emit_file_legacy(module, out, file_type);
 #else
@@ -114,19 +114,19 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
     return codegen_llvm(module, context);
 }
 
-void compile_llvm_module_to_object(llvm::Module &module, llvm::raw_fd_ostream& out) {
+void compile_llvm_module_to_object(llvm::Module &module, llvm::raw_pwrite_stream& out) {
     emit_file(module, out, llvm::TargetMachine::CGFT_ObjectFile);
 }
 
-void compile_llvm_module_to_assembly(llvm::Module &module, llvm::raw_fd_ostream& out) {
+void compile_llvm_module_to_assembly(llvm::Module &module, llvm::raw_pwrite_stream& out) {
     emit_file(module, out, llvm::TargetMachine::CGFT_AssemblyFile);
 }
 
-void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, llvm::raw_fd_ostream& out) {
+void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, llvm::raw_pwrite_stream& out) {
     WriteBitcodeToFile(&module, out);
 }
 
-void compile_llvm_module_to_llvm_assembly(llvm::Module &module, llvm::raw_fd_ostream& out) {
+void compile_llvm_module_to_llvm_assembly(llvm::Module &module, llvm::raw_pwrite_stream& out) {
     module.print(out, nullptr);
 }
 
