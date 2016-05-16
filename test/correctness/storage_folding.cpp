@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
         Func f, g;
 
         g(x, y) = x * y;
-        f(x, y) = g(x/2, y/2) + g(x/2, y/2+1);
+        f(x, y) = g(x, y/2) + g(x, y/2+1);
 
         // The automatic storage folding optimization can't figure
         // this out due to the downsampling. Explicitly fold it.
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
 
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
-                int correct = (x/2) * (y/2) + (x/2) * (y/2 + 1);
+                int correct = (x) * (y/2) + (x) * (y/2 + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
                     return -1;
