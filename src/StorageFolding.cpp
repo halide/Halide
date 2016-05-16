@@ -249,7 +249,8 @@ class StorageFolding : public IRMutator {
         IsBufferSpecial special(op->name);
         op->accept(&special);
 
-        // Do explicit storage folding first.
+        // Get the function associated with this realization, which
+        // contains the explicit fold directives from the schedule.
         auto func_it = env.find(op->name);
         Function func = func_it != env.end() ? func_it->second : Function();
 
@@ -269,15 +270,7 @@ class StorageFolding : public IRMutator {
         } else {
             AttemptStorageFoldingOfFunction folder(func);
             debug(3) << "Attempting to fold " << op->name << "\n";
-            if (folder.dims_folded.empty()) {
-                // We can only attempt to fold if there were no
-                // explicit folds.
-                // TODO: We could try to use the same logic in
-                // AttemptStorageFoldingOfFunction to detect if the
-                // explicit folds were on a stencil, and if not, allow
-                // further storage folding attempts.
-                body = folder.mutate(body);
-            }
+            body = folder.mutate(body);
 
             if (body.same_as(op->body)) {
                 stmt = op;

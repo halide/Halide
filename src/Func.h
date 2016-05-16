@@ -1331,11 +1331,10 @@ public:
     EXPORT Func &align_storage(Var dim, Expr alignment);
 
     /** Store realizations of this function in a circular buffer of a
-     * given extent. This can cause programs to be incorrect if the
-     * extent of the circular buffer is too small to avoid overwriting
-     * values of a producer before they are consumed. This is more
-     * efficient when the extent of the circular buffer is a power of
-     * 2.
+     * given extent. This is more efficient when the extent of the
+     * circular buffer is a power of 2. If the fold factor is too
+     * small, or the dimension is not accessed monotonically, the
+     * pipeline will generate an error at runtime.
      *
      * For example, consider the pipeline:
      \code
