@@ -10,6 +10,8 @@ namespace Internal {
 
 namespace {
 
+// This is just a simple wrapper that allows us to consume a vector<uint8_t>
+// like a string.
 template<typename T>
 class vector_istreambuf : public std::basic_streambuf<char> {
 public:

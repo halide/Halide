@@ -28,8 +28,8 @@ EXPORT void create_ar_file(const std::vector<std::string> &src_files,
  * all modes (equivalent to the ar -D option). 
  */
 struct ArInput {
-  std::string name;
-  std::vector<uint8_t> data;
+    std::string name;
+    std::vector<uint8_t> data;
 };
 EXPORT void create_ar_file(const std::vector<ArInput> &src_files, 
                            const std::string &dst_file);
