@@ -10,6 +10,16 @@ namespace Internal {
 
 namespace {
 
+template<typename T>
+class vector_istreambuf : public std::basic_streambuf<char> {
+public:
+    vector_istreambuf(const std::vector<T> &vec) {
+        static_assert(sizeof(T) == sizeof(char), "T must be sizeof(char)");
+        char *p = reinterpret_cast<char*>(const_cast<T*>(vec.data()));
+        setg(p, p, p + vec.size());
+    }
+};
+
 std::string pad_right(std::string s, size_t max) {
     internal_assert(s.size() <= max) << s.size() << " " << s;
     while (s.size() < max) {
@@ -99,7 +109,8 @@ void create_ar_file(const std::vector<ArInput> &src_files,
     ar << "!<arch>\x0A";
     for (const ArInput &input : src_files) {
         FileStat src_stat = { input.data.size(), 0, 0, 0, 0644 };
-        std::istringstream src_data(input.data, std::ifstream::in);
+        vector_istreambuf<uint8_t> streambuf(input.data);
+        std::istream src_data(&streambuf);
         append_ar_file(ar, input.name, src_stat, src_data);
     }
     user_assert(ar.good());
@@ -132,9 +143,9 @@ e789f)literal";
 
     // Test the memory version
     create_ar_file({
-        ArInput{ "a.tmp", "a123b" },
-        ArInput{ "b_long_name_is_long.tmp", "c456d" },
-        ArInput{ "./c_path.tmp", "e789f" }
+        ArInput{ "a.tmp", {'a', '1', '2', '3', 'b'} },
+        ArInput{ "b_long_name_is_long.tmp", {'c', '4', '5', '6', 'd'} },
+        ArInput{ "./c_path.tmp", {'e', '7', '8', '9', 'f'} }
     }, "arfile2.a");
 
     std::string actual2 = read_from("arfile2.a");
