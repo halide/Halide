@@ -152,7 +152,7 @@ void verify_image_construction_from_array(Array &vals) {
         n *= dimSizes[i];
     }
     T const *reference = first_of_array(vals);
-    T  *under_test = img.data();
+    T const *under_test = img.data();
     for (int i = 0; i < n; ++i) {
         if (under_test[i] == reference[i])
             continue;
