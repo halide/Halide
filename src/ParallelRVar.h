@@ -19,7 +19,7 @@ namespace Internal {
  */
 bool can_parallelize_rvar(const std::string &rvar,
                           const std::string &func,
-                          const UpdateDefinition &r);
+                          const Definition &r);
 
 }
 }

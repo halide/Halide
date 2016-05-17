@@ -427,7 +427,8 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Make any specialized copies
-    for (size_t i = s.specializations().size(); i > 0; i--) {
+    //TODO(psuriana)
+    /*for (size_t i = s.specializations().size(); i > 0; i--) {
         Expr c = s.specializations()[i-1].condition;
         Schedule sched = s.specializations()[i-1].schedule;
         const EQ *eq = c.as<EQ>();
@@ -450,7 +451,7 @@ Stmt build_provide_loop_nest(Function f,
         } else {
             stmt = IfThenElse::make(c, then_case, stmt);
         }
-    }
+    }*/
 
     return stmt;
 }
@@ -605,31 +606,31 @@ vector<Stmt> build_update(Function f) {
     vector<Stmt> updates;
 
     for (size_t i = 0; i < f.updates().size(); i++) {
-        UpdateDefinition r = f.updates()[i];
+        Definition r = f.update(i);
 
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
-        vector<Expr> site(r.args.size());
-        vector<Expr> values(r.values.size());
+        vector<Expr> site(r.args().size());
+        vector<Expr> values(r.values().size());
         for (size_t i = 0; i < values.size(); i++) {
-            Expr v = r.values[i];
+            Expr v = r.values()[i];
             v = qualify(prefix, v);
             values[i] = v;
             debug(3) << "Update value " << i << " = " << v << "\n";
         }
 
-        for (size_t i = 0; i < r.args.size(); i++) {
-            Expr s = r.args[i];
+        for (size_t i = 0; i < r.args().size(); i++) {
+            Expr s = r.args()[i];
             s = qualify(prefix, s);
             site[i] = s;
             debug(3) << "Update site " << i << " = " << s << "\n";
         }
 
-        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
+        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule(), true);
 
         // Now define the bounds on the reduction domain
-        if (r.domain.defined()) {
-            const vector<ReductionVariable> &dom = r.domain.domain();
+        if (r.domain().defined()) {
+            const vector<ReductionVariable> &dom = r.domain().domain();
             for (size_t i = 0; i < dom.size(); i++) {
                 string p = prefix + dom[i].var;
                 Expr rmin = Variable::make(Int(32), p + ".min");
@@ -1075,13 +1076,13 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (const UpdateDefinition &r : f.updates()) {
-        any_scheduled = any_scheduled || r.schedule.touched();
+    for (const Definition &r : f.updates()) {
+        any_scheduled = any_scheduled || r.schedule().touched();
     }
     if (any_scheduled) {
         for (size_t i = 0; i < f.updates().size(); i++) {
-            const UpdateDefinition &r = f.updates()[i];
-            if (!r.schedule.touched()) {
+            const Definition &r = f.update(i);
+            if (!r.schedule().touched()) {
                 std::cerr << "Warning: Update step " << i
                           << " of function " << f.name()
                           << " has not been scheduled, even though some other"
@@ -1097,14 +1098,15 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
     // api is enabled in the target.
     vector<Schedule> schedules;
     schedules.push_back(f.schedule());
-    for (const UpdateDefinition &u : f.updates()) {
-        schedules.push_back(u.schedule);
+    for (const Definition &u : f.updates()) {
+        schedules.push_back(u.schedule());
     }
-    for (size_t i = 0; i < schedules.size(); i++) {
+    //TODO(psuriana)
+    /*for (size_t i = 0; i < schedules.size(); i++) {
         for (const Specialization &s : schedules[i].specializations()) {
             schedules.push_back(s.schedule);
         }
-    }
+    }*/
     for (const Schedule &s : schedules) {
         for (const Dim &d : s.dims()) {
             if (!target.supports_device_api(d.device_api)) {

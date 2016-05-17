@@ -229,6 +229,7 @@ set(HEADER_FILES
   CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
+  Definition.h
   Deinterleave.h
   DeviceArgument.h
   DeviceInterface.h
@@ -381,6 +382,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
+  Definition.cpp
   Deinterleave.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
