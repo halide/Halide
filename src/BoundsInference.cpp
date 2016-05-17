@@ -118,16 +118,17 @@ public:
         vector<Expr> exprs;
         string stage_prefix;
 
+        //TODO(psuriana): fix this to take into account different values for specialization
         // Computed expressions on the left and right-hand sides
         void compute_exprs() {
             if (stage == 0) {
                 exprs = func.values();
             } else {
-                const UpdateDefinition &r = func.updates()[stage - 1];
-                exprs = r.values;
-                exprs.insert(exprs.end(), r.args.begin(), r.args.end());
-                if (r.domain.defined()) {
-                    exprs.push_back(r.domain.predicate());
+                const Definition &r = func.update(stage - 1);
+                exprs = r.values();
+                exprs.insert(exprs.end(), r.args().begin(), r.args().end());
+                if (r.domain().defined()) {
+                    exprs.push_back(r.domain().predicate());
                 }
             }
         }
@@ -161,9 +162,11 @@ public:
                 // figure out what those dimensions are, and just have all
                 // stages but the last use the bounds for the last stage.
                 vector<bool> always_pure_dims(func.args().size(), true);
-                for (UpdateDefinition i : func.updates()) {
+                //TODO(psuriana): fix this to take into account specialization with different values
+                for (Definition i : func.updates()) {
+                    const vector<Expr> i_args = i.args();
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        const Variable *v = i.args[j].as<Variable>();
+                        const Variable *v = i_args[j].as<Variable>();
                         if (!v || v->name != func.args()[j]) {
                             always_pure_dims[j] = false;
                         }
@@ -316,9 +319,10 @@ public:
             }
 
             if (stage > 0) {
-                const UpdateDefinition &r = func.updates()[stage - 1];
-                if (r.domain.defined()) {
-                    for (ReductionVariable i : r.domain.domain()) {
+                //TODO(psuriana): fix this to take into account specialization with different values
+                const Definition &r = func.update(stage - 1);
+                if (r.domain().defined()) {
+                    for (ReductionVariable i : r.domain().domain()) {
                         string arg = name + ".s" + std::to_string(stage) + "." + i.var;
                         s = LetStmt::make(arg + ".min", i.min, s);
                         s = LetStmt::make(arg + ".max", i.extent + i.min - 1, s);
@@ -434,9 +438,10 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                const UpdateDefinition &r = func.updates()[stage - 1];
-                if (r.domain.defined()) {
-                    const vector<ReductionVariable> &dom = r.domain.domain();
+                //TODO(psuriana): fix this to take into account specialization with different values
+                const Definition &r = func.update(stage - 1);
+                if (r.domain().defined()) {
+                    const vector<ReductionVariable> &dom = r.domain().domain();
                     for (size_t i = 0; i < dom.size(); i++) {
                         const ReductionVariable &rvar = dom[i];
                         string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
@@ -578,9 +583,10 @@ public:
                 // the scope to take into account of the predicate.
                 Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
                 if (consumer.stage > 0) {
-                    const UpdateDefinition &r = consumer.func.updates()[consumer.stage - 1];
-                    if (r.domain.defined()) {
-                        vector<Expr> predicates = r.domain.split_predicate();
+                    //TODO(psuriana): fix this to take into account specialization with different values
+                    const Definition &r = consumer.func.update(consumer.stage - 1);
+                    if (r.domain().defined()) {
+                        vector<Expr> predicates = r.domain().split_predicate();
                         for (const Expr &pred : predicates) {
                             wrapped = IfThenElse::make(likely(pred), wrapped);
                         }
@@ -777,9 +783,10 @@ public:
             // And the current bounds on its reduction variables.
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
-                const UpdateDefinition &r = s.func.updates()[s.stage - 1];
-                if (r.domain.defined()) {
-                    for (ReductionVariable d : r.domain.domain()) {
+                //TODO(psuriana): fix this to take into account specialization with different values
+                const Definition &r = s.func.update(s.stage - 1);
+                if (r.domain().defined()) {
+                    for (ReductionVariable d : r.domain().domain()) {
                         string var = s.stage_prefix + d.var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {

@@ -279,6 +279,7 @@ SOURCE_FILES = \
   CSE.cpp \
   Debug.cpp \
   DebugToFile.cpp \
+  Definition.cpp \
   Deinterleave.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
@@ -403,6 +404,7 @@ HEADER_FILES = \
   CSE.h \
   Debug.h \
   DebugToFile.h \
+  Definition.h \
   Deinterleave.h \
   DeviceArgument.h \
   DeviceInterface.h \

@@ -10,6 +10,7 @@
 #include "Parameter.h"
 #include "Schedule.h"
 #include "Reduction.h"
+#include "Definition.h"
 
 #include <map>
 
@@ -51,12 +52,6 @@ struct ExternFuncArgument {
 };
 
 namespace Internal {
-
-struct UpdateDefinition {
-    std::vector<Expr> values, args;
-    Schedule schedule;
-    ReductionDomain domain;
-};
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
@@ -125,13 +120,17 @@ public:
     /** Get the name of the function */
     EXPORT const std::string &name() const;
 
+    /** Get a mutable handle to the pure definition. */
+    EXPORT Definition &definition();
+
+    /** Get the pure definition */
+    EXPORT const Definition &definition() const;
+
     /** Get the pure arguments */
-    EXPORT const std::vector<std::string> &args() const;
+    EXPORT const std::vector<std::string> args() const;
 
     /** Get the dimensionality */
-    int dimensions() const {
-        return (int)args().size();
-    }
+    int dimensions() const;
 
     /** Get the number of outputs */
     int outputs() const {
@@ -145,9 +144,7 @@ public:
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition */
-    bool has_pure_definition() const {
-        return !values().empty();
-    }
+    bool has_pure_definition() const;
 
     /** Does this function *only* have a pure definition */
     bool is_pure() const {
@@ -171,8 +168,16 @@ public:
      * stage */
     EXPORT Schedule &update_schedule(int idx = 0);
 
+    /** Get a mutable handle to this function's update definition at
+     * index 'idx'. */
+    EXPORT Definition &update(int idx = 0);
+
+    /** Get a const reference to this function's update definition at
+     * index 'idx'. */
+    EXPORT const Definition &update(int idx = 0) const;
+
     /** Get a const reference to this function's update definitions. */
-    EXPORT const std::vector<UpdateDefinition> &updates() const;
+    EXPORT const std::vector<Definition> &updates() const;
 
     /** Does this function have an update definition */
     EXPORT bool has_update_definition() const;
