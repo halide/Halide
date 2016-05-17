@@ -245,7 +245,9 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const Target target = parse_target_string(target_string);
 
     if (!runtime_name.empty()) {
-        compile_standalone_runtime(output_dir + "/" + runtime_name, target);
+        std::string base_path = compute_base_path(output_dir, runtime_name, "");
+        Outputs output_files = compute_outputs(target, base_path, emit_options);
+        compile_standalone_runtime(output_files, target);
     }
 
     if (!generator_name.empty()) {
