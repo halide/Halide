@@ -134,11 +134,30 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         halide_print(NULL, "Requesting power for HVX...");
 
         HAP_power_request_t request;
-        request.type = HAP_power_set_HVX;
-        request.hvx.power_up = TRUE;
+
+        request.type = HAP_power_set_apptype;
+        request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
         int retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
-            halide_print(NULL, "unable to power on HVX!");
+            halide_print(NULL, "HAP_power_set(HAP_power_set_apptype) failed");
+            return -1;
+        }
+/*
+        request.type = HAP_power_set_DCVS;
+        request.dcvs.dcvs_enable = FALSE;
+        request.dcvs.dcvs_option = HAP_DCVS_ADJUST_UP_DOWN;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            halide_print(NULL, "HAP_power_set(HAP_power_set_DCVS) failed");
+            return -1;
+        }
+*/
+
+        request.type = HAP_power_set_HVX;
+        request.hvx.power_up = TRUE;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            halide_print(NULL, "HAP_power_set(HAP_power_set_HVX) failed");
             return -1;
         }
 
@@ -147,13 +166,13 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         request.mips_bw.mipsPerThread = 500;
         request.mips_bw.mipsTotal = 1000;
         request.mips_bw.set_bus_bw = TRUE;
-        request.mips_bw.bwBytePerSec = 12000;
+        request.mips_bw.bwBytePerSec = static_cast<uint64_t>(12000) * 1000000;
         request.mips_bw.busbwUsagePercentage = 100;
-        request.mips_bw.set_latency = FALSE;
-        request.mips_bw.latency=0;
+        request.mips_bw.set_latency = TRUE;
+        request.mips_bw.latency = 1;
         retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
-            halide_print(NULL, "unable to tune power on HVX!");
+            halide_print(NULL, "HAP_power_set(HAP_power_set_mips_bw) failed");
             return -1;
         }
     }
