@@ -145,9 +145,11 @@ void Module::compile(const Outputs &output_files) const {
     }
 }
 
-void compile_standalone_runtime(std::string object_filename, Target t) {
+void compile_standalone_runtime(const Outputs &output_files, Target t) {
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
-    empty.compile(Outputs().object(object_filename));
+    // For runtime, it only makes sense to output object files (for now), so ignore
+    // everything else. (Soon, this will also support static libraries.)
+    empty.compile(Outputs().object(output_files.object_name));
 }
 
 }
