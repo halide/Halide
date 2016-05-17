@@ -174,10 +174,11 @@ public:
     }
 
     // Initialize the Image from a statically sized array.
-    // Because of the scalar overload of dimension_sizes, this will only work if Array
+    // The data will be copied to internal storage.
+    // Because of the scalar overload of dimension_sizes, this will only work if vals
     // is T or T const of one or more dimensions.
-    template< typename Array, size_t N >
-    Image(Array (&vals)[N]) {
+    template<typename Array, size_t N>
+    explicit Image(Array const (&vals)[N]) {
         std::vector<int> dimSizes(dimension_sizes(vals));
         size_t dims = dimSizes.size();
         assert(dims <= 4);
