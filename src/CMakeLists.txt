@@ -203,7 +203,6 @@ set(HEADER_FILES
   AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
-  BlockFlattening.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -352,7 +351,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AllocationBoundsInference.cpp
-  BlockFlattening.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
