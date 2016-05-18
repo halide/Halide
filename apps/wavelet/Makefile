@@ -25,7 +25,7 @@ $(BUILD_DIR)/%.o $(BUILD_DIR)/%.h: $(BUILD_DIR)/%.generator
 $(BUILD_DIR)/runtime_$(HL_TARGET).o: $(BUILD_DIR)/haar_x.generator
 	@echo Compiling Halide runtime for target $(HL_TARGET)
 	@mkdir -p $(BUILD_DIR)
-	@$< -r runtime_$(HL_TARGET).o -o $(BUILD_DIR) target=$(HL_TARGET)
+	@$< -r runtime_$(HL_TARGET) -o $(BUILD_DIR) target=$(HL_TARGET)
 
 HL_MODULES = \
 	$(BUILD_DIR)/daubechies_x.o \
