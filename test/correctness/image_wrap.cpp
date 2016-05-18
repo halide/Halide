@@ -106,15 +106,15 @@ int calling_wrap_no_op_test() {
     Var x("x"), y("y");
 
     {
-        Func f("f"), g("g");
-        f(x, y) = x + y;
-        g(x, y) = f(x, y);
+        ImageParam img(Int(32), 2);
+        Func f("f");
+        f(x, y) = img(x, y);
 
-        // Calling wrap on the same Func for the same Func multiple times should
+        // Calling wrap on the same ImageParam for the same Func multiple times should
         // return the same wrapper
-        Func wrapper = f.in(g);
+        Func wrapper = img.in(f);
         for (int i = 0; i < 5; ++i) {
-            Func temp = f.in(g);
+            Func temp = img.in(f);
             if (wrapper.name() != temp.name()) {
                 std::cerr << "Expect " << wrapper.name() << "; got " << temp.name() << " instead\n";
                 return -1;
@@ -123,13 +123,13 @@ int calling_wrap_no_op_test() {
     }
 
     {
-        Func f("f"), g("g");
-        f(x, y) = x + y;
-        g(x, y) = f(x, y);
+        ImageParam img(Int(32), 2);
+        Func f("f");
+        f(x, y) = img(x, y);
 
         // Should return the same global wrapper
-        Func wrapper1 = f.in();
-        Func wrapper2 = f.in();
+        Func wrapper1 = img.in();
+        Func wrapper2 = img.in();
         if (wrapper1.name() != wrapper2.name()) {
             std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
             return -1;
@@ -137,15 +137,15 @@ int calling_wrap_no_op_test() {
     }
 
     {
-        Func d("d"), e("e"), f("f"), g("g"), h("h");
-        d(x, y) = x + y;
-        e(x, y) = d(x, y);
-        f(x, y) = d(x, y);
-        g(x, y) = d(x, y);
-        h(x, y) = d(x, y);
+        ImageParam img(Int(32), 2);
+        Func e("e"), f("f"), g("g"), h("h");
+        e(x, y) = img(x, y);
+        f(x, y) = img(x, y);
+        g(x, y) = img(x, y);
+        h(x, y) = img(x, y);
 
-        Func wrapper1 = d.in({e, f, g});
-        Func wrapper2 = d.in({g, f, e});
+        Func wrapper1 = img.in({e, f, g});
+        Func wrapper2 = img.in({g, f, e});
         if (wrapper1.name() != wrapper2.name()) {
             std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
             return -1;
@@ -156,25 +156,30 @@ int calling_wrap_no_op_test() {
 }
 
 int func_wrap_test() {
-    Func f("f"), g("g");
+    Func source("source"), g("g");
     Var x("x"), y("y");
 
-    f(x) = x;
-    g(x, y) = f(x);
+    source(x) = x;
+    ImageParam img(Int(32), 1, "img");
+    Image<int> buf = source.realize(200);
+    img.set(buf);
 
-    Func wrapper = f.in(g).compute_root();
-    f.compute_root();
+    g(x, y) = img(x);
+
+    Func wrapper = img.in(g).compute_root();
+    Func img_f = img;
+    img_f.compute_root();
 
     // Check the call graphs.
-    // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing
-    Module m = g.compile_to_module({});
+    // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img'
+    Module m = g.compile_to_module({g.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {g.name(), {wrapper.name()}},
-        {wrapper.name(), {f.name()}},
-        {f.name(), {}},
+        {wrapper.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -189,28 +194,33 @@ int func_wrap_test() {
 }
 
 int multiple_funcs_sharing_wrapper_test() {
-    Func f("f"), g1("g1"), g2("g2"), g3("g3");
+    Func source("source"), g1("g1"), g2("g2"), g3("g3");
     Var x("x"), y("y");
 
-    f(x) = x;
-    g1(x, y) = f(x);
-    g2(x, y) = f(x);
-    g3(x, y) = f(x);
+    source(x) = x;
+    ImageParam img(Int(32), 1, "img");
+    Image<int> buf = source.realize(200);
+    img.set(buf);
 
-    f.compute_root();
-    Func f_wrapper = f.in({g1, g2, g3}).compute_root();
+    g1(x, y) = img(x);
+    g2(x, y) = img(x);
+    g3(x, y) = img(x);
+
+    Func im_wrapper = img.in({g1, g2, g3}).compute_root();
+    Func img_f = img;
+    img_f.compute_root();
 
     {
         // Check the call graphs.
-        // Expect 'g1' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
-        Module m = g1.compile_to_module({});
+        // Expect 'g1' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'img_f' to call 'img'
+        Module m = g1.compile_to_module({g1.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g1.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            {g1.name(), {im_wrapper.name()}},
+            {im_wrapper.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -225,15 +235,15 @@ int multiple_funcs_sharing_wrapper_test() {
 
     {
         // Check the call graphs.
-        // Expect 'g2' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
-        Module m = g2.compile_to_module({});
+        // Expect 'g2' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
+        Module m = g2.compile_to_module({g2.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g2.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            {g2.name(), {im_wrapper.name()}},
+            {im_wrapper.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -248,15 +258,15 @@ int multiple_funcs_sharing_wrapper_test() {
 
     {
         // Check the call graphs.
-        // Expect 'g3' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
-        Module m = g3.compile_to_module({});
+        // Expect 'g3' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
+        Module m = g3.compile_to_module({g3.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g3.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            {g3.name(), {im_wrapper.name()}},
+            {im_wrapper.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -272,32 +282,37 @@ int multiple_funcs_sharing_wrapper_test() {
 }
 
 int global_wrap_test() {
-    Func f("f"), g("g"), h("h"), i("i");
+    Func source("source"), g("g"), h("h"), i("i");
     Var x("x"), y("y");
 
-    f(x, y) = x + y;
-    g(x, y) = f(x, y);
-    h(x, y) = g(x, y) + f(x, y);
+    source(x, y) = x + y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(200, 200);
+    img.set(buf);
+
+    g(x, y) = img(x, y);
+    h(x, y) = g(x, y) + img(x, y);
 
     Var xi("xi"), yi("yi"), t("t");
-    Func wrapper = f.in();
-    f.compute_root();
+    Func wrapper = img.in();
+    Func img_f = img;
+    img_f.compute_root();
     h.compute_root().tile(x, y, xi, yi, 16, 16).fuse(x, y, t).parallel(t);
     g.compute_at(h, yi);
-    wrapper.compute_at(h, yi).tile(x, y, xi, yi, 8, 8).fuse(xi, yi, t).vectorize(t, 4);
+    wrapper.compute_at(h, yi).tile(_0, _1, xi, yi, 8, 8).fuse(xi, yi, t).vectorize(t, 4);
 
     // Check the call graphs.
-    // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing,
+    // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img',
     // 'h' to call 'wrapper' and 'g'
-    Module m = h.compile_to_module({});
+    Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {h.name(), {g.name(), wrapper.name()}},
         {g.name(), {wrapper.name()}},
-        {wrapper.name(), {f.name()}},
-        {f.name(), {}},
+        {wrapper.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -312,19 +327,23 @@ int global_wrap_test() {
 }
 
 int update_defined_after_wrap_test() {
-    Func f("f"), g("g");
+    Func source("source"), g("g");
     Var x("x"), y("y");
 
-    f(x, y) = x + y;
-    g(x, y) = f(x, y);
+    source(x, y) = x + y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(200, 200);
+    img.set(buf);
 
-    Func wrapper = f.in(g);
+    g(x, y) = img(x, y);
 
-    // Update of 'g' is defined after f.in(g) is called. g's updates should
-    // still call f's wrapper.
+    Func wrapper = img.in(g);
+
+    // Update of 'g' is defined after img.in(g) is called. g's updates should
+    // still call img's wrapper.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
-    g(r.x, r.y) += 2*f(r.x, r.y);
+    g(r.x, r.y) += 2*img(r.x, r.y);
 
     Param<bool> param;
 
@@ -332,15 +351,16 @@ int update_defined_after_wrap_test() {
     RVar rxo("rxo"), rxi("rxi");
     g.specialize(param).vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
     g.update(0).split(r.x, rxo, rxi, 2).unroll(rxi);
-    f.compute_root();
-    wrapper.compute_root().vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
+    Func img_f = img;
+    img_f.compute_root();
+    wrapper.compute_root().vectorize(_0, 8).unroll(_0, 2).split(_0, _0, xi, 4).parallel(_0);
 
     {
         param.set(true);
 
         // Check the call graphs.
         // Expect initialization of 'g' to call 'wrapper' and its update to call
-        // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
+        // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
@@ -348,8 +368,8 @@ int update_defined_after_wrap_test() {
         CallGraphs expected = {
             {g.name(), {wrapper.name()}},
             {g.update(0).name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            {wrapper.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -369,7 +389,7 @@ int update_defined_after_wrap_test() {
 
         // Check the call graphs.
         // Expect initialization of 'g' to call 'wrapper' and its update to call
-        // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
+        // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
@@ -377,8 +397,8 @@ int update_defined_after_wrap_test() {
         CallGraphs expected = {
             {g.name(), {wrapper.name()}},
             {g.update(0).name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            {wrapper.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -397,32 +417,37 @@ int update_defined_after_wrap_test() {
 }
 
 int rdom_wrapper_test() {
-    Func f("f"), g("g"), result("result");
+    Func source("source"), g("g"), result("result");
     Var x("x"), y("y");
 
-    f(x, y) = x + y;
+    source(x, y) = x + y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(200, 200);
+    img.set(buf);
+
     g(x, y) = 10;
-    g(x, y) += 2 * f(x, x);
-    g(x, y) += 3 * f(y, y);
+    g(x, y) += 2 * img(x, x);
+    g(x, y) += 3 * img(y, y);
 
     // Make a global wrapper on 'g', so that we can schedule initialization
     // and the update on the same compute level at the global wrapper
     Func wrapper = g.in().compute_root();
     g.compute_at(wrapper, x);
-    f.compute_root();
+    Func img_f = img;
+    img_f.compute_root();
 
     // Check the call graphs.
     // Expect 'wrapper' to call 'g', initialization of 'g' to call nothing
-    // and its update to call 'f' and 'g', 'f' to call nothing
-    Module m = wrapper.compile_to_module({});
+    // and its update to call 'img_f' and 'g', 'img_f' to call 'img'
+    Module m = wrapper.compile_to_module({wrapper.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {g.name(), {}},
-        {g.update(0).name(), {f.name(), g.name()}},
+        {g.update(0).name(), {img_f.name(), g.name()}},
         {wrapper.name(), {g.name()}},
-        {f.name(), {}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -437,31 +462,36 @@ int rdom_wrapper_test() {
 }
 
 int global_and_custom_wrap_test() {
-    Func f("f"), g("g"), result("result");
+    Func source("source"), g("g"), result("result");
     Var x("x"), y("y");
 
-    f(x) = x;
-    g(x, y) = f(x);
-    result(x, y) = f(x) + g(x, y);
+    source(x) = x;
+    ImageParam img(Int(32), 1, "img");
+    Image<int> buf = source.realize(200);
+    img.set(buf);
 
-    Func f_in_g = f.in(g).compute_at(g, x);
-    Func f_wrapper = f.in().compute_at(result, y);
-    f.compute_root();
+    g(x, y) = img(x);
+    result(x, y) = img(x) + g(x, y);
+
+    Func img_in_g = img.in(g).compute_at(g, x);
+    Func img_wrapper = img.in().compute_at(result, y);
+    Func img_f = img;
+    img_f.compute_root();
     g.compute_at(result, y);
 
     // Check the call graphs.
-    // Expect 'result' to call 'g' and 'f_wrapper', 'g' to call 'f_in_g',
-    // 'f_wrapper' to call 'f', f_in_g' to call 'f', 'f' to call nothing
-    Module m = result.compile_to_module({});
+    // Expect 'result' to call 'g' and 'img_wrapper', 'g' to call 'img_in_g',
+    // 'img_wrapper' to call 'f', img_in_g' to call 'img_f', 'f' to call 'img'
+    Module m = result.compile_to_module({result.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {result.name(), {g.name(), f_wrapper.name()}},
-        {g.name(), {f_in_g.name()}},
-        {f_wrapper.name(), {f.name()}},
-        {f_in_g.name(), {f.name()}},
-        {f.name(), {}},
+        {result.name(), {g.name(), img_wrapper.name()}},
+        {g.name(), {img_in_g.name()}},
+        {img_wrapper.name(), {img_f.name()}},
+        {img_in_g.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -477,27 +507,32 @@ int global_and_custom_wrap_test() {
 
 
 int wrapper_depend_on_mutated_func_test() {
-    Func e("e"), f("f"), g("g"), h("h");
+    Func source("sourceo"), f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
-    e(x, y) = x + y;
-    f(x, y) = e(x, y);
+    source(x, y) = x + y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(200, 200);
+    img.set(buf);
+
+    f(x, y) = img(x, y);
     g(x, y) = f(x, y);
     h(x, y) = g(x, y);
 
     Var xo("xo"), xi("xi");
-    e.compute_root();
+    Func img_f = img;
+    img_f.compute_root();
     f.compute_at(g, y).vectorize(x, 8);
     g.compute_root();
-    Func e_in_f = e.in(f);
+    Func img_in_f = img.in(f);
     Func g_in_h = g.in(h).compute_root();
     g_in_h.compute_at(h, y).vectorize(x, 8);
-    e_in_f.compute_at(f, y).split(x, xo, xi, 8);
+    img_in_f.compute_at(f, y).split(_0, xo, xi, 8);
 
     // Check the call graphs.
     // Expect 'h' to call 'g_in_h', 'g_in_h' to call 'g', 'g' to call 'f',
-    // 'f' to call 'e_in_f', e_in_f' to call 'e', 'e' to call nothing
-    Module m = h.compile_to_module({});
+    // 'f' to call 'img_in_f', img_in_f' to call 'img_f', 'img_f' to call 'img'
+    Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
@@ -505,9 +540,9 @@ int wrapper_depend_on_mutated_func_test() {
         {h.name(), {g_in_h.name()}},
         {g_in_h.name(), {g.name()}},
         {g.name(), {f.name()}},
-        {f.name(), {e_in_f.name()}},
-        {e_in_f.name(), {e.name()}},
-        {e.name(), {}},
+        {f.name(), {img_in_f.name()}},
+        {img_in_f.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -522,36 +557,38 @@ int wrapper_depend_on_mutated_func_test() {
 }
 
 int wrapper_on_wrapper_test() {
-    Func e("e"), f("f"), g("g"), h("h");
+    Func source("source"), g("g"), h("h");
     Var x("x"), y("y");
 
-    e(x, y) = x + y;
-    f(x, y) = e(x, y);
-    g(x, y) = f(x, y) + e(x, y);
-    Func f_in_g = f.in(g).compute_root();
-    Func f_in_f_in_g = f.in(f_in_g).compute_root();
-    h(x, y) = g(x, y) + f(x, y) + f_in_f_in_g(x, y);
+    source(x, y) = x + y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(200, 200);
+    img.set(buf);
 
-    e.compute_root();
-    f.compute_root();
+    g(x, y) = img(x, y) + img(x, y);
+    Func img_in_g = img.in(g).compute_root();
+    Func img_in_img_in_g = img.in(img_in_g).compute_root();
+    h(x, y) = g(x, y) + img(x, y) + img_in_img_in_g(x, y);
+
+    Func img_f = img;
+    img_f.compute_root();
     g.compute_root();
-    Func f_in_h = f.in(h).compute_root();
+    Func img_in_h = img.in(h).compute_root();
     Func g_in_h = g.in(h).compute_root();
 
     // Check the call graphs.
-    Module m = h.compile_to_module({});
+    Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {h.name(), {f_in_h.name(), g_in_h.name(), f_in_f_in_g.name()}},
-        {f_in_h.name(), {f.name()}},
+        {h.name(), {img_in_h.name(), g_in_h.name(), img_in_img_in_g.name()}},
+        {img_in_h.name(), {img_f.name()}},
         {g_in_h.name(), {g.name()}},
-        {g.name(), {e.name(), f_in_g.name()}},
-        {f_in_g.name(), {f_in_f_in_g.name()}},
-        {f_in_f_in_g.name(), {f.name()}},
-        {f.name(), {e.name()}},
-        {e.name(), {}},
+        {g.name(), {img_in_g.name()}},
+        {img_in_g.name(), {img_in_img_in_g.name()}},
+        {img_in_img_in_g.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -566,34 +603,40 @@ int wrapper_on_wrapper_test() {
 }
 
 int wrapper_on_rdom_predicate_test() {
-    Func f("f"), g("g"), h("h");
+    Func source("source"), g("g"), h("h");
     Var x("x"), y("y");
 
-    f(x, y) = x + y;
+    source(x, y) = x + y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(200, 200);
+    img.set(buf);
+
     g(x, y) = 10;
     h(x, y) = 5;
 
     RDom r(0, 100, 0, 100);
-    r.where(f(r.x, r.y) + h(r.x, r.y) < 50);
+    r.where(img(r.x, r.y) + h(r.x, r.y) < 50);
     g(r.x, r.y) += h(r.x, r.y);
 
     Func h_wrapper = h.in().store_root().compute_at(g, r.y);
-    Func f_in_g = f.in(g).compute_at(g, r.x);
-    f.compute_root();
+    Func img_in_g = img.in(g).compute_at(g, r.x);
+    Func img_f = img;
+    img_f.compute_root();
     h.compute_root();
 
     // Check the call graphs.
-    // Expect 'g' to call nothing, update of 'g' to call 'g', f_in_g', and 'h_wrapper',
-    // 'f_in_g' to call 'f', 'f' to call nothing, 'h_wrapper' to call 'h', 'h' to call nothing
-    Module m = g.compile_to_module({});
+    // Expect 'g' to call nothing, update of 'g' to call 'g', img_in_g', and 'h_wrapper',
+    // 'img_in_g' to call 'img_f', 'img_f' to call 'img', 'h_wrapper' to call 'h',
+    // 'h' to call nothing
+    Module m = g.compile_to_module({g.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {g.name(), {}},
-        {g.update(0).name(), {g.name(), f_in_g.name(), h_wrapper.name()}},
-        {f_in_g.name(), {f.name()}},
-        {f.name(), {}},
+        {g.update(0).name(), {g.name(), img_in_g.name(), h_wrapper.name()}},
+        {img_in_g.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
         {h_wrapper.name(), {h.name()}},
         {h.name(), {}},
     };
@@ -612,30 +655,35 @@ int wrapper_on_rdom_predicate_test() {
 }
 
 int two_fold_wrapper_test() {
-    Func input("input"), input_in_output_in_output, input_in_output, output("output");
+    Func source("source"), img_in_output_in_output, img_in_output, output("output");
     Var x("x"), y("y");
 
-    input(x, y) = 2*x + 3*y;
-    input.compute_root();
+    source(x, y) = 2*x + 3*y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(1024, 1024);
+    img.set(buf);
 
-    output(x, y) = input(y, x);
+    Func img_f = img;
+    img_f.compute_root();
+
+    output(x, y) = img(y, x);
 
     Var xi("xi"), yi("yi");
     output.tile(x, y, xi, yi, 8, 8);
 
-    input_in_output = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
-    input_in_output_in_output = input_in_output.in(output).compute_at(output, x).unroll(x).unroll(y);
+    img_in_output = img.in(output).compute_at(output, x).vectorize(_0).unroll(_1);
+    img_in_output_in_output = img_in_output.in(output).compute_at(output, x).unroll(_0).unroll(_1);
 
     // Check the call graphs.
-    Module m = output.compile_to_module({});
+    Module m = output.compile_to_module({output.infer_arguments()});
     CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {output.name(), {input_in_output_in_output.name()}},
-        {input_in_output_in_output.name(), {input_in_output.name()}},
-        {input_in_output.name(), {input.name()}},
-        {input.name(), {}},
+        {output.name(), {img_in_output_in_output.name()}},
+        {img_in_output_in_output.name(), {img_in_output.name()}},
+        {img_in_output.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -650,36 +698,41 @@ int two_fold_wrapper_test() {
 }
 
 int multi_folds_wrapper_test() {
-    Func f("f"), f_in_g_in_g, f_in_g, f_in_g_in_g_in_h, f_in_g_in_g_in_h_in_h, g("g"), h("h");
+    Func source("source"), img_in_g_in_g, img_in_g, img_in_g_in_g_in_h, img_in_g_in_g_in_h_in_h, g("g"), h("h");
     Var x("x"), y("y");
 
-    f(x, y) = 2*x + 3*y;
-    f.compute_root();
+    source(x, y) = 2*x + 3*y;
+    ImageParam img(Int(32), 2, "img");
+    Image<int> buf = source.realize(1024, 1024);
+    img.set(buf);
 
-    g(x, y) = f(y, x);
+    Func img_f = img;
+    img_f.compute_root();
+
+    g(x, y) = img(y, x);
 
     Var xi("xi"), yi("yi");
-    g.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    g.compute_root().tile(x, y, xi, yi, 8, 8);
 
-    f_in_g = f.in(g).compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
-    f_in_g_in_g = f_in_g.in(g).compute_root().tile(x, y, xi, yi, 8, 8).unroll(xi).unroll(yi);
+    img_in_g = img.in(g).compute_root().tile(_0, _1, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    img_in_g_in_g = img_in_g.in(g).compute_root().tile(_0, _1, xi, yi, 8, 8).unroll(xi).unroll(yi);
 
-    h(x, y) = f_in_g_in_g(y, x);
-    f_in_g_in_g_in_h = f_in_g_in_g.in(h).compute_at(h, x).vectorize(x).unroll(y);
-    f_in_g_in_g_in_h_in_h = f_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(x).unroll(y);
+    h(x, y) = img_in_g_in_g(y, x);
+    img_in_g_in_g_in_h = img_in_g_in_g.in(h).compute_at(h, x).vectorize(_0).unroll(_1);
+    img_in_g_in_g_in_h_in_h = img_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(_0).unroll(_1);
     h.compute_root().tile(x, y, xi, yi, 8, 8);
 
     {
         // Check the call graphs.
-        Module m = g.compile_to_module({});
+        Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g.name(), {f_in_g_in_g.name()}},
-            {f_in_g_in_g.name(), {f_in_g.name()}},
-            {f_in_g.name(), {f.name()}},
-            {f.name(), {}},
+            {g.name(), {img_in_g_in_g.name()}},
+            {img_in_g_in_g.name(), {img_in_g.name()}},
+            {img_in_g.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -694,17 +747,17 @@ int multi_folds_wrapper_test() {
 
     {
         // Check the call graphs.
-        Module m = h.compile_to_module({});
+        Module m = h.compile_to_module({h.infer_arguments()});
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {h.name(), {f_in_g_in_g_in_h_in_h.name()}},
-            {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
-            {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
-            {f_in_g_in_g.name(), {f_in_g.name()}},
-            {f_in_g.name(), {f.name()}},
-            {f.name(), {}},
+            {h.name(), {img_in_g_in_g_in_h_in_h.name()}},
+            {img_in_g_in_g_in_h_in_h.name(), {img_in_g_in_g_in_h.name()}},
+            {img_in_g_in_g_in_h.name(), {img_in_g_in_g.name()}},
+            {img_in_g_in_g.name(), {img_in_g.name()}},
+            {img_in_g.name(), {img_f.name()}},
+            {img_f.name(), {img.name()}},
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;

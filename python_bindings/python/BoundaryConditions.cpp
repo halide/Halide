@@ -4,6 +4,7 @@
 #include <boost/python.hpp>
 
 #include "../../src/Lambda.h" // needed by BoundaryConditions.h
+#include "../../src/ImageParam.h"
 #include "../../src/BoundaryConditions.h"
 #include "../../src/Func.h"
 
@@ -142,7 +143,7 @@ void def_mirror_interior_for_image<void>()
 
 void defineBoundaryConditions()
 {
-    
+
 
     // Other variants of constant_exterior exist, but not yet implemented
 
@@ -244,4 +245,3 @@ void defineBoundaryConditions()
 
     return;
 }
-

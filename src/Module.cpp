@@ -97,24 +97,28 @@ void Module::compile(const Outputs &output_files) const {
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
         if (!output_files.object_name.empty()) {
+            auto out = make_raw_fd_ostream(output_files.object_name);
             if (target().arch == Target::PNaCl) {
-                compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.object_name);
+                compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
             } else {
-                compile_llvm_module_to_object(*llvm_module, output_files.object_name);
+                compile_llvm_module_to_object(*llvm_module, *out);
             }
         }
         if (!output_files.assembly_name.empty()) {
+            auto out = make_raw_fd_ostream(output_files.assembly_name);
             if (target().arch == Target::PNaCl) {
-                compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.assembly_name);
+                compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
             } else {
-                compile_llvm_module_to_assembly(*llvm_module, output_files.assembly_name);
+                compile_llvm_module_to_assembly(*llvm_module, *out);
             }
         }
         if (!output_files.bitcode_name.empty()) {
-            compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.bitcode_name);
+            auto out = make_raw_fd_ostream(output_files.bitcode_name);
+            compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
         }
         if (!output_files.llvm_assembly_name.empty()) {
-            compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.llvm_assembly_name);
+            auto out = make_raw_fd_ostream(output_files.llvm_assembly_name);
+            compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
     if (!output_files.c_header_name.empty()) {
@@ -141,8 +145,10 @@ void Module::compile(const Outputs &output_files) const {
     }
 }
 
-void compile_standalone_runtime(std::string object_filename, Target t) {
+void compile_standalone_runtime(const std::string &object_filename, Target t) {
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
+    // For runtime, it only makes sense to output object files (for now), so ignore
+    // everything else. (Soon, this will also support static libraries.)
     empty.compile(Outputs().object(object_filename));
 }
 
