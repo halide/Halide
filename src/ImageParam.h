@@ -70,7 +70,7 @@ public:
      * '_0' represents the first dimension of the Func, while _1 represents the
      * second dimension of the Func.
      */
-    operator Func() const;
+    EXPORT operator Func() const;
 
 
     /** Creates and returns a new Func that wraps this ImageParam. During
