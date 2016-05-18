@@ -15,6 +15,9 @@
 namespace Halide {
 namespace Internal {
 
+/** Definition of an argument to a LoweredFunc. This is similar to
+ * Argument, except it enables passing extra information useful to
+ * some targets to LoweredFunc. */
 struct LoweredArgument : public Argument {
     /** For scalar arguments, the modulus and remainder of this
      * argument. */
