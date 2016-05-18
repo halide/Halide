@@ -1,5 +1,6 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "LLVM_Runtime_Linker.h"
 #include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -128,6 +129,24 @@ void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOSt
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
     module.print(out, nullptr);
+}
+
+void create_static_library(const std::vector<std::string> &src_files, const Target &target,
+                    const std::string &dst_file, bool deterministic) {
+    std::vector<llvm::NewArchiveIterator> new_members;
+    for (auto &src : src_files) {
+        new_members.push_back(llvm::NewArchiveIterator(src));
+    }
+    const bool write_symtab = true;
+    const bool thin = false;
+    const auto kind = Internal::get_triple_for_target(target).isOSDarwin() 
+        ? llvm::object::Archive::K_BSD 
+        : llvm::object::Archive::K_GNU;
+    auto result = llvm::writeArchive(dst_file, new_members,
+                       write_symtab, kind,
+                       deterministic, thin, nullptr);
+    internal_assert(!result.second) << "Failed to write archive: " << dst_file 
+        << ", reason: " << result.second << "\n";
 }
 
 }  // namespace Halide
