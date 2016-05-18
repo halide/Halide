@@ -172,6 +172,9 @@ const Specialization &Definition::add_specialization(Expr condition) {
     //TODO(psuriana)
     Specialization s;
     s.condition = condition;
+    s.definition.contents->values = contents->values;
+    s.definition.contents->args = contents->args;
+    s.definition.contents->domain = contents->domain;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
     s.definition.contents->schedule.store_level()      = contents->schedule.store_level();

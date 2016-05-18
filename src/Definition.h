@@ -21,8 +21,8 @@ struct FunctionContents;
 
 namespace Internal {
 
-struct IRVisitor;
-struct IRMutator;
+class IRVisitor;
+class IRMutator;
 struct Specialization;
 
 /** A Function definition which can either represent a pure or an update
