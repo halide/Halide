@@ -247,7 +247,9 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
         Outputs output_files = compute_outputs(target, base_path, emit_options);
-        compile_standalone_runtime(output_files, target);
+        // For runtime, it only makes sense to output object files (for now), so ignore
+        // everything else. (Soon, this will also support static libraries.)
+        compile_standalone_runtime(output_files.object_name, target);
     }
 
     if (!generator_name.empty()) {

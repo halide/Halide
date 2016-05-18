@@ -81,7 +81,7 @@ EXPORT Module link_modules(const std::string &name, const std::vector<Module> &m
 
 /** Create an object file containing the Halide runtime for a given
  * target. For use with Target::NoRuntime. */
-EXPORT void compile_standalone_runtime(const Outputs &output_files, Target t);
+EXPORT void compile_standalone_runtime(const std::string &object_filename, Target t);
 
 }
 
