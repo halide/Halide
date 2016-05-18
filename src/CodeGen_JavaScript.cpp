@@ -408,11 +408,11 @@ void CodeGen_JavaScript::compile(const Module &input) {
     bool old_use_simd_js = use_simd_js;
     use_simd_js = input.target().has_feature(Target::JavaScript_SIMD);
 
-    for (size_t i = 0; i < input.buffers.size(); i++) {
-        compile(input.buffers[i]);
+    for (const auto &b : input.buffers()) {
+        compile(b);
     }
-    for (size_t i = 0; i < input.functions.size(); i++) {
-        compile(input.functions[i]);
+    for (const auto &f : input.functions()) {
+        compile(f);
     }
 
     use_simd_js = old_use_simd_js;

@@ -12,6 +12,7 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,13 +39,8 @@ int static_sign(Expr x) {
     }
     return 0;
 }
+}
 
-
-// Given a varying expression, try to find a constant that is either:
-// An upper bound (always greater than or equal to the expression), or
-// A lower bound (always less than or equal to the expression)
-// If it fails, returns an undefined Expr.
-enum Direction {Upper, Lower};
 Expr find_constant_bound(Expr e, Direction d) {
     // We look through casts, so we only handle ops that can't
     // overflow. E.g. if A >= a and B >= b, then you can't assume that
@@ -56,9 +52,9 @@ Expr find_constant_bound(Expr e, Direction d) {
         Expr b = find_constant_bound(min->b, d);
         if (a.defined() && b.defined()) {
             return simplify(Min::make(a, b));
-        } else if (a.defined() && d == Upper) {
+        } else if (a.defined() && d == Direction::Upper) {
             return a;
-        } else if (b.defined() && d == Upper) {
+        } else if (b.defined() && d == Direction::Upper) {
             return b;
         }
     } else if (const Max *max = e.as<Max>()) {
@@ -66,9 +62,9 @@ Expr find_constant_bound(Expr e, Direction d) {
         Expr b = find_constant_bound(max->b, d);
         if (a.defined() && b.defined()) {
             return simplify(Max::make(a, b));
-        } else if (a.defined() && d == Lower) {
+        } else if (a.defined() && d == Direction::Lower) {
             return a;
-        } else if (b.defined() && d == Lower) {
+        } else if (b.defined() && d == Direction::Lower) {
             return b;
         }
     } else if (const Cast *cast = e.as<Cast>()) {
@@ -80,7 +76,6 @@ Expr find_constant_bound(Expr e, Direction d) {
     return Expr();
 }
 
-}
 
 class Bounds : public IRVisitor {
 public:
@@ -95,11 +90,11 @@ public:
 private:
 
     // Compute the intrinsic bounds of a function.
-    void bounds_of_func(Function f, int value_index) {
+    void bounds_of_func(string name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
-        bounds_of_type(f.output_types()[value_index]);
+        bounds_of_type(t);
 
-        pair<string, int> key = make_pair(f.name(), value_index);
+        pair<string, int> key = make_pair(name, value_index);
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -177,8 +172,8 @@ private:
             // can only really prove that this is the case if they're
             // constants, so try to make the constants first.
 
-            Expr lower_bound = find_constant_bound(min_a, Lower);
-            Expr upper_bound = find_constant_bound(max_a, Upper);
+            Expr lower_bound = find_constant_bound(min_a, Direction::Lower);
+            Expr upper_bound = find_constant_bound(max_a, Direction::Upper);
 
             if (lower_bound.defined() && upper_bound.defined()) {
                 // Cast them to the narrow type and back and see if
@@ -438,7 +433,9 @@ private:
                     min = Expr(); max = Expr(); return;
                 }
 
-                // Sign of b is unknown
+                // Sign of b is unknown. Note that this might divide
+                // by zero, but only in cases where the original code
+                // divides by zero.
                 Expr a = min_a / min_b;
                 Expr b = max_a / max_b;
                 Expr cmp = min_b > make_zero(min_b.type().element_of());
@@ -508,7 +505,7 @@ private:
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                min = 0;
+                min = make_zero(t);
                 max = Max::make(abs(min_b), abs(max_b));
             }
         }
@@ -645,14 +642,22 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
+        bool const_scalar_condition =
+            (op->condition.type().is_scalar() &&
+             !expr_uses_vars(op->condition, scope));
+
         if (min_a.same_as(min_b)) {
             min = min_a;
+        } else if (const_scalar_condition) {
+            min = select(op->condition, min_a, min_b);
         } else {
             min = Min::make(min_a, min_b);
         }
 
         if (max_a.same_as(max_b)) {
             max = max_a;
+        } else if (const_scalar_condition) {
+            max = select(op->condition, max_a, max_b);
         } else {
             max = Max::make(max_a, max_b);
         }
@@ -787,8 +792,8 @@ private:
             // trace_expr returns argument 4
             internal_assert(op->args.size() >= 5);
             op->args[4].accept(this);
-        } else if (op->func.has_pure_definition()) {
-            bounds_of_func(op->func, op->value_index);
+        } else if (op->call_type == Call::Halide) {
+            bounds_of_func(op->name, op->value_index, op->type);
         } else {
             // Just use the bounds of the type
             bounds_of_type(t);
@@ -1185,11 +1190,13 @@ private:
             op->value.accept(this);
         }
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
+
+        bool fixed = value_bounds.min.same_as(value_bounds.max);
         value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = simplify(value_bounds.max);
+        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
 
         if (is_small_enough_to_substitute(value_bounds.min) &&
-            is_small_enough_to_substitute(value_bounds.max)) {
+            (fixed || is_small_enough_to_substitute(value_bounds.max))) {
             scope.push(op->name, value_bounds);
             op->body.accept(this);
             scope.pop(op->name);
@@ -1206,12 +1213,20 @@ private:
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
-                        box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                        box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        if (expr_uses_var(box[i].min, max_name)) {
+                            box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                        }
+                        if (expr_uses_var(box[i].min, min_name)) {
+                            box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        }
                     }
                     if (box[i].max.defined()) {
-                        box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                        box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        if (expr_uses_var(box[i].max, max_name)) {
+                            box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                        }
+                        if (expr_uses_var(box[i].max, min_name)) {
+                            box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        }
                     }
                 }
             }
@@ -1228,7 +1243,6 @@ private:
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
-
         if (expr_uses_vars(op->condition, scope)) {
             if (!op->else_case.defined()) {
                 // Trim the scope down to represent the fact that the
@@ -1271,10 +1285,22 @@ private:
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
-                        if (lt)       i.max = min(likely_i.max, bi.max - 1);
-                        if (le || eq) i.max = min(likely_i.max, bi.max);
-                        if (gt)       i.min = max(likely_i.min, bi.min + 1);
-                        if (ge || eq) i.min = max(likely_i.min, bi.min);
+                        if (bi.max.defined()) {
+                            if (lt) {
+                                i.max = min(likely_i.max, bi.max - 1);
+                            }
+                            if (le || eq) {
+                                i.max = min(likely_i.max, bi.max);
+                            }
+                        }
+                        if (bi.min.defined()) {
+                            if (gt) {
+                                i.min = max(likely_i.min, bi.min + 1);
+                            }
+                            if (ge || eq) {
+                                i.min = max(likely_i.min, bi.min);
+                            }
+                        }
                         scope.push(var_a->name, i);
                         var_to_pop = var_a->name;
                     } else if (var_b && scope.contains(var_b->name)) {
@@ -1287,10 +1313,22 @@ private:
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
-                        if (gt)       i.max = min(likely_i.max, ai.max - 1);
-                        if (ge || eq) i.max = min(likely_i.max, ai.max);
-                        if (lt)       i.min = max(likely_i.min, ai.min + 1);
-                        if (le || eq) i.min = max(likely_i.min, ai.min);
+                        if (ai.max.defined()) {
+                            if (gt) {
+                                i.max = min(likely_i.max, ai.max - 1);
+                            }
+                            if (ge || eq) {
+                                i.max = min(likely_i.max, ai.max);
+                            }
+                        }
+                        if (ai.min.defined()) {
+                            if (lt) {
+                                i.min = max(likely_i.min, ai.min + 1);
+                            }
+                            if (le || eq) {
+                                i.min = max(likely_i.min, ai.min);
+                            }
+                        }
                         scope.push(var_b->name, i);
                         var_to_pop = var_b->name;
                     }
@@ -1321,7 +1359,7 @@ private:
                 else_boxes.swap(boxes);
             }
 
-            // debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
@@ -1335,7 +1373,7 @@ private:
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
 
-                // debug(0) << " Merging boxes for " << iter->first << "\n";
+                //debug(0) << " Merging boxes for " << i.first << "\n";
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
@@ -1353,7 +1391,6 @@ private:
                 merge_boxes(orig_box, then_box);
             }
         }
-
     }
 
     void visit(const For *op) {
@@ -1516,12 +1553,14 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
                 result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
 
+                // These can expand combinatorially as we go down the
+                // pipeline if we don't run CSE on them.
                 if (result.min.defined()) {
-                    result.min = simplify(result.min);
+                    result.min = simplify(common_subexpression_elimination(result.min));
                 }
 
                 if (result.max.defined()) {
-                    result.max = simplify(result.max);
+                    result.max = simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;
@@ -1576,6 +1615,10 @@ void bounds_test() {
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
+
+    check(scope, select(y == 5, 0, 3), select(y == 5, 0, 3), select(y == 5, 0, 3));
+    check(scope, select(y == 5, x, -3*x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
+    check(scope, select(y == x, x, -3*x + 8), -22, 10);
 
     check(scope, cast<int32_t>(abs(cast<int16_t>(x/y))), 0, 32768);
     check(scope, cast<float>(x), 0.0f, 10.0f);

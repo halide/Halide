@@ -42,11 +42,13 @@
 #include "StorageFolding.h"
 #include "Substitute.h"
 #include "Tracing.h"
+#include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
+#include "WrapCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -56,10 +58,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 using std::map;
-using std::pair;
-using std::make_pair;
 
-Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
@@ -67,6 +67,9 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
+
+    // Create a deep-copy of the entire graph of Funcs and substitute in wrapper Funcs.
+    std::tie(outputs, env) = wrap_func_calls(outputs, env);
 
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
@@ -148,7 +151,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s);
+        s = inject_image_intrinsics(s, env);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
 
@@ -216,6 +219,10 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = partition_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
+
+    debug(1) << "Trimming loops to the region over which they do something...\n";
+    s = trim_no_ops(s);
+    debug(2) << "Lowering after loop trimming:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);

@@ -6,6 +6,7 @@
  */
 
 #include "Expr.h"
+#include "Buffer.h"
 
 #include "Buffer.h"
 #include "IntrusivePtr.h"

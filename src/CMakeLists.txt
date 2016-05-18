@@ -231,7 +231,6 @@ set(HEADER_FILES
   Debug.h
   DebugToFile.h
   Deinterleave.h
-  Derivative.h
   DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
@@ -254,6 +253,7 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   Image.h
+  ImageParam.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
@@ -273,9 +273,10 @@ set(HEADER_FILES
   Memoization.h
   Module.h
   ModulusRemainder.h
+  Monotonic.h
   ObjectInstanceRegistry.h
-  OneToOne.h
-  Output.h
+  OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -298,12 +299,14 @@ set(HEADER_FILES
   SkipStages.h
   SlidingWindow.h
   Solve.h
+  StaticLibrary.h
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
   Target.h
   Tracing.h
+  TrimNoOps.h
   Tuple.h
   Type.h
   UnifyDuplicateLets.h
@@ -313,6 +316,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WrapCalls.h
   runtime/HalideRuntime.h
 )
 
@@ -380,7 +384,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   DebugToFile.cpp
   Deinterleave.cpp
-  Derivative.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
@@ -401,6 +404,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   Image.cpp
+  ImageParam.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
@@ -417,11 +421,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
+  Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  OneToOne.cpp
-  Output.cpp
+  OutputImageParam.cpp
   ParallelRVar.cpp
-  Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
   Pipeline.cpp
@@ -442,12 +445,14 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
+  StaticLibrary.cpp
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp
   Substitute.cpp
   Target.cpp
   Tracing.cpp
+  TrimNoOps.cpp
   Tuple.cpp
   Type.cpp
   UnifyDuplicateLets.cpp
@@ -457,6 +462,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WrapCalls.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

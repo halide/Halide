@@ -9,7 +9,7 @@ namespace Internal {
 // Define the mex wrapper API call (mexFunction) for a func with name pipeline_name.
 llvm::Function *define_matlab_wrapper(llvm::Module *module,
                                       llvm::Function *pipeline_argv_wrapper,
-                                      llvm::Value *metadata) {
+                                      llvm::Function *metadata_getter) {
     user_assert(!module->getFunction("mexFunction"))
         << "Module already contains a mexFunction. Only one pipeline can define a mexFunction.\n";
 
@@ -43,6 +43,9 @@ llvm::Function *define_matlab_wrapper(llvm::Module *module,
     IRBuilder<> ir(ctx);
     ir.SetInsertPoint(entry);
 
+    // Call the metadata_getter function to get the metadata pointer block.
+    llvm::CallInst *metadata_ptr = ir.CreateCall(metadata_getter);
+
     // Extract the argument values from the mexFunction.
     llvm::Function::arg_iterator mex_args = mex->arg_begin();
     Value *nlhs = iterator_to_pointer(mex_args++);
@@ -53,7 +56,7 @@ llvm::Function *define_matlab_wrapper(llvm::Module *module,
     Value *call_pipeline_args[] = {
         user_context,
         pipeline_argv_wrapper,
-        metadata,
+        metadata_ptr,
         nlhs,
         plhs,
         nrhs,

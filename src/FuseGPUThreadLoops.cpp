@@ -416,9 +416,8 @@ class ExtractSharedAllocations : public IRMutator {
         }
         alloc.size = simplify(alloc.size);
         allocations.push_back(alloc);
-        stmt = op->body;
-
         shared.erase(op->name);
+        stmt = op->body;
     }
 
     void visit(const Load *op) {
@@ -749,7 +748,7 @@ class ZeroGPULoopMins : public IRMutator {
     void visit(const For *op) {
         bool old_in_non_glsl_gpu = in_non_glsl_gpu;
 
-        in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::Parent) ||
+        in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
           (op->device_api == DeviceAPI::Metal);
 

@@ -5,6 +5,7 @@
 #include "add_operators.h"
 
 #include "../../src/RDom.h"
+#include "../../src/ImageParam.h"
 #include "../../src/IROperator.h" // for operations with RVar
 
 #include <string>
@@ -148,7 +149,6 @@ h::RDom *RDom_constructor4(h::Expr min0, h::Expr extent0,
 void defineRDom()
 {
     using Halide::RDom;
-    
 
     defineRVar();
 
@@ -218,7 +218,19 @@ void defineRDom()
                  "Compare two reduction domains for equality of reference")
             .def("dimensions", &RDom::dimensions, p::arg("self"),
                  "Get the dimensionality of a reduction domain")
-
+            .def("where", &RDom::where, p::args("self", "predicate"),
+                  "Add a predicate to the RDom. An RDom may have multiple"
+                  "predicates associated with it. An update definition that uses"
+                  "an RDom only iterates over the subset points in the domain for"
+                  "which all of its predicates are true. The predicate expression"
+                  "obeys the same rules as the expressions used on the"
+                  "right-hand-side of the corresponding update definition. It may"
+                  "refer to the RDom's variables and free variables in the Func's"
+                  "update definition. It may include calls to other Funcs, or make"
+                  "recursive calls to the same Func. This permits iteration over"
+                  "non-rectangular domains, or domains with sizes that vary with"
+                  "some free variable, or domains with shapes determined by some"
+                  "other Func. ")
             //"Get at one of the dimensions of the reduction domain"
             //EXPORT RVar operator[](int) const;
 

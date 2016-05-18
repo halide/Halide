@@ -1,5 +1,6 @@
 #include "Error.h"
 #include "CodeGen_JavaScript.h"
+#include "ImageParam.h"
 #include "JavaScriptExecutor.h"
 #include "JITModule.h"
 #include "Func.h"
@@ -2126,20 +2127,20 @@ EXPORT JavaScriptModule compile_javascript(const Target &target, const std::stri
     JavaScriptModule module;
     module.contents = new JavaScriptModuleContents();
 
-    module.contents.ptr->externs = externs;
-    module.contents.ptr->extern_deps = extern_deps;
+    module.contents->externs = externs;
+    module.contents->extern_deps = extern_deps;
     // This call explicitly does not use "_argv" as the suffix because
     // that name may already exist and if so, will return an int
     // instead of taking a pointer at the end of the args list to
     // receive the result value.
-    module.contents.ptr->trampolines = JITModule::make_trampolines_module(target, module.contents.ptr->externs,
-                                                                          "_js_trampoline", module.contents.ptr->extern_deps);
+    module.contents->trampolines = JITModule::make_trampolines_module(target, module.contents->externs,
+                                                                      "_js_trampoline", module.contents->extern_deps);
 
 #ifdef WITH_JAVASCRIPT_V8
     if (!target.has_feature(Target::JavaScript_SpiderMonkey)) {
-        if (compile_javascript_v8(source, fn_name, module.contents.ptr->externs, module.contents.ptr->trampolines,
-                                  module.contents.ptr->v8_isolate, module.contents.ptr->v8_context,
-                                  module.contents.ptr->v8_function) ==0) {
+        if (compile_javascript_v8(source, fn_name, module.contents->externs, module.contents->trampolines,
+                                  module.contents->v8_isolate, module.contents->v8_context,
+                                  module.contents->v8_function) ==0) {
             return module;
         }
     }
@@ -2151,11 +2152,11 @@ EXPORT JavaScriptModule compile_javascript(const Target &target, const std::stri
 
 #ifdef WITH_JAVASCRIPT_SPIDERMONKEY
     debug(0) << "Compiling with SpiderMonkey\n";
-    if (compile_javascript_spider_monkey(source, fn_name, module.contents.ptr->externs,
-                                         module.contents.ptr->trampolines, module.contents.ptr->spider_monkey_runtime,
-                                         module.contents.ptr->spider_monkey_context, module.contents.ptr->spider_monkey_globals,
-                                         module.contents.ptr->spider_monkey_function_name,
-                                         module.contents.ptr->spider_monkey_callback_info_storage) == 0) {
+    if (compile_javascript_spider_monkey(source, fn_name, module.contents->externs,
+                                         module.contents->trampolines, module.contents->spider_monkey_runtime,
+                                         module.contents->spider_monkey_context, module.contents->spider_monkey_globals,
+                                         module.contents->spider_monkey_function_name,
+                                         module.contents->spider_monkey_callback_info_storage) == 0) {
         debug(0) << "Compiling with SpiderMonkey suceeded\n";
         return module;
     }
@@ -2177,18 +2178,18 @@ EXPORT int run_javascript(JavaScriptModule module, const std::vector<std::pair<A
 #endif
 
 #ifdef WITH_JAVASCRIPT_V8
-    if (module.contents.ptr->v8_isolate) {
-        return run_javascript_v8(args, module.contents.ptr->v8_isolate,
-                                 module.contents.ptr->v8_context, module.contents.ptr->v8_function);
+    if (module.contents->v8_isolate) {
+        return run_javascript_v8(args, module.contents->v8_isolate,
+                                 module.contents->v8_context, module.contents->v8_function);
     }
 #endif
 
 #ifdef WITH_JAVASCRIPT_SPIDERMONKEY
     debug(0) << "Running with SpiderMonkey\n";
-    if (module.contents.ptr->spider_monkey_runtime) {
-      return run_javascript_spider_monkey(args, module.contents.ptr->spider_monkey_context,
-                                         module.contents.ptr->spider_monkey_globals,
-                                         module.contents.ptr->spider_monkey_function_name);
+    if (module.contents->spider_monkey_runtime) {
+        return run_javascript_spider_monkey(args, module.contents->spider_monkey_context,
+                                            module.contents->spider_monkey_globals,
+                                            module.contents->spider_monkey_function_name);
     }
 #endif
 

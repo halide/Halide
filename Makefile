@@ -296,7 +296,6 @@ SOURCE_FILES = \
   Debug.cpp \
   DebugToFile.cpp \
   Deinterleave.cpp \
-  Derivative.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
@@ -310,6 +309,7 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
   Image.cpp \
+  ImageParam.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
@@ -334,11 +334,10 @@ SOURCE_FILES = \
   Memoization.cpp \
   Module.cpp \
   ModulusRemainder.cpp \
+  Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
-  OneToOne.cpp \
-  Output.cpp \
+  OutputImageParam.cpp \
   ParallelRVar.cpp \
-  Param.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
@@ -359,12 +358,14 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
+  StaticLibrary.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
+  TrimNoOps.cpp \
   Tuple.cpp \
   Type.cpp \
   UnifyDuplicateLets.cpp \
@@ -373,7 +374,8 @@ SOURCE_FILES = \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \
-  VectorizeLoops.cpp
+  VectorizeLoops.cpp \
+  WrapCalls.cpp
 
 ifeq ($(LLVM_VERSION_TIMES_10),35)
 BITWRITER_VERSION=.35
@@ -420,7 +422,6 @@ HEADER_FILES = \
   Debug.h \
   DebugToFile.h \
   Deinterleave.h \
-  Derivative.h \
   DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
@@ -438,6 +439,7 @@ HEADER_FILES = \
   Generator.h \
   runtime/HalideRuntime.h \
   Image.h \
+  ImageParam.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
@@ -465,9 +467,10 @@ HEADER_FILES = \
   Memoization.h \
   Module.h \
   ModulusRemainder.h \
+  Monotonic.h \
   ObjectInstanceRegistry.h \
-  OneToOne.h \
-  Output.h \
+  Outputs.h \
+  OutputImageParam.h \
   ParallelRVar.h \
   Parameter.h \
   Param.h \
@@ -490,12 +493,14 @@ HEADER_FILES = \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
+  StaticLibrary.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
   Substitute.h \
   Target.h \
   Tracing.h \
+  TrimNoOps.h \
   Tuple.h \
   Type.h \
   UnifyDuplicateLets.h \
@@ -503,7 +508,8 @@ HEADER_FILES = \
   UnrollLoops.h \
   Util.h \
   Var.h \
-  VectorizeLoops.h
+  VectorizeLoops.h \
+  WrapCalls.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
@@ -761,7 +767,7 @@ test_generators:  \
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators test_renderscript
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
-# For static and generator tests they time the compile time only. The times are recorded in CSV files.
+# For generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=time_compilation_opengl_%)
@@ -785,7 +791,7 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=$(BIN_DIR)/renderscript_%)
 
-time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
+time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generators
 
 # Make an empty generator for generating runtimes.
 $(BIN_DIR)/runtime.generator: $(ROOT_DIR)/tools/GenGen.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
@@ -794,7 +800,7 @@ $(BIN_DIR)/runtime.generator: $(ROOT_DIR)/tools/GenGen.cpp $(BIN_DIR)/libHalide.
 # Generate a standalone runtime for a given target string
 $(RUNTIMES_DIR)/runtime_%.o: $(BIN_DIR)/runtime.generator
 	@mkdir -p $(RUNTIMES_DIR)
-	$(LD_PATH_SETUP) $(CURDIR)/$< -r $(notdir $@) -o $(CURDIR)/$(RUNTIMES_DIR) target=$*
+	$(LD_PATH_SETUP) $(CURDIR)/$< -r $(basename $(notdir $@)) -o $(CURDIR)/$(RUNTIMES_DIR) target=$*
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	$(CXX) $(CXX_FLAGS)  $< -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
@@ -818,11 +824,6 @@ $(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED
 
 $(BIN_DIR)/renderscript_%: $(ROOT_DIR)/test/renderscript/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
-
-$(TMP_DIR)/static/%/%.o: $(BIN_DIR)/static_%_generate
-	@-mkdir -p $(TMP_DIR)/static/$*
-	cd $(TMP_DIR)/static/$*; $(LD_PATH_SETUP) $(CURDIR)/$<
-	@-echo
 
 # TODO(srj): this doesn't auto-delete, why not?
 .INTERMEDIATE: $(FILTERS_DIR)/%.generator
@@ -1058,9 +1059,6 @@ time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 
 time_compilation_renderscript_%: $(BIN_DIR)/renderscript_%
 	$(TIME_COMPILATION) compile_times_renderscript.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_renderscript_%=renderscript_%)
-
-time_compilation_static_%: $(BIN_DIR)/static_%_generate
-	$(TIME_COMPILATION) compile_times_static.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_static_%=$(TMP_DIR)/static/%/%.o)
 
 time_compilation_generator_%: $(FILTERS_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.o)
