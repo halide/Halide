@@ -144,6 +144,8 @@ public:
             // Merge all the relevant boxes.
             Box b;
 
+            const vector<string> func_args = func.args();
+
             for (const pair<pair<string, int>, Box> &i : bounds) {
                 string func_name = i.first.first;
                 string stage_name = func_name + ".s" + std::to_string(i.first.second);
@@ -153,7 +155,7 @@ public:
                 }
             }
 
-            internal_assert(b.empty() || b.size() == func.args().size());
+            internal_assert(b.empty() || b.size() == func_args.size());
 
             if (!b.empty()) {
                 // Optimization: If a dimension is pure in every update
@@ -161,13 +163,12 @@ public:
                 // that dimension, instead of one bound per stage. Let's
                 // figure out what those dimensions are, and just have all
                 // stages but the last use the bounds for the last stage.
-                vector<bool> always_pure_dims(func.args().size(), true);
+                vector<bool> always_pure_dims(func_args.size(), true);
                 //TODO(psuriana): fix this to take into account specialization with different values
-                for (Definition i : func.updates()) {
-                    const vector<Expr> i_args = i.args();
+                for (const Definition &i : func.updates()) {
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        const Variable *v = i_args[j].as<Variable>();
-                        if (!v || v->name != func.args()[j]) {
+                        const Variable *v = i.args()[j].as<Variable>();
+                        if (!v || v->name != func_args[j]) {
                             always_pure_dims[j] = false;
                         }
                     }
@@ -178,7 +179,7 @@ public:
                     string last_stage = func.name() + ".s" + std::to_string(stages) + ".";
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
-                            const string &dim = func.args()[i];
+                            const string &dim = func_args[i];
                             Expr min = Variable::make(Int(32), last_stage + dim + ".min");
                             Expr max = Variable::make(Int(32), last_stage + dim + ".max");
                             b[i] = Interval(min, max);
@@ -233,8 +234,8 @@ public:
                         Expr new_max = inner_max + shift;
 
                         // Modify the region to be computed accordingly
-                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
-                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".min", new_min, s);
+                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
+                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
                     }
 
                     // 2)
@@ -260,8 +261,8 @@ public:
                         Expr new_max = Call::make(Int(32), Call::extract_buffer_max,
                                                   {inner_query, i}, Call::PureIntrinsic);
 
-                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
-                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".min", new_min, s);
+                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
+                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
                     }
 
                     s = do_bounds_query(s, in_pipeline);
@@ -308,7 +309,7 @@ public:
             }
 
             for (size_t d = 0; d < b.size(); d++) {
-                string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + std::to_string(stage) + "." + func_args[d];
 
                 if (b[d].min.same_as(b[d].max)) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
@@ -382,12 +383,13 @@ public:
 
             // Make the buffer_ts representing the output. They all
             // use the same size, but have differing types.
+            const vector<string> func_args = func.args();
             for (int j = 0; j < func.outputs(); j++) {
                 vector<Expr> output_buffer_t_args(2);
                 output_buffer_t_args[0] = null_handle;
                 output_buffer_t_args[1] = make_zero(func.output_types()[j]);
-                for (size_t k = 0; k < func.args().size(); k++) {
-                    const string &arg = func.args()[k];
+                for (size_t k = 0; k < func_args.size(); k++) {
+                    const string &arg = func_args[k];
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
@@ -430,10 +432,10 @@ public:
 
         // A scope giving the bounds for variables used by this stage
         void populate_scope(Scope<Interval> &result) {
-
-            for (size_t d = 0; d < func.args().size(); d++) {
-                string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
-                result.push(func.args()[d],
+            const vector<string> func_args = func.args();
+            for (size_t d = 0; d < func_args.size(); d++) {
+                string arg = name + ".s" + std::to_string(stage) + "." + func_args[d];
+                result.push(func_args[d],
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
             }
@@ -751,9 +753,10 @@ public:
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
+                const vector<string> f_args = f.args();
                 for (size_t i = 0; i < box.size(); i++) {
                     internal_assert(box[i].min.defined() && box[i].max.defined());
-                    string var = stage_name + "." + f.args()[i];
+                    string var = stage_name + "." + f_args[i];
 
                     if (box[i].max.same_as(box[i].min)) {
                         body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
@@ -765,7 +768,7 @@ public:
 
                     // The following is also valid, but seems to not simplify as well
                     /*
-                      string var = stage_name + "." + f.args()[i];
+                      string var = stage_name + "." + f_args[i];
                       Interval in = bounds_of_inner_var(var, body);
                       if (!in.min.defined() || !in.max.defined()) continue;
 

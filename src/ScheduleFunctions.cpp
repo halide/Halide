@@ -530,13 +530,14 @@ Stmt build_produce(Function f) {
                 stride_name += ".0";
             }
             string stage_name = f.name() + ".s0.";
+            const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
 
                 vector<Expr> buffer_args(2);
 
                 vector<Expr> top_left;
                 for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f.args()[k];
+                    string var = stage_name + f_args[k];
                     top_left.push_back(Variable::make(Int(32), var + ".min"));
                 }
                 Expr host_ptr = Call::make(f, top_left, j);
@@ -545,7 +546,7 @@ Stmt build_produce(Function f) {
                 buffer_args[0] = host_ptr;
                 buffer_args[1] = make_zero(f.output_types()[j]);
                 for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f.args()[k];
+                    string var = stage_name + f_args[k];
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
                     Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k));
@@ -592,8 +593,9 @@ Stmt build_produce(Function f) {
             values[i] = qualify(prefix, f.values()[i]);
         }
 
-        for (size_t i = 0; i < f.args().size(); i++) {
-            site.push_back(Variable::make(Int(32), prefix + f.args()[i]));
+        const vector<string> f_args = f.args();
+        for (size_t i = 0; i < f_args.size(); i++) {
+            site.push_back(Variable::make(Int(32), prefix + f_args[i]));
         }
 
         return build_provide_loop_nest(f, prefix, site, values, f.schedule(), false);
@@ -749,8 +751,9 @@ private:
         if (!is_output) {
             Region bounds;
             string name = func.name();
+            const vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                string arg = func.args()[i];
+                const string &arg = func_args[i];
                 Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
                 Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
                 bounds.push_back(Range(min, extent));

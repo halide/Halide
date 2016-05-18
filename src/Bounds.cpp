@@ -1547,8 +1547,9 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
                 // Make a scope that says the args could be anything.
                 Scope<Interval> arg_scope;
-                for (size_t k = 0; k < f.args().size(); k++) {
-                    arg_scope.push(f.args()[k], Interval(Expr(), Expr()));
+                const vector<string> f_args = f.args();
+                for (size_t k = 0; k < f_args.size(); k++) {
+                    arg_scope.push(f_args[k], Interval(Expr(), Expr()));
                 }
 
                 result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);

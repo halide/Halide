@@ -317,7 +317,9 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
 
     for (const auto &def : src->updates) {
         Definition def_copy = def.deep_copy(copied_map);
-        internal_assert(def_copy.domain().defined() && def_copy.domain().same_as(def_copy.schedule().reduction_domain()))
+        internal_assert(
+            (!def_copy.domain().defined() && !def_copy.schedule().reduction_domain().defined()) ||
+            (def_copy.domain().defined() && def_copy.domain().same_as(def_copy.schedule().reduction_domain())))
             << "Update definition should point to the same reduction domain as its schedule\n";
         dst->updates.push_back(std::move(def_copy));
     }

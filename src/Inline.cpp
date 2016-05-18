@@ -96,11 +96,13 @@ class Inliner : public IRMutator {
             // Grab the body
             Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
 
+            const vector<string> func_args = func.args();
+
             // Bind the args using Let nodes
-            internal_assert(args.size() == func.args().size());
+            internal_assert(args.size() == func_args.size());
 
             for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func.args()[i], args[i], body);
+                body = Let::make(func.name() + "." + func_args[i], args[i], body);
             }
 
             expr = body;
