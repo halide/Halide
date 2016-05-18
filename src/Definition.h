@@ -26,7 +26,7 @@ class IRMutator;
 struct Specialization;
 
 /** A Function definition which can either represent a pure or an update
- * definition. If it's a pure definition, then reduction domain is undefined.
+ * definition. If it's a pure definition, the reduction domain is undefined.
  * A function may have different definitions due to specialization, which are
  * stored in 'specializations' (Not possible from the front-end, but some
  * scheduling directives may potentially cause this divergence to occur). */
@@ -59,7 +59,7 @@ public:
         return contents.same_as(other.contents);
     }
 
-    /** Is this function a pure definition */
+    /** Is this a pure definition */
     bool is_pure() const;
 
     /** Pass an IRVisitor through to all Exprs referenced in the
@@ -70,25 +70,26 @@ public:
      * Definition. */
     void mutate(IRMutator *);
 
-    /** Get the arguments */
+    /** Get the default (no-specialization) arguments */
     // @{
     const std::vector<Expr> &args() const;
     std::vector<Expr> &args();
     // @}
 
-    /** Get the right-hand-side of the definition */
+    /** Get the default (no-specialization) right-hand-side of the definition */
     // @{
     const std::vector<Expr> &values() const;
     std::vector<Expr> &values();
     // @}
 
-    /** Get the schedule associated with this Definition. */
+    /** Get the default (no-specialization) schedule associated with this Definition. */
     // @{
     Schedule &schedule();
     const Schedule &schedule() const;
     // @}
 
-    /** Any reduction domain associated with this function's definition. */
+    /** Get the default (no-specialization) reduction domain associated with this
+     * function's definition. */
     // @{
     const ReductionDomain &domain() const;
     void set_domain(const ReductionDomain &d);

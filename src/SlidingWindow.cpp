@@ -108,16 +108,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Region provided:\n";
 
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
+            const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
-                string var = prefix + func.args()[i];
+                string var = prefix + func_args[i];
                 internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
                 Expr min_req = scope.get(var + ".min");
                 Expr max_req = scope.get(var + ".max");
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
-                debug(3) << func.args()[i] << ":" << min_req << ", " << max_req  << "\n";
+                debug(3) << func_args[i] << ":" << min_req << ", " << max_req  << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
                     expr_depends_on_var(max_req, loop_var)) {
                     if (!dim.empty()) {
@@ -126,7 +127,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         max_required = Expr();
                         break;
                     } else {
-                        dim = func.args()[i];
+                        dim = func_args[i];
                         dim_idx = i;
                         min_required = min_req;
                         max_required = max_req;
