@@ -90,6 +90,16 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
         return false;
     }
 }
+bool reduce_expr_modulo(Expr expr, int modulus, int *remainder, const Scope<ModulusRemainder> &scope) {
+    ModulusRemainder result = modulus_remainder(expr, scope);
+
+    if (result.modulus % modulus == 0) {
+        *remainder = result.remainder % modulus;
+        return true;
+    } else {
+        return false;
+    }
+}
 
 ModulusRemainder ComputeModulusRemainder::analyze(Expr e) {
     e.accept(this);
