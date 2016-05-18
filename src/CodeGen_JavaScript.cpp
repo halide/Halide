@@ -253,7 +253,8 @@ const string preamble =
     "";
 }
 
-CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {
+CodeGen_JavaScript::CodeGen_JavaScript(ostream &s) : IRPrinter(s), id("$$ BAD ID $$"),
+                                                     use_simd_js(false) {
 }
 
 CodeGen_JavaScript::~CodeGen_JavaScript() {
@@ -309,6 +310,7 @@ string javascript_type_array_name_fragment(Type type) {
             typed_array_name = "I";
         }
         switch (type.bits()) {
+            case 1:
             case 8:
               typed_array_name += "nt8";
               break;
@@ -322,28 +324,56 @@ string javascript_type_array_name_fragment(Type type) {
               user_error << "64-bit integers are not supported in JavaScript.\n";
               break;
             default:
+              internal_error << "Array fragment name requested for unsupported type " << type << "\n";
               break;
         }
     }
     return typed_array_name;
 }
 
-string CodeGen_JavaScript::print_reinterpret(Type type, Expr e) {
-    if (e.type() == type) {
-        return print_expr(e);
-    } else if ((type.is_int() || type.is_uint()) && (e.type().is_int() || e.type().is_uint())) {
-        return make_js_int_cast(print_expr(e), e.type().is_uint(), e.type().bits(), type.is_uint(), type.bits());
+Expr conditionally_extract_lane(Expr e, int lane) {
+    internal_assert(lane < e.type().lanes()) << "Bad lane in conditionally_extract_lane\n";
+    if (e.type().lanes() != 1) {
+        return extract_lane(e, lane);
     } else {
-        int32_t bytes_needed = (std::max(type.bits(), e.type().bits()) + 7) / 8;
-        string dataview = unique_name('r');
-        do_indent();
-        stream << "var " << dataview << " = new DataView(new ArrayBuffer(" << bytes_needed << "));\n";
-        string setter = "set" + javascript_type_array_name_fragment(e.type());
-        string getter = "get" + javascript_type_array_name_fragment(type);
-        string val = print_expr(e);
-        do_indent();
-        stream << dataview << "." << setter << "(0, " << val << ", true);\n";
-        return dataview + "." + getter + "(0, true)";
+        return e;
+    }
+}
+
+string CodeGen_JavaScript::print_reinterpret(Type type, Expr e) {
+    string from_simd_type;
+    string to_simd_type;
+    // Both vector length and bit length are required to be the same.
+    if (e.type().element_of() == type.element_of()) {
+        return print_expr(e);
+    } else if (simd_js_type_for_type(e.type(), from_simd_type, false) &&
+               simd_js_type_for_type(type, to_simd_type)) {
+        return to_simd_type + ".from" + from_simd_type + "Bits(" + print_expr(e) + ")";
+    } else {
+        ostringstream rhs;
+        rhs << literal_may_be_vector_start(type);
+        const char *lead = "";
+
+        for (int lane = 0; lane < type.lanes(); lane++) {
+            if ((type.is_int() || type.is_uint()) && (e.type().is_int() || e.type().is_uint())) {
+                rhs << lead << make_js_int_cast(print_expr(conditionally_extract_lane(e, lane)),
+                                                e.type().is_uint(), e.type().bits(), type.is_uint(), type.bits());
+                lead = ", ";
+            } else {
+                int32_t bytes_needed = (std::max(type.bits(), e.type().bits()) + 7) / 8;
+                string dataview = unique_name('r');
+                do_indent();
+                stream << "var " << dataview << " = new DataView(new ArrayBuffer(" << bytes_needed << "));\n";
+                string setter = "set" + javascript_type_array_name_fragment(e.type());
+                string getter = "get" + javascript_type_array_name_fragment(type);
+                string val = print_expr(conditionally_extract_lane(e, lane));
+                do_indent();
+                stream << dataview << "." << setter << "(0, " << val << ", true);\n";
+                return dataview + "." + getter + "(0, true)";
+            }
+        }
+        rhs << literal_may_be_vector_end(type);
+        return rhs.str();
     }
 }
 
@@ -374,12 +404,18 @@ void CodeGen_JavaScript::compile(const Module &input) {
     if (!input.target().has_feature(Target::NoRuntime)) {
         stream << preamble;
     }
+
+    bool old_use_simd_js = use_simd_js;
+    use_simd_js = input.target().has_feature(Target::JavaScript_SIMD);
+
     for (size_t i = 0; i < input.buffers.size(); i++) {
         compile(input.buffers[i]);
     }
     for (size_t i = 0; i < input.functions.size(); i++) {
         compile(input.functions[i]);
     }
+
+    use_simd_js = old_use_simd_js;
 }
 
 void CodeGen_JavaScript::compile(const LoweredFunc &f) {
@@ -516,6 +552,7 @@ void CodeGen_JavaScript::print_stmt(Stmt s) {
 }
 
 string CodeGen_JavaScript::print_assignment(Type /* t */, const std::string &rhs) {
+    internal_assert(!rhs.empty());
     // TODO: t is ignored and I expect casts will be required for value correctness.
     map<string, string>::iterator cached = cache.find(rhs);
 
@@ -548,85 +585,174 @@ void CodeGen_JavaScript::close_scope(const std::string &comment) {
     }
 }
 
+bool CodeGen_JavaScript::simd_js_type_for_type(Type t, std::string &result, bool include_prefix) {
+    if (!use_simd_js) {
+        return false;
+    }
+
+    result = include_prefix ? "SIMD." : "";
+
+    if (t.is_float() && t.bits() == 32 && t.lanes() == 4) {
+        result += "Float32x4";
+        return true;
+    } else if (t.is_int()) {
+        if (t.bits() == 32 && t.lanes() == 4) {
+            result += "Int32x4";
+            return true;
+        } else if (t.bits() == 16 && t.lanes() == 8) {
+            result += "Int16x8";
+            return true;
+        } else if (t.bits() == 8 && t.lanes() == 16) {
+            result += "Int8x16";
+            return true;
+        }
+    } else if (t.is_bool()) { // Has to be before uint case because is_uint is true for Bool.
+        if (t.lanes() == 4) {
+            result += "Bool32x4";
+            return true;
+        } else if (t.lanes() == 8) {
+            result += "Bool8x16";
+            return true;
+        } else if (t.lanes() == 16) {
+            result += "Bool16x8";
+            return true;
+        }
+    } else if (t.is_uint()) {
+        if (t.bits() == 32 && t.lanes() == 4) {
+            result += "Uint32x4";
+            return true;
+        } else if (t.bits() == 16 && t.lanes() == 8) {
+            result += "Uint16x8";
+            return true;
+        } else if (t.bits() == 8 && t.lanes() == 16) {
+            result += "Uint8x16";
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::string CodeGen_JavaScript::literal_may_be_vector_start(Type t) {
+    if (t.lanes() > 1) {
+        string simd_js_type;
+        if (simd_js_type_for_type(t, simd_js_type)) {
+            return simd_js_type + "(";
+        } else {
+            return "[";
+        }
+    } else {
+        return "";
+    }
+}
+
+std::string CodeGen_JavaScript::literal_may_be_vector_end(Type t) {
+    if (t.lanes() > 1) {
+        string simd_js_type;
+        if (simd_js_type_for_type(t, simd_js_type)) {
+            return ")";
+        } else {
+            return "]";
+        }
+    } else {
+        return "";
+    }
+}
+
 void CodeGen_JavaScript::visit(const Variable *op) {
     id = print_name(op->name);
 }
 
 std::string CodeGen_JavaScript::fround_start_if_needed(const Type &t) const {
-    return t.is_float() && t.bits() == 32 ? "Math.fround(" : "";
+    return (t.is_float() && t.bits() == 32 && (!use_simd_js || t.lanes() != 4)) ? "Math.fround(" : "";
 }
 
 std::string CodeGen_JavaScript::fround_end_if_needed(const Type &t) const {
-    return t.is_float() && t.bits() == 32 ? ")" : "";
+    return (t.is_float() && t.bits() == 32 && (!use_simd_js || t.lanes() != 4)) ? ")" : "";
 }
 
 void CodeGen_JavaScript::visit(const Cast *op) {
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
-
-    string value = print_expr(op->value);
-
-    if (dst.is_handle() && src.is_handle()) {
-    } else if (dst.is_handle() || src.is_handle()) {
-        internal_error << "Can't cast from " << src << " to " << dst << "\n";
-    } else if (!src.is_float() && !dst.is_float()) {
-        value = make_js_int_cast(value, src.is_uint(), src.bits(), dst.is_uint(), dst.bits());
-    } else if (src.is_float() && dst.is_int()) {
-        value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, false, dst.bits());
-    } else if (src.is_float() && dst.is_uint()) {
-        value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, true, dst.bits());
-    } else {
-        internal_assert(dst.is_float());
-        value = fround_start_if_needed(op->type) + value + fround_end_if_needed(op->type);
-    }
-  
-    print_assignment(op->type, value);
-}
-
-Expr conditionally_extract_lane(Expr e, int lane) {
-    internal_assert(lane < e.type().lanes()) << "Bad lane in conditionally_extract_lane\n";
-    if (e.type().lanes() != 1) {
-        return extract_lane(e, lane);
-    } else {
-        return e;
-    }
-}
-
-void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b, const char * op) {
+    
     ostringstream rhs;
-    const char *lead_char = (t.lanes() != 1) ? "[" : "";
+    rhs << literal_may_be_vector_start(dst);
+    const char *lead_char = "";
+    for (int lane = 0; lane < dst.lanes(); lane++) {
+        string value = print_expr(conditionally_extract_lane(op->value, lane));
 
-    for (int lane = 0; lane < t.lanes(); lane++) {
-        string sa = print_expr(conditionally_extract_lane(a, lane));
-        string sb = print_expr(conditionally_extract_lane(b, lane));
-        rhs << lead_char << fround_start_if_needed(t) << sa << " " << op << " " << sb << fround_end_if_needed(t);
+        if (dst.is_handle() && src.is_handle()) {
+        } else if (dst.is_handle() || src.is_handle()) {
+            internal_error << "Can't cast from " << src << " to " << dst << "\n";
+        } else if (!src.is_float() && !dst.is_float()) {
+            value = make_js_int_cast(value, src.is_uint(), src.bits(), dst.is_uint(), dst.bits());
+        } else if (src.is_float() && dst.is_int()) {
+            value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, false, dst.bits());
+        } else if (src.is_float() && dst.is_uint()) {
+            value = make_js_int_cast("Math.trunc(" + value + ")", false, 64, true, dst.bits());
+        } else {
+            internal_assert(dst.is_float());
+            value = fround_start_if_needed(op->type) + value + fround_end_if_needed(op->type);
+        }
+        rhs << lead_char << value;
         lead_char = ", ";
     }
-    if (t.lanes() > 1) {
-        rhs << "]";
+    rhs << literal_may_be_vector_end(dst);
+    print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::visit_binop(Type t, Expr a, Expr b,
+                                     const char * op, const char *simd_js_op) {
+    ostringstream rhs;
+    std::string simd_js_type;
+    if (simd_js_type_for_type(t, simd_js_type)) {
+        string sa = print_expr(a);
+        string sb = print_expr(b);
+
+        rhs << simd_js_type << "." << simd_js_op << "(" << sa << ", " << sb << ")";
+    } else {
+        const char *lead_char = (t.lanes() != 1) ? "[" : "";
+
+        internal_assert(t.lanes() > 0);
+        for (int lane = 0; lane < t.lanes(); lane++) {
+            string sa = print_expr(conditionally_extract_lane(a, lane));
+            string sb = print_expr(conditionally_extract_lane(b, lane));
+            rhs << lead_char << fround_start_if_needed(t) << sa << " " << op << " " << sb << fround_end_if_needed(t);
+            lead_char = ", ";
+        }
+        if (t.lanes() > 1) {
+            rhs << "]";
+        }
     }
     string id_var = print_assignment(t, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Add *op) {
-    visit_binop(op->type, op->a, op->b, "+");
+    visit_binop(op->type, op->a, op->b, "+", "add");
 }
 
 void CodeGen_JavaScript::visit(const Sub *op) {
-    visit_binop(op->type, op->a, op->b, "-");
+    std::string simd_js_type;
+    if (is_zero(op->a) && simd_js_type_for_type(op->type, simd_js_type)) {
+        string arg = print_expr(op->b);
+        print_assignment(op->type, simd_js_type + ".neg(" + arg + ")");
+    } else {
+        visit_binop(op->type, op->a, op->b, "-", "sub");
+    }
 }
 
 void CodeGen_JavaScript::visit(const Mul *op) {
-    if (op->type.is_float()) {
-        visit_binop(op->type, op->a, op->b, "*");
+    std::string simd_js_type;
+    if (op->type.is_float() || simd_js_type_for_type(op->type, simd_js_type)) {
+        visit_binop(op->type, op->a, op->b, "*", "mul");
     } else {
         ostringstream rhs;
         const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
 
         for (int lane = 0; lane < op->type.lanes(); lane++) {
-            string sa = print_expr(conditionally_extract_lane(op->a, lane));
-            string sb = print_expr(conditionally_extract_lane(op->b, lane));
-            rhs << lead_char << "Math.imul(" << sa << ", " << sb << ")";
+            string a = print_expr(conditionally_extract_lane(op->a, lane));
+            string b = print_expr(conditionally_extract_lane(op->b, lane));
+            rhs << lead_char << "Math.imul(" << a << ", " << b << ")";
             lead_char = ", ";
         }
         if (op->type.lanes() > 1) {
@@ -637,37 +763,47 @@ void CodeGen_JavaScript::visit(const Mul *op) {
 }
 
 void CodeGen_JavaScript::visit(const Div *op) {
-    const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
     ostringstream rhs;
-    for (int lane = 0; lane < op->type.lanes(); lane++) {
-        int bits;
+    std::string simd_js_type;
+    if (simd_js_type_for_type(op->type, simd_js_type) &&
+        op->type.is_float()) { // SIMD.js only supports vector divide on floating-point types.
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        rhs << simd_js_type << ".div(" << a << ", " << b << ")";
+    } else {
+        const char *lead_char = "";
+        rhs << literal_may_be_vector_start(op->type);
+        for (int lane = 0; lane < op->type.lanes(); lane++) {
+            int bits;
 
-        if (is_const_power_of_two_integer(conditionally_extract_lane(op->b, lane), &bits)) {
-            // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
-            string shift_op = op->type.is_uint() ? ">>>" : ">>";
-            rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << shift_op << bits;
-        } else {
-            string a = print_expr(conditionally_extract_lane(op->a, lane));
-            string b = print_expr(conditionally_extract_lane(op->b, lane));
-            rhs << lead_char << fround_start_if_needed(op->type);
-            if (!op->type.is_float()) {
-                rhs << "Math.floor(" << a << " / " << b << ")";
+            if (is_const_power_of_two_integer(conditionally_extract_lane(op->b, lane), &bits)) {
+                // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
+                string shift_op = op->type.is_uint() ? ">>>" : ">>";
+                rhs << lead_char << print_expr(conditionally_extract_lane(op->a, lane)) << shift_op << bits;
             } else {
-                rhs << a << " / " << b;
+                string a = print_expr(conditionally_extract_lane(op->a, lane));
+                string b = print_expr(conditionally_extract_lane(op->b, lane));
+                rhs << lead_char << fround_start_if_needed(op->type);
+                if (!op->type.is_float()) {
+                    rhs << "Math.floor(" << a << " / " << b << ")";
+                } else {
+                    rhs << a << " / " << b;
+                }
+                rhs << fround_end_if_needed(op->type);
             }
-            rhs << fround_end_if_needed(op->type);
+            lead_char = ", ";
         }
-        lead_char = ", ";
-    }
-    if (op->type.lanes() > 1) {
-        rhs << "]";
+        rhs << literal_may_be_vector_end(op->type);
     }
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Mod *op) {
-    const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
     ostringstream rhs;
+    // SIMD.js doesn't seem to have vectorized floor, even for floats,
+    // so this is basically a no go for vectorization.
+    rhs << literal_may_be_vector_start(op->type);
+    const char *lead_char = "";
     for (int lane = 0; lane < op->type.lanes(); lane++) {
         int bits;
 
@@ -693,58 +829,68 @@ void CodeGen_JavaScript::visit(const Mod *op) {
         }
         lead_char = ", ";
     }
-    if (op->type.lanes() > 1) {
-        rhs << "]";
-    }
+    rhs << literal_may_be_vector_end(op->type);
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Max *op) {
-  std::string expr_id = print_expr(Call::make(op->type, "Math.max", {op->a, op->b}, Call::Extern));
-    std::string wrap_start = fround_start_if_needed(op->type);
-    if (!wrap_start.empty()) {
-        print_assignment(op->type, wrap_start + expr_id + fround_end_if_needed(op->type));
+    ostringstream rhs;
+    std::string simd_js_type;
+    if (simd_js_type_for_type(op->type, simd_js_type) && op->type.is_float()) {
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        rhs << simd_js_type << ".max(" << a << ", " << b << ")";
+     } else {
+        call_scalar_function(rhs, op->type, "Math.max", false, {op->a, op->b});
     }
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Min *op) {
-  std::string expr_id = print_expr(Call::make(op->type, "Math.min", {op->a, op->b}, Call::Extern));
-    std::string wrap_start = fround_start_if_needed(op->type);
-    if (!wrap_start.empty()) {
-        print_assignment(op->type, wrap_start + expr_id + fround_end_if_needed(op->type));
+    ostringstream rhs;
+    std::string simd_js_type;
+    if (simd_js_type_for_type(op->type, simd_js_type) && op->type.is_float()) {
+        string a = print_expr(op->a);
+        string b = print_expr(op->b);
+        rhs << simd_js_type << ".min(" << a << ", " << b << ")";
+    } else {
+        call_scalar_function(rhs, op->type, "Math.min", false, {op->a, op->b});
     }
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const EQ *op) {
-    visit_binop(op->type, op->a, op->b, "==");
+    visit_binop(op->a.type(), op->a, op->b, "==", "equal");
 }
 
 void CodeGen_JavaScript::visit(const NE *op) {
-    visit_binop(op->type, op->a, op->b, "!=");
+    visit_binop(op->a.type(), op->a, op->b, "!=", "notEqual");
 }
 
 void CodeGen_JavaScript::visit(const LT *op) {
-    visit_binop(op->type, op->a, op->b, "<");
+    visit_binop(op->a.type(), op->a, op->b, "<", "lessThan");
 }
 
 void CodeGen_JavaScript::visit(const LE *op) {
-    visit_binop(op->type, op->a, op->b, "<=");
+    visit_binop(op->a.type(), op->a, op->b, "<=", "lessThanOrEqual");
 }
 
 void CodeGen_JavaScript::visit(const GT *op) {
-    visit_binop(op->type, op->a, op->b, ">");
+    visit_binop(op->a.type(), op->a, op->b, ">", "greaterThan");
 }
 
 void CodeGen_JavaScript::visit(const GE *op) {
-    visit_binop(op->type, op->a, op->b, ">=");
+    visit_binop(op->a.type(), op->a, op->b, ">=", "greaterThanOrEqual");
 }
 
 void CodeGen_JavaScript::visit(const Or *op) {
-    visit_binop(op->type, op->a, op->b, "||");
+    // TODO(zalman): Is this correct?
+    visit_binop(op->type, op->a, op->b, "||", "or");
 }
 
 void CodeGen_JavaScript::visit(const And *op) {
-    visit_binop(op->type, op->a, op->b, "&&");
+    // TODO(zalman): Is this correct?
+    visit_binop(op->type, op->a, op->b, "&&", "and");
 }
 
 void CodeGen_JavaScript::visit(const Not *op) {
@@ -879,6 +1025,42 @@ std::map<string, std::pair<string, int> > js_math_functions {
 
 }
 
+void CodeGen_JavaScript::call_scalar_function(std::ostream &rhs, Type type, const string &name,
+                                              bool is_operator, const std::vector<Expr> &arg_exprs) {
+    std::string lead = literal_may_be_vector_start(type);
+
+    for (int lane = 0; lane < type.lanes(); lane++) {
+        vector<string> args(arg_exprs.size());
+        for (size_t i = 0; i < arg_exprs.size(); i++) {
+            args[i] = print_expr(conditionally_extract_lane(arg_exprs[i], lane));
+        }
+
+        if (is_operator) {
+            internal_assert(args.size() == 2);
+            rhs << lead << fround_start_if_needed(type) << "(" <<
+                args[0] << " " << name << " " << args[1] <<
+                ")" << fround_end_if_needed(type);
+        } else {
+            rhs << lead << fround_start_if_needed(type) << name << "(";
+
+            const char *separator = "";
+            if (function_takes_user_context(name)) {
+                rhs << (have_user_context ? "__user_context" : "null");
+                separator = ", ";
+            }
+
+            for (size_t i = 0; i < args.size(); i++) {
+                rhs << separator << args[i];
+                separator = ", ";
+            }
+            rhs << ")" << fround_end_if_needed(type);
+        }
+        lead = ",";
+    }
+
+    rhs << literal_may_be_vector_end(type);
+}
+
 void CodeGen_JavaScript::visit(const Call *op) {
     // TODO: It is probably possible to add support for name mangling
     // here and make this go away for calling into native code.
@@ -895,28 +1077,47 @@ void CodeGen_JavaScript::visit(const Call *op) {
 
     if (op->is_intrinsic(Call::shuffle_vector)) {
         internal_assert((int) op->args.size() == 1 + op->type.lanes());
+        string simd_js_type;
+        bool is_simd_js = simd_js_type_for_type(op->args[0].type(), simd_js_type);
+
         string input_vector = print_expr(op->args[0]);
-        const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
+        rhs << literal_may_be_vector_start(op->type);
+        const char *lead_char = "";
         for (size_t i = 1; i < op->args.size(); i++) {
-            rhs << lead_char << input_vector << "[" << print_expr(op->args[i]) << "]";
+            if (is_simd_js) {
+                rhs << lead_char << simd_js_type << ".extractLane(" << input_vector << ", " << print_expr(op->args[i]) << ")";
+            } else {
+                rhs << lead_char << input_vector << "[" << print_expr(op->args[i]) << "]";
+            }
             lead_char = ", ";
         }
-        if (op->type.lanes() != 1) {
-            rhs << "]";
-        }
+        rhs << literal_may_be_vector_end(op->type);
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
-        vector<string> vecs(op->args.size());
+        struct arg_info {
+            string arg;
+            string simd_js_type;
+            bool is_simd;
+        };
+        vector<arg_info> vecs(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
-            vecs[i] = print_expr(op->args[i]);
+            arg_info info;
+            info.arg = print_expr(op->args[i]);
+            info.is_simd = simd_js_type_for_type(op->args[i].type(), info.simd_js_type);
+            vecs[i] = info;
         }
-        const char *lead_char = "[";
-        for (int i = 0; i < op->type.lanes(); i++) {
+        rhs << literal_may_be_vector_start(op->type);
+        const char *lead_char = "";
+        for (int i = 0; i < op->args[0].type().lanes(); i++) {
             for (size_t j = 0; j < op->args.size(); j++) {
-                rhs << lead_char <<  vecs[j] << "[" << i << "]";
+              if (vecs[j].is_simd) {
+                  rhs << lead_char << vecs[j].simd_js_type << ".extractLane(" << vecs[j].arg << ", " << i << ")";
+              } else {
+                  rhs << lead_char <<  vecs[j].arg << "[" << i << "]";
+              }
                 lead_char = ", ";
             }
         }
-        rhs << "]";
+        rhs << literal_may_be_vector_end(op->type);
     } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *string_imm = op->args[0].as<StringImm>();
@@ -931,37 +1132,68 @@ void CodeGen_JavaScript::visit(const Call *op) {
         rhs << ", " << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " & " << a1;
+        visit_binop(op->type, op->args[0], op->args[1], "&", "and");
+        rhs << id;
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " ^ " << a1;
+        visit_binop(op->type, op->args[0], op->args[1], "^", "xor");
+        rhs << id;
     } else if (op->is_intrinsic(Call::bitwise_or)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " | " << a1;
+        visit_binop(op->type, op->args[0], op->args[1], "|", "or");
+        rhs << id;
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
-        rhs << "~" << print_expr(op->args[0]);
+        string a = print_expr(op->args[0]);
+        string simd_js_type;
+        if (simd_js_type_for_type(op->type, simd_js_type)) {
+            rhs << simd_js_type << ".not(" << a << ")";
+        } else {
+            rhs << "~" << a;
+        }
     } else if (op->is_intrinsic(Call::reinterpret)) {
         internal_assert(op->args.size() == 1);
         rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " << " << a1;
+        string simd_js_type;
+        // SIMD.js only supports shifts by a scalar.
+        if (simd_js_type_for_type(op->type, simd_js_type)) {
+            const Broadcast *broadcast = op->args[1].as<Broadcast>();
+            if (broadcast != nullptr) {
+                string a0 = print_expr(op->args[0]);
+                string shift_amount = print_expr(broadcast->value);
+
+                rhs << simd_js_type << ".leftShiftByScalar(" << a0 << ", " << shift_amount << ")";
+            } else {
+                call_scalar_function(rhs, op->type, "<<", true, op->args);
+            }
+        } else {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
         const char *shift_op = op->type.is_uint() ? " >>> " : " >> ";
-        rhs << a0 << shift_op << a1;
+        string simd_js_type;
+        // SIMD.js only supports shifts by a scalar.
+        if (simd_js_type_for_type(op->type, simd_js_type)) {
+            const Broadcast *broadcast = op->args[1].as<Broadcast>();
+            if (broadcast != nullptr) {
+                string a0 = print_expr(op->args[0]);
+                string shift_amount = print_expr(broadcast->value);
+
+                rhs << simd_js_type << ".rightShiftByScalar(" << a0 << ", " << shift_amount << ")";
+            } else {
+                call_scalar_function(rhs, op->type, shift_op, true, op->args);
+            }
+        } else {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            // JavaScript distinguishes signed vs. unsigned shift using >> vs >>>
+            rhs << a0 << shift_op << a1;
+        }
     } else if (op->is_intrinsic(Call::rewrite_buffer)) {
         int dims = ((int)(op->args.size())-2)/3;
         (void)dims; // In case internal_assert is ifdef'd to do nothing
@@ -1017,21 +1249,26 @@ void CodeGen_JavaScript::visit(const Call *op) {
 
         string event_name = unique_name('e');
         do_indent();
-        stream << "var " << event_name << " = { func: " << op->args[0] << ", ";
-        stream << "event: " << op->args[1] << ", ";
-        stream << "parent_id: " << op->args[2] << ", ";
+        std::vector<string> str_args(op->args.size());
+        for (size_t i = 0; i < str_args.size(); i++) {
+            str_args[i] = print_expr(op->args[i]);
+        }
+
+        stream << "var " << event_name << " = { func: " << str_args[0] << ", ";
+        stream << "event: " << str_args[1] << ", ";
+        stream << "parent_id: " << str_args[2] << ", ";
         stream << "type_code: " << type.code() << ", bits: " << type.bits() << ", vector_width: " << type.lanes() << ", ";
-        stream << "value_index: " << op->args[3] << ", ";
+        stream << "value_index: " << str_args[3] << ", ";
         stream << "value: " << value_stream.str() << ", ";
         stream << "dimensions: " << int_args * type.lanes() << ", ";
         stream << "coordinates: " << coordinates_stream.str() << " }\n";
 
         if (op->is_intrinsic(Call::trace_expr)) {
             do_indent();
-            rhs << "halide_trace(__user_context, " << event_name << ")";
-        } else {
             stream << "halide_trace(__user_context, " << event_name << ");\n";
-            rhs << print_expr(op->args[4]);
+            rhs << str_args[4];
+        } else {
+            rhs << "halide_trace(__user_context, " << event_name << ")";
         }
     } else if (op->is_intrinsic(Call::lerp)) {
         // JavaScript doesn't support 64-bit ints, which are used for 32-bit interger lerps.
@@ -1221,20 +1458,28 @@ void CodeGen_JavaScript::visit(const Call *op) {
         rhs << "0";
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
-        string arg = print_expr(op->args[0]);
-        // TODO: Should this use Math.abs?
-        rhs << "(" << arg << " >= 0 ? " << arg << " : " <<
-            fround_start_if_needed(op->type) << "-" << arg << fround_end_if_needed(op->type) << ")";
+        string simd_js_type_arg;
+        string simd_js_type_result;
+        if (simd_js_type_for_type(op->args[0].type(), simd_js_type_arg) &&
+            simd_js_type_for_type(op->type, simd_js_type_result)) {
+            string arg = print_expr(op->args[0]);
+            // SIMD.js doesn't support "abs" on integer types.
+            if (op->type.is_float()) {
+                rhs << simd_js_type_arg << ".abs(" << arg << ")";
+            } else {
+                Expr abs_expr =
+                    reinterpret(op->type, select(op->args[0] < 0, 0 - op->args[0], op->args[0]));
+                rhs << print_expr(abs_expr);
+            }
+        } else {
+            call_scalar_function(rhs, op->type, "Math.abs", false, op->args);
+        }
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
-        string temp = unique_name('_');
-        string arg_a = print_expr(op->args[0]);
-        string arg_b = print_expr(op->args[1]);
-        do_indent();
-        stream << "var " << temp << " = " <<
-            fround_start_if_needed(op->type) << arg_a << " - " << arg_b << fround_end_if_needed(op->type) << ";\n";
-        // TODO: Should this use Math.abs?
-        rhs << "(" << temp << " >= 0 ? " << temp << " : -" << temp << ")";
+
+        Expr absd_expr =
+            reinterpret(op->type, select(op->args[0] < op->args[1], op->args[1] - op->args[0], op->args[0] - op->args[1]));
+        rhs << print_expr(absd_expr);
     } else if (op->is_intrinsic(Call::memoize_expr)) {
         internal_assert(op->args.size() >= 1);
         string arg = print_expr(op->args[0]);
@@ -1330,51 +1575,51 @@ void CodeGen_JavaScript::visit(const Call *op) {
                 js_name = js_math_fn->second.first;
             }
 
-            for (int lane = 0; lane < op->type.lanes(); lane++) {
-
-                const char *lead_char = "";
-                if (op->type.lanes() != 1) {
-                    lead_char = (lane == 0) ? "[" : ", ";
-                }
-
-                vector<string> args(op->args.size());
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    args[i] = print_expr(conditionally_extract_lane(op->args[i], lane));
-                }
-                rhs << lead_char << fround_start_if_needed(op->type) << js_name << "(";
-
-                const char *separator = "";
-                if (function_takes_user_context(op->name)) {
-                    rhs << (have_user_context ? "__user_context" : "null");
-                    separator = ", ";
-                }
-
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    rhs << separator << args[i];
-                    separator = ", ";
-                }
-                rhs << ")" << fround_end_if_needed(op->type);
-            }
+            call_scalar_function(rhs, op->type, js_name, false, op->args);
         }
-        if (op->type.lanes() != 1) {
-            rhs << "]";
-        }
-
     }
 
     print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::lane_by_lane_load(std::ostringstream &rhs, const Load *op,
+    const std::string &typed_name, const std::string &open, const std::string &close, bool type_cast_needed) {
+    Type t = op->type;
+    std::vector<string> indices;
+
+    for (int32_t i = 0; i < t.lanes(); i++) {
+        indices.push_back(print_expr(extract_lane(op->index, i)));
+    }
+    rhs << open;
+    for (int32_t i = 0; i < t.lanes(); i++) {
+        std::string possibly_casted = typed_name;
+        std::string index_expr = indices[i];
+        if (type_cast_needed) {
+            std::string temp = unique_name('_');
+            std::string array_type = javascript_type_array_name_fragment(t);
+            stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
+                   << index_expr << " * " << t.bytes() << ", 1);\n";
+            possibly_casted = temp;
+            index_expr = "0";
+        }
+        if (i != 0) {
+            rhs << ", ";
+        }
+        rhs << possibly_casted << "[" << index_expr << "]";
+    }
+    rhs << close;
 }
 
 void CodeGen_JavaScript::visit(const Load *op) {
     Type t = op->type;
 
     bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == t);
+                              allocations.get(op->name).type.element_of() == t.element_of());
  
     std::string typed_name = print_name(op->name);
 
     ostringstream rhs;
-    if (t.lanes() == 1) {
+    if (t.is_scalar()) {
         std::string index_expr = print_expr(op->index);
         if (type_cast_needed) {
             std::string temp = unique_name('_');
@@ -1390,30 +1635,22 @@ void CodeGen_JavaScript::visit(const Load *op) {
                 << "]";
         }
     } else {
-        std::vector<string> indices;
+        std::string simd_js_type;
+        if (simd_js_type_for_type(op->type, simd_js_type)) {
+            const Ramp *ramp = op->index.as<Ramp>();
 
-        for (int32_t i = 0; i < t.lanes(); i++) {
-            indices.push_back(print_expr(extract_lane(op->index, i)));
-        }
-        rhs << "[";
-        // TODO: Handle dense ramps.
-        for (int32_t i = 0; i < t.lanes(); i++) {
-            std::string possibly_casted = typed_name;
-            std::string index_expr = indices[i];
-            if (type_cast_needed) {
-                std::string temp = unique_name('_');
-                std::string array_type = javascript_type_array_name_fragment(t);
-                stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
-                       << index_expr << " * " << t.bytes() << ", 1);\n";
-                possibly_casted = temp;
-                index_expr = "0";
+            if (ramp && is_one(ramp->stride)) {
+                string base = print_expr(ramp->base);
+                // TODO: verify that the .buffer here is correct
+                rhs << simd_js_type << ".load(" << print_name(op->name) << ", " << base << ")";
+            } else {
+                lane_by_lane_load(rhs, op, typed_name, simd_js_type + "(", ")", type_cast_needed);
             }
-            if (i != 0) {
-                rhs << ", ";
-            }
-            rhs << possibly_casted << "[" << index_expr << "]";
+        } else {
+            // TODO: Handle dense ramps. See if above code for SIMD.js can give an advantage for
+            // non-SIMD.js case.
+            lane_by_lane_load(rhs, op, typed_name, "[", "]", type_cast_needed);
         }
-        rhs << "]";
     }
 
     print_assignment(t, rhs.str());
@@ -1423,29 +1660,68 @@ void CodeGen_JavaScript::visit(const Ramp *op) {
     ostringstream rhs;
     string base = print_expr(op->base);
     string stride = print_expr(op->stride);
-    rhs << "[";
+
+    rhs << literal_may_be_vector_start(op->type);
     for (int32_t i = 0; i < op->lanes; i++) {
         if (i != 0) {
             rhs << ", ";
         }
         rhs << base << " + " << stride << " * " << i;
     }
-    rhs << "]";
+    rhs << literal_may_be_vector_end(op->type);
+
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_JavaScript::visit(const Broadcast *op) {
     ostringstream rhs;
     string value = print_expr(op->value);
-    const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
-    for (int32_t i = 0; i < op->lanes; i++) {
-        rhs << lead_char << value;
-        lead_char = ", ";
-    }
-    if (op->type.lanes() != 1) {
-        rhs << "]";
+    std::string simd_js_type;
+    if (simd_js_type_for_type(op->type, simd_js_type)) {
+        rhs << simd_js_type << ".splat(" << value << ")";
+    } else  {
+        const char *lead_char = (op->type.lanes() != 1) ? "[" : "";
+        for (int32_t i = 0; i < op->lanes; i++) {
+            rhs << lead_char << value;
+            lead_char = ", ";
+        }
+        if (op->type.lanes() != 1) {
+            rhs << "]";
+        }
     }
     print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_JavaScript::lane_by_lane_store(const Store *op, const std::string &typed_name, bool type_cast_needed) {
+    Type t = op->value.type();
+    std::vector<string> indices;
+    std::vector<string> values;
+
+    for (int32_t i = 0; i < t.lanes(); i++) {
+        indices.push_back(print_expr(extract_lane(op->index, i)));
+        values.push_back(print_expr(extract_lane(op->value, i)));
+    }
+    for (int32_t i = 0; i < t.lanes(); i++) {
+        do_indent();
+        if (type_cast_needed) {
+            std::string temp = unique_name('_');
+            std::string array_type = javascript_type_array_name_fragment(t);
+            stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
+                   << indices[i] << " * " << t.bytes() << ", 1);\n";
+            do_indent();
+            stream << temp;
+            stream << "[0]= "
+                   << values[i]
+                   << ";\n";
+        } else {
+            stream << typed_name;
+            stream << "["
+                   << indices[i]
+                   << "] = "
+                   << values[i]
+                   << ";\n";
+        }
+    }
 }
 
 void CodeGen_JavaScript::visit(const Store *op) {
@@ -1456,8 +1732,7 @@ void CodeGen_JavaScript::visit(const Store *op) {
  
     std::string typed_name = print_name(op->name);
 
-    int32_t width = op->value.type().lanes();
-    if (width == 1) {
+    if (op->value.type().is_scalar()) {
         string id_index = print_expr(op->index);
         string id_value = print_expr(op->value);
         do_indent();
@@ -1477,33 +1752,20 @@ void CodeGen_JavaScript::visit(const Store *op) {
                    << ";\n";
         }
     } else {
-        std::vector<string> indices;
-        std::vector<string> values;
-
-        for (int32_t i = 0; i < width; i++) {
-            indices.push_back(print_expr(extract_lane(op->index, i)));
-            values.push_back(print_expr(extract_lane(op->value, i)));
-        }
-        for (int32_t i = 0; i < width; i++) {
-            do_indent();
-            if (type_cast_needed) {
-                std::string temp = unique_name('_');
-                std::string array_type = javascript_type_array_name_fragment(t);
-                stream << "var " << temp << " = new " << array_type << "Array(" << typed_name << ".buffer, "
-                       << indices[i] << " * " << t.bytes() << ", 1);\n";
-                do_indent();
-                stream << temp;
-                stream << "[0]= "
-                       << values[i]
-                       << ";\n";
+        string simd_js_type;
+        if (simd_js_type_for_type(t, simd_js_type)) {
+            const Ramp *ramp = op->index.as<Ramp>();
+            if (ramp && is_one(ramp->stride)) {
+                string base = print_expr(ramp->base);
+                string value = print_expr(op->value);
+                stream << simd_js_type << ".store(" << print_name(op->name) << ", " << base << ", " << value << ");";
             } else {
-                stream << typed_name;
-                stream << "["
-                       << indices[i]
-                       << "] = "
-                       << values[i]
-                       << ";\n";
+                lane_by_lane_store(op, typed_name, type_cast_needed);
             }
+        } else {
+            // TODO: Handle dense ramps. See if above code for SIMD.js can give an advantage for
+            // non-SIMD.js case.
+            lane_by_lane_store(op, typed_name, type_cast_needed);
         }
     }
     cache.clear();
@@ -1521,10 +1783,25 @@ void CodeGen_JavaScript::visit(const Select *op) {
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
-    rhs << "(" << cond
-        << " ? " << true_val
-        << " : " << false_val
-        << ")";
+
+    std::string simd_js_type;
+    if (simd_js_type_for_type(op->type, simd_js_type)) {
+        rhs << simd_js_type << ".select(";
+        if (op->condition.type().is_scalar()) {
+            string simd_js_bool_type;
+            bool has_bool_type = simd_js_type_for_type(Bool(op->true_value.type().lanes()), simd_js_bool_type);
+            internal_assert(has_bool_type) << "SIMD.js does not have a boolean type corresponding to " << op->true_value.type() << "\n";
+            rhs << simd_js_bool_type << ".splat(" << cond << ")";
+        } else {
+            rhs << cond;
+        }
+        rhs << ", " << true_val << ", " << false_val << ")";
+    } else {
+        rhs << "(" << cond
+            << " ? " << true_val
+            << " : " << false_val
+            << ")";
+    }
     print_assignment(op->type, rhs.str());
 }
 
@@ -1548,12 +1825,7 @@ void CodeGen_JavaScript::visit(const AssertStmt *op) {
     open_scope();
     string id_msg = print_expr(op->message);
     do_indent();
-    stream << "halide_error("
-           << (have_user_context ? "__user_context, " : "null, ")
-           << id_msg
-           << ");\n";
-    do_indent();
-    stream << "return -1;\n";
+    stream << "return " << id_msg << ";\n";
     close_scope("");
 }
 
@@ -1618,8 +1890,6 @@ void CodeGen_JavaScript::visit(const Allocate *op) {
     allocations.push(op->name, alloc);
     
     internal_assert(op->type.is_float() || op->type.is_int() || op->type.is_uint()) << "Cannot allocate non-numeric type in JavaScript codegen.\n";
-    // TODO: this needs to go away with SIMD.js...
-    internal_assert(op->type.lanes() == 1) << "Vector types not supported in JavaScript codegen.\n";
 
     if (op->new_expr.defined()) {
         std::string alloc_expr = print_expr(op->new_expr);
@@ -1636,6 +1906,9 @@ void CodeGen_JavaScript::visit(const Allocate *op) {
             allocation_size = print_expr(op->extents[0]);
             for (size_t i = 1; i < op->extents.size(); i++) {
                 allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->extents[i]));
+            }
+            if (op->type.lanes() > 1) {
+                allocation_size = print_assignment(Float(64), allocation_size + " * " + print_expr(op->type.lanes()));
             }
         }
 

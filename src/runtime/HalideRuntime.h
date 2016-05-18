@@ -106,8 +106,8 @@ extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
 //@{
 typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
 extern int halide_do_par_for(void *user_context,
-			     halide_task_t task,
-			     int min, int size, uint8_t *closure);
+                             halide_task_t task,
+                             int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
 //@}
 

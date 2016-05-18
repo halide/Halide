@@ -233,6 +233,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"mingw", Target::MinGW},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"javascript", Target::JavaScript},
+    {"javascript_simd", Target::JavaScript_SIMD},
     {"v8", Target::JavaScript_V8},
     {"spidermonkey", Target::JavaScript_SpiderMonkey},
 };

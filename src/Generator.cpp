@@ -50,7 +50,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] "
                           "target=target-string [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of optional files to emit. Accepted values are "
-                          "[assembly, bitcode, stmt, html, cpp]\n"
+                          "[assembly, bitcode, stmt, html, cpp, javascript]\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -138,6 +138,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             emit_options.emit_stmt_html = true;
         } else if (opt == "cpp") {
             emit_options.emit_cpp = true;
+        } else if (opt == "javascript") {
+            emit_options.emit_javascript = true;
         } else if (!opt.empty()) {
             cerr << "Unrecognized emit option: " << opt
                  << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
@@ -367,6 +369,9 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     }
     if (options.emit_cpp) {
         pipeline.compile_to_c(base_path + get_extension(".cpp", options), inputs, function_name, target);
+    }
+    if (options.emit_javascript) {
+        pipeline.compile_to_javascript(base_path + get_extension(".js", options), inputs, function_name, target);
     }
     if (options.emit_stmt) {
         pipeline.compile_to_lowered_stmt(base_path + get_extension(".stmt", options), inputs, Halide::Text, target);

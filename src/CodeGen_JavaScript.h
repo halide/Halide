@@ -52,6 +52,10 @@ protected:
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
 
+    /** Is SIMD.js allowed in the current scope being compiled?
+     * Generally set on a per module basis. */
+    bool use_simd_js;
+
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
     std::string print_expr(Expr);
@@ -132,10 +136,19 @@ protected:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
 
-    void visit_binop(Type t, Expr a, Expr b, const char *op);
+    void visit_binop(Type t, Expr a, Expr b, const char *op, const char *simd_js_op);
 
     std::string fround_start_if_needed(const Type &t) const;
     std::string fround_end_if_needed(const Type &t) const;
+
+    bool simd_js_type_for_type(Type t, std::string &result, bool include_prefix = true);
+    std::string literal_may_be_vector_start(Type t);
+    std::string literal_may_be_vector_end(Type t);
+
+    void lane_by_lane_load(std::ostringstream &rhs, const Load *op,
+        const std::string &typed_name, const std::string &open, const std::string &close, bool type_cast_needed);
+    void lane_by_lane_store(const Store *op, const std::string &typed_name, bool type_cast_needed);
+    void call_scalar_function(std::ostream &rhs, Type type, const std::string &name, bool is_operator, const std::vector<Expr> &args);
 };
 
 }
