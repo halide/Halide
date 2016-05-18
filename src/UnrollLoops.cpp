@@ -4,6 +4,8 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
+using std::vector;
+
 namespace Halide {
 namespace Internal {
 
@@ -24,13 +26,12 @@ class UnrollLoops : public IRMutator {
                 user_warning << "Warning: Unrolling a for loop of extent 1: " << for_loop->name << "\n";
             }
 
-            Stmt block;
+            vector<Stmt> iters;
             // Make n copies of the body, each wrapped in a let that defines the loop var for that body
-            for (int i = e->value-1; i >= 0; i--) {
-                Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
-                block = Block::make(iter, block);
+            for (int i = 0; i < e->value; i++) {
+                iters.push_back(substitute(for_loop->name, for_loop->min + i, body));
             }
-            stmt = block;
+            stmt = Block::make(iters);
 
         } else {
             IRMutator::visit(for_loop);
