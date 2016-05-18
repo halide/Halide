@@ -709,38 +709,20 @@ namespace {
     template<typename T, typename A>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
-        *stmt = Stmt();
-        if (a.defined()) {
-            *stmt = a;
-        }
+        *stmt = Block::make({a});
     }
     template<typename T, typename A, typename B>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
-        *stmt = Stmt();
-        if (b.defined()) {
-            *stmt = Block::make(b, *stmt);
-        }
-        if (a.defined()) {
-            *stmt = Block::make(a, *stmt);
-        }
+        *stmt = Block::make({a, b});
     }
     template<typename T, typename A, typename B, typename C>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, const C op_c, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
         Stmt c = mutator->mutate(op_c);
-        *stmt = Stmt();
-        if (c.defined()) {
-            *stmt = Block::make(c, *stmt);
-        }
-        if (b.defined()) {
-            *stmt = Block::make(b, *stmt);
-        }
-        if (a.defined()) {
-            *stmt = Block::make(a, *stmt);
-        }
+        *stmt = Block::make({a, b, c});
     }
 }
 

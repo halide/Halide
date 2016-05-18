@@ -478,12 +478,31 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
 
 Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
-    // rest is allowed to be null
+    internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-    node->first = first;
-    node->rest = rest;
+
+    if (const Block *b = first.as<Block>()) {
+        // Use a canonical block nesting order
+        node->first = b->first;
+        node->rest  = Block::make(b->rest, rest);
+    } else {
+        node->first = first;
+        node->rest = rest;
+    }
+
     return node;
+}
+
+Stmt Block::make(const std::vector<Stmt> &stmts) {
+    if (stmts.empty()) {
+        return Stmt();
+    }
+    Stmt result = stmts.back();
+    for (size_t i = stmts.size()-1; i > 0; i--) {
+        result = Block::make(stmts[i-1], result);
+    }
+    return result;
 }
 
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
