@@ -104,6 +104,37 @@ EXPORT std::string base_name(const std::string &name, char delim = '.');
 /** Split the source string using 'delim' as the divider. */
 EXPORT std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
+/** Perform a left fold of a vector. Returns a default-constructed
+ * vector element if the vector is empty. Similar to std::accumulate
+ * but with a less clunky syntax. */
+template<typename T, typename Fn>
+T fold_left(const std::vector<T> &vec, Fn f) {
+    T result;
+    if (vec.empty()) {
+        return result;
+    }
+    result = vec[0];
+    for (size_t i = 1; i < vec.size(); i++) {
+        result = f(result, vec[i]);
+    }
+    return result;
+}
+
+/** Returns a right fold of a vector. Returns a default-constructed
+ * vector element if the vector is empty. */
+template<typename T, typename Fn>
+T fold_right(const std::vector<T> &vec, Fn f) {
+    T result;
+    if (vec.empty()) {
+        return result;
+    }
+    result = vec.back();
+    for (size_t i = vec.size()-1; i > 0; i--) {
+        result = f(vec[i-1], result);
+    }
+    return result;
+}
+
 template <typename T>
 inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
 }
