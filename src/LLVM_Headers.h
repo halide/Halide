@@ -54,6 +54,7 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/ADT/StringMap.h>
+#include <llvm/Object/ArchiveWriter.h>
 #include <llvm/Object/ObjectFile.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3+
