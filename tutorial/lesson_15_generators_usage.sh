@@ -206,7 +206,7 @@ check_no_runtime my_first_generator_avx.o
 check_symbol     my_first_generator_avx.o my_first_generator_avx
 
 # We can then use the generator to emit just the runtime:
-./lesson_15_generate -r halide_runtime_x86.o -o . target=host-x86-64
+./lesson_15_generate -r halide_runtime_x86 -o . target=host-x86-64
 check_runtime halide_runtime_x86.o
 
 # Linking the standalone runtime with the three generated object files
