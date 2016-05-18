@@ -133,6 +133,7 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
 
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
                     const std::string &dst_file, bool deterministic) {
+#if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
     std::vector<llvm::NewArchiveIterator> new_members;
     for (auto &src : src_files) {
         new_members.push_back(llvm::NewArchiveIterator(src));
@@ -147,6 +148,9 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
                        deterministic, thin, nullptr);
     internal_assert(!result.second) << "Failed to write archive: " << dst_file 
         << ", reason: " << result.second << "\n";
+#else
+    internal_error << "create_static_library requires LLVM 3.7 or later.\n";
+#endif
 }
 
 }  // namespace Halide
