@@ -56,18 +56,20 @@ bool contains_impure_call(const Expr &expr) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(Function f,
-                             string prefix,
-                             const vector<Expr> &site,
-                             const vector<Expr> &values,
-                             const Schedule &s,
-                             bool is_update) {
+Stmt build_provide_loop_nest_helper(string func_name,
+                                    string prefix,
+                                    const vector<string> &dims,
+                                    const vector<Expr> &site,
+                                    const vector<Expr> &values,
+                                    const Schedule &s,
+                                    bool is_update) {
+
 
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(f.name(), values, site);
+    Stmt stmt = Provide::make(func_name, values, site);
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -77,6 +79,7 @@ Stmt build_provide_loop_nest(Function f,
     }
     // Then use any reduction domain.
     const ReductionDomain &rdom = s.reduction_domain();
+    internal_assert((!is_update && !rdom.defined()) || is_update);
     if (rdom.defined()) {
         for (const ReductionVariable &i : rdom.domain()) {
             known_size_dims[i.var] = i.extent;
@@ -415,7 +418,7 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
-    for (const std::string &i : f.args()) {
+    for (const std::string &i : dims) {
         string var = prefix + i;
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min"); // Inject instance name here? (compute instance names during lowering)
@@ -426,16 +429,63 @@ Stmt build_provide_loop_nest(Function f,
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
     }
 
+    // Define the loop mins and extents for the reduction domain (if there is any)
+    // in terms of the mins and maxs produced by bounds inference
+    if (rdom.defined()) {
+        for (const ReductionVariable &rv : rdom.domain()) {
+            string p = prefix + rv.var;
+            Expr rmin = Variable::make(Int(32), p + ".min");
+            Expr rmax = Variable::make(Int(32), p + ".max");
+            stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
+            stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
+            stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
+        }
+    }
+
+    return stmt;
+}
+
+// Build a loop nest about a provide node using a schedule
+Stmt build_provide_loop_nest(string func_name,
+                             string prefix,
+                             const vector<string> &dims,
+                             const Definition &def,
+                             bool is_update) {
+
+    internal_assert(!is_update == def.is_init());
+
+    // Default stored values
+    vector<Expr> site(def.args().size());
+    vector<Expr> values(def.values().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        Expr v = def.values()[i];
+        v = qualify(prefix, v);
+        values[i] = v;
+        debug(3) << "Value " << i << " = " << v << "\n";
+    }
+
+    // Default stored locations
+    for (size_t i = 0; i < def.args().size(); i++) {
+        Expr s = def.args()[i];
+        s = qualify(prefix, s);
+        site[i] = s;
+        debug(3) << "Site " << i << " = " << s << "\n";
+    }
+
+    // Default schedule/values if there is no specialization
+    Stmt stmt = build_provide_loop_nest_helper(
+        func_name, prefix, dims, site, values, def.schedule(), is_update);
+
     // Make any specialized copies
-    //TODO(psuriana)
-    /*for (size_t i = s.specializations().size(); i > 0; i--) {
-        Expr c = s.specializations()[i-1].condition;
-        Schedule sched = s.specializations()[i-1].schedule;
+    const vector<Specialization> &specializations = def.specializations();
+    for (size_t i = specializations.size(); i > 0; i--) {
+        Expr c = specializations[i-1].condition;
+        const Definition &s_def = specializations[i-1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
         Stmt then_case =
-            build_provide_loop_nest(f, prefix, site, values, sched, is_update);
+            build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
 
         if (var && eq) {
             then_case = simplify_exprs(substitute(var->name, eq->b, then_case));
@@ -451,7 +501,7 @@ Stmt build_provide_loop_nest(Function f,
         } else {
             stmt = IfThenElse::make(c, then_case, stmt);
         }
-    }*/
+    }
 
     return stmt;
 }
@@ -584,21 +634,8 @@ Stmt build_produce(Function f) {
     } else {
 
         string prefix = f.name() + ".s0.";
-
-        // Compute the site to store to as the function args
-        vector<Expr> site;
-
-        vector<Expr> values(f.values().size());
-        for (size_t i = 0; i < values.size(); i++) {
-            values[i] = qualify(prefix, f.values()[i]);
-        }
-
-        const vector<string> f_args = f.args();
-        for (size_t i = 0; i < f_args.size(); i++) {
-            site.push_back(Variable::make(Int(32), prefix + f_args[i]));
-        }
-
-        return build_provide_loop_nest(f, prefix, site, values, f.schedule(), false);
+        vector<string> dims = f.args();
+        return build_provide_loop_nest(f.name(), prefix, dims, f.definition(), false);
     }
 }
 
@@ -608,41 +645,12 @@ vector<Stmt> build_update(Function f) {
     vector<Stmt> updates;
 
     for (size_t i = 0; i < f.updates().size(); i++) {
-        Definition r = f.update(i);
+        const Definition &def = f.update(i);
 
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
-        vector<Expr> site(r.args().size());
-        vector<Expr> values(r.values().size());
-        for (size_t i = 0; i < values.size(); i++) {
-            Expr v = r.values()[i];
-            v = qualify(prefix, v);
-            values[i] = v;
-            debug(3) << "Update value " << i << " = " << v << "\n";
-        }
-
-        for (size_t i = 0; i < r.args().size(); i++) {
-            Expr s = r.args()[i];
-            s = qualify(prefix, s);
-            site[i] = s;
-            debug(3) << "Update site " << i << " = " << s << "\n";
-        }
-
-        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule(), true);
-
-        // Now define the bounds on the reduction domain
-        if (r.domain().defined()) {
-            const vector<ReductionVariable> &dom = r.domain().domain();
-            for (size_t i = 0; i < dom.size(); i++) {
-                string p = prefix + dom[i].var;
-                Expr rmin = Variable::make(Int(32), p + ".min");
-                Expr rmax = Variable::make(Int(32), p + ".max");
-                loop = LetStmt::make(p + ".loop_min", rmin, loop);
-                loop = LetStmt::make(p + ".loop_max", rmax, loop);
-                loop = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, loop);
-            }
-        }
-
+        vector<string> dims = f.args();
+        Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, def, true);
         updates.push_back(loop);
     }
 
@@ -1099,18 +1107,20 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
 
     // If the func is scheduled on the gpu, check that the relevant
     // api is enabled in the target.
-    vector<Schedule> schedules;
-    schedules.push_back(f.schedule());
-    for (const Definition &u : f.updates()) {
-        schedules.push_back(u.schedule());
+    vector<Definition> definitions;
+    definitions.push_back(f.definition());
+    for (const Definition &def : f.updates()) {
+        definitions.push_back(def);
     }
-    //TODO(psuriana)
-    /*for (size_t i = 0; i < schedules.size(); i++) {
-        for (const Specialization &s : schedules[i].specializations()) {
-            schedules.push_back(s.schedule);
+
+    for (size_t i = 0; i < definitions.size(); i++) {
+        for (const Specialization &s : definitions[i].specializations()) {
+            definitions.push_back(s.definition);
         }
-    }*/
-    for (const Schedule &s : schedules) {
+    }
+
+    for (const Definition &def : definitions) {
+        const Schedule &s = def.schedule();
         for (const Dim &d : s.dims()) {
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()

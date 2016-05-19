@@ -1534,7 +1534,7 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValue
 Interval compute_function_definition_value_bounds(
         const Definition &def, const Scope<Interval>& scope, const FuncValueBounds &fb, int dim) {
 
-    internal_assert(def.is_pure());
+    internal_assert(def.is_init());
 
     Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
 

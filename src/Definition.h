@@ -25,15 +25,15 @@ class IRVisitor;
 class IRMutator;
 struct Specialization;
 
-/** A Function definition which can either represent a pure or an update
+/** A Function definition which can either represent a init or an update
  * definition. A function may have different definitions due to specialization,
  * which are stored in 'specializations' (Not possible from the front-end, but
  * some scheduling directives may potentially cause this divergence to occur).
- * Although pure definition may have multiple values per specialization, it must
+ * Although init definition may have multiple values per specialization, it must
  * have the same pure args (i.e. same pure dimension variables). The update
  * definition, on the other hand, may have different args/values per specialization.
  * Note that, while the Expr in args/values may be different across specializations,
- * they must have the same number of dimensions.
+ * they must have the same number of dimensions and the same pure dimensions.
  */
 class Definition {
 
@@ -45,9 +45,9 @@ public:
 
     /** Construct a Definition with the supplied args, values, and reduction domain. */
     EXPORT Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
-                      const ReductionDomain &rdom, bool is_pure);
+                      const ReductionDomain &rdom, bool is_init);
 
-    /** Construct an empty Definition. By default, it is a pure definition. */
+    /** Construct an empty Definition. By default, it is a init definition. */
     EXPORT Definition();
 
     /** Return a deep copy of this Definition. It recursively deep copies all
@@ -65,8 +65,8 @@ public:
         return contents.same_as(other.contents);
     }
 
-    /** Is this a pure definition; otherwise it's an update definition */
-    bool is_pure() const;
+    /** Is this an init definition; otherwise it's an update definition */
+    bool is_init() const;
 
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Definition. */

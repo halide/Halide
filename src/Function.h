@@ -120,10 +120,10 @@ public:
     /** Get the name of the function */
     EXPORT const std::string &name() const;
 
-    /** Get a mutable handle to the pure definition. */
+    /** Get a mutable handle to the init definition. */
     EXPORT Definition &definition();
 
-    /** Get the pure definition */
+    /** Get the init definition */
     EXPORT const Definition &definition() const;
 
     /** Get the pure arguments */
