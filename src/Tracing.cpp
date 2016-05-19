@@ -78,9 +78,9 @@ private:
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
             Function f = env.find(op->name)->second;
-            bool inlined = f.schedule().compute_level().is_inline();
-            if (f.has_update_definition()) inlined = false;
-            trace_it = f.is_tracing_loads() || (global_level > 2 && !inlined);
+            internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
+
+            trace_it = f.is_tracing_loads() || (global_level > 2);
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
             trace_it = global_level > 2;
@@ -110,10 +110,9 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        bool inlined = f.schedule().compute_level().is_inline();
-        if (f.has_update_definition()) inlined = false;
+        internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
-        if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
+        if (f.is_tracing_stores() || (global_level > 1)) {
             // Wrap each expr in a tracing call
 
             const vector<Expr> &values = op->values;

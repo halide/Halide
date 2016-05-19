@@ -440,7 +440,8 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                //TODO(psuriana): fix this to take into account specialization with different values
+                //TODO(psuriana): fix this to take into account specialization with different values,
+                //more importantly specialization with diferent reduction domain!!!
                 const Definition &r = func.update(stage - 1);
                 if (r.domain().defined()) {
                     const vector<ReductionVariable> &dom = r.domain().domain();
@@ -478,7 +479,7 @@ public:
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
                 f[i].schedule().compute_level().is_inline() &&
-                f[i].is_pure()) {
+                f[i].can_be_inlined()) {
                 inlined[i] = true;
             } else {
                 inlined[i] = false;
@@ -526,7 +527,7 @@ public:
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
             if (!stages[i].func.schedule().compute_level().is_inline() ||
-                !stages[i].func.is_pure()) {
+                !stages[i].func.can_be_inlined()) {
                 new_stages.push_back(stages[i]);
             }
         }

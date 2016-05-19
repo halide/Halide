@@ -107,6 +107,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
+            //TODO(psuriana): we can only slides if all the dimension is pure in
+            //all specialization args.
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {

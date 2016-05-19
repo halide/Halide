@@ -312,11 +312,13 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
 
     // Copy the pure definition
     dst->pure_def = src->pure_def.deep_copy(copied_map);
+    internal_assert(dst->pure_def.is_pure());
     internal_assert(!dst->pure_def.domain().defined() && !dst->pure_def.schedule().reduction_domain().defined())
         << "Pure definition shouldn't have reduction domain\n";
 
     for (const auto &def : src->updates) {
         Definition def_copy = def.deep_copy(copied_map);
+        internal_assert(!def_copy.is_pure());
         internal_assert(
             (!def_copy.domain().defined() && !def_copy.schedule().reduction_domain().defined()) ||
             (def_copy.domain().defined() && def_copy.domain().same_as(def_copy.schedule().reduction_domain())))
@@ -424,6 +426,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents = new FunctionContents;
         contents->name = unique_name('f');
     }
+
+    internal_assert(contents->pure_def.is_pure());
 
     user_assert(contents->pure_def.values().empty())
         << "In pure definition of Func \"" << name() << "\":\n"
@@ -618,8 +622,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             deleter.mutate(check.reduction_domain.predicate()));
     }
 
-    Definition r(args, values, check.reduction_domain);
+    Definition r(args, values, check.reduction_domain, false);
     r.schedule().set_reduction_domain(r.domain());
+    internal_assert(!r.is_pure());
 
     // First add any reduction domain
     if (r.domain().defined()) {
@@ -780,6 +785,10 @@ const std::vector<Definition> &Function::updates() const {
 
 bool Function::has_pure_definition() const {
     return !contents->pure_def.values().empty();
+}
+
+bool Function::can_be_inlined() const {
+    return is_pure() && definition().specializations().empty();
 }
 
 bool Function::has_update_definition() const {

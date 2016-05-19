@@ -153,6 +153,9 @@ public:
                 !has_extern_definition());
     }
 
+    /** Is it legal to inline this function */
+    bool can_be_inlined() const;
+
     /** Get a handle to the schedule for the purpose of modifying
      * it */
     EXPORT Schedule &schedule();
