@@ -774,11 +774,20 @@ time_compilation_tests: time_compilation_correctness time_compilation_performanc
 $(BIN_DIR)/runtime.generator: $(ROOT_DIR)/tools/GenGen.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	$(CXX) $(CXX_FLAGS) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz -o $@
 
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37))
+# Generate a standalone runtime for a given target string
+$(RUNTIMES_DIR)/runtime_%.a: $(BIN_DIR)/runtime.generator
+	@mkdir -p $(RUNTIMES_DIR)
+	$(LD_PATH_SETUP) $(CURDIR)/$< -r $(basename $(notdir $@)) -o $(CURDIR)/$(RUNTIMES_DIR) target=$*
+	ar q $@ $(RUNTIMES_DIR)/runtime_$*.o
+	ranlib $@
+else
 # Generate a standalone runtime for a given target string
 $(RUNTIMES_DIR)/runtime_%.a: $(BIN_DIR)/runtime.generator
 	@mkdir -p $(RUNTIMES_DIR)
 	$(LD_PATH_SETUP) $(CURDIR)/$< -r $(basename $(notdir $@)) -o $(CURDIR)/$(RUNTIMES_DIR) -e static_library target=$*
 	ranlib $@
+endif
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	$(CXX) $(CXX_FLAGS)  $< -I$(SRC_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
