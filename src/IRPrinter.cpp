@@ -48,11 +48,11 @@ ostream &operator <<(ostream &stream, const Buffer &buffer) {
 
 ostream &operator<<(ostream &stream, const Module &m) {
     stream << "Target = " << m.target().to_string() << "\n";
-    for (size_t i = 0; i < m.buffers.size(); i++) {
-        stream << m.buffers[i] << "\n";
+    for (const auto &b : m.buffers()) {
+        stream << b << "\n";
     }
-    for (size_t i = 0; i < m.functions.size(); i++) {
-        stream << m.functions[i] << "\n";
+    for (const auto &f : m.functions()) {
+        stream << f << "\n";
     }
     return stream;
 }

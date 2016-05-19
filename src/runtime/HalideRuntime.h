@@ -516,6 +516,58 @@ extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_
 
 // @}
 
+/** Optional features a compilation Target can have. 
+ */
+typedef enum halide_target_feature_t {
+    halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
+    halide_target_feature_debug = 1,  ///< Turn on debug info and output for runtime code.
+    halide_target_feature_no_asserts = 2,  ///< Disable all runtime checks, for slightly tighter code.
+    halide_target_feature_no_bounds_query = 3, ///< Disable the bounds querying functionality.
+
+    halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+    halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.
+    halide_target_feature_avx2 = 6,  ///< Use AVX 2 instructions. Only relevant on x86.
+    halide_target_feature_fma = 7,  ///< Enable x86 FMA instruction
+    halide_target_feature_fma4 = 8,  ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c = 9,  ///< Enable x86 16-bit float support
+
+    halide_target_feature_armv7s = 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+    halide_target_feature_no_neon = 11,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
+
+    halide_target_feature_vsx = 12,  ///< Use VSX instructions. Only relevant on POWERPC.
+    halide_target_feature_power_arch_2_07 = 13,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
+
+    halide_target_feature_cuda = 14,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30 = 15,  ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32 = 16,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35 = 17,  ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50 = 18,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+
+    halide_target_feature_opencl = 19,  ///< Enable the OpenCL runtime.
+    halide_target_feature_cl_doubles = 20,  ///< Enable double support on OpenCL targets
+
+    halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
+    halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
+
+    halide_target_feature_renderscript = 23, ///< Enable the Renderscript runtime.
+
+    halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
+
+    halide_target_feature_register_metadata = 25,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+
+    halide_target_feature_matlab = 26,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+
+    halide_target_feature_profile = 27, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime = 28, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+
+    halide_target_feature_metal = 29, ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw = 30, ///< For Windows compile to MinGW toolset rather then Visual Studio
+
+    halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
+
+    halide_target_feature_end = 32 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+} halide_target_feature_t;
+
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always 64-bits).
  * Note that the int/uint/float values do not imply a specific bit width

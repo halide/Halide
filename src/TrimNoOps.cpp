@@ -386,9 +386,9 @@ class TrimNoOps : public IRMutator {
         // loop range is now truncated
         body = simplify(SimplifyUsingBounds(op->name, i).mutate(body));
 
-        string new_min_name = unique_name(op->name + ".new_min", false);
-        string new_max_name = unique_name(op->name + ".new_max", false);
-        string old_max_name = unique_name(op->name + ".old_max", false);
+        string new_min_name = unique_name(op->name + ".new_min");
+        string new_max_name = unique_name(op->name + ".new_max");
+        string old_max_name = unique_name(op->name + ".old_max");
         Expr new_min_var = Variable::make(Int(32), new_min_name);
         Expr new_max_var = Variable::make(Int(32), new_max_name);
         Expr old_max_var = Variable::make(Int(32), old_max_name);

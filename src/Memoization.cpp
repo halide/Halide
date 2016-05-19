@@ -59,6 +59,8 @@ public:
             Function fn(call->func);
             visit_function(fn);
             IRGraphVisitor::visit(call);
+        } else {
+            IRGraphVisitor::visit(call);
         }
     }
 
@@ -107,7 +109,7 @@ public:
         info.type = expr.type();
         info.size_expr = info.type.bytes();
         info.value_expr = expr;
-        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag", false))] = info;
+        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag"))] = info;
     }
 
     // Used to make sure larger parameters come before smaller ones
@@ -292,10 +294,7 @@ public:
                                          (index / i.second.size_expr), Parameter()));
             index += i.second.size_expr;
         }
-        Stmt blocks;
-        for (size_t i = writes.size(); i > 0; i--) {
-            blocks = Block::make(writes[i - 1], blocks);
-        }
+        Stmt blocks = Block::make(writes);
 
         return blocks;
     }

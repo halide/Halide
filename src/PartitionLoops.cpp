@@ -552,8 +552,8 @@ class PartitionLoops : public IRMutator {
         // Construct variables for the bounds of the simplified middle section
         Expr min_steady = op->min, max_steady = op->extent + op->min;
         Expr prologue_val, epilogue_val;
-        string prologue_name = unique_name(op->name + ".prologue", false);
-        string epilogue_name = unique_name(op->name + ".epilogue", false);
+        string prologue_name = unique_name(op->name + ".prologue");
+        string epilogue_name = unique_name(op->name + ".epilogue");
 
         if (make_prologue) {
             // They'll simplify better if you put them in
@@ -799,14 +799,14 @@ class RenormalizeGPULoops : public IRMutator {
             inner = LetStmt::make(condition_name, op->condition, inner);
             stmt = mutate(inner);
         } else if (let_a) {
-            string new_name = unique_name(let_a->name, false);
+            string new_name = unique_name(let_a->name);
             Stmt inner = let_a->body;
             inner = substitute(let_a->name, Variable::make(let_a->value.type(), new_name), inner);
             inner = IfThenElse::make(op->condition, inner, else_case);
             inner = LetStmt::make(new_name, let_a->value, inner);
             stmt = mutate(inner);
         } else if (let_b) {
-            string new_name = unique_name(let_b->name, false);
+            string new_name = unique_name(let_b->name);
             Stmt inner = let_b->body;
             inner = substitute(let_b->name, Variable::make(let_b->value.type(), new_name), inner);
             inner = IfThenElse::make(op->condition, then_case, inner);

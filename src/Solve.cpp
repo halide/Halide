@@ -1029,8 +1029,8 @@ class AndConditionOverDomain : public IRMutator {
         }
 
         if (!value_bounds.max.same_as(op->value) || !value_bounds.min.same_as(op->value)) {
-            string min_name = unique_name(op->name + ".min", false);
-            string max_name = unique_name(op->name + ".max", false);
+            string min_name = unique_name(op->name + ".min");
+            string max_name = unique_name(op->name + ".max");
             Expr min_var, max_var;
             if (!value_bounds.min.defined() ||
                 (is_const(value_bounds.min) && value_bounds.min.as<Variable>())) {

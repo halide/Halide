@@ -228,7 +228,7 @@ string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option)
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
 // have to use a different name mangling scheme than in the C code generator.
 std::string CodeGen_GLSLBase::print_name(const std::string &name) {
-    std::string mangled = CodeGen_C::print_name(name);
+    const std::string mangled = CodeGen_C::print_name(name);
     return replace_all(mangled, "__", "XX");
 }
 

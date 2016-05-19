@@ -537,7 +537,7 @@ public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
+        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library;
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -547,7 +547,7 @@ public:
         std::map<std::string, std::string> extensions;
         EmitOptions()
             : emit_o(true), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false) {}
+              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
@@ -603,6 +603,11 @@ public:
     EXPORT void emit_filter(const std::string &output_dir, const std::string &function_name = "",
                             const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
+    // Call build() and produce a Module for the result. 
+    // If function_name is empty, generator_name() will be used for the function.
+    EXPORT Module build_module(const std::string &function_name = "", 
+                               const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
+
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
@@ -621,6 +626,7 @@ private:
     virtual const std::string &generator_name() const = 0;
 
     EXPORT void build_params();
+    EXPORT void rebuild_params();
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
