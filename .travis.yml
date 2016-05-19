@@ -31,7 +31,7 @@ install:
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 20
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 20
   # Make Clang ${LLVM_VERSION} the default clang version
-  - sudo apt-get -y install clang-${LLVM_VERSION}
+  - sudo apt-get -y --force-yes install clang-${LLVM_VERSION}
   - sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM_VERSION} 20
   - sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${LLVM_VERSION} 20
   # Get libpng for the tutorials and apps
