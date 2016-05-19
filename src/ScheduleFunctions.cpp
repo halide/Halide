@@ -1231,8 +1231,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         validate_schedule(f, s, target, is_output);
 
-        if (f.has_pure_definition() &&
-            !f.has_update_definition() &&
+        if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);

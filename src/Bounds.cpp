@@ -1530,30 +1530,49 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValue
     return box_touched(Expr(), s, true, true, fn, scope, fb);
 }
 
+// Compute interval of all possible function's values (default + specialized values)
+Interval compute_function_definition_value_bounds(
+        const Definition &def, const Scope<Interval>& scope, const FuncValueBounds &fb, int dim) {
+
+    internal_assert(def.is_pure());
+
+    Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
+
+    // Pure function might have different values due to specialization.
+    // We need to take the min and max bounds of all those possible values.
+    for (const auto &s : def.specializations()) {
+        Interval s_interval = compute_function_definition_value_bounds(s.definition, scope, fb, dim);
+        if (result.min.defined()) {
+            result.min = s_interval.min.defined() ? min(result.min, s_interval.min) : Expr();
+        }
+        if (result.max.defined()) {
+            result.max = s_interval.max.defined() ? max(result.max, s_interval.max) : Expr();
+        }
+    }
+    return result;
+}
+
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
     for (size_t i = 0; i < order.size(); i++) {
         Function f = env.find(order[i])->second;
+        const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = make_pair(f.name(), j);
 
             Interval result;
 
-            if (f.has_pure_definition() &&
-                !f.has_update_definition() &&
-                !f.has_extern_definition()) {
+            if (f.is_pure()) {
 
                 // Make a scope that says the args could be anything.
                 Scope<Interval> arg_scope;
-                const vector<string> f_args = f.args();
                 for (size_t k = 0; k < f_args.size(); k++) {
                     arg_scope.push(f_args[k], Interval(Expr(), Expr()));
                 }
 
-                result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
-
+                result = compute_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
                 // These can expand combinatorially as we go down the
                 // pipeline if we don't run CSE on them.
                 if (result.min.defined()) {
@@ -1565,7 +1584,6 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 }
 
                 fb[key] = result;
-
             }
 
             debug(2) << "Bounds on value " << j

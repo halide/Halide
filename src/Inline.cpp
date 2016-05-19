@@ -22,7 +22,7 @@ class Inliner : public IRMutator {
     // Sanity check that this is a reasonable function to inline
     void check(Function f) {
 
-        internal_assert(!f.has_update_definition());
+        internal_assert(f.can_be_inlined()) << "Illegal to inline " << f.name() << "\n";
 
         const Schedule &s = f.schedule();
 

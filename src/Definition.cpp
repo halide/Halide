@@ -14,10 +14,13 @@ using std::map;
 
 struct DefinitionContents {
     mutable RefCount ref_count;
+    bool pure;
     std::vector<Expr> values, args;
     Schedule schedule;
     ReductionDomain domain;
     std::vector<Specialization> specializations;
+
+    DefinitionContents() : pure(true) {}
 
     void accept(IRVisitor *visitor) const {
         for (Expr val : values) {
@@ -86,7 +89,8 @@ Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(p
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
-                       const ReductionDomain &rdom) : contents(new DefinitionContents) {
+                       const ReductionDomain &rdom, bool is_pure) : contents(new DefinitionContents) {
+    contents->pure = is_pure;
     contents->values = values;
     contents->args = args;
     contents->domain = rdom;
@@ -98,11 +102,14 @@ Definition Definition::deep_copy(
     internal_assert(contents.defined()) << "Cannot deep-copy undefined Definition\n";
 
     Definition copy;
+    copy.contents->pure = contents->pure;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
     copy.contents->schedule = contents->schedule.deep_copy(copied_map);
 
-    // Definition's domain is the same as the one pointed by its schedule
+    // Definition's domain is the same as the one pointed by its schedule.
+    internal_assert((contents->pure && !contents->domain.defined()) || !contents->pure)
+        << "Pure definition should not have a reduction domain";
     internal_assert((!contents->domain.defined() && !contents->schedule.reduction_domain().defined()) ||
                     (contents->domain.defined() && contents->schedule.reduction_domain().same_as(contents->domain)))
         << "Definition should point to the same reduction domain as its schedule\n";
@@ -121,7 +128,9 @@ Definition Definition::deep_copy(
 }
 
 bool Definition::is_pure() const {
-    return !contents->domain.defined();
+    internal_assert(!contents->pure || (contents->pure && !contents->domain.defined()))
+        << "Pure definition shouldn't have reduction domain\n";
+    return contents->pure;
 }
 
 void Definition::accept(IRVisitor *visitor) const {
