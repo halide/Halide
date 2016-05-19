@@ -118,19 +118,61 @@ public:
         vector<Expr> exprs;
         string stage_prefix;
 
-        //TODO(psuriana): fix this to take into account different values for specialization
-        // Computed expressions on the left and right-hand sides
-        void compute_exprs() {
-            if (stage == 0) {
-                exprs = func.values();
-            } else {
-                const Definition &r = func.update(stage - 1);
-                exprs = r.values();
-                exprs.insert(exprs.end(), r.args().begin(), r.args().end());
-                if (r.domain().defined()) {
-                    exprs.push_back(r.domain().predicate());
+        // Computed expressions on the left and right-hand sides.
+        // Note that a function definition might have different LHS or reduction domain
+        // (if it's an update def) or RHS per specialization. All specializations
+        // of an init definition should have the same LHS.
+        void compute_exprs_helper(const Definition& def, bool is_update) {
+            internal_assert((!is_update && !def.domain().defined()) || is_update)
+                << "Init definition shouldn't have a RDom\n";
+
+            // Default case (no specialization)
+            exprs.insert(exprs.end(), def.values().begin(), def.values().end());
+            if (is_update) {
+                exprs.insert(exprs.end(), def.args().begin(), def.args().end());
+                if (def.domain().defined()) {
+                    exprs.push_back(def.domain().predicate());
                 }
             }
+
+            const vector<Specialization> &specializations = def.specializations();
+            for (size_t i = specializations.size(); i > 0; i--) {
+                Expr c = specializations[i-1].condition;
+                const Definition &s_def = specializations[i-1].definition;
+
+                //TODO(psuriana): merge the condition (WITH + NO specialization)
+                // With specialization
+                compute_exprs_helper(s_def, is_update);
+            }
+        }
+
+        // Computed expressions on the left and right-hand sides
+        void compute_exprs() {
+            bool is_update = (stage != 0);
+            exprs.clear();
+            if (!is_update) {
+                compute_exprs_helper(func.definition(), is_update);
+            } else {
+                const Definition &def = func.update(stage - 1);
+                compute_exprs_helper(def, is_update);
+            }
+        }
+
+        // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
+        // in the definition (including in its specializations)
+        bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+            const Variable *var = def.args()[dim_idx].as<Variable>();
+            if ((!var) || (var->name != dim)) {
+                return false;
+            }
+
+            for (const auto &s : def.specializations()) {
+                bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
+                if (!pure) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         // Wrap a statement in let stmts defining the box
@@ -165,10 +207,10 @@ public:
                 // stages but the last use the bounds for the last stage.
                 vector<bool> always_pure_dims(func_args.size(), true);
                 //TODO(psuriana): fix this to take into account specialization with different values
-                for (const Definition &i : func.updates()) {
+                for (const Definition &def : func.updates()) {
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        const Variable *v = i.args()[j].as<Variable>();
-                        if (!v || v->name != func_args[j]) {
+                        bool pure = is_dim_always_pure(def, func_args[j], j);
+                        if (!pure) {
                             always_pure_dims[j] = false;
                         }
                     }

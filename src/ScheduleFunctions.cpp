@@ -79,7 +79,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
     // Then use any reduction domain.
     const ReductionDomain &rdom = s.reduction_domain();
-    internal_assert((!is_update && !rdom.defined()) || is_update);
+    internal_assert((!is_update && !rdom.defined()) || is_update)
+        << "Init definition shouldn't have a RDom\n";
     if (rdom.defined()) {
         for (const ReductionVariable &i : rdom.domain()) {
             known_size_dims[i.var] = i.extent;

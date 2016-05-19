@@ -109,7 +109,7 @@ Definition Definition::deep_copy(
 
     // Definition's domain is the same as the one pointed by its schedule.
     internal_assert((contents->is_init == !contents->domain.defined()) || !contents->is_init)
-        << "Pure definition should not have a reduction domain\n";
+        << "Init definition should not have a reduction domain\n";
 
     internal_assert((!contents->domain.defined() && !contents->schedule.reduction_domain().defined()) ||
                     (contents->domain.defined() && contents->schedule.reduction_domain().same_as(contents->domain)))
@@ -130,7 +130,7 @@ Definition Definition::deep_copy(
 
 bool Definition::is_init() const {
     internal_assert(!contents->is_init || (contents->is_init && !contents->domain.defined()))
-        << "Pure definition shouldn't have reduction domain\n";
+        << "Init definition shouldn't have reduction domain\n";
     return contents->is_init;
 }
 

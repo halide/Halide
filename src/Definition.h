@@ -29,10 +29,10 @@ struct Specialization;
  * definition. A function may have different definitions due to specialization,
  * which are stored in 'specializations' (Not possible from the front-end, but
  * some scheduling directives may potentially cause this divergence to occur).
- * Although init definition may have multiple values per specialization, it must
- * have the same pure args (i.e. same pure dimension variables). The update
- * definition, on the other hand, may have different args/values per specialization.
- * Note that, while the Expr in args/values may be different across specializations,
+ * Although init definition may have multiple values (RHS) per specialization, it
+ * must have the same LHS (i.e. same pure dimension variables). The update
+ * definition, on the other hand, may have different LHS/RHS per specialization.
+ * Note that, while the Expr in LHS/RHS may be different across specializations,
  * they must have the same number of dimensions and the same pure dimensions.
  */
 class Definition {
@@ -69,14 +69,14 @@ public:
     bool is_init() const;
 
     /** Pass an IRVisitor through to all Exprs referenced in the
-     * Definition. */
+     * definition. */
     void accept(IRVisitor *) const;
 
     /** Pass an IRMutator through to all Exprs referenced in the
-     * Definition. */
+     * definition. */
     void mutate(IRMutator *);
 
-    /** Get the default (no-specialization) arguments */
+    /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
     // @{
     const std::vector<Expr> &args() const;
     std::vector<Expr> &args();
@@ -88,7 +88,7 @@ public:
     std::vector<Expr> &values();
     // @}
 
-    /** Get the default (no-specialization) schedule associated with this Definition. */
+    /** Get the default (no-specialization) schedule associated with this definition. */
     // @{
     Schedule &schedule();
     const Schedule &schedule() const;

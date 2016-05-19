@@ -89,6 +89,23 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     using IRMutator::visit;
 
+    // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
+    // in the definition (including in its specializations)
+    bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+        const Variable *var = def.args()[dim_idx].as<Variable>();
+        if ((!var) || (var->name != dim)) {
+            return false;
+        }
+
+        for (const auto &s : def.specializations()) {
+            bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
+            if (!pure) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void visit(const ProducerConsumer *op) {
         if (op->name != func.name()) {
             IRMutator::visit(op);
@@ -107,8 +124,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
-            //TODO(psuriana): we can only slides if all the dimension is pure in
-            //all specialization args.
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
@@ -144,14 +159,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 return;
             }
 
-            // If the function is not pure in the given dimension, give up
+            // If the function is not pure in the given dimension, give up. We also
+            // need to make sure that it is pure in all the specializations
             bool pure = true;
-            for (const Definition &i : func.updates()) {
-                const Variable *var = i.args()[dim_idx].as<Variable>();
-                if (!var) {
-                    pure = false;
-                } else if (var->name != dim) {
-                    pure = false;
+            for (const Definition &def : func.updates()) {
+                pure = is_dim_always_pure(def, dim, dim_idx);
+                if (!pure) {
+                    break;
                 }
             }
             if (!pure) {
