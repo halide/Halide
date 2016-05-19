@@ -136,16 +136,31 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
 #if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
     std::vector<llvm::NewArchiveIterator> new_members;
     for (auto &src : src_files) {
+#if LLVM_VERSION == 37
+        new_members.push_back(llvm::NewArchiveIterator(src, ""));
+#else
         new_members.push_back(llvm::NewArchiveIterator(src));
+#endif
     }
     const bool write_symtab = true;
-    const bool thin = false;
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin() 
         ? llvm::object::Archive::K_BSD 
         : llvm::object::Archive::K_GNU;
+#if LLVM_VERSION == 37
+    auto result = llvm::writeArchive(dst_file, new_members,
+                       write_symtab, kind,
+                       deterministic);
+#elif LLVM_VERSION == 38
+    const bool thin = false;
+    auto result = llvm::writeArchive(dst_file, new_members,
+                       write_symtab, kind,
+                       deterministic, thin);
+#else
+    const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
                        write_symtab, kind,
                        deterministic, thin, nullptr);
+#endif
     internal_assert(!result.second) << "Failed to write archive: " << dst_file 
         << ", reason: " << result.second << "\n";
 #else
