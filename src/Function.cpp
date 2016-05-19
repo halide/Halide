@@ -314,7 +314,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->init_def = src->init_def.deep_copy(copied_map);
     internal_assert(dst->init_def.is_init());
     internal_assert(!dst->init_def.domain().defined() && !dst->init_def.schedule().reduction_domain().defined())
-        << "Pure definition shouldn't have reduction domain\n";
+        << "Init definition shouldn't have reduction domain\n";
 
     for (const auto &def : src->updates) {
         internal_assert(!def.is_init());

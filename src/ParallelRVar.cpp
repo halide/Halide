@@ -91,7 +91,6 @@ class SubstituteInBooleanLets : public IRMutator {
 bool can_parallelize_rvar(const string &v,
                           const string &f,
                           const Definition &r) {
-    //TODO(psuriana): how would the specialization change parallelizability?
     const vector<Expr> &values = r.values();
     const vector<Expr> &args = r.args();
     const ReductionDomain &domain = r.domain();
