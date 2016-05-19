@@ -18,6 +18,22 @@
 namespace Halide {
 namespace Tools {
 
+namespace Internal {
+
+template<typename T> struct type_code_t;
+template<> struct type_code_t<uint8_t> { static halide_type_code_t const value = halide_type_uint; };
+template<> struct type_code_t<uint16_t> { static halide_type_code_t const value = halide_type_uint; };
+template<> struct type_code_t<uint32_t> { static halide_type_code_t const value = halide_type_uint; };
+template<> struct type_code_t<uint64_t> { static halide_type_code_t const value = halide_type_uint; };
+template<> struct type_code_t<int8_t> { static halide_type_code_t const value = halide_type_int; };
+template<> struct type_code_t<int16_t> { static halide_type_code_t const value = halide_type_int; };
+template<> struct type_code_t<int32_t> { static halide_type_code_t const value = halide_type_int; };
+template<> struct type_code_t<int64_t> { static halide_type_code_t const value = halide_type_int; };
+template<> struct type_code_t<float> { static halide_type_code_t const value = halide_type_float; };
+template<> struct type_code_t<double> { static halide_type_code_t const value = halide_type_float; };
+
+}
+
 class ImageBase {
 protected:
     struct Contents {
@@ -60,17 +76,6 @@ protected:
         }
         return contents;
     }
-
-    static halide_type_code_t type_code(uint8_t) { return halide_type_code_t::halide_type_uint; }
-    static halide_type_code_t type_code(uint16_t) { return halide_type_code_t::halide_type_uint; }
-    static halide_type_code_t type_code(uint32_t) { return halide_type_code_t::halide_type_uint; }
-    static halide_type_code_t type_code(uint64_t) { return halide_type_code_t::halide_type_uint; }
-    static halide_type_code_t type_code(int8_t) { return halide_type_code_t::halide_type_int; }
-    static halide_type_code_t type_code(int16_t) { return halide_type_code_t::halide_type_int; }
-    static halide_type_code_t type_code(int32_t) { return halide_type_code_t::halide_type_int; }
-    static halide_type_code_t type_code(int64_t) { return halide_type_code_t::halide_type_int; }
-    static halide_type_code_t type_code(float) { return halide_type_code_t::halide_type_float; }
-    static halide_type_code_t type_code(double) { return halide_type_code_t::halide_type_float; }
 
     void initialize(int x, int y, int z, int w, bool interleaved, halide_type_code_t tc, int elem_size) {
         buffer_t buf = {0};
@@ -138,7 +143,7 @@ public:
     halide_type_code_t type_code() const {
         if (contents)
             return contents->type_code;
-        return halide_type_code_t::halide_type_int;
+        return halide_type_int;
     }
 
     int elem_size() const {
@@ -296,7 +301,7 @@ public:
     }
 
     static halide_type_code_t type_code() {
-        return ImageBase::type_code(T());
+        return Internal::type_code_t<T>::value;
     }
 
     static int elem_size() {
