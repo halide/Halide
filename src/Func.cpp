@@ -337,7 +337,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
         for (int j = 0; j < 2; j++) {
             if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != old) {
                 user_error << "In schedule for " << stage_name
-                           << ", Can't create var " << new_names[j]
+                           << ", can't create var " << new_names[j]
                            << " using a split or tile, because " << new_names[j]
                            << " is already used in this Func's schedule elsewhere.\n" << dump_argument_list();
             }
@@ -363,7 +363,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
 
     if (!found) {
         user_error << "In schedule for " << stage_name
-                   << "Could not find split dimension: "
+                   << ", could not find split dimension: "
                    << old
                    << "\n"
                    << dump_argument_list();
@@ -433,7 +433,7 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
 
     if (!found_inner) {
         user_error << "In schedule for " << stage_name
-                   << "Could not find inner fuse dimension: "
+                   << ", could not find inner fuse dimension: "
                    << inner.name()
                    << "\n"
                    << dump_argument_list();

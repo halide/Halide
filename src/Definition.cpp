@@ -14,13 +14,13 @@ using std::map;
 
 struct DefinitionContents {
     mutable RefCount ref_count;
-    bool pure;
+    bool is_init;
     std::vector<Expr> values, args;
     Schedule schedule;
     ReductionDomain domain;
     std::vector<Specialization> specializations;
 
-    DefinitionContents() : pure(true) {}
+    DefinitionContents() : is_init(true) {}
 
     void accept(IRVisitor *visitor) const {
         for (Expr val : values) {
@@ -89,8 +89,8 @@ Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(p
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
-                       const ReductionDomain &rdom, bool is_pure) : contents(new DefinitionContents) {
-    contents->pure = is_pure;
+                       const ReductionDomain &rdom, bool is_init) : contents(new DefinitionContents) {
+    contents->is_init = is_init;
     contents->values = values;
     contents->args = args;
     contents->domain = rdom;
@@ -102,14 +102,15 @@ Definition Definition::deep_copy(
     internal_assert(contents.defined()) << "Cannot deep-copy undefined Definition\n";
 
     Definition copy;
-    copy.contents->pure = contents->pure;
+    copy.contents->is_init = contents->is_init;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
     copy.contents->schedule = contents->schedule.deep_copy(copied_map);
 
     // Definition's domain is the same as the one pointed by its schedule.
-    internal_assert((contents->pure && !contents->domain.defined()) || !contents->pure)
-        << "Pure definition should not have a reduction domain";
+    internal_assert((contents->is_init == !contents->domain.defined()) || !contents->is_init)
+        << "Pure definition should not have a reduction domain\n";
+
     internal_assert((!contents->domain.defined() && !contents->schedule.reduction_domain().defined()) ||
                     (contents->domain.defined() && contents->schedule.reduction_domain().same_as(contents->domain)))
         << "Definition should point to the same reduction domain as its schedule\n";
@@ -127,10 +128,10 @@ Definition Definition::deep_copy(
     return copy;
 }
 
-bool Definition::is_pure() const {
-    internal_assert(!contents->pure || (contents->pure && !contents->domain.defined()))
+bool Definition::is_init() const {
+    internal_assert(!contents->is_init || (contents->is_init && !contents->domain.defined()))
         << "Pure definition shouldn't have reduction domain\n";
-    return contents->pure;
+    return contents->is_init;
 }
 
 void Definition::accept(IRVisitor *visitor) const {
@@ -181,8 +182,9 @@ const Specialization &Definition::add_specialization(Expr condition) {
     //TODO(psuriana)
     Specialization s;
     s.condition = condition;
+    s.definition.contents->is_init = contents->is_init;
     s.definition.contents->values = contents->values;
-    s.definition.contents->args = contents->args;
+    s.definition.contents->args   = contents->args;
     s.definition.contents->domain = contents->domain;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
