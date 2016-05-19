@@ -50,9 +50,8 @@ static void cpuid(int info[4], int infoType, int extra) {
 #endif
 #endif
 #endif
-}
 
-Target get_host_target() {
+Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
 #ifdef __linux__
     os = Target::Linux;
@@ -139,6 +138,17 @@ Target get_host_target() {
 #endif
 #endif
 #endif
+}
+
+}  // namespace
+
+Target get_host_target() {
+    // Calculating the host target isn't slow but it isn't free,
+    // and it's pointless to recalculate it every time we (e.g.) parse
+    // an arbitrary Target string. It won't ever change, so cache on first
+    // use.
+    static Target host_target = calculate_host_target();
+    return host_target;
 }
 
 namespace {

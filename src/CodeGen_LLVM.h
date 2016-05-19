@@ -477,15 +477,18 @@ private:
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
-     * as extern "C" linkage.
+     * as extern "C" linkage. Note that the return value is a function-returning-
+     * pointer-to-constant-data.
      */
-    llvm::Constant* embed_metadata(const std::string &metadata_name,
+    llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
         const std::string &function_name, const std::vector<Argument> &args);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);
 
-    void register_metadata(const std::string &name, llvm::Constant *metadata, llvm::Function *argv_wrapper);
+    void register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper);
+
+    llvm::Function *add_argv_wrapper(const std::string &name);
 };
 
 }

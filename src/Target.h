@@ -13,6 +13,7 @@
 #include "Type.h"
 #include "Util.h"
 #include "Expr.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
@@ -33,56 +34,43 @@ struct Target {
     int bits;
 
     /** Optional features a target can have.
-     * Corresponds to feature_name_map in Target.cpp. */
-
+     * Corresponds to feature_name_map in Target.cpp. 
+     * See definitions in HalideRuntime.h for full information.
+     */
     enum Feature {
-        JIT,  ///< Generate code that will run immediately inside the calling process.
-        Debug,  ///< Turn on debug info and output for runtime code.
-        NoAsserts,  ///< Disable all runtime checks, for slightly tighter code.
-        NoBoundsQuery, ///< Disable the bounds querying functionality.
-
-        SSE41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-        AVX,  ///< Use AVX 1 instructions. Only relevant on x86.
-        AVX2,  ///< Use AVX 2 instructions. Only relevant on x86.
-        FMA,  ///< Enable x86 FMA instruction
-        FMA4,  ///< Enable x86 (AMD) FMA4 instruction set
-        F16C,  ///< Enable x86 16-bit float support
-
-        ARMv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-        NoNEON,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
-
-        VSX,  ///< Use VSX instructions. Only relevant on POWERPC.
-        POWER_ARCH_2_07,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
-
-        CUDA,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-        CUDACapability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
-        CUDACapability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
-        CUDACapability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
-        CUDACapability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
-
-        OpenCL,  ///< Enable the OpenCL runtime.
-        CLDoubles,  ///< Enable double support on OpenCL targets
-
-        OpenGL,  ///< Enable the OpenGL runtime.
-        OpenGLCompute, ///< Enable OpenGL Compute runtime.
-
-        Renderscript, ///< Enable the Renderscript runtime.
-
-        UserContext,  ///< Generated code takes a user_context pointer as first argument
-
-        RegisterMetadata,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
-
-        Matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
-
-        Profile, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-        NoRuntime, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
-
-        Metal, ///< Enable the (Apple) Metal runtime.
-        MinGW, ///< For Windows compile to MinGW toolset rather then Visual Studio
-
-        CPlusPlusMangling, ///< Generate C++ mangled names for result function, et al
-
-        FeatureEnd ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+        JIT = halide_target_feature_jit,
+        Debug = halide_target_feature_debug,
+        NoAsserts = halide_target_feature_no_asserts,
+        NoBoundsQuery = halide_target_feature_no_bounds_query,
+        SSE41 = halide_target_feature_sse41,
+        AVX = halide_target_feature_avx,
+        AVX2 = halide_target_feature_avx2,
+        FMA = halide_target_feature_fma,
+        FMA4 = halide_target_feature_fma4,
+        F16C = halide_target_feature_f16c,
+        ARMv7s = halide_target_feature_armv7s,
+        NoNEON = halide_target_feature_no_neon,
+        VSX = halide_target_feature_vsx,
+        POWER_ARCH_2_07 = halide_target_feature_power_arch_2_07,
+        CUDA = halide_target_feature_cuda,
+        CUDACapability30 = halide_target_feature_cuda_capability30,
+        CUDACapability32 = halide_target_feature_cuda_capability32,
+        CUDACapability35 = halide_target_feature_cuda_capability35,
+        CUDACapability50 = halide_target_feature_cuda_capability50,
+        OpenCL = halide_target_feature_opencl,
+        CLDoubles = halide_target_feature_cl_doubles,
+        OpenGL = halide_target_feature_opengl,
+        OpenGLCompute = halide_target_feature_openglcompute,
+        Renderscript = halide_target_feature_renderscript,
+        UserContext = halide_target_feature_user_context,
+        RegisterMetadata = halide_target_feature_register_metadata,
+        Matlab = halide_target_feature_matlab,
+        Profile = halide_target_feature_profile,
+        NoRuntime = halide_target_feature_no_runtime,
+        Metal = halide_target_feature_metal,
+        MinGW = halide_target_feature_mingw,
+        CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
+        FeatureEnd = halide_target_feature_end
     };
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

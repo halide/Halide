@@ -13,6 +13,7 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 #include <string>
@@ -67,14 +68,26 @@ EXPORT std::string get_env_variable(char const *env_var_name, size_t &var_define
  * If program name cannot be retrieved, function returns an empty string. */
 EXPORT std::string running_program_name();
 
-/** Generate a unique name starting with the given character. It's
- * unique relative to all other calls to unique_name done by this
- * process. Not thread-safe. */
+/** Generate a unique name starting with the given prefix. It's unique
+ * relative to all other strings returned by unique_name in this
+ * process.
+ *
+ * The single-character version always appends a numeric suffix to the
+ * character.
+ *
+ * The string version will either return the input as-is (with high
+ * probability on the first time it is called with that input), or
+ * replace any existing '$' characters with underscores, then add a
+ * '$' sign and a numeric suffix to it.
+ *
+ * Note that unique_name('f') therefore differs from
+ * unique_name("f"). The former returns something like f123, and the
+ * latter returns either f or f$123.
+ */
+// @{
 EXPORT std::string unique_name(char prefix);
-
-/** Generate a unique name starting with the given string.  Not
- * thread-safe. */
-EXPORT std::string unique_name(const std::string &name, bool user = true);
+EXPORT std::string unique_name(const std::string &prefix);
+// @}
 
 /** Test if the first string starts with the second string */
 EXPORT bool starts_with(const std::string &str, const std::string &prefix);
@@ -83,7 +96,7 @@ EXPORT bool starts_with(const std::string &str, const std::string &prefix);
 EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 
 /** Replace all matches of the second string in the first string with the last string */
-EXPORT std::string replace_all(std::string &str, const std::string &find, const std::string &replace);
+EXPORT std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
 
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
@@ -132,6 +145,38 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+
+struct FileStat {
+    uint64_t file_size;
+    uint32_t mod_time;  // Unix epoch time
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t mode;
+};
+
+/** Wrapper for access(). Asserts upon error. */
+bool file_exists(const std::string &name);
+
+/** Wrapper for unlink(). Asserts upon error. */
+void file_unlink(const std::string &name);
+
+/** Wrapper for stat(). Asserts upon error. */
+FileStat file_stat(const std::string &name);
+
+/** A simple utility class that deletes a file in its dtor; this is useful
+ * for temporary files that you want to ensure are deleted when exiting
+ * a certain scope. Note that this has the same failure mode as file_unlink()
+ * (i.e.: asserts upon error).
+ */
+class FileUnlinker final {
+public:
+    explicit FileUnlinker(const std::string &pathname) : pathname(pathname) {}
+    ~FileUnlinker() { file_unlink(pathname); }
+private:
+    const std::string pathname;
+    FileUnlinker(const FileUnlinker &) = delete;
+    void operator=(const FileUnlinker &) = delete;
+};
 
 }
 }

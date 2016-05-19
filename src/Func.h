@@ -10,6 +10,7 @@
 #include "Var.h"
 #include "Function.h"
 #include "Param.h"
+#include "OutputImageParam.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITModule.h"
@@ -18,6 +19,8 @@
 #include "Tuple.h"
 #include "Module.h"
 #include "Pipeline.h"
+
+#include <map>
 
 namespace Halide {
 
@@ -795,6 +798,107 @@ public:
     }
     // @}
 
+    /** Creates and returns a new Func that wraps this Func. During
+     * compilation, Halide replaces all calls to this Func done by 'f'
+     * with calls to the wrapper. If this Func is already wrapped for
+     * use in 'f', will return the existing wrapper.
+     *
+     * For example, g.in(f) would rewrite a pipeline like this:
+     \code
+     g(x, y) = ...
+     f(x, y) = ... g(x, y) ...
+     \endcode
+     * into a pipeline like this:
+     \code
+     g(x, y) = ...
+     g_wrap(x, y) = g(x, y)
+     f(x, y) = ... g_wrap(x, y)
+     \endcode
+     *
+     * This has a variety of uses. You can use it to schedule this
+     * Func differently in the different places it is used:
+     \code
+     g(x, y) = ...
+     f1(x, y) = ... g(x, y) ...
+     f2(x, y) = ... g(x, y) ...
+     g.in(f1).compute_at(f1, y).vectorize(x, 8);
+     g.in(f2).compute_at(f2, x).unroll(x);
+     \endcode
+     *
+     * You can also use it to stage loads from this Func via some
+     * intermediate buffer (perhaps on the stack as in
+     * test/performance/block_transpose.cpp, or in shared GPU memory
+     * as in test/performance/wrap.cpp). In this we compute the
+     * wrapper at tiles of the consuming Funcs like so:
+     \code
+     g.compute_root()...
+     g.in(f).compute_at(f, tiles)...
+     \endcode
+     *
+     * Func::in() can also be used to compute pieces of a Func into a
+     * smaller scratch buffer (perhaps on the GPU) and then copy them
+     * into a larger output buffer one tile at a time. See
+     * apps/interpolate/interpolate.cpp for an example of this. In
+     * this case we compute the Func at tiles of its own wrapper:
+     \code
+     f.in(g).compute_root().gpu_tile(...)...
+     f.compute_at(f.in(g), tiles)...
+     \endcode
+     *
+     * A similar use of Func::in() wrapping Funcs with multiple update
+     * stages in a pure wrapper. The following code:
+     \code
+     f(x, y) = x + y;
+     f(x, y) += 5;
+     g(x, y) = f(x, y);
+     f.compute_root();
+     \endcode
+     *
+     * Is equivalent to:
+     \code
+     for y:
+       for x:
+         f(x, y) = x + y;
+     for y:
+       for x:
+         f(x, y) += 5
+     for y:
+       for x:
+         g(x, y) = f(x, y)
+     \endcode
+     * using Func::in(), we can write:
+     \code
+     f(x, y) = x + y;
+     f(x, y) += 5;
+     g(x, y) = f(x, y);
+     f.in(g).compute_root();
+     \endcode
+     * which instead produces:
+     \code
+     for y:
+       for x:
+         f(x, y) = x + y;
+         f(x, y) += 5
+         f_wrap(x, y) = f(x, y)
+     for y:
+       for x:
+         g(x, y) = f_wrap(x, y)
+     \endcode
+     */
+    EXPORT Func in(const Func &f);
+
+    /** Create and return a wrapper shared by all the Funcs in
+     * 'fs'. If any of the Funcs in 'fs' already have a custom
+     * wrapper, this will throw an error. */
+    EXPORT Func in(const std::vector<Func> &fs);
+
+    /** Create and return a global wrapper, which wraps all calls to
+     * this Func by any other Func. If a global wrapper already
+     * exists, returns it. The global wrapper is only used by callers
+     * for which no custom wrapper has been specified.
+    */
+    EXPORT Func in();
+
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
      * factor-1. The inner and outer subdimensions can then be dealt
@@ -1528,12 +1632,11 @@ public:
      \endcode
      */
     EXPORT std::vector<Argument> infer_arguments() const;
-
 };
 
- /** JIT-Compile and run enough code to evaluate a Halide
-  * expression. This can be thought of as a scalar version of
-  * \ref Func::realize */
+/** JIT-Compile and run enough code to evaluate a Halide
+ * expression. This can be thought of as a scalar version of
+ * \ref Func::realize */
 template<typename T>
 NO_INLINE T evaluate(Expr e) {
     user_assert(e.type() == type_of<T>())

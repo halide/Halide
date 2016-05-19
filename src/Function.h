@@ -11,6 +11,8 @@
 #include "Schedule.h"
 #include "Reduction.h"
 
+#include <map>
+
 namespace Halide {
 
 namespace Internal {
@@ -60,8 +62,17 @@ struct UpdateDefinition {
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
 class Function {
-public:
+
     IntrusivePtr<FunctionContents> contents;
+
+public:
+    /** This lets you use a Function as a key in a map of the form
+     * map<Function, Foo, Compare> */
+    struct Compare {
+        bool operator()(const Function &a, const Function &b) const {
+            return a.contents < b.contents;
+        }
+    };
 
     /** Construct a new function with no definitions and no name. This
      * constructor only exists so that you can make vectors of
@@ -74,6 +85,22 @@ public:
 
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
+
+    /** Get a handle on the halide function contents that this Function
+     * represents. */
+    IntrusivePtr<FunctionContents> get_contents() const {
+        return contents;
+    }
+
+    /** Deep copy this Function into 'copy'. It recursively deep copies all called
+     * functions, schedules, update definitions, extern func arguments, specializations,
+     * and reduction domains. This method does not deep-copy the Parameter objects.
+     * This method also takes a map of <old Function, deep-copied version> as input
+     * and would use the deep-copied Function from the map if exists instead of
+     * creating a new deep-copy to avoid creating deep-copies of the same Function
+     * multiple times.
+     */
+    EXPORT void deep_copy(Function &copy, std::map<Function, Function, Compare> &copied_map) const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -204,6 +231,25 @@ public:
     /** Check if a function has been frozen. If so, it is an error to
      * add new definitions. */
     EXPORT bool frozen() const;
+
+    /** Mark calls of this function by 'f' to be replaced with its wrapper
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to this function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. This will also freeze 'wrapper' to prevent
+     * user from updating the values of the Function it wraps via the wrapper.
+     * See \ref Func::in for more details. */
+    // @{
+    EXPORT void add_wrapper(const std::string &f, Function &wrapper);
+    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    // @}
+
+    /** Replace every call to Functions in 'substitutions' keys by all Exprs
+     * referenced in this Function to call to their substitute Functions (i.e.
+     * the corresponding values in 'substitutions' map). */
+    // @{
+    EXPORT Function &substitute_calls(const std::map<Function, Function, Compare> &substitutions);
+    EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
+    // @}
 };
 
 }}

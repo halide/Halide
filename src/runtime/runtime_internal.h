@@ -127,7 +127,7 @@ struct _halide_runtime_internal_registered_filter_t {
     // recursive types currently break our method that copies types from
     // llvm module to llvm module
     void *next;
-    const halide_filter_metadata_t* metadata;
+    const halide_filter_metadata_t* (*metadata)();
     int (*argv_func)(void **args);
 };
 WEAK void halide_runtime_internal_register_metadata(_halide_runtime_internal_registered_filter_t *info);

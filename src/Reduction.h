@@ -32,6 +32,9 @@ public:
      * the vector being outermost. */
     EXPORT ReductionDomain(const std::vector<ReductionVariable> &domain);
 
+    /** Return a deep copy of this ReductionDomain. */
+    EXPORT ReductionDomain deep_copy() const;
+
     /** Is this handle non-nullptr */
     bool defined() const {
         return contents.defined();
@@ -69,6 +72,10 @@ public:
     /** Check if a RDom has been frozen. If so, it is an error to add new
      * predicates. */
     EXPORT bool frozen() const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * ReductionDomain. */
+    void mutate(IRMutator *);
 };
 
 EXPORT void split_predicate_test();
