@@ -321,7 +321,7 @@ public:
             , dims > 1 ? dimSizes[1] : 0
             , dims > 2 ? dimSizes[2] : 0
             , dims > 3 ? dimSizes[3] : 0
-            , false);
+            , false, type_code(), elem_size());
         int n = 1;
         for (size_t i = 0; i < dims; ++i)
             n *= dimSizes[i];
