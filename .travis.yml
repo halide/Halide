@@ -9,15 +9,13 @@ env:
   # Each line in the ``env`` section represents a set of environment
   # variables passed to a build configuration
   #
-  # Test LLVM 3.5 at least once
-  - LLVM_VERSION=3.5 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=1
-  - LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=1
+  # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
   # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
-  #- LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Debug HALIDE_SHARED_LIBRARY=0
-  - LLVM_VERSION=3.6 BUILD_SYSTEM=MAKE  BUILD_TYPE=Debug
-  # Test Release builds
-  - LLVM_VERSION=3.6 BUILD_SYSTEM=MAKE  BUILD_TYPE=Release
-  - LLVM_VERSION=3.6 BUILD_SYSTEM=CMAKE BUILD_TYPE=Release HALIDE_SHARED_LIBRARY=1
+  - LLVM_VERSION=3.6 BUILD_SYSTEM=MAKE BUILD_TYPE=Release
+  - LLVM_VERSION=3.7 BUILD_SYSTEM=MAKE BUILD_TYPE=Release
+  - LLVM_VERSION=3.8 BUILD_SYSTEM=MAKE BUILD_TYPE=Release
+  - LLVM_VERSION=3.7 BUILD_SYSTEM=MAKE BUILD_TYPE=Release HALIDE_SHARED_LIBRARY=1
+  - LLVM_VERSION=3.8 BUILD_SYSTEM=CMAKE BUILD_TYPE=Release HALIDE_SHARED_LIBRARY=1
 cache: apt
 # Note the commands below are written assuming Ubuntu 12.04LTS
 before_install:
