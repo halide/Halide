@@ -8,11 +8,28 @@
 
 #include "IR.h"
 #include "Buffer.h"
+#include "ModulusRemainder.h"
 #include "Outputs.h"
 #include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+/** Definition of an argument to a LoweredFunc. This is similar to
+ * Argument, except it enables passing extra information useful to
+ * some targets to LoweredFunc. */
+struct LoweredArgument : public Argument {
+    /** For scalar arguments, the modulus and remainder of this
+     * argument. */
+    ModulusRemainder alignment;
+
+    LoweredArgument() {}
+    LoweredArgument(const Argument &arg) : Argument(arg) {}
+    LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions,
+                    Expr _def = Expr(),
+                    Expr _min = Expr(),
+                    Expr _max = Expr()) : Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
+};
 
 /** Definition of a lowered function. This object provides a concrete
  * mapping between parameters used in the function body and their
@@ -21,7 +38,7 @@ struct LoweredFunc {
     std::string name;
 
     /** Arguments referred to in the body of this function. */
-    std::vector<Argument> args;
+    std::vector<LoweredArgument> args;
 
     /** Body of this function. */
     Stmt body;
@@ -35,8 +52,14 @@ struct LoweredFunc {
     /** The linkage of this function. */
     LinkageType linkage;
 
-    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
+    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
         : name(name), args(args), body(body), linkage(linkage) {}
+    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
+        : name(name), body(body), linkage(linkage) {
+        for (const Argument &i : args) {
+            this->args.push_back(i);
+        }
+    }
 };
 
 }
@@ -71,7 +94,7 @@ public:
     EXPORT void append(const Internal::LoweredFunc &function);
     // @}
 
-    /** Compile a halide Module to variety of outputs, depending on 
+    /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
     EXPORT void compile(const Outputs &output_files) const;
 };
