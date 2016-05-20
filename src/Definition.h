@@ -90,8 +90,8 @@ public:
 
     /** Get the default (no-specialization) schedule associated with this definition. */
     // @{
-    Schedule &schedule();
     const Schedule &schedule() const;
+    Schedule &schedule();
     // @}
 
     /** Get the default (no-specialization) reduction domain associated with this
@@ -106,6 +106,7 @@ public:
      * true. See \ref Func::specialize */
     // @{
     const std::vector<Specialization> &specializations() const;
+    std::vector<Specialization> &specializations();
     const Specialization &add_specialization(Expr condition);
     // @}
 

@@ -62,9 +62,10 @@ class Function {
 
 public:
     /** This lets you use a Function as a key in a map of the form
-     * map<Function, Foo, Compare> */
+     * map<Function, Foo, Function::Compare> */
     struct Compare {
         bool operator()(const Function &a, const Function &b) const {
+            internal_assert(a.contents.defined() && b.contents.defined());
             return a.contents < b.contents;
         }
     };
