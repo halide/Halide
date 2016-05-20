@@ -34,11 +34,14 @@ EXPORT ModulusRemainder modulus_remainder(Expr e);
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of
  * modulus_remainder: */
-ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
+EXPORT ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
-bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
+///@{
+EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
+EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder, const Scope<ModulusRemainder> &scope);
+///@}
 
 EXPORT void modulus_remainder_test();
 
