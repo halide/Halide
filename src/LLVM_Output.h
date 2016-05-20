@@ -5,8 +5,12 @@
  *
  */
 
-#include <memory>
+#include <string>
+#include <vector>
+
 #include "Module.h"
+#include "Target.h"
+#include "Util.h"
 
 namespace llvm {
 class Module;
@@ -45,6 +49,14 @@ EXPORT void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::
 EXPORT void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out);
 // @}
 
+/**
+ * Concatenate the list of src_files into dst_file, using the appropriate
+ * static library format for the given target (e.g., .a or .lib).
+ * If deterministic is true, emit 0 for all GID/UID/timestamps, and 0644 for
+ * all modes (equivalent to the ar -D option).
+ */
+EXPORT void create_static_library(const std::vector<std::string> &src_files, const Target &target,
+                           const std::string &dst_file, bool deterministic = true);
 }
 
 #endif
