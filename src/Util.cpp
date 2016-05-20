@@ -256,5 +256,28 @@ FileStat file_stat(const std::string &name) {
             static_cast<uint32_t>(a.st_mode)};
 }
 
+std::string file_make_temp(const std::string &base, const std::string &ext) {
+    #ifdef _MSC_VER
+    // Windows implementations of mkstemp() try to create the file in the root
+    // directory, which is... problematic.
+    TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
+    DWORD ret = GetTempPath(MAX_PATH, tmp_path);
+    internal_assert(ret != 0);
+    // Note that GetTempFileName() actually creates the file.
+    ret = GetTempFileName(tmp_path, base.c_str(), 0, tmp_file);
+    internal_assert(ret != 0);
+    return std::string(tmp_file);     
+    #else
+    std::string templ = base + "XXXXXX" + ext;
+    // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
+    std::vector<char> buf(templ.size() + 1);
+    strcpy(&buf[0], templ.c_str());
+    int fd = mkstemps(&buf[0], ext.size());
+    internal_assert(fd != -1) << "Unable to create temp file for " << base << ext;
+    close(fd);
+    return std::string(&buf[0]);
+    #endif
+}
+
 }
 }
