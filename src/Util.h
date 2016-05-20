@@ -185,14 +185,15 @@ struct FileStat {
     uint32_t mode;
 };
 
-// Create a unique file with a name of the form baseXXXXXext in an arbitrary
-// (but writable) directory; this is typically $TMP or /tmp, but the specific
-// location is not guaranteed. (Note that the exact form of the file name
-// may vary; in particular, the extension may be ignored.)
-// The file is created (but not opened), thus this can be called from
-// different threads (or processes, e.g. when building with parallel make)
-// without risking collision. Note that if this file is used as a temporary
-// file, the caller is responsibly for deleting it.
+/** Create a unique file with a name of the form baseXXXXXext in an arbitrary
+ * (but writable) directory; this is typically $TMP or /tmp, but the specific
+ * location is not guaranteed. (Note that the exact form of the file name
+ * may vary; in particular, the extension may be ignored.)
+ * The file is created (but not opened), thus this can be called from
+ * different threads (or processes, e.g. when building with parallel make)
+ * without risking collision. Note that if this file is used as a temporary
+ * file, the caller is responsibly for deleting it.
+ */
 std::string file_make_temp(const std::string &base, const std::string &ext);
 
 /** Wrapper for access(). Asserts upon error. */
