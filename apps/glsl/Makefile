@@ -14,21 +14,21 @@ all: opengl_test
 run: opengl_test
 	LD_LIBRARY_PATH=../../bin ./opengl_test
 
-opengl_test: blur.o ycc.o opengl_test.o
+opengl_test: blur.a ycc.a opengl_test.o
 	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin $(OPENGL_LIBS)
 
-blur.h blur.o: halide_blur
+blur.h blur.a: halide_blur
 	HL_TARGET=host-opengl-debug ./halide_blur
 
-ycc.h ycc.o: halide_ycc
+ycc.h ycc.a: halide_ycc
 	HL_TARGET=host-opengl-debug ./halide_ycc
 
-halide_blur: halide_blur.o $(HALIDE_LIB)
+halide_blur: halide_blur.a $(HALIDE_LIB)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
 
-halide_ycc: halide_ycc.o $(HALIDE_LIB)
+halide_ycc: halide_ycc.a $(HALIDE_LIB)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
 
 .PHONY: clean
 clean:
-	rm -f opengl_test test_jit halide_blur halide_ycc *.o blur.h ycc.h
+	rm -f opengl_test test_jit halide_blur halide_ycc *.o *.a blur.h ycc.h

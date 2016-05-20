@@ -36,10 +36,10 @@ LDFLAGS_PNACL := -L $(LIBDIR_PNACL) -lppapi_cpp -lppapi
 DEMOS = game_of_life julia reaction_diffusion reaction_diffusion_2
 DEMO_OBJECTS = $(DEMOS:%=%_init) $(DEMOS:%=%_update) $(DEMOS:%=%_render)
 
-OBJECTS_32 = nacl_demos_32.o $(DEMO_OBJECTS:%=build_32/%.o)
-OBJECTS_ARM = nacl_demos_arm.o $(DEMO_OBJECTS:%=build_arm/%.o)
-OBJECTS_64 = nacl_demos_64.o $(DEMO_OBJECTS:%=build_64/%.o)
-OBJECTS_PNACL = nacl_demos_pnacl.bc $(DEMO_OBJECTS:%=build_pnacl/%.bc)
+OBJECTS_32 = nacl_demos_32.o $(DEMO_OBJECTS:%=build_32/%.a)
+OBJECTS_ARM = nacl_demos_arm.o $(DEMO_OBJECTS:%=build_arm/%.a)
+OBJECTS_64 = nacl_demos_64.o $(DEMO_OBJECTS:%=build_64/%.a)
+OBJECTS_PNACL = nacl_demos_pnacl.bc $(DEMO_OBJECTS:%=build_pnacl/%.a)
 
 all: nacl_demos.zip
 
@@ -95,4 +95,4 @@ build_pnacl/%.objects: %.generate
 	$(CXX) $< -o $@ -I $(HALIDE_PATH)/include -L $(HALIDE_PATH)/bin -lHalide -lpthread -ldl -lz -std=c++11
 
 clean:
-	rm -f *.generate *.o *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*
+	rm -f *.generate *.o *.a *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*
