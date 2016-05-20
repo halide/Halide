@@ -19,6 +19,9 @@
 #ifdef __linux__
 #include <linux/limits.h>  // For PATH_MAX
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace Halide {
 namespace Internal {
