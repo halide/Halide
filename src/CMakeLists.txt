@@ -311,7 +311,6 @@ set(HEADER_FILES
   SkipStages.h
   SlidingWindow.h
   Solve.h
-  StaticLibrary.h
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
@@ -461,7 +460,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
-  StaticLibrary.cpp
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp

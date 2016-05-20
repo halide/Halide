@@ -194,6 +194,21 @@ void file_unlink(const std::string &name);
 /** Wrapper for stat(). Asserts upon error. */
 FileStat file_stat(const std::string &name);
 
+/** A simple utility class that deletes a file in its dtor; this is useful
+ * for temporary files that you want to ensure are deleted when exiting
+ * a certain scope. Note that this has the same failure mode as file_unlink()
+ * (i.e.: asserts upon error).
+ */
+class FileUnlinker final {
+public:
+    explicit FileUnlinker(const std::string &pathname) : pathname(pathname) {}
+    ~FileUnlinker() { file_unlink(pathname); }
+private:
+    const std::string pathname;
+    FileUnlinker(const FileUnlinker &) = delete;
+    void operator=(const FileUnlinker &) = delete;
+};
+
 }
 }
 

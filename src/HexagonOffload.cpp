@@ -1,3 +1,7 @@
+#include <iostream>
+#include <fstream>
+#include <memory>
+
 #include "HexagonOffload.h"
 #include "IRMutator.h"
 #include "Substitute.h"
@@ -6,9 +10,6 @@
 #include "Image.h"
 #include "LLVM_Output.h"
 #include "RemoveTrivialForLoops.h"
-
-#include <iostream>
-#include <fstream>
 
 namespace Halide {
 namespace Internal {

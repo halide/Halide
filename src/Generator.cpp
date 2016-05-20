@@ -85,6 +85,13 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_stmt_html) {
         output_files.stmt_html_name = base_path + get_extension(".html", options);
     }
+    if (options.emit_static_library) {
+        if (is_windows_coff) {
+            output_files.static_library_name = base_path + get_extension(".lib", options);
+        } else {
+            output_files.static_library_name = base_path + get_extension(".a", options);
+        }
+    }
     return output_files;
 }
 
@@ -116,7 +123,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, stmt]. If omitted, default value is [o, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt]. If omitted, default value is [o, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -220,9 +227,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_o = true;
             } else if (opt == "h") {
                 emit_options.emit_h = true;
+            } else if (opt == "static_library") {
+                emit_options.emit_static_library = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, stmt], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt], ignoring.\n";
             }
         }
     }
@@ -247,9 +256,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
         Outputs output_files = compute_outputs(target, base_path, emit_options);
-        // For runtime, it only makes sense to output object files (for now), so ignore
-        // everything else. (Soon, this will also support static libraries.)
-        compile_standalone_runtime(output_files.object_name, target);
+        compile_standalone_runtime(output_files, target);
     }
 
     if (!generator_name.empty()) {

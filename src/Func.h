@@ -1341,6 +1341,12 @@ public:
      * small, or the dimension is not accessed monotonically, the
      * pipeline will generate an error at runtime.
      *
+     * The fold_forward option indicates that the new values of the
+     * producer are accessed by the consumer in a monotonically
+     * increasing order. Folding storage of producers is also
+     * supported if the new values are accessed in a monotonically
+     * decreasing order by setting fold_forward to false.
+     *
      * For example, consider the pipeline:
      \code
      Func f, g;

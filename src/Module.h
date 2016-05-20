@@ -15,6 +15,9 @@
 namespace Halide {
 namespace Internal {
 
+/** Definition of an argument to a LoweredFunc. This is similar to
+ * Argument, except it enables passing extra information useful to
+ * some targets to LoweredFunc. */
 struct LoweredArgument : public Argument {
     /** For scalar arguments, the modulus and remainder of this
      * argument. */
@@ -102,6 +105,11 @@ EXPORT Module link_modules(const std::string &name, const std::vector<Module> &m
 /** Create an object file containing the Halide runtime for a given
  * target. For use with Target::NoRuntime. */
 EXPORT void compile_standalone_runtime(const std::string &object_filename, Target t);
+
+/** Create an object and/or static library file containing the Halide runtime for a given
+ * target. For use with Target::NoRuntime.
+ */
+EXPORT void compile_standalone_runtime(const Outputs &output_files, Target t);
 
 }
 

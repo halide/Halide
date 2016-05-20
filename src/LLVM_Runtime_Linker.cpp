@@ -32,7 +32,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
-}
+}  // namespace
 
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
@@ -267,7 +267,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
     }
 }
 
-llvm::Triple get_triple_for_target(Target target) {
+}  // namespace
+
+namespace Internal {
+
+llvm::Triple get_triple_for_target(const Target &target) {
     llvm::Triple triple;
 
     if (target.arch == Target::X86) {
@@ -408,14 +412,16 @@ llvm::Triple get_triple_for_target(Target target) {
     return triple;
 }
 
+}  // namespace Internal
+
 namespace {
+
 uint32_t simple_string_hash(const string &s) {
     uint32_t result = 0;
     for (char c : s) {
         result = result * 101 + c;
     }
     return result;
-}
 }
 
 // Link all modules together and with the result in modules[0], all
@@ -424,7 +430,7 @@ uint32_t simple_string_hash(const string &s) {
 void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t) {
 
     llvm::DataLayout data_layout = get_data_layout_for_target(t);
-    llvm::Triple triple = get_triple_for_target(t);
+    llvm::Triple triple = Internal::get_triple_for_target(t);
 
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
@@ -531,7 +537,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
 
 }
 
-}
+}  // namespace
 
 namespace Internal {
 
@@ -984,6 +990,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_renderscript_device(Target 
 }
 #endif
 
-}
+}  // namespace Internal
 
 }
