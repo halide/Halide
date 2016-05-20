@@ -361,7 +361,7 @@ int main(int argc, char **argv) {
     std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
                                   input, matrix_3200, matrix_7000};
     processed.compile_to_file("curved", args, target);
-    processed.compile_to_assembly("curved.s", args, target);
+    processed.compile_to(Outputs().assembly("curved.s"), args, "", target);
 
     return 0;
 }

@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     const char *result_file = "compile_to_bitcode.bc";
     std::vector<Argument> empty_args;
-    j.compile_to_bitcode(result_file, empty_args);
+    j.compile_to(Outputs().bitcode(result_file), empty_args);
 
     #ifndef _MSC_VER
     assert(access("compile_to_bitcode.bc", F_OK) == 0 && "Output file not created.");

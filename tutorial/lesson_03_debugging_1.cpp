@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     // supports syntax highlighting and code-folding, so it can be
     // nicer to read for large pipelines. Open gradient.html with your
     // browser after running this tutorial.
-    gradient.compile_to_lowered_stmt("gradient.html", {}, HTML);
+    gradient.compile_to(Outputs().stmt_html("gradient.html"), {});
 
     // You can usually figure out what code Halide is generating using
     // this pseudocode. In the next lesson we'll see how to snoop on

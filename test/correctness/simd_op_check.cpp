@@ -131,7 +131,7 @@ void check(string op, int vector_width, Expr e) {
         // Compile just the vector Func to assembly. Compile without
         // asserts to make the assembly easier to read.
         string asm_filename = "check_" + name + ".s";
-        f.compile_to_assembly(asm_filename, arg_types, target.with_feature(Target::NoAsserts));
+        f.compile_to(Outputs().assembly(asm_filename), arg_types, "", target.with_feature(Target::NoAsserts));
 
         std::ifstream asm_file;
         asm_file.open(asm_filename);

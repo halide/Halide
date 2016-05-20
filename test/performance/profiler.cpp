@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment().with_feature(Target::Profile);
     Image<float> im = out.realize(10, 1000, t);
 
-    //out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
+    //out.compile_to(Outputs().assembly("/dev/stdout"), {}, t.with_feature(Target::JIT));
 
     printf("Time spent in fn13: %fms\n", ms);
 

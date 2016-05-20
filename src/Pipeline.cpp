@@ -166,73 +166,9 @@ void Pipeline::compile_to(const Outputs &output_files,
 }
 
 
-void Pipeline::compile_to_bitcode(const string &filename,
-                                  const vector<Argument> &args,
-                                  const string &fn_name,
-                                  const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().bitcode(output_name(filename, m, ".bc")));
-}
-
-void Pipeline::compile_to_llvm_assembly(const string &filename,
-                                        const vector<Argument> &args,
-                                        const string &fn_name,
-                                        const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().llvm_assembly(output_name(filename, m, ".ll")));
-}
-
-void Pipeline::compile_to_object(const string &filename,
-                                 const vector<Argument> &args,
-                                 const string &fn_name,
-                                 const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-    m.compile(Outputs().object(output_name(filename, m, ext)));
-}
-
-void Pipeline::compile_to_header(const string &filename,
-                                 const vector<Argument> &args,
-                                 const string &fn_name,
-                                 const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().c_header(output_name(filename, m, ".h")));
-}
-
-void Pipeline::compile_to_assembly(const string &filename,
-                                   const vector<Argument> &args,
-                                   const string &fn_name,
-                                   const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().assembly(output_name(filename, m, ".s")));
-}
-
-
-void Pipeline::compile_to_c(const string &filename,
-                            const vector<Argument> &args,
-                            const string &fn_name,
-                            const Target &target) {
-    Module m = compile_to_module(args, fn_name, target);
-    m.compile(Outputs().c_source(output_name(filename, m, ".c")));
-}
-
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
     std::cerr << Halide::Internal::print_loop_nest(contents->outputs);
-}
-
-void Pipeline::compile_to_lowered_stmt(const string &filename,
-                                       const vector<Argument> &args,
-                                       StmtOutputFormat fmt,
-                                       const Target &target) {
-    Module m = compile_to_module(args, "", target);
-    Outputs outputs;
-    if (fmt == HTML) {
-        outputs = Outputs().stmt_html(output_name(filename, m, ".html"));
-    } else {
-        outputs = Outputs().stmt(output_name(filename, m, ".stmt"));
-    }
-    m.compile(outputs);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,

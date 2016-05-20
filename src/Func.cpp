@@ -1772,53 +1772,6 @@ void Func::compile_to(const Outputs &output_files,
     pipeline().compile_to(output_files, args, fn_name, target);
 }
 
-void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
-                              const Target &target) {
-    pipeline().compile_to_bitcode(filename, args, fn_name, target);
-}
-
-void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args,
-                              const Target &target) {
-    pipeline().compile_to_bitcode(filename, args, "", target);
-}
-
-void Func::compile_to_llvm_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
-                                    const Target &target) {
-    pipeline().compile_to_llvm_assembly(filename, args, fn_name, target);
-}
-
-void Func::compile_to_llvm_assembly(const string &filename, const vector<Argument> &args,
-                                    const Target &target) {
-    pipeline().compile_to_llvm_assembly(filename, args, "", target);
-}
-
-void Func::compile_to_object(const string &filename, const vector<Argument> &args,
-                             const string &fn_name, const Target &target) {
-    pipeline().compile_to_object(filename, args, fn_name, target);
-}
-
-void Func::compile_to_object(const string &filename, const vector<Argument> &args,
-                             const Target &target) {
-    pipeline().compile_to_object(filename, args, "", target);
-}
-
-void Func::compile_to_header(const string &filename, const vector<Argument> &args,
-                             const string &fn_name, const Target &target) {
-    pipeline().compile_to_header(filename, args, fn_name, target);
-}
-
-void Func::compile_to_c(const string &filename, const vector<Argument> &args,
-                        const string &fn_name, const Target &target) {
-    pipeline().compile_to_c(filename, args, fn_name, target);
-}
-
-void Func::compile_to_lowered_stmt(const string &filename,
-                                   const vector<Argument> &args,
-                                   StmtOutputFormat fmt,
-                                   const Target &target) {
-    pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
-}
-
 void Func::print_loop_nest() {
     pipeline().print_loop_nest();
 }
@@ -1827,15 +1780,6 @@ void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
                            const Target &target) {
     pipeline().compile_to_file(filename_prefix, args, target);
-}
-
-void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
-                               const Target &target) {
-    pipeline().compile_to_assembly(filename, args, fn_name, target);
-}
-
-void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
-    pipeline().compile_to_assembly(filename, args, "", target);
 }
 
 // JIT-related code

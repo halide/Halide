@@ -33,17 +33,17 @@ Image<uint16_t> test_transpose(int mode) {
         case scalar_trans:
             block_transpose.compute_at(output, x).unroll(x).unroll(y);
             algorithm = "Scalar transpose";
-            output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
+            output.compile_to(Outputs().assembly("scalar_transpose.s"), std::vector<Argument>());
             break;
         case vec_y_trans:
             block_transpose.compute_at(output, x).vectorize(y).unroll(x);
             algorithm = "Transpose vectorized in y";
-            output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
+            output.compile_to(Outputs().assembly("fast_transpose_y.s"), std::vector<Argument>());
             break;
         case vec_x_trans:
             block_transpose.compute_at(output, x).vectorize(x).unroll(y);
             algorithm = "Transpose vectorized in x";
-            output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
+            output.compile_to(Outputs().assembly("fast_transpose_x.s"), std::vector<Argument>());
             break;
     }
 
@@ -83,17 +83,17 @@ Image<uint16_t> test_transpose_wrap(int mode) {
         case scalar_trans:
             block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).unroll(x).unroll(y);
             algorithm = "Scalar transpose";
-            output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
+            output.compile_to(Outputs().assembly("scalar_transpose.s"), std::vector<Argument>());
             break;
         case vec_y_trans:
             block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(y).unroll(x);
             algorithm = "Transpose vectorized in y";
-            output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
+            output.compile_to(Outputs().assembly("fast_transpose_y.s"), std::vector<Argument>());
             break;
         case vec_x_trans:
             block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
             algorithm = "Transpose vectorized in x";
-            output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
+            output.compile_to(Outputs().assembly("fast_transpose_x.s"), std::vector<Argument>());
             break;
     }
 

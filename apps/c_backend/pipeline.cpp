@@ -23,9 +23,7 @@ int main(int argc, char **argv) {
     std::vector<Argument> args;
     args.push_back(input);
 
-    g.compile_to_header("pipeline_native.h", args, "pipeline_native");
-    g.compile_to_header("pipeline_c.h", args, "pipeline_c");
-    g.compile_to_object("pipeline_native.o", args, "pipeline_native");
-    g.compile_to_c("pipeline_c.cpp", args, "pipeline_c");
+    g.compile_to(Outputs().c_header("pipeline_native.h").object("pipeline_native.o"), args, "pipeline_native");
+    g.compile_to(Outputs().c_header("pipeline_c.h").c_source("pipeline_c.cpp"), args, "pipeline_c");
     return 0;
 }
