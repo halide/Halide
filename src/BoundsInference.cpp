@@ -4,6 +4,7 @@
 #include "Bounds.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -109,52 +110,102 @@ public:
     set<string> in_pipeline, inner_productions;
     Scope<int> in_stages;
 
+    struct CondValue {
+        Expr cond; // Condition on params only (can't depend on loop variable)
+        Expr expr;
+        Stmt stmt;
+        bool is_stmt;
+
+        CondValue(const Expr &c, const Expr &e) : cond(c), expr(e), is_stmt(false) {}
+        CondValue(const Expr &c, const Stmt &s) : cond(c), stmt(s), is_stmt(true) {}
+    };
+
     struct Stage {
         Function func;
         size_t stage; // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
-        vector<Expr> exprs;
+        vector<CondValue> exprs;
+        set<ReductionDomain, ReductionDomain::Compare> rdoms;
         string stage_prefix;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
         // (if it's an update def) or RHS per specialization. All specializations
         // of an init definition should have the same LHS.
-        void compute_exprs_helper(const Definition& def, bool is_update) {
+        // This also pushes all the reduction domains it encounters into the 'rdoms'
+        // set for later use.
+        vector<CondValue> compute_exprs_helper(const Definition& def, bool is_update) {
             internal_assert((!is_update && !def.domain().defined()) || is_update)
                 << "Init definition shouldn't have a RDom\n";
 
+            vector<CondValue> result;
+
             // Default case (no specialization)
-            exprs.insert(exprs.end(), def.values().begin(), def.values().end());
+            vector<Expr> predicates;
+            if (def.domain().defined()) {
+                rdoms.insert(def.domain());
+                predicates = def.domain().split_predicate();
+            }
+            for (const Expr &val : def.values()) {
+                if (!predicates.empty()) {
+                    Stmt cond_val;
+                    for (const Expr &pred : predicates) {
+                        cond_val = Evaluate::make(Call::make(Int(32), "dummy", {val}, Call::PureIntrinsic));
+                        cond_val = IfThenElse::make(likely(pred), cond_val);
+                    }
+                    result.push_back(CondValue(const_true(), cond_val));
+                } else {
+                    result.push_back(CondValue(const_true(), val));
+                }
+            }
             if (is_update) {
-                exprs.insert(exprs.end(), def.args().begin(), def.args().end());
-                if (def.domain().defined()) {
-                    exprs.push_back(def.domain().predicate());
+                for (const Expr &arg : def.args()) {
+                    if (!predicates.empty()) {
+                        Stmt cond_arg;
+                        for (const Expr &pred : predicates) {
+                            cond_arg = Evaluate::make(Call::make(Int(32), "dummy", {arg}, Call::PureIntrinsic));
+                            cond_arg = IfThenElse::make(likely(pred), cond_arg);
+                        }
+                        result.push_back(CondValue(const_true(), cond_arg));
+                    } else {
+                        result.push_back(CondValue(const_true(), arg));
+                    }
                 }
             }
 
             const vector<Specialization> &specializations = def.specializations();
             for (size_t i = specializations.size(); i > 0; i--) {
-                Expr c = specializations[i-1].condition;
+                Expr s_cond = specializations[i-1].condition;
                 const Definition &s_def = specializations[i-1].definition;
 
-                //TODO(psuriana): merge the condition (WITH + NO specialization)
-                // With specialization
-                compute_exprs_helper(s_def, is_update);
+                // Else case (i.e. specialization condition is false)
+                for (auto &i : result) {
+                    i.cond = simplify(!s_cond && i.cond);
+                }
+
+                // Then case (i.e. specialization condition is true)
+                vector<CondValue> s_result = compute_exprs_helper(s_def, is_update);
+                for (auto &i : s_result) {
+                    i.cond = simplify(s_cond && i.cond);
+                }
+                result.insert(result.end(), s_result.begin(), s_result.end());
             }
+
+            return result;
         }
 
-        // Computed expressions on the left and right-hand sides
+        // Computed expressions on the left and right-hand sides. This also
+        // pushes all reduction domains it encounters into the 'rdoms' set
+        // for later use.
         void compute_exprs() {
             bool is_update = (stage != 0);
-            exprs.clear();
             if (!is_update) {
-                compute_exprs_helper(func.definition(), is_update);
+                exprs = compute_exprs_helper(func.definition(), is_update);
             } else {
                 const Definition &def = func.update(stage - 1);
-                compute_exprs_helper(def, is_update);
+                exprs = compute_exprs_helper(def, is_update);
             }
         }
 
@@ -206,7 +257,6 @@ public:
                 // figure out what those dimensions are, and just have all
                 // stages but the last use the bounds for the last stage.
                 vector<bool> always_pure_dims(func_args.size(), true);
-                //TODO(psuriana): fix this to take into account specialization with different values
                 for (const Definition &def : func.updates()) {
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
                         bool pure = is_dim_always_pure(def, func_args[j], j);
@@ -362,15 +412,14 @@ public:
             }
 
             if (stage > 0) {
-                //TODO(psuriana): fix this to take into account specialization with different values
-                const Definition &r = func.update(stage - 1);
-                if (r.domain().defined()) {
-                    for (ReductionVariable i : r.domain().domain()) {
+                for (const ReductionDomain &dom : rdoms) {
+                    for (ReductionVariable i : dom.domain()) {
                         string arg = name + ".s" + std::to_string(stage) + "." + i.var;
                         s = LetStmt::make(arg + ".min", i.min, s);
                         s = LetStmt::make(arg + ".max", i.extent + i.min - 1, s);
                     }
                 }
+
             }
 
             return s;
@@ -472,7 +521,9 @@ public:
             return s;
         }
 
-        // A scope giving the bounds for variables used by this stage
+        // A scope giving the bounds for variables used by this stage.
+        // We need to take into account specializations which may refer to
+        // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
             const vector<string> func_args = func.args();
             for (size_t d = 0; d < func_args.size(); d++) {
@@ -482,13 +533,8 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                //TODO(psuriana): fix this to take into account specialization with different values,
-                //more importantly specialization with diferent reduction domain!!!
-                const Definition &r = func.update(stage - 1);
-                if (r.domain().defined()) {
-                    const vector<ReductionVariable> &dom = r.domain().domain();
-                    for (size_t i = 0; i < dom.size(); i++) {
-                        const ReductionVariable &rvar = dom[i];
+                for (const ReductionDomain &dom : rdoms) {
+                    for (const ReductionVariable &rvar : dom.domain()) {
                         string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
                         result.push(rvar.var, Interval(Variable::make(Int(32), arg + ".min"),
                                                        Variable::make(Int(32), arg + ".max")));
@@ -496,12 +542,11 @@ public:
                 }
             }
 
-            /*
-            for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
-                const Bound &b = func.schedule().bounds[i];
+            /*for (size_t i = 0; i < func.definition().schedule().bounds().size(); i++) {
+                const Bound &b = func.definition().schedule().bounds()[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
-            }
-            */
+            }*/
+
         }
 
     };
@@ -559,7 +604,14 @@ public:
                 for (size_t j = 0; j < stages.size(); j++) {
                     Stage &s = stages[j];
                     for (size_t k = 0; k < s.exprs.size(); k++) {
-                        s.exprs[k] = inline_function(s.exprs[k], func);
+                        CondValue &cond_val = s.exprs[k];
+                        if (cond_val.is_stmt) {
+                            internal_assert(cond_val.stmt.defined());
+                            cond_val.stmt = inline_function(cond_val.stmt, func);
+                        } else {
+                            internal_assert(cond_val.expr.defined());
+                            cond_val.expr = inline_function(cond_val.expr, func);
+                        }
                     }
                 }
             }
@@ -621,26 +673,19 @@ public:
                 }
 
             } else {
-                const vector<Expr> &exprs = consumer.exprs;
-                // We wrap the consumer exprs inside a "dummy" Call stmt so that we can take advantage
-                // of the IfThenElse stmt handler inside boxes_required() to determine the appropriate
-                // box bound size given some predicate on the RDom. Otherwise, we will need to update
-                // the scope to take into account of the predicate.
-                Stmt wrapped = Evaluate::make(Call::make(Int(32), "dummy", exprs, Call::PureIntrinsic));
-                if (consumer.stage > 0) {
-                    //TODO(psuriana): fix this to take into account specialization with different values
-                    const Definition &r = consumer.func.update(consumer.stage - 1);
-                    if (r.domain().defined()) {
-                        vector<Expr> predicates = r.domain().split_predicate();
-                        for (const Expr &pred : predicates) {
-                            wrapped = IfThenElse::make(likely(pred), wrapped);
-                        }
+                for (const auto &cval : consumer.exprs) {
+                    map<string, Box> new_boxes;
+                    if (cval.is_stmt) {
+                        new_boxes = boxes_required(cval.stmt, scope, func_bounds);
+                    } else {
+                        new_boxes = boxes_required(cval.expr, scope, func_bounds);
                     }
-                }
-
-                map<string, Box> new_boxes = boxes_required(wrapped, scope, func_bounds);
-                for (const pair<string, Box> &i : new_boxes) {
-                    merge_boxes(boxes[i.first], i.second);
+                    for (auto &i : new_boxes) {
+                        // Add the condition on which this value is evaluated to the box before merging
+                        Box &box = i.second;
+                        box.used = cval.cond;
+                        merge_boxes(boxes[i.first], box);
+                    }
                 }
             }
 
@@ -830,9 +875,8 @@ public:
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
                 //TODO(psuriana): fix this to take into account specialization with different values
-                const Definition &r = s.func.update(s.stage - 1);
-                if (r.domain().defined()) {
-                    for (ReductionVariable d : r.domain().domain()) {
+                for (const ReductionDomain &dom : s.rdoms) {
+                    for (ReductionVariable d : dom.domain()) {
                         string var = s.stage_prefix + d.var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {
@@ -849,7 +893,6 @@ public:
                     }
                 }
             }
-
         }
 
         inner_productions.insert(old_inner_productions.begin(),

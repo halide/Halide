@@ -174,6 +174,10 @@ void Definition::set_domain(const ReductionDomain &d) {
     contents->domain = d;
 }
 
+std::vector<Specialization> &Definition::specializations() {
+    return contents->specializations;
+}
+
 const std::vector<Specialization> &Definition::specializations() const {
     return contents->specializations;
 }
