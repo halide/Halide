@@ -48,12 +48,12 @@ export DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../bin
 ./lesson_15_generate -g my_first_generator -o . target=host
 
 # That should create a pair of files in the current directory:
-# "my_first_generator.o", and "my_first_generator.h", which define a
+# "my_first_generator.a", and "my_first_generator.h", which define a
 # function "my_first_generator" representing the compiled pipeline.
 
-check_file_exists my_first_generator.o
+check_file_exists my_first_generator.a
 check_file_exists my_first_generator.h
-check_symbol my_first_generator.o my_first_generator
+check_symbol my_first_generator.a my_first_generator
 
 #####################
 # Cross-compilation #
@@ -69,11 +69,11 @@ check_symbol my_first_generator.o my_first_generator
     -o . \
     target=x86-32-windows
 
-# This generates a file called "my_first_generator_win32.obj" in the
+# This generates a file called "my_first_generator_win32.lib" in the
 # current directory, along with a matching header. The function
 # defined is called "my_first_generator_win32".
 
-check_file_exists my_first_generator_win32.obj
+check_file_exists my_first_generator_win32.lib
 check_file_exists my_first_generator_win32.h
 
 ################################
@@ -123,15 +123,15 @@ target=host scale=9.0 rotation=ccw output_type=float32
 ./lesson_15_generate -g my_second_generator -f my_second_generator_3 -o . \
 target=host parallel=false output_type=float64
 
-check_file_exists my_second_generator_1.o
+check_file_exists my_second_generator_1.a
 check_file_exists my_second_generator_1.h
-check_symbol      my_second_generator_1.o my_second_generator_1
-check_file_exists my_second_generator_2.o
+check_symbol      my_second_generator_1.a my_second_generator_1
+check_file_exists my_second_generator_2.a
 check_file_exists my_second_generator_2.h
-check_symbol      my_second_generator_2.o my_second_generator_2
-check_file_exists my_second_generator_3.o
+check_symbol      my_second_generator_2.a my_second_generator_2
+check_file_exists my_second_generator_3.a
 check_file_exists my_second_generator_3.h
-check_symbol      my_second_generator_3.o my_second_generator_3
+check_symbol      my_second_generator_3.a my_second_generator_3
 
 # Use of these generated object files and headers is exactly the same
 # as in lesson 10.
@@ -146,7 +146,7 @@ check_symbol      my_second_generator_3.o my_second_generator_3
 # files.
 
 echo "The halide runtime:"
-nm my_second_generator_1.o | grep "[SW] _\?halide_"
+nm my_second_generator_1.a | grep "[SW] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
@@ -198,30 +198,15 @@ check_no_runtime()
     target=host-x86-64-avx-no_runtime
 
 # These files don't contain the runtime
-check_no_runtime my_first_generator_basic.o
-check_symbol     my_first_generator_basic.o my_first_generator_basic
-check_no_runtime my_first_generator_sse41.o
-check_symbol     my_first_generator_sse41.o my_first_generator_sse41
-check_no_runtime my_first_generator_avx.o
-check_symbol     my_first_generator_avx.o my_first_generator_avx
+check_no_runtime my_first_generator_basic.a
+check_symbol     my_first_generator_basic.a my_first_generator_basic
+check_no_runtime my_first_generator_sse41.a
+check_symbol     my_first_generator_sse41.a my_first_generator_sse41
+check_no_runtime my_first_generator_avx.a
+check_symbol     my_first_generator_avx.a my_first_generator_avx
 
 # We can then use the generator to emit just the runtime:
 ./lesson_15_generate -r halide_runtime_x86 -o . target=host-x86-64
-check_runtime halide_runtime_x86.o
-
-# Linking the standalone runtime with the three generated object files
-# gives us three versions of the pipeline for varying levels of x86,
-# combined with a single runtime that will work on nearly all x86
-# processors.
-ar q my_first_generator_multi.a \
-    my_first_generator_basic.o \
-    my_first_generator_sse41.o \
-    my_first_generator_avx.o \
-    halide_runtime_x86.o
-
-check_runtime my_first_generator_multi.a
-check_symbol  my_first_generator_multi.a my_first_generator_basic
-check_symbol  my_first_generator_multi.a my_first_generator_sse41
-check_symbol  my_first_generator_multi.a my_first_generator_avx
+check_runtime halide_runtime_x86.a
 
 echo "Success!"
