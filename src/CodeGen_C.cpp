@@ -455,7 +455,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         << "Function '" << f.name << "'  has already been emitted.\n";
     emitted.insert(f.name);
 
-    const std::vector<Argument> &args = f.args;
+    const std::vector<LoweredArgument> &args = f.args;
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].type.handle_type != NULL) {
@@ -1531,15 +1531,11 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
-    Argument float_arg("alpha", Argument::InputScalar, Float(32), 0);
-    Argument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    Argument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
-    vector<Argument> args(4);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;
-    args[3] = user_context_arg;
+    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
+    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
+    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
+    vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
