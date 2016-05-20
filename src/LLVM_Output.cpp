@@ -16,13 +16,13 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename.c_str(), error_string));
     #elif LLVM_VERSION == 35
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename.c_str(), error_string, llvm::sys::fs::F_None));
-#else // llvm 3.6 or later
+    #else // llvm 3.6 or later
     std::error_code err;
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
     if (err) error_string = err.message();
     #endif
     internal_assert(error_string.empty())
-                       << "Error opening output " << filename << ": " << error_string << "\n";
+        << "Error opening output " << filename << ": " << error_string << "\n";
 
     return raw_out;
 }
