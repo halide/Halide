@@ -183,7 +183,6 @@ const std::vector<Specialization> &Definition::specializations() const {
 }
 
 const Specialization &Definition::add_specialization(Expr condition) {
-    //TODO(psuriana)
     Specialization s;
     s.condition = condition;
     s.definition.contents->is_init = contents->is_init;

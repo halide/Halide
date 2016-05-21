@@ -874,7 +874,6 @@ public:
             // And the current bounds on its reduction variables.
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
-                //TODO(psuriana): fix this to take into account specialization with different values
                 for (const ReductionDomain &dom : s.rdoms) {
                     for (ReductionVariable d : dom.domain()) {
                         string var = s.stage_prefix + d.var;

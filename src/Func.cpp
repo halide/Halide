@@ -479,7 +479,6 @@ Stage Stage::specialize(Expr condition) {
             return Stage(specializations[i].definition, stage_name);
         }
     }
-    //TODO(psuriana): need to rethink this
     const Specialization &s = definition.add_specialization(condition);
 
     return Stage(s.definition, stage_name);

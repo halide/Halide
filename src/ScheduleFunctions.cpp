@@ -482,26 +482,11 @@ Stmt build_provide_loop_nest(string func_name,
     for (size_t i = specializations.size(); i > 0; i--) {
         Expr c = specializations[i-1].condition;
         const Definition &s_def = specializations[i-1].definition;
-        const EQ *eq = c.as<EQ>();
-        const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
         Stmt then_case =
             build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
 
-        if (var && eq) {
-            then_case = simplify_exprs(substitute(var->name, eq->b, then_case));
-            Stmt else_case = stmt;
-            if (eq->b.type().is_bool()) {
-                else_case = simplify_exprs(substitute(var->name, !eq->b, else_case));
-            }
-            stmt = IfThenElse::make(c, then_case, else_case);
-        } else if (var) {
-            then_case = simplify_exprs(substitute(var->name, const_true(), then_case));
-            Stmt else_case = simplify_exprs(substitute(var->name, const_false(), stmt));
-            stmt = IfThenElse::make(c, then_case, else_case);
-        } else {
-            stmt = IfThenElse::make(c, then_case, stmt);
-        }
+        stmt = IfThenElse::make(c, then_case, stmt);
     }
 
     return stmt;
