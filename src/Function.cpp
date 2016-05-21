@@ -295,7 +295,7 @@ IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
 void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
                                         IntrusivePtr<FunctionContents> &dst,
                                         DeepCopyMap &copied_map) {
-    debug(3) << "Deep-copy function contents: \"" << src->name << "\"\n";
+    debug(4) << "Deep-copy function contents: \"" << src->name << "\"\n";
 
     internal_assert(dst.defined() && src.defined()) << "Cannot deep-copy undefined FunctionContents\n";
 
