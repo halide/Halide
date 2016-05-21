@@ -151,6 +151,11 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+void Pipeline::auto_schedule(const Target &target) {
+  // TODO: Do some actual auto scheduling
+  return;
+}
+
 void Pipeline::compile_to(const Outputs &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
