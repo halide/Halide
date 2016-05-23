@@ -1261,6 +1261,22 @@ Func &Func::align_storage(Var dim, Expr alignment) {
     return *this;
 }
 
+Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, dim.name())) {
+            dims[i].fold_factor = factor;
+            dims[i].fold_forward = fold_forward;
+            return *this;
+        }
+    }
+    user_error << "Could not find variable " << dim.name()
+               << " to fold the storage of.\n";
+    return *this;
+}
+
 Func &Func::compute_at(Func f, RVar var) {
     return compute_at(f, Var(var.name()));
 }

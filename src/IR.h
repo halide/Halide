@@ -338,6 +338,7 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     EXPORT static Stmt make(Stmt first, Stmt rest);
+    EXPORT static Stmt make(const std::vector<Stmt> &stmts);
 };
 
 /** An if-then-else block. 'else' may be undefined. */
@@ -423,8 +424,6 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
-        make_int64,
-        make_float64,
         register_destructor,
         div_round_to_zero,
         mod_round_to_zero;

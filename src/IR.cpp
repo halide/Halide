@@ -478,12 +478,31 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
 
 Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
-    // rest is allowed to be null
+    internal_assert(rest.defined()) << "Block of undefined\n";
 
     Block *node = new Block;
-    node->first = first;
-    node->rest = rest;
+
+    if (const Block *b = first.as<Block>()) {
+        // Use a canonical block nesting order
+        node->first = b->first;
+        node->rest  = Block::make(b->rest, rest);
+    } else {
+        node->first = first;
+        node->rest = rest;
+    }
+
     return node;
+}
+
+Stmt Block::make(const std::vector<Stmt> &stmts) {
+    if (stmts.empty()) {
+        return Stmt();
+    }
+    Stmt result = stmts.back();
+    for (size_t i = stmts.size()-1; i > 0; i--) {
+        result = Block::make(stmts[i-1], result);
+    }
+    return result;
 }
 
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
@@ -672,8 +691,6 @@ Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
-Call::ConstString Call::make_int64 = "make_int64";
-Call::ConstString Call::make_float64 = "make_float64";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
