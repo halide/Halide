@@ -205,19 +205,21 @@ void file_unlink(const std::string &name);
 /** Wrapper for stat(). Asserts upon error. */
 FileStat file_stat(const std::string &name);
 
-/** A simple utility class that deletes a file in its dtor; this is useful
- * for temporary files that you want to ensure are deleted when exiting
- * a certain scope. Note that this has the same failure mode as file_unlink()
- * (i.e.: asserts upon error).
+/** A simple utility class that creates a temporary file in its ctor and
+ * deletes that file in its dtor; this is useful for temporary files that you 
+ * want to ensure are deleted when exiting a certain scope. Since this is essentially
+ * just an RAII wrapper around file_make_temp() and file_unlink(), it has the same
+ * failure modes (i.e.: assertion upon error).
  */
-class FileUnlinker final {
+class TemporaryFile final {
 public:
-    explicit FileUnlinker(const std::string &pathname) : pathname(pathname) {}
-    ~FileUnlinker() { file_unlink(pathname); }
+    explicit TemporaryFile(const std::string &base, const std::string &ext) : temp_path(file_make_temp(base, ext)) {}
+    const std::string &pathname() const { return temp_path; }
+    ~TemporaryFile() { file_unlink(temp_path); }
 private:
-    const std::string pathname;
-    FileUnlinker(const FileUnlinker &) = delete;
-    void operator=(const FileUnlinker &) = delete;
+    const std::string temp_path;
+    TemporaryFile(const TemporaryFile &) = delete;
+    void operator=(const TemporaryFile &) = delete;
 };
 
 }
