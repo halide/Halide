@@ -109,7 +109,8 @@ void Module::compile(const Outputs &output_files) const {
 
             std::string object_name = output_files.object_name;
             if (object_name.empty()) {
-                object_name = output_files.static_library_name + ".tmp";
+                const char* ext = target().os == Target::Windows && !target().has_feature(Target::MinGW) ? ".obj" : ".o";
+                object_name = Internal::file_make_temp(output_files.static_library_name, ext);
                 file_to_delete.reset(new Internal::FileUnlinker(object_name));
             }
 
