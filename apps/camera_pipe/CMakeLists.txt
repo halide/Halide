@@ -6,7 +6,8 @@ set(curved_obj "${CMAKE_CURRENT_BINARY_DIR}/curved${CMAKE_CXX_OUTPUT_EXTENSION}"
 
 # FIXME: Set -O3 here
 add_library(fcam fcam/Demosaic.cpp fcam/Demosaic_ARM.cpp)
-if (NOT MSVC)
+FIND_PACKAGE(OpenMP)
+if (OPENMP_FOUND)
     target_compile_options(fcam PUBLIC "-fopenmp")
 endif()
 

@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "CodeGen_C.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
@@ -92,16 +93,42 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
 void Module::compile(const Outputs &output_files) const {
     if (!output_files.object_name.empty() || !output_files.assembly_name.empty() ||
-        !output_files.bitcode_name.empty() || !output_files.llvm_assembly_name.empty()) {
+        !output_files.bitcode_name.empty() || !output_files.llvm_assembly_name.empty() ||
+        !output_files.static_library_name.empty()) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
-        if (!output_files.object_name.empty()) {
-            auto out = make_raw_fd_ostream(output_files.object_name);
-            if (target().arch == Target::PNaCl) {
-                compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
-            } else {
-                compile_llvm_module_to_object(*llvm_module, *out);
+        if (!output_files.object_name.empty() || !output_files.static_library_name.empty()) {
+            // We must always generate the object files here, either because they are
+            // needed directly, or as temporary inputs to create a static library.
+            // If they are just temporary inputs, we delete them when we're done,
+            // to minimize the cruft left laying around in build products directory.
+            // (Would it make more sense to identify a tmp directory and output them there
+            // in this case?)
+            std::unique_ptr<Internal::FileUnlinker> file_to_delete;
+
+            std::string object_name = output_files.object_name;
+            if (object_name.empty()) {
+                const char* ext = target().os == Target::Windows && !target().has_feature(Target::MinGW) ? ".obj" : ".o";
+                object_name = Internal::file_make_temp(output_files.static_library_name, ext);
+                file_to_delete.reset(new Internal::FileUnlinker(object_name));
+            }
+
+            {
+                auto out = make_raw_fd_ostream(object_name);
+                if (target().arch == Target::PNaCl) {
+                    compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
+                } else {
+                    compile_llvm_module_to_object(*llvm_module, *out);
+                }
+                out->flush();
+            }
+
+            if (!output_files.static_library_name.empty()) {
+                Target base_target(target().os, target().arch, target().bits);
+                const bool deterministic = true;
+                create_static_library({object_name}, base_target, 
+                    output_files.static_library_name, deterministic);
             }
         }
         if (!output_files.assembly_name.empty()) {
@@ -145,9 +172,15 @@ void Module::compile(const Outputs &output_files) const {
     }
 }
 
-void compile_standalone_runtime(std::string object_filename, Target t) {
+void compile_standalone_runtime(const Outputs &output_files, Target t) {
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
-    empty.compile(Outputs().object(object_filename));
+    // For runtime, it only makes sense to output object files or static_library, so ignore
+    // everything else. 
+    empty.compile(Outputs().object(output_files.object_name).static_library(output_files.static_library_name));
+}
+
+void compile_standalone_runtime(const std::string &object_filename, Target t) {
+    compile_standalone_runtime(Outputs().object(object_filename), t);
 }
 
 }

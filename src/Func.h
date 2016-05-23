@@ -1331,6 +1331,38 @@ public:
      * aligned to multiples of 16, use foo.align_storage(x, 16). */
     EXPORT Func &align_storage(Var dim, Expr alignment);
 
+    /** Store realizations of this function in a circular buffer of a
+     * given extent. This is more efficient when the extent of the
+     * circular buffer is a power of 2. If the fold factor is too
+     * small, or the dimension is not accessed monotonically, the
+     * pipeline will generate an error at runtime.
+     *
+     * The fold_forward option indicates that the new values of the
+     * producer are accessed by the consumer in a monotonically
+     * increasing order. Folding storage of producers is also
+     * supported if the new values are accessed in a monotonically
+     * decreasing order by setting fold_forward to false.
+     *
+     * For example, consider the pipeline:
+     \code
+     Func f, g;
+     Var x, y;
+     g(x, y) = x*y;
+     f(x, y) = g(x, y) + g(x, y+1);
+     \endcode
+     *
+     * If we schedule f like so:
+     *
+     \code
+     g.compute_at(f, y).store_root().fold_storage(y, 2);
+     \endcode
+     *
+     * Then g will be computed at each row of f and stored in a buffer
+     * with an extent in y of 2, alternately storing each computed row
+     * of g in row y=0 or y=1.
+     */
+    EXPORT Func &fold_storage(Var dim, Expr extent, bool fold_forward = true);
+
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.
      *
