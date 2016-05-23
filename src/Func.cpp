@@ -1071,7 +1071,7 @@ Func &Func::estimate(Var var, Expr min, Expr extent) {
         }
     }
     user_assert(found)
-        << "Can't provide an esitmate on variable " << var.name()
+        << "Can't provide an estimate on variable " << var.name()
         << " of function " << name()
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";

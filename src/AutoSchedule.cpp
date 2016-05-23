@@ -63,6 +63,11 @@ void generate_schedules(const std::vector<Function> &outputs,
 
   // Set the schedule defaults for each funtion in the environment
   set_schedule_defaults(env);
+
+  // Compute the expression costs for each function in the pipeline
+
+  // Dependence analysis to compute all the regions of upstream functions
+  // required to compute a region of the function
 }
 
 }
