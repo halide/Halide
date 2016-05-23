@@ -35,6 +35,7 @@ CL_FN(cl_int,
                         void *          /* param_value */,
                         size_t *        /* param_value_size_ret */));
 
+#ifdef HAVE_OPENCL_12
 CL_FN(cl_int,
       clCreateSubDevices, (cl_device_id                         /* in_device */,
                            const cl_device_partition_property * /* properties */,
@@ -47,6 +48,7 @@ CL_FN(cl_int,
 
 CL_FN(cl_int,
       clReleaseDevice, (cl_device_id /* device */));
+#endif
 
 /* Context APIs  */
 CL_FN(cl_context,
@@ -112,6 +114,7 @@ CL_FN(cl_mem,
                           const void *             /* buffer_create_info */,
                           cl_int *                 /* errcode_ret */));
 
+#ifdef HAVE_OPENCL_12
 CL_FN(cl_mem,
       clCreateImage, (cl_context              /* context */,
                       cl_mem_flags            /* flags */,
@@ -119,6 +122,7 @@ CL_FN(cl_mem,
                       const cl_image_desc *   /* image_desc */,
                       void *                  /* host_ptr */,
                       cl_int *                /* errcode_ret */));
+#endif
 
 CL_FN(cl_int,
       clRetainMemObject, (cl_mem /* memobj */));
