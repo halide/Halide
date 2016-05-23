@@ -5,7 +5,7 @@ all: process
 camera_pipe: ../../ camera_pipe.cpp
 	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
 
-curved.o: camera_pipe
+curved.a: camera_pipe
 	./camera_pipe 8 # 8-bit output,
 
 fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
@@ -14,7 +14,7 @@ fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
 
-process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
+process: process.cpp curved.a fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS) -ldl -lpthread
 
 out.png: process
@@ -27,4 +27,4 @@ camera_pipe.avi: camera_pipe.cpp viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTrac
 	bash viz.sh
 
 clean:
-	rm -f out.png process curved.o camera_pipe fcam/*.o
+	rm -f out.png process curved.a camera_pipe fcam/*.o
