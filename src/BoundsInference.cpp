@@ -112,12 +112,9 @@ public:
 
     struct CondValue {
         Expr cond; // Condition on params only (can't depend on loop variable)
-        Expr expr;
-        Stmt stmt;
-        bool is_stmt;
+        Expr value;
 
-        CondValue(const Expr &c, const Expr &e) : cond(c), expr(e), is_stmt(false) {}
-        CondValue(const Expr &c, const Stmt &s) : cond(c), stmt(s), is_stmt(true) {}
+        CondValue(const Expr &c, const Expr &v) : cond(c), value(v) {}
     };
 
     struct Stage {
@@ -150,15 +147,15 @@ public:
             }
             for (const Expr &val : def.values()) {
                 if (!predicates.empty()) {
-                    Stmt cond_val;
-                    for (const Expr &pred : predicates) {
-                        // We wrap 'val' inside a 'dummy' Call stmt so that we can take advantage
-                        // of the IfThenElse stmt handler inside boxes_required() during later pass
-                        // to determine the appropriate box bound size given some predicate on the
-                        // reduction domain. Otherwise, we will need to update the scope to take
-                        // into account of the predicate.
-                        cond_val = Evaluate::make(Call::make(Int(32), "dummy", {val}, Call::PureIntrinsic));
-                        cond_val = IfThenElse::make(likely(pred), cond_val);
+                    Expr cond_val = Call::make(val.type(),
+                                               Internal::Call::if_then_else,
+                                               {likely(predicates[0]), val, make_zero(val.type())},
+                                               Internal::Call::PureIntrinsic);
+                    for (size_t i = 1; i < predicates.size(); ++i) {
+                        cond_val = Call::make(cond_val.type(),
+                                              Internal::Call::if_then_else,
+                                              {likely(predicates[i]), cond_val, make_zero(cond_val.type())},
+                                              Internal::Call::PureIntrinsic);
                     }
                     result.push_back(CondValue(const_true(), cond_val));
                 } else {
@@ -168,15 +165,15 @@ public:
             if (is_update) {
                 for (const Expr &arg : def.args()) {
                     if (!predicates.empty()) {
-                        Stmt cond_arg;
-                        for (const Expr &pred : predicates) {
-                            // We wrap 'val' inside a 'dummy' Call stmt so that we can take advantage
-                            // of the IfThenElse stmt handler inside boxes_required() during later pass
-                            // to determine the appropriate box bound size given some predicate on the
-                            // reduction domain. Otherwise, we will need to update the scope to take
-                            // into account of the predicate.
-                            cond_arg = Evaluate::make(Call::make(Int(32), "dummy", {arg}, Call::PureIntrinsic));
-                            cond_arg = IfThenElse::make(likely(pred), cond_arg);
+                        Expr cond_arg = Call::make(arg.type(),
+                                                   Internal::Call::if_then_else,
+                                                   {likely(predicates[0]), arg, make_zero(arg.type())},
+                                                   Internal::Call::PureIntrinsic);
+                        for (size_t i = 1; i < predicates.size(); ++i) {
+                            cond_arg = Call::make(cond_arg.type(),
+                                                  Internal::Call::if_then_else,
+                                                  {likely(predicates[i]), cond_arg, make_zero(cond_arg.type())},
+                                                  Internal::Call::PureIntrinsic);
                         }
                         result.push_back(CondValue(const_true(), cond_arg));
                     } else {
@@ -612,13 +609,8 @@ public:
                     Stage &s = stages[j];
                     for (size_t k = 0; k < s.exprs.size(); k++) {
                         CondValue &cond_val = s.exprs[k];
-                        if (cond_val.is_stmt) {
-                            internal_assert(cond_val.stmt.defined());
-                            cond_val.stmt = inline_function(cond_val.stmt, func);
-                        } else {
-                            internal_assert(cond_val.expr.defined());
-                            cond_val.expr = inline_function(cond_val.expr, func);
-                        }
+                        internal_assert(cond_val.value.defined());
+                        cond_val.value = inline_function(cond_val.value, func);
                     }
                 }
             }
@@ -682,11 +674,7 @@ public:
             } else {
                 for (const auto &cval : consumer.exprs) {
                     map<string, Box> new_boxes;
-                    if (cval.is_stmt) {
-                        new_boxes = boxes_required(cval.stmt, scope, func_bounds);
-                    } else {
-                        new_boxes = boxes_required(cval.expr, scope, func_bounds);
-                    }
+                    new_boxes = boxes_required(cval.value, scope, func_bounds);
                     for (auto &i : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
                         Box &box = i.second;

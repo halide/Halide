@@ -1152,6 +1152,17 @@ private:
             return;
         }
 
+        if (op->is_intrinsic(Call::if_then_else)) {
+            assert(op->args.size() == 3);
+            // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
+            // only takes Stmts as arguments.
+            Stmt then_case = Evaluate::make(op->args[1]);
+            Stmt else_case = Evaluate::make(op->args[2]);
+            Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+            equivalent_if.accept(this);
+            return;
+        }
+
         IRVisitor::visit(op);
 
         if (op->call_type == Call::Halide ||
@@ -1251,7 +1262,7 @@ private:
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (!op->else_case.defined()) {
+            if (!op->else_case.defined() || is_no_op(op->else_case)) {
                 // Trim the scope down to represent the fact that the
                 // condition is true. We only understand certain types
                 // of conditions for now.
