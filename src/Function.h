@@ -131,7 +131,7 @@ public:
     EXPORT const std::vector<std::string> args() const;
 
     /** Get the dimensionality */
-    int dimensions() const;
+    EXPORT int dimensions() const;
 
     /** Get the number of outputs */
     int outputs() const {
@@ -145,7 +145,7 @@ public:
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition */
-    bool has_pure_definition() const;
+    EXPORT bool has_pure_definition() const;
 
     /** Does this function *only* have a pure definition */
     bool is_pure() const {
@@ -155,7 +155,7 @@ public:
     }
 
     /** Is it legal to inline this function */
-    bool can_be_inlined() const;
+    EXPORT bool can_be_inlined() const;
 
     /** Get a handle to the schedule for the purpose of modifying
      * it */
@@ -249,7 +249,7 @@ public:
      * See \ref Func::in for more details. */
     // @{
     EXPORT void add_wrapper(const std::string &f, Function &wrapper);
-    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    EXPORT const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
     // @}
 
     /** Replace every call to Functions in 'substitutions' keys by all Exprs

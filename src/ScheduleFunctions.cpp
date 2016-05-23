@@ -79,7 +79,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
     // Then use any reduction domain.
     const ReductionDomain &rdom = s.reduction_domain();
-    internal_assert((!is_update && !rdom.defined()) || is_update)
+    internal_assert(is_update || !rdom.defined())
         << "Init definition shouldn't have a RDom\n";
     if (rdom.defined()) {
         for (const ReductionVariable &i : rdom.domain()) {
@@ -1080,13 +1080,13 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
         for (size_t i = 0; i < f.updates().size(); i++) {
             const Definition &r = f.update(i);
             if (!r.schedule().touched()) {
-                std::cerr << "Warning: Update step " << i
-                          << " of function " << f.name()
-                          << " has not been scheduled, even though some other"
-                          << " steps have been. You may have forgotten to"
-                          << " schedule it. If this was intentional, call "
-                          << f.name() << ".update(" << i << ") to suppress"
-                          << " this warning.\n";
+                user_warning << "Warning: Update step " << i
+                             << " of function " << f.name()
+                             << " has not been scheduled, even though some other"
+                             << " steps have been. You may have forgotten to"
+                             << " schedule it. If this was intentional, call "
+                             << f.name() << ".update(" << i << ") to suppress"
+                             << " this warning.\n";
             }
         }
     }

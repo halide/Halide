@@ -1,5 +1,5 @@
-#ifndef DEEP_COPY_H
-#define DEEP_COPY_H
+#ifndef HALIDE_DEEP_COPY_H
+#define HALIDE_DEEP_COPY_H
 
 /** \file
  *
