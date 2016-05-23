@@ -32,7 +32,7 @@ void set_schedule_defaults(map<string, Function> &env) {
     // variable y in g cannot be split or reordered since that
     // may change user intent.
     //
-    // Open question how to deal with the constraints induced
+    // Open question is how to deal with the constraints induced
     // by user specified schedules.
     kv.second.schedule().store_level().func = "";
     kv.second.schedule().store_level().var = "__root";
@@ -49,8 +49,8 @@ void set_schedule_defaults(map<string, Function> &env) {
   }
 }
 
-void auto_schedule_functions(const std::vector<Function> &outputs,
-                             const Target &target) {
+void generate_schedules(const std::vector<Function> &outputs,
+                        const Target &target) {
   // Compute an environment
   map<string, Function> env;
   for (Function f : outputs) {

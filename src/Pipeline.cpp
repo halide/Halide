@@ -9,6 +9,7 @@
 #include "Lower.h"
 #include "Outputs.h"
 #include "PrintLoopNest.h"
+#include "AutoSchedule.h"
 
 using namespace Halide::Internal;
 
@@ -152,7 +153,7 @@ vector<Func> Pipeline::outputs() const {
 }
 
 void Pipeline::auto_schedule(const Target &target) {
-  // TODO: Do some actual auto scheduling
+  generate_schedules(contents->outputs, target);
   return;
 }
 

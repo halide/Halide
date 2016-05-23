@@ -19,8 +19,8 @@ namespace Internal {
 class Function;
 
 /* Determine a schedule for functions in the pipeline */
-void auto_schedule_functions(const std::vector<Function> &outputs,
-                             const Target &target);
+void generate_schedules(const std::vector<Function> &outputs,
+                        const Target &target);
 }
 }
 
