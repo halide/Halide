@@ -920,6 +920,10 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    // The optimization passes inject intrinsics that aren't legal for
+    // PNaCl. (e.g. vectorized floor).
+    if (target.arch == Target::PNaCl) return;
+
     if (debug::debug_level >= 3) {
         module->dump();
     }
@@ -937,7 +941,7 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.add(new DataLayoutPass());
     #endif
 
-    #if (LLVM_VERSION >= 37)
+    #if (LLVM_VERSION >= 37) && !WITH_NATIVE_CLIENT
     std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
