@@ -964,6 +964,15 @@ public:
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
 
+    /** Statically declare that the range over which the function will be
+     * evaluated in the general case. This provides a basis for the auto
+     * scheduler to make trade-offs and scheduling decisions. The estimates will
+     * be used in conjunction with bounds if they are specified. The auto
+     * generated schedules might break when the sizes of the dimensions are very
+     * different from the estimates specified. These estimates are used only
+     * used by the auto scheduler.*/
+    EXPORT Func &estimate(Var var, Expr min, Expr extent);
+
     /** Bound the extent of a Func's realization, but not its
      * min. This means the dimension can be unrolled or vectorized
      * even when its min is not fixed (for example because it is

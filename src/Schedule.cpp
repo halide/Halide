@@ -22,6 +22,7 @@ struct ScheduleContents {
     std::vector<Dim> dims;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
+    std::vector<Bound> estimates;
     std::vector<Specialization> specializations;
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     ReductionDomain reduction_domain;
@@ -39,6 +40,14 @@ struct ScheduleContents {
             }
         }
         for (Bound &b : bounds) {
+            if (b.min.defined()) {
+                b.min = mutator->mutate(b.min);
+            }
+            if (b.extent.defined()) {
+                b.extent = mutator->mutate(b.extent);
+            }
+        }
+        for (Bound &b : estimates) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
             }
@@ -86,6 +95,7 @@ void deep_copy_schedule_contents_helper(
     dst->dims = src->dims;
     dst->storage_dims = src->storage_dims;
     dst->bounds = src->bounds;
+    dst->estimates = src->estimates;
     dst->reduction_domain = src->reduction_domain.deep_copy();
     dst->memoized = src->memoized;
     dst->touched = src->touched;
@@ -172,8 +182,16 @@ std::vector<Bound> &Schedule::bounds() {
     return contents->bounds;
 }
 
+std::vector<Bound> &Schedule::estimates() {
+    return contents->estimates;
+}
+
 const std::vector<Bound> &Schedule::bounds() const {
     return contents->bounds;
+}
+
+const std::vector<Bound> &Schedule::estimates() const {
+    return contents->estimates;
 }
 
 const std::vector<Specialization> &Schedule::specializations() const {
@@ -192,6 +210,7 @@ const Specialization &Schedule::add_specialization(Expr condition) {
     s.schedule->dims             = contents->dims;
     s.schedule->storage_dims     = contents->storage_dims;
     s.schedule->bounds           = contents->bounds;
+    s.schedule->estimates        = contents->estimates;
     s.schedule->reduction_domain = contents->reduction_domain;
     s.schedule->memoized         = contents->memoized;
     s.schedule->touched          = contents->touched;
@@ -259,6 +278,14 @@ void Schedule::accept(IRVisitor *visitor) const {
         }
     }
     for (const Bound &b : bounds()) {
+        if (b.min.defined()) {
+            b.min.accept(visitor);
+        }
+        if (b.extent.defined()) {
+            b.extent.accept(visitor);
+        }
+    }
+    for (const Bound &b : estimates()) {
         if (b.min.defined()) {
             b.min.accept(visitor);
         }

@@ -244,6 +244,13 @@ public:
     std::vector<Bound> &bounds();
     // @}
 
+    /** You may explicitly specify an estimate of some of the function
+     * dimensions See \ref Func::estimate */
+    // @{
+    const std::vector<Bound> &estimates() const;
+    std::vector<Bound> &estimates();
+    // @}
+
     /** You may create several specialized versions of a func with
      * different schedules. They trigger when the condition is
      * true. See \ref Func::specialize */

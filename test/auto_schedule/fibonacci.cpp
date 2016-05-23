@@ -15,7 +15,8 @@ int main(int argc, char **argv) {
     g(x) = fib(x+10);
 
     // Provide estimates for pipeline output
-    
+    g.estimate(x, 0, 50);
+
     // Auto schedule the pipeline
     Target target = get_target_from_environment();
     Pipeline p(g);
@@ -23,9 +24,11 @@ int main(int argc, char **argv) {
     p.auto_schedule(target);
 
     // Inspect the schedule
+    g.print_loop_nest();
+
+    // Run the schedule
+    Image<int> out = p.realize(10);
 
     printf("Success!\n");
-
     return 0;
-
 }

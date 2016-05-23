@@ -5,8 +5,8 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    ImageParam input(UInt(16), 2);
     Var x("x"), y("y"), xi("xi"), yi("yi");
+    Image<float> input = lambda(x, y, sin(x) + cos(y) + 1.0f).realize(2200, 2200);
 
     int num_levels = 10;
 
@@ -42,6 +42,11 @@ int main(int argc, char **argv) {
     p.auto_schedule(target);
 
     // Inspect the schedule
+    up[num_levels -1].print_loop_nest();
+
+    // Run the schedule
+    Image<float> out = p.realize(1500, 1500);
+
     printf("Success!\n");
 
     return 0;
