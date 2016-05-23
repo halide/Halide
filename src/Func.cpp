@@ -497,10 +497,12 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
             << " to RVar " << new_var.name() << "\n";
     }
 
+    Schedule &schedule = definition.schedule();
+
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string old_name;
-    vector<Dim> &dims = definition.schedule().dims();
+    vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old_var.name())) {
             found = true;
@@ -524,34 +526,35 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
 
     // If possible, rewrite the split or rename that defines it.
     found = false;
-    for (size_t i = definition.schedule().splits().size(); i > 0; i--) {
-        if (definition.schedule().splits()[i-1].is_fuse()) {
-            if (definition.schedule().splits()[i-1].inner == old_name ||
-                definition.schedule().splits()[i-1].outer == old_name) {
+    vector<Split> &splits = schedule.splits();
+    for (size_t i = splits.size(); i > 0; i--) {
+        if (splits[i-1].is_fuse()) {
+            if (splits[i-1].inner == old_name ||
+                splits[i-1].outer == old_name) {
                 user_error
                     << "In schedule for " << stage_name
                     << ", can't rename variable " << old_name
                     << " because it has already been fused into "
-                    << definition.schedule().splits()[i-1].old_var << "\n"
+                    << splits[i-1].old_var << "\n"
                     << dump_argument_list();
             }
-            if (definition.schedule().splits()[i-1].old_var == old_name) {
-                definition.schedule().splits()[i-1].old_var = new_name;
+            if (splits[i-1].old_var == old_name) {
+                splits[i-1].old_var = new_name;
                 found = true;
                 break;
             }
         } else {
-            if (definition.schedule().splits()[i-1].inner == old_name) {
-                definition.schedule().splits()[i-1].inner = new_name;
+            if (splits[i-1].inner == old_name) {
+                splits[i-1].inner = new_name;
                 found = true;
                 break;
             }
-            if (definition.schedule().splits()[i-1].outer == old_name) {
-                definition.schedule().splits()[i-1].outer = new_name;
+            if (splits[i-1].outer == old_name) {
+                splits[i-1].outer = new_name;
                 found = true;
                 break;
             }
-            if (definition.schedule().splits()[i-1].old_var == old_name) {
+            if (splits[i-1].old_var == old_name) {
                 user_error
                     << "In schedule for " << stage_name
                     << ", can't rename a variable " << old_name

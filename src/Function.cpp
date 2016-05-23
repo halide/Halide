@@ -316,7 +316,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     internal_assert(!dst->init_def.domain().defined() && !dst->init_def.schedule().reduction_domain().defined())
         << "Init definition shouldn't have reduction domain\n";
 
-    for (const auto &def : src->updates) {
+    for (const Definition &def : src->updates) {
         internal_assert(!def.is_init());
         Definition def_copy = def.deep_copy(copied_map);
         internal_assert(!def_copy.is_init());
@@ -327,7 +327,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
         dst->updates.push_back(std::move(def_copy));
     }
 
-    for (const auto &e : src->extern_arguments) {
+    for (const ExternFuncArgument &e : src->extern_arguments) {
         ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
         dst->extern_arguments.push_back(std::move(e_copy));
     }
@@ -624,8 +624,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     Definition r(args, values, check.reduction_domain, false);
-    r.schedule().set_reduction_domain(r.domain());
-    internal_assert(!r.is_init());
+    internal_assert(!r.is_init()) << "Should have been an update definition\n";
 
     // First add any reduction domain
     if (r.domain().defined()) {
@@ -766,17 +765,17 @@ const std::vector<Parameter> &Function::output_buffers() const {
 }
 
 Schedule &Function::update_schedule(int idx) {
-    internal_assert((int)contents->updates.size() >= idx + 1) << "Invalid update definition index\n";
+    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx].schedule();
 }
 
 Definition &Function::update(int idx) {
-    internal_assert((int)contents->updates.size() >= idx + 1) << "Invalid update definition index\n";
+    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx];
 }
 
 const Definition &Function::update(int idx) const {
-    internal_assert((int)contents->updates.size() >= idx + 1) << "Invalid update definition index\n";
+    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx];
 }
 

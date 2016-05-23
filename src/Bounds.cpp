@@ -910,8 +910,15 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const 
 Interval interval_union(const Interval &a, const Interval &b) {
     Expr max, min;
     debug(3) << "Interval union of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
-    if (a.max.defined() && b.max.defined()) max = Max::make(a.max, b.max);
-    if (a.min.defined() && b.min.defined()) min = Min::make(a.min, b.min);
+    if (equal(a.min, b.min) && equal(a.max, b.max)) {
+        return a;
+    }
+    if (a.max.defined() && b.max.defined()) {
+        max = simplify(Max::make(a.max, b.max));
+    }
+    if (a.min.defined() && b.min.defined()) {
+        min = simplify(Min::make(a.min, b.min));
+    }
     return Interval(min, max);
 }
 
@@ -1537,15 +1544,10 @@ Interval compute_pure_function_definition_value_bounds(
     Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
 
     // Pure function might have different values due to specialization.
-    // We need to take the min and max bounds of all those possible values.
-    for (const auto &s : def.specializations()) {
+    // We need to take the union of min and max bounds of all those possible values.
+    for (const Specialization &s : def.specializations()) {
         Interval s_interval = compute_pure_function_definition_value_bounds(s.definition, scope, fb, dim);
-        if (result.min.defined()) {
-            result.min = s_interval.min.defined() ? min(result.min, s_interval.min) : Expr();
-        }
-        if (result.max.defined()) {
-            result.max = s_interval.max.defined() ? max(result.max, s_interval.max) : Expr();
-        }
+        result = interval_union(result, s_interval);
     }
     return result;
 }

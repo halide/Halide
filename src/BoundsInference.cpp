@@ -152,6 +152,11 @@ public:
                 if (!predicates.empty()) {
                     Stmt cond_val;
                     for (const Expr &pred : predicates) {
+                        // We wrap 'val' inside a 'dummy' Call stmt so that we can take advantage
+                        // of the IfThenElse stmt handler inside boxes_required() during later pass
+                        // to determine the appropriate box bound size given some predicate on the
+                        // reduction domain. Otherwise, we will need to update the scope to take
+                        // into account of the predicate.
                         cond_val = Evaluate::make(Call::make(Int(32), "dummy", {val}, Call::PureIntrinsic));
                         cond_val = IfThenElse::make(likely(pred), cond_val);
                     }
@@ -165,6 +170,11 @@ public:
                     if (!predicates.empty()) {
                         Stmt cond_arg;
                         for (const Expr &pred : predicates) {
+                            // We wrap 'val' inside a 'dummy' Call stmt so that we can take advantage
+                            // of the IfThenElse stmt handler inside boxes_required() during later pass
+                            // to determine the appropriate box bound size given some predicate on the
+                            // reduction domain. Otherwise, we will need to update the scope to take
+                            // into account of the predicate.
                             cond_arg = Evaluate::make(Call::make(Int(32), "dummy", {arg}, Call::PureIntrinsic));
                             cond_arg = IfThenElse::make(likely(pred), cond_arg);
                         }
@@ -181,13 +191,13 @@ public:
                 const Definition &s_def = specializations[i-1].definition;
 
                 // Else case (i.e. specialization condition is false)
-                for (auto &i : result) {
+                for (CondValue &i : result) {
                     i.cond = simplify(!s_cond && i.cond);
                 }
 
                 // Then case (i.e. specialization condition is true)
                 vector<CondValue> s_result = compute_exprs_helper(s_def, is_update);
-                for (auto &i : s_result) {
+                for (CondValue &i : s_result) {
                     i.cond = simplify(s_cond && i.cond);
                 }
                 result.insert(result.end(), s_result.begin(), s_result.end());
@@ -217,7 +227,7 @@ public:
                 return false;
             }
 
-            for (const auto &s : def.specializations()) {
+            for (const Specialization &s : def.specializations()) {
                 bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
                 if (!pure) {
                     return false;
@@ -413,10 +423,10 @@ public:
 
             if (stage > 0) {
                 for (const ReductionDomain &dom : rdoms) {
-                    for (ReductionVariable i : dom.domain()) {
-                        string arg = name + ".s" + std::to_string(stage) + "." + i.var;
-                        s = LetStmt::make(arg + ".min", i.min, s);
-                        s = LetStmt::make(arg + ".max", i.extent + i.min - 1, s);
+                    for (const ReductionVariable &rvar : dom.domain()) {
+                        string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
+                        s = LetStmt::make(arg + ".min", rvar.min, s);
+                        s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
                     }
                 }
 
@@ -474,13 +484,11 @@ public:
 
             // Make the buffer_ts representing the output. They all
             // use the same size, but have differing types.
-            const vector<string> func_args = func.args();
             for (int j = 0; j < func.outputs(); j++) {
                 vector<Expr> output_buffer_t_args(2);
                 output_buffer_t_args[0] = null_handle;
                 output_buffer_t_args[1] = make_zero(func.output_types()[j]);
-                for (size_t k = 0; k < func_args.size(); k++) {
-                    const string &arg = func_args[k];
+                for (const string arg : func.args()) {
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
@@ -525,10 +533,9 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            const vector<string> func_args = func.args();
-            for (size_t d = 0; d < func_args.size(); d++) {
-                string arg = name + ".s" + std::to_string(stage) + "." + func_args[d];
-                result.push(func_args[d],
+            for (const string farg : func.args()) {
+                string arg = name + ".s" + std::to_string(stage) + "." + farg;
+                result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
             }
@@ -875,7 +882,7 @@ public:
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
                 for (const ReductionDomain &dom : s.rdoms) {
-                    for (ReductionVariable d : dom.domain()) {
+                    for (const ReductionVariable &d : dom.domain()) {
                         string var = s.stage_prefix + d.var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {

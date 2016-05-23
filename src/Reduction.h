@@ -82,6 +82,10 @@ public:
      * predicates. */
     EXPORT bool frozen() const;
 
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * ReductionDomain. */
+    void accept(IRVisitor *) const;
+
     /** Pass an IRMutator through to all Exprs referenced in the
      * ReductionDomain. */
     void mutate(IRMutator *);

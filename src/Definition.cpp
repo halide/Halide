@@ -33,11 +33,7 @@ struct DefinitionContents {
         schedule.accept(visitor);
 
         if (domain.defined()) {
-            for (ReductionVariable rv : domain.domain()) {
-                rv.min.accept(visitor);
-                rv.extent.accept(visitor);
-            }
-            domain.predicate().accept(visitor);
+            domain.accept(visitor);
         }
 
         for (const Specialization &s : specializations) {
@@ -86,6 +82,11 @@ Definition::Definition() : contents(new DefinitionContents) {}
 Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(ptr) {
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined DefinitionContents ptr\n";
+    internal_assert(!contents->is_init || !contents->domain.defined())
+        << "Init definition should not have a reduction domain\n";
+    internal_assert((!contents->domain.defined() && !contents->schedule.reduction_domain().defined()) ||
+                    (contents->domain.defined() && contents->schedule.reduction_domain().same_as(contents->domain)))
+        << "Definition should point to the same reduction domain as its schedule\n";
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
@@ -94,6 +95,11 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     contents->values = values;
     contents->args = args;
     contents->domain = rdom;
+    // Definition's domain is the same as the one pointed by its schedule.
+    contents->schedule.set_reduction_domain(contents->domain);
+
+    internal_assert(!contents->is_init || !contents->domain.defined())
+        << "Init definition should not have a reduction domain\n";
 }
 
 // Return deep-copy of Definition
@@ -108,7 +114,7 @@ Definition Definition::deep_copy(
     copy.contents->schedule = contents->schedule.deep_copy(copied_map);
 
     // Definition's domain is the same as the one pointed by its schedule.
-    internal_assert((contents->is_init == !contents->domain.defined()) || !contents->is_init)
+    internal_assert(!contents->is_init || !contents->domain.defined())
         << "Init definition should not have a reduction domain\n";
 
     internal_assert((!contents->domain.defined() && !contents->schedule.reduction_domain().defined()) ||
@@ -119,7 +125,7 @@ Definition Definition::deep_copy(
     copy.contents->domain = copy.schedule().reduction_domain();
 
     // Deep-copy specializations
-    for (const auto &s : contents->specializations) {
+    for (const Specialization &s : contents->specializations) {
         Specialization s_copy;
         s_copy.condition = s.condition;
         s_copy.definition = s.definition.deep_copy(copied_map);
@@ -129,7 +135,7 @@ Definition Definition::deep_copy(
 }
 
 bool Definition::is_init() const {
-    internal_assert(!contents->is_init || (contents->is_init && !contents->domain.defined()))
+    internal_assert(!contents->is_init || !contents->domain.defined())
         << "Init definition shouldn't have reduction domain\n";
     return contents->is_init;
 }
