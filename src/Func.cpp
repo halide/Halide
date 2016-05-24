@@ -1059,6 +1059,8 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
     Bound b = {var.name(), min, extent};
     func.schedule().bounds().push_back(b);
+    // Add the information to estimates as well
+    func.schedule().estimates().push_back(b);
     return *this;
 }
 

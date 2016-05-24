@@ -915,6 +915,15 @@ Interval interval_union(const Interval &a, const Interval &b) {
     return Interval(min, max);
 }
 
+// TODO: Fix this when intersect and union are made same across solve and bounds
+Interval interval_intersect(const Interval &a, const Interval &b) {
+    Expr max, min;
+    debug(3) << "Interval intersect of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
+    if (a.max.defined() && b.max.defined()) max = Min::make(a.max, b.max);
+    if (a.min.defined() && b.min.defined()) min = Max::make(a.min, b.min);
+    return Interval(min, max);
+}
+
 Region region_union(const Region &a, const Region &b) {
     internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
     Region result;
