@@ -8,15 +8,10 @@
 
 #include "IROperator.h"
 #include "Scope.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
-
-struct Interval {
-    Expr min, max;
-    Interval() {}
-    Interval(Expr min, Expr max) : min(min), max(max) {}
-};
 
 typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
 

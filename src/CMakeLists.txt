@@ -252,6 +252,7 @@ set(HEADER_FILES
   IRVisitor.h
   Image.h
   ImageParam.h
+  Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
@@ -400,6 +401,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRVisitor.cpp
   Image.cpp
   ImageParam.cpp
+  Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
