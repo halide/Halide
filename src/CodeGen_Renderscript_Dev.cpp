@@ -1,4 +1,4 @@
-#if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
+#if LLVM_VERSION < 36
 #include "BitWriter_3_2.35/ReaderWriter_3_2.h"
 #else
 #include "BitWriter_3_2/ReaderWriter_3_2.h"
