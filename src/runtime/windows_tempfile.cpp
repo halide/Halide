@@ -15,6 +15,9 @@ extern uint32_t WIN32API GetTempFileNameA(const char *, const char *, uint32_t, 
 
 WEAK int halide_create_temp_file(void *user_context, const char *prefix, const char *suffix,
                                  char *path_buf, size_t path_buf_size) {
+    if (!prefix || !suffix || !path_buf) {
+        return halide_error_code_internal_error;
+    }
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
     char tmp_dir_path[MAX_PATH];

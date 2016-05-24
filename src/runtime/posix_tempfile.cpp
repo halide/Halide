@@ -7,6 +7,9 @@ extern int mkstemps(char *, int);
 
 WEAK int halide_create_temp_file(void *user_context, const char *prefix, const char *suffix,
                                  char *path_buf, size_t path_buf_size) {
+    if (!prefix || !suffix || !path_buf) {
+        return halide_error_code_internal_error;
+    }
     const char *kTmp = "/tmp/";
     const char *kWild = "XXXXXX";
     const size_t needed = strlen(kTmp) + strlen(prefix) + strlen(kWild) + strlen(suffix) + 1;
