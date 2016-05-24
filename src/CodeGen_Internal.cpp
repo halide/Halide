@@ -245,7 +245,7 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
     if (!value) {
         return false;
     }
-    #if LLVM_VERSION < 36 || defined(WITH_NATIVE_CLIENT)
+    #if LLVM_VERSION < 36
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
     #else
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);

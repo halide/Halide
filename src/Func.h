@@ -445,7 +445,7 @@ public:
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
-     * directly; call compile_to_file instead. */
+     * directly; call compile_to_static_library or compile_to_file instead. */
     //@{
     EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
@@ -459,7 +459,7 @@ public:
      * third. The name defaults to the same name as this halide
      * function. You don't actually have to have defined this function
      * yet to call this. You probably don't want to use this directly;
-     * call compile_to_file instead. */
+     * call compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
                                   const Target &target = get_target_from_environment());
 
@@ -503,6 +503,13 @@ public:
      */
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair, with the given
+     * arguments. Also names the C function to match the first
+     * argument.
+     */
+    EXPORT void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
+                                          const Target &target = get_target_from_environment());
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */

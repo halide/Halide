@@ -81,55 +81,36 @@ function(halide_add_generator_dependency)
   # generated library
   if (MSVC)
     add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                              "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.obj"
+                              "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.lib"
       DEPENDS "${args_GENERATOR_TARGET}"
       COMMAND "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${generator_exec}" ${invoke_args}
-      COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${args_GENERATED_FUNCTION}.obj"
+      COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${args_GENERATED_FUNCTION}.lib"
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
   elseif(XCODE)
-    if (NOT target_is_pnacl)
-      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                                "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
-        DEPENDS "${args_GENERATOR_TARGET}"
+    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+      DEPENDS "${args_GENERATOR_TARGET}"
 
-        # The generator executable will be placed in a configuration specific
-        # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom
-        # build script.
-        COMMAND "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${generator_exec}" ${invoke_args}
+      # The generator executable will be placed in a configuration specific
+      # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom
+      # build script.
+      COMMAND "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${generator_exec}" ${invoke_args}
 
-        # If we are building an ordinary executable, use libtool to create the
-        # static library.
-        COMMAND libtool -static -o "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
-        WORKING_DIRECTORY "${SCRATCH_DIR}"
-        )
-    else()
-      # For pnacl targets, there is no libtool step
-      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-        DEPENDS "${args_GENERATOR_TARGET}"
-        COMMAND "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${generator_exec}" ${invoke_args}
-        WORKING_DIRECTORY "${SCRATCH_DIR}"
-        )
-    endif()
-
+      WORKING_DIRECTORY "${SCRATCH_DIR}"
+      )
+  elseif(target_is_pnacl)
+    # No archive step for pnacl targets
+    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+      DEPENDS "${args_GENERATOR_TARGET}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
+      WORKING_DIRECTORY "${SCRATCH_DIR}"
+      )
   else()
-    if (NOT target_is_pnacl)
-      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                                "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
-        DEPENDS "${args_GENERATOR_TARGET}"
-        COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
-        # Create an archive using ar (or similar)
-        COMMAND "${CMAKE_AR}" r "${FILTER_LIB}" "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.o"
-        WORKING_DIRECTORY "${SCRATCH_DIR}"
-        )
-    else()
-      # No archive step for pnacl targets
-      add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-        DEPENDS "${args_GENERATOR_TARGET}"
-        COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
-        WORKING_DIRECTORY "${SCRATCH_DIR}"
-        )
-    endif()
+    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+      DEPENDS "${args_GENERATOR_TARGET}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
+      WORKING_DIRECTORY "${SCRATCH_DIR}"
+      )
   endif()
 
   # Use a custom target to force it to run the generator before the

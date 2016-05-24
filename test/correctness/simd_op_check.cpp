@@ -161,7 +161,7 @@ void check(string op, int vector_width, Expr e) {
         asm_file.close();
     }
 
-    // Also compile the error checking Func
+    // Also compile the error checking Func (to be sure it compiles without error)
     error.compile_to_file("test_" + name, arg_types, target);
 
     bool can_run_the_code = can_run_code();
