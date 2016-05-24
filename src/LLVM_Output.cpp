@@ -177,7 +177,6 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
     for (auto &src : src_files) {
         command += " " + src;
     }
-    Internal::debug(0)<<command<<"\n";
     int result = system(command.c_str());
     internal_assert(result == 0) << "shelling out to ar failed.\n";
 #endif

@@ -179,34 +179,60 @@ check_no_runtime()
 # with the no_runtime target flag. Let's generate and link several
 # different versions of the first pipeline for different x86 variants:
 
+# (Note that we'll ask the generators to just give us object files ("-e o"), 
+# instead of static libraries, so that we can easily link them all into a 
+# single static library.)
+
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_basic \
+    -e o,h \
     -o . \
     target=host-x86-64-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_sse41 \
+    -e o,h \
     -o . \
     target=host-x86-64-sse41-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_avx \
+    -e o,h \
     -o . \
     target=host-x86-64-avx-no_runtime
 
 # These files don't contain the runtime
-check_no_runtime my_first_generator_basic.a
-check_symbol     my_first_generator_basic.a my_first_generator_basic
-check_no_runtime my_first_generator_sse41.a
-check_symbol     my_first_generator_sse41.a my_first_generator_sse41
-check_no_runtime my_first_generator_avx.a
-check_symbol     my_first_generator_avx.a my_first_generator_avx
+check_no_runtime my_first_generator_basic.o
+check_symbol     my_first_generator_basic.o my_first_generator_basic
+check_no_runtime my_first_generator_sse41.o
+check_symbol     my_first_generator_sse41.o my_first_generator_sse41
+check_no_runtime my_first_generator_avx.o
+check_symbol     my_first_generator_avx.o my_first_generator_avx
 
 # We can then use the generator to emit just the runtime:
-./lesson_15_generate -r halide_runtime_x86 -o . target=host-x86-64
-check_runtime halide_runtime_x86.a
+./lesson_15_generate \
+    -r halide_runtime_x86 \
+    -e o,h \
+    -o . \
+    target=host-x86-64
+check_runtime halide_runtime_x86.o
+
+# Linking the standalone runtime with the three generated object files     
+# gives us three versions of the pipeline for varying levels of x86,      
+# combined with a single runtime that will work on nearly all x86     
+# processors.
+ar q my_first_generator_multi.a \
+    my_first_generator_basic.o \
+    my_first_generator_sse41.o \
+    my_first_generator_avx.o \
+    halide_runtime_x86.o
+
+check_runtime my_first_generator_multi.a
+check_symbol  my_first_generator_multi.a my_first_generator_basic
+check_symbol  my_first_generator_multi.a my_first_generator_sse41
+check_symbol  my_first_generator_multi.a my_first_generator_avx
 
 echo "Success!"
