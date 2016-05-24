@@ -78,7 +78,8 @@ endif()
 
 file(GLOB SrcCpp
 python/*.cpp
-../src/Param.cpp)
+../src/OutputImageParam.cpp
+../src/ImageParam.cpp)
 
 add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
