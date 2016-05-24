@@ -23,6 +23,7 @@ set(RUNTIME_CPP
   android_host_cpu_count
   android_io
   android_opengl_context
+  android_tempfile
   cache
   cuda
   destructors
