@@ -197,16 +197,16 @@ struct FileStat {
 std::string file_make_temp(const std::string &base, const std::string &ext);
 
 /** Wrapper for access(). Asserts upon error. */
-bool file_exists(const std::string &name);
+EXPORT bool file_exists(const std::string &name);
 
 /** Wrapper for unlink(). Asserts upon error. */
-void file_unlink(const std::string &name);
+EXPORT void file_unlink(const std::string &name);
 
 /** Wrapper for stat(). Asserts upon error. */
-FileStat file_stat(const std::string &name);
+EXPORT FileStat file_stat(const std::string &name);
 
 /** A simple utility class that creates a temporary file in its ctor and
- * deletes that file in its dtor; this is useful for temporary files that you 
+ * deletes that file in its dtor; this is useful for temporary files that you
  * want to ensure are deleted when exiting a certain scope. Since this is essentially
  * just an RAII wrapper around file_make_temp() and file_unlink(), it has the same
  * failure modes (i.e.: assertion upon error).
