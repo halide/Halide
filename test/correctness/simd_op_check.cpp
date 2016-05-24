@@ -482,13 +482,13 @@ void check_sse_all() {
         check("vpaddsb", 32, i8c(i16(i8_1) + i16(i8_2)));
         check("vpsubsb", 32, i8c(i16(i8_1) - i16(i8_2)));
         check("vpaddusb", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-        check("vpsubusb", 32, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
+        check("vpsubusb", 32, u8(max(i16(u8_1) - i16(u8_2), 0)));
         check("vpaddw", 16, u16_1 + u16_2);
         check("vpsubw", 16, u16_1 - u16_2);
         check("vpaddsw", 16, i16c(i32(i16_1) + i32(i16_2)));
         check("vpsubsw", 16, i16c(i32(i16_1) - i32(i16_2)));
         check("vpaddusw", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-        check("vpsubusw", 16, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
+        check("vpsubusw", 16, u16(max(i32(u16_1) - i32(u16_2), 0)));
         check("vpaddd", 8, i32_1 + i32_2);
         check("vpsubd", 8, i32_1 - i32_2);
         check("vpmulhw", 16, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -508,8 +508,8 @@ void check_sse_all() {
         check("vpminsw", 16, min(i16_1, i16_2));
         check("vpmaxub", 32, max(u8_1, u8_2));
         check("vpminub", 32, min(u8_1, u8_2));
-        check("vpmulhuw", 16, i16((i32(i16_1) * i32(i16_2))/(256*256)));
-        check("vpmulhuw", 16, i16((i32(i16_1) * i32(i16_2))>>16));
+        check("vpmulhuw", 16, u16((u32(u16_1) * u32(u16_2))/(256*256)));
+        check("vpmulhuw", 16, u16((u32(u16_1) * u32(u16_2))>>16));
 
         check("vpaddq", 8, i64_1 + i64_2);
         check("vpsubq", 8, i64_1 - i64_2);
