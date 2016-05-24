@@ -1128,8 +1128,12 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
         }
     }
 
-    // Inlining is always allowed
+    // Inlining is allowed only if there is no specialization.
     if (store_at.is_inline() && compute_at.is_inline()) {
+        user_assert(f.definition().specializations().empty())
+            << "Func " << f.name() << " is scheduled inline, so it"
+            << " must not have any specializations. Specialize on the"
+            << " scheduled Func instead.\n";
         return;
     }
 
