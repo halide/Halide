@@ -71,65 +71,75 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod ## _ll)
 
+// Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_ion)
 DECLARE_CPP_INITMOD(android_mman)
 DECLARE_CPP_INITMOD(android_opengl_context)
-DECLARE_CPP_INITMOD(ios_io)
+DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(destructors)
-DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(device_interface)
+DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_ion)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
+DECLARE_CPP_INITMOD(gpu_device_selection)
+DECLARE_CPP_INITMOD(hexagon_host)
+DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_mman)
 DECLARE_CPP_INITMOD(linux_opengl_context)
-DECLARE_CPP_INITMOD(osx_opengl_context)
+DECLARE_CPP_INITMOD(matlab)
+DECLARE_CPP_INITMOD(metadata)
+DECLARE_CPP_INITMOD(mingw_math)
+DECLARE_CPP_INITMOD(module_aot_ref_count)
+DECLARE_CPP_INITMOD(module_jit_ref_count)
+DECLARE_CPP_INITMOD(nacl_host_cpu_count)
+DECLARE_CPP_INITMOD(noos)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
+DECLARE_CPP_INITMOD(osx_clock)
+DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
+DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
-DECLARE_CPP_INITMOD(windows_clock)
-DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
-DECLARE_CPP_INITMOD(errors)
-DECLARE_CPP_INITMOD(posix_io)
-DECLARE_CPP_INITMOD(ssp)
-DECLARE_CPP_INITMOD(windows_io)
-DECLARE_CPP_INITMOD(posix_thread_pool)
-DECLARE_CPP_INITMOD(windows_thread_pool)
-DECLARE_CPP_INITMOD(tracing)
-DECLARE_CPP_INITMOD(write_debug_image)
-DECLARE_CPP_INITMOD(posix_print)
-DECLARE_CPP_INITMOD(gpu_device_selection)
-DECLARE_CPP_INITMOD(cache)
-DECLARE_CPP_INITMOD(nacl_host_cpu_count)
-DECLARE_CPP_INITMOD(to_string)
-DECLARE_CPP_INITMOD(mingw_math)
-DECLARE_CPP_INITMOD(module_jit_ref_count)
-DECLARE_CPP_INITMOD(module_aot_ref_count)
-DECLARE_CPP_INITMOD(device_interface)
-DECLARE_CPP_INITMOD(hexagon_host)
-DECLARE_CPP_INITMOD(metadata)
-DECLARE_CPP_INITMOD(matlab)
-DECLARE_CPP_INITMOD(noos)
 DECLARE_CPP_INITMOD(posix_get_symbol)
-DECLARE_CPP_INITMOD(osx_get_symbol)
-DECLARE_CPP_INITMOD(windows_get_symbol)
-DECLARE_CPP_INITMOD(renderscript)
+DECLARE_CPP_INITMOD(posix_io)
+DECLARE_CPP_INITMOD(posix_print)
+DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
-DECLARE_CPP_INITMOD(runtime_api)
-DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_allocator)
+DECLARE_CPP_INITMOD(qurt_hvx)
+DECLARE_CPP_INITMOD(renderscript)
+DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(ssp)
+DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(tracing)
+DECLARE_CPP_INITMOD(windows_clock)
+DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(windows_io)
+DECLARE_CPP_INITMOD(windows_opencl)
+DECLARE_CPP_INITMOD(windows_thread_pool)
+DECLARE_CPP_INITMOD(write_debug_image)
+
+// Universal LL Initmods. Please keep sorted alphabetically.
+DECLARE_LL_INITMOD(posix_math)
+DECLARE_LL_INITMOD(pnacl_math)
+DECLARE_LL_INITMOD(win32_math)
+DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(renderscript_dev)
+
+// Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
@@ -146,7 +156,7 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 DECLARE_NO_INITMOD(metal)
 DECLARE_NO_INITMOD(metal_objc_arm)
 DECLARE_NO_INITMOD(metal_objc_x86)
-#endif
+#endif  // WITH_METAL
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -154,22 +164,20 @@ DECLARE_LL_INITMOD(arm_no_neon)
 #else
 DECLARE_NO_INITMOD(arm)
 DECLARE_NO_INITMOD(arm_no_neon)
-#endif
+#endif  // WITH_ARM
+
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
 #else
 DECLARE_NO_INITMOD(aarch64)
-#endif
-DECLARE_LL_INITMOD(posix_math)
-DECLARE_LL_INITMOD(pnacl_math)
-DECLARE_LL_INITMOD(win32_math)
-DECLARE_LL_INITMOD(ptx_dev)
-DECLARE_LL_INITMOD(renderscript_dev)
+#endif  // WITH_AARCH64
+
 #ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
-#endif
+#endif  // WITH_PTX
+
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
@@ -178,24 +186,27 @@ DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
-#endif
+#endif  // WITH_X86
+
 #ifdef WITH_MIPS
 DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
-#endif
+#endif  // WITH_MIPS
+
 #ifdef WITH_POWERPC
 DECLARE_LL_INITMOD(powerpc)
 #else
 DECLARE_NO_INITMOD(powerpc)
-#endif
+#endif  // WITH_POWERPC
+
 #ifdef WITH_HEXAGON
 DECLARE_LL_INITMOD(hvx_64)
 DECLARE_LL_INITMOD(hvx_128)
 #else
 DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
-#endif
+#endif  // WITH_HEXAGON
 
 namespace {
 
