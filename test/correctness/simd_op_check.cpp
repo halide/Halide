@@ -1485,7 +1485,7 @@ int main(int argc, char **argv) {
     }
 
     // Compile a runtime for this target, for use in the static test.
-    compile_standalone_runtime("simd_op_check_runtime", target);
+    compile_standalone_runtime("simd_op_check_runtime.o", target);
 
     // Wait for any children to terminate
     for (int child : children) {
