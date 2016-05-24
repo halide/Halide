@@ -1,9 +1,12 @@
+#include<algorithm>
+
 #include "AutoSchedule.h"
 #include "RealizationOrder.h"
 #include "FindCalls.h"
 #include "Simplify.h"
 #include "Target.h"
 #include "Function.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -49,6 +52,28 @@ void set_schedule_defaults(map<string, Function> &env) {
   }
 }
 
+bool check_estimates_on_outputs(const vector<Function> &outputs) {
+    bool estimates_avail = true;
+    for (auto &out : outputs) {
+        const vector<Bound> &estimates = out.schedule().estimates();
+        if (estimates.size() != out.args().size()) {
+            estimates_avail = false;
+            break;
+        }
+        vector<string> vars = out.args();
+
+        for (unsigned int i = 0; i < estimates.size(); i++) {
+            if (std::find(vars.begin(), vars.end(), estimates[i].var) == vars.end()
+                    || !((estimates[i].min.as<IntImm>()) &&
+                        (estimates[i].extent.as<IntImm>())))  {
+                estimates_avail = false;
+                break;
+            }
+        }
+    }
+    return estimates_avail;
+}
+
 void generate_schedules(const std::vector<Function> &outputs,
                         const Target &target) {
   // Compute an environment
@@ -68,6 +93,15 @@ void generate_schedules(const std::vector<Function> &outputs,
 
   // Dependence analysis to compute all the regions of upstream functions
   // required to compute a region of the function
+
+  FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+
+  bool estimates_avail = check_estimates_on_outputs(outputs);
+
+  // Inform the user that estimates of output sizes were not available on
+  // the outputs of the pipeline.
+  user_assert(estimates_avail) << "Please provide estimates for each \
+                                   dimension of the pipeline output functions.";
 }
 
 }
