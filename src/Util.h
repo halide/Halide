@@ -13,6 +13,7 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 #include <string>
@@ -144,6 +145,38 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+
+struct FileStat {
+    uint64_t file_size;
+    uint32_t mod_time;  // Unix epoch time
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t mode;
+};
+
+/** Wrapper for access(). Asserts upon error. */
+bool file_exists(const std::string &name);
+
+/** Wrapper for unlink(). Asserts upon error. */
+void file_unlink(const std::string &name);
+
+/** Wrapper for stat(). Asserts upon error. */
+FileStat file_stat(const std::string &name);
+
+/** A simple utility class that deletes a file in its dtor; this is useful
+ * for temporary files that you want to ensure are deleted when exiting
+ * a certain scope. Note that this has the same failure mode as file_unlink()
+ * (i.e.: asserts upon error).
+ */
+class FileUnlinker final {
+public:
+    explicit FileUnlinker(const std::string &pathname) : pathname(pathname) {}
+    ~FileUnlinker() { file_unlink(pathname); }
+private:
+    const std::string pathname;
+    FileUnlinker(const FileUnlinker &) = delete;
+    void operator=(const FileUnlinker &) = delete;
+};
 
 }
 }

@@ -866,6 +866,7 @@ void Func::invalidate_cache() {
 }
 
 Func Func::in(const Func &f) {
+    invalidate_cache();
     user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
     const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
     const auto &iter = wrappers.find(f.name());
@@ -894,6 +895,7 @@ Func Func::in(const Func &f) {
 }
 
 Func Func::in(const vector<Func>& fs) {
+    invalidate_cache();
     if (fs.empty()) {
         user_error << "Could not create a wrapper for an empty list of Funcs\n";
     }
@@ -948,6 +950,7 @@ Func Func::in(const vector<Func>& fs) {
 }
 
 Func Func::in() {
+    invalidate_cache();
     const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
     const auto &iter = wrappers.find("");
     if (iter == wrappers.end()) {

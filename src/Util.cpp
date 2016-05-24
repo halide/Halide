@@ -8,9 +8,16 @@
 #include <mutex>
 #include <string>
 
-#ifdef __linux__
+#ifdef _MSC_VER
+#include <io.h>
+#else
 #include <unistd.h>
-#include <linux/limits.h>
+#endif
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#ifdef __linux__
+#include <linux/limits.h>  // For PATH_MAX
 #endif
 
 namespace Halide {
@@ -212,6 +219,41 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
     std::string result = namespaces.back();
     namespaces.pop_back();
     return result;
+}
+
+bool file_exists(const std::string &name) {
+    #ifdef _MSC_VER
+    return _access(name.c_str(), 0) == 0;
+    #else
+    return ::access(name.c_str(), F_OK) == 0;
+    #endif
+}
+
+void file_unlink(const std::string &name) {
+    #ifdef _MSC_VER
+    _unlink(name.c_str());
+    #else
+    ::unlink(name.c_str());
+    #endif
+}
+
+FileStat file_stat(const std::string &name) {
+    #ifdef _MSC_VER
+    struct _stat a;
+    if (_stat(name.c_str(), &a) != 0) {
+        user_error << "Could not stat " << name << "\n";
+    }
+    #else
+    struct stat a;
+    if (::stat(name.c_str(), &a) != 0) {
+        user_error << "Could not stat " << name << "\n";
+    }
+    #endif
+    return {static_cast<uint64_t>(a.st_size),
+            static_cast<uint32_t>(a.st_mtime),
+            static_cast<uint32_t>(a.st_uid),
+            static_cast<uint32_t>(a.st_gid),
+            static_cast<uint32_t>(a.st_mode)};
 }
 
 }

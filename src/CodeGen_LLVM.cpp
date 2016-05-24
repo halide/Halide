@@ -435,7 +435,7 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     names.extern_name = names.simple_name;
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
-    
+
     const std::vector<Argument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
@@ -930,7 +930,7 @@ void CodeGen_LLVM::optimize_module() {
     #endif
 
     #if (LLVM_VERSION >= 37)
-    std::unique_ptr<TargetMachine> TM(get_target_machine(*module));
+    std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     #endif

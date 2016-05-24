@@ -10,6 +10,7 @@
 #include "Var.h"
 #include "Function.h"
 #include "Param.h"
+#include "OutputImageParam.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITModule.h"

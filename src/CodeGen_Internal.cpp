@@ -354,7 +354,7 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     }
 }
 
-llvm::TargetMachine *get_target_machine(const llvm::Module &module) {
+std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module) {
     std::string error_string;
 
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
@@ -369,12 +369,12 @@ llvm::TargetMachine *get_target_machine(const llvm::Module &module) {
     std::string mattrs = "";
     get_target_options(module, options, mcpu, mattrs);
 
-    return target->createTargetMachine(module.getTargetTriple(),
-                                       mcpu, mattrs,
-                                       options,
-                                       llvm::Reloc::PIC_,
-                                       llvm::CodeModel::Default,
-                                       llvm::CodeGenOpt::Aggressive);
+    return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(module.getTargetTriple(),
+                                                mcpu, mattrs,
+                                                options,
+                                                llvm::Reloc::PIC_,
+                                                llvm::CodeModel::Default,
+                                                llvm::CodeGenOpt::Aggressive));
 }
 
 }
