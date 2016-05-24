@@ -307,7 +307,7 @@ public:
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + std::to_string(stage) + "." + func.args()[d];
 
-                if (b[d].min.same_as(b[d].max)) {
+                if (b[d].is_single_point()) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
                 } else {
                     s = LetStmt::make(arg + ".min", b[d].min, s);
@@ -602,7 +602,7 @@ public:
                 if (!b.empty()) {
                     // Check for unboundedness
                     for (size_t k = 0; k < b.size(); k++) {
-                        if (!b[k].min.defined() || !b[k].max.defined()) {
+                        if (!b[k].is_bounded()) {
                             std::ostringstream err;
                             if (consumer.stage == 0) {
                                 err << "The pure definition ";
@@ -746,10 +746,10 @@ public:
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
                 for (size_t i = 0; i < box.size(); i++) {
-                    internal_assert(box[i].min.defined() && box[i].max.defined());
+                    internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f.args()[i];
 
-                    if (box[i].max.same_as(box[i].min)) {
+                    if (box[i].is_single_point()){
                         body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                     } else {
                         body = LetStmt::make(var + ".max", box[i].max, body);
@@ -782,7 +782,7 @@ public:
                     for (ReductionVariable d : r.domain.domain()) {
                         string var = s.stage_prefix + d.var;
                         Interval in = bounds_of_inner_var(var, body);
-                        if (in.min.defined() && in.max.defined()) {
+                        if (in.is_bounded()) {
                             body = LetStmt::make(var + ".min", in.min, body);
                             body = LetStmt::make(var + ".max", in.max, body);
                         } else {

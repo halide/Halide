@@ -293,6 +293,7 @@ SOURCE_FILES = \
   Generator.cpp \
   Image.cpp \
   ImageParam.cpp \
+  Interval.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
@@ -419,6 +420,7 @@ HEADER_FILES = \
   runtime/HalideRuntime.h \
   Image.h \
   ImageParam.h \
+  Interval.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \

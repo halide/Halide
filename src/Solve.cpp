@@ -549,41 +549,6 @@ private:
 
 };
 
-Expr pos_inf = Variable::make(Int(32), "pos_inf");
-Expr neg_inf = Variable::make(Int(32), "neg_inf");
-
-Expr interval_max(Expr a, Expr b) {
-    if (a.same_as(pos_inf) || b.same_as(pos_inf)) {
-        return pos_inf;
-    } else if (a.same_as(neg_inf)) {
-        return b;
-    } else if (b.same_as(neg_inf)) {
-        return a;
-    } else {
-        return max(a, b);
-    }
-}
-
-Expr interval_min(Expr a, Expr b) {
-    if (a.same_as(neg_inf) || b.same_as(neg_inf)) {
-        return neg_inf;
-    } else if (a.same_as(pos_inf)) {
-        return b;
-    } else if (b.same_as(pos_inf)) {
-        return a;
-    } else {
-        return min(a, b);
-    }
-}
-
-Interval interval_intersection(Interval ia, Interval ib) {
-    return Interval(interval_max(ia.min, ib.min), interval_min(ia.max, ib.max));
-}
-
-Interval interval_union(Interval ia, Interval ib) {
-    return Interval(interval_min(ia.min, ib.min), interval_max(ia.max, ib.max));
-}
-
 class SolveForInterval : public IRVisitor {
 
     // The var we're solving for
@@ -609,10 +574,10 @@ class SolveForInterval : public IRVisitor {
     void fail() {
         if (outer) {
             // If we're looking for an outer bound, then return an infinite interval.
-            result = Interval(neg_inf, pos_inf);
+            result = Interval::everything();
         } else {
             // If we're looking for an inner bound, return an empty interval
-            result = Interval(pos_inf, neg_inf);
+            result = Interval::nothing();
         }
     }
 
@@ -620,10 +585,10 @@ class SolveForInterval : public IRVisitor {
         internal_assert(op->type.is_bool());
         if ((op->value && target) ||
             (!op->value && !target)) {
-            result = Interval(neg_inf, pos_inf);
+            result = Interval::everything();
         } else if ((!op->value && target) ||
                    (op->value && !target)) {
-            result = Interval(pos_inf, neg_inf);
+            result = Interval::nothing();
         } else {
             fail();
         }
@@ -638,12 +603,12 @@ class SolveForInterval : public IRVisitor {
             debug(3) << "And intersecting: " << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = interval_intersection(ia, ib);
+            result = Interval::make_intersection(ia, ib);
         } else {
             debug(3) << "And union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = interval_union(ia, ib);
+            result = Interval::make_union(ia, ib);
         }
     }
 
@@ -656,12 +621,12 @@ class SolveForInterval : public IRVisitor {
             debug(3) << "Or intersecting:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = interval_intersection(ia, ib);
+            result = Interval::make_intersection(ia, ib);
         } else {
             debug(3) << "Or union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = interval_union(ia, ib);
+            result = Interval::make_union(ia, ib);
         }
     }
 
@@ -679,10 +644,10 @@ class SolveForInterval : public IRVisitor {
         scope.push(op->name, op->value);
         op->body.accept(this);
         scope.pop(op->name);
-        if (result.min.defined() && expr_uses_var(result.min, op->name)) {
+        if (result.has_lower_bound() && expr_uses_var(result.min, op->name)) {
             result.min = Let::make(op->name, op->value, result.min);
         }
-        if (result.max.defined() && expr_uses_var(result.max, op->name)) {
+        if (result.has_upper_bound() && expr_uses_var(result.max, op->name)) {
             result.max = Let::make(op->name, op->value, result.max);
         }
     }
@@ -742,9 +707,9 @@ class SolveForInterval : public IRVisitor {
             }
         } else if (v && v->name == var) {
             if (target) {
-                result = Interval(neg_inf, le->b);
+                result = Interval(Interval::neg_inf, le->b);
             } else {
-                result = Interval(le->b + 1, pos_inf);
+                result = Interval(le->b + 1, Interval::pos_inf);
             }
         } else if (const Max *max_a = le->a.as<Max>()) {
             // Rewrite (max(a, b) <= c) <==> (a <= c && (b <= c || a >= b))
@@ -787,9 +752,9 @@ class SolveForInterval : public IRVisitor {
             }
         } else if (v && v->name == var) {
             if (target) {
-                result = Interval(ge->b, pos_inf);
+                result = Interval(ge->b, Interval::pos_inf);
             } else {
-                result = Interval(neg_inf, ge->b - 1);
+                result = Interval(Interval::neg_inf, ge->b - 1);
             }
         } else if (const Max *max_a = ge->a.as<Max>()) {
             // Rewrite (max(a, b) >= c) <==> (a >= c || (b >= c && a <= b))
@@ -875,9 +840,9 @@ class AndConditionOverDomain : public IRMutator {
 
     Interval get_bounds(Expr a) {
         Interval bounds = bounds_of_expr_in_scope(a, scope);
-        if (!bounds.min.same_as(bounds.max) ||
-            !bounds.min.defined() ||
-            !bounds.max.defined()) {
+        if (!bounds.is_single_point() ||
+            !bounds.has_lower_bound() ||
+            !bounds.has_upper_bound()) {
             relaxed = true;
         }
         return bounds;
@@ -949,7 +914,7 @@ class AndConditionOverDomain : public IRMutator {
             // Rewrite to the difference is zero.
             Expr delta = simplify(op->a - op->b);
             Interval i = get_bounds(delta);
-            if (!i.min.defined() || !i.max.defined()) {
+            if (!i.has_lower_bound() || !i.has_upper_bound()) {
                 fail();
                 return;
             }
@@ -982,7 +947,7 @@ class AndConditionOverDomain : public IRMutator {
         if (scope.contains(op->name) && op->type.is_bool()) {
             Interval i = scope.get(op->name);
             if (!flipped) {
-                if (interval_has_lower_bound(i) && i.min.defined()) {
+                if (i.has_lower_bound()) {
                     // Sufficient condition: if this boolean var
                     // could ever be false, then return false.
                     expr = i.min;
@@ -990,7 +955,7 @@ class AndConditionOverDomain : public IRMutator {
                     expr = const_false();
                 }
             } else {
-                if (interval_has_upper_bound(i) && i.max.defined()) {
+                if (i.has_upper_bound()) {
                     // Necessary condition: if this boolean var could
                     // ever be true, return true.
                     expr = i.max;
@@ -1032,17 +997,17 @@ class AndConditionOverDomain : public IRMutator {
             string min_name = unique_name(op->name + ".min");
             string max_name = unique_name(op->name + ".max");
             Expr min_var, max_var;
-            if (!value_bounds.min.defined() ||
+            if (!value_bounds.has_lower_bound() ||
                 (is_const(value_bounds.min) && value_bounds.min.as<Variable>())) {
                 min_var = value_bounds.min;
-                value_bounds.min = Expr();
+                value_bounds.min = Interval::neg_inf;
             } else {
                 min_var = Variable::make(value_bounds.min.type(), min_name);
             }
-            if (!value_bounds.max.defined() ||
+            if (!value_bounds.has_upper_bound() ||
                 (is_const(value_bounds.max) && value_bounds.max.as<Variable>())) {
                 max_var = value_bounds.max;
-                value_bounds.max = Expr();
+                value_bounds.max = Interval::pos_inf;
             } else {
                 max_var = Variable::make(value_bounds.max.type(), max_name);
             }
@@ -1054,10 +1019,10 @@ class AndConditionOverDomain : public IRMutator {
             if (expr_uses_var(expr, op->name)) {
                 expr = Let::make(op->name, op->value, expr);
             }
-            if (value_bounds.min.defined() && expr_uses_var(expr, min_name)) {
+            if (value_bounds.has_lower_bound() && expr_uses_var(expr, min_name)) {
                 expr = Let::make(min_name, value_bounds.min, expr);
             }
-            if (value_bounds.max.defined() && expr_uses_var(expr, max_name)) {
+            if (value_bounds.has_upper_bound() && expr_uses_var(expr, max_name)) {
                 expr = Let::make(max_name, value_bounds.max, expr);
             }
         } else {
@@ -1118,10 +1083,9 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_inner_interval returned undefined Exprs: " << c << "\n";
-    if (is_one(simplify(s.result.min > s.result.max))) {
-        // Empty interval
-        s.result.min = pos_inf;
-        s.result.max = neg_inf;
+    if (s.result.is_bounded() &&
+        is_one(simplify(s.result.min > s.result.max))) {
+        return Interval::nothing();
     }
     return s.result;
 }
@@ -1131,28 +1095,11 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_outer_interval returned undefined Exprs: " << c << "\n";
-    if (is_one(simplify(s.result.min > s.result.max))) {
-        // Empty interval
-        s.result.min = pos_inf;
-        s.result.max = neg_inf;
+    if (s.result.is_bounded() &&
+        is_one(simplify(s.result.min > s.result.max))) {
+        return Interval::nothing();
     }
     return s.result;
-}
-
-bool interval_has_lower_bound(const Interval &i) {
-    return !i.min.same_as(neg_inf);
-}
-
-bool interval_has_upper_bound(const Interval &i) {
-    return !i.max.same_as(pos_inf);
-}
-
-bool interval_is_empty(const Interval &i) {
-    return i.min.same_as(pos_inf) || i.max.same_as(neg_inf);
-}
-
-bool interval_is_everything(const Interval &i) {
-    return i.min.same_as(neg_inf) && i.max.same_as(pos_inf);
 }
 
 Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
@@ -1282,8 +1229,8 @@ void solve_test() {
     check_solve(4 > y*x, x*y < 4);
 
     // Now test solving for an interval
-    check_inner_interval(x > 0, 1, pos_inf);
-    check_inner_interval(x < 100, neg_inf, 99);
+    check_inner_interval(x > 0, 1, Interval::pos_inf);
+    check_inner_interval(x < 100, Interval::neg_inf, 99);
     check_outer_interval(x > 0 && x < 100, 1, 99);
     check_inner_interval(x > 0 && x < 100, 1, 99);
 
@@ -1292,7 +1239,7 @@ void solve_test() {
     check_outer_interval(Let::make("c", x > 0, c && x < 100), 1, 99);
 
     check_outer_interval((x >= 10 && x <= 90) && sin(x) > 0.5f, 10, 90);
-    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, pos_inf, neg_inf);
+    check_inner_interval((x >= 10 && x <= 90) && sin(x) > 0.6f, Interval::pos_inf, Interval::neg_inf);
 
     check_inner_interval(x == 10, 10, 10);
     check_outer_interval(x == 10, 10, 10);
@@ -1300,14 +1247,14 @@ void solve_test() {
     check_inner_interval(!(x != 10), 10, 10);
     check_outer_interval(!(x != 10), 10, 10);
 
-    check_inner_interval(3*x + 4 < 27, neg_inf, 7);
-    check_outer_interval(3*x + 4 < 27, neg_inf, 7);
+    check_inner_interval(3*x + 4 < 27, Interval::neg_inf, 7);
+    check_outer_interval(3*x + 4 < 27, Interval::neg_inf, 7);
 
     check_inner_interval(min(x, y) > 17, 18, y);
-    check_outer_interval(min(x, y) > 17, 18, pos_inf);
+    check_outer_interval(min(x, y) > 17, 18, Interval::pos_inf);
 
-    check_inner_interval(x/5 < 17, neg_inf, 84);
-    check_outer_interval(x/5 < 17, neg_inf, 84);
+    check_inner_interval(x/5 < 17, Interval::neg_inf, 84);
+    check_outer_interval(x/5 < 17, Interval::neg_inf, 84);
 
     // Test anding a condition over a domain
     check_and_condition(x > 0, const_true(), Interval(1, y));

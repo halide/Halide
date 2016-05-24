@@ -370,13 +370,13 @@ class TrimNoOps : public IRMutator {
 
         debug(3) << "Interval is: " << i.min << ", " << i.max << "\n";
 
-        if (interval_is_everything(i)) {
+        if (i.is_everything()) {
             // Nope.
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             return;
         }
 
-        if (interval_is_empty(i)) {
+        if (i.is_empty()) {
             // Empty loop
             stmt = Evaluate::make(0);
             return;
@@ -394,7 +394,7 @@ class TrimNoOps : public IRMutator {
         Expr old_max_var = Variable::make(Int(32), old_max_name);
 
         // Convert max to max-plus-one
-        if (interval_has_upper_bound(i)) {
+        if (i.has_upper_bound()) {
             i.max = i.max + 1;
         }
 
@@ -402,12 +402,12 @@ class TrimNoOps : public IRMutator {
         // a no-op.
         Expr old_max = op->min + op->extent;
         Expr new_min, new_max;
-        if (interval_has_lower_bound(i)) {
+        if (i.has_lower_bound()) {
             new_min = clamp(i.min, op->min, old_max_var);
         } else {
             new_min = op->min;
         }
-        if (interval_has_upper_bound(i)) {
+        if (i.has_upper_bound()) {
             new_max = clamp(i.max, new_min_var, old_max_var);
         } else {
             new_max = old_max;
