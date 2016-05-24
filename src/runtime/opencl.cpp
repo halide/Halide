@@ -11,7 +11,9 @@
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 
-// Define the function pointers for the OpenCL API.
+// Define the function pointers for the OpenCL API. OpenCL 1.2
+// currently disabled so we can work on build bots without it.
+//#define HAVE_OPENCL_12
 #define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
 #include "cl_functions.h"
 

@@ -205,20 +205,24 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-                #if LLVM_VERSION >= 37
+                #if WITH_NATIVE_CLIENT
+                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-S32");
+                #elif LLVM_VERSION >= 37
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #else
                 return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #endif
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+            } else if (target.os == Target::NaCl) {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-n8:16:32-S128");
             } else {
-                // Linux/Android/NaCl
+                // Linux/Android
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
             }
         } else { // 64-bit
             if (target.os == Target::NaCl) {
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128");
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-n8:16:32:64-S128");
             } else if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
@@ -233,6 +237,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+            } else if (target.os == Target::NaCl) {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S128");
             } else {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
             }
@@ -256,7 +262,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             return llvm::DataLayout("e-m:e-i64:64-n32:64");
         }
     } else if (target.arch == Target::PNaCl) {
-        return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
+        return llvm::DataLayout("e-p:32:32-i64:64-n32");
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
