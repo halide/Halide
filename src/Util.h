@@ -185,16 +185,17 @@ struct FileStat {
     uint32_t mode;
 };
 
-/** Create a unique file with a name of the form baseXXXXXext in an arbitrary
- * (but writable) directory; this is typically $TMP or /tmp, but the specific
+/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
+ * (but writable) directory; this is typically /tmp, but the specific
  * location is not guaranteed. (Note that the exact form of the file name
- * may vary; in particular, the extension may be ignored.)
+ * may vary; in particular, the suffix may be ignored on Windows.)
  * The file is created (but not opened), thus this can be called from
  * different threads (or processes, e.g. when building with parallel make)
  * without risking collision. Note that if this file is used as a temporary
- * file, the caller is responsibly for deleting it.
+ * file, the caller is responsibly for deleting it. Neither the prefix nor suffix
+ * may contain a directory separator.
  */
-std::string file_make_temp(const std::string &base, const std::string &ext);
+std::string file_make_temp(const std::string &prefix, const std::string &suffix);
 
 /** Wrapper for access(). Asserts upon error. */
 bool file_exists(const std::string &name);
@@ -213,7 +214,8 @@ FileStat file_stat(const std::string &name);
  */
 class TemporaryFile final {
 public:
-    explicit TemporaryFile(const std::string &base, const std::string &ext) : temp_path(file_make_temp(base, ext)) {}
+    TemporaryFile(const std::string &prefix, const std::string &suffix) 
+        : temp_path(file_make_temp(prefix, suffix)) {}
     const std::string &pathname() const { return temp_path; }
     ~TemporaryFile() { file_unlink(temp_path); }
 private:
