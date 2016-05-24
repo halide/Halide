@@ -1,5 +1,5 @@
-#ifndef WRAP_CALLS_H
-#define WRAP_CALLS_H
+#ifndef HALIDE_WRAP_CALLS_H
+#define HALIDE_WRAP_CALLS_H
 
 /** \file
  *
