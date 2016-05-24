@@ -12,6 +12,7 @@
 #include <io.h>
 #else
 #include <unistd.h>
+#include <stdlib.h>
 #endif
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -269,7 +270,7 @@ std::string file_make_temp(const std::string &base, const std::string &ext) {
     // Note that GetTempFileName() actually creates the file.
     ret = GetTempFileName(tmp_path, base.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
-    return std::string(tmp_file);     
+    return std::string(tmp_file);
     #else
     std::string templ = base + "XXXXXX" + ext;
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.

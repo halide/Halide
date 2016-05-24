@@ -241,6 +241,22 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
     m.compile(outputs);
 }
 
+void Pipeline::compile_to_static_library(const string &filename_prefix,
+                                         const vector<Argument> &args,
+                                         const Target &target) {
+    Module m = compile_to_module(args, filename_prefix, target);
+    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
+
+    if (target.arch == Target::PNaCl) {
+        outputs = outputs.bitcode(filename_prefix + ".a");
+    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+        outputs = outputs.object(filename_prefix + ".lib");
+    } else {
+        outputs = outputs.object(filename_prefix + ".a");
+    }
+    m.compile(outputs);
+}
+
 void Pipeline::compile_to_file(const string &filename_prefix,
                                const vector<Argument> &args,
                                const Target &target) {
