@@ -26,6 +26,9 @@
 #if LLVM_VERSION >= 37
 #include <llvm/IR/DebugInfoMetadata.h>
 #endif
+#if WITH_NATIVE_CLIENT
+#include <llvm/IR/DebugInfo.h>
+#endif
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -1328,7 +1331,7 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
     const LandingPadInst &LP = cast<LandingPadInst>(I);
     Code = bitc::FUNC_CODE_INST_LANDINGPAD;
     Vals.push_back(VE.getTypeID(LP.getType()));
-#if LLVM_VERSION < 37
+#if LLVM_VERSION < 37 || WITH_NATIVE_CLIENT
     PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
 #else
     PushValueAndType(LP.getParent()->getParent()->getPersonalityFn(), InstID,
@@ -1592,7 +1595,11 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
         Stream.EmitRecord(bitc::FUNC_CODE_DEBUG_LOC_AGAIN, Vals);
       } else {
 
-#if LLVM_VERSION >= 37
+#if WITH_NATIVE_CLIENT
+        MDNode* Scope = DL.getScope();
+        assert(Scope && "Expected valid scope");
+        MDLocation *IA = DL.getInlinedAt();
+#elif LLVM_VERSION >= 37
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
         DILocation *IA = DL.getInlinedAt();
