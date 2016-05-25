@@ -58,7 +58,6 @@ void schedule(Func f, const Target &t) {
 
 template <typename T>
 int test_bit_counting(const Target &target) {
-    const int bits = sizeof(T)*8;
     Image<T> input(256);
     for (int i = 0; i < 256; i++) {
         if (i < 16) {
