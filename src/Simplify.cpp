@@ -3766,6 +3766,8 @@ Stmt simplify_exprs(Stmt s) {
 }
 
 bool can_prove(Expr e) {
+    internal_assert(e.type().is_bool())
+        << "Argument to can_prove is not a boolean Expr: " << e << "\n";
     return is_one(simplify(e));
 }
 
