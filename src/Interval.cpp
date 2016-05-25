@@ -17,6 +17,9 @@ Expr Interval::make_max(Expr a, Expr b) {
     if (a.same_as(Interval::neg_inf)) return b;
     if (b.same_as(Interval::neg_inf)) return a;
 
+    // Deep equality
+    if (equal(a, b)) return a;
+
     // Constant fold
     const int64_t *ia = as_const_int(a);
     const int64_t *ib = as_const_int(b);
@@ -54,6 +57,9 @@ Expr Interval::make_min(Expr a, Expr b) {
     if (b.same_as(Interval::pos_inf)) return a;
     if (a.same_as(Interval::neg_inf)) return a;
     if (b.same_as(Interval::neg_inf)) return b;
+
+    // Deep equality
+    if (equal(a, b)) return a;
 
     // Constant fold
     const int64_t *ia = as_const_int(a);
