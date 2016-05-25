@@ -143,7 +143,7 @@ private:
         Interval a = interval;
 
         if (a.is_single_point(op->value)) {
-            interval = Interval(op, op);
+            interval = Interval::single_point(op);
             return;
         }
 
@@ -184,8 +184,7 @@ private:
                     // Relax the bounds to the constants we found. Not
                     // strictly necessary, but probably helpful to
                     // keep the expressions small.
-                    a.min = lower_bound;
-                    a.max = upper_bound;
+                    a = Interval(lower_bound, upper_bound);
                 }
             }
         }
@@ -197,8 +196,8 @@ private:
             if (a.has_lower_bound()) interval.min = a.min;
             if (a.has_upper_bound()) interval.max = a.max;
             // Then cast those bounds to the wider type.
-            if (a.has_lower_bound()) interval.min = Cast::make(to, interval.min);
-            if (a.has_upper_bound()) interval.max = Cast::make(to, interval.max);
+            if (interval.has_lower_bound()) interval.min = Cast::make(to, interval.min);
+            if (interval.has_upper_bound()) interval.max = Cast::make(to, interval.max);
         } else {
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
