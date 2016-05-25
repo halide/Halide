@@ -31,7 +31,7 @@ Expr Interval::make_max(Expr a, Expr b) {
     // Balance trees to the left, with constants pushed rightwards
     const Max *ma = a.as<Max>();
     const Max *mb = b.as<Max>();
-    if (mb && !ma) {
+    if (mb && !ma && !(is_const(mb->a) && is_const(mb->b))) {
         std::swap(ma, mb);
         std::swap(a, b);
     }
@@ -69,7 +69,7 @@ Expr Interval::make_min(Expr a, Expr b) {
     // Balance trees to the left, with constants pushed rightwards
     const Min *ma = a.as<Min>();
     const Min *mb = b.as<Min>();
-    if (mb && !ma) {
+    if (mb && !ma && !(is_const(mb->a) && is_const(mb->b))) {
         std::swap(ma, mb);
         std::swap(a, b);
     }
