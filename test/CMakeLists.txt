@@ -32,6 +32,9 @@ function(tests folder)
   if (WIN32)
     LIST(REMOVE_ITEM TESTS "simd_op_check.cpp") # Relies on shell stuff that doesn't work on windows
   endif()
+  # TODO(srj): This test requires the runtime to be linked in as well, which 
+  # requires massaging the Generator code a bit; just skip it here for now
+  LIST(REMOVE_ITEM TESTS "can_use_target.cpp")
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
     # Test links against libHalide

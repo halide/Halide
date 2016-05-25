@@ -77,6 +77,7 @@ DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(cache)
+DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
@@ -153,15 +154,19 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
+DECLARE_CPP_INITMOD(arm_cpu_features)
 #else
 DECLARE_NO_INITMOD(arm)
 DECLARE_NO_INITMOD(arm_no_neon)
+DECLARE_NO_INITMOD(arm_cpu_features)
 #endif  // WITH_ARM
 
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
+DECLARE_CPP_INITMOD(aarch64_cpu_features)
 #else
 DECLARE_NO_INITMOD(aarch64)
+DECLARE_NO_INITMOD(aarch64_cpu_features)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_PTX
@@ -174,22 +179,28 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
+DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
+DECLARE_NO_INITMOD(x86_cpu_features)
 #endif  // WITH_X86
 
 #ifdef WITH_MIPS
 DECLARE_LL_INITMOD(mips)
+DECLARE_CPP_INITMOD(mips_cpu_features)
 #else
 DECLARE_NO_INITMOD(mips)
+DECLARE_NO_INITMOD(mips_cpu_features)
 #endif  // WITH_MIPS
 
 #ifdef WITH_POWERPC
 DECLARE_LL_INITMOD(powerpc)
+DECLARE_CPP_INITMOD(powerpc_cpu_features)
 #else
 DECLARE_NO_INITMOD(powerpc)
+DECLARE_NO_INITMOD(powerpc_cpu_features)
 #endif  // WITH_POWERPC
 
 namespace {
@@ -720,6 +731,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
+            modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
@@ -739,6 +751,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are optional
             if (t.arch == Target::X86) {
                 modules.push_back(get_initmod_x86_ll(c));
+                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
@@ -750,12 +763,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_arm_no_neon_ll(c));
                 }
+                modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::MIPS) {
                 modules.push_back(get_initmod_mips_ll(c));
+                modules.push_back(get_initmod_mips_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
+                modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
             }
             if (t.has_feature(Target::SSE41)) {
                 modules.push_back(get_initmod_x86_sse41_ll(c));

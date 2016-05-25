@@ -493,11 +493,14 @@ OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 RUNTIME_CPP_COMPONENTS = \
+  aarch64_cpu_features \
   android_clock \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
+  arm_cpu_features \
   cache \
+  can_use_target \
   cuda \
   destructors \
   device_interface \
@@ -516,6 +519,7 @@ RUNTIME_CPP_COMPONENTS = \
   metal_objc_arm \
   metal_objc_x86 \
   mingw_math \
+  mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
@@ -533,6 +537,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_io \
   posix_print \
   posix_thread_pool \
+  powerpc_cpu_features \
   profiler \
   profiler_inlined \
   renderscript \
@@ -546,7 +551,8 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_thread_pool \
-  write_debug_image
+  write_debug_image \
+  x86_cpu_features 
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
@@ -784,7 +790,10 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(S
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
+
+# Correctness test that also link against runtime
+$(BIN_DIR)/correctness_can_use_target: $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
