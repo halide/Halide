@@ -260,8 +260,49 @@ struct DependenceAnalysis {
       }
 };
 
+void disp_regions(map<string, Box> &regions) {
+    for (auto& reg: regions) {
+        debug(0) << reg.first;
+        debug(0) << reg.second;
+        debug(0) << "\n";
+    }
+}
 
-void generate_schedules(const std::vector<Function> &outputs,
+map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
+                                     const vector<Function> &outputs) {
+  map<string, Box> pipeline_bounds;
+
+  for (auto &out: outputs) {
+    vector<Interval> bounds;
+    vector<string> vars = out.args();
+    for (size_t i = 0; i < vars.size(); i++) {
+      for (auto &b: out.schedule().estimates())
+        if (b.var == vars[i]) {
+          Interval I = Interval(b.min, simplify(b.min + b.extent - 1));
+          bounds.push_back(I);
+        }
+    }
+
+    map<string, Box> regions =
+        analy.concrete_dep_regions(out.name(), bounds);
+
+    // Add the output region to the pipeline bounds as well
+    regions[out.name()] = bounds;
+
+    for (auto& reg: regions) {
+      // Merge region with an existing region for the function in
+      // the global map
+      if (pipeline_bounds.find(reg.first) == pipeline_bounds.end())
+        pipeline_bounds[reg.first] = reg.second;
+      else
+        merge_boxes(pipeline_bounds[reg.first], reg.second);
+    }
+  }
+
+  return pipeline_bounds;
+}
+
+void generate_schedules(const vector<Function> &outputs,
                         const Target &target) {
   // Compute an environment
   map<string, Function> env;
@@ -296,6 +337,9 @@ void generate_schedules(const std::vector<Function> &outputs,
 
   // Show bounds of all the functions in the pipeline given estimates
   // on outputs. Also report fuctions where the bounds could not be inferred.
+  map<string, Box> pipeline_bounds = get_pipeline_bounds(analy, outputs);
+  disp_regions(pipeline_bounds);
+
 }
 
 }
