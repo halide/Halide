@@ -1760,6 +1760,16 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
 }
  // @}
 
+namespace Internal {
+
+inline void schedule_scalar(Func f) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
+        f.gpu_single_thread();
+    }
+}
+
+}  // namespace Internal
 
 /** JIT-Compile and run enough code to evaluate a Halide
  * expression. This can be thought of as a scalar version of
@@ -1772,12 +1782,9 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = e;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1796,12 +1803,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
         << t[1] << " of type " << t[1].type()
         << " as a scalar of type " << type_of<B>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1821,12 +1825,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << "Can't evaluate expression "
         << t[2] << " of type " << t[2].type()
         << " as a scalar of type " << type_of<C>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1852,12 +1853,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
         << t[3] << " of type " << t[3].type()
         << " as a scalar of type " << type_of<D>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
