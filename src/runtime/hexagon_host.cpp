@@ -185,7 +185,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
-        char filename[200];
+        char filename[260];
         result = write_shared_object(user_context, code, code_size, filename, sizeof(filename));
         if (result != 0) {
             return result;
