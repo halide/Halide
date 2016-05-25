@@ -261,7 +261,7 @@ FileStat file_stat(const std::string &name) {
 }
 
 std::string file_make_temp(const std::string &base, const std::string &ext) {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
     TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
