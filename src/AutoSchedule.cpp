@@ -81,12 +81,112 @@ bool check_estimates_on_outputs(const vector<Function> &outputs) {
   return estimates_avail;
 }
 
-void simplify_box(Box& b) {
-  for (unsigned int i = 0; i < b.size(); i++) {
-    b[i].min = simplify(b[i].min);
-    b[i].max = simplify(b[i].max);
+struct CostModel {
+
+  /* Visitor for computing the arithmetic cost of a single value of a function*/
+  class ExprCost : public IRVisitor {
+   public:
+    int ops;
+    int loads;
+
+    ExprCost() {
+      ops = 0; loads = 0;
+    }
+
+    using IRVisitor::visit;
+
+    void visit(const IntImm *) {}
+    void visit(const UIntImm *) {}
+    void visit(const FloatImm *) {}
+    void visit(const StringImm *) {}
+    void visit(const Cast * op) {
+      op->value.accept(this);
+      ops+=1;
+    }
+    void visit(const Variable *) {}
+
+    template<typename T>
+        void visit_binary_operator(const T *op, int cost) {
+          op->a.accept(this);
+          op->b.accept(this);
+          ops += cost;
+        }
+
+    // TODO: Figure out the right costs
+    void visit(const Add *op) {visit_binary_operator(op, 1);}
+    void visit(const Sub *op) {visit_binary_operator(op, 1);}
+    void visit(const Mul *op) {visit_binary_operator(op, 1);}
+    void visit(const Div *op) {visit_binary_operator(op, 1);}
+    void visit(const Mod *op) {visit_binary_operator(op, 1);}
+    void visit(const Min *op) {visit_binary_operator(op, 1);}
+    void visit(const Max *op) {visit_binary_operator(op, 1);}
+    void visit(const EQ *op) {visit_binary_operator(op, 1);}
+    void visit(const NE *op) {visit_binary_operator(op, 1);}
+    void visit(const LT *op) {visit_binary_operator(op, 1);}
+    void visit(const LE *op) {visit_binary_operator(op, 1);}
+    void visit(const GT *op) {visit_binary_operator(op, 1);}
+    void visit(const GE *op) {visit_binary_operator(op, 1);}
+    void visit(const And *op) {visit_binary_operator(op, 1);}
+    void visit(const Or *op) {visit_binary_operator(op, 1);}
+
+    void visit(const Not *op) {
+      op->a.accept(this);
+      ops+=1;
+    }
+
+    void visit(const Select *op) {
+      op->condition.accept(this);
+      op->true_value.accept(this);
+      op->false_value.accept(this);
+      ops+=1;
+    }
+
+    // TODO: Figure out the right costs
+    void visit(const Call * call) {
+      if (call->call_type == Call::Halide) {
+        loads+=1;
+      } else if (call->call_type == Call::Extern) {
+        ops+=1;
+      } else if (call->call_type == Call::Image) {
+        loads+=1;
+      } else if (call->call_type == Call::Intrinsic) {
+        ops+=1;
+      }
+      for (size_t i = 0; (i < call->args.size()); i++)
+        call->args[i].accept(this);
+    }
+
+    void visit(const Let * let) {
+      let->value.accept(this);
+      let->body.accept(this);
+    }
+    // Should not hit any of these IR nodes at this
+    // stage of compilation
+    void visit(const Load *) { assert(0); }
+    void visit(const Ramp *) { assert(0); }
+    void visit(const Broadcast *) { assert(0); }
+    void visit(const LetStmt *) { assert(0); }
+    void visit(const AssertStmt *) {}
+    void visit(const ProducerConsumer *) { assert(0); }
+    void visit(const For *) { assert(0); }
+    void visit(const Store *) { assert(0); }
+    void visit(const Provide *) { assert(0); }
+    void visit(const Allocate *) { assert(0); }
+    void visit(const Free *) { assert(0); }
+    void visit(const Realize *) { assert(0); }
+    void visit(const Block *) { assert(0); }
+    void visit(const IfThenElse *) { assert(0); }
+    void visit(const Evaluate *) { assert(0); }
+  };
+
+  pair<size_t, size_t> get_expr_cost(Expr e) {
+    ExprCost cost_visitor;
+    e.accept(&cost_visitor);
+    return make_pair(cost_visitor.ops, cost_visitor.loads);
   }
-}
+
+  CostModel() {}
+};
 
 struct DependenceAnalysis {
 
@@ -98,6 +198,13 @@ struct DependenceAnalysis {
   DependenceAnalysis(map<string, Function> &_env,
                      const FuncValueBounds &_func_val_bounds):
                      env(_env), func_val_bounds(_func_val_bounds) {}
+
+  void simplify_box(Box& b) {
+    for (unsigned int i = 0; i < b.size(); i++) {
+      b[i].min = simplify(b[i].min);
+      b[i].max = simplify(b[i].max);
+    }
+  }
 
   /* Compute the regions of producers required to compute a region of the function
      'f' given concrete sizes of the tile in each dimension. */
@@ -186,8 +293,6 @@ struct DependenceAnalysis {
     }
     return concrete_regions;
   }
-
-
 
   /* Compute the redundant regions computed while computing a tile of the function
      'f' given sizes of the tile in each dimension. */
@@ -339,6 +444,27 @@ void generate_schedules(const vector<Function> &outputs,
   // on outputs. Also report fuctions where the bounds could not be inferred.
   map<string, Box> pipeline_bounds = get_pipeline_bounds(analy, outputs);
   disp_regions(pipeline_bounds);
+
+  // Initialize the cost model
+  // TODO: Build a class which encapsulates the cost model
+  // TODO: Arithmetic cost model and functions which help in computing
+  // foot prints go here
+
+  // TODO: Partitioner which is capable of auto scheduling hierarchically
+  // TODO: Auto scheduler modes
+  // O1 Does not introduce any redundant compute but performs basic fusion
+  // O2 No redundant compute basic fusion and reordering
+  // O3 Trades-offs redundant work for enhancing locality and parallelism
+
+  // TODO: Realize the generated schedule
+  // CPU
+
+  // TODO: Update definitions
+  // TODO: Boundary conditions
+
+  // TODO: Realize the generated schedule
+  // GPU
+  // ...
 
 }
 
