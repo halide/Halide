@@ -39,7 +39,7 @@ int num_processes = 16;
 int my_process_id = 0;
 
 // width and height of test images
-const int W = 256*3, H = 100;
+const int W = 256*3, H = 128;
 
 bool can_run_code() {
 
@@ -100,6 +100,7 @@ void check(string op, int vector_width, Expr e) {
     for (size_t i = 0; i < name.size(); i++) {
         if (!isalnum(name[i])) name[i] = '_';
     }
+
     name += "_" + std::to_string(counter);
 
     // Bail out after generating the unique_name, so that names are
@@ -123,9 +124,10 @@ void check(string op, int vector_width, Expr e) {
     // The output to the pipeline is the maximum absolute difference as a double.
     RDom r(0, W, 0, H);
     Func error("error_" + name);
-    error() = maximum(abs(cast<double>(f(r.x, r.y)) - f_scalar(r.x, r.y)));
+    error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
     vector<Argument> arg_types {in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+
 
     {
         // Compile just the vector Func to assembly. Compile without
@@ -1303,7 +1305,6 @@ void check_neon_all() {
 }
 
 void check_altivec_all() {
-
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
@@ -1425,7 +1426,7 @@ int main(int argc, char **argv) {
     }
 
     target = get_target_from_environment();
-    target.set_features({Target::NoBoundsQuery, Target::NoRuntime});
+    target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
@@ -1476,6 +1477,7 @@ int main(int argc, char **argv) {
             p.set(b);
         }
     }
+
     if (target.arch == Target::X86) {
         check_sse_all();
     } else if (target.arch == Target::ARM) {
