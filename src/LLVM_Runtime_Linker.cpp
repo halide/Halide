@@ -740,7 +740,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
-            modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
@@ -760,7 +759,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are optional
             if (t.arch == Target::X86) {
                 modules.push_back(get_initmod_x86_ll(c));
-                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
@@ -772,15 +770,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_arm_no_neon_ll(c));
                 }
-                modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::MIPS) {
                 modules.push_back(get_initmod_mips_ll(c));
-                modules.push_back(get_initmod_mips_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
-                modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
             }
             if (t.has_feature(Target::SSE41)) {
                 modules.push_back(get_initmod_x86_sse41_ll(c));
@@ -790,6 +785,27 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.has_feature(Target::Profile)) {
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+            }
+        }
+
+        if (module_type == ModuleAOT) {
+            // These modules are only used for AOT compilation
+            modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::ARM) {
+                if (t.bits == 64) {
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
+                }
+            }
+            if (t.arch == Target::MIPS) {
+                modules.push_back(get_initmod_mips_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::POWERPC) {
+                modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
             }
         }
     }
