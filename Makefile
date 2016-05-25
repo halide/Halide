@@ -514,6 +514,7 @@ RUNTIME_CPP_COMPONENTS = \
   android_ion \
   android_mman \
   android_opengl_context \
+  android_tempfile \
   cache \
   cuda \
   destructors \
@@ -553,6 +554,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_get_symbol \
   posix_io \
   posix_print \
+  posix_tempfile \
   posix_thread_pool \
   profiler \
   profiler_inlined \
@@ -568,6 +570,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_get_symbol \
   windows_io \
   windows_opencl \
+  windows_tempfile \
   windows_thread_pool \
   write_debug_image
 

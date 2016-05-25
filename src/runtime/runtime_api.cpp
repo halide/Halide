@@ -18,6 +18,7 @@
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_copy_to_device,
     (void *)&halide_copy_to_host,
+    (void *)&halide_create_temp_file,
     (void *)&halide_cuda_detach_device_ptr,
     (void *)&halide_cuda_device_interface,
     (void *)&halide_cuda_get_device_ptr,
