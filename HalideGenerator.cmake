@@ -73,8 +73,11 @@ function(halide_add_generator_dependency)
       "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" 
       "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS}
   )
-
-  if(XCODE)
+  if(MSVC)
+    # In MSVC, the generator executable will be placed in a configuration specific
+    # directory specified by ${CMAKE_CFG_INTDIR}.
+    set(generator_exec "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
+  elseif(XCODE)
     # In Xcode, the generator executable will be placed in a configuration specific
     # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom build script.
     set(generator_exec "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
