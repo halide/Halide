@@ -24,6 +24,7 @@ set(RUNTIME_CPP
   android_host_cpu_count
   android_io
   android_opengl_context
+  android_tempfile
   arm_cpu_features
   cache
   can_use_target
@@ -62,6 +63,7 @@ set(RUNTIME_CPP
   posix_get_symbol
   posix_io
   posix_print
+  posix_tempfile
   posix_thread_pool
   powerpc_cpu_features
   profiler
@@ -76,6 +78,7 @@ set(RUNTIME_CPP
   windows_get_symbol
   windows_io
   windows_opencl
+  windows_tempfile
   windows_thread_pool
   write_debug_image
   x86_cpu_features
