@@ -581,6 +581,39 @@ typedef enum halide_target_feature_t {
     halide_target_feature_end = 32 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
+/** This function is called internally by Halide in some situations to determine
+ * if the current execution environment can support the given set of 
+ * halide_target_feature_t flags. The implementation must do the following:
+ *
+ * -- If there are flags set in features that the function knows *cannot* be supported, return 0.
+ * -- Otherwise, return 1.
+ * -- Note that any flags set in features that the function doesn't know how to test should be ignored;
+ * this implies that a return value of 1 means "not known to be bad" rather than "known to be good".
+ *
+ * In other words: a return value of 0 means "It is not safe to use code compiled with these features", 
+ * while a return value of 1 means "It is not obviously unsafe to use code compiled with these features".
+ *
+ * The default implementation simply calls halide_default_can_use_target_features.
+ */
+extern int halide_can_use_target_features(uint64_t features);
+
+/** 
+ * This is the default implementation of halide_can_use_target_features; it is provided
+ * for convenience of user code that may wish to extend halide_can_use_target_features
+ * but continue providing existing support, e.g.
+ *
+ *     int halide_can_use_target_features(uint64_t features) {
+ *          if (features & halide_target_somefeature) {
+ *              if (!can_use_somefeature()) {
+ *                  return 0;
+ *              }
+ *          }
+ *          return halide_default_can_use_target_features(features);
+ *     }
+ */
+extern int halide_default_can_use_target_features(uint64_t features);
+
+
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always 64-bits).
  * Note that the int/uint/float values do not imply a specific bit width

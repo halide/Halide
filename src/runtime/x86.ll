@@ -132,3 +132,32 @@ define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwi
   %result = select <2 x i1> %c, <2 x double> %b, <2 x double> %a
   ret <2 x double> %result
 }
+
+; Adapted from asm_cpuid.ll in LLVM source.
+define weak_odr void @halide_x86_cpuid(i32 %fn_id, i32* %out) nounwind uwtable {
+  %fn_id.ptr = alloca i32
+  %a.ptr = alloca i32
+  %b.ptr = alloca i32
+  %c.ptr = alloca i32
+  %d.ptr = alloca i32
+  store i32 %fn_id, i32* %fn_id.ptr
+  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $4\0A\09mov ecx, 0\0A\09cpuid\0A\09mov dword ptr $0, eax\0A\09mov dword ptr $1, ebx\0A\09mov dword ptr $2, ecx\0A\09mov dword ptr $3, edx\0A\09xchg ebx, esi", "=*m,=*m,=*m,=*m,*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %a.ptr, i32* %b.ptr, i32* %c.ptr, i32* %d.ptr, i32* %fn_id.ptr)
+
+  %a = load i32, i32* %a.ptr
+  %a.out = getelementptr inbounds i32, i32* %out, i32 0
+  store i32 %a, i32* %a.out
+
+  %b = load i32, i32* %b.ptr
+  %b.out = getelementptr inbounds i32, i32* %out, i32 1
+  store i32 %b, i32* %b.out
+
+  %c = load i32, i32* %c.ptr
+  %c.out = getelementptr inbounds i32, i32* %out, i32 2
+  store i32 %c, i32* %c.out
+
+  %d = load i32, i32* %d.ptr
+  %d.out = getelementptr inbounds i32, i32* %out, i32 3
+  store i32 %d, i32* %d.out
+
+  ret void
+}
