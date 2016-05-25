@@ -265,7 +265,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
                     prefix.find("\\") == string::npos &&
                     suffix.find("/") == string::npos &&
                     suffix.find("\\") == string::npos);
-    #ifdef _MSC_VER
+    #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
     TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
