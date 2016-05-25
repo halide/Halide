@@ -21,7 +21,7 @@ DECL_SOT(double);
 
 template <typename T>
 bool is_type_supported(int vec_width, const Target &target) {
-    return true;
+    return target.supports_type(type_of<T>().with_lanes(vec_width));
 }
 
 template<typename A, typename B>
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
 
     bool ok = true;
 
-    // We only support power-of-two vector widths for now
+    // We only test power-of-two vector widths for now
     for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
         printf("Testing vector width %d\n", vec_width);
         ok = ok && test_all<float>(vec_width, target);
