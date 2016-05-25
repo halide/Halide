@@ -179,7 +179,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     Expr next_var = Variable::make(Int(32), op->name) + 1;
                     Expr next_min = substitute(op->name, next_var, min);
-                    if (is_one(simplify(max < next_min))) {
+                    if (can_prove(max < next_min)) {
                         // There's no overlapping usage between loop
                         // iterations, so we can continue to search
                         // for further folding opportinities

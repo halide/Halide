@@ -105,6 +105,8 @@ Interval Interval::make_intersection(const Interval &a, const Interval &b) {
                     Interval::make_min(a.max, b.max));
 }
 
+// Use Handle types for positive and negative infinity, to prevent
+// accidentally doing arithmetic on them.
 Expr Interval::pos_inf = Variable::make(Handle(), "pos_inf");
 Expr Interval::neg_inf = Variable::make(Handle(), "neg_inf");
 

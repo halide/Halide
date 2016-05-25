@@ -632,7 +632,7 @@ class PartitionLoops : public IRMutator {
             prologue_val = op->min;
         }
 
-        if (is_one(simplify(epilogue_val <= prologue_val))) {
+        if (can_prove(epilogue_val <= prologue_val)) {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
             IRMutator::visit(op);
