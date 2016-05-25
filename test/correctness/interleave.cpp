@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
         unrolled(x, y) = select(x % 2 == 0, f1(x), f2(x)) + y;
 
         Var xi, yi;
-        unrolled.tile(x, y, xi, yi, 2, 2).vectorize(x, 4).unroll(xi).unroll(yi).unroll(x, 2);
+        unrolled.tile(x, y, xi, yi, 16, 2).unroll(xi, 2).vectorize(xi, 4).unroll(xi).unroll(yi);
 
         check_interleave_count(unrolled, 4);
     }
