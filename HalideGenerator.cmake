@@ -68,12 +68,6 @@ function(halide_add_generator_dependency)
   set(FILTER_LIB "${args_GENERATED_FUNCTION}${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${args_GENERATED_FUNCTION}.h")
 
-  # Check to see if the target includes pnacl
-  if ("${args_GENERATOR_ARGS}" MATCHES ".*pnacl.*")
-    set(FILTER_LIB "${args_GENERATED_FUNCTION}.bc")
-    set(target_is_pnacl TRUE)
-  endif()
-
   set(invoke_args "-g" "${args_GENERATOR_NAME}" "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS})
   set(generator_exec ${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX})
 
@@ -96,13 +90,6 @@ function(halide_add_generator_dependency)
       # build script.
       COMMAND "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${generator_exec}" ${invoke_args}
 
-      WORKING_DIRECTORY "${SCRATCH_DIR}"
-      )
-  elseif(target_is_pnacl)
-    # No archive step for pnacl targets
-    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-      DEPENDS "${args_GENERATOR_TARGET}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
   else()
