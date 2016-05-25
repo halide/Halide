@@ -79,25 +79,19 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
 
     Func lerp_test("lerp_test");
     lerp_test(zero_val, one_val, weight) =
-      lerp(cast<value_t>(zero_val * zero_scale_p + zero_offset_p),
-           cast<value_t>(one_val * one_scale_p + one_offset_p),
-           cast<weight_t>(weight * weight_scale_p + weight_offset_p));
+        lerp(cast<value_t>((zero_val + zero_min) * zero_scale_p + zero_offset_p),
+             cast<value_t>((one_val + one_min) * one_scale_p + one_offset_p),
+             cast<weight_t>((weight + weight_min) * weight_scale_p + weight_offset_p));
 
-    Buffer result(type_of<value_t>(), zero_extent, one_extent, weight_extent);
-    result.raw_buffer()->min[0] = zero_min;
-    result.raw_buffer()->min[1] = one_min;
-    result.raw_buffer()->min[2] = weight_min;
+    Image<value_t> result(zero_extent, one_extent, weight_extent);
     lerp_test.realize(result);
 
-    const value_t *result_ptr = static_cast<value_t *>(result.host_ptr());
-    buffer_t *buffer = result.raw_buffer();
-
-    for (int32_t i = buffer->min[0]; i < buffer->min[0] + buffer->extent[0]; i++) {
-        for (int32_t j = buffer->min[1]; j < buffer->min[1] + buffer->extent[1]; j++) {
-            for (int32_t k = buffer->min[2]; k < buffer->min[2] + buffer->extent[2]; k++) {
-                value_t zero_verify = (i * zero_scale + zero_offset);
-                value_t one_verify =  (j * one_scale + one_offset);
-                weight_t weight_verify = (weight_t)(k * weight_scale + weight_offset);
+    for (int32_t i = 0; i < result.extent(0); i++) {
+        for (int32_t j = 0; j < result.extent(1); j++) {
+            for (int32_t k = 0; k < result.extent(2); k++) {
+                value_t zero_verify = ((i + zero_min) * zero_scale + zero_offset);
+                value_t one_verify =  ((j + one_min) * one_scale + one_offset);
+                weight_t weight_verify = (weight_t)((k + weight_min) * weight_scale + weight_offset);
                 double actual_weight = weight_verify / weight_type_scale<weight_t>();
 
                 double verify_val_full = zero_verify * (1.0 - actual_weight) + one_verify * actual_weight;
@@ -107,9 +101,7 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
                     verify_val_full += conversion_rounding<value_t>();
 
                 value_t verify_val = convert_to_value<value_t>(verify_val_full);
-                value_t computed_val = result_ptr[(i - buffer->min[0]) * result.stride(0) +
-                                                  (j - buffer->min[1]) * result.stride(1) +
-                                                  (k - buffer->min[2]) * result.stride(2)];
+                value_t computed_val = result(i, j, k);
 
                 if (!relatively_equal(verify_val, computed_val)) {
                     std::cerr << "Expected " << (typename promote_if_char<value_t>::promoted)(verify_val) <<
