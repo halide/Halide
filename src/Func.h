@@ -1767,7 +1767,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
 
 namespace Internal {
 
-inline void schedule_scalar_for_offload(Func f) {
+inline void schedule_scalar(Func f) {
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
         f.gpu_single_thread();
@@ -1792,7 +1792,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Internal::schedule_scalar_for_offload(f);
+    Internal::schedule_scalar(f);
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1813,7 +1813,7 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
 
     Func f;
     f() = t;
-    Internal::schedule_scalar_for_offload(f);
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1835,7 +1835,7 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << " as a scalar of type " << type_of<C>() << "\n";
     Func f;
     f() = t;
-    Internal::schedule_scalar_for_offload(f);
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1863,7 +1863,7 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
 
     Func f;
     f() = t;
-    Internal::schedule_scalar_for_offload(f);
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
