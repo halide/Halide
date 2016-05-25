@@ -22,7 +22,6 @@ using std::deque;
 using std::pair;
 using std::make_pair;
 
-
 void set_schedule_defaults(map<string, Function> &env) {
   // Changing the default to compute root.
 
@@ -80,6 +79,13 @@ bool check_estimates_on_outputs(const vector<Function> &outputs) {
   }
   return estimates_avail;
 }
+
+struct MachineParams {
+  unsigned int parallelism;
+  unsigned int vec_len;
+  unsigned int fast_mem_size;
+  unsigned int balance;
+};
 
 struct CostModel {
 
@@ -363,6 +369,42 @@ struct DependenceAnalysis {
         }
         return conc_overlaps;
       }
+
+  int get_extent(const Interval &i) {
+    if ((i.min.as<IntImm>()) && (i.max.as<IntImm>())) {
+      const IntImm * bmin = i.min.as<IntImm>();
+      const IntImm * bmax = i.max.as<IntImm>();
+      // Count only if the overlap makes sense
+      if (bmin->value <= bmax->value)
+        return (bmax->value - bmin->value + 1);
+      else
+        return 0;
+    }
+    /* TODO Check if this is necessary at some point
+       else {
+       Expr diff = simplify(i.max - i.min);
+       if (diff.as<IntImm>())
+       return diff.as<IntImm>()->value;
+       } */
+    return -1;
+  }
+
+  int64_t box_area(Box &b) {
+    int64_t box_area = 1;
+    for(size_t i = 0; i < b.size(); i++) {
+      // Maybe should check for unsigned integers and floats too
+      int64_t extent = get_extent(b[i]);
+      if (extent > 0 && box_area > 0)
+        box_area = box_area * extent;
+      else if (extent == 0) {
+        box_area = 0;
+        break;
+      } else {
+        box_area = -1;
+      }
+    }
+    return box_area;
+  }
 };
 
 void disp_regions(map<string, Box> &regions) {
@@ -406,6 +448,208 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
 
   return pipeline_bounds;
 }
+
+struct Partitioner {
+
+  struct FusionChoice {
+    // FusionChoice encodes the chocie of the prod_group being merged with
+    // the cons_group at the granularity of the tile given by tile_sizes
+    string prod_group;
+    string cons_group;
+    // Tile sizes along the output of the consumer group
+    map<string, int> tile_sizes;
+
+    FusionChoice(string _prod_group, string _cons_group,
+                 map<string, int>& _tile_sizes) :
+      prod_group(_prod_group), cons_group(_cons_group),
+      tile_sizes(_tile_sizes) { }
+  };
+
+  map<pair<string, string>, FusionChoice> fusion_cache;
+
+  struct Group {
+    // The output function representing the group
+    string output;
+    // All the functions that belong to the group
+    vector<Function> members;
+
+    // Estimate of arithmetic cost
+    int64_t work;
+    // Estimate of accesses to slow memory
+    int64_t mem_accesses;
+    // Estimate of the parallelism
+    int64_t parallelism;
+
+    // Reuse along dimensions of the group members
+    map<string, map<string, int64_t> > reuse;
+
+    // Schedule information
+    // All the members of the group which are inlined
+    set<string> inlined;
+    // For now this is just the tile sizes since the we only tile the output of
+    // the group and compute all the members of the group at that granularity
+    map<string, int> tile_sizes;
+
+    Group(string _output, vector<Function> _members):
+      output(_output), members(_members) {
+        work = -1;
+        mem_accesses = -1;
+        parallelism = -1;
+      }
+
+    friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
+
+      stream << "Output:" << g.output << '\n';
+      stream << "Memebers:" << '[';
+      for (auto &m: g.members) {
+        stream << m.name() << ",";
+      }
+      stream << "]" << '\n';
+
+      stream << "Tile sizes:" << "[";
+      for (auto &s: g.tile_sizes) {
+        stream << "(" << s.first << "," <<  s.second << ")";
+      }
+      stream << "]" << '\n';
+
+      stream << "Work:" << g.work  << '\n';
+      stream << "Memory accesses:" << g.mem_accesses  << '\n';
+      stream << "Parallelism:" << g.parallelism  << '\n';
+      return stream;
+    }
+  };
+
+  map<string, Group> groups;
+
+  // Levels that are targetted by the grouping algorithm
+  enum Level {INLINE, FAST_MEM};
+
+  map<string, Box> &pipeline_bounds;
+  MachineParams &arch_params;
+  DependenceAnalysis &analy;
+  //map<string, pair<long long, long long> > &func_cost;
+  const vector<Function> &outputs;
+
+  //map<string, float > input_reuse;
+
+  map<string, set<string> > children;
+  void disp_children(map<string, set<string> > &children) {
+    for (auto &f: children) {
+      debug(0) << f.first <<  ": [";
+      for (auto &c: f.second)
+        debug(0) << c << ",";
+      debug(0) << "]" << '\n';
+    }
+  }
+
+  // These are pre-computed values that are used throughout the grouping
+  // TODO: see what is required and purge the rest
+  map<string, vector<int> > func_pure_dim_estimates;
+  map<string, map<string, int> > func_dim_estimates;
+  map<string, int64_t > func_op;
+  map<string, int64_t > func_size;
+
+  bool gpu_schedule;
+
+  Partitioner(map<string, Box> &_pipeline_bounds, MachineParams &_arch_params,
+              DependenceAnalysis &_analy, const vector<Function> &_outputs,
+              bool _gpu_schedule):
+              pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
+              analy(_analy), outputs(_outputs), gpu_schedule(_gpu_schedule) {
+
+      // Place each function in its own group
+      for (auto &f: analy.env) {
+        vector<Function> members;
+        members.push_back(f.second);
+        Group g(f.first, members);
+        groups.insert(make_pair(f.first, g));
+      }
+
+      // Find consumers of each function relate groups with their children
+      for (auto &f: analy.env) {
+        map<string, Function> calls = find_direct_calls(f.second);
+        for (auto &c: calls)
+          if (c.first != f.first)
+            children[c.first].insert(f.first);
+      }
+
+      disp_children(children);
+
+      //TODO: Any preprocess inlining should go here and they
+      //should be added to the corresponding group as inlined
+      //members
+    }
+
+  void merge_groups(string cand_group, string child_group) {
+    assert(groups.find(child_group) != groups.end());
+    vector<Function> cand_funcs = groups.at(cand_group).members;
+
+    groups.erase(cand_group);
+
+    vector<Function> &child_members = groups.at(child_group).members;
+    child_members.insert(child_members.end(),
+                         cand_funcs.begin(), cand_funcs.end());
+
+    // Update the children mapping
+    children.erase(cand_group);
+    for (auto &f: children) {
+      set<string> &cons = f.second;
+      if (cons.find(cand_group) != cons.end()) {
+        cons.erase(cand_group);
+        cons.insert(child_group);
+      }
+    }
+  }
+
+  void merge_group_into_all_children(string cand_group) {
+
+    set<string> cand_group_children = children[cand_group];
+    for (auto &cg: cand_group_children) {
+      assert(groups.find(cg) != groups.end());
+      vector<Function> cand_funcs = groups.at(cand_group).members;
+
+      vector<Function> &cg_members = groups.at(cg).members;
+      cg_members.insert(cg_members.end(),
+                        cand_funcs.begin(), cand_funcs.end());
+    }
+
+    groups.erase(cand_group);
+
+    // Update the children mapping
+    children.erase(cand_group);
+    for (auto &f: children) {
+      set<string> &cons = f.second;
+      if (cons.find(cand_group) != cons.end()) {
+        cons.erase(cand_group);
+        cons.insert(cand_group_children.begin(),
+                    cand_group_children.end());
+      }
+    }
+  }
+
+  void disp_grouping() {
+    for (auto& g: groups) {
+      debug(0) << "Group " <<  g.first  << " : [" ;
+      debug(0) << g.second;
+      debug(0) << "]" << '\n';
+    }
+  }
+
+  /*
+  Option choose_candidate(const vector< pair<string, string > > &cand_pairs);
+  pair<float, vector<Option> >
+      choose_candidate_inline(const vector< pair<string, string > > &cand_pairs);
+  void group(Partitioner::Level level);
+  void clear_schedules_fast_mem();
+  void initialize_groups_fast_mem();
+  void initialize_groups_inline();
+  void update_function_costs();
+  void evaluate_option(Option &opt, Partitioner::Level level);
+  void tile_for_input_locality(bool init_pipeline_reuse = false);
+  vector<float> get_input_reuse(Function f, vector<string> &inputs);
+  pair<float, float> evaluate_reuse(string, vector<string> &group_inputs,
+                                    vector<int> &tile_sizes, bool unit_tile); */
+};
 
 void generate_schedules(const vector<Function> &outputs,
                         const Target &target) {
