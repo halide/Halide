@@ -127,33 +127,27 @@ namespace {
 // TODO: Try writing this in a way that doesn't actually touch the file system (named pipe?)
 WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
                              char *filename, size_t filename_size) {
-    // Attempt to provide a unique filename token by hashing the
-    // module data.
-    size_t token = hash(data, data + size);
-
-    const char *tmp_paths[] = {
-        "/data/local/tmp/",
-        "/tmp/"
-    };
-    Printer<StringStreamPrinter> path(user_context);
-    for (size_t j = 0; j < sizeof(tmp_paths)/sizeof(tmp_paths[0]); j++) {
-        path.clear();
-        path << tmp_paths[j] << "halide_kernels_" << (int)token << ".so";
-        strncpy(filename, path.str(), filename_size);
-
-        int so_fd = open(filename, O_RDWR | O_TRUNC | O_CREAT | O_EXCL, 0755);
-        if (so_fd == -1) continue;
-        ssize_t written = write(so_fd, data, size);
-        close(so_fd);
-        if (written < (ssize_t)size) {
-            error(user_context) << "Failed to write shared object file " << filename << "\n";
-            return -1;
-        }
-        debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
-        return 0;
+    int result = halide_create_temp_file(user_context, "halide_kernels_", ".so", filename, filename_size);
+    if (result != 0) {
+        error(user_context) << "Unable to create temporary shared object file\n";
+        return result;
     }
-    error(user_context) << "Unable to write temporary shared object file.\n";
-    return -1;
+
+    int so_fd = open(filename, O_RDWR | O_TRUNC, 0755);
+    if (so_fd == -1) {
+        error(user_context) << "Failed to open shared object file " << filename << "\n";
+        return halide_error_code_internal_error;
+    }
+
+    ssize_t written = write(so_fd, data, size);
+    close(so_fd);
+    if (written < (ssize_t)size) {
+        error(user_context) << "Failed to write shared object file " << filename << "\n";
+        return halide_error_code_internal_error;
+    }
+
+    debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
+    return 0;
 }
 
 }  // namespace
