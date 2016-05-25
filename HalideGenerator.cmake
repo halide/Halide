@@ -65,9 +65,8 @@ function(halide_add_generator_dependency)
   halide_generator_output_path(${unique_generator_target} SCRATCH_DIR)
 
   # Determine the name of the output files
-  # CMake 2.8 doesn't have string(CONCAT), so fake it like so:
-  string(REPLACE ".lib" "${CMAKE_STATIC_LIBRARY_SUFFIX}" FILTER_LIB "${args_GENERATED_FUNCTION}.lib" )
-  string(REPLACE ".h" ".h" FILTER_HDR "${args_GENERATED_FUNCTION}.h" )
+  set(FILTER_LIB "${args_GENERATED_FUNCTION}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+  set(FILTER_HDR "${args_GENERATED_FUNCTION}.h")
 
   # Check to see if the target includes pnacl
   if ("${args_GENERATOR_ARGS}" MATCHES ".*pnacl.*")
