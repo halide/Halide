@@ -205,6 +205,9 @@ Stmt build_provide_loop_nest(Function f,
                 // old extent. No need to adjust the base or add an if
                 // statement.
                 known_size_dims[split.outer] = iter->second / split.factor;
+            } else if (is_negative_const(split.factor) || is_zero(split.factor)) {
+                user_error << "Can't split " << split.old_var << " by " << split.factor
+                           << ". Split factors must be strictly positive\n";
             } else if (is_one(split.factor)) {
                 // The split factor trivially divides the old extent,
                 // but we know nothing new about the outer dimension.

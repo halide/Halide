@@ -28,7 +28,7 @@ class RemoveTrivialForLoops : public IRMutator {
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (is_zero(for_loop->extent)) {
             stmt = Evaluate::make(0);
-        } else if (!gpu_loop && is_zero(simplify(for_loop->extent > 1))) {
+        } else if (!gpu_loop && can_prove(for_loop->extent <= 1)) {
             // Loop has at most one iteration
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
             stmt = IfThenElse::make(for_loop->extent > 0, stmt, Stmt());

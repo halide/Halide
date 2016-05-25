@@ -196,8 +196,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
 
             // If there's no overlap between adjacent iterations, we shouldn't slide.
-            if (is_one(simplify(min_required >= prev_max_plus_one)) ||
-                is_one(simplify(max_required <= prev_min_minus_one))) {
+            if (can_prove(min_required >= prev_max_plus_one) ||
+                can_prove(max_required <= prev_min_minus_one)) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
                          << " along loop variable " << loop_var

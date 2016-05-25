@@ -882,7 +882,10 @@ class AndConditionOverDomain : public IRMutator {
             a = make_smaller(op->a);
             b = make_bigger(op->b);
         }
-        if (!a.defined() || !b.defined()) {
+        if (a.same_as(Interval::pos_inf) ||
+            b.same_as(Interval::pos_inf) ||
+            a.same_as(Interval::neg_inf) ||
+            b.same_as(Interval::neg_inf)) {
             fail();
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -918,7 +921,7 @@ class AndConditionOverDomain : public IRMutator {
                 fail();
                 return;
             }
-            if (is_one(simplify(i.min == i.max))) {
+            if (can_prove(i.min == i.max)) {
                 // The expression does not vary, so an equivalent condition is:
                 expr = (i.min == 0);
             } else {
@@ -1084,7 +1087,7 @@ Interval solve_for_inner_interval(Expr c, const std::string &var) {
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_inner_interval returned undefined Exprs: " << c << "\n";
     if (s.result.is_bounded() &&
-        is_one(simplify(s.result.min > s.result.max))) {
+        can_prove(s.result.min > s.result.max)) {
         return Interval::nothing();
     }
     return s.result;
@@ -1096,7 +1099,7 @@ Interval solve_for_outer_interval(Expr c, const std::string &var) {
     internal_assert(s.result.min.defined() && s.result.max.defined())
         << "solve_for_outer_interval returned undefined Exprs: " << c << "\n";
     if (s.result.is_bounded() &&
-        is_one(simplify(s.result.min > s.result.max))) {
+        can_prove(s.result.min > s.result.max)) {
         return Interval::nothing();
     }
     return s.result;

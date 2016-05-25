@@ -179,8 +179,7 @@ private:
                 Expr test =
                     (cast(from, cast(to, lower_bound)) == lower_bound &&
                      cast(from, cast(to, upper_bound)) == upper_bound);
-                test = simplify(test);
-                if (is_one(test)) {
+                if (can_prove(test)) {
                     could_overflow = false;
                     // Relax the bounds to the constants we found. Not
                     // strictly necessary, but probably helpful to
@@ -211,7 +210,7 @@ private:
             interval = scope.get(op->name);
         } else if (op->type.is_vector()) {
             // Uh oh, we need to take the min/max lane of some unknown vector. Treat as unbounded.
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         } else {
             interval = Interval::single_point(op);
         }
@@ -225,42 +224,35 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
-        }
-
-        interval.min =
-            ((a.has_lower_bound() && b.has_lower_bound()) ?
-             (a.min + b.min) :
-             Interval::neg_inf);
-
-        if (a.is_single_point() && b.is_single_point()) {
-            interval.max = interval.min;
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min + b.min);
         } else {
-            interval.max =
-                ((a.has_lower_bound() && b.has_lower_bound()) ?
-                 (a.max + b.max) :
-                 Interval::pos_inf);
-        }
+            interval = Interval::everything();
+            if (a.has_lower_bound() && b.has_lower_bound()) {
+                interval.min = a.min + b.min;
+            }
+            if (a.has_upper_bound() && b.has_upper_bound()) {
+                interval.max = a.max + b.max;
+            }
 
-        // Check for overflow for (u)int8 and (u)int16
-        if (!op->type.is_float() && op->type.bits() < 32) {
-            if (interval.has_upper_bound()) {
-                Expr test = (cast<int>(a.max) + cast<int>(b.max) - cast<int>(interval.max));
-                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_zero(simplify(test))) {
-                    bounds_of_type(op->type);
-                    return;
+            // Check for overflow for (u)int8 and (u)int16
+            if (!op->type.is_float() && op->type.bits() < 32) {
+                if (interval.has_upper_bound()) {
+                    Expr no_overflow = (cast<int>(a.max) + cast<int>(b.max) == cast<int>(interval.max));
+                    if (!can_prove(no_overflow)) {
+                        bounds_of_type(op->type);
+                        return;
+                    }
+                }
+                if (interval.has_lower_bound()) {
+                    Expr no_overflow = (cast<int>(a.min) + cast<int>(b.min) == cast<int>(interval.min));
+                    if (!can_prove(no_overflow)) {
+                        bounds_of_type(op->type);
+                        return;
+                    }
                 }
             }
-            if (interval.has_lower_bound()) {
-                Expr test = (cast<int>(a.min) + cast<int>(b.min) - cast<int>(interval.min));
-                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_zero(simplify(test))) {
-                    bounds_of_type(op->type);
-                    return;
-                }
-            }
         }
-
     }
 
     void visit(const Sub *op) {
@@ -271,124 +263,99 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
-        }
-
-        interval.min =
-            ((a.has_lower_bound() && b.has_upper_bound()) ?
-             (a.min - b.max) :
-             Interval::neg_inf);
-
-        if (a.is_single_point() && b.is_single_point()) {
-            interval.max = interval.min;
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min - b.min);
         } else {
-            interval.max =
-                ((a.has_upper_bound() && b.has_lower_bound()) ?
-                 (a.max - b.min) :
-                 Interval::pos_inf);
-        }
+            interval = Interval::everything();
+            if (a.has_lower_bound() && b.has_upper_bound()) {
+                interval.min = a.min - b.max;
+            }
+            if (a.has_upper_bound() && b.has_lower_bound()) {
+                interval.max = a.max - b.min;
+            }
 
-        // Check for overflow for (u)int8 and (u)int16
-        if (!op->type.is_float() && op->type.bits() < 32) {
-            if (interval.has_upper_bound()) {
-                Expr test = (cast<int>(a.max) - cast<int>(b.min) - cast<int>(interval.max));
-                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_zero(simplify(test))) {
-                    bounds_of_type(op->type);
-                    return;
+            // Check for overflow for (u)int8 and (u)int16
+            if (!op->type.is_float() && op->type.bits() < 32) {
+                if (interval.has_upper_bound()) {
+                    Expr no_overflow = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
+                    if (!can_prove(no_overflow)) {
+                        bounds_of_type(op->type);
+                        return;
+                    }
+                }
+                if (interval.has_lower_bound()) {
+                    Expr no_overflow = (cast<int>(a.min) - cast<int>(b.max) == cast<int>(interval.min));
+                    if (!can_prove(no_overflow)) {
+                        bounds_of_type(op->type);
+                        return;
+                    }
                 }
             }
-            if (interval.has_lower_bound()) {
-                Expr test = (cast<int>(a.min) - cast<int>(b.max) - cast<int>(interval.min));
-                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_zero(simplify(test))) {
-                    bounds_of_type(op->type);
-                    return;
-                }
-            }
-        }
 
-        // Check underflow for uint
-        if (op->type.is_uint()) {
-            if (interval.has_lower_bound()) {
-                Expr test = (b.max <= a.min);
-                if (!is_one(simplify(test))) {
-                    bounds_of_type(op->type);
-                    return;
-                }
+            // Check underflow for uint
+            if (op->type.is_uint() &&
+                interval.has_lower_bound() &&
+                !can_prove(b.max <= a.min)) {
+                bounds_of_type(op->type);
             }
         }
     }
 
     void visit(const Mul *op) {
+
         op->a.accept(this);
-        if (!interval.is_bounded()) {
-            interval = Interval::everything();
-            return;
-        }
         Interval a = interval;
 
         op->b.accept(this);
-        if (!interval.is_bounded()) {
-            interval = Interval::everything();
-            return;
-        }
         Interval b = interval;
+
+        // Move constants to the right
+        if (a.is_single_point() && !b.is_single_point()) {
+            std::swap(a, b);
+        }
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
-        }
-
-        if (a.is_single_point() && b.is_single_point()) {
+        } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min * b.min);
-        } else if (a.is_single_point()) {
-            if (is_zero(a.min)) {
-                interval = a;
-            } else if (is_positive_const(a.min) || op->type.is_uint()) {
-                interval = Interval(b.min * a.min, b.max * a.min);
-            } else if (is_negative_const(a.min)) {
-                interval = Interval(b.max * a.min, b.min * a.min);
-            } else {
-                // Sign of a is unknown
-                Expr e1 = a.min * b.min;
-                Expr e2 = a.min * b.max;
-                Expr cmp = a.min >= make_zero(a.min.type().element_of());
-                interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
-            }
         } else if (b.is_single_point()) {
+            Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
+            Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
             if (is_zero(b.min)) {
                 interval = b;
             } else if (is_positive_const(b.min) || op->type.is_uint()) {
-                interval = Interval(a.min * b.min, a.max * b.min);
+                interval = Interval(e1, e2);
             } else if (is_negative_const(b.min)) {
-                interval = Interval(a.max * b.min, a.min * b.min);
-            } else {
+                interval = Interval(e2, e1);
+            } else if (a.is_bounded()) {
                 // Sign of b is unknown
-                Expr e1 = b.min * a.min;
-                Expr e2 = b.min * a.max;
                 Expr cmp = b.min >= make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
+            } else {
+                interval = Interval::everything();
             }
-        } else {
+        } else if (a.is_bounded() && b.is_bounded()) {
             interval = Interval::nothing();
             interval.include(a.min * b.min);
             interval.include(a.min * b.max);
             interval.include(a.max * b.min);
             interval.include(a.max * b.max);
+        } else {
+            interval = Interval::everything();
         }
 
         if (op->type.bits() < 32 && !op->type.is_float()) {
-            // Try to prove it can't overflow
-            Expr test1 = (cast<int>(a.min) * cast<int>(b.min) - cast<int>(a.min * b.min));
-            Expr test2 = (cast<int>(a.min) * cast<int>(b.max) - cast<int>(a.min * b.max));
-            Expr test3 = (cast<int>(a.max) * cast<int>(b.min) - cast<int>(a.max * b.min));
-            Expr test4 = (cast<int>(a.max) * cast<int>(b.max) - cast<int>(a.max * b.max));
-            test1 = simplify(test1);
-            test2 = simplify(test2);
-            test3 = simplify(test3);
-            test4 = simplify(test4);
-            if (!is_zero(test1) || !is_zero(test2) || !is_zero(test3) || !is_zero(test4)) {
+            if (a.is_bounded() && b.is_bounded()) {
+                // Try to prove it can't overflow
+                Expr test1 = (cast<int>(a.min) * cast<int>(b.min) == cast<int>(a.min * b.min));
+                Expr test2 = (cast<int>(a.min) * cast<int>(b.max) == cast<int>(a.min * b.max));
+                Expr test3 = (cast<int>(a.max) * cast<int>(b.min) == cast<int>(a.max * b.min));
+                Expr test4 = (cast<int>(a.max) * cast<int>(b.max) == cast<int>(a.max * b.max));
+                if (!can_prove(test1 && test2 && test3 && test4)) {
+                    bounds_of_type(op->type);
+                }
+            } else {
                 bounds_of_type(op->type);
-                return;
             }
         }
 
@@ -403,53 +370,41 @@ private:
 
         if (!b.is_bounded()) {
             interval = Interval::everything();
-            return;
-        }
-
-        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+        } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
-        }
-
-        // It's really important that we can prove the sign of the
-        // denominator, so do a deep check for equality.
-        if (equal(b.min, b.max)) {
-            interval = Interval::everything();
+        } else if (can_prove(b.min == b.max)) {
+            Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
+            Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
             if (is_positive_const(b.min) || op->type.is_uint()) {
-                if (a.has_lower_bound()) interval.min = a.min / b.min;
-                if (a.has_upper_bound()) interval.max = a.max / b.min;
+                interval = Interval(e1, e2);
             } else if (is_negative_const(b.min)) {
-                if (a.has_lower_bound()) interval.min = a.max / b.min;
-                if (a.has_upper_bound()) interval.max = a.min / b.min;
-            } else {
-                if (!a.is_bounded()) return;
-
+                interval = Interval(e2, e1);
+            } else if (a.is_bounded()) {
                 // Sign of b is unknown. Note that this might divide
                 // by zero, but only in cases where the original code
                 // divides by zero.
-                Expr e1 = a.min / b.min;
-                Expr e2 = a.max / b.max;
                 Expr cmp = b.min > make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
+            } else {
+                interval = Interval::everything();
             }
-        } else {
-            interval = Interval::everything();
-
-            if (!a.is_bounded()) return;
-
+        } else if (a.is_bounded()) {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
             int min_sign = static_sign(b.min);
             int max_sign = static_sign(b.max);
             if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
-                return;
+                interval = Interval::everything();
+            } else {
+                // Divisor is either strictly positive or strictly
+                // negative, so we can just take the extrema.
+                interval = Interval::nothing();
+                interval.include(a.min / b.min);
+                interval.include(a.max / b.min);
+                interval.include(a.min / b.max);
+                interval.include(a.max / b.max);
             }
-
-            // Divisor is either strictly positive or strictly
-            // negative, so we can just take the extrema.
-            interval = Interval::nothing();
-            interval.include(a.min / b.min);
-            interval.include(a.max / b.min);
-            interval.include(a.min / b.max);
-            interval.include(a.max / b.max);
+        } else {
+            interval = Interval::everything();
         }
     }
 
@@ -499,8 +454,6 @@ private:
         op->b.accept(this);
         Interval b = interval;
 
-        debug(3) << "Bounds of " << Expr(op) << "\n";
-
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
         } else {
@@ -516,8 +469,6 @@ private:
 
         op->b.accept(this);
         Interval b = interval;
-
-        debug(3) << "Bounds of " << Expr(op) << "\n";
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -959,7 +910,8 @@ bool boxes_overlap(const Box &a, const Box &b) {
         }
     }
 
-    return !is_zero(simplify(overlap));
+    // Conservatively, assume they overlap if we can't prove there's no overlap
+    return !can_prove(simplify(!overlap));
 }
 
 // Compute the box produced by a statement
@@ -1217,8 +1169,6 @@ private:
                 else_boxes.swap(boxes);
             }
 
-            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
-
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
             for (pair<const string, Box> &i : then_boxes) {
@@ -1230,8 +1180,6 @@ private:
                 Box &else_box = i.second;
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
-
-                //debug(0) << " Merging boxes for " << i.first << "\n";
 
                 if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
@@ -1406,7 +1354,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 // Make a scope that says the args could be anything.
                 Scope<Interval> arg_scope;
                 for (size_t k = 0; k < f.args().size(); k++) {
-                    arg_scope.push(f.args()[k], Interval(Expr(), Expr()));
+                    arg_scope.push(f.args()[k], Interval::everything());
                 }
 
                 result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);

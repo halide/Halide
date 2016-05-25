@@ -244,8 +244,8 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
-        bool true_value_ge_false_value = is_one(simplify(op->true_value >= op->false_value));
-        bool true_value_le_false_value = is_one(simplify(op->true_value <= op->false_value));
+        bool true_value_ge_false_value = can_prove(op->true_value >= op->false_value);
+        bool true_value_le_false_value = can_prove(op->true_value <= op->false_value);
 
         bool switches_from_true_to_false = rcond == Monotonic::Decreasing;
         bool switches_from_false_to_true = rcond == Monotonic::Increasing;
