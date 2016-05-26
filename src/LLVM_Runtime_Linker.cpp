@@ -71,57 +71,70 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod ## _ll)
 
+// Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
-DECLARE_CPP_INITMOD(ios_io)
+DECLARE_CPP_INITMOD(android_tempfile)
+DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(destructors)
-DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(device_interface)
+DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
+DECLARE_CPP_INITMOD(gpu_device_selection)
+DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
-DECLARE_CPP_INITMOD(osx_opengl_context)
+DECLARE_CPP_INITMOD(matlab)
+DECLARE_CPP_INITMOD(metadata)
+DECLARE_CPP_INITMOD(mingw_math)
+DECLARE_CPP_INITMOD(module_aot_ref_count)
+DECLARE_CPP_INITMOD(module_jit_ref_count)
+DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
+DECLARE_CPP_INITMOD(osx_clock)
+DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
+DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
-DECLARE_CPP_INITMOD(windows_clock)
-DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
-DECLARE_CPP_INITMOD(errors)
-DECLARE_CPP_INITMOD(posix_io)
-DECLARE_CPP_INITMOD(ssp)
-DECLARE_CPP_INITMOD(windows_io)
-DECLARE_CPP_INITMOD(posix_thread_pool)
-DECLARE_CPP_INITMOD(windows_thread_pool)
-DECLARE_CPP_INITMOD(tracing)
-DECLARE_CPP_INITMOD(write_debug_image)
-DECLARE_CPP_INITMOD(posix_print)
-DECLARE_CPP_INITMOD(gpu_device_selection)
-DECLARE_CPP_INITMOD(cache)
-DECLARE_CPP_INITMOD(nacl_host_cpu_count)
-DECLARE_CPP_INITMOD(to_string)
-DECLARE_CPP_INITMOD(mingw_math)
-DECLARE_CPP_INITMOD(module_jit_ref_count)
-DECLARE_CPP_INITMOD(module_aot_ref_count)
-DECLARE_CPP_INITMOD(device_interface)
-DECLARE_CPP_INITMOD(metadata)
-DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(posix_get_symbol)
-DECLARE_CPP_INITMOD(osx_get_symbol)
-DECLARE_CPP_INITMOD(windows_get_symbol)
-DECLARE_CPP_INITMOD(renderscript)
+DECLARE_CPP_INITMOD(posix_io)
+DECLARE_CPP_INITMOD(posix_tempfile)
+DECLARE_CPP_INITMOD(posix_print)
+DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
+DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(ssp)
+DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(tracing)
+DECLARE_CPP_INITMOD(windows_clock)
+DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(windows_io)
+DECLARE_CPP_INITMOD(windows_opencl)
+DECLARE_CPP_INITMOD(windows_tempfile)
+DECLARE_CPP_INITMOD(windows_thread_pool)
+DECLARE_CPP_INITMOD(write_debug_image)
+
+// Universal LL Initmods. Please keep sorted alphabetically.
+DECLARE_LL_INITMOD(posix_math)
+DECLARE_LL_INITMOD(pnacl_math)
+DECLARE_LL_INITMOD(win32_math)
+DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(renderscript_dev)
+
+// Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
 #ifdef WITH_ARM
@@ -138,7 +151,7 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 DECLARE_NO_INITMOD(metal)
 DECLARE_NO_INITMOD(metal_objc_arm)
 DECLARE_NO_INITMOD(metal_objc_x86)
-#endif
+#endif  // WITH_METAL
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -146,22 +159,20 @@ DECLARE_LL_INITMOD(arm_no_neon)
 #else
 DECLARE_NO_INITMOD(arm)
 DECLARE_NO_INITMOD(arm_no_neon)
-#endif
+#endif  // WITH_ARM
+
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
 #else
 DECLARE_NO_INITMOD(aarch64)
-#endif
-DECLARE_LL_INITMOD(posix_math)
-DECLARE_LL_INITMOD(pnacl_math)
-DECLARE_LL_INITMOD(win32_math)
-DECLARE_LL_INITMOD(ptx_dev)
-DECLARE_LL_INITMOD(renderscript_dev)
+#endif  // WITH_AARCH64
+
 #ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
-#endif
+#endif  // WITH_PTX
+
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
@@ -170,17 +181,19 @@ DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
-#endif
+#endif  // WITH_X86
+
 #ifdef WITH_MIPS
 DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
-#endif
+#endif  // WITH_MIPS
+
 #ifdef WITH_POWERPC
 DECLARE_LL_INITMOD(powerpc)
 #else
 DECLARE_NO_INITMOD(powerpc)
-#endif
+#endif  // WITH_POWERPC
 
 namespace {
 
@@ -190,20 +203,24 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-                #if LLVM_VERSION >= 37
+                #if WITH_NATIVE_CLIENT
+                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-S32");
+                #elif LLVM_VERSION >= 37
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #else
                 return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #endif
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+            } else if (target.os == Target::NaCl) {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-n8:16:32-S128");
             } else {
-                // Linux/Android/NaCl
+                // Linux/Android
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
             }
         } else { // 64-bit
             if (target.os == Target::NaCl) {
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:128-n8:16:32:64-S128");
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-n8:16:32:64-S128");
             } else if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
@@ -218,6 +235,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
+            } else if (target.os == Target::NaCl) {
+                return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S128");
             } else {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
             }
@@ -241,7 +260,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             return llvm::DataLayout("e-m:e-i64:64-n32:64");
         }
     } else if (target.arch == Target::PNaCl) {
-        return llvm::DataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
+        return llvm::DataLayout("e-p:32:32-i64:64-n32");
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
         return llvm::DataLayout("unreachable");
@@ -644,12 +663,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Android) {
@@ -659,12 +680,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_android_io(c, bits_64, debug));
+                modules.push_back(get_initmod_android_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_io(c, bits_64, debug));
+                modules.push_back(get_initmod_windows_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
                 if (t.has_feature(Target::MinGW)) {
@@ -673,10 +696,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::NaCl) {
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_ssp(c, bits_64, debug));

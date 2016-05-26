@@ -357,6 +357,19 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
+/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
+ * (but writable) directory; this is typically $TMP or /tmp, but the specific
+ * location is not guaranteed. (Note that the exact form of the file name
+ * may vary; in particular, the suffix may be ignored on non-Posix systems.)
+ * The file is created (but not opened), thus this can be called from
+ * different threads (or processes, e.g. when building with parallel make)
+ * without risking collision. Note that the caller is always responsible
+ * for deleting this file. Returns nonzero value if an error occurs.
+ */
+extern int halide_create_temp_file(void *user_context, 
+  const char *prefix, const char *suffix,
+  char *path_buf, size_t path_buf_size);
+
 /** The error codes that may be returned by a Halide pipeline. */
 enum halide_error_code_t {
     /** There was no error. This is the value returned by Halide on success. */
@@ -460,6 +473,15 @@ enum halide_error_code_t {
      * the alignment set for it by way of a call to
      * set_host_alignment */
     halide_error_code_unaligned_host_ptr = -24,
+
+    /** A fold_storage directive was used on a dimension that is not
+     * accessed in a monotonically increasing or decreasing fashion. */
+    halide_error_code_bad_fold = -25,
+
+    /** A fold_storage directive was used with a fold factor that was
+     * too small to store all the values of a producer needed by the
+     * consumer. */
+    halide_error_code_fold_factor_too_small = -26,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -513,10 +535,14 @@ extern int halide_error_buffer_argument_is_null(void *user_context, const char *
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
 extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
+                                 const char *loop_name);
+extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
+                                              int fold_factor, const char *loop_name, int required_extent);
 
 // @}
 
-/** Optional features a compilation Target can have. 
+/** Optional features a compilation Target can have.
  */
 typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
