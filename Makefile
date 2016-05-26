@@ -793,10 +793,7 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(S
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
-
-# Correctness test that also link against runtime
-$(BIN_DIR)/correctness_can_use_target: $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -lHalide $(TEST_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
