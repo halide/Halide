@@ -73,15 +73,15 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     // Create a deep-copy of the entire graph of Funcs.
     std::tie(outputs, env) = deep_copy(outputs, env);
 
-    // Try to simplify the RHS/LHS of a function definition by propagating its
-    // specializations' conditions
-    simplify_specializations(env);
-
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
 
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
+
+    // Try to simplify the RHS/LHS of a function definition by propagating its
+    // specializations' conditions
+    simplify_specializations(env);
 
     bool any_memoized = false;
 
