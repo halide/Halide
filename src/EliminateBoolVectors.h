@@ -20,7 +20,10 @@ namespace Internal {
  * (with sign extension), using bitwise instead of logical operators,
  * and replacing the conditions of select with a not equals zero
  * expression. */
+///@{
 EXPORT Stmt eliminate_bool_vectors(Stmt s);
+EXPORT Expr eliminate_bool_vectors(Expr s);
+///@}
 
 /** If a type is a boolean vector, find the type that it has been
  * changed to by eliminate_bool_vectors. */
