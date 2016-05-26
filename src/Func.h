@@ -444,7 +444,7 @@ public:
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
-     * directly; call compile_to_file instead. */
+     * directly; call compile_to_static_library or compile_to_file instead. */
     //@{
     EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
@@ -458,7 +458,7 @@ public:
      * third. The name defaults to the same name as this halide
      * function. You don't actually have to have defined this function
      * yet to call this. You probably don't want to use this directly;
-     * call compile_to_file instead. */
+     * call compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
                                   const Target &target = get_target_from_environment());
 
@@ -502,6 +502,13 @@ public:
      */
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair, with the given
+     * arguments. Also names the C function to match the first
+     * argument.
+     */
+    EXPORT void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
+                                          const Target &target = get_target_from_environment());
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -1754,6 +1761,16 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
 }
  // @}
 
+namespace Internal {
+
+inline void schedule_scalar(Func f) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
+        f.gpu_single_thread();
+    }
+}
+
+}  // namespace Internal
 
 /** JIT-Compile and run enough code to evaluate a Halide
  * expression. This can be thought of as a scalar version of
@@ -1766,12 +1783,9 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = e;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1790,12 +1804,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
         << t[1] << " of type " << t[1].type()
         << " as a scalar of type " << type_of<B>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1815,12 +1826,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << "Can't evaluate expression "
         << t[2] << " of type " << t[2].type()
         << " as a scalar of type " << type_of<C>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1846,12 +1854,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
         << t[3] << " of type " << t[3].type()
         << " as a scalar of type " << type_of<D>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);

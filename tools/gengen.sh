@@ -12,7 +12,7 @@
 # -s : path to .cpp file(s) containing Generators [REQUIRED]
 # -g : name of the Generator to produce. [Can be omitted if there's only one in the .cpp]
 # -f : C function name for the result. [Defaults to the Generator name if omitted]
-# -e : Emit options. [Defaults to o, h]
+# -e : Emit options. [Defaults to static_library, h]
 # -n : Output filename base. [Defaults to same as -f]
 # -x : Extension options. [Defaults to none.]
 #
