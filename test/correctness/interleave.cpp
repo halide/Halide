@@ -74,6 +74,19 @@ Expr element(FuncRefVarOrExpr f, int i) {
 int main(int argc, char **argv) {
     Var x, y, c;
 
+    // As of May 26 2016, this test causes a segfault due to
+    // permissions failure on ARM-32 trying to execute a
+    // non-executable page when jitting. Started happening between
+    // llvm commits 270148 and 270159, but there's no obvious
+    // culprit. Just disabling it for now.
+    {
+        Target t = get_host_target();
+        if (t.arch == Target::ARM && t.bits == 32) {
+            printf("Skipping test on arm-32 (see the source for why)\n");
+            return 0;
+        }
+    }
+
     for (int elements = 1; elements <= 5; elements++) {
         Func f, g, h;
         std::vector<Expr> f_def, g_def;
