@@ -58,15 +58,15 @@ void schedule(Func f, const Target &t) {
 
 template <typename T>
 int test_bit_counting(const Target &target) {
-    const int bits = sizeof(T)*8;
     Image<T> input(256);
     for (int i = 0; i < 256; i++) {
-        if (i < 16)
+        if (i < 16) {
             input(i) = i;
-        else if (i < 32)
-            input(i) = (1ul << bits) - i;
-        else
+        } else if (i < 32) {
+            input(i) = 0xffffffffUL - i;
+        } else {
             input(i) = rand();
+        }
     }
 
     Func popcount_test("popcount_test");

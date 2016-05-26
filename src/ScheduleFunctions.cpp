@@ -85,65 +85,6 @@ Stmt build_provide_loop_nest(Function f,
 
     vector<Split> splits = s.splits();
 
-    // Rebalance the split tree to make the outermost split first.
-    for (size_t i = 0; i < splits.size(); i++) {
-        for (size_t j = i+1; j < splits.size(); j++) {
-
-            Split &first = splits[i];
-            Split &second = splits[j];
-            if (first.outer == second.old_var) {
-                internal_assert(!second.is_rename())
-                    << "Rename of derived variable found in splits list. This should never happen.";
-
-                if (first.is_rename()) {
-                    // Given a rename:
-                    // X -> Y
-                    // And a split:
-                    // Y -> f * Z + W
-                    // Coalesce into:
-                    // X -> f * Z + W
-                    second.old_var = first.old_var;
-                    // Drop first entirely
-                    for (size_t k = i; k < splits.size()-1; k++) {
-                        splits[k] = splits[k+1];
-                    }
-                    splits.pop_back();
-                    // Start processing this split from scratch,
-                    // because we just clobbered it.
-                    j = i+1;
-                } else {
-                    // Given two splits:
-                    // X  ->  a * Xo  + Xi
-                    // (splits stuff other than Xo, including Xi)
-                    // Xo ->  b * Xoo + Xoi
-
-                    // Re-write to:
-                    // X  -> ab * Xoo + s0
-                    // s0 ->  a * Xoi + Xi
-                    // (splits on stuff other than Xo, including Xi)
-
-                    // The name Xo went away, because it was legal for it to
-                    // be X before, but not after.
-
-                    first.exact |= second.exact;
-                    second.exact = first.exact;
-                    second.old_var = unique_name('s');
-                    first.outer   = second.outer;
-                    second.outer  = second.inner;
-                    second.inner  = first.inner;
-                    first.inner   = second.old_var;
-                    Expr f = simplify(first.factor * second.factor);
-                    second.factor = first.factor;
-                    first.factor  = f;
-                    // Push the second split back to just after the first
-                    for (size_t k = j; k > i+1; k--) {
-                        std::swap(splits[k], splits[k-1]);
-                    }
-                }
-            }
-        }
-    }
-
     Dim innermost_non_trivial_loop;
     for (const Dim &d : s.dims()) {
         if (d.for_type != ForType::Vectorized &&
