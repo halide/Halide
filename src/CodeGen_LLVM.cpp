@@ -436,7 +436,7 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    const std::vector<Argument> &args = f.args;
+    const std::vector<LoweredArgument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
         target.has_feature(Target::CPlusPlusMangling) &&
@@ -534,7 +534,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
 
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
-                              const std::string& extern_name, const std::vector<Argument>& args) {
+                              const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -574,12 +574,16 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
                 push_buffer(args[i].name, &arg);
             }
 
+            if (args[i].alignment.modulus != 0) {
+                alignment_info.push(args[i].name, args[i].alignment);
+            }
+
             i++;
         }
     }
 }
 
-void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
+void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
@@ -587,6 +591,10 @@ void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
         sym_pop(args[i].name);
         if (args[i].is_buffer()) {
             pop_buffer(args[i].name);
+        }
+
+        if (args[i].alignment.modulus != 0) {
+            alignment_info.pop(args[i].name);
         }
     }
 
@@ -814,7 +822,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<Argument> &args) {
+        const std::string &function_name, const std::vector<LoweredArgument> &args) {
     Constant *zero = ConstantInt::get(i32, 0);
 
     const int num_args = (int) args.size();
@@ -912,6 +920,10 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    // The optimization passes inject intrinsics that aren't legal for
+    // PNaCl. (e.g. vectorized floor).
+    if (target.arch == Target::PNaCl) return;
+
     if (debug::debug_level >= 3) {
         module->dump();
     }
@@ -929,7 +941,7 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.add(new DataLayoutPass());
     #endif
 
-    #if (LLVM_VERSION >= 37)
+    #if (LLVM_VERSION >= 37) && !WITH_NATIVE_CLIENT
     std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));

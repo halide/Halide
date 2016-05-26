@@ -123,7 +123,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt]. If omitted, default value is [o, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt]. If omitted, default value is [static_library, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -204,12 +204,12 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     GeneratorBase::EmitOptions emit_options;
     // Ensure all flags start as false.
-    emit_options.emit_o = emit_options.emit_h = false;
+    emit_options.emit_static_library = emit_options.emit_h = false;
 
     std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
-        // If omitted or empty, assume .o and .h
-        emit_options.emit_o = emit_options.emit_h = true;
+        // If omitted or empty, assume .a and .h
+        emit_options.emit_static_library = emit_options.emit_h = true;
     } else {
         // If anything specified, only emit what is enumerated
         for (const std::string &opt : emit_flags) {

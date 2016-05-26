@@ -12,6 +12,14 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
+int64_t next_power_of_two(int64_t x) {
+    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x + 1)));
+}
+
+}  // namespace
+
 using std::string;
 using std::vector;
 using std::map;
@@ -55,12 +63,12 @@ public:
 
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
-    string func;
+    Function func;
 
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        if (op->name == func) {
+        if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
             stmt = op;
         } else {
@@ -80,16 +88,18 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             return;
         }
 
-        Box box = box_touched(op->body, func);
-
-        Stmt result = op;
+        Stmt body = op->body;
+        Box box = box_touched(body, func.name());
 
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             Expr min = simplify(box[i-1].min);
             Expr max = simplify(box[i-1].max);
 
-            debug(3) << "\nConsidering folding " << func << " over for loop over " << op->name << '\n'
+            const StorageDim &storage_dim = func.schedule().storage_dims()[i-1];
+            Expr explicit_factor = storage_dim.fold_factor;
+
+            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n';
 
@@ -99,31 +109,73 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             bool max_monotonic_decreasing =
                 (is_monotonic(max, op->name) == Monotonic::Decreasing);
 
+            if (!min_monotonic_increasing && !max_monotonic_decreasing &&
+                explicit_factor.defined()) {
+                // If we didn't find a monotonic dimension, and we have an explicit fold factor,
+                // assert that the min/max do in fact monotonically increase/decrease.
+                Expr condition;
+                Expr loop_var = Variable::make(Int(32), op->name);
+                if (storage_dim.fold_forward) {
+                    Expr min_next = substitute(op->name, loop_var + 1, min);
+                    condition = min_next >= min;
+
+                    // After we assert that the min increased, assume
+                    // the min is monotonically increasing.
+                    min_monotonic_increasing = true;
+                } else {
+                    Expr max_next = substitute(op->name, loop_var + 1, max);
+                    condition = max_next <= max;
+
+                    // After we assert that the max decreased, assume
+                    // the max is monotonically decreasing.
+                    max_monotonic_decreasing = true;
+                }
+                Expr error = Call::make(Int(32), "halide_error_bad_fold",
+                                        {func.name(), storage_dim.var, op->name},
+                                        Call::Extern);
+
+                body = Block::make(AssertStmt::make(condition, error), body);
+            }
+
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
-            if (min_monotonic_increasing ||
-                max_monotonic_decreasing) {
-
-                // The max of the extent over all values of the loop variable must be a constant
+            if (min_monotonic_increasing || max_monotonic_decreasing) {
                 Expr extent = simplify(max - min);
-                Scope<Interval> scope;
-                scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
-                                              Variable::make(Int(32), op->name + ".loop_max")));
-                Expr max_extent = bounds_of_expr_in_scope(extent, scope).max;
-                scope.pop(op->name);
+                Expr factor;
+                if (explicit_factor.defined()) {
+                    Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
+                                            {func.name(), storage_dim.var, explicit_factor, op->name, extent},
+                                            Call::Extern);
+                    body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
 
-                max_extent = find_constant_bound(simplify(max_extent), Direction::Upper);
+                    factor = explicit_factor;
+                } else {
+                    // The max of the extent over all values of the loop variable must be a constant
+                    Scope<Interval> scope;
+                    scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
+                                                  Variable::make(Int(32), op->name + ".loop_max")));
+                    Expr max_extent = simplify(bounds_of_expr_in_scope(extent, scope).max);
+                    scope.pop(op->name);
 
-                if (const int64_t *extent = as_const_int(max_extent)) {
+                    max_extent = find_constant_bound(max_extent, Direction::Upper);
 
-                    int factor = 1;
-                    while (factor <= *extent && factor < 1024) factor *= 2;
+                    const int max_fold = 1024;
+                    const int64_t *const_max_extent = as_const_int(max_extent);
+                    if (const_max_extent && *const_max_extent <= max_fold) {
+                        factor = static_cast<int>(next_power_of_two(*const_max_extent));
+                    } else {
+                        debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                                 << "extent = " << extent << "\n"
+                                 << "max extent = " << max_extent << "\n";
+                    }
+                }
 
+                if (factor.defined()) {
                     debug(3) << "Proceeding with factor " << factor << "\n";
 
                     Fold fold = {(int)i - 1, factor};
                     dims_folded.push_back(fold);
-                    result = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
+                    body = FoldStorageOfFunction(func.name(), (int)i - 1, factor).mutate(body);
 
                     Expr next_var = Variable::make(Int(32), op->name) + 1;
                     Expr next_min = substitute(op->name, next_var, min);
@@ -132,15 +184,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         // iterations, so we can continue to search
                         // for further folding opportinities
                         // recursively.
+                    } else if (!body.same_as(op->body)) {
+                        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                        return;
                     } else {
-                        stmt = result;
+                        stmt = op;
                         return;
                     }
-
-                } else {
-                    debug(3) << "Not folding because extent not bounded by a constant\n"
-                             << "extent = " << extent << "\n"
-                             << "max extent = " << max_extent << "\n";
                 }
             } else {
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
@@ -150,17 +200,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
 
         // Any folds that took place folded dimensions away entirely, so we can proceed recursively.
-        if (const For *f = result.as<For>()) {
-            Stmt body = mutate(f->body);
-            if (body.same_as(f->body)) {
-                stmt = result;
-            } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
-            }
+        body = mutate(body);
+        if (body.same_as(op->body)) {
+            stmt = op;
         } else {
-            stmt = result;
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }
-
     }
 
 public:
@@ -170,7 +215,7 @@ public:
     };
     vector<Fold> dims_folded;
 
-    AttemptStorageFoldingOfFunction(string f) : func(f) {}
+    AttemptStorageFoldingOfFunction(Function f) : func(f) {}
 };
 
 /** Check if a buffer's allocated is referred to directly via an
@@ -196,16 +241,28 @@ private:
 
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
+    const map<string, Function> &env;
+
     using IRMutator::visit;
 
     void visit(const Realize *op) {
         Stmt body = mutate(op->body);
 
-        AttemptStorageFoldingOfFunction folder(op->name);
         IsBufferSpecial special(op->name);
         op->accept(&special);
 
+        // Get the function associated with this realization, which
+        // contains the explicit fold directives from the schedule.
+        auto func_it = env.find(op->name);
+        Function func = func_it != env.end() ? func_it->second : Function();
+
         if (special.special) {
+            for (const StorageDim &i : func.schedule().storage_dims()) {
+                user_assert(!i.fold_factor.defined())
+                    << "Dimension " << i.var << " of " << op->name
+                    << " cannot be folded because it is accessed by extern or device stages.\n";
+            }
+
             debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
             if (body.same_as(op->body)) {
                 stmt = op;
@@ -213,12 +270,13 @@ class StorageFolding : public IRMutator {
                 stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             }
         } else {
+            AttemptStorageFoldingOfFunction folder(func);
             debug(3) << "Attempting to fold " << op->name << "\n";
-            Stmt new_body = folder.mutate(body);
+            body = folder.mutate(body);
 
-            if (new_body.same_as(op->body)) {
+            if (body.same_as(op->body)) {
                 stmt = op;
-            } else if (new_body.same_as(body)) {
+            } else if (folder.dims_folded.empty()) {
                 stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             } else {
                 Region bounds = op->bounds;
@@ -232,10 +290,13 @@ class StorageFolding : public IRMutator {
                     bounds[d] = Range(0, f);
                 }
 
-                stmt = Realize::make(op->name, op->types, bounds, op->condition, new_body);
+                stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
             }
         }
     }
+
+public:
+    StorageFolding(const map<string, Function> &env) : env(env) {}
 };
 
 // Because storage folding runs before simplification, it's useful to
@@ -272,9 +333,9 @@ class SubstituteInConstants : public IRMutator {
     }
 };
 
-Stmt storage_folding(Stmt s) {
+Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
     s = SubstituteInConstants().mutate(s);
-    s = StorageFolding().mutate(s);
+    s = StorageFolding(env).mutate(s);
     return s;
 }
 

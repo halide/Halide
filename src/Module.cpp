@@ -103,14 +103,13 @@ void Module::compile(const Outputs &output_files) const {
             // needed directly, or as temporary inputs to create a static library.
             // If they are just temporary inputs, we delete them when we're done,
             // to minimize the cruft left laying around in build products directory.
-            // (Would it make more sense to identify a tmp directory and output them there
-            // in this case?)
-            std::unique_ptr<Internal::FileUnlinker> file_to_delete;
+            std::unique_ptr<Internal::TemporaryFile> temp_file;
 
             std::string object_name = output_files.object_name;
             if (object_name.empty()) {
-                object_name = output_files.static_library_name + ".tmp";
-                file_to_delete.reset(new Internal::FileUnlinker(object_name));
+                const char* ext = target().os == Target::Windows && !target().has_feature(Target::MinGW) ? ".obj" : ".o";
+                temp_file.reset(new Internal::TemporaryFile(Internal::base_name(output_files.static_library_name, '/'), ext));
+                object_name = temp_file->pathname();
             }
 
             {
