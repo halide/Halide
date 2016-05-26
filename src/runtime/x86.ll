@@ -134,13 +134,8 @@ define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwi
 }
 
 ; Adapted from asm_cpuid.ll in LLVM source.
-; The awkward multi-out-value syntax is a workaround to avoid load/store
-; instructions in the code (since syntax has changed over the versions of LLVM
-; we still wish to support).
-define weak_odr void @halide_x86_cpuid(i32 %fn_id, i32* %info0, i32* %info1, i32* %info2, i32* %info3) nounwind uwtable  {
-  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, $4\0A\09mov ecx, 0\0A\09cpuid\0A\09mov dword ptr $0, eax\0A\09mov dword ptr $1, ebx\0A\09mov dword ptr $2, ecx\0A\09mov dword ptr $3, edx\0A\09xchg ebx, esi", "=*m,=*m,=*m,=*m,r,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info0, i32* %info1, i32* %info2, i32* %info3, i32 %fn_id)
+define weak_odr void @halide_x86_cpuid(i32 %fn_id, i32* %info) nounwind uwtable {
+  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, $1\0A\09mov ecx, 0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,r,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info, i32 %fn_id)
 
   ret void
 }
-
-
