@@ -133,11 +133,12 @@ public:
         // of an init definition should have the same LHS.
         // This also pushes all the reduction domains it encounters into the 'rdoms'
         // set for later use.
-        vector<CondValue> compute_exprs_helper(const Definition& def, bool is_update) {
+        pair<vector<CondValue>, vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
             internal_assert((!is_update && !def.domain().defined()) || is_update)
                 << "Init definition shouldn't have a RDom\n";
 
-            vector<CondValue> result;
+            vector<CondValue> values;
+            vector<CondValue> args;
 
             // Default case (no specialization)
             vector<Expr> predicates;
@@ -157,9 +158,9 @@ public:
                                               {likely(predicates[i]), cond_val, make_zero(cond_val.type())},
                                               Internal::Call::PureIntrinsic);
                     }
-                    result.push_back(CondValue(const_true(), cond_val));
+                    values.push_back(CondValue(const_true(), cond_val));
                 } else {
-                    result.push_back(CondValue(const_true(), val));
+                    values.push_back(CondValue(const_true(), val));
                 }
             }
             if (is_update) {
@@ -175,9 +176,9 @@ public:
                                                   {likely(predicates[i]), cond_arg, make_zero(cond_arg.type())},
                                                   Internal::Call::PureIntrinsic);
                         }
-                        result.push_back(CondValue(const_true(), cond_arg));
+                        args.push_back(CondValue(const_true(), cond_arg));
                     } else {
-                        result.push_back(CondValue(const_true(), arg));
+                        args.push_back(CondValue(const_true(), arg));
                     }
                 }
             }
@@ -188,19 +189,66 @@ public:
                 const Definition &s_def = specializations[i-1].definition;
 
                 // Else case (i.e. specialization condition is false)
-                for (CondValue &i : result) {
+                for (CondValue &i : args) {
+                    i.cond = simplify(!s_cond && i.cond);
+                }
+                for (CondValue &i : values) {
                     i.cond = simplify(!s_cond && i.cond);
                 }
 
                 // Then case (i.e. specialization condition is true)
-                vector<CondValue> s_result = compute_exprs_helper(s_def, is_update);
-                for (CondValue &i : s_result) {
+                vector<CondValue> s_args, s_values;
+                std::tie(s_args, s_values) = compute_exprs_helper(s_def, is_update);
+                for (CondValue &i : s_args) {
                     i.cond = simplify(s_cond && i.cond);
                 }
-                result.insert(result.end(), s_result.begin(), s_result.end());
+                for (CondValue &i : s_values) {
+                    i.cond = simplify(s_cond && i.cond);
+                }
+                values.insert(values.end(), s_values.begin(), s_values.end());
+                args.insert(args.end(), s_args.begin(), s_args.end());
             }
 
-            return result;
+            // Optimization: If the args/values across specializations including
+            // the default case, are the same, we can combine those args/values
+            // into one arg/value with a const_true() condition for the purpose
+            // of bounds inference.
+            if (values.size() > 1) {
+                bool all_equal = true;
+                Expr val = values[0].value;
+                for (size_t i = 1; i < values.size(); ++i) {
+                    if (!is_one(simplify(val == values[i].value))) {
+                        all_equal = false;
+                        break;
+                    }
+                }
+                if (all_equal) {
+                    debug(4) << "compute_exprs: all values (size: " << values.size() << ") "
+                             << "(" << val << ") are equal, combine them together\n";
+                    internal_assert(val.defined());
+                    values.clear();
+                    values.push_back(CondValue(const_true(), val));
+                }
+            }
+            if (args.size() > 1) {
+                bool all_equal = true;
+                Expr arg = args[0].value;
+                for (size_t i = 1; i < args.size(); ++i) {
+                    if (!is_one(simplify(arg == args[i].value))) {
+                        all_equal = false;
+                        break;
+                    }
+                }
+                if (all_equal) {
+                    debug(4) << "compute_exprs: all args (size: " << args.size() << ") "
+                             << "(" << arg << ") are equal, combine them together\n";
+                    internal_assert(arg.defined());
+                    args.clear();
+                    args.push_back(CondValue(const_true(), arg));
+                }
+            }
+
+            return make_pair(args, values);
         }
 
         // Computed expressions on the left and right-hand sides. This also
@@ -208,12 +256,15 @@ public:
         // for later use.
         void compute_exprs() {
             bool is_update = (stage != 0);
+            vector<CondValue> args, values;
             if (!is_update) {
-                exprs = compute_exprs_helper(func.definition(), is_update);
+                std::tie(args, values) = compute_exprs_helper(func.definition(), is_update);
             } else {
                 const Definition &def = func.update(stage - 1);
-                exprs = compute_exprs_helper(def, is_update);
+                std::tie(args, values) = compute_exprs_helper(def, is_update);
             }
+            exprs = args;
+            exprs.insert(exprs.end(), values.begin(), values.end());
         }
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
