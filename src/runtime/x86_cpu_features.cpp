@@ -3,11 +3,7 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-extern "C" void halide_x86_cpuid(int32_t, int32_t *, int32_t *, int32_t *, int32_t *);
-
-static inline void cpuid(int32_t fn_id, int32_t *info) {
-    halide_x86_cpuid(fn_id, &info[0], &info[1], &info[2], &info[3]);
-}
+extern "C" void halide_x86_cpuid(int32_t, int32_t *);
 
 WEAK CpuFeatures halide_get_cpu_features() {
     const uint64_t known = (1ULL << halide_target_feature_sse41) | 
@@ -19,7 +15,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
     uint64_t available = 0;
 
     int32_t info[4];
-    cpuid(1, info);
+    halide_x86_cpuid(1, info);
 
     const bool have_sse41 = (info[2] & (1 << 19)) != 0;
     const bool have_avx = (info[2] & (1 << 28)) != 0;
@@ -44,7 +40,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
         // So far, so good.  AVX2?
         // Call cpuid with eax=7
         int32_t info2[4];
-        cpuid(7, info2);
+        halide_x86_cpuid(7, info2);
         const bool have_avx2 = (info2[1] & (1 << 5)) != 0;
         if (have_avx2) {
             available |= (1ULL << halide_target_feature_avx2);
