@@ -546,8 +546,8 @@ public:
         // after the fact.
         std::map<std::string, std::string> extensions;
         EmitOptions()
-            : emit_o(true), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(false) {}
+            : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
+              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true) {}
     };
 
     EXPORT virtual ~GeneratorBase();
