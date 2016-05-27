@@ -493,11 +493,15 @@ OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 RUNTIME_CPP_COMPONENTS = \
+  aarch64_cpu_features \
   android_clock \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
+  android_tempfile \
+  arm_cpu_features \
   cache \
+  can_use_target \
   cuda \
   destructors \
   device_interface \
@@ -516,6 +520,7 @@ RUNTIME_CPP_COMPONENTS = \
   metal_objc_arm \
   metal_objc_x86 \
   mingw_math \
+  mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
@@ -532,7 +537,9 @@ RUNTIME_CPP_COMPONENTS = \
   posix_get_symbol \
   posix_io \
   posix_print \
+  posix_tempfile \
   posix_thread_pool \
+  powerpc_cpu_features \
   profiler \
   profiler_inlined \
   renderscript \
@@ -545,8 +552,10 @@ RUNTIME_CPP_COMPONENTS = \
   windows_get_symbol \
   windows_io \
   windows_opencl \
+  windows_tempfile \
   windows_thread_pool \
-  write_debug_image
+  write_debug_image \
+  x86_cpu_features 
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
@@ -885,7 +894,7 @@ $(FILTERS_DIR)/nested_externs_%.a $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_D
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -g nested_externs_$* -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
-$(BIN_DIR)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_leaf.a $(FILTERS_DIR)/nested_externs_inner.a $(FILTERS_DIR)/nested_externs_combine.a $(FILTERS_DIR)/nested_externs_root.a $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
+$(BIN_DIR)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.a $(FILTERS_DIR)/nested_externs_inner.a $(FILTERS_DIR)/nested_externs_combine.a $(FILTERS_DIR)/nested_externs_leaf.a $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.a/.h (but not libHalide).
