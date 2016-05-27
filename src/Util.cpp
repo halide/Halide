@@ -177,14 +177,6 @@ string replace_all(const string &str, const string &find, const string &replace)
     return result;
 }
 
-string base_name(const string &name, char delim) {
-    size_t off = name.rfind(delim);
-    if (off == string::npos) {
-        return name;
-    }
-    return name.substr(off+1);
-}
-
 string make_entity_name(void *stack_ptr, const string &type, char prefix) {
     string name = Introspection::get_variable_name(stack_ptr, type);
 
