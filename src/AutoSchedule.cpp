@@ -22,6 +22,43 @@ using std::deque;
 using std::pair;
 using std::make_pair;
 
+// Utility functions
+int get_extent(const Interval &i) {
+  if ((i.min.as<IntImm>()) && (i.max.as<IntImm>())) {
+    const IntImm * bmin = i.min.as<IntImm>();
+    const IntImm * bmax = i.max.as<IntImm>();
+    // Count only if the overlap makes sense
+    if (bmin->value <= bmax->value)
+      return (bmax->value - bmin->value + 1);
+    else
+      return 0;
+  }
+  /* TODO Check if this is necessary at some point
+     else {
+     Expr diff = simplify(i.max - i.min);
+     if (diff.as<IntImm>())
+     return diff.as<IntImm>()->value;
+     } */
+  return -1;
+}
+
+int64_t box_area(Box &b) {
+  int64_t box_area = 1;
+  for(size_t i = 0; i < b.size(); i++) {
+    // Maybe should check for unsigned integers and floats too
+    int64_t extent = get_extent(b[i]);
+    if (extent > 0 && box_area > 0)
+      box_area = box_area * extent;
+    else if (extent == 0) {
+      box_area = 0;
+      break;
+    } else {
+      box_area = -1;
+    }
+  }
+  return box_area;
+}
+
 void set_schedule_defaults(map<string, Function> &env) {
   // Changing the default to compute root.
 
@@ -87,7 +124,23 @@ struct MachineParams {
   unsigned int balance;
 };
 
-struct CostModel {
+class FindAllCalls : public IRVisitor {
+ public:
+  set<string> calls;
+  using IRVisitor::visit;
+
+  void visit(const Call *call) {
+    // See if images need to be included
+    if (call->call_type == Call::Halide ||
+        call->call_type == Call::Image) {
+      calls.insert(call->name);
+    }
+    for (size_t i = 0; (i < call->args.size()); i++)
+      call->args[i].accept(this);
+  }
+};
+
+struct AbstractCost {
 
   /* Visitor for computing the arithmetic cost of a single value of a function*/
   class ExprCost : public IRVisitor {
@@ -185,13 +238,103 @@ struct CostModel {
     void visit(const Evaluate *) { assert(0); }
   };
 
-  pair<size_t, size_t> get_expr_cost(Expr e) {
+  map<string, pair<int64_t, int64_t> > func_cost;
+
+  pair<int, int> get_expr_cost(Expr e) {
     ExprCost cost_visitor;
     e.accept(&cost_visitor);
     return make_pair(cost_visitor.ops, cost_visitor.loads);
   }
 
-  CostModel() {}
+  // TODO: Fix this for reductions
+  int64_t region_cost(string func, Box &region) {
+
+    int64_t area = box_area(region);
+    if (area < 0) {
+      // Area could not be determined
+      return -1;
+    }
+    int64_t op_cost = func_cost[func].first;
+
+    int64_t cost = area * (op_cost);
+    assert(cost >= 0);
+    return cost;
+  }
+
+  int64_t region_cost(map<string, Box> &regions) {
+
+    int64_t total_cost = 0;
+    for(auto &f: regions) {
+      int64_t cost = region_cost(f.first, f.second);
+      if (cost < 0) {
+        return -1;
+      }
+      else
+        total_cost += cost;
+    }
+    assert(total_cost >= 0);
+    return total_cost;
+  }
+
+  AbstractCost(const map<string, Function> &env) {
+
+    for (auto& kv : env) {
+
+      func_cost[kv.first].first = 1;
+      func_cost[kv.first].second = 0;
+
+      // TODO: revist how boundary conditions are handled
+      for (auto &e: kv.second.values()) {
+        ExprCost cost_visitor;
+        e.accept(&cost_visitor);
+        func_cost[kv.first].first += cost_visitor.ops;
+        func_cost[kv.first].second += cost_visitor.loads;
+      }
+
+      // Estimating cost when reductions are involved
+      // TODO: This assumes that the entire reduction of each
+      // update definition is evaluated to compute each value of
+      // the function.
+      if (!kv.second.is_pure()) {
+        for (const UpdateDefinition &u: kv.second.updates()) {
+
+          int64_t ops = 1;
+          int64_t loads = 0;
+          for (auto &e: u.values) {
+            ExprCost cost_visitor;
+            e.accept(&cost_visitor);
+            ops += cost_visitor.ops;
+            loads += cost_visitor.loads;
+          }
+
+          for (auto &arg: u.args) {
+            ExprCost cost_visitor;
+            arg.accept(&cost_visitor);
+            ops += cost_visitor.ops;
+            loads += cost_visitor.loads;
+          }
+
+          if (u.domain.defined()) {
+            Box b;
+            for (auto &rvar: u.domain.domain()) {
+              b.push_back(Interval(simplify(rvar.min),
+                                   simplify(rvar.min + rvar.extent - 1)));
+            }
+            int64_t area = box_area(b);
+            if (area != -1) {
+              func_cost[kv.first].first += ops * area;
+              func_cost[kv.first].second += loads * area;
+            } else {
+              func_cost[kv.first].first = -1;
+              func_cost[kv.first].second = -1;
+              debug(0) << "Warning: could not determine the bounds of\
+                           the rdom in function " << kv.first << '\n';
+            }
+          }
+        }
+      }
+    }
+  }
 };
 
 struct DependenceAnalysis {
@@ -215,7 +358,7 @@ struct DependenceAnalysis {
   /* Compute the regions of producers required to compute a region of the function
      'f' given concrete sizes of the tile in each dimension. */
   map<string, Box> regions_required(Function f,
-                                    const vector<Interval> &conc_bounds){
+                                    const vector<Interval> &conc_bounds) {
 
     map<string, Box> regions;
     // Add the function and its region to the queue
@@ -243,7 +386,7 @@ struct DependenceAnalysis {
 
         curr_regions = boxes_required(val, curr_scope, func_val_bounds);
         for (auto& reg: curr_regions) {
-          // Merge region with an existing region for the function in
+          // merge region with an existing region for the function in
           // the global map
           if (regions.find(reg.first) == regions.end())
             regions[reg.first] = reg.second;
@@ -255,7 +398,57 @@ struct DependenceAnalysis {
                                         reg.second.bounds));
         }
       }
-      // TODO: Currently not handling updates
+
+      // TODO: Check if this handling of updates is correct
+      for (auto &update: curr_f.updates()) {
+        for (auto &val: update.values) {
+          map<string, Box> curr_regions;
+          Scope<Interval> curr_scope;
+          int interval_index = 0;
+          vector<Expr> exprs;
+          exprs.push_back(val);
+          for (auto &arg: update.args) {
+            Interval simple_bounds = Interval(simplify(curr_bounds[interval_index].min),
+                                              simplify(curr_bounds[interval_index].max));
+            // Check for a pure variable
+            const Variable *v = arg.as<Variable>();
+            if (!v) {
+              // Need to evaluate boxes required on args that are not pure
+              // for potenial calls to other functions
+              exprs.push_back(arg);
+            } else {
+              curr_scope.push(v->name, simple_bounds);
+            }
+            interval_index++;
+          }
+
+          if (update.domain.defined()) {
+            for (auto &rvar: update.domain.domain()) {
+              Interval simple_bounds = Interval(rvar.min,
+                                                rvar.min + rvar.extent - 1);
+              curr_scope.push(rvar.var, simple_bounds);
+            }
+          }
+
+          for (auto &e: exprs) {
+            curr_regions = boxes_required(e, curr_scope, func_val_bounds);
+            for (auto& reg: curr_regions) {
+              // Merge region with an existing region for the function in
+              // the global map
+              if(reg.first != curr_f.name()) {
+                if (regions.find(reg.first) == regions.end())
+                  regions[reg.first] = reg.second;
+                else
+                  merge_boxes(regions[reg.first], reg.second);
+
+                if (env.find(reg.first) != env.end())
+                  f_queue.push_back(make_pair(env.at(reg.first),
+                                              reg.second.bounds));
+              }
+            }
+          }
+        }
+      }
     }
 
     // Simplify
@@ -303,7 +496,7 @@ struct DependenceAnalysis {
   /* Compute the redundant regions computed while computing a tile of the function
      'f' given sizes of the tile in each dimension. */
   map<string, Box> redundant_regions(Function f, int dir,
-                                     const vector<Interval> &conc_bounds){
+                                     const vector<Interval> &conc_bounds) {
 
     map<string, Box> regions = regions_required(f, conc_bounds);
 
@@ -369,42 +562,6 @@ struct DependenceAnalysis {
         }
         return conc_overlaps;
       }
-
-  int get_extent(const Interval &i) {
-    if ((i.min.as<IntImm>()) && (i.max.as<IntImm>())) {
-      const IntImm * bmin = i.min.as<IntImm>();
-      const IntImm * bmax = i.max.as<IntImm>();
-      // Count only if the overlap makes sense
-      if (bmin->value <= bmax->value)
-        return (bmax->value - bmin->value + 1);
-      else
-        return 0;
-    }
-    /* TODO Check if this is necessary at some point
-       else {
-       Expr diff = simplify(i.max - i.min);
-       if (diff.as<IntImm>())
-       return diff.as<IntImm>()->value;
-       } */
-    return -1;
-  }
-
-  int64_t box_area(Box &b) {
-    int64_t box_area = 1;
-    for(size_t i = 0; i < b.size(); i++) {
-      // Maybe should check for unsigned integers and floats too
-      int64_t extent = get_extent(b[i]);
-      if (extent > 0 && box_area > 0)
-        box_area = box_area * extent;
-      else if (extent == 0) {
-        box_area = 0;
-        break;
-      } else {
-        box_area = -1;
-      }
-    }
-    return box_area;
-  }
 };
 
 void disp_regions(map<string, Box> &regions) {
@@ -463,6 +620,22 @@ struct Partitioner {
                  map<string, int>& _tile_sizes) :
       prod_group(_prod_group), cons_group(_cons_group),
       tile_sizes(_tile_sizes) { }
+
+    friend std::ostream& operator <<(std::ostream& stream,
+                                     const FusionChoice& choice) {
+
+      stream << "Choice:" << choice.prod_group << "->"
+                          << choice.cons_group << '\n';
+
+      stream << "Tile sizes:" << "[";
+      for (auto &s: choice.tile_sizes) {
+        stream << "(" << s.first << "," <<  s.second << ")";
+      }
+      stream << "]" << '\n';
+
+      return stream;
+    }
+
   };
 
   map<pair<string, string>, FusionChoice> fusion_cache;
@@ -474,11 +647,14 @@ struct Partitioner {
     vector<Function> members;
 
     // Estimate of arithmetic cost
-    int64_t work;
+    int64_t arith_cost;
     // Estimate of accesses to slow memory
-    int64_t mem_accesses;
+    int64_t mem_cost;
     // Estimate of the parallelism
     int64_t parallelism;
+    // Indicator to say if the cost of the group has been
+    // evaluated
+    bool cost_evaluated;
 
     // Reuse along dimensions of the group members
     map<string, map<string, int64_t> > reuse;
@@ -492,9 +668,10 @@ struct Partitioner {
 
     Group(string _output, vector<Function> _members):
       output(_output), members(_members) {
-        work = -1;
-        mem_accesses = -1;
+        arith_cost = -1;
+        mem_cost = -1;
         parallelism = -1;
+        cost_evaluated = false;
       }
 
     friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
@@ -506,14 +683,20 @@ struct Partitioner {
       }
       stream << "]" << '\n';
 
+      stream << "Inlined:" << '[';
+      for (auto &in: g.inlined) {
+        stream << in << ",";
+      }
+      stream << "]" << '\n';
+
       stream << "Tile sizes:" << "[";
       for (auto &s: g.tile_sizes) {
         stream << "(" << s.first << "," <<  s.second << ")";
       }
       stream << "]" << '\n';
 
-      stream << "Work:" << g.work  << '\n';
-      stream << "Memory accesses:" << g.mem_accesses  << '\n';
+      stream << "Arithmetic cost:" << g.arith_cost  << '\n';
+      stream << "Memory cost:" << g.mem_cost  << '\n';
       stream << "Parallelism:" << g.parallelism  << '\n';
       return stream;
     }
@@ -578,6 +761,9 @@ struct Partitioner {
       //TODO: Any preprocess inlining should go here and they
       //should be added to the corresponding group as inlined
       //members
+
+      // Precompute the arithmetic and load costs for each function
+      // in the pipeline
     }
 
   void merge_groups(string cand_group, string child_group) {
@@ -635,7 +821,12 @@ struct Partitioner {
     }
   }
 
-  /*
+  void evaluate_fusion_choice(FusionChoice &choice,
+                              Partitioner::Level level);
+  void evaluate_group_cost(Group &g);
+  vector<Interval> get_bounds_from_tile_sizes(string func,
+                                              map<string, int> &tile_sizes);
+/*
   Option choose_candidate(const vector< pair<string, string > > &cand_pairs);
   pair<float, vector<Option> >
       choose_candidate_inline(const vector< pair<string, string > > &cand_pairs);
@@ -644,12 +835,168 @@ struct Partitioner {
   void initialize_groups_fast_mem();
   void initialize_groups_inline();
   void update_function_costs();
-  void evaluate_option(Option &opt, Partitioner::Level level);
   void tile_for_input_locality(bool init_pipeline_reuse = false);
   vector<float> get_input_reuse(Function f, vector<string> &inputs);
   pair<float, float> evaluate_reuse(string, vector<string> &group_inputs,
-                                    vector<int> &tile_sizes, bool unit_tile); */
+                                    vector<int> &tile_sizes, bool unit_tile);
+*/
 };
+
+vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
+                                                         map<string, int> &tile_sizes) {
+  vector<Interval> bounds;
+  const vector<string> &args = analy.env.at(func).args();
+
+  for (size_t i = 0; i < args.size(); i++) {
+    if (tile_sizes.find(args[i]) != tile_sizes.end()) {
+      int size = tile_sizes.at(args[i]);
+      // Check if the bounds allow for tiling with the given tile size
+      // i.e., ensure atleast 2 tiles
+      int extent = get_extent(pipeline_bounds.at(func)[i]);
+      if (extent >= 2 * size) {
+        // TODO: Maybe shift this to the center of the pipeline bound
+        bounds.push_back(Interval(0, size - 1));
+      }
+      else {
+        // If the dimension is too small do not tile it and set the
+        // extent of the bounds to that of the dimension estimate
+        bounds.push_back(pipeline_bounds.at(func)[i]);
+      }
+    }
+    else {
+      bounds.push_back(pipeline_bounds.at(func)[i]);
+    }
+  }
+
+  return bounds;
+}
+
+void Partitioner::evaluate_group_cost(Group &g) {
+  // Estimating the number of accesses to slow memory
+
+  // 1) Assume all loads are a miss if the working set does not fit
+  // in cache. This ignores any locality that results from the
+  // iteration order. This is pretty aggresive in estimating the benefit
+  // of fusion.
+  //
+  // 2) Assume that the intermediates are loaded only once even if
+  // the do not fit in cache. It is a pretty good model for pipelines
+  // which are streaming in nature. This gives a conservative estimate
+  // of fusion benefit and does not accurately capture scenarios where
+  // there is significant reuse.
+  //
+  // The actual number of accesses will inbetween 2) and 1) for now
+  // going with model 1).
+  //
+  // TODO: See if the model needs to be refined further to account
+  // for spatial locality and iteration order.
+
+  set<string> group_inputs;
+
+  for(auto &f: g.members) {
+    FindAllCalls find;
+    analy.env.at(f.name()).accept(&find);
+    //for(auto &c: find.calls) {
+    //  if (std::find(g.members.begin(), g.members.end(), c) == g.members.end())
+    //    group_inputs.insert(c);
+    //}
+  }
+
+  // Count the number of tiles
+  uint64_t estimate_tiles = 1;
+  uint64_t num_ele_per_tile = 1;
+
+  const vector<string> &args = analy.env.at(g.output).args();
+
+  for (size_t i = 0; i < args.size(); i++) {
+    if (g.tile_sizes.find(args[i]) != g.tile_sizes.end()) {
+      int size = g.tile_sizes.at(args[i]);
+      int extent = get_extent(pipeline_bounds.at(g.output)[i]);
+      estimate_tiles *= std::ceil((float)extent/size);
+      num_ele_per_tile *= size;
+    }
+  }
+
+  // Determining the size of the intermediates
+  vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
+                                                       g.tile_sizes);
+  map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
+
+  // disp_regions(conc_reg);
+
+  // TODO: Edit the text on the cost model
+  // Cost model
+
+  // We currently assume a two level memory model. The fast_mem_size field in
+  // the arch parameters gives the size of the fast memory. Additionally, the
+  // ratio of load from fast memory vs slow memory is encoded in the machine
+  // parameters.
+
+  // We compute the size of the intermediate buffers that are required to
+  // compute the output of the group.
+
+  // inter_s = size of the intermediates in the fused group
+  // M = fast memory size
+  // s_c = the cost of loading from slow memory
+  // f_c = the cost of loading from fast memory
+  // op_c = the cost of computing an op
+
+  // The benefit of an option is the reduction in the number of operations
+  // that read/write to slow memory and the benefit is calculated per tile
+  //
+  // if inter_s fits in fast memory then
+  //    inter_s * s_c - (inter_s * f_c + (redundant_ops) * op_c)
+  //    => inter_s * (s_c - f_c) - (redundant_ops) * op_c
+  // else
+  //    hit = max(2M - inter_s, 0) assuming LRU
+  //    inter_s * s_c - (hit * f_c + (inter_s - hit) * s_c + (redundant_ops)
+  //                     * op_c)
+  //    => hit * (s_c - f_c) - (redundant_ops) * op_c
+
+  map<string, Box> mem_reg;
+
+  // TODO: Do not count inlines while accounting for intermediate
+  // storage when grouping for fast mem
+  for (auto &f: g.members)
+    mem_reg[f.name()] = conc_reg[f.name()];
+
+  mem_reg[g.output] = Box(bounds);
+}
+
+void Partitioner::evaluate_fusion_choice(FusionChoice &choice,
+                                         Partitioner::Level l) {
+    //disp_option(opt);
+
+    map<string, Box> conc_reg;
+
+    // Create a group that reflects the fusion choice and evaluate
+    // the cost of the group
+    Group prod_group = groups.at(choice.prod_group);
+    Group cons_group = groups.at(choice.cons_group);
+
+    vector<Function> fused_members;
+    for(auto &f: prod_group.members)
+      fused_members.push_back(f);
+    for(auto &f: cons_group.members)
+      fused_members.push_back(f);
+
+    Group fused_group(cons_group.output, fused_members);
+
+    for(auto &f: prod_group.inlined)
+      fused_group.inlined.insert(f);
+    for(auto &f: cons_group.inlined)
+      cons_group.inlined.insert(f);
+
+    fused_group.tile_sizes = choice.tile_sizes;
+
+    // Compare the cost with the costs of the groups without fusion
+    evaluate_group_cost(prod_group);
+    evaluate_group_cost(cons_group);
+    evaluate_group_cost(fused_group);
+
+    // Return the overall benefit of the choice
+    // TODO: Use the arch params to compute total work
+}
 
 void generate_schedules(const vector<Function> &outputs,
                         const Target &target) {
