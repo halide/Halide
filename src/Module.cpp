@@ -109,7 +109,8 @@ void Module::compile(const Outputs &output_files) const {
             std::string object_name = output_files.object_name;
             if (object_name.empty()) {
                 const char* ext = target().os == Target::Windows && !target().has_feature(Target::MinGW) ? ".obj" : ".o";
-                temp_file.reset(new Internal::TemporaryFile(Internal::base_name(output_files.static_library_name, '/'), ext));
+                auto base_name = Internal::split_string(output_files.static_library_name, "/").back();
+                temp_file.reset(new Internal::TemporaryFile(base_name, ext));
                 object_name = temp_file->pathname();
             }
 
