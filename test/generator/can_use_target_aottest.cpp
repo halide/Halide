@@ -10,7 +10,7 @@ using namespace Halide::Tools;
 #define TESTING_ON_X86 0
 #endif
 
-#ifdef TESTING_ON_X86
+#if TESTING_ON_X86
 #if defined(_MSC_VER)
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
@@ -37,7 +37,7 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 int main(int argc, char **argv) {
 
-#ifdef TESTING_ON_X86
+#if TESTING_ON_X86
     int info[4];
     cpuid(info, 1, 0);
     uint64_t host_features = 0;
