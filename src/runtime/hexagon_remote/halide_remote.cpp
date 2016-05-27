@@ -1,6 +1,6 @@
 extern "C" {
 
-#include "halide_hexagon_remote.h"
+#include "bin/src/halide_hexagon_remote.h"
 #include <sys/mman.h>
 #include <memory.h>
 #include <stdlib.h>
