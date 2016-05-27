@@ -34,7 +34,7 @@ struct Target {
     int bits;
 
     /** Optional features a target can have.
-     * Corresponds to feature_name_map in Target.cpp. 
+     * Corresponds to feature_name_map in Target.cpp.
      * See definitions in HalideRuntime.h for full information.
      */
     enum Feature {
@@ -151,7 +151,7 @@ struct Target {
      * types except 64-bit float and int/uint should be supported by
      * all backends.
      */
-    bool supports_type(const Type &t) {
+    bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
             if (t.is_float()) {
                 return !has_feature(Metal) &&
@@ -225,7 +225,7 @@ struct Target {
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     int natural_vector_size(Halide::Type t) const {
-        user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0) 
+        user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
             << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
