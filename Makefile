@@ -608,8 +608,19 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
+ifneq (,$(WITH_HEXAGON))
+LIB_HEXAGON_HOST = $(BIN_DIR)/libhalide_hexagon_host.$(SHARED_EXT)
+else
+LIB_HEXAGON_HOST = 
+endif
+
 .PHONY: all
-all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
+all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) $(LIB_HEXAGON_HOST) test_internal
+
+ifneq (,$(WITH_HEXAGON))
+$(BIN_DIR)/libhalide_hexagon_host.$(SHARED_EXT): $(ROOT_DIR)/src/runtime/hexagon_remote/host/libhalide_hexagon_host.$(SHARED_EXT)
+	cp $< $@
+endif
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
 $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
@@ -1189,7 +1200,7 @@ Doxyfile: Doxyfile.in
 
 install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p $(PREFIX)/include $(PREFIX)/bin $(PREFIX)/lib $(PREFIX)/share/halide/tutorial/images $(PREFIX)/share/halide/tools $(PREFIX)/share/halide/tutorial/figures
-	cp $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(PREFIX)/lib
+	cp $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(LIB_HEXAGON_HOST) $(PREFIX)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(PREFIX)/include
 	cp $(INCLUDE_DIR)/HalideRuntim*.h $(PREFIX)/include
 	cp $(ROOT_DIR)/tutorial/images/*.png $(PREFIX)/share/halide/tutorial/images
@@ -1207,7 +1218,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/lib $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures
-	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
+	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(LIB_HEXAGON_HOST) $(DISTRIB_DIR)/bin
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideRuntim*.h $(DISTRIB_DIR)/include
