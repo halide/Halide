@@ -12,6 +12,7 @@
 #include "StmtToHtml.h"
 
 namespace Halide {
+using Halide::Internal::debug;
 
 namespace Internal {
 
@@ -124,9 +125,6 @@ void Module::compile(const Outputs &output_files) const {
 
             if (!output_files.static_library_name.empty()) {
                 Target base_target(target().os, target().arch, target().bits);
-                const bool deterministic = true;
-                create_static_library({object_name}, base_target, 
-                    output_files.static_library_name, deterministic);
             }
         }
         if (!output_files.assembly_name.empty()) {
@@ -147,7 +145,6 @@ void Module::compile(const Outputs &output_files) const {
         }
     }
     if (!output_files.c_header_name.empty()) {
-        std::ofstream file(output_files.c_header_name.c_str());
         Internal::CodeGen_C cg(file,
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
@@ -155,14 +152,12 @@ void Module::compile(const Outputs &output_files) const {
         cg.compile(*this);
     }
     if (!output_files.c_source_name.empty()) {
-        std::ofstream file(output_files.c_source_name.c_str());
         Internal::CodeGen_C cg(file,
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
     if (!output_files.stmt_name.empty()) {
-        std::ofstream file(output_files.stmt_name.c_str());
         file << *this;
     }
     if (!output_files.stmt_html_name.empty()) {
@@ -170,11 +165,9 @@ void Module::compile(const Outputs &output_files) const {
     }
 }
 
-void compile_standalone_runtime(const Outputs &output_files, Target t) {
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else. 
-    empty.compile(Outputs().object(output_files.object_name).static_library(output_files.static_library_name));
 }
 
 void compile_standalone_runtime(const std::string &object_filename, Target t) {
