@@ -1,0 +1,126 @@
+
+Linker Script and memory map
+LOAD /usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/initS.o[v60]
+LOAD /usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/libc.so[v60]
+START GROUP
+LOAD bin/v60/halide_remote.o[v60]
+LOAD bin/v60/halide_hexagon_remote_skel.o[v60]
+END GROUP
+START GROUP
+LOAD /usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/libgcc.so[v60]
+END GROUP
+LOAD /usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/finiS.o[v60]
+
+.dynsym	0x1000	0x400
+
+.dynstr	0x1400	0x279
+
+.hash	0x167c	0x19c
+
+.rela.dyn	0x1818	0x1d4
+
+.rela.plt	0x19ec	0x90
+
+.init	0x1a80	0x74
+(.init)	
+.init	0x1a80	0x74	/usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/initS.o	
+	0x1a80		.init	
+	0x1a80		_init	
+
+.plt	0x1b00	0xf0
+
+
+.text	0x1c00	0x11f0
+(.text)	
+.text	0x1c00	0xcb8	bin/v60/halide_remote.o	
+	0x1c00		.text	
+	0x1c00		halide_print	
+	0x1c60		_Z13_HAP_debug_v2iPKciS0_z	
+	0x1ca0		halide_error	
+	0x1d00		halide_malloc	
+	0x1d20		halide_free	
+	0x1d40		halide_do_task	
+	0x1d60		halide_do_par_for	
+	0x1dc0		halide_get_symbol	
+	0x1de0		halide_load_library	
+	0x1e00		halide_get_library_symbol	
+	0x1e20		halide_hexagon_remote_initialize_kernels	
+	0x21a0		halide_hexagon_remote_get_symbol	
+	0x21c0		halide_hexagon_remote_run	
+	0x2880		halide_hexagon_remote_release_kernels	
+.text	0x28c0	0x530	bin/v60/halide_hexagon_remote_skel.o	
+	0x28c0		.text	
+	0x28c0		halide_hexagon_remote_skel_invoke	
+
+.fini	0x2e00	0x48
+(.fini)	
+.fini	0x2e00	0x48	/usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/finiS.o	
+	0x2e00		.fini	
+	0x2e00		_fini	
+
+.rodata	0x2e48	0x1df
+(.rodata.str1.8)	(.rodata)	
+.rodata.str1.8	0x2e48	0x13c	bin/v60/halide_remote.o	
+	0x2e48		.rodata.str1.8	
+.rodata	0x2f88	0x9f	bin/v60/halide_hexagon_remote_skel.o	
+	0x2f88		methodStringsArrays	
+	0x2f88		.rodata	
+	0x2f90		methodStrings	
+	0x2fb0		strings	
+
+.eh_frame	0x3040	0x120
+
+.dynamic	0x4000	0xb0
+
+.got	0x40b0	0x2c
+
+
+.got.plt	0x40e0	0x40
+
+
+.data.rel.ro.local	0x4120	0x168
+(.data.rel.ro.local)	
+.data.rel.ro.local	0x4120	0x168	bin/v60/halide_hexagon_remote_skel.o	
+	0x4120		methodArrays	
+	0x4120		.data.rel.ro.local	
+	0x4130		halide_hexagon_remote_slim	
+	0x4150		parameterArrays	
+	0x4180		methods	
+	0x41f0		parameters	
+	0x4250		sequenceTypes	
+	0x4268		types	
+
+.ctors	0x4288	0x8
+(.ctors)	
+.ctors	0x4288	0x4	/usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/initS.o	
+	0x4288		__CTOR_LIST__	
+	0x4288		.ctors	
+.ctors	0x428c	0x4	/usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/finiS.o	
+	0x428c		.ctors	
+	0x428c		__CTOR_END__	
+
+.dtors	0x4290	0x8
+(.dtors)	
+.dtors	0x4290	0x4	/usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/initS.o	
+	0x4290		.dtors	
+	0x4290		__DTOR_LIST__	
+.dtors	0x4294	0x4	/usr/local/google/home/srj/Qualcomm/HEXAGON_Tools/7.2.12/Tools/bin/../target/hexagon/lib/v60/G0/pic/finiS.o	
+	0x4294		__DTOR_END__	
+	0x4294		.dtors	
+
+.bss	0x4298	0x4
+(.bss)	
+.bss	0x4298	0x4	bin/v60/halide_remote.o	
+	0x4298		.bss	
+	0x4298		context_count	
+
+.comment	0x4298	0x28
+(.comment)	
+.comment	0x4298	0x1	bin/v60/halide_remote.o	
+	0x0		.comment	
+
+.shstrtab	0x42c0	0xb4
+
+.symtab	0x4374	0x560
+
+.strtab	0x48d4	0x329

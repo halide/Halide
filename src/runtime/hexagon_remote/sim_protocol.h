@@ -1,5 +1,5 @@
-#ifndef HALIDE_RPC_PROTOCOL_H
-#define HALIDE_RPC_PROTOCOL_H
+#ifndef SIM_PROTOCOL_H
+#define SIM_PROTOCOL_H
 
 namespace Message {
 enum {
@@ -14,4 +14,4 @@ enum {
 };
 }
 
-#endif
+#endif  // SIM_PROTOCOL_H
