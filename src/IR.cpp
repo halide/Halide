@@ -694,6 +694,7 @@ Call::ConstString Call::likely = "likely";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
+Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
 
 
 }

@@ -1334,6 +1334,19 @@ void solve_test() {
     check_and_condition((x != 0) && (y != 0), const_false(), Interval(-10, 10));
     check_and_condition((x != 0) && (y != 0), y != 0, Interval(-20, -10));
 
+    {
+        // This case used to break due to signed integer overflow in
+        // the simplifier.
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer(), Parameter());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer(), Parameter());
+        Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
+
+        Scope<Interval> s;
+        s.push("x", Interval(-10, 10));
+        Expr cond = and_condition_over_domain(lhs < 0, s);
+        internal_assert(!is_one(simplify(cond)));
+    }
+
     debug(0) << "Solve test passed\n";
 
 }
