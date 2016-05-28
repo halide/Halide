@@ -6,6 +6,8 @@
  * Defines Module, an IR container that fully describes a Halide program.
  */
 
+#include <functional>
+ 
 #include "IR.h"
 #include "Buffer.h"
 #include "ModulusRemainder.h"
