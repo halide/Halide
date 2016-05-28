@@ -1835,6 +1835,12 @@ void Func::compile_to_static_library(const string &filename_prefix,
     pipeline().compile_to_static_library(filename_prefix, args, target);
 }
 
+void Func::compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                 const std::vector<Argument> &args,
+                                                 const std::vector<Target> &targets) {
+    pipeline().compile_to_multitarget_static_library(filename_prefix, args, targets);
+}
+
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
     pipeline().compile_to_assembly(filename, args, fn_name, target);
