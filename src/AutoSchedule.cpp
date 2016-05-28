@@ -608,8 +608,17 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
 
 struct Partitioner {
 
+  struct InlineChoice {
+    // InlineChoice encodes the choice of the prod_group being inlined
+    // into the cons_group
+    string prod_group;
+    string cons_group;
+    InlineChoice(string _prod_group, string _cons_group) :
+      prod_group(_prod_group), cons_group(_cons_group) {}
+  };
+
   struct FusionChoice {
-    // FusionChoice encodes the chocie of the prod_group being merged with
+    // FusionChoice encodes the choice of the prod_group being merged with
     // the cons_group at the granularity of the tile given by tile_sizes
     string prod_group;
     string cons_group;
@@ -619,7 +628,7 @@ struct Partitioner {
     FusionChoice(string _prod_group, string _cons_group,
                  map<string, int>& _tile_sizes) :
       prod_group(_prod_group), cons_group(_cons_group),
-      tile_sizes(_tile_sizes) { }
+      tile_sizes(_tile_sizes) {}
 
     friend std::ostream& operator <<(std::ostream& stream,
                                      const FusionChoice& choice) {
@@ -638,7 +647,7 @@ struct Partitioner {
 
   };
 
-  map<pair<string, string>, FusionChoice> fusion_cache;
+  map<pair<string, string>, int64_t> fusion_cache;
 
   struct Group {
     // The output function representing the group
@@ -821,16 +830,17 @@ struct Partitioner {
     }
   }
 
-  void evaluate_fusion_choice(FusionChoice &choice,
-                              Partitioner::Level level);
+  int64_t evaluate_choice(FusionChoice &choice);
+  int64_t evaluate_choice(InlineChoice &choice);
+
   void evaluate_group_cost(Group &g);
   vector<Interval> get_bounds_from_tile_sizes(string func,
                                               map<string, int> &tile_sizes);
+  void group(Partitioner::Level level);
+  pair<vector<InlineChoice>, int64_t>
+      choose_candidate_fuse_inline(const vector< pair<string, string > > &cand_pairs);
 /*
   Option choose_candidate(const vector< pair<string, string > > &cand_pairs);
-  pair<float, vector<Option> >
-      choose_candidate_inline(const vector< pair<string, string > > &cand_pairs);
-  void group(Partitioner::Level level);
   void clear_schedules_fast_mem();
   void initialize_groups_fast_mem();
   void initialize_groups_inline();
@@ -841,7 +851,133 @@ struct Partitioner {
                                     vector<int> &tile_sizes, bool unit_tile);
 */
 };
+//TODO: This should not be candidate pairs
+pair<vector<Partitioner::InlineChoice>, int64_t>
+Partitioner::choose_candidate_fuse_inline(
+    const vector< pair<string, string> > &cand_pairs) {
 
+  pair<vector<Partitioner::InlineChoice>, int64_t> best;
+  best.second = -1;
+  for (auto &p: cand_pairs) {
+    // Compute the aggregate benefit for inlining into all the children
+    int64_t overall_benefit = 0;
+    vector<Partitioner::InlineChoice> choices;
+
+    for (auto &c: children[p.first]) {
+      int64_t benefit = 0;
+      // Get the output function of the child group
+      Function output = analy.env.at(c);
+
+      InlineChoice cand_choice(p.first, c);
+    
+      // Check if the pair has been evaluated for inline fusion before
+      pair<string, string> key = make_pair(p.first, c);
+      if (fusion_cache.find(key) != fusion_cache.end()) {
+
+        best.second = fusion_cache.at(key);
+
+      } else {
+        benefit = evaluate_choice(cand_choice);
+        // Cache the result of the evaluation for the pair
+        fusion_cache.insert(make_pair(key, benefit));
+      }
+
+      // Conservative strategy that only goes ahead with the fusion
+      // if all the fusions into the consumers are beneficial
+      // TODO: Create a test where this assumption breaks
+      if (benefit < 0) {
+        overall_benefit = -1;
+        break;
+      } else {
+        choices.push_back(cand_choice);
+        overall_benefit += benefit;
+      }
+    }
+
+    if (best.second < overall_benefit) {
+      best.first = choices;
+      best.second = overall_benefit;
+    }
+  }
+  return best;
+}
+/*
+void Partitioner::group(Partitioner::Level level) {
+    // Partition the pipeline by iteratively merging groups until a fixpoint
+    bool fixpoint = false;
+    while(!fixpoint) {
+        fixpoint = true;
+        vector< pair<string, string> > cand;
+        for (auto &g: groups) {
+
+            if (std::find(outputs.begin(), outputs.end(), g.first) !=
+                outputs.end())
+                continue;
+
+            if (children.find(g.first) != children.end()) {
+                int num_children = children[g.first].size();
+                // Find all the groups which have a single child
+                if (num_children == 1 && level == Partitioner::FAST_MEM) {
+                    cand.push_back(make_pair(g.first,
+                                             *children[g.first].begin()));
+                } else if(num_children > 0  && level == Partitioner::INLINE) {
+                    cand.push_back(make_pair(g.first, ""));
+                }
+            }
+        }
+
+        debug(0) << "Current grouping candidates:" << '\n';
+        for (auto &p: cand) {
+          debug(0) << "[" << p.first << "," <<  p.second << "]" << '\n';
+        }
+
+        vector<pair<string, string> > invalid_keys;
+        if (level == Partitioner::INLINE) {
+            pair<vector<InlineChoice>, int64_t> best;
+            best = choose_candidate_fuse_inline(cand);
+            if (best.second >= 0) {
+                string prod = best.second[0].prod_group;
+
+                for (auto &o: best.second)
+                    internal_assert(o.prod_group == prod);
+
+                // Mark the entries of the fusion cache that need to be
+                // invalidated
+                for (auto &c: children[prod]) {
+                    for (auto& choice: choice_cache) {
+                        if (choice.first.first == c ||
+                                choice.first.second == c)
+                            invalid_keys.push_back(choice.first);
+                    }
+                }
+                merge_group_into_all_children(prod);
+                fixpoint = false;
+            }
+
+        } else {
+            pair<FusionChoice, int64_t> best;
+            best = choose_candidate_fuse_fast_mem(cand);
+            if (best.second >= 0) {
+
+                // Mark the entries of the fusion cache that need to be
+                // invalidated
+                for (auto& choice: fusion_cache) {
+                    if (choice.first.second == best.first.cons_group
+                            || choice.first.first == best.first.cons_group)
+                        invalid_keys.push_back(choice.first);
+                }
+
+                merge_groups(best.first.prod_group, best.first.cons_group);
+                fixpoint = false;
+            }
+        }
+
+        // Invalidate the fusion cache
+        for (auto& key: invalid_keys)
+            fusion_cache.erase(key);
+    }
+}
+*/
 vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
                                                          map<string, int> &tile_sizes) {
   vector<Interval> bounds;
@@ -963,39 +1099,44 @@ void Partitioner::evaluate_group_cost(Group &g) {
   mem_reg[g.output] = Box(bounds);
 }
 
-void Partitioner::evaluate_fusion_choice(FusionChoice &choice,
-                                         Partitioner::Level l) {
-    //disp_option(opt);
 
-    map<string, Box> conc_reg;
+int64_t Partitioner::evaluate_choice(InlineChoice &choice) {
+  return 0;
+}
 
-    // Create a group that reflects the fusion choice and evaluate
-    // the cost of the group
-    Group prod_group = groups.at(choice.prod_group);
-    Group cons_group = groups.at(choice.cons_group);
+int64_t Partitioner::evaluate_choice(FusionChoice &choice) {
+  //disp_option(opt);
 
-    vector<Function> fused_members;
-    for(auto &f: prod_group.members)
-      fused_members.push_back(f);
-    for(auto &f: cons_group.members)
-      fused_members.push_back(f);
+  map<string, Box> conc_reg;
 
-    Group fused_group(cons_group.output, fused_members);
+  // Create a group that reflects the fusion choice and evaluate
+  // the cost of the group
+  Group prod_group = groups.at(choice.prod_group);
+  Group cons_group = groups.at(choice.cons_group);
 
-    for(auto &f: prod_group.inlined)
-      fused_group.inlined.insert(f);
-    for(auto &f: cons_group.inlined)
-      cons_group.inlined.insert(f);
+  vector<Function> fused_members;
+  for(auto &f: prod_group.members)
+    fused_members.push_back(f);
+  for(auto &f: cons_group.members)
+    fused_members.push_back(f);
 
-    fused_group.tile_sizes = choice.tile_sizes;
+  Group fused_group(cons_group.output, fused_members);
 
-    // Compare the cost with the costs of the groups without fusion
-    evaluate_group_cost(prod_group);
-    evaluate_group_cost(cons_group);
-    evaluate_group_cost(fused_group);
+  for(auto &f: prod_group.inlined)
+    fused_group.inlined.insert(f);
+  for(auto &f: cons_group.inlined)
+    cons_group.inlined.insert(f);
 
-    // Return the overall benefit of the choice
-    // TODO: Use the arch params to compute total work
+  fused_group.tile_sizes = choice.tile_sizes;
+
+  // Compare the cost with the costs of the groups without fusion
+  evaluate_group_cost(prod_group);
+  evaluate_group_cost(cons_group);
+  evaluate_group_cost(fused_group);
+
+  // Return the overall benefit of the choice
+  // TODO: Use the arch params to compute total work
+  return 0;
 }
 
 void generate_schedules(const vector<Function> &outputs,
