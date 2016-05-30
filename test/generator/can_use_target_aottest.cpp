@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     if (info[2] & (1 << 29)) host_features |= (1ULL << halide_target_feature_f16c);
     if (info[2] & (1 << 12)) host_features |= (1ULL << halide_target_feature_fma);
 
-    printf("host_features are: %llx\n", (unsigned long long) host_features);
+    printf("host_features are: %x %x\n", (unsigned)host_features, (unsigned)(host_features >> 32));
 
     // First, test that the host features are usable. If not, something is wrong.
     if (!halide_can_use_target_features(host_features)) {
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < (int)(halide_target_feature_end); i++) {
         if (host_features & (1ULL << i)) {
             host_features &= ~(1ULL << i);
-            printf("Testing features: %llx\n", (unsigned long long) host_features);
+	    printf("host_features are: %x %x\n", (unsigned)host_features, (unsigned)(host_features >> 32));
             if (!halide_can_use_target_features(host_features)) {
               printf("Failure!\n");
               return -1;
