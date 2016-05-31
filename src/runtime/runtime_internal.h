@@ -159,10 +159,12 @@ extern WEAK void halide_release_jit_module();
 
 // Return a mask with all CPU-specific features supported by the current CPU set.
 struct CpuFeatures {
-    const uint64_t known;     // mask of the CPU features we know how to detect
-    const uint64_t available; // mask of the CPU features that are available
+    uint64_t known;     // mask of the CPU features we know how to detect
+    uint64_t available; // mask of the CPU features that are available
                               // (always a subset of 'known')
     CpuFeatures(const uint64_t known, const uint64_t available) : known(known), available(available) {}
+    CpuFeatures(const CpuFeatures &other) : known(other.known), available(other.available) {}
+    CpuFeatures() : known(0), available(0) {}
 };
 extern WEAK CpuFeatures halide_get_cpu_features();
 
