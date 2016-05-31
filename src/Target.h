@@ -153,7 +153,7 @@ struct Target {
      * types except 64-bit float and int/uint should be supported by
      * all backends.
      */
-    bool supports_type(const Type &t) {
+    bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
             if (t.is_float()) {
                 return !has_feature(Metal) &&

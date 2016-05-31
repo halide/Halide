@@ -2666,6 +2666,10 @@ void CodeGen_LLVM::visit(const Call *op) {
             f->setCallingConv(CallingConv::C);
         }
         register_destructor(f, codegen(arg), Always);
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        user_error << "Signed integer overflow occurred during constant-folding. Signed"
+            " integer overflow for int32 and int64 is undefined behavior in"
+            " Halide.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
