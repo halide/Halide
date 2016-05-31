@@ -738,7 +738,8 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
-        } else if (op->is_intrinsic(Call::likely)) {
+        } else if (op->is_intrinsic(Call::likely) ||
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -1250,7 +1251,8 @@ private:
                 // of conditions for now.
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
-                if (call && call->is_intrinsic(Call::likely)) {
+                if (call && (call->is_intrinsic(Call::likely) ||
+                             call->is_intrinsic(Call::likely_if_innermost))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
@@ -1282,6 +1284,9 @@ private:
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
                             likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
@@ -1310,6 +1315,9 @@ private:
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
                             likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
