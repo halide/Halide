@@ -2841,6 +2841,12 @@ private:
         const Call *cf = false_value.as<Call>();
         const Select *sel_t = true_value.as<Select>();
         const Select *sel_f = false_value.as<Select>();
+        const Add *add_t = true_value.as<Add>();
+        const Add *add_f = false_value.as<Add>();
+        const Sub *sub_t = true_value.as<Sub>();
+        const Sub *sub_f = false_value.as<Sub>();
+        const Mul *mul_t = true_value.as<Mul>();
+        const Mul *mul_f = false_value.as<Mul>();
 
         if (is_zero(condition)) {
             expr = false_value;
@@ -2898,6 +2904,76 @@ private:
                    equal(sel_f->true_value, true_value)) {
             // select(a, d, select(b, d, c)) -> select(a || b, d, c)
             expr = mutate(Select::make(condition || sel_f->condition, true_value, sel_f->false_value));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->a, add_f->a)) {
+            // select(c, a+b, a+d) -> a + select(x, b, d)
+            expr = mutate(add_t->a + Select::make(condition, add_t->b, add_f->b));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->a, add_f->b)) {
+            // select(c, a+b, d+a) -> a + select(x, b, d)
+            expr = mutate(add_t->a + Select::make(condition, add_t->b, add_f->a));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->b, add_f->a)) {
+            // select(c, b+a, a+d) -> a + select(x, b, d)
+            expr = mutate(add_t->b + Select::make(condition, add_t->a, add_f->b));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->b, add_f->b)) {
+            // select(c, b+a, d+a) -> select(x, b, d) + a
+            expr = mutate(Select::make(condition, add_t->a, add_f->a) + add_t->b);
+        } else if (sub_t &&
+                   sub_f &&
+                   equal(sub_t->a, sub_f->a)) {
+            // select(c, a-b, a-d) -> a - select(x, b, d)
+            expr = mutate(sub_t->a - Select::make(condition, sub_t->b, sub_f->b));
+        } else if (sub_t &&
+                   sub_f &&
+                   equal(sub_t->b, sub_f->b)) {
+            // select(c, b-a, d-a) -> select(x, b, d) - a
+            expr = mutate(Select::make(condition, sub_t->a, sub_f->a) - sub_t->b);\
+        } else if (add_t &&
+                   sub_f &&
+                   equal(add_t->a, sub_f->a)) {
+            // select(c, a+b, a-d) -> a + select(x, b, 0-d)
+            expr = mutate(add_t->a + Select::make(condition, add_t->b, make_zero(sub_f->b.type()) - sub_f->b));
+        } else if (add_t &&
+                   sub_f &&
+                   equal(add_t->b, sub_f->b)) {
+            // select(c, b+a, a-d) -> a + select(x, b, 0-d)
+            expr = mutate(add_t->b + Select::make(condition, add_t->a, make_zero(sub_f->b.type()) - sub_f->b));
+        } else if (sub_t &&
+                   add_f &&
+                   equal(sub_t->a, add_f->a)) {
+            // select(c, a-b, a+d) -> a + select(x, 0-b, d)
+            expr = mutate(sub_t->a + Select::make(condition, make_zero(sub_t->b.type()) - sub_t->b, add_f->b));
+        } else if (sub_t &&
+                   add_f &&
+                   equal(sub_t->a, add_f->b)) {
+            // select(c, a-b, d+a) -> a + select(x, 0-b, d)
+            expr = mutate(sub_t->a + Select::make(condition, make_zero(sub_t->b.type()) - sub_t->b, add_f->a));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->a, mul_f->a)) {
+            // select(c, a*b, a*d) -> a * select(x, b, d)
+            expr = mutate(mul_t->a * Select::make(condition, mul_t->b, mul_f->b));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->a, mul_f->b)) {
+            // select(c, a*b, d*a) -> a * select(x, b, d)
+            expr = mutate(mul_t->a * Select::make(condition, mul_t->b, mul_f->a));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->b, mul_f->a)) {
+            // select(c, b*a, a*d) -> a * select(x, b, d)
+            expr = mutate(mul_t->b * Select::make(condition, mul_t->a, mul_f->b));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->b, mul_f->b)) {
+            // select(c, b*a, d*a) -> select(x, b, d) * a
+            expr = mutate(Select::make(condition, mul_t->a, mul_f->a) * mul_t->b);
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -4408,10 +4484,10 @@ void check_boolean() {
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
-                           Evaluate::make(select(b1, x+3, x+8) - select(b2, x+5, x+7))),
+                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
+                           Evaluate::make(select(b1, x+3, y+8) - select(b2, x+5, y+7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
+                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
@@ -4488,6 +4564,24 @@ void check_boolean() {
 
     check(max(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
           select(x == 2, max(y*3, y+8), max(y*7, 8)));
+
+    check(select(x == 2, x+1, x+5), x + select(x == 2, 1, 5));
+    check(select(x == 2, x+y, x+z), x + select(x == 2, y, z));
+    check(select(x == 2, y+x, x+z), x + select(x == 2, y, z));
+    check(select(x == 2, y+x, z+x), select(x == 2, y, z) + x);
+    check(select(x == 2, x+y, z+x), x + select(x == 2, y, z));
+    check(select(x == 2, x*2, x*5), x * select(x == 2, 2, 5));
+    check(select(x == 2, x*y, x*z), x * select(x == 2, y, z));
+    check(select(x == 2, y*x, x*z), x * select(x == 2, y, z));
+    check(select(x == 2, y*x, z*x), select(x == 2, y, z) * x);
+    check(select(x == 2, x*y, z*x), x * select(x == 2, y, z));
+    check(select(x == 2, x-y, x-z), x - select(x == 2, y, z));
+    check(select(x == 2, y-x, z-x), select(x == 2, y, z) - x);
+    check(select(x == 2, x+y, x-z), x + select(x == 2, y, 0-z));
+    check(select(x == 2, y+x, x-z), x + select(x == 2, y, 0-z));
+    check(select(x == 2, x-z, x+y), x + select(x == 2, 0-z, y));
+    check(select(x == 2, x-z, y+x), x + select(x == 2, 0-z, y));
+
 
     {
 
