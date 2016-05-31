@@ -153,7 +153,7 @@ public:
             }
             vecs[1] = def.values();
 
-            for (size_t i = 0; i <result.size(); ++i) {
+            for (size_t i = 0; i < result.size(); ++i) {
                 for (const Expr &val : vecs[i]) {
                     if (!predicates.empty()) {
                         Expr cond_val = Call::make(val.type(),
