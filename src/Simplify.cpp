@@ -2941,7 +2941,7 @@ private:
             expr = mutate(add_t->a + Select::make(condition, add_t->b, make_zero(sub_f->b.type()) - sub_f->b));
         } else if (add_t &&
                    sub_f &&
-                   equal(add_t->b, sub_f->b)) {
+                   equal(add_t->b, sub_f->a)) {
             // select(c, b+a, a-d) -> a + select(x, b, 0-d)
             expr = mutate(add_t->b + Select::make(condition, add_t->a, make_zero(sub_f->b.type()) - sub_f->b));
         } else if (sub_t &&
