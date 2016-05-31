@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
         Image<int> im = g.realize(100, 1000, 3);
 
-        size_t expected_size = 102*4*sizeof(int) + sizeof(int);
+        size_t expected_size = 101*4*sizeof(int) + sizeof(int);
         printf("%d\n", (int)custom_malloc_size);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);

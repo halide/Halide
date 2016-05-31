@@ -11,9 +11,9 @@ int main(int argc, char **argv) {
     Func g("g");
     g(x, y) = f(x, y-1) + f(x, y+1);
 
-    f.compute_at(g, y).store_root();//.vectorize(x, 8);
+    f.compute_at(g, y).store_root().vectorize(x, 8);
 
-    //g.specialize(g.output_buffer().width() < 64).vectorize(x, 8);
+    g.specialize(g.output_buffer().width() < 64).vectorize(x, 8);
 
     g.realize(32, 24);
 
