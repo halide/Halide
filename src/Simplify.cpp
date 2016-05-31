@@ -56,6 +56,15 @@ bool no_overflow(Type t) {
     return t.is_float() || no_overflow_scalar_int(t.element_of());
 }
 
+// Make a poison value used when overflow is detected during constant
+// folding.
+Expr signed_integer_overflow_error(Type t) {
+    // Mark each call with an atomic counter, so that the errors can't
+    // cancel against each other.
+    static std::atomic<int> counter;
+    return Call::make(t, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+}
+
 }
 
 class Simplify : public IRMutator {
@@ -413,8 +422,12 @@ private:
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
-            // const int + const int
-            expr = IntImm::make(a.type(), ia + ib);
+            if (no_overflow(a.type()) &&
+                add_would_overflow(a.type().bits(), ia, ib)) {
+                expr = signed_integer_overflow_error(a.type());
+            } else {
+                expr = IntImm::make(a.type(), ia + ib);
+            }
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
             // const uint + const uint
@@ -737,7 +750,12 @@ private:
         } else if (equal(a, b)) {
             expr = make_zero(op->type);
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = IntImm::make(a.type(), ia - ib);
+            if (no_overflow(a.type()) &&
+                sub_would_overflow(a.type().bits(), ia, ib)) {
+                expr = signed_integer_overflow_error(a.type());
+            } else {
+                expr = IntImm::make(a.type(), ia - ib);
+            }
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
             expr = UIntImm::make(a.type(), ua - ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
@@ -1179,7 +1197,12 @@ private:
         } else if (is_one(b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = IntImm::make(a.type(), ia * ib);
+            if (no_overflow(a.type()) &&
+                mul_would_overflow(a.type().bits(), ia, ib)) {
+                expr = signed_integer_overflow_error(a.type());
+            } else {
+                expr = IntImm::make(a.type(), ia * ib);
+            }
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
             expr = UIntImm::make(a.type(), ua * ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
@@ -4509,6 +4532,54 @@ void check_math() {
     check(ceil(ceil(x)), ceil(x));
 }
 
+void check_overflow() {
+    Expr overflowing[] = {
+        make_const(Int(32), 0x7fffffff) + 1,
+        make_const(Int(32), 0x7ffffff0) + 16,
+        (make_const(Int(32), 0x7fffffff) +
+         make_const(Int(32), 0x7fffffff)),
+        make_const(Int(32), 0x08000000) * 16,
+        (make_const(Int(32), 0x00ffffff) *
+         make_const(Int(32), 0x00ffffff)),
+        make_const(Int(32), 0x80000000) - 1,
+        0 - make_const(Int(32), 0x80000000),
+        make_const(Int(64), (int64_t)0x7fffffffffffffffLL) + 1,
+        make_const(Int(64), (int64_t)0x7ffffffffffffff0LL) + 16,
+        (make_const(Int(64), (int64_t)0x7fffffffffffffffLL) +
+         make_const(Int(64), (int64_t)0x7fffffffffffffffLL)),
+        make_const(Int(64), (int64_t)0x0800000000000000LL) * 16,
+        (make_const(Int(64), (int64_t)0x00ffffffffffffffLL) *
+         make_const(Int(64), (int64_t)0x00ffffffffffffffLL)),
+        make_const(Int(64), (int64_t)0x8000000000000000LL) - 1,
+        0 - make_const(Int(64), (int64_t)0x8000000000000000LL),
+    };
+    Expr not_overflowing[] = {
+        make_const(Int(32), 0x7ffffffe) + 1,
+        make_const(Int(32), 0x7fffffef) + 16,
+        make_const(Int(32), 0x07ffffff) * 2,
+        (make_const(Int(32), 0x0000ffff) *
+         make_const(Int(32), 0x00008000)),
+        make_const(Int(32), 0x80000001) - 1,
+        0 - make_const(Int(32), 0x7fffffff),
+        make_const(Int(64), (int64_t)0x7ffffffffffffffeLL) + 1,
+        make_const(Int(64), (int64_t)0x7fffffffffffffefLL) + 16,
+        make_const(Int(64), (int64_t)0x07ffffffffffffffLL) * 16,
+        (make_const(Int(64), (int64_t)0x00000000ffffffffLL) *
+         make_const(Int(64), (int64_t)0x0000000080000000LL)),
+        make_const(Int(64), (int64_t)0x8000000000000001LL) - 1,
+        0 - make_const(Int(64), (int64_t)0x7fffffffffffffffLL),
+    };
+
+    for (Expr e : overflowing) {
+        internal_assert(!is_const(simplify(e)))
+            << "Overflowing expression should not have simplified: " << e << "\n";
+    }
+    for (Expr e : not_overflowing) {
+        internal_assert(is_const(simplify(e)))
+            << "Non-everflowing expression should have simplified: " << e << "\n";
+    }
+}
+
 }
 
 void simplify_test() {
@@ -4523,6 +4594,7 @@ void simplify_test() {
     check_bounds();
     check_math();
     check_boolean();
+    check_overflow();
 
     // Check bitshift operations
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
