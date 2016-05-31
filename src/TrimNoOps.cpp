@@ -202,7 +202,6 @@ class SimplifyUsingBounds : public IRMutator {
             }  else if (loop.i.is_bounded() &&
                         can_prove(loop.i.min == loop.i.max) &&
                         expr_uses_var(test, loop.var)) {
-                //debug(0) << "Substituting out " << loop.var << "\n";
                 // If min == max then either the domain only has one correct value, which we
                 // can substitute directly.
                 // Need to call CSE here since simplify() is sometimes unable to simplify expr with
