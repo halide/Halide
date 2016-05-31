@@ -89,7 +89,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
 
         Stmt body = op->body;
-        Box box = box_touched(body, func.name());
+        Box provided = box_provided(body, func.name());
+        Box required = box_required(body, func.name());
+        Box box = box_union(provided, required);
 
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
@@ -99,7 +101,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             const StorageDim &storage_dim = func.schedule().storage_dims()[i-1];
             Expr explicit_factor = storage_dim.fold_factor;
 
-            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
+            debug(0) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n';
 
@@ -164,14 +166,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     if (const_max_extent && *const_max_extent <= max_fold) {
                         factor = static_cast<int>(next_power_of_two(*const_max_extent));
                     } else {
-                        debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                        debug(0) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
                                  << "extent = " << extent << "\n"
                                  << "max extent = " << max_extent << "\n";
                     }
                 }
 
                 if (factor.defined()) {
-                    debug(3) << "Proceeding with factor " << factor << "\n";
+                    debug(0) << "Proceeding with factor " << factor << "\n";
 
                     Fold fold = {(int)i - 1, factor};
                     dims_folded.push_back(fold);
@@ -193,20 +195,27 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     }
                 }
             } else {
-                debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                debug(0) << "Not folding because loop min or max not monotonic in the loop variable\n"
                          << "min = " << min << "\n"
                          << "max = " << max << "\n";
             }
         }
 
-        // Any folds that took place folded dimensions away entirely, so we can proceed recursively.
-        body = mutate(body);
+        // If there's no communication of values from one loop
+        // iteration to the next (which may happen due to sliding),
+        // then we're safe to fold an inner loop.
+        if (box_contains(provided, required)) {
+            body = mutate(body);
+        }
+
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }
     }
+
+    // TODO: Handle IfThenElse
 
 public:
     struct Fold {
@@ -263,7 +272,7 @@ class StorageFolding : public IRMutator {
                     << " cannot be folded because it is accessed by extern or device stages.\n";
             }
 
-            debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
+            debug(0) << "Not attempting to fold " << op->name << " because its buffer is used\n";
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
@@ -271,7 +280,7 @@ class StorageFolding : public IRMutator {
             }
         } else {
             AttemptStorageFoldingOfFunction folder(func);
-            debug(3) << "Attempting to fold " << op->name << "\n";
+            debug(0) << "Attempting to fold " << op->name << "\n";
             body = folder.mutate(body);
 
             if (body.same_as(op->body)) {

@@ -1073,6 +1073,12 @@ void merge_boxes(Box &a, const Box &b) {
     }
 }
 
+Box box_union(const Box &a, const Box &b) {
+    Box result = a;
+    merge_boxes(result, b);
+    return result;
+}
+
 bool boxes_overlap(const Box &a, const Box &b) {
     // If one box is scalar and the other is not, the boxes cannot
     // overlap.
@@ -1099,6 +1105,17 @@ bool boxes_overlap(const Box &a, const Box &b) {
     }
 
     return !is_zero(simplify(overlap));
+}
+
+bool box_contains(const Box &outer, const Box &inner) {
+    internal_assert(outer.size() == inner.size());
+    Expr condition = const_true();
+    for (size_t i = 0; i < outer.size(); i++) {
+        condition = (condition &&
+                     (outer[i].min <= inner[i].min) &&
+                     (outer[i].max >= inner[i].max));
+    }
+    return is_one(simplify(condition));
 }
 
 // Compute the box produced by a statement
