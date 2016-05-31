@@ -466,7 +466,10 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
 
         args[0] = high;
         args.insert(args.begin() + 1, low);
-        arg_types.insert(arg_types.begin() + 1, arg_types.front());
+
+        Type split_type = arg_types.front().with_lanes(arg_types.front().lanes() / 2);
+        arg_types[0] = split_type;
+        arg_types.insert(arg_types.begin() + 1, split_type);
     }
 
     // Replace args with bitcasts if necessary.
