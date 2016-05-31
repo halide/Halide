@@ -64,6 +64,7 @@ public:
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
+    bool in_branch;
 
     using IRMutator::visit;
 
@@ -105,10 +106,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n';
 
-            bool min_monotonic_increasing =
+            // First, attempt to detect if the loop is monotonically
+            // increasing or decreasing. We don't try to do this if we
+            // are in a branch (because we can't guarantee that all
+            // branches successfully fold), but we still allow
+            // explicit folds in a branch (because they should apply
+            // equally to all branches).
+            bool min_monotonic_increasing = !in_branch &&
                 (is_monotonic(min, op->name) == Monotonic::Increasing);
 
-            bool max_monotonic_decreasing =
+            bool max_monotonic_decreasing = !in_branch &&
                 (is_monotonic(max, op->name) == Monotonic::Decreasing);
 
             if (!min_monotonic_increasing && !max_monotonic_decreasing &&
@@ -215,7 +222,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
-    // TODO: Handle IfThenElse
+    void visit(const IfThenElse *op) {
+        bool was_in_branch = in_branch;
+        in_branch = true;
+        IRMutator::visit(op);
+        in_branch = was_in_branch;
+    }
 
 public:
     struct Fold {
@@ -224,7 +236,7 @@ public:
     };
     vector<Fold> dims_folded;
 
-    AttemptStorageFoldingOfFunction(Function f) : func(f) {}
+    AttemptStorageFoldingOfFunction(Function f) : func(f), in_branch(false) {}
 };
 
 /** Check if a buffer's allocated is referred to directly via an
