@@ -88,18 +88,27 @@ check_file_exists my_first_generator_win32.h
 # -o directory : Specifies which directory to create the outputs
 # in. Usually a build directory.
 
-# -f name : Specifies the name of the generated function, and also the
-# name of the object file. If you omit this, it defaults to the
-# generator name.
+# -f name : Specifies the name of the generated function. If you omit
+# this, it defaults to the generator name.
 
-# -e assembly,bitcode,stmt,html: A list of comma separated values
-# specifying additional outputs to create. "assembly" generates
-# assembly equivalent to the generated object file. "bitcode"
-# generates llvm bitcode for the pipeline. "stmt" generates
-# human-readable pseudocode for the pipeline (similar to setting
-# HL_DEBUG_CODEGEN). "html" generates an html version of the
-# pseudocode, which can be much nicer to read than the raw .stmt
-# file.
+# -n file_base_name : Specifies the basename of the generated file(s). If
+# you omit this, it defaults to the name of the generated function.
+
+# -e static_library,o,h,assembly,bitcode,stmt,html: A list of
+# comma-separated values specifying outputs to create. The default is
+# "static_library,h". "assembly" generates assembly equivalent to the
+# generated object file. "bitcode" generates llvm bitcode for the pipeline.
+# "stmt" generates human-readable pseudocode for the pipeline (similar to
+# setting HL_DEBUG_CODEGEN). "html" generates an html version of the
+# pseudocode, which can be much nicer to read than the raw .stmt file.
+
+# -r file_base_name : Specifies that the generator should create a
+# standalone file for just the runtime. For use when generating multiple
+# pipelines from a single generator, to be linked together in one
+# executable. See example below.
+
+# -x .old=new,.old2=.new2,... : A comma-separated list of file extension
+# pairs to substitute during file naming.
 
 # target=... : The target to compile for.
 
