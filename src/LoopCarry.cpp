@@ -322,7 +322,6 @@ class LoopCarryOverLoop : public IRMutator {
             }
         }
 
-
         // For each load, move the load index forwards by one loop iteration
         vector<Expr> indices, next_indices;
         for (const vector<const Load *> &v: loads) {
@@ -491,8 +490,8 @@ class LoopCarryOverLoop : public IRMutator {
             }
 
             allocs.push_back({scratch,
-                        loads[0][0]->type.element_of(),
-                        (int)c.size() * loads[0][0]->type.lanes(),
+                        loads[c.front()][0]->type.element_of(),
+                        (int)c.size() * loads[c.front()][0]->type.lanes(),
                         initial_stores});
         }
 
