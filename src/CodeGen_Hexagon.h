@@ -52,7 +52,7 @@ protected:
                                          bool broadcast_scalar_word = false);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
-                                         const std::vector<Type> &arg_types,
+                                         std::vector<Type> arg_types,
                                          bool broadcast_scalar_word = false);
 
     using CodeGen_Posix::visit;
