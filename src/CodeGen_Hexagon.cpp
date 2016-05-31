@@ -431,7 +431,7 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret
     return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar_word);
 }
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const std::string &name,
-                                                      const std::vector<Type> &arg_types, bool broadcast_scalar_word) {
+                                                      std::vector<Type> arg_types, bool broadcast_scalar_word) {
     internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
 
@@ -466,6 +466,7 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
 
         args[0] = high;
         args.insert(args.begin() + 1, low);
+        arg_types.insert(arg_types.begin() + 1, arg_types.front());
     }
 
     // Replace args with bitcasts if necessary.
