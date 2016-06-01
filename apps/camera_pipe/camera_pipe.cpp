@@ -259,7 +259,7 @@ Func process(Func raw, Type result_type,
         .reorder(c, x, y)
         .unroll(c);
     corrected.compute_at(processed, x)
-        .vectorize(x, 8)
+        .vectorize(x, vec)
         .reorder(c, x, y)
         .unroll(c);
     processed.compute_root()
