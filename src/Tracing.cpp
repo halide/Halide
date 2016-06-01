@@ -77,7 +77,7 @@ private:
         bool trace_it = false;
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
-            Function f = op->func;
+            Function f = env.find(op->name)->second;
             bool inlined = f.schedule().compute_level().is_inline();
             if (f.has_update_definition()) inlined = false;
             trace_it = f.is_tracing_loads() || (global_level > 2 && !inlined);

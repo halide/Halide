@@ -332,8 +332,9 @@ private:
         if (call->call_type == Call::Halide ||
             call->call_type == Call::Image) {
             string name = call->name;
+            auto it = env.find(call->name);
             if (call->call_type == Call::Halide &&
-                call->func.outputs() > 1) {
+                it->second.outputs() > 1) {
                 name = name + '.' + std::to_string(call->value_index);
             }
 

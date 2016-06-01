@@ -30,7 +30,7 @@ WEAK int halide_enumerate_registered_filters(void *user_context, void* enumerate
     ScopedMutexLock lock(&list_head.mutex);
     for (_halide_runtime_internal_registered_filter_t* f = list_head.next; f != NULL;
          f = (_halide_runtime_internal_registered_filter_t *)(f->next)) {
-        int r = (*func)(enumerate_context, f->metadata, f->argv_func);
+        int r = (*func)(enumerate_context, f->metadata(), f->argv_func);
         if (r != 0) return r;
     }
     return 0;

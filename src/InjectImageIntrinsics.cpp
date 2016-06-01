@@ -8,14 +8,16 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 using std::vector;
 
 class InjectImageIntrinsics : public IRMutator {
 public:
-    InjectImageIntrinsics() : inside_kernel_loop(false) {}
+    InjectImageIntrinsics(const map<string, Function> &e) : inside_kernel_loop(false), env(e) {}
     Scope<int> scope;
     bool inside_kernel_loop;
+    const map<string, Function> &env;
 
 private:
     using IRMutator::visit;
@@ -57,7 +59,10 @@ private:
         }
 
         string name = call->name;
-        if (call->call_type == Call::Halide && call->func.outputs() > 1) {
+        auto it = env.find(name);
+        if (call->call_type == Call::Halide &&
+            it != env.end() &&
+            it->second.outputs() > 1) {
             name = name + '.' + std::to_string(call->value_index);
         }
 
@@ -111,7 +116,7 @@ private:
                        Call::image_load,
                        args,
                        Call::PureIntrinsic,
-                       Function(),
+                       nullptr,
                        0,
                        call->image,
                        call->param);
@@ -145,12 +150,12 @@ private:
     }
 };
 
-Stmt inject_image_intrinsics(Stmt s) {
+Stmt inject_image_intrinsics(Stmt s, const map<string, Function> &env) {
     debug(4)
         << "InjectImageIntrinsics: inject_image_intrinsics stmt: "
         << s << "\n";
     s = zero_gpu_loop_mins(s);
-    InjectImageIntrinsics gl;
+    InjectImageIntrinsics gl(env);
     return gl.mutate(s);
 }
 }

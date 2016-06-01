@@ -190,7 +190,7 @@ if (WITH_TEST_GENERATORS)
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "cxx_mangling${OBJ_GEN_EXE_SUFFIX}"
                                GENERATOR_NAME "cxx_mangling"
-			       TARGET_SUFFIX "_2"
+                               TARGET_SUFFIX "_2"
                                GENERATED_FUNCTION "cxx_mangling"
                                GENERATED_FUNCTION_NAMESPACE "HalideTest::"
                                GENERATOR_ARGS "target=host-c_plus_plus_name_mangling"

@@ -21,11 +21,12 @@ namespace Halide {
 
 struct Argument;
 class Func;
+struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
 class IRMutator;
-}
+}  // namespace Internal
 
 /**
  * Used to determine if the output printed to file should be as a normal string
@@ -42,52 +43,12 @@ template<typename T>
 void delete_lowering_pass(T *pass) {
     delete pass;
 }
-}
+}  // namespace
 
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
 struct CustomLoweringPass {
     Internal::IRMutator *pass;
     void (*deleter)(Internal::IRMutator *);
-};
-
-/** A struct specifying a collection of outputs. Used as an argument
- * to Pipeline::compile_to and Func::compile_to */
-struct Outputs {
-    /** The name of the emitted object file. Empty if no object file
-     * output is desired. */
-    std::string object_name;
-
-    /** The name of the emitted text assembly file. Empty if no
-     * assembly file output is desired. */
-    std::string assembly_name;
-
-    /** The name of the emitted llvm bitcode. Empty if no llvm bitcode
-     * output is desired. */
-    std::string bitcode_name;
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an object file with the given name. */
-    Outputs object(const std::string &object_name) {
-        Outputs updated = *this;
-        updated.object_name = object_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an assembly file with the given name. */
-    Outputs assembly(const std::string &assembly_name) {
-        Outputs updated = *this;
-        updated.assembly_name = assembly_name;
-        return updated;
-    }
-
-    /** Make a new Outputs struct that emits everything this one does
-     * and also an llvm bitcode file with the given name. */
-    Outputs bitcode(const std::string &bitcode_name) {
-        Outputs updated = *this;
-        updated.bitcode_name = bitcode_name;
-        return updated;
-    }
 };
 
 struct JITExtern;
@@ -149,7 +110,7 @@ public:
      * object file, with the given filename (which should probably end in
      * .o or .obj), type signature, and C function name (which defaults to
      * the same name as this halide function. You probably don't want to
-     * use this directly; call compile_to_file instead. */
+     * use this directly; call compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_object(const std::string &filename,
                                   const std::vector<Argument> &,
                                   const std::string &fn_name,
@@ -160,7 +121,7 @@ public:
      * the second argument, and a name given by the third. You don't
      * actually have to have defined any of these functions yet to
      * call this. You probably don't want to use this directly; call
-     * compile_to_file instead. */
+     * compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename,
                                   const std::vector<Argument> &,
                                   const std::string &fn_name,
@@ -205,11 +166,19 @@ public:
                                 const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
 
+    /** Compile to static-library file and header pair, with the given
+     * arguments. Also names the C function to match the filename
+     * argument. */
+    EXPORT void compile_to_static_library(const std::string &filename_prefix,
+                                          const std::vector<Argument> &args,
+                                          const Target &target = get_target_from_environment());
+
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
     EXPORT Module compile_to_module(const std::vector<Argument> &args,
                                     const std::string &fn_name,
-                                    const Target &target = get_target_from_environment());
+                                    const Target &target = get_target_from_environment(),
+                                    const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::External);
 
    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -419,8 +388,9 @@ public:
      * been rescheduled. */
     EXPORT void invalidate_cache();
 
-    private:
-        std::string generate_function_name();
+private:
+    std::string generate_function_name() const;
+    std::vector<Argument> build_public_args(const std::vector<Argument> &args, const Target &target) const;
 
 };
 
@@ -495,6 +465,6 @@ struct JITExtern {
     }
 };
 
-}
+}  // namespace Halide
 
 #endif

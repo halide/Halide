@@ -513,6 +513,96 @@ int tile_intermediate_bound_depend_on_output_test(int index) {
     return 0;
 }
 
+int self_reference_bound_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+    Var x("x"), y("y");
+    f(x, y) = x + y;
+    g(x, y) = 10;
+
+    RDom r1(0, 100, 0, 100, "r1");
+    r1.where(f(r1.x, r1.y) >= 40);
+    r1.where(f(r1.x, r1.y) != 50);
+    f(r1.x, r1.y) += 1;
+    f.compute_root();
+
+    RDom r2(0, 50, 0, 50, "r2");
+    r2.where(f(r2.x, r2.y) < 30);
+    g(r2.x, r2.y) += f(r2.x, r2.y);
+
+    Image<int> im1 = f.realize(200, 200);
+    for (int y = 0; y < im1.height(); y++) {
+        for (int x = 0; x < im1.width(); x++) {
+            int correct = x + y;
+            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+                correct += ((correct >= 40) && (correct != 50)) ? 1 : 0;
+            }
+            if (im1(x, y) != correct) {
+                printf("im1(%d, %d) = %d instead of %d\n",
+                       x, y, im1(x, y), correct);
+                return -1;
+            }
+        }
+    }
+
+    Image<int> im2 = g.realize(200, 200);
+    for (int y = 0; y < im2.height(); y++) {
+        for (int x = 0; x < im2.width(); x++) {
+            int correct = 10;
+            if ((0 <= x && x <= 49) && (0 <= y && y <= 49)) {
+                correct += (im1(x, y) < 30) ? im1(x, y) : 0;
+            }
+            if (im2(x, y) != correct) {
+                printf("im2(%d, %d) = %d instead of %d\n",
+                       x, y, im2(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+int random_float_bound_test(int index) {
+    buffer_index = index;
+
+    Func f("f_" + std::to_string(index));
+    Var x("x"), y("y");
+
+    Expr e1 = random_float() < 0.5f;
+    f(x, y) = Tuple(e1, x + y);
+
+    RDom r(0, 100, 0, 100);
+    r.where(f(r.x, r.y)[0]);
+    f(r.x, r.y) = Tuple(f(r.x, r.y)[0], f(r.x, r.y)[1] + 10);
+
+    Realization res = f.realize(200, 200);
+    assert(res.size() == 2);
+    Image<bool> im0 = res[0];
+    Image<int> im1 = res[1];
+
+    int n_true = 0;
+    for (int y = 0; y < im1.height(); y++) {
+        for (int x = 0; x < im1.width(); x++) {
+            n_true += im0(x, y);
+            int correct = x + y;
+            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+                correct += im0(x, y) ? 10 : 0;
+            }
+            if (im1(x, y) != correct) {
+                printf("im1(%d, %d) = %d instead of %d\n",
+                       x, y, im1(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    if (!(19000 <= n_true && n_true <= 21000)) {
+        printf("Expected n_true to be between 19000 and 21000; got %d instead\n", n_true);
+        return -1;
+    }
+    return 0;
+}
+
 int newton_method_test() {
     Func inverse;
     Var x;
@@ -734,6 +824,16 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Running self reference bound test\n");
+    if (self_reference_bound_test(10) != 0) {
+        return -1;
+    }
+
+    printf("Running random float bound test\n");
+    if (random_float_bound_test(11) != 0) {
+        return -1;
+    }
+
     printf("Running newton's method test\n");
     if (newton_method_test() != 0) {
         return -1;
@@ -747,17 +847,17 @@ int main(int argc, char **argv) {
     }
 
     printf("Running initialization on gpu and update on cpu test\n");
-    if (init_on_gpu_update_on_cpu_test(19) != 0) {
+    if (init_on_gpu_update_on_cpu_test(12) != 0) {
         return -1;
     }
 
     printf("Running initialization on cpu and update on gpu test\n");
-    if (init_on_cpu_update_on_gpu_test(11) != 0) {
+    if (init_on_cpu_update_on_gpu_test(13) != 0) {
         return -1;
     }
 
     printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
-    if (gpu_intermediate_computed_if_param_test(12) != 0) {
+    if (gpu_intermediate_computed_if_param_test(14) != 0) {
         return -1;
     }
 

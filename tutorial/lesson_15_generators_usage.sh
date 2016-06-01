@@ -48,12 +48,12 @@ export DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../bin
 ./lesson_15_generate -g my_first_generator -o . target=host
 
 # That should create a pair of files in the current directory:
-# "my_first_generator.o", and "my_first_generator.h", which define a
+# "my_first_generator.a", and "my_first_generator.h", which define a
 # function "my_first_generator" representing the compiled pipeline.
 
-check_file_exists my_first_generator.o
+check_file_exists my_first_generator.a
 check_file_exists my_first_generator.h
-check_symbol my_first_generator.o my_first_generator
+check_symbol my_first_generator.a my_first_generator
 
 #####################
 # Cross-compilation #
@@ -69,11 +69,11 @@ check_symbol my_first_generator.o my_first_generator
     -o . \
     target=x86-32-windows
 
-# This generates a file called "my_first_generator_win32.obj" in the
+# This generates a file called "my_first_generator_win32.lib" in the
 # current directory, along with a matching header. The function
 # defined is called "my_first_generator_win32".
 
-check_file_exists my_first_generator_win32.obj
+check_file_exists my_first_generator_win32.lib
 check_file_exists my_first_generator_win32.h
 
 ################################
@@ -88,18 +88,27 @@ check_file_exists my_first_generator_win32.h
 # -o directory : Specifies which directory to create the outputs
 # in. Usually a build directory.
 
-# -f name : Specifies the name of the generated function, and also the
-# name of the object file. If you omit this, it defaults to the
-# generator name.
+# -f name : Specifies the name of the generated function. If you omit
+# this, it defaults to the generator name.
 
-# -e assembly,bitcode,stmt,html: A list of comma separated values
-# specifying additional outputs to create. "assembly" generates
-# assembly equivalent to the generated object file. "bitcode"
-# generates llvm bitcode for the pipeline. "stmt" generates
-# human-readable pseudocode for the pipeline (similar to setting
-# HL_DEBUG_CODEGEN). "html" generates an html version of the
-# pseudocode, which can be much nicer to read than the raw .stmt
-# file.
+# -n file_base_name : Specifies the basename of the generated file(s). If
+# you omit this, it defaults to the name of the generated function.
+
+# -e static_library,o,h,assembly,bitcode,stmt,html: A list of
+# comma-separated values specifying outputs to create. The default is
+# "static_library,h". "assembly" generates assembly equivalent to the
+# generated object file. "bitcode" generates llvm bitcode for the pipeline.
+# "stmt" generates human-readable pseudocode for the pipeline (similar to
+# setting HL_DEBUG_CODEGEN). "html" generates an html version of the
+# pseudocode, which can be much nicer to read than the raw .stmt file.
+
+# -r file_base_name : Specifies that the generator should create a
+# standalone file for just the runtime. For use when generating multiple
+# pipelines from a single generator, to be linked together in one
+# executable. See example below.
+
+# -x .old=new,.old2=.new2,... : A comma-separated list of file extension
+# pairs to substitute during file naming.
 
 # target=... : The target to compile for.
 
@@ -123,15 +132,15 @@ target=host scale=9.0 rotation=ccw output_type=float32
 ./lesson_15_generate -g my_second_generator -f my_second_generator_3 -o . \
 target=host parallel=false output_type=float64
 
-check_file_exists my_second_generator_1.o
+check_file_exists my_second_generator_1.a
 check_file_exists my_second_generator_1.h
-check_symbol      my_second_generator_1.o my_second_generator_1
-check_file_exists my_second_generator_2.o
+check_symbol      my_second_generator_1.a my_second_generator_1
+check_file_exists my_second_generator_2.a
 check_file_exists my_second_generator_2.h
-check_symbol      my_second_generator_2.o my_second_generator_2
-check_file_exists my_second_generator_3.o
+check_symbol      my_second_generator_2.a my_second_generator_2
+check_file_exists my_second_generator_3.a
 check_file_exists my_second_generator_3.h
-check_symbol      my_second_generator_3.o my_second_generator_3
+check_symbol      my_second_generator_3.a my_second_generator_3
 
 # Use of these generated object files and headers is exactly the same
 # as in lesson 10.
@@ -146,7 +155,7 @@ check_symbol      my_second_generator_3.o my_second_generator_3
 # files.
 
 echo "The halide runtime:"
-nm my_second_generator_1.o | grep "[SW] _\?halide_"
+nm my_second_generator_1.a | grep "[SW] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
@@ -179,21 +188,28 @@ check_no_runtime()
 # with the no_runtime target flag. Let's generate and link several
 # different versions of the first pipeline for different x86 variants:
 
+# (Note that we'll ask the generators to just give us object files ("-e o"), 
+# instead of static libraries, so that we can easily link them all into a 
+# single static library.)
+
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_basic \
+    -e o,h \
     -o . \
     target=host-x86-64-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_sse41 \
+    -e o,h \
     -o . \
     target=host-x86-64-sse41-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_avx \
+    -e o,h \
     -o . \
     target=host-x86-64-avx-no_runtime
 
@@ -206,12 +222,16 @@ check_no_runtime my_first_generator_avx.o
 check_symbol     my_first_generator_avx.o my_first_generator_avx
 
 # We can then use the generator to emit just the runtime:
-./lesson_15_generate -r halide_runtime_x86.o -o . target=host-x86-64
+./lesson_15_generate \
+    -r halide_runtime_x86 \
+    -e o,h \
+    -o . \
+    target=host-x86-64
 check_runtime halide_runtime_x86.o
 
-# Linking the standalone runtime with the three generated object files
-# gives us three versions of the pipeline for varying levels of x86,
-# combined with a single runtime that will work on nearly all x86
+# Linking the standalone runtime with the three generated object files     
+# gives us three versions of the pipeline for varying levels of x86,      
+# combined with a single runtime that will work on nearly all x86     
 # processors.
 ar q my_first_generator_multi.a \
     my_first_generator_basic.o \

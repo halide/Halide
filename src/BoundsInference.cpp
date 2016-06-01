@@ -126,9 +126,9 @@ public:
                 const UpdateDefinition &r = func.updates()[stage - 1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
-                /*if (r.domain.defined()) {
+                if (r.domain.defined()) {
                     exprs.push_back(r.domain.predicate());
-                }*/
+                }
             }
         }
 

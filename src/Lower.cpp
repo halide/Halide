@@ -48,6 +48,7 @@
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
+#include "WrapCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -57,10 +58,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 using std::map;
-using std::pair;
-using std::make_pair;
 
-Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
@@ -68,6 +67,9 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
+
+    // Create a deep-copy of the entire graph of Funcs and substitute in wrapper Funcs.
+    std::tie(outputs, env) = wrap_func_calls(outputs, env);
 
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
@@ -132,7 +134,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
-    s = storage_folding(s);
+    s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
@@ -149,7 +151,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
         debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s);
+        s = inject_image_intrinsics(s, env);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
 

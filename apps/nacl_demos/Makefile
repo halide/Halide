@@ -1,5 +1,5 @@
 HALIDE_PATH ?= $(realpath ../..)
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_41
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_49
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I $(HALIDE_PATH)/include
@@ -7,39 +7,30 @@ CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I $(HALIDE_PATH)/i
 UNAME = $(shell uname)
 
 ifeq ($(UNAME), Linux)
-TC ?= $(NACL_SDK_ROOT)/toolchain/linux_x86_newlib
-ARM_TC ?= $(NACL_SDK_ROOT)/toolchain/linux_arm_newlib
-PNACL_TC ?= $(NACL_SDK_ROOT)/toolchain/linux_pnacl
+TC ?= $(NACL_SDK_ROOT)/toolchain/linux_pnacl
 endif
 
 ifeq ($(UNAME), Darwin)
-TC ?= $(NACL_SDK_ROOT)/toolchain/mac_x86_newlib
-ARM_TC ?= $(NACL_SDK_ROOT)/toolchain/mac_arm_newlib
-PNACL_TC ?= $(NACL_SDK_ROOT)/toolchain/mac_pnacl
+TC ?= $(NACL_SDK_ROOT)/toolchain/mac_pnacl
 endif
 
-LIBDIR_32 = $(NACL_SDK_ROOT)/lib/newlib_x86_32/Release
-LIBDIR_64 = $(NACL_SDK_ROOT)/lib/newlib_x86_64/Release
-LIBDIR_ARM = $(NACL_SDK_ROOT)/lib/newlib_arm/Release
-LIBDIR_PNACL = $(NACL_SDK_ROOT)/lib/pnacl/Release
-
-CXX_64 := $(TC)/bin/x86_64-nacl-g++ -m64 -O3 -Wall -s -Wl,--gc-sections
-CXX_32 := $(TC)/bin/i686-nacl-g++ -m32 -O3 -Wall -s -Wl,--gc-sections
-CXX_ARM := $(ARM_TC)/bin/arm-nacl-g++ -O3 -Wall -s -Wl,--gc-sections -fstack-protector
-CXX_PNACL := $(PNACL_TC)/bin/pnacl-clang++ -O3
+CXX_64 := $(TC)/bin/x86_64-nacl-clang++ -m64 -O3 -Wall -Wl,--gc-sections
+CXX_32 := $(TC)/bin/i686-nacl-clang++ -m32 -O3 -Wall -Wl,--gc-sections
+CXX_ARM := $(TC)/bin/arm-nacl-clang++ -O3 -Wall -Wl,--gc-sections
+CXX_PNACL := $(TC)/bin/pnacl-clang++ -O3
 STRIP_64 := $(TC)/bin/x86_64-nacl-strip
-LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi
-LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi
-LDFLAGS_ARM := -L $(LIBDIR_ARM) -lppapi_cpp -lppapi
-LDFLAGS_PNACL := -L $(LIBDIR_PNACL) -lppapi_cpp -lppapi
+LDFLAGS_64 := -L $(TC)/x86_32-nacl/lib/Release -L $(NACL_SDK_ROOT)/lib/clang-newlib_x86_64/Release -lppapi_cpp -lppapi
+LDFLAGS_32 := -L $(TC)/x86_64-nacl/lib/Release -L $(NACL_SDK_ROOT)/lib/clang-newlib_x86_32/Release -lppapi_cpp -lppapi
+LDFLAGS_ARM := -L $(TC)/arm-nacl/lib/Release -L $(NACL_SDK_ROOT)/lib/clang-newlib_arm/Release -lppapi_cpp -lppapi
+LDFLAGS_PNACL := -L $(NACL_SDK_ROOT)/lib/pnacl/Release -lppapi_cpp -lppapi
 
 DEMOS = game_of_life julia reaction_diffusion reaction_diffusion_2
 DEMO_OBJECTS = $(DEMOS:%=%_init) $(DEMOS:%=%_update) $(DEMOS:%=%_render)
 
-OBJECTS_32 = nacl_demos_32.o $(DEMO_OBJECTS:%=build_32/%.o)
-OBJECTS_ARM = nacl_demos_arm.o $(DEMO_OBJECTS:%=build_arm/%.o)
-OBJECTS_64 = nacl_demos_64.o $(DEMO_OBJECTS:%=build_64/%.o)
-OBJECTS_PNACL = nacl_demos_pnacl.bc $(DEMO_OBJECTS:%=build_pnacl/%.bc)
+OBJECTS_32 = nacl_demos_32.o $(DEMO_OBJECTS:%=build_32/%.a)
+OBJECTS_ARM = nacl_demos_arm.o $(DEMO_OBJECTS:%=build_arm/%.a)
+OBJECTS_64 = nacl_demos_64.o $(DEMO_OBJECTS:%=build_64/%.a)
+OBJECTS_PNACL = nacl_demos_pnacl.bc $(DEMO_OBJECTS:%=build_pnacl/%.a)
 
 all: nacl_demos.zip
 
@@ -57,7 +48,7 @@ nacl_demos_arm.nexe: nacl_demos_arm.o
 
 nacl_demos_pnacl.pexe: nacl_demos_pnacl.bc
 	$(CXX_PNACL) -o $@ $(OBJECTS_PNACL) $(LDFLAGS_PNACL)
-	$(PNACL_TC)/bin/pnacl-finalize $@
+	$(TC)/bin/pnacl-finalize $@
 
 nacl_demos_64.o: nacl_demos.cpp $(DEMOS:%=build_64/%.objects)
 	$(CXX_64) -o $@ -m64 -c $< $(CXXFLAGS) -I build_64
@@ -95,4 +86,4 @@ build_pnacl/%.objects: %.generate
 	$(CXX) $< -o $@ -I $(HALIDE_PATH)/include -L $(HALIDE_PATH)/bin -lHalide -lpthread -ldl -lz -std=c++11
 
 clean:
-	rm -f *.generate *.o *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*
+	rm -f *.generate *.o *.a *.nexe *.pexe *.bc *.ll *.s *.zip $(DEMOS:%=%.h) build_32/* build_64/* build_arm/* build_pnacl/*

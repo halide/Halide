@@ -49,6 +49,13 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     return codegen(total_size);
 }
 
+int CodeGen_Posix::allocation_padding(Type type) const {
+    // We potentially load one scalar value past the end of the
+    // buffer, so pad the allocation with an extra instance of the
+    // scalar type.
+    return type.bytes();
+}
+
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
                                                            Expr new_expr, std::string free_function) {
@@ -72,13 +79,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     // Only allocate memory if the condition is true, otherwise 0.
     Value *llvm_condition = codegen(condition);
     if (llvm_size != nullptr) {
-        // We potentially load one scalar value past the end of the
-        // buffer, so pad the allocation with an extra instance of the
-        // scalar type. If the allocation is on the stack, we can just
-        // read one past the top of the stack, so we only need this
-        // for heap allocations.
-        llvm_size = builder->CreateAdd(llvm_size,
-                                       ConstantInt::get(llvm_size->getType(), type.bytes()));
+        // Add the requested padding to the allocation size. If the
+        // allocation is on the stack, we can just read past the top
+        // of the stack, so we only need this for heap allocations.
+        Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
+        llvm_size = builder->CreateAdd(llvm_size, padding);
+
 
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
@@ -94,7 +100,13 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.destructor_function = nullptr;
     allocation.name = name;
 
-    if (!new_expr.defined() && stack_bytes != 0) {
+    if (!new_expr.defined() && extents.empty()) {
+        // If it's a scalar allocation, don't try anything clever. We
+        // want llvm to be able to promote it to a register.
+        allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
+        allocation.stack_bytes = stack_bytes;
+    } else if (!new_expr.defined() && stack_bytes != 0) {
+
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
         for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
@@ -188,6 +200,21 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
+void CodeGen_Posix::free_allocation(const std::string &name) {
+    Allocation alloc = allocations.get(name);
+
+    if (alloc.stack_bytes) {
+        // Remember this allocation so it can be re-used by a later allocation.
+        free_stack_allocs.push_back(alloc);
+    } else {
+        internal_assert(alloc.destructor);
+        trigger_destructor(alloc.destructor_function, alloc.destructor);
+    }
+
+    allocations.pop(name);
+    sym_pop(name + ".host");
+}
+
 string CodeGen_Posix::get_allocation_name(const std::string &n) {
     if (allocations.contains(n)) {
         return allocations.get(n).name;
@@ -209,24 +236,14 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 
     codegen(alloc->body);
 
-    // Should have been freed
-    internal_assert(!sym_exists(alloc->name + ".host"));
-    internal_assert(!allocations.contains(alloc->name));
+    // If there was no early free, free it now.
+    if (allocations.contains(alloc->name)) {
+        free_allocation(alloc->name);
+    }
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
-    Allocation alloc = allocations.get(stmt->name);
-
-    if (alloc.stack_bytes) {
-        // Remember this allocation so it can be re-used by a later allocation.
-        free_stack_allocs.push_back(alloc);
-    } else {
-        internal_assert(alloc.destructor);
-        trigger_destructor(alloc.destructor_function, alloc.destructor);
-    }
-
-    allocations.pop(stmt->name);
-    sym_pop(stmt->name + ".host");
+    free_allocation(stmt->name);
 }
 
 }}
