@@ -912,7 +912,7 @@ $(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_D
 
 # The matlab tests needs "-matlab" in the runtime
 $(BIN_DIR)/generator_aot_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.a $(FILTERS_DIR)/matlab.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET)-matlab.a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) $(TEST_LD_FLAGS) -o $@
 
 # acquire_release is the only test that explicitly uses CUDA/OpenCL APIs, so link only those here.
 $(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.a $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
