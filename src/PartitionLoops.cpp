@@ -891,9 +891,46 @@ class CollapseSelects : public IRMutator {
     }
 };
 
+class ContainsLoop : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const For *op) {
+        result = true;
+    }
+public:
+    bool result = false;
+};
+
+class LowerLikelyIfInnermost : public IRMutator {
+    using IRMutator::visit;
+
+    bool inside_innermost_loop = false;
+
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::likely_if_innermost)) {
+            internal_assert(op->args.size() == 1);
+            if (inside_innermost_loop) {
+                expr = Call::make(op->type, Call::likely, {mutate(op->args[0])}, Call::PureIntrinsic);
+            } else {
+                expr = mutate(op->args[0]);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const For *op) {
+        ContainsLoop c;
+        op->body.accept(&c);
+        inside_innermost_loop = !c.result;
+        IRMutator::visit(op);
+        inside_innermost_loop = false;
+    }
+};
+
 }
 
 Stmt partition_loops(Stmt s) {
+    s = LowerLikelyIfInnermost().mutate(s);
     s = MarkClampedRampsAsLikely().mutate(s);
     s = ExpandSelects().mutate(s);
     s = PartitionLoops().mutate(s);

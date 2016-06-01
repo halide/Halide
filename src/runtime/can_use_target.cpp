@@ -8,7 +8,12 @@ WEAK int halide_can_use_target_features(uint64_t features) {
 
 WEAK int halide_default_can_use_target_features(uint64_t features) {
     // cpu features should never change, so call once and cache.
-    static const CpuFeatures cpu_features = halide_get_cpu_features();
+    static bool initialized = false;
+    static CpuFeatures cpu_features;
+    if (!initialized) {
+        cpu_features = halide_get_cpu_features();
+        initialized = true;
+    }
 
     uint64_t m;
     if ((m = (features & cpu_features.known)) != 0) {
