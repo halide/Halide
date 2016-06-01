@@ -126,10 +126,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr max = simplify(box[i-1].max);
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[i-1];
-            Expr explicit_factor = storage_dim.fold_factor;
-
-            if (!expr_uses_var(min, op->name) && !expr_uses_var(max, op->name)) {
-                explicit_factor = Expr();
+            Expr explicit_factor;
+            if (expr_uses_var(min, op->name) || expr_uses_var(max, op->name)) {
+                // We only use the explicit fold factor if the fold is
+                // relevant for this loop. If the fold isn't relevant
+                // for this loop, the added asserts will be too
+                // conservative.
+                explicit_factor = storage_dim.fold_factor;
             }
 
             debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
@@ -137,11 +140,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                      << "Max: " << max << '\n';
 
             // First, attempt to detect if the loop is monotonically
-            // increasing or decreasing. We don't try to do this if we
-            // are in a branch (because we can't guarantee that all
-            // branches successfully fold), but we still allow
-            // explicit folds in a branch (because they should apply
-            // equally to all branches).
+            // increasing or decreasing (if we allow automatic folding).
             bool min_monotonic_increasing = !explicit_only &&
                 (is_monotonic(min, op->name) == Monotonic::Increasing);
 
