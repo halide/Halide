@@ -1108,9 +1108,13 @@ bool boxes_overlap(const Box &a, const Box &b) {
 }
 
 bool box_contains(const Box &outer, const Box &inner) {
-    internal_assert(outer.size() == inner.size());
+    // If the inner box has more dimensions than the outer box, the
+    // inner box cannot fit in the outer box.
+    if (inner.size() > outer.size()) {
+        return false;
+    }
     Expr condition = const_true();
-    for (size_t i = 0; i < outer.size(); i++) {
+    for (size_t i = 0; i < inner.size(); i++) {
         condition = (condition &&
                      (outer[i].min <= inner[i].min) &&
                      (outer[i].max >= inner[i].max));
