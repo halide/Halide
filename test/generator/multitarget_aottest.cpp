@@ -1,3 +1,4 @@
+#include <atomic>
 #include <string>
 #include "HalideRuntime.h"
 #include "multitarget.h"
