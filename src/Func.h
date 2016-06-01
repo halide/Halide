@@ -510,7 +510,7 @@ public:
                                           const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
-     * each resulting function will be evaluated (in order) via halide_can_use_target_features()
+     * each resulting function will be considered (in order) via halide_can_use_target_features()
      * at runtime, with the first appropriate match being selected for subsequent use.
      * This is typically useful for specializations that may vary unpredictably by machine
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
