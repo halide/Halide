@@ -282,7 +282,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 }
                 return gen->build_module(name);
             };
-        compile_multitarget(function_name, output_files, targets, module_producer);
+        if (targets.size() > 1) {
+            compile_multitarget(function_name, output_files, targets, module_producer);
+        } else {
+            // compile_multitarget() will fail if we request anything but library and/or header,
+            // so defer directly to Module::compile if there is a single target.
+            module_producer(function_name, targets[0]).compile(output_files);
+        }
     }
 
     return 0;

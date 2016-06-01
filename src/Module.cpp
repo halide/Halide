@@ -213,6 +213,9 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
 
+    // TODO(srj): It's not clear whether it's sensible to support anything else here.
+    // For now, we simply fail if anything but .h/.a is requested -- even if
+    // there is only a single target.
     user_assert(output_files.object_name.empty()) << "Cannot request object_name for compile_multitarget.\n";
     user_assert(output_files.assembly_name.empty()) << "Cannot request assembly_name for compile_multitarget.\n";
     user_assert(output_files.bitcode_name.empty()) << "Cannot request bitcode_name for compile_multitarget.\n";
