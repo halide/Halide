@@ -57,9 +57,6 @@ struct work_queue_t {
     // Global flag indicating if the thread pool has been shutdown.
     bool shutdown;
 
-    // The head and tail of the circular buffer that is "jobs".
-    int head, tail;
-
     bool running() {
         return !shutdown;
     }
@@ -226,7 +223,6 @@ void initialize_work_queue() {
     FARF(LOW, "HVX_TP: Master Thread: Initializing work queue\n");
     lock_work_queue();
     work_queue.shutdown = false;
-    work_queue.head = work_queue.tail = 0;
     work_queue.jobs = NULL;
     FARF(LOW, "HVX_TP: Master Thread: Work queue initialized\n");
     unlock_work_queue();
@@ -270,6 +266,14 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     //    c) Setting up a semaphore on which worker threads sleep until awoken
     //       by this thread i.e. the master thread.
     if (!thread_pool_initialized) {
+        // Initialize the work queue mutex.
+        // Initialize the wait_for_work semaphore.
+        // lock work queue
+        //    wq.shutdown = false;
+        //    wq.jobs = NULL;
+        // unlcok work queue
+        // create NUM_WORKER_THREADS_TO_CREATE number of threads.
+        // thread_pool_initialized = true;
         qurt_thread_pool_init();
     }
 
@@ -484,7 +488,6 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
         if (thread_pool_initialized) {
 
             lock_work_queue();
-            work_queue.head = work_queue.tail = 0;
             work_queue.jobs = NULL;
             FARF(LOW, "HVX_TP: Master Thread: Shutting down the work queue\n");
             work_queue.shutdown = true;
