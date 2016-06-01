@@ -11,7 +11,7 @@ static inline void cpuid(int32_t fn_id, int32_t *info) {
 }
 
 WEAK CpuFeatures halide_get_cpu_features() {
-    const uint64_t known = (1ULL << halide_target_feature_sse41) | 
+    const uint64_t known = (1ULL << halide_target_feature_sse41) |
                            (1ULL << halide_target_feature_avx) |
                            (1ULL << halide_target_feature_f16c) |
                            (1ULL << halide_target_feature_fma) |
@@ -51,8 +51,8 @@ WEAK CpuFeatures halide_get_cpu_features() {
             available |= (1ULL << halide_target_feature_avx2);
         }
     }
-    return CpuFeatures(known, available);
+    CpuFeatures features = {known, available};
+    return features;
 }
 
 }}}  // namespace Halide::Runtime::Internal
-

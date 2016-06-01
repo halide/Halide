@@ -1018,12 +1018,12 @@ public:
 
                 // Store the coordinates into the vertex buffer in interleaved
                 // order
-                mutated_body = Block::make(Store::make(vertex_buffer_name,
-                                                       coord1,
-                                                       gpu_varying_offset + 1, Parameter()),
+                mutated_body = make_block(Store::make(vertex_buffer_name,
+                                                      coord1,
+                                                      gpu_varying_offset + 1, Parameter()),
                                            mutated_body);
 
-                mutated_body = Block::make(Store::make(vertex_buffer_name,
+                mutated_body = make_block(Store::make(vertex_buffer_name,
                                                        coord0,
                                                        gpu_varying_offset + 0, Parameter()),
                                            mutated_body);
