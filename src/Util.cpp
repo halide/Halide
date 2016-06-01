@@ -177,14 +177,6 @@ string replace_all(const string &str, const string &find, const string &replace)
     return result;
 }
 
-string base_name(const string &name, char delim) {
-    size_t off = name.rfind(delim);
-    if (off == string::npos) {
-        return name;
-    }
-    return name.substr(off+1);
-}
-
 string make_entity_name(void *stack_ptr, const string &type, char prefix) {
     string name = Introspection::get_variable_name(stack_ptr, type);
 
@@ -285,6 +277,41 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     close(fd);
     return std::string(&buf[0]);
     #endif
+}
+
+bool add_would_overflow(int bits, int64_t a, int64_t b) {
+    int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
+    int64_t min_val = -max_val - 1;
+    return
+        ((b > 0 && a > max_val - b) || // (a + b) > max_val, rewritten to avoid overflow
+         (b < 0 && a < min_val - b));  // (a + b) < min_val, rewritten to avoid overflow
+}
+
+bool sub_would_overflow(int bits, int64_t a, int64_t b) {
+    int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
+    int64_t min_val = -max_val - 1;
+    return
+        ((b < 0 && a > max_val + b) || // (a - b) > max_val, rewritten to avoid overflow
+         (b > 0 && a < min_val + b));  // (a - b) < min_val, rewritten to avoid overflow
+}
+
+bool mul_would_overflow(int bits, int64_t a, int64_t b) {
+    int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
+    int64_t min_val = -max_val - 1;
+    if (a == 0) {
+        return false;
+    } else if (a == -1) {
+        return b == min_val;
+    } else {
+        // Do the multiplication as a uint64, for which overflow is
+        // well defined, then cast the bits back to int64 to get
+        // multiplication modulo 2^64.
+        int64_t ab = (int64_t)((uint64_t)a)*((uint64_t)b);
+        // The first two clauses catch overflow mod 2^bits, assuming
+        // no 64-bit overflow occurs, and the third clause catches
+        // 64-bit overflow.
+        return ab < min_val || ab > max_val || (ab / a != b);
+    }
 }
 
 }

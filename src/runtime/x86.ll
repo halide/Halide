@@ -132,3 +132,17 @@ define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwi
   %result = select <2 x i1> %c, <2 x double> %b, <2 x double> %a
   ret <2 x double> %result
 }
+
+; An admittedly ugly but functional version: "info" is an in-out parameter,
+; with the selector being passed as info[0] (other fields ignored on input),
+; and info[0...3] as output. This is regrettable but solves two issues:
+; -- A saner API can easily be written that spills to/from the stack internally,
+; but it's not feasible to write one that is compatible across all LLVM versions we
+; support. (Once LLVM3.6 is dropped this may change.)
+; -- A version without stack spills tends to confuse the x86-32 code generator
+; and cause it to fail via running out of registers.
+define weak_odr void @x86_cpuid_halide(i32* %info) nounwind uwtable {
+  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, 0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info)
+
+  ret void
+}

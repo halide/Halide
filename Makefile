@@ -493,12 +493,15 @@ OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 RUNTIME_CPP_COMPONENTS = \
+  aarch64_cpu_features \
   android_clock \
   android_host_cpu_count \
   android_io \
   android_opengl_context \
   android_tempfile \
+  arm_cpu_features \
   cache \
+  can_use_target \
   cuda \
   destructors \
   device_interface \
@@ -517,6 +520,7 @@ RUNTIME_CPP_COMPONENTS = \
   metal_objc_arm \
   metal_objc_x86 \
   mingw_math \
+  mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
   nacl_host_cpu_count \
@@ -535,6 +539,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_tempfile \
   posix_thread_pool \
+  powerpc_cpu_features \
   profiler \
   profiler_inlined \
   renderscript \
@@ -549,7 +554,8 @@ RUNTIME_CPP_COMPONENTS = \
   windows_opencl \
   windows_tempfile \
   windows_thread_pool \
-  write_debug_image
+  write_debug_image \
+  x86_cpu_features 
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \

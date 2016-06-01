@@ -78,6 +78,7 @@ DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(android_tempfile)
 DECLARE_CPP_INITMOD(cache)
+DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
@@ -156,15 +157,19 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
+DECLARE_CPP_INITMOD(arm_cpu_features)
 #else
 DECLARE_NO_INITMOD(arm)
 DECLARE_NO_INITMOD(arm_no_neon)
+DECLARE_NO_INITMOD(arm_cpu_features)
 #endif  // WITH_ARM
 
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
+DECLARE_CPP_INITMOD(aarch64_cpu_features)
 #else
 DECLARE_NO_INITMOD(aarch64)
+DECLARE_NO_INITMOD(aarch64_cpu_features)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_PTX
@@ -177,22 +182,28 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
+DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
+DECLARE_NO_INITMOD(x86_cpu_features)
 #endif  // WITH_X86
 
 #ifdef WITH_MIPS
 DECLARE_LL_INITMOD(mips)
+DECLARE_CPP_INITMOD(mips_cpu_features)
 #else
 DECLARE_NO_INITMOD(mips)
+DECLARE_NO_INITMOD(mips_cpu_features)
 #endif  // WITH_MIPS
 
 #ifdef WITH_POWERPC
 DECLARE_LL_INITMOD(powerpc)
+DECLARE_CPP_INITMOD(powerpc_cpu_features)
 #else
 DECLARE_NO_INITMOD(powerpc)
+DECLARE_NO_INITMOD(powerpc_cpu_features)
 #endif  // WITH_POWERPC
 
 namespace {
@@ -774,6 +785,27 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.has_feature(Target::Profile)) {
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+            }
+        }
+
+        if (module_type == ModuleAOT) {
+            // These modules are only used for AOT compilation
+            modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::ARM) {
+                if (t.bits == 64) {
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
+                }
+            }
+            if (t.arch == Target::MIPS) {
+                modules.push_back(get_initmod_mips_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::POWERPC) {
+                modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
             }
         }
     }
