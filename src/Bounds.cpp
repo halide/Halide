@@ -1129,7 +1129,7 @@ bool box_contains(const Box &outer, const Box &inner) {
             return false;
         }
     }
-    return can_prove(condition);
+    return is_one(simplify(condition));
 }
 
 // Compute the box produced by a statement
