@@ -732,16 +732,6 @@ RENDERSCRIPT_TESTS := $(shell ls $(ROOT_DIR)/test/renderscript/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 
-#ifeq ($(UNAME), Darwin)
-#LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:$(CURDIR)/$(BIN_DIR)
-#else
-#ifneq (,$(findstring MINGW,$(UNAME)))
-#LD_PATH_SETUP = PATH="${PATH}:$(CURDIR)/$(BIN_DIR)"
-#else
-#LD_PATH_SETUP = LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(CURDIR)/$(BIN_DIR)
-#endif
-#endif
-
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
