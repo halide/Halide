@@ -110,14 +110,8 @@ private:
 
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if (t.is_uint() && t.bits() <= 16) {
-            interval = Interval(cast(t, 0),
-                                cast(t, (1 << t.bits()) - 1));
-
-        } else if (t.is_int() && t.bits() <= 16) {
-            interval = Interval(cast(t, -(1 << (t.bits()-1))),
-                                cast(t, (1 << (t.bits()-1)) - 1));
-
+        if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+            interval = Interval(t.min(), t.max());
         } else {
             interval = Interval::everything();
         }
