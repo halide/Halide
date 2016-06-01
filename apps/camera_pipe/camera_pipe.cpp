@@ -147,8 +147,9 @@ Func demosaic(Func deinterleaved) {
 
 
     /* THE SCHEDULE */
-    g_r.compute_at(processed, yi).store_at(processed, yo).vectorize(x, 8).fold_storage(y, 2);
-    g_b.compute_at(processed, yi).store_at(processed, yo).vectorize(x, 8).fold_storage(y, 2);
+    const int vec = target.natural_vector_size(UInt(16));
+    g_r.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
+    g_b.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
     r_gr.compute_at(processed, x).vectorize(x);
     b_gr.compute_at(processed, x).vectorize(x);
     r_gb.compute_at(processed, x).vectorize(x);
@@ -248,12 +249,13 @@ Func process(Func raw, Type result_type,
     Expr out_height = processed.output_buffer().height();
 
     const int strip_size = 32;
+    const int vec = target.natural_vector_size(UInt(16));
     denoised.compute_at(processed, yi).store_at(processed, yo)
         .fold_storage(y, 8)
-        .vectorize(x, 16);
+        .vectorize(x, vec);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
         .fold_storage(y, 4)
-        .vectorize(x, 16)
+        .vectorize(x, vec)
         .reorder(c, x, y)
         .unroll(c);
     corrected.compute_at(processed, x)
@@ -263,14 +265,14 @@ Func process(Func raw, Type result_type,
     processed.compute_root()
         .split(y, yo, yi, strip_size)
         .split(yi, yi, yii, 2)
-        .split(x, x, xi, 32)
+        .split(x, x, xi, 2*vec)
         .reorder(xi, c, yii, x, yi, yo)
         .parallel(yo);
 
     // We can generate slightly better code if we know the splits divide the extent.
     processed
         .bound(c, 0, 3)
-        .bound(x, 0, ((out_width)/32)*32)
+        .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
         .bound(y, 0, (out_height/strip_size)*strip_size);
 
     return processed;
