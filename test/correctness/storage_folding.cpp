@@ -21,7 +21,7 @@ void my_free(void *user_context, void *ptr) {
 
 int main(int argc, char **argv) {
     Var x, y, c;
-#if 0
+
     {
         Func f, g;
 
@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
         }
 
     }
-#endif
+
     {
         Func f, g;
 
