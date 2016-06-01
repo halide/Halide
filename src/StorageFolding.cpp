@@ -15,7 +15,7 @@ namespace Internal {
 namespace {
 
 int64_t next_power_of_two(int64_t x) {
-    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x + 1)));
+    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
 }
 
 }  // namespace
@@ -23,6 +23,32 @@ int64_t next_power_of_two(int64_t x) {
 using std::string;
 using std::vector;
 using std::map;
+
+// Count the number of producers of a particular func.
+class CountProducers : public IRVisitor {
+    const std::string &name;
+
+    void visit(const ProducerConsumer *op) {
+        if (op->name == name) {
+            count++;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    using IRVisitor::visit;
+
+public:
+    int count = 0;
+
+    CountProducers(const std::string &name) : name(name) {}
+};
+
+int count_producers(Stmt in, const std::string &name) {
+    CountProducers counter(name);
+    in.accept(&counter);
+    return counter.count;
+}
 
 // Fold the storage of a function in a particular dimension by a particular factor
 class FoldStorageOfFunction : public IRMutator {
@@ -64,7 +90,7 @@ public:
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
-    bool in_branch;
+    bool explicit_only;
 
     using IRMutator::visit;
 
@@ -102,7 +128,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             const StorageDim &storage_dim = func.schedule().storage_dims()[i-1];
             Expr explicit_factor = storage_dim.fold_factor;
 
-            debug(0) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
+            if (!expr_uses_var(min, op->name) && !expr_uses_var(max, op->name)) {
+                explicit_factor = Expr();
+            }
+
+            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n';
 
@@ -112,10 +142,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // branches successfully fold), but we still allow
             // explicit folds in a branch (because they should apply
             // equally to all branches).
-            bool min_monotonic_increasing = !in_branch &&
+            bool min_monotonic_increasing = !explicit_only &&
                 (is_monotonic(min, op->name) == Monotonic::Increasing);
 
-            bool max_monotonic_decreasing = !in_branch &&
+            bool max_monotonic_decreasing = !explicit_only &&
                 (is_monotonic(max, op->name) == Monotonic::Decreasing);
 
             if (!min_monotonic_increasing && !max_monotonic_decreasing &&
@@ -149,7 +179,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
             if (min_monotonic_increasing || max_monotonic_decreasing) {
-                Expr extent = simplify(max - min);
+                Expr extent = simplify(max - min + 1);
                 Expr factor;
                 if (explicit_factor.defined()) {
                     Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
@@ -173,14 +203,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     if (const_max_extent && *const_max_extent <= max_fold) {
                         factor = static_cast<int>(next_power_of_two(*const_max_extent));
                     } else {
-                        debug(0) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                        debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
                                  << "extent = " << extent << "\n"
                                  << "max extent = " << max_extent << "\n";
                     }
                 }
 
                 if (factor.defined()) {
-                    debug(0) << "Proceeding with factor " << factor << "\n";
+                    debug(3) << "Proceeding with factor " << factor << "\n";
 
                     Fold fold = {(int)i - 1, factor};
                     dims_folded.push_back(fold);
@@ -202,7 +232,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     }
                 }
             } else {
-                debug(0) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
                          << "min = " << min << "\n"
                          << "max = " << max << "\n";
             }
@@ -222,13 +252,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
-    void visit(const IfThenElse *op) {
-        bool was_in_branch = in_branch;
-        in_branch = true;
-        IRMutator::visit(op);
-        in_branch = was_in_branch;
-    }
-
 public:
     struct Fold {
         int dim;
@@ -236,7 +259,8 @@ public:
     };
     vector<Fold> dims_folded;
 
-    AttemptStorageFoldingOfFunction(Function f) : func(f), in_branch(false) {}
+    AttemptStorageFoldingOfFunction(Function f, bool explicit_only)
+        : func(f), explicit_only(explicit_only) {}
 };
 
 /** Check if a buffer's allocated is referred to directly via an
@@ -284,15 +308,18 @@ class StorageFolding : public IRMutator {
                     << " cannot be folded because it is accessed by extern or device stages.\n";
             }
 
-            debug(0) << "Not attempting to fold " << op->name << " because its buffer is used\n";
+            debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
                 stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             }
         } else {
-            AttemptStorageFoldingOfFunction folder(func);
-            debug(0) << "Attempting to fold " << op->name << "\n";
+            // Don't attempt automatic storage folding if there is
+            // more than one produce node for this func.
+            bool explicit_only = count_producers(body, op->name) != 1;
+            AttemptStorageFoldingOfFunction folder(func, explicit_only);
+            debug(3) << "Attempting to fold " << op->name << "\n";
             body = folder.mutate(body);
 
             if (body.same_as(op->body)) {
