@@ -150,13 +150,6 @@ Func demosaic(Func deinterleaved) {
     const int vec = target.natural_vector_size(UInt(16));
     g_r.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
     g_b.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
-    r_gr.compute_at(processed, x).vectorize(x);
-    b_gr.compute_at(processed, x).vectorize(x);
-    r_gb.compute_at(processed, x).vectorize(x);
-    b_gb.compute_at(processed, x).vectorize(x);
-    r_b.compute_at(processed, x).vectorize(x);
-    b_r.compute_at(processed, x).vectorize(x);
-
     output.compute_at(processed, x)
         .vectorize(x)
         .unroll(y)
