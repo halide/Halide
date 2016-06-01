@@ -1120,7 +1120,16 @@ bool box_contains(const Box &outer, const Box &inner) {
                      (outer[i].min <= inner[i].min) &&
                      (outer[i].max >= inner[i].max));
     }
-    return is_one(simplify(condition));
+    if (outer.maybe_unused()) {
+        if (inner.maybe_unused()) {
+            // inner condition must imply outer one
+            condition = condition && ((outer.used && inner.used) == inner.used);
+        } else {
+            // outer box is conditional, but inner is not
+            return false;
+        }
+    }
+    return can_prove(condition);
 }
 
 // Compute the box produced by a statement
