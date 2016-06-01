@@ -2759,7 +2759,11 @@ void CodeGen_LLVM::visit(const Call *op) {
              call_args.push_back(&arg);
         }
 
+#if LLVM_VERSION >= 37
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
+#else
+        llvm::CallInst *call = builder->CreateCall(phi, call_args);
+#endif
         value = call;
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
