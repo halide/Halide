@@ -11,7 +11,9 @@
 #include <string>
 #include <vector>
 
+#ifndef HALIDE_NOPNG
 #include "png.h"
+#endif
 
 namespace Halide {
 namespace Tools {
@@ -102,9 +104,18 @@ struct FileOpener {
             fclose(f);
         }
     }
+    // read a line of data skipping lines that begin with '#"
+    char *readLine(char *buf, int maxlen) {
+        char *status;
+        do {
+            status = fgets(buf, maxlen, f);
+        } while(status && buf[0] == '#');
+        return(status);
+    }
     FILE * const f;
 };
 
+#ifndef HALIDE_NOPNG
 struct PngRowPointers {
     PngRowPointers(int height, int rowbytes) : p(new png_bytep[height]), height(height) {
         if (p != nullptr) {
@@ -124,12 +135,16 @@ struct PngRowPointers {
     png_bytep* const p;
     int const height;
 };
+#endif // HALIDE_NOPNG
 
 }  // namespace Internal
 
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_png(const std::string &filename, ImageType *im) {
+#ifdef HALIDE_NOPNG
+    return false;
+#else // HALIDE_NOPNG
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
@@ -214,11 +229,15 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     im->set_host_dirty();
     return true;
+#endif // HALIDE_NOPNG
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
+#ifdef HALIDE_NOPNG
+    return false;
+#else // HALIDE_NOPNG
     png_structp png_ptr;
     png_infop info_ptr;
     png_byte color_type;
@@ -310,6 +329,112 @@ bool save_png(ImageType &im, const std::string &filename) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;
+#endif // HALIDE_NOPNG
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_pgm(const std::string &filename, ImageType *im) {
+
+    /* open file and test for it being a pgm */
+    Internal::FileOpener f(filename.c_str(), "rb");
+    if (!check(f.f != nullptr, "File %s could not be opened for reading\n", filename.c_str())) return false;
+
+    int width, height, maxval;
+    char header[256];
+    char buf[1024];
+    bool fmt_binary = false;
+
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%255s", header) == 1, "Could not read PGM header\n")) return false;
+    if (header == std::string("P5") || header == std::string("p5"))
+        fmt_binary = true;
+    if (!check(fmt_binary, "Input is not binary PGM\n")) return false;
+
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d %d\n", &width, &height) == 2, "Could not read PGM width and height\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d", &maxval) == 1, "Could not read PGM max value\n")) return false;
+
+    int bit_depth = 0;
+    if (maxval == 255) { bit_depth = 8; }
+    else if (maxval == 65535) { bit_depth = 16; }
+    else if (!check(false, "Invalid bit depth in PGM\n")) { return false; }
+
+    // Graymap
+    *im = ImageType(width, height);
+
+    // convert the data to ImageType::ElemType
+    if (bit_depth == 8) {
+        std::vector<uint8_t> data(width*height);
+        if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
+        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        uint8_t *p = &data[0];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Internal::convert(*p++, *im_data++);
+            }
+        }
+    } else if (bit_depth == 16) {
+        int little_endian = Internal::is_little_endian();
+        std::vector<uint16_t> data(width*height);
+        if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
+        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        uint16_t *p = &data[0];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                uint16_t value = *p++;
+                Internal::swap_endian_16(little_endian, value);
+                Internal::convert(value, *im_data++);
+            }
+        }
+    }
+    (*im)(0,0,0) = (*im)(0,0,0);      /* Mark dirty inside read/write functions. */
+
+    return true;
+}
+
+// "im" is not const-ref because copy_to_host() is not const.
+// Optional channel parameter for specifying which color to save as a graymap
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel = 0) {
+    im.copy_to_host();
+
+    unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
+    unsigned int num_channels = im.channels();
+
+    if (!check(channel >= 0, "Selected channel %d not available in image\n", channel)) return false;
+    if (!check(channel < num_channels, "Selected channel %d not available in image\n", channel)) return false;
+    Internal::FileOpener f(filename.c_str(), "wb");
+    if (!check(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str())) return false;
+    fprintf(f.f, "P5\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
+    int width = im.width(), height = im.height();
+
+    if (bit_depth == 8) {
+        std::vector<uint8_t> data(width*height);
+        uint8_t *p = &data[0];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Internal::convert(im(x, y, channel), *p++);
+            }
+        }
+        if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
+    } else if (bit_depth == 16) {
+        int little_endian = Internal::is_little_endian();
+        std::vector<uint16_t> data(width*height);
+        uint16_t *p = &data[0];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                uint16_t value;
+                Internal::convert(im(x, y, channel), value);
+                Internal::swap_endian_16(little_endian, value);
+                *p++ = value;
+            }
+        }
+        if (!check(fwrite((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 16-bit data\n")) return false;
+    } else {
+        return check(false, "We only support saving 8- and 16-bit images.");
+    }
+    return true;
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
@@ -321,17 +446,24 @@ bool load_ppm(const std::string &filename, ImageType *im) {
 
     int width, height, maxval;
     char header[256];
-    if (!check(fscanf(f.f, "%255s", header) == 1, "Could not read PPM header\n")) return false;
-    if (!check(fscanf(f.f, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
-    if (!check(fscanf(f.f, "%d", &maxval) == 1, "Could not read PPM max value\n")) return false;
-    if (!check(fgetc(f.f) != EOF, "Could not read char from PPM\n")) return false;
+    char buf[1024];
+    bool fmt_binary = false;
+
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%255s", header) == 1, "Could not read PPM header\n")) return false;
+    if (header == std::string("P6") || header == std::string("p6"))
+        fmt_binary = true;
+    if (!check(fmt_binary, "Input is not binary PPM\n")) return false;
+
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n")) return false;
+    f.readLine(buf, 1024);
+    if (!check(sscanf(buf, "%d", &maxval) == 1, "Could not read PPM max value\n")) return false;
 
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
     else if (maxval == 65535) { bit_depth = 16; }
-    else { if (!check(false, "Invalid bit depth in PPM\n")) return false; }
-
-    if (!check(header == std::string("P6") || header == std::string("p6"), "Input is not binary PPM\n")) return false;
+    else if (!check(false, "Invalid bit depth in PPM\n")) { return false; }
 
     int channels = 3;
     *im = ImageType(width, height, channels);
@@ -339,11 +471,11 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     // convert the data to ImageType::ElemType
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height*3);
-        if (!check(fread((void *) data.data(), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
+        if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
-        for (int y = 0; y < im->height(); y++) {
-            uint8_t *row = &data[(y*width)*3];
-            for (int x = 0; x < im->width(); x++) {
+        uint8_t *row = &data[0];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
                 Internal::convert(*row++, im_data[(0*height+y)*width+x]);
                 Internal::convert(*row++, im_data[(1*height+y)*width+x]);
                 Internal::convert(*row++, im_data[(2*height+y)*width+x]);
@@ -352,15 +484,21 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
-        if (!check(fread((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
+        if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
-        for (int y = 0; y < im->height(); y++) {
-            uint16_t *row = &data[(y*width)*3];
-            for (int x = 0; x < im->width(); x++) {
+        uint16_t *row = &data[0];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
                 uint16_t value;
-                value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(0*height+y)*width+x]);
-                value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(1*height+y)*width+x]);
-                value = *row++; Internal::swap_endian_16(little_endian, value); Internal::convert(value, im_data[(2*height+y)*width+x]);
+                value = *row++;
+                Internal::swap_endian_16(little_endian, value);
+                Internal::convert(value, im_data[(0*height+y)*width+x]);
+                value = *row++;
+                Internal::swap_endian_16(little_endian, value);
+                Internal::convert(value, im_data[(1*height+y)*width+x]);
+                value = *row++;
+                Internal::swap_endian_16(little_endian, value);
+                Internal::convert(value, im_data[(2*height+y)*width+x]);
             }
         }
     }
@@ -374,39 +512,68 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_ppm(ImageType &im, const std::string &filename) {
     im.copy_to_host();
 
-	unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
+    unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
 
     Internal::FileOpener f(filename.c_str(), "wb");
     if (!check(f.f != nullptr, "File %s could not be opened for writing\n", filename.c_str())) return false;
     fprintf(f.f, "P6\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
-    int width = im.width(), height = im.height();
+    int width = im.width(), height = im.height(), channels = im.channels();
 
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height*3);
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                uint8_t *p = &data[(y*width+x)*3];
-                for (int c = 0; c < im.channels(); c++) {
-                    Internal::convert(im(x, y, c), p[c]);
+        uint8_t *p = &data[0];
+        // unroll inner loop for 3 channel RGB (common case)
+        if (channels == 3) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    Internal::convert(im(x, y, 0), *p++);
+                    Internal::convert(im(x, y, 1), *p++);
+                    Internal::convert(im(x, y, 2), *p++);
+                }
+            }
+        } else {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    for (int c = 0; c < channels; c++) {
+                        Internal::convert(im(x, y, c), *p++);
+                    }
                 }
             }
         }
-        if (!check(fwrite((void *) data.data(), sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
+        if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                uint16_t *p = &data[(y*width+x)*3];
-                for (int c = 0; c < im.channels(); c++) {
-                    uint16_t value;
-                    Internal::convert(im(x, y, c), value);
-                    Internal::swap_endian_16(little_endian, value);
-                    p[c] = value;
+        uint16_t *p = &data[0];
+        // unroll inner loop for 3 channel RGB (common case)
+        if (channels == 3) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    uint16_t value0, value1, value2;
+                    Internal::convert(im(x, y, 0), value0);
+                    Internal::swap_endian_16(little_endian, value0);
+                    *p++ = value0;
+                    Internal::convert(im(x, y, 1), value1);
+                    Internal::swap_endian_16(little_endian, value1);
+                    *p++ = value1;
+                    Internal::convert(im(x, y, 2), value2);
+                    Internal::swap_endian_16(little_endian, value2);
+                    *p++ = value2;
+                }
+            }
+        } else {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    for (int c = 0; c < channels; c++) {
+                        uint16_t value;
+                        Internal::convert(im(x, y, c), value);
+                        Internal::swap_endian_16(little_endian, value);
+                        *p++ = value;
+                    }
                 }
             }
         }
-        if (!check(fwrite((void *) data.data(), sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n")) return false;
+        if (!check(fwrite((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 16-bit data\n")) return false;
     } else {
         return check(false, "We only support saving 8- and 16-bit images.");
     }
@@ -418,22 +585,25 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load(const std::string &filename, ImageType *im) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
         return load_png<ImageType, check>(filename, im);
+    } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
+        return load_pgm<ImageType, check>(filename, im);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
         return load_ppm<ImageType, check>(filename, im);
     } else {
-        return check(false, "[load] unsupported file extension (png|ppm supported)");
+        return check(false, "[load] unsupported file extension (png|pgm|ppm supported)");
     }
 }
-
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save(ImageType &im, const std::string &filename) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
         return save_png<ImageType, check>(im, filename);
+    } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
+        return save_pgm<ImageType, check>(im, filename);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
         return save_ppm<ImageType, check>(im, filename);
     } else {
-        return check(false, "[save] unsupported file extension (png|ppm supported)");
+        return check(false, "[save] unsupported file extension (png|pgm|ppm supported)");
     }
 }
 

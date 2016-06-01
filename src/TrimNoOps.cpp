@@ -31,7 +31,8 @@ class StripIdentities : public IRMutator {
         if (op->is_intrinsic(Call::trace_expr)) {
             expr = mutate(op->args[4]);
         } else if (op->is_intrinsic(Call::return_second) ||
-                   op->is_intrinsic(Call::likely)) {
+                   op->is_intrinsic(Call::likely) ||
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             expr = mutate(op->args.back());
         } else {
             IRMutator::visit(op);
@@ -39,6 +40,29 @@ class StripIdentities : public IRMutator {
     }
 };
 
+/** Check if an Expr loads from the given buffer. */
+class LoadsFromBuffer : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Load *op) {
+        if (op->name == buffer) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    string buffer;
+public:
+    bool result = false;
+    LoadsFromBuffer(const string &b) : buffer(b) {}
+};
+
+bool loads_from_buffer(Expr e, string buf) {
+    LoadsFromBuffer l(buf);
+    e.accept(&l);
+    return l.result;
+}
 
 /** Construct a sufficient condition for the visited stmt to be a no-op. */
 class IsNoOp : public IRVisitor {
@@ -66,6 +90,14 @@ class IsNoOp : public IRVisitor {
             // If the value being stored is the same as the value loaded,
             // this is a no-op
             debug(3) << "Considering store: " << Stmt(op) << "\n";
+
+            // Early-out: There's no way for that to be true if the
+            // RHS does not load from the buffer being stored to.
+            if (!loads_from_buffer(op->value, op->name)) {
+                condition = const_false();
+                return;
+            }
+
             Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, Buffer(), Parameter());
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
@@ -355,9 +387,9 @@ class TrimNoOps : public IRMutator {
         // loop range is now truncated
         body = simplify(SimplifyUsingBounds(op->name, i).mutate(body));
 
-        string new_min_name = unique_name(op->name + ".new_min", false);
-        string new_max_name = unique_name(op->name + ".new_max", false);
-        string old_max_name = unique_name(op->name + ".old_max", false);
+        string new_min_name = unique_name(op->name + ".new_min");
+        string new_max_name = unique_name(op->name + ".new_max");
+        string old_max_name = unique_name(op->name + ".old_max");
         Expr new_min_var = Variable::make(Int(32), new_min_name);
         Expr new_max_var = Variable::make(Int(32), new_max_name);
         Expr old_max_var = Variable::make(Int(32), old_max_name);

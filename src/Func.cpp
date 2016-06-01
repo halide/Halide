@@ -22,7 +22,7 @@
 #include "IREquality.h"
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
-#include "Output.h"
+#include "Outputs.h"
 #include "LLVM_Output.h"
 
 namespace Halide {
@@ -30,6 +30,7 @@ namespace Halide {
 using std::max;
 using std::min;
 using std::make_pair;
+using std::map;
 using std::string;
 using std::vector;
 using std::pair;
@@ -241,6 +242,9 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
 
 namespace {
 bool var_name_match(string candidate, string var) {
+    internal_assert(var.find('.') == string::npos)
+        << "var_name_match expects unqualified names for the second argument. "
+        << "Name passed: " << var << "\n";
     if (candidate == var) return true;
     return Internal::ends_with(candidate, "." + var);
 }
@@ -322,6 +326,7 @@ std::string Stage::dump_argument_list() const {
     oss << "\n";
     return oss.str();
 }
+
 
 void Stage::split(const string &old, const string &outer, const string &inner, Expr factor, bool exact, TailStrategy tail) {
     vector<Dim> &dims = schedule.dims();
@@ -860,6 +865,108 @@ void Func::invalidate_cache() {
     }
 }
 
+Func Func::in(const Func &f) {
+    invalidate_cache();
+    user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
+    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const auto &iter = wrappers.find(f.name());
+    if (iter == wrappers.end()) {
+        Func wrapper(name() + "_in_" + f.name());
+        wrapper(args()) = (*this)(args());
+        func.add_wrapper(f.name(), wrapper.func);
+        return wrapper;
+    }
+
+    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    internal_assert(wrapper_contents.defined());
+
+    // Make sure that no other Func shares the same wrapper as 'f'
+    for (const auto &it : wrappers) {
+        if (it.first == f.name()) {
+            continue;
+        }
+        user_assert(!it.second.same_as(wrapper_contents))
+            << "Redefinition of shared wrapper with " << it.first << " [" << name() << " -> "
+            << Function(wrapper_contents).name() << "] in " << f.name() << " is not allowed\n";
+    }
+    Function wrapper(wrapper_contents);
+    internal_assert(wrapper.frozen());
+    return Func(wrapper);
+}
+
+Func Func::in(const vector<Func>& fs) {
+    invalidate_cache();
+    if (fs.empty()) {
+        user_error << "Could not create a wrapper for an empty list of Funcs\n";
+    }
+
+    // Either all Funcs have the same wrapper or they don't already have any wrappers.
+    // Otherwise, throw an error.
+    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+
+    const auto &iter = wrappers.find(fs[0].name());
+    if (iter == wrappers.end()) {
+        // Make sure the other Funcs also don't have any wrappers
+        for (size_t i = 1; i < fs.size(); ++i) {
+            user_assert(wrappers.count(fs[i].name()) == 0)
+                << "Cannot define the wrapper since " << fs[i].name()
+                << " already has a wrapper while " << fs[0].name() << " doesn't \n";
+        }
+        Func wrapper(name() + "_wrapper");
+        wrapper(args()) = (*this)(args());
+        for (const Func &f : fs) {
+            user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
+            func.add_wrapper(f.name(), wrapper.func);
+        }
+        return wrapper;
+    }
+
+    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    internal_assert(wrapper_contents.defined());
+
+    // Make sure all the other Funcs in 'fs' share the same wrapper and no other
+    // Func not in 'fs' share the same wrapper.
+    for (const auto &it : wrappers) {
+        if (it.first == fs[0].name()) {
+            continue;
+        }
+        const auto &fs_iter = std::find_if(
+            fs.begin(), fs.end(), [&it](const Func& f) { return f.name() == it.first; });
+        bool in_fs = fs_iter != fs.end();
+
+        if (in_fs) {
+            user_assert(it.second.same_as(wrapper_contents))
+                << it.first << " should have shared the same wrapper as " << fs[0].name() << "\n";
+        } else {
+            user_assert(!it.second.same_as(wrapper_contents))
+                << "Redefinition of shared wrapper [" << name() << " -> "
+                << Function(wrapper_contents).name() << "] in " << fs[0].name() << " is illegal since "
+                << it.first << " shares the same wrapper but not part of the redefinition\n";
+        }
+    }
+    Function wrapper(wrapper_contents);
+    internal_assert(wrapper.frozen());
+    return Func(wrapper);
+}
+
+Func Func::in() {
+    invalidate_cache();
+    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const auto &iter = wrappers.find("");
+    if (iter == wrappers.end()) {
+        Func wrapper(name() + "_global_wrapper");
+        wrapper(args()) = (*this)(args());
+        func.add_wrapper("", wrapper.func);
+        return wrapper;
+    }
+
+    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    internal_assert(wrapper_contents.defined());
+    Function wrapper(wrapper_contents);
+    internal_assert(wrapper.frozen());
+    return Func(wrapper);
+}
+
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func.schedule(), name()).split(old, outer, inner, factor, tail);
@@ -1148,6 +1255,22 @@ Func &Func::align_storage(Var dim, Expr alignment) {
     }
     user_error << "Could not find variable " << dim.name()
                << " to align the storage of.\n";
+    return *this;
+}
+
+Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, dim.name())) {
+            dims[i].fold_factor = factor;
+            dims[i].fold_forward = fold_forward;
+            return *this;
+        }
+    }
+    user_error << "Could not find variable " << dim.name()
+               << " to fold the storage of.\n";
     return *this;
 }
 
@@ -1704,6 +1827,12 @@ void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
                            const Target &target) {
     pipeline().compile_to_file(filename_prefix, args, target);
+}
+
+void Func::compile_to_static_library(const string &filename_prefix,
+                                     const vector<Argument> &args,
+                                     const Target &target) {
+    pipeline().compile_to_static_library(filename_prefix, args, target);
 }
 
 void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,

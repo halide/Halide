@@ -101,12 +101,14 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
+// Get a pointer to the pixel data in a buffer, relative to the min
+// coordinate, not in absolute coordinates.
 WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
                                   const struct buffer_t *buf) {
-    uint8_t *ptr = buf->host + buf->elem_size * ((dim0 - buf->min[0]) * buf->stride[0] +
-                                                 (dim1 - buf->min[1]) * buf->stride[1] +
-                                                 (dim2 - buf->min[2]) * buf->stride[2] +
-                                                 (dim3 - buf->min[3]) * buf->stride[3]);
+    uint8_t *ptr = buf->host + buf->elem_size * (dim0 * buf->stride[0] +
+                                                 dim1 * buf->stride[1] +
+                                                 dim2 * buf->stride[2] +
+                                                 dim3 * buf->stride[3]);
     return ptr;
 }
 

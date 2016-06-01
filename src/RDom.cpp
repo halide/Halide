@@ -1,5 +1,6 @@
 #include "RDom.h"
 #include "Util.h"
+#include "ImageParam.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -63,7 +64,7 @@ void RDom::init_vars(string name) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
-            *(vars[i]) = RVar(name + "." + var_names[i]);
+            *(vars[i]) = RVar(name + "$" + var_names[i]);
         }
     }
 }
@@ -131,7 +132,7 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
             default: rvar_uniquifier = std::to_string(i); break;
         }
         ReductionVariable rv;
-        rv.var = name + "." + rvar_uniquifier + "$r";
+        rv.var = name + "$" + rvar_uniquifier;
         rv.min = cast<int32_t>(ranges[i].first);
         rv.extent = cast<int32_t>(ranges[i].second);
         vars.push_back(rv);
@@ -141,11 +142,11 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
 }
 
 RDom::RDom(Buffer b) {
-    static string var_names[] = {"x$r", "y$r", "z$r", "w$r"};
+    static string var_names[] = {"x", "y", "z", "w"};
     std::vector<ReductionVariable> vars;
     for (int i = 0; i < b.dimensions(); i++) {
         ReductionVariable var = {
-            b.name() + "." + var_names[i],
+            b.name() + "$" + var_names[i],
             b.min(i),
             b.extent(i)
         };
@@ -157,11 +158,11 @@ RDom::RDom(Buffer b) {
 }
 
 RDom::RDom(ImageParam p) {
-    static string var_names[] = {"x$r", "y$r", "z$r", "w$r"};
+    static string var_names[] = {"x", "y", "z", "w"};
     std::vector<ReductionVariable> vars;
     for (int i = 0; i < p.dimensions(); i++) {
         ReductionVariable var = {
-            p.name() + "." + var_names[i],
+            p.name() + "$" + var_names[i],
             p.min(i),
             p.extent(i)
         };

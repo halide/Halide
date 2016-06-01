@@ -235,5 +235,147 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     }
 }
 
+bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+    if (!value) {
+        return false;
+    }
+    #if LLVM_VERSION < 36
+    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
+    #else
+    llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
+    if (!cam) {
+        return false;
+    }
+    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
+    #endif
+    if (!c) {
+        return false;
+    }
+    result = !c->isZero();
+    return true;
+}
+
+bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+    if (!value) {
+        result = "";
+        return false;
+    }
+    #if LLVM_VERSION < 36
+    if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
+        result = "";
+        return true;
+    }
+    llvm::ConstantDataArray *c = llvm::cast<llvm::ConstantDataArray>(value);
+    if (c) {
+        result = c->getAsCString();
+        return true;
+    }
+    #else
+    llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
+    if (c) {
+        result = c->getString();
+        return true;
+    }
+    #endif
+    return false;
+}
+
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
+    bool use_soft_float_abi = false;
+    get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
+    get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+
+    options = llvm::TargetOptions();
+    options.LessPreciseFPMADOption = true;
+    options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
+    options.UnsafeFPMath = true;
+
+    #if LLVM_VERSION >= 37
+    #ifndef WITH_NATIVE_CLIENT
+    // Turn off approximate reciprocals for division. It's too
+    // inaccurate even for us.
+    options.Reciprocals.setDefaults("all", false, 0);
+    #endif
+    #endif
+
+    options.NoInfsFPMath = true;
+    options.NoNaNsFPMath = true;
+    options.HonorSignDependentRoundingFPMathOption = false;
+    #if LLVM_VERSION < 37
+    options.NoFramePointerElim = false;
+    options.UseSoftFloat = false;
+    #endif
+    options.NoZerosInBSS = false;
+    options.GuaranteedTailCallOpt = false;
+    #if LLVM_VERSION < 37
+    options.DisableTailCalls = false;
+    #endif
+    options.StackAlignmentOverride = 0;
+    #if LLVM_VERSION < 37
+    options.TrapFuncName = "";
+    #endif
+    options.FunctionSections = true;
+    #ifdef WITH_NATIVE_CLIENT
+    options.UseInitArray = true;
+    #else
+    options.UseInitArray = false;
+    #endif
+    options.FloatABIType =
+        use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+}
+
+
+void clone_target_options(const llvm::Module &from, llvm::Module &to) {
+    to.setTargetTriple(from.getTargetTriple());
+
+    llvm::LLVMContext &context = to.getContext();
+
+    bool use_soft_float_abi = false;
+    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi))
+        to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+
+    std::string mcpu;
+    if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
+        #if LLVM_VERSION < 36
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::ConstantDataArray::getString(context, mcpu));
+        #else
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
+        #endif
+    }
+
+    std::string mattrs;
+    if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
+        #if LLVM_VERSION < 36
+        to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
+        #else
+        to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
+        #endif
+    }
+}
+
+std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module) {
+    std::string error_string;
+
+    const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
+    if (!target) {
+        std::cout << error_string << std::endl;
+        llvm::TargetRegistry::printRegisteredTargetsForVersion();
+    }
+    internal_assert(target) << "Could not create target for " << module.getTargetTriple() << "\n";
+
+    llvm::TargetOptions options;
+    std::string mcpu = "";
+    std::string mattrs = "";
+    get_target_options(module, options, mcpu, mattrs);
+
+    return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(module.getTargetTriple(),
+                                                mcpu, mattrs,
+                                                options,
+                                                llvm::Reloc::PIC_,
+                                                llvm::CodeModel::Default,
+                                                llvm::CodeGenOpt::Aggressive));
+}
+
 }
 }

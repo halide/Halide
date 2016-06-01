@@ -338,6 +338,7 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     EXPORT static Stmt make(Stmt first, Stmt rest);
+    EXPORT static Stmt make(const std::vector<Stmt> &stmts);
 };
 
 /** An if-then-else block. 'else' may be undefined. */
@@ -423,15 +424,17 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
-        make_int64,
-        make_float64,
+        likely_if_innermost,
         register_destructor,
         div_round_to_zero,
-        mod_round_to_zero;
+        mod_round_to_zero,
+        signed_integer_overflow;
 
-    // If it's a call to another halide function, this call node
-    // holds onto a pointer to that function.
-    Function func;
+    // If it's a call to another halide function, this call node holds
+    // onto a pointer to that function for the purposes of reference
+    // counting only. Self-references in update definitions do not
+    // have this set, to avoid cycles.
+    IntrusivePtr<FunctionContents> func;
 
     // If that function has multiple values, which value does this
     // call node refer to?
@@ -446,7 +449,7 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
-                            Function func = Function(), int value_index = 0,
+                            IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
                             Buffer image = Buffer(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
@@ -456,17 +459,17 @@ struct Call : public ExprNode<Call> {
             << "Value index out of range in call to halide function\n";
         internal_assert(func.has_pure_definition() || func.has_extern_definition())
             << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func, idx, Buffer(), Parameter());
+        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(Buffer image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, Function(), 0, image, Parameter());
+        return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, Function(), 0, Buffer(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that

@@ -691,11 +691,11 @@ void print_to_html(string filename, Stmt s) {
 
 void print_to_html(string filename, const Module &m) {
     StmtToHtml sth(filename);
-    for (size_t i = 0; i < m.buffers.size(); i++) {
-        sth.print(m.buffers[i]);
+    for (const auto &b : m.buffers()) {
+        sth.print(b);
     }
-    for (size_t i = 0; i < m.functions.size(); i++) {
-        sth.print(m.functions[i]);
+    for (const auto &f : m.functions()) {
+        sth.print(f);
     }
 }
 

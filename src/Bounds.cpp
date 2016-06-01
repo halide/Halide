@@ -12,6 +12,7 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -89,11 +90,11 @@ public:
 private:
 
     // Compute the intrinsic bounds of a function.
-    void bounds_of_func(Function f, int value_index) {
+    void bounds_of_func(string name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
-        bounds_of_type(f.output_types()[value_index]);
+        bounds_of_type(t);
 
-        pair<string, int> key = make_pair(f.name(), value_index);
+        pair<string, int> key = make_pair(name, value_index);
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -504,7 +505,7 @@ private:
                 // The floating point version has the same sign rules,
                 // but can reach all the way up to the original value,
                 // so there's no -1.
-                min = 0;
+                min = make_zero(t);
                 max = Max::make(abs(min_b), abs(max_b));
             }
         }
@@ -641,11 +642,13 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
-        bool const_condition = !expr_uses_vars(op->condition, scope);
+        bool const_scalar_condition =
+            (op->condition.type().is_scalar() &&
+             !expr_uses_vars(op->condition, scope));
 
         if (min_a.same_as(min_b)) {
             min = min_a;
-        } else if (const_condition) {
+        } else if (const_scalar_condition) {
             min = select(op->condition, min_a, min_b);
         } else {
             min = Min::make(min_a, min_b);
@@ -653,7 +656,7 @@ private:
 
         if (max_a.same_as(max_b)) {
             max = max_a;
-        } else if (const_condition) {
+        } else if (const_scalar_condition) {
             max = select(op->condition, max_a, max_b);
         } else {
             max = Max::make(max_a, max_b);
@@ -735,7 +738,8 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
-        } else if (op->is_intrinsic(Call::likely)) {
+        } else if (op->is_intrinsic(Call::likely) ||
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -789,8 +793,8 @@ private:
             // trace_expr returns argument 4
             internal_assert(op->args.size() >= 5);
             op->args[4].accept(this);
-        } else if (op->func.has_pure_definition()) {
-            bounds_of_func(op->func, op->value_index);
+        } else if (op->call_type == Call::Halide) {
+            bounds_of_func(op->name, op->value_index, op->type);
         } else {
             // Just use the bounds of the type
             bounds_of_type(t);
@@ -1187,11 +1191,13 @@ private:
             op->value.accept(this);
         }
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
+
+        bool fixed = value_bounds.min.same_as(value_bounds.max);
         value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = simplify(value_bounds.max);
+        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
 
         if (is_small_enough_to_substitute(value_bounds.min) &&
-            is_small_enough_to_substitute(value_bounds.max)) {
+            (fixed || is_small_enough_to_substitute(value_bounds.max))) {
             scope.push(op->name, value_bounds);
             op->body.accept(this);
             scope.pop(op->name);
@@ -1208,12 +1214,20 @@ private:
                 Box &box = i.second;
                 for (size_t i = 0; i < box.size(); i++) {
                     if (box[i].min.defined()) {
-                        box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                        box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        if (expr_uses_var(box[i].min, max_name)) {
+                            box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                        }
+                        if (expr_uses_var(box[i].min, min_name)) {
+                            box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                        }
                     }
                     if (box[i].max.defined()) {
-                        box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                        box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        if (expr_uses_var(box[i].max, max_name)) {
+                            box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                        }
+                        if (expr_uses_var(box[i].max, min_name)) {
+                            box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        }
                     }
                 }
             }
@@ -1237,7 +1251,8 @@ private:
                 // of conditions for now.
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
-                if (call && call->is_intrinsic(Call::likely)) {
+                if (call && (call->is_intrinsic(Call::likely) ||
+                             call->is_intrinsic(Call::likely_if_innermost))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
@@ -1269,6 +1284,9 @@ private:
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
                             likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
@@ -1297,6 +1315,9 @@ private:
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
                             likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
@@ -1540,12 +1561,14 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
                 result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
 
+                // These can expand combinatorially as we go down the
+                // pipeline if we don't run CSE on them.
                 if (result.min.defined()) {
-                    result.min = simplify(result.min);
+                    result.min = simplify(common_subexpression_elimination(result.min));
                 }
 
                 if (result.max.defined()) {
-                    result.max = simplify(result.max);
+                    result.max = simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;

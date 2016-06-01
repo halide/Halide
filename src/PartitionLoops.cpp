@@ -221,11 +221,12 @@ struct Simplification {
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
-public:
-    vector<Simplification> simplifications;
+    Scope<int> depends_on_loop_var;
 
-private:
     void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
+        if (!expr_uses_vars(condition, depends_on_loop_var)) {
+            return;
+        }
         condition = RemoveLikelyTags().mutate(condition);
         Simplification s = {condition, old, likely_val, unlikely_val, true};
         if (s.condition.type().is_vector()) {
@@ -318,6 +319,10 @@ private:
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
+        bool varying = expr_uses_vars(op->value, depends_on_loop_var);
+        if (varying) {
+            depends_on_loop_var.push(op->name, 0);
+        }
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -327,6 +332,9 @@ private:
             }
         }
         simplifications.insert(simplifications.end(), old.begin(), old.end());
+        if (varying) {
+            depends_on_loop_var.pop(op->name);
+        }
     }
 
     void visit(const LetStmt *op) {
@@ -335,6 +343,12 @@ private:
 
     void visit(const Let *op) {
         visit_let(op);
+    }
+public:
+    vector<Simplification> simplifications;
+
+    FindSimplifications(const std::string &v) {
+        depends_on_loop_var.push(v, 0);
     }
 };
 
@@ -400,7 +414,7 @@ class PartitionLoops : public IRMutator {
         }
 
         // Find simplifications in this loop body
-        FindSimplifications finder;
+        FindSimplifications finder(op->name);
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
@@ -538,8 +552,8 @@ class PartitionLoops : public IRMutator {
         // Construct variables for the bounds of the simplified middle section
         Expr min_steady = op->min, max_steady = op->extent + op->min;
         Expr prologue_val, epilogue_val;
-        string prologue_name = unique_name(op->name + ".prologue", false);
-        string epilogue_name = unique_name(op->name + ".epilogue", false);
+        string prologue_name = unique_name(op->name + ".prologue");
+        string epilogue_name = unique_name(op->name + ".epilogue");
 
         if (make_prologue) {
             // They'll simplify better if you put them in
@@ -548,7 +562,7 @@ class PartitionLoops : public IRMutator {
             // them together and can drop one of them.
             std::sort(min_vals.begin(), min_vals.end(), IRDeepCompare());
             min_vals.push_back(op->min);
-            prologue_val = std::accumulate(min_vals.begin() + 1, min_vals.end(), min_vals[0], Max::make);
+            prologue_val = fold_left(min_vals, Max::make);
             // Stop the prologue from running past the end of the loop
             prologue_val = min(prologue_val, op->extent + op->min);
             // prologue_val = print(prologue_val, prologue_name);
@@ -559,7 +573,7 @@ class PartitionLoops : public IRMutator {
         if (make_epilogue) {
             std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
             max_vals.push_back(op->min + op->extent - 1);
-            epilogue_val = std::accumulate(max_vals.begin() + 1, max_vals.end(), max_vals[0], Min::make) + 1;
+            epilogue_val = fold_left(max_vals, Min::make) + 1;
             if (make_prologue) {
                 epilogue_val = max(epilogue_val, prologue_val);
             }
@@ -785,14 +799,14 @@ class RenormalizeGPULoops : public IRMutator {
             inner = LetStmt::make(condition_name, op->condition, inner);
             stmt = mutate(inner);
         } else if (let_a) {
-            string new_name = unique_name(let_a->name, false);
+            string new_name = unique_name(let_a->name);
             Stmt inner = let_a->body;
             inner = substitute(let_a->name, Variable::make(let_a->value.type(), new_name), inner);
             inner = IfThenElse::make(op->condition, inner, else_case);
             inner = LetStmt::make(new_name, let_a->value, inner);
             stmt = mutate(inner);
         } else if (let_b) {
-            string new_name = unique_name(let_b->name, false);
+            string new_name = unique_name(let_b->name);
             Stmt inner = let_b->body;
             inner = substitute(let_b->name, Variable::make(let_b->value.type(), new_name), inner);
             inner = IfThenElse::make(op->condition, then_case, inner);
@@ -877,9 +891,46 @@ class CollapseSelects : public IRMutator {
     }
 };
 
+class ContainsLoop : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const For *op) {
+        result = true;
+    }
+public:
+    bool result = false;
+};
+
+class LowerLikelyIfInnermost : public IRMutator {
+    using IRMutator::visit;
+
+    bool inside_innermost_loop = false;
+
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::likely_if_innermost)) {
+            internal_assert(op->args.size() == 1);
+            if (inside_innermost_loop) {
+                expr = Call::make(op->type, Call::likely, {mutate(op->args[0])}, Call::PureIntrinsic);
+            } else {
+                expr = mutate(op->args[0]);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const For *op) {
+        ContainsLoop c;
+        op->body.accept(&c);
+        inside_innermost_loop = !c.result;
+        IRMutator::visit(op);
+        inside_innermost_loop = false;
+    }
+};
+
 }
 
 Stmt partition_loops(Stmt s) {
+    s = LowerLikelyIfInnermost().mutate(s);
     s = MarkClampedRampsAsLikely().mutate(s);
     s = ExpandSelects().mutate(s);
     s = PartitionLoops().mutate(s);
