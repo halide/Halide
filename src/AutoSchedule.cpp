@@ -839,6 +839,8 @@ struct Partitioner {
   void group(Partitioner::Level level);
   pair<vector<InlineChoice>, int64_t>
       choose_candidate_fuse_inline(const vector< pair<string, string > > &cand_pairs);
+  pair<FusionChoice, int64_t>
+      choose_candidate_fuse_fast_mem(const vector< pair<string, string > > &cand_pairs);
 /*
   Option choose_candidate(const vector< pair<string, string > > &cand_pairs);
   void clear_schedules_fast_mem();
@@ -901,7 +903,16 @@ Partitioner::choose_candidate_fuse_inline(
   }
   return best;
 }
-/*
+
+pair<Partitioner::FusionChoice, int64_t>
+Partitioner::choose_candidate_fuse_fast_mem(
+    const vector< pair<string, string> > &cand_pairs) {
+
+  map<string, int> tile_sizes;
+  FusionChoice c("", "", tile_sizes);
+  return make_pair(c, 0);
+}
+
 void Partitioner::group(Partitioner::Level level) {
     // Partition the pipeline by iteratively merging groups until a fixpoint
     bool fixpoint = false;
@@ -910,8 +921,13 @@ void Partitioner::group(Partitioner::Level level) {
         vector< pair<string, string> > cand;
         for (auto &g: groups) {
 
-            if (std::find(outputs.begin(), outputs.end(), g.first) !=
-                outputs.end())
+            bool is_output = false;
+            for (auto &f: outputs) {
+              if (g.first == f.name())
+                is_output = true;
+            }
+
+            if (is_output)
                 continue;
 
             if (children.find(g.first) != children.end()) {
@@ -936,15 +952,15 @@ void Partitioner::group(Partitioner::Level level) {
             pair<vector<InlineChoice>, int64_t> best;
             best = choose_candidate_fuse_inline(cand);
             if (best.second >= 0) {
-                string prod = best.second[0].prod_group;
+                string prod = best.first[0].prod_group;
 
-                for (auto &o: best.second)
+                for (auto &o: best.first)
                     internal_assert(o.prod_group == prod);
 
                 // Mark the entries of the fusion cache that need to be
                 // invalidated
                 for (auto &c: children[prod]) {
-                    for (auto& choice: choice_cache) {
+                    for (auto& choice: fusion_cache) {
                         if (choice.first.first == c ||
                                 choice.first.second == c)
                             invalid_keys.push_back(choice.first);
@@ -955,8 +971,8 @@ void Partitioner::group(Partitioner::Level level) {
             }
 
         } else {
-            pair<FusionChoice, int64_t> best;
-            best = choose_candidate_fuse_fast_mem(cand);
+            pair<FusionChoice, int64_t> best
+                = choose_candidate_fuse_fast_mem(cand);
             if (best.second >= 0) {
 
                 // Mark the entries of the fusion cache that need to be
@@ -977,7 +993,7 @@ void Partitioner::group(Partitioner::Level level) {
             fusion_cache.erase(key);
     }
 }
-*/
+
 vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
                                                          map<string, int> &tile_sizes) {
   vector<Interval> bounds;
