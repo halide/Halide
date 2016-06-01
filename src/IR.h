@@ -424,6 +424,7 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
+        likely_if_innermost,
         register_destructor,
         div_round_to_zero,
         mod_round_to_zero,
