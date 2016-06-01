@@ -17,7 +17,14 @@ int init_sim() {
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
-    status = sim->ConfigureExecutableBinary("hexagon_sim_remote");
+    // If an explicit path to the simulator is provided, use it.
+    const char *sim_remote_path = getenv("HL_HEXAGON_SIM_REMOTE");
+    if (!sim_remote_path || !sim_remote_path[0]) {
+        // Otherwise... just assume that something with this name will be
+        // available in the working directory, I guess.
+        sim_remote_path = "hexagon_sim_remote";
+    }
+    status = sim->ConfigureExecutableBinary(sim_remote_path);
     if (status != HEX_STAT_SUCCESS) {
         printf("HexagonWrapper::ConfigureExecutableBinary failed: %d\n", status);
         return -1;
@@ -30,8 +37,8 @@ int init_sim() {
     }
 
     // memfill defaults to 0x1f on the simulator.
-    // example: HL_HEX_MEMFILL=0
-    const char *memfill = getenv("HL_HEX_MEMFILL");
+    // example: HL_HEXAGON_MEMFILL=0
+    const char *memfill = getenv("HL_HEXAGON_MEMFILL");
     if (memfill && memfill[0] != 0) {
         status = sim->ConfigureMemFill(atoi(memfill));
         if (status != HEX_STAT_SUCCESS) {
@@ -40,7 +47,7 @@ int init_sim() {
         }
     }
 
-    const char *timing = getenv("HL_HEX_TIMING");
+    const char *timing = getenv("HL_HEXAGON_TIMING");
     if (timing && timing[0] != 0) {
         status = sim->ConfigureTimingMode(HEX_TIMING);
         if (status != HEX_STAT_SUCCESS) {
@@ -50,7 +57,7 @@ int init_sim() {
     }
 
     // Configue tracing.
-    const char *T = getenv("HL_HEX_SIM_MIN_TRACE");
+    const char *T = getenv("HL_HEXAGON_SIM_MIN_TRACE");
     if (T && T[0] != 0) {
         status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
         if (status != HEX_STAT_SUCCESS) {
@@ -58,7 +65,7 @@ int init_sim() {
             return -1;
         }
     } else {
-        const char *T = getenv("HL_HEX_SIM_TRACE");
+        const char *T = getenv("HL_HEXAGON_SIM_TRACE");
         if (T && T[0] != 0) {
             status = sim->SetTracing(HEX_TRACE_PC, T);
             if (status != HEX_STAT_SUCCESS) {
@@ -70,7 +77,7 @@ int init_sim() {
 
     // Configure use of debugger
     int pnum = 0;
-    char *s = getenv("HL_HEX_SIM_DBG_PORT");
+    char *s = getenv("HL_HEXAGON_SIM_DBG_PORT");
     if (s && (pnum = atoi(s))) {
         printf("Debugger port: %d\n", pnum);
         status = sim->ConfigureRemoteDebug(pnum);
@@ -322,7 +329,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     HEX_8u_t cycles_end = 0;
     sim->GetSimulatedCycleCount(&cycles_end);
 
-    if (getenv("HL_HEX_SIM_CYCLES")) {
+    if (getenv("HL_HEXAGON_SIM_CYCLES")) {
         int cycles = static_cast<int>(cycles_end - cycles_begin);
         printf("Hexagon simulator executed function 0x%x in %d cycles\n", function, cycles);
     }
@@ -336,7 +343,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     // Print out sim statistics if desired.
-    if (getenv("HL_HEX_SIM_STATS")) {
+    if (getenv("HL_HEXAGON_SIM_STATS")) {
         char Buf[4096];
         HEXAPI_Status status = sim->EmitPerfStatistics(0, 0, 0, 0, Buf, sizeof(Buf));
         if (status != HEX_STAT_SUCCESS) {
