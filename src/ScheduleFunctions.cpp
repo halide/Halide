@@ -19,6 +19,7 @@ using std::map;
 using std::vector;
 using std::pair;
 using std::make_pair;
+using std::set;
 
 namespace {
 // A structure representing a containing LetStmt, IfThenElse, or For
@@ -84,74 +85,6 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     vector<Split> splits = s.splits();
-
-    // Rebalance the split tree to make the outermost split first.
-    for (size_t i = 0; i < splits.size(); i++) {
-        for (size_t j = i+1; j < splits.size(); j++) {
-
-            Split &first = splits[i];
-            Split &second = splits[j];
-            if (first.outer == second.old_var) {
-                internal_assert(!second.is_rename())
-                    << "Rename of derived variable found in splits list. This should never happen.";
-
-                if (first.is_rename()) {
-                    // Given a rename:
-                    // X -> Y
-                    // And a split:
-                    // Y -> f * Z + W
-                    // Coalesce into:
-                    // X -> f * Z + W
-                    second.old_var = first.old_var;
-                    // Drop first entirely
-                    for (size_t k = i; k < splits.size()-1; k++) {
-                        splits[k] = splits[k+1];
-                    }
-                    splits.pop_back();
-                    // Start processing this split from scratch,
-                    // because we just clobbered it.
-                    j = i+1;
-                } else {
-                    // Given two splits:
-                    // X  ->  a * Xo  + Xi
-                    // (splits stuff other than Xo, including Xi)
-                    // Xo ->  b * Xoo + Xoi
-
-                    // Re-write to:
-                    // X  -> ab * Xoo + s0
-                    // s0 ->  a * Xoi + Xi
-                    // (splits on stuff other than Xo, including Xi)
-
-                    // The name Xo went away, because it was legal for it to
-                    // be X before, but not after.
-
-                    first.exact |= second.exact;
-                    second.exact = first.exact;
-                    second.old_var = unique_name('s');
-                    first.outer   = second.outer;
-                    second.outer  = second.inner;
-                    second.inner  = first.inner;
-                    first.inner   = second.old_var;
-                    Expr f = simplify(first.factor * second.factor);
-                    second.factor = first.factor;
-                    first.factor  = f;
-                    // Push the second split back to just after the first
-                    for (size_t k = j; k > i+1; k--) {
-                        std::swap(splits[k], splits[k-1]);
-                    }
-                }
-            }
-        }
-    }
-
-    Dim innermost_non_trivial_loop;
-    for (const Dim &d : s.dims()) {
-        if (d.for_type != ForType::Vectorized &&
-            d.for_type != ForType::Unrolled) {
-            innermost_non_trivial_loop = d;
-            break;
-        }
-    }
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
@@ -235,14 +168,10 @@ Stmt build_provide_loop_nest(Function f,
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                // Only mark the base as likely (triggering a loop
-                // partition) if the outer var is the innermost
-                // non-trivial loop and it's a serial loop. This
-                // usually is due to an unroll or vectorize call.
-                if (split.outer == innermost_non_trivial_loop.var &&
-                    innermost_non_trivial_loop.for_type == ForType::Serial) {
-                    base = likely(base);
-                }
+                // We'll only mark the base as likely (triggering a loop
+                // partition) if we're at or inside the innermost
+                // non-trivial loop.
+                base = likely_if_innermost(base);
 
                 base = Min::make(base, old_max + (1 - split.factor));
             } else {

@@ -622,7 +622,8 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 interval.max = Interval::pos_inf;
             }
-        } else if (op->is_intrinsic(Call::likely)) {
+        } else if (op->is_intrinsic(Call::likely) ||
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -884,6 +885,12 @@ void merge_boxes(Box &a, const Box &b) {
     }
 }
 
+Box box_union(const Box &a, const Box &b) {
+    Box result = a;
+    merge_boxes(result, b);
+    return result;
+}
+
 bool boxes_overlap(const Box &a, const Box &b) {
     // If one box is scalar and the other is not, the boxes cannot
     // overlap.
@@ -911,6 +918,21 @@ bool boxes_overlap(const Box &a, const Box &b) {
 
     // Conservatively, assume they overlap if we can't prove there's no overlap
     return !can_prove(simplify(!overlap));
+}
+
+bool box_contains(const Box &outer, const Box &inner) {
+    // If the inner box has more dimensions than the outer box, the
+    // inner box cannot fit in the outer box.
+    if (inner.size() > outer.size()) {
+        return false;
+    }
+    Expr condition = const_true();
+    for (size_t i = 0; i < inner.size(); i++) {
+        condition = (condition &&
+                     (outer[i].min <= inner[i].min) &&
+                     (outer[i].max >= inner[i].max));
+    }
+    return is_one(simplify(condition));
 }
 
 // Compute the box produced by a statement
@@ -1059,7 +1081,8 @@ private:
                 // of conditions for now.
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
-                if (call && call->is_intrinsic(Call::likely)) {
+                if (call && (call->is_intrinsic(Call::likely) ||
+                             call->is_intrinsic(Call::likely_if_innermost))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
@@ -1091,6 +1114,9 @@ private:
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
                             likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
@@ -1119,6 +1145,9 @@ private:
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
                             likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
