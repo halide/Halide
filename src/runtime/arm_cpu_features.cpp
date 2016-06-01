@@ -17,8 +17,8 @@ WEAK CpuFeatures halide_get_cpu_features() {
     //    available |= 1ULL << halide_target_feature_armv7s;
     // }
 
-    return CpuFeatures(known, available);
+    CpuFeatures features = {known, available};
+    return features;
 }
 
 }}} // namespace Halide::Runtime::Internal
-

@@ -6,8 +6,8 @@ WEAK CpuFeatures halide_get_cpu_features() {
     // AArch64 has no CPU-specific Features.
     const uint64_t known = 0;
     const uint64_t available = 0;
-    return CpuFeatures(known, available);
+    CpuFeatures features = {known, available};
+    return features;
 }
 
 }}} // namespace Halide::Runtime::Internal
-
