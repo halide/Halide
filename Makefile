@@ -920,6 +920,13 @@ $(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_rel
 $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread $(LIBDL) -lz -o $@
 
+# generator_aot_multitarget is run multiple times, with different env vars.
+generator_aot_multitarget: $(BIN_DIR)/generator_aot_multitarget
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; HL_MULTITARGET_TEST_USE_DEBUG_FEATURE=0 $(LD_PATH_SETUP) $(CURDIR)/$<
+	cd $(TMP_DIR) ; HL_MULTITARGET_TEST_USE_DEBUG_FEATURE=1 $(LD_PATH_SETUP) $(CURDIR)/$<
+	@-echo
+
 # nested externs doesn't actually contain a generator named
 # "nested_externs", and has no internal tests in any case.
 test_generator_nested_externs:
