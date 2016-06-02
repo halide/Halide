@@ -44,19 +44,20 @@ struct VarOrRVar {
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
-    Internal::Schedule schedule;
+    Internal::Definition definition;
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact, TailStrategy tail);
     std::string stage_name;
 public:
-    Stage(Internal::Schedule s, const std::string &n) :
-        schedule(s), stage_name(n) {s.touched() = true;}
+    Stage(Internal::Definition d, const std::string &n) : definition(d), stage_name(n) {
+        definition.schedule().touched() = true;
+    }
 
     /** Return the current Schedule associated with this Stage.  For
      * introspection only: to modify Schedule, use the Func
      * interface. */
-    const Internal::Schedule &get_schedule() const { return schedule; }
+    const Internal::Schedule &get_schedule() const { return definition.schedule(); }
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */

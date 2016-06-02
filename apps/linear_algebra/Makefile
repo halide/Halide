@@ -3,7 +3,7 @@ include ../support/Makefile.inc
 CXXFLAGS += -O3 -fopenmp -Wall -std=c++11 -march=native
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
-EMIT_OPTIONS = stmt,assembly
+EMIT_OPTIONS = stmt,assembly,o,h
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
@@ -81,7 +81,7 @@ clean:
 	rm -f $(BENCHMARKS)
 
 KERNEL_HEADERS = $(KERNELS:%=$(KERNEL_DIR)/halide_%.h)
-KERNEL_OBJECTS = $(KERNELS:%=$(KERNEL_DIR)/halide_%.o) $(KERNEL_DIR)/halide_runtime.o
+KERNEL_OBJECTS = $(KERNELS:%=$(KERNEL_DIR)/halide_%.o) $(KERNEL_DIR)/halide_runtime.a
 $(LIBHALIDE_BLAS): src/halide_blas.o $(KERNEL_OBJECTS)
 	$(LD) -r -o src/BLAS.o src/halide_blas.o $(KERNEL_OBJECTS) $(LIBS)
 	rm -f $(LIBHALIDE_BLAS)
@@ -207,8 +207,8 @@ $(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 	$(CXX) -std=c++11 -fno-rtti -I../../include $(filter-out %.h,$^) $(LLVM_LDFLAGS) -o $@
 
 # This can use any of the generators; pick an arbitrary one
-$(KERNEL_DIR)/halide_runtime.o: $(KERNEL_DIR)/blas_l1.generator
-	$< -g saxpy -o $(KERNEL_DIR) -r $(@F) target=$(HL_TARGET)
+$(KERNEL_DIR)/halide_runtime.a: $(KERNEL_DIR)/blas_l1.generator
+	$< -g saxpy -o $(KERNEL_DIR) -r halide_runtime target=$(HL_TARGET)
 
 $(KERNEL_DIR)/halide_scopy_impl.o $(KERNEL_DIR)/halide_scopy_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g saxpy -f halide_scopy_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \

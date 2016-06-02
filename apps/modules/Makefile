@@ -8,6 +8,7 @@ all: out.png
 # The implementations of the library functions
 my_library_impl.a: vignette_impl.a flip_impl.a
 	ar rvs my_library_impl.a vignette_impl.a flip_impl.a
+	ranlib my_library_impl.a
 
 # A library that contains the stub functions the generator uses.
 my_library.a: my_library/my_library.cpp

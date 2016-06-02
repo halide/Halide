@@ -29,6 +29,7 @@ class AllocationInference : public IRMutator {
         map<string, Function>::const_iterator iter = env.find(op->name);
         internal_assert(iter != env.end());
         Function f = iter->second;
+        const vector<string> f_args = f.args();
 
         Scope<Interval> empty_scope;
         Box b = box_touched(op->body, op->name, empty_scope, func_bounds);
@@ -38,7 +39,7 @@ class AllocationInference : public IRMutator {
             // and outputs to extern stages).
             Box required(op->bounds.size());
             for (size_t i = 0; i < required.size(); i++) {
-                string prefix = op->name + ".s0." + f.args()[i];
+                string prefix = op->name + ".s0." + f_args[i];
                 required[i] = Interval(Variable::make(Int(32), prefix + ".min"),
                                        Variable::make(Int(32), prefix + ".max"));
             }
@@ -57,18 +58,18 @@ class AllocationInference : public IRMutator {
             Bound bound;
             for (size_t j = 0; j < f.schedule().bounds().size(); j++) {
                 Bound b = f.schedule().bounds()[j];
-                if (f.args()[i] == b.var) {
+                if (f_args[i] == b.var) {
                     bound = b;
                 }
             }
 
-            string prefix = op->name + "." + f.args()[i];
+            string prefix = op->name + "." + f_args[i];
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
             string extent_name = prefix + ".extent_realized";
             if (!b[i].is_bounded()) {
                 user_error << op->name << " is accessed over an unbounded domain in dimension "
-                           << f.args()[i] << "\n";
+                           << f_args[i] << "\n";
             }
             Expr min, max, extent;
             b[i].min = simplify(b[i].min);
@@ -90,7 +91,7 @@ class AllocationInference : public IRMutator {
             Expr max_var = Variable::make(Int(32), max_name);
 
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        {f.args()[i], f.name(), min_var, max_var, b[i].min, b[i].max},
+                                        {f_args[i], f.name(), min_var, max_var, b[i].min, b[i].max},
                                         Call::Extern);
 
             if (bound.min.defined()) {
