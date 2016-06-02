@@ -926,6 +926,15 @@ bool box_contains(const Box &outer, const Box &inner) {
                      (outer[i].min <= inner[i].min) &&
                      (outer[i].max >= inner[i].max));
     }
+    if (outer.maybe_unused()) {
+        if (inner.maybe_unused()) {
+            // inner condition must imply outer one
+            condition = condition && ((outer.used && inner.used) == inner.used);
+        } else {
+            // outer box is conditional, but inner is not
+            return false;
+        }
+    }
     return is_one(simplify(condition));
 }
 
@@ -970,6 +979,17 @@ private:
                 l->index.accept(this);
             }
 
+            return;
+        }
+
+        if (op->is_intrinsic(Call::if_then_else)) {
+            assert(op->args.size() == 3);
+            // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
+            // only takes Stmts as arguments.
+            Stmt then_case = Evaluate::make(op->args[1]);
+            Stmt else_case = Evaluate::make(op->args[2]);
+            Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+            equivalent_if.accept(this);
             return;
         }
 
@@ -1069,7 +1089,7 @@ private:
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
-            if (!op->else_case.defined()) {
+            if (!op->else_case.defined() || is_no_op(op->else_case)) {
                 // Trim the scope down to represent the fact that the
                 // condition is true. We only understand certain types
                 // of conditions for now.
@@ -1358,29 +1378,42 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValue
     return box_touched(Expr(), s, true, true, fn, scope, fb);
 }
 
+// Compute interval of all possible function's values (default + specialized values)
+Interval compute_pure_function_definition_value_bounds(
+        const Definition &def, const Scope<Interval>& scope, const FuncValueBounds &fb, int dim) {
+
+    Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
+
+    // Pure function might have different values due to specialization.
+    // We need to take the union of min and max bounds of all those possible values.
+    for (const Specialization &s : def.specializations()) {
+        Interval s_interval = compute_pure_function_definition_value_bounds(s.definition, scope, fb, dim);
+        result.include(s_interval);
+    }
+    return result;
+}
+
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
     for (size_t i = 0; i < order.size(); i++) {
         Function f = env.find(order[i])->second;
+        const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = make_pair(f.name(), j);
 
             Interval result;
 
-            if (f.has_pure_definition() &&
-                !f.has_update_definition() &&
-                !f.has_extern_definition()) {
+            if (f.is_pure()) {
 
                 // Make a scope that says the args could be anything.
                 Scope<Interval> arg_scope;
                 for (size_t k = 0; k < f.args().size(); k++) {
-                    arg_scope.push(f.args()[k], Interval::everything());
+                    arg_scope.push(f_args[k], Interval::everything());
                 }
 
-                result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
-
+                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
                 // These can expand combinatorially as we go down the
                 // pipeline if we don't run CSE on them.
                 if (result.has_lower_bound()) {
@@ -1392,7 +1425,6 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 }
 
                 fb[key] = result;
-
             }
 
             debug(2) << "Bounds on value " << j

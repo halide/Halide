@@ -1,5 +1,5 @@
-#ifndef WRAP_CALLS_H
-#define WRAP_CALLS_H
+#ifndef HALIDE_WRAP_CALLS_H
+#define HALIDE_WRAP_CALLS_H
 
 /** \file
  *
@@ -13,11 +13,9 @@
 namespace Halide {
 namespace Internal {
 
-/** Create deep-copies of all Functions in 'env' and replace every call to
- * wrapped Functions in the Functions' definitions with call to their wrapper
- * functions. */
-std::pair<std::vector<Function>, std::map<std::string, Function>> wrap_func_calls(
-	const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
+/** Replace every call to wrapped Functions in the Functions' definitions with
+  * call to their wrapper functions. */
+std::map<std::string, Function> wrap_func_calls(const std::map<std::string, Function> &env);
 
 }
 }

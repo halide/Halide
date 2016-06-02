@@ -278,6 +278,8 @@ SOURCE_FILES = \
   CSE.cpp \
   Debug.cpp \
   DebugToFile.cpp \
+  DeepCopy.cpp \
+  Definition.cpp \
   Deinterleave.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
@@ -338,6 +340,7 @@ SOURCE_FILES = \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
   Simplify.cpp \
+  SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
@@ -401,6 +404,8 @@ HEADER_FILES = \
   CSE.h \
   Debug.h \
   DebugToFile.h \
+  DeepCopy.h \
+  Definition.h \
   Deinterleave.h \
   DeviceArgument.h \
   DeviceInterface.h \
@@ -470,6 +475,7 @@ HEADER_FILES = \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
+  SimplifySpecializations.h \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
