@@ -52,12 +52,16 @@ Type map_type(const Type &type) {
 }
 }
 
-  string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded) {
+string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
     Type mapped_type = map_type(type);
     if (mapped_type.is_uint() && !mapped_type.is_bool()) {
-        return mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.lanes());
+        string s = mapped_type.is_scalar() ? "uint": "uvec"  + std::to_string(mapped_type.lanes());
+        if (space == AppendSpace) {
+            s += " ";
+        }
+        return s;
     } else {
-        return CodeGen_GLSLBase::print_type(type);
+        return CodeGen_GLSLBase::print_type(type, space);
     }
 }
 
@@ -376,6 +380,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Evaluate *o
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const IntImm *op) {
     // GL seems to interpret some large int immediates as uints.
     id = "int(" + std::to_string(op->value) + ")";
+}
+
+void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const UIntImm *op) {
+    id = "uint(" + std::to_string(op->value) + ")";
 }
 
 vector<char> CodeGen_OpenGLCompute_Dev::compile_to_src() {

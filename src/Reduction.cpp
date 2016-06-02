@@ -108,9 +108,24 @@ struct ReductionDomainContents {
     ReductionDomainContents() : predicate(const_true()), frozen(false) {
     }
 
+    // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents
+    void accept(IRVisitor *visitor) {
+        for (const ReductionVariable &rvar : domain) {
+            if (rvar.min.defined()) {
+                rvar.min.accept(visitor);
+            }
+            if (rvar.extent.defined()) {
+                rvar.extent.accept(visitor);
+            }
+        }
+        if (predicate.defined()) {
+            predicate.accept(visitor);
+        }
+    }
+
     // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
     void mutate(IRMutator *mutator) {
-        for (auto &rvar : domain) {
+        for (ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
                 rvar.min = mutator->mutate(rvar.min);
             }
@@ -198,6 +213,12 @@ void ReductionDomain::freeze() {
 
 bool ReductionDomain::frozen() const {
     return contents->frozen;
+}
+
+void ReductionDomain::accept(IRVisitor *visitor) const {
+    if (contents.defined()) {
+        contents->accept(visitor);
+    }
 }
 
 void ReductionDomain::mutate(IRMutator *mutator) {
