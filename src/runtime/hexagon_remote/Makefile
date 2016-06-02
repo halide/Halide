@@ -9,7 +9,6 @@
 # In order to build this, you'll need to ensure that the following
 # env vars are set correctly:
 #
-# ANDROID_NDK_ROOT   : path to Android NDK 
 # HEXAGON_SDK_ROOT   : path to Qualcom Hexagon SDK
 # HEXAGON_TOOLS_ROOT : path to Qualcomm Hexagon Tools
 # HEXAGON_QAIC       : path to Qualcomm qaic compiler
@@ -24,18 +23,19 @@
 # from the SDK that cannot be redistributed with Halide).
 #
 
-ANDROID_NDK_ROOT ?= ${HOME}/android-ndk-r11c
 HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.0
 HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/HEXAGON_Tools/7.2.12/Tools
 
-# Some SDK versions use "inc/", some use "incs/"
-HEXAGON_SDK_INCLUDES ?= ${HEXAGON_SDK_ROOT}/incs
-
-# Some SDK versions use "lib/", some use "libs/"
-HEXAGON_SDK_LIBS ?= ${HEXAGON_SDK_ROOT}/libs
+ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
 
 # QAIC compiler may vary depending on your build env.
 HEXAGON_QAIC ?= ${HEXAGON_SDK_ROOT}/tools/qaic/Ubuntu14/qaic
+
+# Some SDK versions use "inc/", some use "incs/"
+HEXAGON_SDK_INCLUDES ?= "${HEXAGON_SDK_ROOT}/incs"
+
+# Some SDK versions use "lib/", some use "libs/"
+HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
 COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
