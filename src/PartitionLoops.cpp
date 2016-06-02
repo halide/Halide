@@ -446,8 +446,8 @@ class PartitionLoops : public IRMutator {
                      << "  tight: " << s.tight << "\n";
 
             // Accept all non-empty intervals
-            if (!interval_is_empty(s.interval)) {
-                if (interval_has_lower_bound(s.interval)) {
+            if (!s.interval.is_empty()) {
+                if (s.interval.has_lower_bound()) {
                     Expr m = s.interval.min;
                     if (!s.tight) {
                         lower_bound_is_tight = false;
@@ -462,7 +462,7 @@ class PartitionLoops : public IRMutator {
                         lower_bound_is_tight = false;
                     }
                 }
-                if (interval_has_upper_bound(s.interval)) {
+                if (s.interval.has_upper_bound()) {
                     Expr m = s.interval.max;
                     if (!s.tight) {
                         upper_bound_is_tight = false;
@@ -503,13 +503,13 @@ class PartitionLoops : public IRMutator {
             // If it goes down to minus infinity, we can also
             // apply it to the prologue
             if (can_simplify_prologue &&
-                !interval_has_lower_bound(s.interval)) {
+                !s.interval.has_lower_bound()) {
                 prologue_simps.push_back(s);
             }
 
             // If it goes up to positive infinity, we can also
             // apply it to the epilogue
-            if (!interval_has_upper_bound(s.interval)) {
+            if (!s.interval.has_upper_bound()) {
                 epilogue_simps.push_back(s);
             }
 
@@ -517,7 +517,7 @@ class PartitionLoops : public IRMutator {
             // it's tight, then the reverse rule can be applied to the
             // prologue.
             if (can_simplify_prologue &&
-                interval_has_lower_bound(s.interval) &&
+                s.interval.has_lower_bound() &&
                 lower_bound_is_tight) {
                 internal_assert(s.tight);
                 Simplification s2 = s;
@@ -528,7 +528,7 @@ class PartitionLoops : public IRMutator {
                 std::swap(s2.likely_value, s2.unlikely_value);
                 prologue_simps.push_back(s2);
             }
-            if (interval_has_upper_bound(s.interval) &&
+            if (s.interval.has_upper_bound() &&
                 upper_bound_is_tight) {
                 internal_assert(s.tight);
                 Simplification s2 = s;
@@ -632,7 +632,7 @@ class PartitionLoops : public IRMutator {
             prologue_val = op->min;
         }
 
-        if (is_one(simplify(epilogue_val <= prologue_val))) {
+        if (can_prove(epilogue_val <= prologue_val)) {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
             IRMutator::visit(op);

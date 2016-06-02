@@ -237,6 +237,8 @@ set(HEADER_FILES
   CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
+  DeepCopy.h
+  Definition.h
   Deinterleave.h
   DeviceArgument.h
   DeviceInterface.h
@@ -261,6 +263,7 @@ set(HEADER_FILES
   IRVisitor.h
   Image.h
   ImageParam.h
+  Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
@@ -303,6 +306,7 @@ set(HEADER_FILES
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
   Solve.h
@@ -387,6 +391,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
+  DeepCopy.cpp
+  Definition.cpp
   Deinterleave.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
@@ -409,6 +415,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRVisitor.cpp
   Image.cpp
   ImageParam.cpp
+  Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
@@ -446,6 +453,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
