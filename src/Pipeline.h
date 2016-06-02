@@ -174,6 +174,17 @@ public:
                                           const std::vector<Argument> &args,
                                           const Target &target = get_target_from_environment());
 
+    /** Compile to static-library file and header pair once for each target;
+     * each resulting function will be considered (in order) via halide_can_use_target_features()
+     * at runtime, with the first appropriate match being selected for subsequent use.
+     * This is typically useful for specializations that may vary unpredictably by machine
+     * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
+     * All targets must have identical arch-os-bits.
+     */
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                      const std::vector<Argument> &args,
+                                                      const std::vector<Target> &targets);
+
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
     EXPORT Module compile_to_module(const std::vector<Argument> &args,

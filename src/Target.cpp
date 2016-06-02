@@ -477,7 +477,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
-    case DeviceAPI::Default_GPU: return has_gpu_feature();
+    case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }
