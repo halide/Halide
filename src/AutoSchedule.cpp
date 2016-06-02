@@ -647,7 +647,8 @@ struct Partitioner {
 
   };
 
-  map<pair<string, string>, int64_t> fusion_cache;
+  map<string, pair<InlineChoice, int64_t>> inline_cache;
+  map<pair<string, string>, pair<FusionChoice, int64_t> > fusion_cache;
 
   struct Group {
     // The output function representing the group
@@ -841,6 +842,7 @@ struct Partitioner {
       choose_candidate_fuse_inline(const vector< pair<string, string > > &cand_pairs);
   pair<FusionChoice, int64_t>
       choose_candidate_fuse_fast_mem(const vector< pair<string, string > > &cand_pairs);
+  map<string, int64_t> evaluate_reuse(string func, const set<string> &prod);
 /*
   Option choose_candidate(const vector< pair<string, string > > &cand_pairs);
   void clear_schedules_fast_mem();
@@ -849,18 +851,55 @@ struct Partitioner {
   void update_function_costs();
   void tile_for_input_locality(bool init_pipeline_reuse = false);
   vector<float> get_input_reuse(Function f, vector<string> &inputs);
-  pair<float, float> evaluate_reuse(string, vector<string> &group_inputs,
-                                    vector<int> &tile_sizes, bool unit_tile);
 */
 };
-//TODO: This should not be candidate pairs
+
+map<string, int64_t> Partitioner::evaluate_reuse(string func,
+                                                 const set<string> &prod) {
+  map<string, int64_t> reuse;
+  Function f = analy.env.at(func);
+  const vector<string> &args = f.args();
+
+  map<string, int> tile_sizes;
+  // TODO: Check if tile sizes of 1 in each dimension gives a reasonable
+  // answer or reuse should be evaluated at a much larger granularity or
+  // symbolically. Using a symbolic version might be more stable.
+  for (size_t i = 0; i < args.size(); i++)
+    tile_sizes[args[i]] = 1;
+
+  vector<Interval> bounds = get_bounds_from_tile_sizes(func, tile_sizes);
+
+  vector< map<string, Box> > reuse_regions =
+                            analy.concrete_overlap_regions(func, bounds);
+
+  for (size_t i = 0; i < args.size(); i++) {
+    int64_t total_reuse = 0;
+    for (auto &reg: reuse_regions[i]) {
+      // Discard all the regions not in procucer set
+      if (prod.find(reg.first) == prod.end())
+        continue;
+      int64_t area = box_area(reg.second);
+      if (area > 0) {
+        total_reuse += area;
+      } else {
+        total_reuse = -1;
+        break;
+      }
+    }
+    reuse[args[i]] = total_reuse;
+  }
+
+  return reuse;
+}
+
 pair<vector<Partitioner::InlineChoice>, int64_t>
 Partitioner::choose_candidate_fuse_inline(
-    const vector< pair<string, string> > &cand_pairs) {
+    const vector<pair<string, string> > &cands) {
 
   pair<vector<Partitioner::InlineChoice>, int64_t> best;
   best.second = -1;
-  for (auto &p: cand_pairs) {
+  for (auto &p: cands) {
+    internal_assert(p.second == "");
     // Compute the aggregate benefit for inlining into all the children
     int64_t overall_benefit = 0;
     vector<Partitioner::InlineChoice> choices;
@@ -871,17 +910,17 @@ Partitioner::choose_candidate_fuse_inline(
       Function output = analy.env.at(c);
 
       InlineChoice cand_choice(p.first, c);
-    
-      // Check if the pair has been evaluated for inline fusion before
-      pair<string, string> key = make_pair(p.first, c);
-      if (fusion_cache.find(key) != fusion_cache.end()) {
 
-        best.second = fusion_cache.at(key);
+      // Check if the pair has been evaluated for inline fusion before
+      if (inline_cache.find(p.first) != inline_cache.end()) {
+
+        benefit = inline_cache.at(p.first).second;
 
       } else {
         benefit = evaluate_choice(cand_choice);
         // Cache the result of the evaluation for the pair
-        fusion_cache.insert(make_pair(key, benefit));
+        inline_cache.insert(make_pair(p.first,
+                                      make_pair(cand_choice, benefit)));
       }
 
       // Conservative strategy that only goes ahead with the fusion
@@ -911,6 +950,112 @@ Partitioner::choose_candidate_fuse_fast_mem(
   map<string, int> tile_sizes;
   FusionChoice c("", "", tile_sizes);
   return make_pair(c, 0);
+
+  // The choose candidate operates by considering a wide variety of
+  // posssible fusion structures between each pair of candidates. The fusion
+  // structure is restricted to computing all the functions in both the
+  // groups at some granularity of the output function in the child group.
+  //
+  // Among these options the only ones considered are the ones that satisfy
+  // the machine constraints. This means the following things:
+  //
+  // 1) Do all the intermediate buffers fit in the fast level of memory. One
+  // needs to account for early frees and the high watermark of intermediate
+  // storage.
+  //
+  // 2) Is the amount of redundant computation introduced in the process
+  // give the best redundant compute vs. locality trade-off.
+  //
+  // 3) Does the fused group have enough parallelism both for multiple cores.
+  // This can get tricky as it has load balancing aspect to it too. For
+  // example, if the group can be split into 10 tiles and there are 4 cores the
+  // latency of the entire pipeline is 3 tiles. So either the number of tiles
+  // have to a multiple of the cores or large in number to avoid the load
+  // imbalance.
+  //
+  // 4) Does the fusion limit vectorization. Reordering function dimensions
+  // and modifying data layout have significant interactions with
+  // vectorization. As a first pass the goal is to not miss any obvious
+  // vectorization.
+
+  /*
+  vector<FusionChoice> choices;
+
+  pair<FusionChoice, int64_t> best;
+
+  for (auto &p: cand_pairs) {
+    pair<string, string> key = make_pair(p.first, p.second);
+    FusionChoice cand_best;
+
+    // Check if the pair has been evaluated before
+    if (fusion_cache.find(key) != fusion_cache.end()) {
+      if (best.second < fusion_cache[key].second) {
+        cand_best = fusion_cache[key].first;
+        best.second = fusion_cache[key].second;
+      }
+      continue;
+    }
+
+    // If the pair has not been evaluated before create all the fusion
+    // granularities and evaluate them
+
+    // Get the output function of the child group
+    Function output = analy.env[p.second];
+    const vector<string> &args = output.args();
+
+    cand_best.prod_group = p.first;
+    cand_best.cons_group = p.second;
+
+    // Find the dimensions with zero reuse/redundant work
+
+    // From the outer to the inner most argument
+    for (int i = (int)args.size() - 1; i >= 0; i--) {
+      for (auto s: size_variants) {
+        Option opt;
+        opt.prod_group = p.first;
+        opt.cons_group = p.second;
+        opt.reuse = reuse;
+
+        for (int j = 0; j < i; j++) {
+          if (reuse[j] > 0 || j == 0)
+            opt.tile_sizes.push_back(-1);
+          else
+            opt.tile_sizes.push_back(1);
+        }
+
+        for (unsigned int j = i; j < args.size(); j++) {
+          int curr_size;
+          if (reuse[j] > 0 || j == 0)
+            curr_size = s;
+          else
+            curr_size = 1;
+
+          if (j == 0) {
+            if (gpu_schedule)
+              opt.tile_sizes.push_back(std::max(curr_size, arch_params.vec_len));
+            else
+              opt.tile_sizes.push_back(std::max(curr_size, 64));
+          }
+          else
+            opt.tile_sizes.push_back(curr_size);
+        }
+
+        evaluate_option(opt, Partitioner::FAST_MEM);
+
+        if (cand_best_opt.benefit < opt.benefit) {
+          cand_best_opt = opt;
+        }
+      }
+    }
+
+    // Cache the result of the evaluation for the pair
+    option_cache[key] = cand_best_opt;
+    if (best_opt.benefit < cand_best_opt.benefit)
+      best_opt = cand_best_opt;
+  }
+
+  return best_opt;
+  */
 }
 
 void Partitioner::group(Partitioner::Level level) {
@@ -1196,7 +1341,7 @@ void generate_schedules(const vector<Function> &outputs,
   // Initialize the cost model
   // TODO: Build a class which encapsulates the cost model
   // TODO: Arithmetic cost model and functions which help in computing
-  // foot prints go here
+  // footprints go here
 
   // TODO: Partitioner which is capable of auto scheduling hierarchically
   // TODO: Auto scheduler modes
