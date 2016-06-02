@@ -712,8 +712,43 @@ private:
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
 
+    template <typename T>
+    void visit_binary_integer_cast(const Cast *cast, const T *op) {
+        // This is basically a two-in-one visitor combining
+        // visit_binary above, and visit(Cast) below. This is
+        // necessary to skip over the boolean vector during interleave
+        // simplification.
+        Type type = cast->type;
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        internal_assert(a.type().bits() == b.type().bits());
+        if (type.bits() == op->a.type().bits() &&
+            yields_removable_interleave({a, b})) {
+
+            a = remove_interleave(a);
+            b = remove_interleave(b);
+            expr = native_interleave(Cast::make(type, T::make(a, b)));
+        } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
+            expr = Cast::make(type, T::make(a, b));
+        } else {
+            expr = cast;
+        }
+    }
+
     void visit(const Cast *op) {
-        if (op->type.bits() == op->value.type().bits()) {
+        // Casts that are a result of eliminate_boolean_vectors need
+        // special handling, because we need to avoid attempting to
+        // generate an interleave of 1 bit integer vectors.
+        if (op->value.as<EQ>()) { visit_binary_integer_cast(op, op->value.as<EQ>()); }
+        else if (op->value.as<NE>()) { visit_binary_integer_cast(op, op->value.as<NE>()); }
+        else if (op->value.as<LT>()) { visit_binary_integer_cast(op, op->value.as<LT>()); }
+        else if (op->value.as<LE>()) { visit_binary_integer_cast(op, op->value.as<LE>()); }
+        else if (op->value.as<GT>()) { visit_binary_integer_cast(op, op->value.as<GT>()); }
+        else if (op->value.as<GE>()) { visit_binary_integer_cast(op, op->value.as<GE>()); }
+        // Other boolean operations producing boolean vectors should
+        // have been converted to bitwise operations.
+        else if (op->type.bits() == op->value.type().bits()) {
             // We can move interleaves through casts of the same size.
             Expr value = mutate(op->value);
             if (is_native_interleave(value)) {
