@@ -1,5 +1,4 @@
 #include "WrapCalls.h"
-#include "IRVisitor.h"
 
 #include <set>
 
@@ -15,18 +14,6 @@ using std::vector;
 typedef map<Function, Function, Function::Compare> SubstitutionMap;
 
 namespace {
-
-// Return true if 'func' exists as a copy of one of the function in 'copied_map'
-bool is_copy(const Function& func, const SubstitutionMap &copied_map) {
-    for (const auto &iter : copied_map) {
-        if (iter.second.same_as(func)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-} // anonymous namespace
 
 void insert_func_wrapper_helper(map<Function, SubstitutionMap, Function::Compare> &func_wrappers_map,
                                 const Function &in_func, const Function &wrapped_func,
@@ -56,38 +43,20 @@ void insert_func_wrapper_helper(map<Function, SubstitutionMap, Function::Compare
     wrappers_map[wrapped_func] = wrapper;
 }
 
-pair<vector<Function>, map<string, Function>> wrap_func_calls(
-            const vector<Function> &outputs, const map<string, Function> &env) {
-    vector<Function> wrapped_outputs;
+} // anonymous namespace
+
+map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> wrapped_env;
-
-    // Create empty deep-copies of all Functions in 'env'
-    SubstitutionMap copied_map; // Original Function -> Deep-copy
-    for (const auto &iter : env) {
-        copied_map[iter.second] = Function(iter.second.name());
-    }
-
-    // Deep copy all Functions in 'env' into their corresponding empty copies
-    for (const auto &iter : env) {
-        iter.second.deep_copy(copied_map[iter.second], copied_map);
-    }
-
-    // Need to substitute-in all old Function references in all Exprs referenced
-    // within the Function with the deep-copy versions
-    for (auto &iter : copied_map) {
-        iter.second.substitute_calls(copied_map);
-    }
 
     map<Function, SubstitutionMap, Function::Compare> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
 
-    // Populate the env with the deep-copy version
-    for (const auto &iter : copied_map) {
-        wrapped_env.emplace(iter.first.name(), iter.second);
+    for (const auto &iter : env) {
+        wrapped_env.emplace(iter.first, iter.second);
         func_wrappers_map[iter.second];
     }
 
-    for (const auto &it : copied_map) {
-        string wrapped_fname = it.first.name();
+    for (const auto &it : env) {
+        string wrapped_fname = it.first;
         const Function &wrapped_func = it.second;
         const auto &wrappers = wrapped_func.schedule().wrappers();
 
@@ -101,7 +70,6 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
         for (const auto &iter : wrappers) {
             string in_func = iter.first;
             const Function &wrapper = Function(iter.second); // This is already the deep-copy version
-            internal_assert(is_copy(wrapper, copied_map));   // Make sure it's indeed the copy
 
             if (in_func.empty()) { // Global wrapper
                 for (const auto &wrapped_env_iter : wrapped_env) {
@@ -159,18 +127,7 @@ pair<vector<Function>, map<string, Function>> wrap_func_calls(
         }
     }
 
-    for (const auto &func : outputs) {
-        const auto &iter = copied_map.find(func);
-        if (iter != copied_map.end()) {
-            debug(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
-            wrapped_outputs.push_back(iter->second);
-        } else {
-            debug(4) << "Adding original version to outputs: " << func.name() << "\n";
-            wrapped_outputs.push_back(func);
-        }
-    }
-
-    return std::make_pair(wrapped_outputs, wrapped_env);
+    return wrapped_env;
 }
 
 }

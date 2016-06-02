@@ -6,8 +6,8 @@ HL_TARGET ?= host
 all: out.png
 
 # The implementations of the library functions
-my_library_impl.a: vignette_impl.a flip_impl.a
-	ar rvs my_library_impl.a vignette_impl.a flip_impl.a
+my_library_impl.a: vignette_impl.o flip_impl.o
+	ar rvs my_library_impl.a vignette_impl.o flip_impl.o
 
 # A library that contains the stub functions the generator uses.
 my_library.a: my_library/my_library.cpp
@@ -15,7 +15,7 @@ my_library.a: my_library/my_library.cpp
 	ar q my_library.a my_library.o
 
 # A generated library function
-vignette_impl.a: my_library/vignette
+vignette_impl.o: my_library/vignette
 	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET)-no_runtime ./my_library/vignette
 
 # A library function generator
@@ -23,7 +23,7 @@ my_library/vignette: my_library/vignette.cpp
 	$(CXX) $(CXXFLAGS) my_library/vignette.cpp -o my_library/vignette $(HALIDE_LD_FLAGS)
 
 # A generated library function
-flip_impl.a: my_library/flip
+flip_impl.o: my_library/flip
 	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET)-no_runtime ./my_library/flip
 
 # A library function generator
@@ -35,12 +35,12 @@ generate_pipeline: generate_pipeline.cpp my_library.a
 	$(CXX) $(CXXFLAGS) generate_pipeline.cpp my_library.a -o generate_pipeline $(HALIDE_LD_FLAGS)
 
 # The output pipeline. Includes the runtime.
-pipeline.a: generate_pipeline
+pipeline.o: generate_pipeline
 	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET) ./generate_pipeline
 
 # A library containing the output pipeline and also the library implementation
-pipeline_all.a: pipeline.a my_library_impl.a
-	$(LD) -r -o final.o pipeline.a my_library_impl.a
+pipeline_all.a: pipeline.o my_library_impl.a
+	$(LD) -r -o final.o pipeline.o my_library_impl.a
 	ar rvs pipeline_all.a final.o
 
 # A binary that runs the output pipeline on an image

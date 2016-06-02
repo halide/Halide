@@ -10,6 +10,7 @@
 #include "Parameter.h"
 #include "Schedule.h"
 #include "Reduction.h"
+#include "Definition.h"
 
 #include <map>
 
@@ -52,12 +53,6 @@ struct ExternFuncArgument {
 
 namespace Internal {
 
-struct UpdateDefinition {
-    std::vector<Expr> values, args;
-    Schedule schedule;
-    ReductionDomain domain;
-};
-
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
@@ -67,9 +62,10 @@ class Function {
 
 public:
     /** This lets you use a Function as a key in a map of the form
-     * map<Function, Foo, Compare> */
+     * map<Function, Foo, Function::Compare> */
     struct Compare {
         bool operator()(const Function &a, const Function &b) const {
+            internal_assert(a.contents.defined() && b.contents.defined());
             return a.contents < b.contents;
         }
     };
@@ -125,13 +121,17 @@ public:
     /** Get the name of the function */
     EXPORT const std::string &name() const;
 
+    /** Get a mutable handle to the init definition. */
+    EXPORT Definition &definition();
+
+    /** Get the init definition */
+    EXPORT const Definition &definition() const;
+
     /** Get the pure arguments */
-    EXPORT const std::vector<std::string> &args() const;
+    EXPORT const std::vector<std::string> args() const;
 
     /** Get the dimensionality */
-    int dimensions() const {
-        return (int)args().size();
-    }
+    EXPORT int dimensions() const;
 
     /** Get the number of outputs */
     int outputs() const {
@@ -145,9 +145,7 @@ public:
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition */
-    bool has_pure_definition() const {
-        return !values().empty();
-    }
+    EXPORT bool has_pure_definition() const;
 
     /** Does this function *only* have a pure definition */
     bool is_pure() const {
@@ -155,6 +153,9 @@ public:
                 !has_update_definition() &&
                 !has_extern_definition());
     }
+
+    /** Is it legal to inline this function */
+    EXPORT bool can_be_inlined() const;
 
     /** Get a handle to the schedule for the purpose of modifying
      * it */
@@ -171,8 +172,16 @@ public:
      * stage */
     EXPORT Schedule &update_schedule(int idx = 0);
 
+    /** Get a mutable handle to this function's update definition at
+     * index 'idx'. */
+    EXPORT Definition &update(int idx = 0);
+
+    /** Get a const reference to this function's update definition at
+     * index 'idx'. */
+    EXPORT const Definition &update(int idx = 0) const;
+
     /** Get a const reference to this function's update definitions. */
-    EXPORT const std::vector<UpdateDefinition> &updates() const;
+    EXPORT const std::vector<Definition> &updates() const;
 
     /** Does this function have an update definition */
     EXPORT bool has_update_definition() const;
@@ -240,7 +249,7 @@ public:
      * See \ref Func::in for more details. */
     // @{
     EXPORT void add_wrapper(const std::string &f, Function &wrapper);
-    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    EXPORT const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
     // @}
 
     /** Replace every call to Functions in 'substitutions' keys by all Exprs

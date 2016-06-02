@@ -63,6 +63,7 @@ protected:
         void visit(const Select *op);
         void visit(const Evaluate *op);
         void visit(const IntImm *op);
+        void visit(const UIntImm *op);
 
     public:
         int workgroup_size[3];

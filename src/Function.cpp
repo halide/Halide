@@ -3,13 +3,13 @@
 #include <atomic>
 
 #include "IR.h"
+#include "IRMutator.h"
 #include "Function.h"
 #include "Scope.h"
 #include "CSE.h"
 #include "Random.h"
 #include "Introspection.h"
 #include "IRPrinter.h"
-#include "IRMutator.h"
 #include "ParallelRVar.h"
 #include "Var.h"
 
@@ -22,8 +22,6 @@ using std::set;
 using std::map;
 
 typedef map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
-UpdateDefinition deep_copy_update_definition_helper(const UpdateDefinition &src,
-                                                    DeepCopyMap &copied_map);
 ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgument &src,
                                                          DeepCopyMap &copied_map);
 void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
@@ -35,12 +33,10 @@ IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
 struct FunctionContents {
     mutable RefCount ref_count;
     std::string name;
-    std::vector<std::string> args;
-    std::vector<Expr> values;
     std::vector<Type> output_types;
-    Schedule schedule;
 
-    std::vector<UpdateDefinition> updates;
+    Definition init_def;
+    std::vector<Definition> updates;
 
     std::string debug_file;
 
@@ -59,29 +55,9 @@ struct FunctionContents {
                          frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
-        for (Expr i : values) {
-            i.accept(visitor);
-        }
-
-        schedule.accept(visitor);
-
-        for (UpdateDefinition update : updates) {
-            for (Expr i : update.values) {
-                i.accept(visitor);
-            }
-            for (Expr i : update.args) {
-                i.accept(visitor);
-            }
-
-            if (update.domain.defined()) {
-                for (ReductionVariable rv : update.domain.domain()) {
-                    rv.min.accept(visitor);
-                    rv.extent.accept(visitor);
-                }
-                update.domain.predicate().accept(visitor);
-            }
-
-            update.schedule.accept(visitor);
+        init_def.accept(visitor);
+        for (const Definition &def : updates) {
+            def.accept(visitor);
         }
 
         if (!extern_function_name.empty()) {
@@ -95,7 +71,7 @@ struct FunctionContents {
         }
 
         for (Parameter i : output_buffers) {
-            for (size_t j = 0; j < args.size() && j < 4; j++) {
+            for (size_t j = 0; j < init_def.args().size() && j < 4; j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);
                 }
@@ -111,28 +87,9 @@ struct FunctionContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FunctionContents
     void mutate(IRMutator *mutator) {
-        for (size_t i = 0; i < values.size(); ++i) {
-            values[i] = mutator->mutate(values[i]);
-        }
-
-        // Mutate schedule
-        schedule.mutate(mutator);
-
-        // Mutate update definition
-        for (UpdateDefinition &update : updates) {
-            for (size_t i = 0; i < update.values.size(); ++i) {
-                update.values[i] = mutator->mutate(update.values[i]);
-            }
-            for (size_t i = 0; i < update.args.size(); ++i) {
-                update.args[i] = mutator->mutate(update.args[i]);
-            }
-
-            if (update.domain.defined()) {
-                update.domain.mutate(mutator);
-            }
-
-            // Mutate update definition's schedule
-            update.schedule.mutate(mutator);
+        init_def.mutate(mutator);
+        for (Definition &def : updates) {
+            def.mutate(mutator);
         }
 
         if (!extern_function_name.empty()) {
@@ -297,23 +254,6 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
     contents->name = n;
 }
 
-// Return deep-copy of UpdateDefinition 'src'
-UpdateDefinition deep_copy_update_definition_helper(const UpdateDefinition &src,
-                                                    DeepCopyMap &copied_map) {
-    UpdateDefinition copy;
-    copy.values = src.values;
-    copy.args = src.args;
-    copy.schedule = src.schedule.deep_copy(copied_map);
-
-    // UpdateDefinition's domain is the same as the one pointed by its schedule
-    internal_assert(src.schedule.reduction_domain().same_as(src.domain))
-        << "UpdateDefinition should point to the same reduction domain as its schedule\n";
-    // We don't need to deep-copy the reduction domain since we've already done
-    // it when deep-copying the schedule above
-    copy.domain = copy.schedule.reduction_domain();
-    return copy;
-}
-
 // Return deep-copy of ExternFuncArgument 'src'
 ExternFuncArgument deep_copy_extern_func_argument_helper(
         const ExternFuncArgument &src, DeepCopyMap &copied_map) {
@@ -360,8 +300,6 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     internal_assert(dst.defined() && src.defined()) << "Cannot deep-copy undefined FunctionContents\n";
 
     dst->name = src->name;
-    dst->args = src->args;
-    dst->values = src->values;
     dst->output_types = src->output_types;
     dst->debug_file = src->debug_file;
     dst->extern_function_name = src->extern_function_name;
@@ -372,15 +310,24 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->frozen = src->frozen;
     dst->output_buffers = src->output_buffers;
 
-    dst->schedule = src->schedule.deep_copy(copied_map);
+    // Copy the pure definition
+    dst->init_def = src->init_def.deep_copy(copied_map);
+    internal_assert(dst->init_def.is_init());
+    internal_assert(!dst->init_def.domain().defined() && !dst->init_def.schedule().reduction_domain().defined())
+        << "Init definition shouldn't have reduction domain\n";
 
-    for (const auto &u : src->updates) {
-        UpdateDefinition u_copy = deep_copy_update_definition_helper(u, copied_map);
-        internal_assert(u_copy.domain.same_as(u_copy.schedule.reduction_domain()))
-            << "UpdateDefinition should point to the same reduction domain as its schedule\n";
-        dst->updates.push_back(std::move(u_copy));
+    for (const Definition &def : src->updates) {
+        internal_assert(!def.is_init());
+        Definition def_copy = def.deep_copy(copied_map);
+        internal_assert(!def_copy.is_init());
+        internal_assert(
+            (!def_copy.domain().defined() && !def_copy.schedule().reduction_domain().defined()) ||
+            (def_copy.domain().defined() && def_copy.domain().same_as(def_copy.schedule().reduction_domain())))
+            << "Update definition should point to the same reduction domain as its schedule\n";
+        dst->updates.push_back(std::move(def_copy));
     }
-    for (const auto &e : src->extern_arguments) {
+
+    for (const ExternFuncArgument &e : src->extern_arguments) {
         ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
         dst->extern_arguments.push_back(std::move(e_copy));
     }
@@ -398,7 +345,7 @@ void Function::deep_copy(Function &copy,
         copied_funcs_map[iter.first.contents] = iter.second.contents;
     }
     // Add reference to this Function's deep-copy to the map in case of
-    // self-reference, e.g. self-reference in an UpdateDefinition.
+    // self-reference, e.g. self-reference in an Definition.
     copied_funcs_map[contents] = copy.contents;
 
     // Perform the deep-copies
@@ -481,29 +428,35 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents->name = unique_name('f');
     }
 
-    user_assert(contents->values.empty())
+    internal_assert(contents->init_def.is_init());
+
+    user_assert(contents->init_def.values().empty())
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func is already defined.\n";
 
-    contents->values = values;
-    contents->args = args;
-
-    contents->output_types.resize(values.size());
-    for (size_t i = 0; i < contents->output_types.size(); i++) {
-        contents->output_types[i] = values[i].type();
+    contents->init_def.values() = values;
+    auto &pure_def_args = contents->init_def.args();
+    pure_def_args.resize(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        pure_def_args[i] = Var(args[i]);
     }
 
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, true};
-        contents->schedule.dims().push_back(d);
+        contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {args[i]};
-        contents->schedule.storage_dims().push_back(sd);
+        contents->init_def.schedule().storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
     {
         Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
-        contents->schedule.dims().push_back(d);
+        contents->init_def.schedule().dims().push_back(d);
+    }
+
+    contents->output_types.resize(values.size());
+    for (size_t i = 0; i < contents->output_types.size(); i++) {
+        contents->output_types[i] = values[i].type();
     }
 
     for (size_t i = 0; i < values.size(); i++) {
@@ -540,16 +493,17 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Dimensionality of update definition must match dimensionality of pure definition.\n";
 
-    user_assert(values.size() == contents->values.size())
+    user_assert(values.size() == contents->init_def.values().size())
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Number of tuple elements for update definition must "
         << "match number of tuple elements for pure definition.\n";
 
+    const auto &pure_def_vals = contents->init_def.values();
     for (size_t i = 0; i < values.size(); i++) {
         // Check that pure value and the update value have the same
         // type.  Without this check, allocations may be the wrong size
         // relative to what update code expects.
-        Type pure_type = contents->values[i].type();
+        Type pure_type = pure_def_vals[i].type();
         if (pure_type != values[i].type()) {
             std::ostringstream err;
             err << "In update definition " << update_idx << " of Func \"" << name() << "\":\n";
@@ -574,6 +528,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // pure args in the pure definition.
     bool pure = true;
     vector<string> pure_args(args.size());
+    const auto &pure_def_args = contents->init_def.args();
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
         user_assert(args[i].defined())
@@ -581,9 +536,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             << "Argument " << i
             << " in left-hand-side of update definition is undefined.\n";
         if (const Variable *var = args[i].as<Variable>()) {
+            const Variable *pure_var = pure_def_args[i].as<Variable>();
+            internal_assert(pure_var);
             if (!var->param.defined() &&
                 !var->reduction_domain.defined() &&
-                var->name == contents->args[i]) {
+                var->name == pure_var->name) {
                 pure_args[i] = var->name;
             } else {
                 pure = false;
@@ -649,12 +606,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         check.reduction_domain.set_predicate(lower_random(check.reduction_domain.predicate(), free_vars, tag));
     }
 
-    UpdateDefinition r;
-    r.args = args;
-    r.values = values;
-    r.domain = check.reduction_domain;
-    r.schedule.set_reduction_domain(r.domain);
-
     // The update value and args probably refer back to the
     // function itself, introducing circular references and hence
     // memory leaks. We need to break these cycles.
@@ -662,28 +613,32 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     deleter.func = contents;
     deleter.count = 0;
     for (size_t i = 0; i < args.size(); i++) {
-        r.args[i] = deleter.mutate(r.args[i]);
+        args[i] = deleter.mutate(args[i]);
     }
     for (size_t i = 0; i < values.size(); i++) {
-        r.values[i] = deleter.mutate(r.values[i]);
+        values[i] = deleter.mutate(values[i]);
     }
-    if (r.domain.defined()) {
-        r.domain.set_predicate(deleter.mutate(r.domain.predicate()));
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.set_predicate(
+            deleter.mutate(check.reduction_domain.predicate()));
     }
 
+    Definition r(args, values, check.reduction_domain, false);
+    internal_assert(!r.is_init()) << "Should have been an update definition\n";
+
     // First add any reduction domain
-    if (r.domain.defined()) {
-        for (size_t i = 0; i < r.domain.domain().size(); i++) {
+    if (r.domain().defined()) {
+        for (size_t i = 0; i < r.domain().domain().size(); i++) {
             // Is this RVar actually pure (safe to parallelize and
             // reorder)? It's pure if one value of the RVar can never
             // access from the same memory that another RVar is
             // writing to.
-            const string &v = r.domain.domain()[i].var;
+            const string &v = r.domain().domain()[i].var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
             Dim d = {v, ForType::Serial, DeviceAPI::None, pure};
-            r.schedule.dims().push_back(d);
+            r.schedule().dims().push_back(d);
         }
     }
 
@@ -691,20 +646,20 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
             Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, true};
-            r.schedule.dims().push_back(d);
+            r.schedule().dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
         Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
-        r.schedule.dims().push_back(d);
+        r.schedule().dims().push_back(d);
     }
 
     // If there's no recursive reference, no reduction domain, and all
     // the args are pure, then this definition completely hides
     // earlier ones!
-    if (!r.domain.defined() &&
+    if (!r.domain().defined() &&
         deleter.count == 0 &&
         pure) {
         user_warning
@@ -748,12 +703,13 @@ void Function::define_extern(const std::string &function_name,
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
-    contents->args.resize(dimensionality);
+    auto &pure_def_args = contents->init_def.args();
+    pure_def_args.resize(dimensionality);
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
-        contents->args[i] = arg;
+        pure_def_args[i] = Var(arg);
         StorageDim sd = {arg};
-        contents->schedule.storage_dims().push_back(sd);
+        contents->init_def.schedule().storage_dims().push_back(sd);
     }
 }
 
@@ -765,8 +721,27 @@ const std::string &Function::name() const {
     return contents->name;
 }
 
-const std::vector<std::string> &Function::args() const {
-    return contents->args;
+Definition &Function::definition() {
+    return contents->init_def;
+}
+
+const Definition &Function::definition() const {
+    return contents->init_def;
+}
+
+const std::vector<std::string> Function::args() const {
+    const auto &pure_def_args = contents->init_def.args();
+    std::vector<std::string> arg_names(pure_def_args.size());
+    for (size_t i = 0; i < pure_def_args.size(); i++) {
+        const Variable *var = pure_def_args[i].as<Variable>();
+        internal_assert(var);
+        arg_names[i] = var->name;
+    }
+    return arg_names;
+}
+
+int Function::dimensions() const {
+    return contents->init_def.args().size();
 }
 
 const std::vector<Type> &Function::output_types() const {
@@ -774,15 +749,15 @@ const std::vector<Type> &Function::output_types() const {
 }
 
 const std::vector<Expr> &Function::values() const {
-    return contents->values;
+    return contents->init_def.values();
 }
 
 Schedule &Function::schedule() {
-    return contents->schedule;
+    return contents->init_def.schedule();
 }
 
 const Schedule &Function::schedule() const {
-    return contents->schedule;
+    return contents->init_def.schedule();
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
@@ -790,11 +765,30 @@ const std::vector<Parameter> &Function::output_buffers() const {
 }
 
 Schedule &Function::update_schedule(int idx) {
-    return contents->updates[idx].schedule;
+    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
+    return contents->updates[idx].schedule();
 }
 
-const std::vector<UpdateDefinition> &Function::updates() const {
+Definition &Function::update(int idx) {
+    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
+    return contents->updates[idx];
+}
+
+const Definition &Function::update(int idx) const {
+    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
+    return contents->updates[idx];
+}
+
+const std::vector<Definition> &Function::updates() const {
     return contents->updates;
+}
+
+bool Function::has_pure_definition() const {
+    return !contents->init_def.values().empty();
+}
+
+bool Function::can_be_inlined() const {
+    return is_pure() && definition().specializations().empty();
 }
 
 bool Function::has_update_definition() const {
@@ -853,12 +847,12 @@ bool Function::frozen() const {
 }
 
 const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
-    return contents->schedule.wrappers();
+    return contents->init_def.schedule().wrappers();
 }
 
 void Function::add_wrapper(const std::string &f, Function &wrapper) {
     wrapper.freeze();
-    contents->schedule.add_wrapper(f, wrapper.contents);
+    contents->init_def.schedule().add_wrapper(f, wrapper.contents);
 }
 
 namespace {

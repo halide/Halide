@@ -5,7 +5,7 @@ using namespace Halide;
 
 Target target;
 
-Var x, y, tx("tx"), ty("ty"), c("c");
+Var x, y, yi("yi"), yo("yo"), c("c");
 Func processed("processed");
 
 // Average two positive values rounding up
@@ -309,7 +309,7 @@ Func process(Func raw, Type result_type,
              ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
              Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
 
-    Var xi, yi;
+    Var yii, xi;
 
     Func denoised = hot_pixel_suppression(raw);
     Func deinterleaved = deinterleave(denoised);

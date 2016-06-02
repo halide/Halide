@@ -1031,22 +1031,22 @@ private:
             expr = make_zero(op->type);
         } else if (min_a &&
                    min_b &&
-                   is_zero(simplify((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
+                   is_zero(mutate((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
             // min(a, b) - min(c, d) where a-b == c-d -> b - d
             expr = mutate(min_a->b - min_b->b);
         } else if (max_a &&
                    max_b &&
-                   is_zero(simplify((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
+                   is_zero(mutate((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
             // max(a, b) - max(c, d) where a-b == c-d -> b - d
             expr = mutate(max_a->b - max_b->b);
         } else if (min_a &&
                    min_b &&
-                   is_zero(simplify((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
+                   is_zero(mutate((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
             // min(a, b) - min(c, d) where a-b == d-c -> b - c
             expr = mutate(min_a->b - min_b->a);
         } else if (max_a &&
                    max_b &&
-                   is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
+                   is_zero(mutate((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
         } else if (no_overflow(op->type) &&
@@ -3857,6 +3857,12 @@ public:
 
 Stmt simplify_exprs(Stmt s) {
     return SimplifyExprs().mutate(s);
+}
+
+bool can_prove(Expr e) {
+    internal_assert(e.type().is_bool())
+        << "Argument to can_prove is not a boolean Expr: " << e << "\n";
+    return is_one(simplify(e));
 }
 
 namespace {
