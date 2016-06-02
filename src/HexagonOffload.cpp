@@ -179,7 +179,8 @@ class InjectHexagonRpc : public IRMutator {
             std::vector<Expr> arg_flags;
 
             for (const auto& i : c.buffers) {
-                arg_sizes.push_back(Expr((size_t)sizeof(buffer_t*)));
+                // sizeof(pointer) will always fit into int32
+                arg_sizes.push_back(Expr((int32_t)sizeof(buffer_t*)));
                 arg_ptrs.push_back(Variable::make(type_of<buffer_t *>(), i.first + ".buffer"));
                 int flags = 0;
                 if (i.second.read) flags |= 0x1;
@@ -190,13 +191,14 @@ class InjectHexagonRpc : public IRMutator {
                 Expr arg = Variable::make(i.second, i.first);
                 Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
 
-                arg_sizes.push_back(Expr((size_t)i.second.bytes()));
+                // sizeof(scalar-type) will always fit into int32
+                arg_sizes.push_back(Expr((int32_t)i.second.bytes()));
                 arg_ptrs.push_back(arg_ptr);
                 arg_flags.push_back(0x0);
             }
 
             // The argument list is terminated with an argument of size 0.
-            arg_sizes.push_back(Expr((size_t)0));
+            arg_sizes.push_back(Expr((int32_t)0));
 
             std::string pipeline_name = hex_name + "_argv";
             std::vector<Expr> params;
@@ -280,7 +282,7 @@ public:
 
         // Wrap the statement in calls to halide_initialize_kernels.
         Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                   {module_state_ptr(), code_ptr, Expr(code_size)});
+                                                   {module_state_ptr(), code_ptr, Expr((uint64_t) code_size)});
         s = Block::make(init_kernels, s);
 
         return s;
