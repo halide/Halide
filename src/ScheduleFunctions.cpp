@@ -19,6 +19,7 @@ using std::map;
 using std::vector;
 using std::pair;
 using std::make_pair;
+using std::set;
 
 namespace {
 // A structure representing a containing LetStmt, IfThenElse, or For
@@ -88,15 +89,6 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
 
     vector<Split> splits = s.splits();
-
-    Dim innermost_non_trivial_loop;
-    for (const Dim &d : s.dims()) {
-        if (d.for_type != ForType::Vectorized &&
-            d.for_type != ForType::Unrolled) {
-            innermost_non_trivial_loop = d;
-            break;
-        }
-    }
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
@@ -177,14 +169,10 @@ Stmt build_provide_loop_nest_helper(string func_name,
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                // Only mark the base as likely (triggering a loop
-                // partition) if the outer var is the innermost
-                // non-trivial loop and it's a serial loop. This
-                // usually is due to an unroll or vectorize call.
-                if (split.outer == innermost_non_trivial_loop.var &&
-                    innermost_non_trivial_loop.for_type == ForType::Serial) {
-                    base = likely(base);
-                }
+                // We'll only mark the base as likely (triggering a loop
+                // partition) if we're at or inside the innermost
+                // non-trivial loop.
+                base = likely_if_innermost(base);
 
                 base = Min::make(base, old_max + (1 - split.factor));
             } else {

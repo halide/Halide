@@ -98,9 +98,6 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 /** Replace all matches of the second string in the first string with the last string */
 EXPORT std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
 
-/** Return the final token of the name string using the given delimiter. */
-EXPORT std::string base_name(const std::string &name, char delim = '.');
-
 /** Split the source string using 'delim' as the divider. */
 EXPORT std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
@@ -214,7 +211,7 @@ EXPORT FileStat file_stat(const std::string &name);
  */
 class TemporaryFile final {
 public:
-    TemporaryFile(const std::string &prefix, const std::string &suffix) 
+    TemporaryFile(const std::string &prefix, const std::string &suffix)
         : temp_path(file_make_temp(prefix, suffix)) {}
     const std::string &pathname() const { return temp_path; }
     ~TemporaryFile() { file_unlink(temp_path); }
@@ -223,6 +220,15 @@ private:
     TemporaryFile(const TemporaryFile &) = delete;
     void operator=(const TemporaryFile &) = delete;
 };
+
+/** Routines to test if math would overflow for signed integers with
+ * the given number of bits. */
+// @{
+bool add_would_overflow(int bits, int64_t a, int64_t b);
+bool sub_would_overflow(int bits, int64_t a, int64_t b);
+bool mul_would_overflow(int bits, int64_t a, int64_t b);
+// @}
+
 
 }
 }
