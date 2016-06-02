@@ -4,10 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
-        return 0;
-    }
+    Target target = get_jit_target_from_environment();
 
     Var x, y, z, w;
     Image<int> full(80, 60, 10, 10);
@@ -42,7 +39,9 @@ int main(int argc, char **argv) {
 
     Func f;
     f(x, y, z, w) = 3*x + 2*y + z + 4*w;
-    f.reorder(z, w, x, y).gpu_tile(x, y, 16, 16);
+    if (target.has_gpu_feature()) {
+        f.gpu_tile(x, y, 16, 16);
+    }
     f.output_buffer().dim(0).set_stride(Expr());
     f.realize(cropped);
 

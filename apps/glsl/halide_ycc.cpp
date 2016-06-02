@@ -41,7 +41,7 @@ void RgbToYcc() {
     std::vector<Argument> args;
     args.push_back(input8);
 
-    cpuout.compile_to_file("ycc", args, target);
+    cpuout.compile_to_static_library("ycc", args, target);
 }
 
 int main() {

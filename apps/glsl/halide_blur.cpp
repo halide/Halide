@@ -25,6 +25,6 @@ int main(int argc, char **argv) {
 
     std::vector<Argument> args;
     args.push_back(input8);
-    out.compile_to_file("blur", args, target);
+    out.compile_to_static_library("blur", args, target);
     return 0;
 }

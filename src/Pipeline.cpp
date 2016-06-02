@@ -7,7 +7,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
-#include "Output.h"
+#include "Outputs.h"
 #include "PrintLoopNest.h"
 
 using namespace Halide::Internal;
@@ -17,6 +17,30 @@ namespace Halide {
 using std::vector;
 using std::string;
 using std::set;
+
+namespace {
+
+std::string output_name(const string &filename, const string &fn_name, const char* ext) {
+    return !filename.empty() ? filename : (fn_name + ext);
+}
+
+std::string output_name(const string &filename, const Module &m, const char* ext) {
+    return output_name(filename, m.name(), ext);
+}
+
+Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
+    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
+    if (target.arch == Target::PNaCl) {
+        outputs = outputs.static_library(filename_prefix + ".a");
+    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+        outputs = outputs.static_library(filename_prefix + ".lib");
+    } else {
+        outputs = outputs.static_library(filename_prefix + ".a");
+    }
+    return outputs;
+}
+
+}  // namespace
 
 /** An inferred argument. Inferred args are either Params,
  * ImageParams, or Buffers. The first two are handled by the param
@@ -124,20 +148,20 @@ bool Pipeline::defined() const {
 Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
     output.compute_root().store_root();
     output.function().freeze();
-    contents.ptr->outputs.push_back(output.function());
+    contents->outputs.push_back(output.function());
 }
 
 Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
     for (Func f: outputs) {
         f.compute_root().store_root();
         f.function().freeze();
-        contents.ptr->outputs.push_back(f.function());
+        contents->outputs.push_back(f.function());
     }
 }
 
 vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
-    for (Function f : contents.ptr->outputs) {
+    for (Function f : contents->outputs) {
         funcs.push_back(Func(f));
     }
     return funcs;
@@ -149,12 +173,12 @@ void Pipeline::compile_to(const Outputs &output_files,
                           const Target &target) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
-    for (Function f : contents.ptr->outputs) {
+    for (Function f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile undefined Func.\n";
     }
 
-    compile_module_to_outputs(compile_to_module(args, fn_name, target), output_files);
+    compile_to_module(args, fn_name, target).compile(output_files);
 }
 
 
@@ -162,35 +186,41 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const vector<Argument> &args,
                                   const string &fn_name,
                                   const Target &target) {
-    compile_module_to_llvm_bitcode(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().bitcode(output_name(filename, m, ".bc")));
 }
 
 void Pipeline::compile_to_llvm_assembly(const string &filename,
                                         const vector<Argument> &args,
                                         const string &fn_name,
                                         const Target &target) {
-    compile_module_to_llvm_assembly(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().llvm_assembly(output_name(filename, m, ".ll")));
 }
 
 void Pipeline::compile_to_object(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
                                  const Target &target) {
-    compile_module_to_object(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
+    m.compile(Outputs().object(output_name(filename, m, ext)));
 }
 
 void Pipeline::compile_to_header(const string &filename,
                                  const vector<Argument> &args,
                                  const string &fn_name,
                                  const Target &target) {
-    compile_module_to_c_header(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().c_header(output_name(filename, m, ".h")));
 }
 
 void Pipeline::compile_to_assembly(const string &filename,
                                    const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target) {
-    compile_module_to_assembly(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().assembly(output_name(filename, m, ".s")));
 }
 
 
@@ -198,12 +228,13 @@ void Pipeline::compile_to_c(const string &filename,
                             const vector<Argument> &args,
                             const string &fn_name,
                             const Target &target) {
-    compile_module_to_c_source(compile_to_module(args, fn_name, target), filename);
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().c_source(output_name(filename, m, ".c")));
 }
 
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
-    std::cerr << Halide::Internal::print_loop_nest(contents.ptr->outputs);
+    std::cerr << Halide::Internal::print_loop_nest(contents->outputs);
 }
 
 void Pipeline::compile_to_lowered_stmt(const string &filename,
@@ -211,27 +242,47 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
+    Outputs outputs;
     if (fmt == HTML) {
-        compile_module_to_html(m, filename);
+        outputs = Outputs().stmt_html(output_name(filename, m, ".html"));
     } else {
-        compile_module_to_text(m, filename);
+        outputs = Outputs().stmt(output_name(filename, m, ".stmt"));
     }
+    m.compile(outputs);
+}
+
+void Pipeline::compile_to_static_library(const string &filename_prefix,
+                                         const vector<Argument> &args,
+                                         const Target &target) {
+    Module m = compile_to_module(args, filename_prefix, target);
+    Outputs outputs = static_library_outputs(filename_prefix, target);
+    m.compile(outputs);
+}
+
+void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix,
+                                                     const std::vector<Argument> &args,
+                                                     const std::vector<Target> &targets) {
+    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+        return compile_to_module(args, name, target);
+    };
+    Outputs outputs = static_library_outputs(filename_prefix, targets.back());
+    compile_multitarget(generate_function_name(), outputs, targets, module_producer);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,
                                const vector<Argument> &args,
                                const Target &target) {
     Module m = compile_to_module(args, filename_prefix, target);
-    compile_module_to_c_header(m, filename_prefix + ".h");
+    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
     if (target.arch == Target::PNaCl) {
-        compile_module_to_llvm_bitcode(m, filename_prefix + ".bc");
-    } else if (target.os == Target::Windows &&
-               !target.has_feature(Target::MinGW)) {
-        compile_module_to_object(m, filename_prefix + ".obj");
+        outputs = outputs.bitcode(filename_prefix + ".bc");
+    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+        outputs = outputs.object(filename_prefix + ".obj");
     } else {
-        compile_module_to_object(m, filename_prefix + ".o");
+        outputs = outputs.object(filename_prefix + ".o");
     }
+    m.compile(outputs);
 }
 
 namespace Internal {
@@ -360,26 +411,26 @@ private:
 vector<Argument> Pipeline::infer_arguments() {
     user_assert(defined()) << "Can't infer arguments on an undefined Pipeline\n";
 
-    if (contents.ptr->inferred_args.empty()) {
+    if (contents->inferred_args.empty()) {
         // Infer an arguments vector by walking the IR
-        InferArguments infer_args(contents.ptr->inferred_args,
-                                  contents.ptr->outputs);
+        InferArguments infer_args(contents->inferred_args,
+                                  contents->outputs);
 
         // Sort the Arguments with all buffers first (alphabetical by name),
         // followed by all non-buffers (alphabetical by name).
-        std::sort(contents.ptr->inferred_args.begin(), contents.ptr->inferred_args.end());
+        std::sort(contents->inferred_args.begin(), contents->inferred_args.end());
 
         // Add the user context argument.
-        contents.ptr->inferred_args.push_back(contents.ptr->user_context_arg);
+        contents->inferred_args.push_back(contents->user_context_arg);
     }
 
     // Return the inferred argument types, minus any constant images
     // (we'll embed those in the binary by default), and minus the user_context arg.
     vector<Argument> result;
-    for (const InferredArgument &arg : contents.ptr->inferred_args) {
+    for (const InferredArgument &arg : contents->inferred_args) {
         debug(1) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
         if (!arg.buffer.defined() &&
-            arg.arg.name != contents.ptr->user_context_arg.arg.name) {
+            arg.arg.name != contents->user_context_arg.arg.name) {
             result.push_back(arg.arg);
         }
     }
@@ -395,9 +446,9 @@ vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args) {
 
     vector<Buffer> images_to_embed;
 
-    for (const InferredArgument &arg : contents.ptr->inferred_args) {
+    for (const InferredArgument &arg : contents->inferred_args) {
 
-        if (arg.param.same_as(contents.ptr->user_context_arg.param)) {
+        if (arg.param.same_as(contents->user_context_arg.param)) {
             // The user context is always in the inferred args, but is
             // not required to be in the args list.
             continue;
@@ -429,8 +480,8 @@ vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args) {
                 err << args[i].name << " ";
             }
             err << "\n\nParameters referenced in generated code: ";
-            for (const InferredArgument &ia : contents.ptr->inferred_args) {
-                if (ia.arg.name != contents.ptr->user_context_arg.arg.name) {
+            for (const InferredArgument &ia : contents->inferred_args) {
+                if (ia.arg.name != contents->user_context_arg.arg.name) {
                     err << ia.arg.name << " ";
                 }
             }
@@ -452,16 +503,16 @@ vector<Argument> Pipeline::build_public_args(const vector<Argument> &args, const
     const bool requires_user_context = target.has_feature(Target::UserContext);
     bool has_user_context = false;
     for (Argument arg : args) {
-        if (arg.name == contents.ptr->user_context_arg.arg.name) {
+        if (arg.name == contents->user_context_arg.arg.name) {
             has_user_context = true;
         }
     }
     if (requires_user_context && !has_user_context) {
-        public_args.insert(public_args.begin(), contents.ptr->user_context_arg.arg);
+        public_args.insert(public_args.begin(), contents->user_context_arg.arg);
     }
 
     // Add the output buffer arguments
-    for (Function out : contents.ptr->outputs) {
+    for (Function out : contents->outputs) {
         for (Parameter buf : out.output_buffers()) {
             public_args.push_back(Argument(buf.name(),
                                            Argument::OutputBuffer,
@@ -496,7 +547,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     Stmt private_body;
 
-    const Module &old_module = contents.ptr->module;
+    const Module &old_module = contents->module;
     if (!old_module.functions().empty() &&
         old_module.target() == target) {
         internal_assert(old_module.functions().size() == 2);
@@ -507,11 +558,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
-        for (CustomLoweringPass p : contents.ptr->custom_lowering_passes) {
+        for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
-        private_body = lower(contents.ptr->outputs, fn_name, target, custom_passes);
+        private_body = lower(contents->outputs, fn_name, target, custom_passes);
     }
 
     std::vector<std::string> namespaces;
@@ -557,7 +608,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
 
-    contents.ptr->module = module;
+    contents->module = module;
 
     return module;
 }
@@ -565,7 +616,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
     // Come up with a name for a generated function
-    string name = contents.ptr->outputs[0].name();
+    string name = contents->outputs[0].name();
     for (size_t i = 0; i < name.size(); i++) {
         if (!isalnum(name[i])) {
             name[i] = '_';
@@ -585,13 +636,13 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
-    if (contents.ptr->jit_target == target &&
-        contents.ptr->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents.ptr->jit_target.to_string() << "\n";
-        return contents.ptr->jit_module.main_function();
+    if (contents->jit_target == target &&
+        contents->jit_module.compiled()) {
+        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target.to_string() << "\n";
+        return contents->jit_module.main_function();
     }
 
-    contents.ptr->jit_target = target;
+    contents->jit_target = target;
 
     // Infer an arguments vector
     infer_arguments();
@@ -600,7 +651,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     string name = generate_function_name();
 
     vector<Argument> args;
-    for (const InferredArgument &arg : contents.ptr->inferred_args) {
+    for (const InferredArgument &arg : contents->inferred_args) {
         args.push_back(arg.arg);
     }
 
@@ -610,7 +661,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Make sure we're not embedding any images
     internal_assert(module.buffers().empty());
 
-    std::map<std::string, JITExtern> lowered_externs = contents.ptr->jit_externs;
+    std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     // Compile to jit module
     JITModule jit_module(module, module.functions().back(),
                          make_externs_jit_module(target_arg, lowered_externs));
@@ -624,13 +675,12 @@ void *Pipeline::compile_jit(const Target &target_arg) {
         if (program_name.empty()) {
             program_name = "unknown" + unique_name('_').substr(1);
         }
-
-        string function_name = name + "_" + unique_name('g').substr(1);
-        compile_to_bitcode(program_name + "_" + function_name + ".bc",
-                           infer_arguments(), function_name);
+        string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
+        debug(4) << "Saving bitcode to: " << file_name << "\n";
+        module.compile(Outputs().bitcode(file_name));
     }
 
-    contents.ptr->jit_module = jit_module;
+    contents->jit_module = jit_module;
 
     return jit_module.main_function();
 }
@@ -638,67 +688,67 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
 void Pipeline::set_error_handler(void (*handler)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_handlers.custom_error = handler;
+    contents->jit_handlers.custom_error = handler;
 }
 
 void Pipeline::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                     void (*cust_free)(void *, void *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_handlers.custom_malloc = cust_malloc;
-    contents.ptr->jit_handlers.custom_free = cust_free;
+    contents->jit_handlers.custom_malloc = cust_malloc;
+    contents->jit_handlers.custom_free = cust_free;
 }
 
 void Pipeline::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_handlers.custom_do_par_for = cust_do_par_for;
+    contents->jit_handlers.custom_do_par_for = cust_do_par_for;
 }
 
 void Pipeline::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_handlers.custom_do_task = cust_do_task;
+    contents->jit_handlers.custom_do_task = cust_do_task;
 }
 
 void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_handlers.custom_trace = trace_fn;
+    contents->jit_handlers.custom_trace = trace_fn;
 }
 
 void Pipeline::set_custom_print(void (*cust_print)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_handlers.custom_print = cust_print;
+    contents->jit_handlers.custom_print = cust_print;
 }
 
 void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->jit_externs = externs;
+    contents->jit_externs = externs;
     invalidate_cache();
 }
 
 const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     user_assert(defined()) << "Pipeline is undefined\n";
-    return contents.ptr->jit_externs;
+    return contents->jit_externs;
 }
 
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents.ptr->invalidate_cache();
+    contents->invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
-    contents.ptr->custom_lowering_passes.push_back(p);
+    contents->custom_lowering_passes.push_back(p);
 }
 
 void Pipeline::clear_custom_lowering_passes() {
     if (!defined()) return;
-    contents.ptr->clear_custom_lowering_passes();
+    contents->clear_custom_lowering_passes();
 }
 
 const vector<CustomLoweringPass> &Pipeline::custom_lowering_passes() {
     user_assert(defined()) << "Pipeline is undefined\n";
-    return contents.ptr->custom_lowering_passes;
+    return contents->custom_lowering_passes;
 }
 
 const JITHandlers &Pipeline::jit_handlers() {
     user_assert(defined()) << "Pipeline is undefined\n";
-    return contents.ptr->jit_handlers;
+    return contents->jit_handlers;
 }
 
 void Pipeline::realize(Buffer b, const Target &target) {
@@ -709,7 +759,7 @@ Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer> bufs;
-    for (Type t : contents.ptr->outputs[0].output_types()) {
+    for (Type t : contents->outputs[0].output_types()) {
         bufs.push_back(Buffer(t, sizes));
     }
     Realization r(bufs);
@@ -746,6 +796,7 @@ Realization Pipeline::realize(const Target &target) {
 }
 
 namespace {
+
 struct ErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
@@ -844,7 +895,8 @@ struct JITFuncCallContext {
         user_context_param.set_scalar((void *)nullptr); // Don't leave param hanging with pointer to stack.
     }
 };
-}
+
+}  // namespace
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
@@ -854,7 +906,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
 
     compile_jit(target);
 
-    JITModule &compiled_module = contents.ptr->jit_module;
+    JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
     struct OutputBufferType {
@@ -863,7 +915,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         int dims;
     };
     vector<OutputBufferType> output_buffer_types;
-    for (Function f : contents.ptr->outputs) {
+    for (Function f : contents->outputs) {
         for (Type t : f.output_types()) {
             OutputBufferType obt = {f, t, f.dimensions()};
             output_buffer_types.push_back(obt);
@@ -897,7 +949,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Come up with the void * arguments to pass to the argv function
-    const vector<InferredArgument> &input_args = contents.ptr->inferred_args;
+    const vector<InferredArgument> &input_args = contents->inferred_args;
     vector<const void *> arg_values;
 
     // First the inputs
@@ -949,7 +1001,7 @@ Pipeline::make_externs_jit_module(const Target &target,
          iter++) {
         JITExtern &jit_extern(iter->second);
         if (iter->second.pipeline.defined()) {
-            PipelineContents &pipeline_contents(*jit_extern.pipeline.contents.ptr);
+            PipelineContents &pipeline_contents(*jit_extern.pipeline.contents);
 
             // Ensure that the pipeline is compiled.
             jit_extern.pipeline.compile_jit(target);
@@ -994,8 +1046,8 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // If target is unspecified...
     if (target.os == Target::OSUnknown) {
         // If we've already jit-compiled for a specific target, use that.
-        if (contents.ptr->jit_module.compiled()) {
-            target = contents.ptr->jit_target;
+        if (contents->jit_module.compiled()) {
+            target = contents->jit_target;
         } else {
             // Otherwise get the target from the environment
             target = get_jit_target_from_environment();
@@ -1004,8 +1056,8 @@ void Pipeline::realize(Realization dst, const Target &t) {
 
     vector<const void *> args = prepare_jit_call_arguments(dst, target);
 
-    for (size_t i = 0; i < contents.ptr->inferred_args.size(); i++) {
-        const InferredArgument &arg = contents.ptr->inferred_args[i];
+    for (size_t i = 0; i < contents->inferred_args.size(); i++) {
+        const InferredArgument &arg = contents->inferred_args[i];
         const void *arg_value = args[i];
         if (arg.param.defined()) {
             user_assert(arg_value != nullptr)
@@ -1036,7 +1088,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // user_context is just a pointer to a JITUserContext, which is a
     // member of the JITFuncCallContext which we will declare now:
 
-    JITFuncCallContext jit_context(jit_handlers(), contents.ptr->user_context_arg.param);
+    JITFuncCallContext jit_context(jit_handlers(), contents->user_context_arg.param);
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -1076,15 +1128,15 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = contents.ptr->jit_module.argv_function()(&(args[0]));
+    int exit_status = contents->jit_module.argv_function()(&(args[0]));
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
     if (target.has_feature(Target::Profile)) {
         JITModule::Symbol report_sym =
-            contents.ptr->jit_module.find_symbol_by_name("halide_profiler_report");
+            contents->jit_module.find_symbol_by_name("halide_profiler_report");
         JITModule::Symbol reset_sym =
-            contents.ptr->jit_module.find_symbol_by_name("halide_profiler_reset");
+            contents->jit_module.find_symbol_by_name("halide_profiler_reset");
         if (report_sym.address && reset_sym.address) {
             void *uc = jit_context.user_context_param.get_scalar<void *>();
             void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
@@ -1133,10 +1185,10 @@ void Pipeline::infer_input_bounds(Realization dst) {
     vector<TrackedBuffer> tracked_buffers(args.size());
 
     vector<size_t> query_indices;
-    for (size_t i = 0; i < contents.ptr->inferred_args.size(); i++) {
+    for (size_t i = 0; i < contents->inferred_args.size(); i++) {
         if (args[i] == nullptr) {
             query_indices.push_back(i);
-            InferredArgument ia = contents.ptr->inferred_args[i];
+            InferredArgument ia = contents->inferred_args[i];
             internal_assert(ia.param.defined() && ia.param.is_buffer());
             // Make some empty halide_buffer_t's
             tracked_buffers[i].query = BoundsQueryBuffer(ia.param.dimensions());
@@ -1151,7 +1203,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
         return;
     }
 
-    JITFuncCallContext jit_context(jit_handlers(), contents.ptr->user_context_arg.param);
+    JITFuncCallContext jit_context(jit_handlers(), contents->user_context_arg.param);
 
     int iter = 0;
     const int max_iters = 16;
@@ -1163,7 +1215,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = contents.ptr->jit_module.argv_function()(&(args[0]));
+        int exit_status = contents->jit_module.argv_function()(&(args[0]));
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
@@ -1190,7 +1242,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
 
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
-        InferredArgument ia = contents.ptr->inferred_args[i];
+        InferredArgument ia = contents->inferred_args[i];
         internal_assert(!ia.param.get_buffer().defined());
         halide_buffer_t *buf = &(tracked_buffers[i].query.buf);
 
@@ -1232,7 +1284,7 @@ void Pipeline::infer_input_bounds(const std::vector<int> &sizes) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
     vector<Buffer> bufs;
-    for (Type t : contents.ptr->outputs[0].output_types()) {
+    for (Type t : contents->outputs[0].output_types()) {
         bufs.push_back(Buffer(t, sizes));
     }
     Realization r(bufs);
@@ -1246,7 +1298,7 @@ void Pipeline::infer_input_bounds(Buffer dst) {
 
 void Pipeline::invalidate_cache() {
     if (defined()) {
-        contents.ptr->invalidate_cache();
+        contents->invalidate_cache();
     }
 }
 

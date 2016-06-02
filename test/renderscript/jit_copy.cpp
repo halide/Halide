@@ -107,7 +107,7 @@ protected:
         assert(op->consume.defined());
 
         IRMutator::visit(op);
-        stmt = Stmt();
+        stmt = Evaluate::make(0);
     }
 
     int for_nest_level = -1;

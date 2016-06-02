@@ -14,8 +14,10 @@
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
+    (void *)&halide_can_use_target_features,
     (void *)&halide_copy_to_device,
     (void *)&halide_copy_to_host,
+    (void *)&halide_create_temp_file,
     (void *)&halide_cuda_detach_device_ptr,
     (void *)&halide_cuda_device_interface,
     (void *)&halide_cuda_get_device_ptr,
@@ -24,6 +26,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_cuda_wrap_device_ptr,
     (void *)&halide_current_time_ns,
     (void *)&halide_debug_to_file,
+    (void *)&halide_default_can_use_target_features,
     (void *)&halide_device_free,
     (void *)&halide_device_free_as_destructor,
     (void *)&halide_device_malloc,
@@ -53,6 +56,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_param_too_small_f64,
     (void *)&halide_error_param_too_small_i64,
     (void *)&halide_error_param_too_small_u64,
+    (void *)&halide_error_bad_fold,
+    (void *)&halide_error_fold_factor_too_small,
     (void *)&halide_float16_bits_to_double,
     (void *)&halide_float16_bits_to_float,
     (void *)&halide_free,

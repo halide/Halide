@@ -134,27 +134,29 @@ int main(int argc, char **argv) {
         }
     } else {
         // cpu schedule
-        Var yi;
-        output.parallel(y, 32).vectorize(x, 8);
+        Var yo;
+        output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
         gray.compute_root().parallel(y, 32).vectorize(x, 8);
-        for (int j = 0; j < 4; j++) {
-            if (j > 0) {
-                inGPyramid[j]
-                    .compute_root().parallel(y, 32).vectorize(x, 8);
-                gPyramid[j]
-                    .compute_root().reorder_storage(x, k, y)
-                    .reorder(k, y).parallel(y, 8).vectorize(x, 8);
-            }
-            outGPyramid[j].compute_root().parallel(y, 32).vectorize(x, 8);
+        for (int j = 1; j < 5; j++) {
+            inGPyramid[j]
+                .compute_root().parallel(y, 32).vectorize(x, 8);
+            gPyramid[j]
+                .compute_root().reorder_storage(x, k, y)
+                .reorder(k, y).parallel(y, 8).vectorize(x, 8);
+            outGPyramid[j]
+                .store_at(output, yo).compute_at(output, y)
+                .vectorize(x, 8);
         }
-        for (int j = 4; j < J; j++) {
+        outGPyramid[0]
+            .compute_at(output, y).vectorize(x, 8);
+        for (int j = 5; j < J; j++) {
             inGPyramid[j].compute_root();
             gPyramid[j].compute_root().parallel(k);
             outGPyramid[j].compute_root();
         }
     }
 
-    output.compile_to_file("local_laplacian", {levels, alpha, beta, input}, target);
+    output.compile_to_static_library("local_laplacian", {levels, alpha, beta, input}, target);
 
     return 0;
 }

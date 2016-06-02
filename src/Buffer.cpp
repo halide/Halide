@@ -119,42 +119,42 @@ Buffer::Buffer(const halide_buffer_t *buf, const std::string &name) :
 
 void *Buffer::host_ptr() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return (void *)contents.ptr->buf.host;
+    return (void *)contents->buf.host;
 }
 
 halide_buffer_t *Buffer::raw_buffer() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return &contents.ptr->buf;
+    return &(contents->buf);
 }
 
 uint64_t Buffer::device_handle() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.device;
+    return contents->buf.device;
 }
 
 bool Buffer::host_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.host_dirty();
+    return contents->buf.host_dirty();
 }
 
 void Buffer::set_host_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.set_host_dirty(dirty);
+    contents->buf.set_host_dirty(dirty);
 }
 
 bool Buffer::device_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.device_dirty();
+    return contents->buf.device_dirty();
 }
 
 void Buffer::set_device_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.set_device_dirty(dirty);
+    contents->buf.set_device_dirty(dirty);
 }
 
 int Buffer::dimensions() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.dimensions;
+    return contents->buf.dimensions;
 }
 
 Buffer::Dimension Buffer::dim(int d) const {
@@ -162,7 +162,7 @@ Buffer::Dimension Buffer::dim(int d) const {
     user_assert(d >= 0 && d < dimensions())
         << "Asking for dimension " << d
         << " from a buffer with " << dimensions() << " dimensions\n";
-    return contents.ptr->buf.dim[d];
+    return contents->buf.dim[d];
 }
 
 void Buffer::set_min(const std::vector<int> &m) {
@@ -171,13 +171,13 @@ void Buffer::set_min(const std::vector<int> &m) {
         << "Wrong number of elements (" << m.size()
         << ") for dimensionality of buffer (" << dimensions() << ")\n";
     for (size_t i = 0; i < m.size(); i++) {
-        contents.ptr->buf.dim[i].min = m[i];
+        contents->buf.dim[i].min = m[i];
     }
 }
 
 Type Buffer::type() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.type;
+    return contents->buf.type;
 }
 
 bool Buffer::same_as(const Buffer &other) const {
@@ -189,7 +189,7 @@ bool Buffer::defined() const {
 }
 
 const std::string &Buffer::name() const {
-    return contents.ptr->name;
+    return contents->name;
 }
 
 Buffer::operator Argument() const {

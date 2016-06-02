@@ -74,6 +74,19 @@ Expr element(FuncRefVarOrExpr f, int i) {
 int main(int argc, char **argv) {
     Var x, y, c;
 
+    // As of May 26 2016, this test causes a segfault due to
+    // permissions failure on ARM-32 trying to execute a
+    // non-executable page when jitting. Started happening between
+    // llvm commits 270148 and 270159, but there's no obvious
+    // culprit. Just disabling it for now.
+    {
+        Target t = get_host_target();
+        if (t.arch == Target::ARM && t.bits == 32) {
+            printf("Skipping test on arm-32 (see the source for why)\n");
+            return 0;
+        }
+    }
+
     for (int elements = 1; elements <= 5; elements++) {
         Func f, g, h;
         std::vector<Expr> f_def, g_def;
@@ -256,7 +269,7 @@ int main(int argc, char **argv) {
         unrolled(x, y) = select(x % 2 == 0, f1(x), f2(x)) + y;
 
         Var xi, yi;
-        unrolled.tile(x, y, xi, yi, 2, 2).vectorize(x, 4).unroll(xi).unroll(yi).unroll(x, 2);
+        unrolled.tile(x, y, xi, yi, 16, 2).unroll(xi, 2).vectorize(xi, 4).unroll(xi).unroll(yi);
 
         check_interleave_count(unrolled, 4);
     }

@@ -1,27 +1,7 @@
-#include "Param.h"
+#include "OutputImageParam.h"
 #include "IROperator.h"
 
 namespace Halide {
-
-void OutputImageParam::add_implicit_args_if_placeholder(std::vector<Expr> &args,
-                                                        Expr last_arg,
-                                                        int total_args,
-                                                        bool *placeholder_seen) const {
-    const Internal::Variable *var = last_arg.as<Internal::Variable>();
-    bool is_placeholder = var && Var::is_placeholder(var->name);
-    if (is_placeholder) {
-        user_assert(!(*placeholder_seen))
-            << "Only one implicit placeholder ('_') allowed in argument list for ImageParam " << name() << "\n";
-        *placeholder_seen = true;
-
-        // The + 1 in the conditional is because one provided argument is an placeholder
-        for (int i = 0; i < (dimensions() - total_args + 1); i++) {
-            args.push_back(Var::implicit(i));
-        }
-    } else {
-        args.push_back(last_arg);
-    }
-}
 
 OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k) :
     param(p), kind(k) {
@@ -164,50 +144,6 @@ OutputImageParam::operator Argument() const {
 
 OutputImageParam::operator ExternFuncArgument() const {
     return param;
-}
-
-ImageParam::ImageParam(Type t, int d) :
-    OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p')), Argument::InputBuffer) {}
-
-ImageParam::ImageParam(Type t, int d, const std::string &n) :
-    OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true), Argument::InputBuffer) {
-    // Discourage future Funcs from having the same name
-    Internal::unique_name(n);
-}
-
-void ImageParam::set(Buffer b) {
-    if (b.defined()) {
-        user_assert(b.type() == type())
-            << "Can't bind ImageParam " << name()
-            << " of type " << type()
-            << " to Buffer " << b.name()
-            << " of type " << b.type() << "\n";
-    }
-    param.set_buffer(b);
-}
-
-Buffer ImageParam::get() const {
-    return param.get_buffer();
-}
-
-Expr ImageParam::operator()(std::vector<Expr> args_passed) const {
-    std::vector<Expr> args;
-    bool placeholder_seen = false;
-    for (size_t i = 0; i < args_passed.size(); i++) {
-        add_implicit_args_if_placeholder(args, args_passed[i],
-                                         args_passed.size(), &placeholder_seen);
-    }
-
-    Internal::check_call_arg_types(name(), &args, dimensions());
-    return Internal::Call::make(param, args);
-}
-
-Expr ImageParam::operator()(std::vector<Var> vars) const {
-    std::vector<Expr> exprs;
-    for (Var v : vars) {
-        exprs.push_back(v);
-    }
-    return (*this)(exprs);
 }
 
 }

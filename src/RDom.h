@@ -7,11 +7,13 @@
  */
 
 #include "IR.h"
-#include "Param.h"
+#include "OutputImageParam.h"
 
 #include <vector>
 
 namespace Halide {
+
+class ImageParam;
 
 /** A reduction variable represents a single dimension of a reduction
  * domain (RDom). Don't construct them directly, instead construct an

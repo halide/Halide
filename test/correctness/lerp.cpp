@@ -79,21 +79,19 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
 
     Func lerp_test("lerp_test");
     lerp_test(zero_val, one_val, weight) =
-      lerp(cast<value_t>(zero_val * zero_scale_p + zero_offset_p),
-           cast<value_t>(one_val * one_scale_p + one_offset_p),
-           cast<weight_t>(weight * weight_scale_p + weight_offset_p));
+        lerp(cast<value_t>((zero_val + zero_min) * zero_scale_p + zero_offset_p),
+             cast<value_t>((one_val + one_min) * one_scale_p + one_offset_p),
+             cast<weight_t>((weight + weight_min) * weight_scale_p + weight_offset_p));
 
     Image<value_t> result(zero_extent, one_extent, weight_extent);
-    result.set_min(zero_min, one_min, weight_min);
     lerp_test.realize(result);
 
-
-    for (int32_t k = result.dim(2).min(); k <= result.dim(2).max(); k++) {
-        for (int32_t j = result.dim(1).min(); j <= result.dim(1).max(); j++) {
-            for (int32_t i = result.dim(0).min(); i <= result.dim(0).max(); i++) {
-                value_t zero_verify = (i * zero_scale + zero_offset);
-                value_t one_verify =  (j * one_scale + one_offset);
-                weight_t weight_verify = (weight_t)(k * weight_scale + weight_offset);
+    for (int32_t i = 0; i < result.dim(0).extent(); i++) {
+        for (int32_t j = 0; j < result.dim(1).extent(); j++) {
+            for (int32_t k = 0; k < result.dim(2).extent(); k++) {
+                value_t zero_verify = ((i + zero_min) * zero_scale + zero_offset);
+                value_t one_verify =  ((j + one_min) * one_scale + one_offset);
+                weight_t weight_verify = (weight_t)((k + weight_min) * weight_scale + weight_offset);
                 double actual_weight = weight_verify / weight_type_scale<weight_t>();
 
                 double verify_val_full = zero_verify * (1.0 - actual_weight) + one_verify * actual_weight;

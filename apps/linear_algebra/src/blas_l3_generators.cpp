@@ -36,13 +36,19 @@ class GEMMGenerator :
         const int vec = natural_vector_size(a_.type());
         const int s = vec * 2;
 
+        ImageParam A_in, B_in;
+
         // If they're both transposed, then reverse the order and transpose the result instead.
         bool transpose_AB = false;
         if ((bool)transpose_A_ && (bool)transpose_B_) {
-            std::swap(A_, B_);
+            A_in = B_;
+            B_in = A_;
             transpose_A_.set(false);
             transpose_B_.set(false);
             transpose_AB = true;
+        } else {
+            A_in = A_;
+            B_in = B_;
         }
 
         Var i, j, ii, ji, jii, iii, io, jo, t;
@@ -51,7 +57,7 @@ class GEMMGenerator :
 
         // Swizzle A for better memory order in the inner loop.
         Func A("A"), B("B"), Btmp("Btmp"), As("As"), Atmp("Atmp");
-        Atmp(i, j) = BoundaryConditions::constant_exterior(A_, cast<T>(0))(i, j);
+        Atmp(i, j) = BoundaryConditions::constant_exterior(A_in, cast<T>(0))(i, j);
 
         if (transpose_A_) {
             As(i, j, io) = Atmp(j, io*s + i);
@@ -61,7 +67,7 @@ class GEMMGenerator :
 
         A(i, j) = As(i % s, j, i / s);
 
-        Btmp(i, j) = B_(i, j);
+        Btmp(i, j) = B_in(i, j);
         if (transpose_B_) {
             B(i, j) = Btmp(j, i);
         } else {
