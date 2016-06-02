@@ -46,11 +46,13 @@ deploy: libs/armeabi-v7a/oglc_run libs/armeabi-v7a/libstlport_shared.so
 
 define RUN_STEPS
 su
-mkdir /data/tmp
-cd /data/tmp
+mkdir -p /data/tmp
+rm -rf /data/tmp/oglc
+mkdir /data/tmp/oglc
+cd /data/tmp/oglc
 pwd
 cp /mnt/sdcard/oglc_run .
-chmod 777 /data/tmp/oglc_run
+chmod 777 /data/tmp/oglc/oglc_run
 cp /mnt/sdcard/libstlport_shared.so .
 LD_LIBRARY_PATH=. ./oglc_run
 exit
@@ -62,7 +64,7 @@ export RUN_STEPS
 run: deploy
 	adb logcat -c
 	sh -c 'echo "$$RUN_STEPS" | adb shell'
-	adb logcat -d | grep "^I/oglc"
+	adb logcat -d | grep "I oglc"
 	echo "Done"
 
 deploy-two: libs/armeabi-v7a/oglc_two_kernels_run
@@ -86,7 +88,7 @@ export RUN_TWO_STEPS
 run-two: deploy-two
 	adb logcat -c
 	sh -c 'echo "$$RUN_TWO_STEPS" | adb shell'
-	adb logcat -d | grep "^I/oglc"
+	adb logcat -d | grep "I oglc"
 	echo "Done"
 
 clean:
@@ -99,4 +101,3 @@ clean:
 	rm -rf obj/
 	rm -rf bin/
 	rm -rf gen/
-
