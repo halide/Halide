@@ -1,5 +1,6 @@
 #include <atomic>
 #include <string>
+#include <tuple>
 #include "HalideRuntime.h"
 #include "multitarget.h"
 #include "halide_image.h"
