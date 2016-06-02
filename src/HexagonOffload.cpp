@@ -258,7 +258,7 @@ public:
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         device_code.compile(Outputs().bitcode("hex.bc"));
 
-        string hex_command = "${HEX_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
+        string hex_command = "${HL_HEXAGON_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
