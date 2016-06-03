@@ -2629,21 +2629,21 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::call_cached_indirect_function)) {
         // Arguments to call_cached_indirect_function are of the form
         //
-        //    cond_1, "sub_function_name_1", 
+        //    cond_1, "sub_function_name_1",
         //    cond_2, "sub_function_name_2",
         //    ...
         //    cond_N, "sub_function_name_N"
         //
         // This will generate code that corresponds (roughly) to
         //
-        //    static FunctionPtr f = []{ 
+        //    static FunctionPtr f = []{
         //      if (cond_1) return sub_function_name_1;
         //      if (cond_2) return sub_function_name_2;
         //      ...
         //      if (cond_N) return sub_function_name_N;
         //    }
         //    return f(args)
-        // 
+        //
         // i.e.: the conditions will be evaluated *in order*; the first one
         // evaluating to true will have its corresponding function cached,
         // which will be used to complete this (and all subsequent) calls.
@@ -2657,7 +2657,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // It is assumed/required that all of the conditions are "pure"; each
         // must evaluate to the same value (within a given runtime environment)
         // across multiple evaluations.
-        // 
+        //
         // It is assumed/required that all of the sub-functions have arguments
         // (and return values) that are identical to those of this->function.
         //
@@ -2678,7 +2678,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         for (size_t i = 0; i < op->args.size(); i += 2) {
             const string sub_fn_name = op->args[i+1].as<StringImm>()->value;
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
-            if (!sub_fn) { 
+            if (!sub_fn) {
                 debug(1) << "Did not find function " << sub_fn_name << ", assuming extern \"C\".\n";
                 vector<llvm::Type *> arg_types;
                 for (const auto &arg : function->args()) {
@@ -2686,7 +2686,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
                 llvm::Type *result_type = llvm_type_of(op->type);
                 FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
-                sub_fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, 
+                sub_fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
                                                 sub_fn_name, module.get());
                 sub_fn->setCallingConv(CallingConv::C);
             }
@@ -2706,9 +2706,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         const auto base_fn = sub_fns.back().fn;
         const string global_name = unique_name(base_fn->getName().str() + "_indirect_fn_ptr");
         GlobalVariable *global = new GlobalVariable(
-            *module, 
+            *module,
             base_fn->getType(),
-            /*isConstant*/ false, 
+            /*isConstant*/ false,
             GlobalValue::PrivateLinkage,
             ConstantPointerNull::get(base_fn->getType()),
             global_name);
@@ -2718,7 +2718,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         BasicBlock *global_not_inited_bb = BasicBlock::Create(*context, "global_not_inited_bb", function);
         BasicBlock *call_fn_bb = BasicBlock::Create(*context, "call_fn_bb", function);
 
-        // Only init the global if not already inited. 
+        // Only init the global if not already inited.
         //
         // Note that we deliberately do not attempt to make this threadsafe via (e.g.) mutexes;
         // the requirements of the conditions above mean that multiple writes *should* only
@@ -2727,7 +2727,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         //
         // (Note that if we ever need to add a way to clear the cached function pointer,
         // we may need to reconsider this, to avoid amusingly horrible race conditions.)
-        builder->CreateCondBr(builder->CreateIsNotNull(loaded_value), 
+        builder->CreateCondBr(builder->CreateIsNotNull(loaded_value),
             global_inited_bb, global_not_inited_bb, very_likely_branch);
 
         // Build the not-already-inited case
@@ -2738,7 +2738,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
-                selected_value = builder->CreateSelect(codegen(sub_fn.cond), 
+                selected_value = builder->CreateSelect(codegen(sub_fn.cond),
                                                        sub_fn.fn_ptr, selected_value);
             }
         }
@@ -2759,7 +2759,7 @@ void CodeGen_LLVM::visit(const Call *op) {
              call_args.push_back(&arg);
         }
 
-#if LLVM_VERSION >= 37
+#if LLVM_VERSION >= 37 && !WITH_NATIVE_CLIENT
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
 #else
         llvm::CallInst *call = builder->CreateCall(phi, call_args);
