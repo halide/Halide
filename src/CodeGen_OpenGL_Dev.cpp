@@ -251,11 +251,7 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSL::visit(const IntImm *op) {
-    if (op->type == Int(32)) {
-        id = std::to_string(op->value);
-    } else {
-        print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
-    }
+    print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
 }
 
 void CodeGen_GLSL::visit(const UIntImm *op) {
