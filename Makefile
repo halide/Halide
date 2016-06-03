@@ -628,19 +628,18 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
+# Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
+ifeq ($(UNAME), Linux)
 ifneq (,$(WITH_HEXAGON))
-LIB_HEXAGON_HOST = $(BIN_DIR)/libhalide_hexagon_host.$(SHARED_EXT)
-else
-LIB_HEXAGON_HOST = 
+TEST_LD_FLAGS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
+#ifneq (,$(HL_HEXAGON_TOOLS))
+TEST_LD_FLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
+#endif
+endif
 endif
 
 .PHONY: all
-all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) $(LIB_HEXAGON_HOST) test_internal
-
-ifneq (,$(WITH_HEXAGON))
-$(BIN_DIR)/libhalide_hexagon_host.$(SHARED_EXT): $(ROOT_DIR)/src/runtime/hexagon_remote/bin/host/libhalide_hexagon_host.$(SHARED_EXT)
-	cp $< $@
-endif
+all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
 $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
