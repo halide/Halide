@@ -25,7 +25,7 @@ before_install:
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
 install:
-  - sudo apt-get -y install ${CXX} ${CC} libedit-dev
+  - sudo apt-get -y --force-yes install ${CXX} ${CC} libedit-dev
   # Make gcc4.8 the default gcc version
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/${CC} 20
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/${CXX} 20
@@ -34,9 +34,9 @@ install:
   - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
   - sudo mv clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04 /usr/local/llvm
   # Get libpng for the tutorials and apps
-  - sudo apt-get -y install libpng-dev
+  - sudo apt-get -y --force-yes install libpng-dev
   # For generating docs
-  - sudo apt-get -y --no-install-recommends install doxygen
+  - sudo apt-get -y --force-yes --no-install-recommends install doxygen
   # Grab a version of CMake >= 3.4
   - wget --no-check-certificate https://cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.sh
   - chmod a+x cmake-3.5.2-Linux-x86_64.sh
