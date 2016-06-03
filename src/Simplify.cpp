@@ -3770,72 +3770,66 @@ private:
 
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
+        Stmt rest = mutate(op->rest);
 
-        if (!op->rest.defined()) {
+        // Check if both halves start with a let statement.
+        const LetStmt *let_first = first.as<LetStmt>();
+        const LetStmt *let_rest = rest.as<LetStmt>();
+        const IfThenElse *if_first = first.as<IfThenElse>();
+        const IfThenElse *if_rest = rest.as<IfThenElse>();
+
+        // Check if first is a no-op.
+        if (is_no_op(first)) {
+            stmt = rest;
+        } else if (is_no_op(rest)) {
             stmt = first;
-        } else {
-            Stmt rest = mutate(op->rest);
+        } else if (let_first &&
+                   let_rest &&
+                   equal(let_first->value, let_rest->value)) {
 
-            // Check if both halves start with a let statement.
-            const LetStmt *let_first = first.as<LetStmt>();
-            const LetStmt *let_rest = rest.as<LetStmt>();
-            const IfThenElse *if_first = first.as<IfThenElse>();
-            const IfThenElse *if_rest = rest.as<IfThenElse>();
+            // Do both first and rest start with the same let statement (occurs when unrolling).
+            Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
 
-            // Check if first is a no-op.
-            if (is_no_op(first)) {
-                stmt = rest;
-            } else if (is_no_op(rest)) {
-                stmt = first;
-            } else if (let_first &&
-                       let_rest &&
-                       equal(let_first->value, let_rest->value)) {
-
-                // Do both first and rest start with the same let statement (occurs when unrolling).
-                Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
-
-                // We're just going to use the first name, so if the
-                // second name is different we need to rewrite it.
-                if (let_rest->name != let_first->name) {
-                    new_block = substitute(let_rest->name,
-                                           Variable::make(let_first->value.type(), let_first->name),
-                                           new_block);
-                }
-
-                stmt = LetStmt::make(let_first->name, let_first->value, new_block);
-            } else if (if_first &&
-                       if_rest &&
-                       equal(if_first->condition, if_rest->condition)) {
-                // Two ifs with matching conditions
-                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
-                Stmt else_case;
-                if (if_first->else_case.defined() && if_rest->else_case.defined()) {
-                    else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
-                } else if (if_first->else_case.defined()) {
-                    // We already simplified the body of the ifs.
-                    else_case = if_first->else_case;
-                } else {
-                    else_case = if_rest->else_case;
-                }
-                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
-            } else if (if_first &&
-                       if_rest &&
-                       !if_rest->else_case.defined() &&
-                       is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
-                // Two ifs where the second condition is tighter than
-                // the first condition.  The second if can be nested
-                // inside the first one, because if it's true the
-                // first one must also be true.
-                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
-                Stmt else_case = mutate(if_first->else_case);
-                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
-            } else if (op->first.same_as(first) &&
-                       op->rest.same_as(rest)) {
-                stmt = op;
-            } else {
-                stmt = Block::make(first, rest);
+            // We're just going to use the first name, so if the
+            // second name is different we need to rewrite it.
+            if (let_rest->name != let_first->name) {
+                new_block = substitute(let_rest->name,
+                                       Variable::make(let_first->value.type(), let_first->name),
+                                       new_block);
             }
 
+            stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+        } else if (if_first &&
+                   if_rest &&
+                   equal(if_first->condition, if_rest->condition)) {
+            // Two ifs with matching conditions
+            Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
+            Stmt else_case;
+            if (if_first->else_case.defined() && if_rest->else_case.defined()) {
+                else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
+            } else if (if_first->else_case.defined()) {
+                // We already simplified the body of the ifs.
+                else_case = if_first->else_case;
+            } else {
+                else_case = if_rest->else_case;
+            }
+            stmt = IfThenElse::make(if_first->condition, then_case, else_case);
+        } else if (if_first &&
+                   if_rest &&
+                   !if_rest->else_case.defined() &&
+                   is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
+            // Two ifs where the second condition is tighter than
+            // the first condition.  The second if can be nested
+            // inside the first one, because if it's true the
+            // first one must also be true.
+            Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
+            Stmt else_case = mutate(if_first->else_case);
+            stmt = IfThenElse::make(if_first->condition, then_case, else_case);
+        } else if (op->first.same_as(first) &&
+                   op->rest.same_as(rest)) {
+            stmt = op;
+        } else {
+            stmt = Block::make(first, rest);
         }
     }
 };
