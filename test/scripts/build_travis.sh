@@ -53,6 +53,9 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
       ${TESTCASE}
   done
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
+  export LLVM_CONFIG=/usr/bin/llvm-config
+  export CLANG=/usr/bin/clang
+
   # Build and run internal tests
   make
 
