@@ -55,7 +55,7 @@ CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/pre
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 
 CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
-	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -Wl,-rpath,${HEXAGON_TOOLS_ROOT}/lib/iss -lwrapper
+	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES}
 
@@ -93,7 +93,7 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -lc -o $@ \
 	    -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	    -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail \
-	    -Wl,-Map=bin/$*/halide_hexagon_remote.so.map -Wl,-soname=libhalide_hexagon_remote_skel.so \
+	    -Wl,-soname=libhalide_hexagon_remote_skel.so \
 	    -Wl,--start-group  bin/$*/halide_remote.o bin/$*/halide_hexagon_remote_skel.o -Wl,--end-group
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c
