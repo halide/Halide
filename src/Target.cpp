@@ -372,13 +372,13 @@ void bad_target_string(const std::string &target) {
             separator = ", ";
         }
     }
-    user_error << "Did not understand HL_TARGET=" << target << "\n"
+    user_error << "Did not understand Halide target " << target << "\n"
                << "Expected format is arch-os-feature1-feature2-...\n"
                << "Where arch is " << architectures << " .\n"
                << "Os is " << oses << " .\n"
                << "If arch or os are omitted, they default to the host.\n"
                << "Features are " << features << " .\n"
-               << "HL_TARGET can also begin with \"host\", which sets the "
+               << "The target can also begin with \"host\", which sets the "
                << "host's architecture, os, and feature set, with the "
                << "exception of the GPU runtimes, which default to off.\n"
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";

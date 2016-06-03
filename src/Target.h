@@ -88,6 +88,8 @@ struct Target {
      * omit (say) an OS specification, the host OS will be used
      * instead. An empty string is exactly equivalent to
      * get_host_target().
+     *
+     * Invalid target strings will fail with a user_error.
      */
     // @{
     EXPORT explicit Target(const std::string &s);
