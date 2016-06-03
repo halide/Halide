@@ -499,7 +499,7 @@ class PartitionLoops : public IRMutator {
         }
 
         // Find simplifications we can apply to the prologue and epilogue.
-        for (auto const &s : middle_simps) {
+        for (const auto &s : middle_simps) {
             // If it goes down to minus infinity, we can also
             // apply it to the prologue
             if (can_simplify_prologue &&
