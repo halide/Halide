@@ -26,10 +26,6 @@ int main(int argc, char **argv) {
        printf("validate_target_string failure: %s\n", ts.c_str());
        return -1;
     }
-    if (t2 != t1) {
-       printf("compare failure: %s %s\n", t1.to_string().c_str(), t2.to_string().c_str());
-       return -1;
-    }
 
     // Full specification round-trip:
     t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41});
@@ -40,10 +36,6 @@ int main(int argc, char **argv) {
     }
     if (!Target::validate_target_string(ts)) {
        printf("validate_target_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-    if (t2 != t1) {
-       printf("compare failure: %s %s\n", t1.to_string().c_str(), t2.to_string().c_str());
        return -1;
     }
 
@@ -61,10 +53,6 @@ int main(int argc, char **argv) {
        printf("validate_target_string failure: %s\n", ts.c_str());
        return -1;
     }
-    if (t2 != t1) {
-       printf("compare failure: %s %s\n", t1.to_string().c_str(), t2.to_string().c_str());
-       return -1;
-    }
 
     // Full specification round-trip, PNacl
     t1 = Target(Target::NaCl, Target::PNaCl, 32);
@@ -75,10 +63,6 @@ int main(int argc, char **argv) {
     }
     if (!Target::validate_target_string(ts)) {
        printf("validate_target_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-    if (t2 != t1) {
-       printf("compare failure: %s %s\n", t1.to_string().c_str(), t2.to_string().c_str());
        return -1;
     }
 

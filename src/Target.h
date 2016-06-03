@@ -245,11 +245,6 @@ private:
 /** Return the target corresponding to the host machine. */
 EXPORT Target get_host_target();
 
-/** Return the host target with all features that start with "No"
- * enabled. Produces the smallest possible assembly, which makes it
- * useful for inspecting what Halide is doing. */
-EXPORT Target get_minimal_target();
-
 /** Return the target that Halide will use. If HL_TARGET is set it
  * uses that. Otherwise calls \ref get_host_target */
 EXPORT Target get_target_from_environment();
