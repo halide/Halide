@@ -10,10 +10,8 @@ namespace Internal {
 class RemoveTrivialForLoops : public IRMutator {
     using IRMutator::visit;
 
-    bool device_loops;
-
     void visit(const For *for_loop) {
-        if (!device_loops && for_loop->device_api != DeviceAPI::None) {
+        if (for_loop->device_api != DeviceAPI::None) {
             // Don't assume any device API loops are trivial.
             IRMutator::visit(for_loop);
             return;
@@ -44,14 +42,11 @@ class RemoveTrivialForLoops : public IRMutator {
             stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, for_loop->device_api, body);
         }
     }
-
-public:
-    RemoveTrivialForLoops(bool device_loops) : device_loops(device_loops) {}
 };
 
 // Turn for loops of size one into let statements
-Stmt remove_trivial_for_loops(Stmt s, bool device_loops) {
-    return RemoveTrivialForLoops(device_loops).mutate(s);
+Stmt remove_trivial_for_loops(Stmt s) {
+    return RemoveTrivialForLoops().mutate(s);
 }
 
 }

@@ -112,7 +112,11 @@ class InjectHexagonRpc : public IRMutator {
             // loops with the same name, so we need to unique them.
             std::string hex_name = "hex_" + loop->name;
 
-            Stmt body = remove_trivial_for_loops(loop, true /*device_loops*/);
+            // After moving this to Hexagon, it doesn't need to be
+            // marked Hexagon anymore.
+            Stmt body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
+                                  DeviceAPI::None, loop->body);
+            body = remove_trivial_for_loops(body);
 
             // Build a closure for the device code.
             // TODO: Should this move the body of the loop to Hexagon,
