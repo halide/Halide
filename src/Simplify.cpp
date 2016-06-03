@@ -3768,7 +3768,6 @@ private:
         }
     }
 
-
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
