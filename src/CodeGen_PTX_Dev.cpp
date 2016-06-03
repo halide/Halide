@@ -327,7 +327,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     std::unique_ptr<TargetMachine>
         target(TheTarget->createTargetMachine(triple.str(),
                                               MCPU, FeaturesStr, Options,
-                                              llvm::Reloc::Default,
+                                              llvm::Reloc::PIC_,
                                               llvm::CodeModel::Default,
                                               OLvl));
     internal_assert(target.get()) << "Could not allocate target machine!";

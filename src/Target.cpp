@@ -123,7 +123,7 @@ Target calculate_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info[1] & (1 << 5);
+        bool have_avx2 = info2[1] & (1 << 5);
         if (have_avx2) {
             initial_features.push_back(Target::AVX2);
         }
@@ -469,7 +469,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
-    case DeviceAPI::Default_GPU: return has_gpu_feature();
+    case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }

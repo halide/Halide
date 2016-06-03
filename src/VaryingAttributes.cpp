@@ -11,6 +11,16 @@
 namespace Halide {
 namespace Internal {
 
+Stmt make_block(Stmt first, Stmt rest) {
+    if (first.defined() && rest.defined()) {
+        return Block::make(first, rest);
+    } else if (first.defined()) {
+        return first;
+    } else {
+        return rest;
+    }
+}
+
 // Find expressions that we can evaluate with interpolation hardware in the GPU
 //
 // This visitor keeps track of the "order" of the expression in terms of the
@@ -709,38 +719,20 @@ namespace {
     template<typename T, typename A>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
-        *stmt = Stmt();
-        if (a.defined()) {
-            *stmt = a;
-        }
+        *stmt = a;
     }
     template<typename T, typename A, typename B>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
-        *stmt = Stmt();
-        if (b.defined()) {
-            *stmt = Block::make(b, *stmt);
-        }
-        if (a.defined()) {
-            *stmt = Block::make(a, *stmt);
-        }
+        *stmt = make_block(a, b);
     }
     template<typename T, typename A, typename B, typename C>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, const C op_c, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
         Stmt c = mutator->mutate(op_c);
-        *stmt = Stmt();
-        if (c.defined()) {
-            *stmt = Block::make(c, *stmt);
-        }
-        if (b.defined()) {
-            *stmt = Block::make(b, *stmt);
-        }
-        if (a.defined()) {
-            *stmt = Block::make(a, *stmt);
-        }
+        *stmt = make_block(make_block(a, b), c);
     }
 }
 
@@ -802,7 +794,7 @@ void IRFilter::visit(const Call *op) {
     stmt = Stmt();
     for (size_t i = 0; i < new_args.size(); ++i) {
         if (new_args[i].defined()) {
-            stmt = Block::make(new_args[i], stmt);
+            stmt = make_block(new_args[i], stmt);
         }
     }
 }
@@ -836,11 +828,11 @@ void IRFilter::visit(const Provide *op) {
     for (size_t i = 0; i < op->args.size(); i++) {
         Stmt new_arg = mutate(op->args[i]);
         if (new_arg.defined()) {
-            stmt = Block::make(new_arg, stmt);
+            stmt = make_block(new_arg, stmt);
         }
         Stmt new_value = mutate(op->values[i]);
         if (new_value.defined()) {
-            stmt = Block::make(new_value, stmt);
+            stmt = make_block(new_value, stmt);
         }
     }
 }
@@ -850,16 +842,16 @@ void IRFilter::visit(const Allocate *op) {
     for (size_t i = 0; i < op->extents.size(); i++) {
         Stmt new_extent = mutate(op->extents[i]);
         if (new_extent.defined())
-            stmt = Block::make(new_extent, stmt);
+            stmt = make_block(new_extent, stmt);
     }
 
     Stmt body = mutate(op->body);
     if (body.defined())
-        stmt = Block::make(body, stmt);
+        stmt = make_block(body, stmt);
 
     Stmt condition = mutate(op->condition);
     if (condition.defined())
-        stmt = Block::make(condition, stmt);
+        stmt = make_block(condition, stmt);
 }
 
 void IRFilter::visit(const Free *op) {
@@ -877,18 +869,18 @@ void IRFilter::visit(const Realize *op) {
         Stmt new_extent = mutate(old_extent);
 
         if (new_min.defined())
-            stmt = Block::make(new_min, stmt);
+            stmt = make_block(new_min, stmt);
         if (new_extent.defined())
-            stmt = Block::make(new_extent, stmt);
+            stmt = make_block(new_extent, stmt);
     }
 
     Stmt body = mutate(op->body);
     if (body.defined())
-        stmt = Block::make(body, stmt);
+        stmt = make_block(body, stmt);
 
     Stmt condition = mutate(op->condition);
     if (condition.defined())
-        stmt = Block::make(condition, stmt);
+        stmt = make_block(condition, stmt);
 }
 
 void IRFilter::visit(const Block *op) {
@@ -953,7 +945,7 @@ public:
         // stmt'ified value is placed in a Block, so that the side effect will
         // be included in filtered IR tree.
         if (mutated_value.defined()) {
-            stmt = Block::make(mutated_value, stmt);
+            stmt = make_block(mutated_value, stmt);
         }
     }
 
@@ -968,7 +960,7 @@ public:
         }
 
         if (mutated_value.defined()) {
-            stmt = Block::make(mutated_value, stmt);
+            stmt = make_block(mutated_value, stmt);
         }
     }
 
@@ -1026,12 +1018,12 @@ public:
 
                 // Store the coordinates into the vertex buffer in interleaved
                 // order
-                mutated_body = Block::make(Store::make(vertex_buffer_name,
-                                                       coord1,
-                                                       gpu_varying_offset + 1, Parameter()),
+                mutated_body = make_block(Store::make(vertex_buffer_name,
+                                                      coord1,
+                                                      gpu_varying_offset + 1, Parameter()),
                                            mutated_body);
 
-                mutated_body = Block::make(Store::make(vertex_buffer_name,
+                mutated_body = make_block(Store::make(vertex_buffer_name,
                                                        coord0,
                                                        gpu_varying_offset + 0, Parameter()),
                                            mutated_body);

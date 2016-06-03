@@ -28,15 +28,6 @@ EXPORT Interval solve_for_outer_interval(Expr c, const std::string &variable);
  * true inside of it, and might be true or false outside of it. */
 EXPORT Interval solve_for_inner_interval(Expr c, const std::string &variable);
 
-/** Check properties of the intervals returned by
- * solve_for_inner_interval or solve_for_outer_interval. */
-// @{
-EXPORT bool interval_has_upper_bound(const Interval &i);
-EXPORT bool interval_has_lower_bound(const Interval &i);
-EXPORT bool interval_is_everything(const Interval &i);
-EXPORT bool interval_is_empty(const Interval &i);
-// @}
-
 /** Take a conditional that includes variables that vary over some
  * domain, and convert it to a more conservative (less frequently
  * true) condition that doesn't depend on those variables. Formally,

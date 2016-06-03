@@ -8,15 +8,10 @@
 
 #include "IROperator.h"
 #include "Scope.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
-
-struct Interval {
-    Expr min, max;
-    Interval() {}
-    Interval(Expr min, Expr max) : min(min), max(max) {}
-};
 
 typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
 
@@ -67,10 +62,18 @@ struct Box {
     bool maybe_unused() const {return used.defined() && !is_one(used);}
 };
 
-// Expand box a to encompass box b
+/** Expand box a to encompass box b */
 void merge_boxes(Box &a, const Box &b);
-// Test if box a could possibly overlap box b.
+
+/** Test if box a could possibly overlap box b. */
 bool boxes_overlap(const Box &a, const Box &b);
+
+/** The union of two boxes */
+Box box_union(const Box &a, const Box &b);
+
+/** Test if box a provably contains box b */
+bool box_contains(const Box &a, const Box &b);
+
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement or

@@ -244,8 +244,8 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
-        bool true_value_ge_false_value = is_one(simplify(op->true_value >= op->false_value));
-        bool true_value_le_false_value = is_one(simplify(op->true_value <= op->false_value));
+        bool true_value_ge_false_value = can_prove(op->true_value >= op->false_value);
+        bool true_value_le_false_value = can_prove(op->true_value <= op->false_value);
 
         bool switches_from_true_to_false = rcond == Monotonic::Decreasing;
         bool switches_from_false_to_true = rcond == Monotonic::Increasing;
@@ -288,8 +288,10 @@ class MonotonicVisitor : public IRVisitor {
 
     void visit(const Call *op) {
         // Some functions are known to be monotonic
-        if (op->is_intrinsic(Call::likely)) {
-            op->args[0].accept(this);
+        if (op->is_intrinsic(Call::likely) ||
+            op->is_intrinsic(Call::likely_if_innermost) ||
+            op->is_intrinsic(Call::return_second)) {
+            op->args.back().accept(this);
             return;
         }
 

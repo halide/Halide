@@ -177,8 +177,11 @@ private:
 };
 
 Stmt eliminate_bool_vectors(Stmt s) {
-    EliminateBoolVectors eliminator;
-    return eliminator.mutate(s);
+    return EliminateBoolVectors().mutate(s);
+}
+
+Expr eliminate_bool_vectors(Expr e) {
+    return EliminateBoolVectors().mutate(e);
 }
 
 }  // namespace Internal

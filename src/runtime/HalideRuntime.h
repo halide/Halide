@@ -357,6 +357,19 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
  */
 extern void halide_memoization_cache_cleanup();
 
+/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
+ * (but writable) directory; this is typically $TMP or /tmp, but the specific
+ * location is not guaranteed. (Note that the exact form of the file name
+ * may vary; in particular, the suffix may be ignored on non-Posix systems.)
+ * The file is created (but not opened), thus this can be called from
+ * different threads (or processes, e.g. when building with parallel make)
+ * without risking collision. Note that the caller is always responsible
+ * for deleting this file. Returns nonzero value if an error occurs.
+ */
+extern int halide_create_temp_file(void *user_context, 
+  const char *prefix, const char *suffix,
+  char *path_buf, size_t path_buf_size);
+
 /** The error codes that may be returned by a Halide pipeline. */
 enum halide_error_code_t {
     /** There was no error. This is the value returned by Halide on success. */
@@ -460,6 +473,15 @@ enum halide_error_code_t {
      * the alignment set for it by way of a call to
      * set_host_alignment */
     halide_error_code_unaligned_host_ptr = -24,
+
+    /** A fold_storage directive was used on a dimension that is not
+     * accessed in a monotonically increasing or decreasing fashion. */
+    halide_error_code_bad_fold = -25,
+
+    /** A fold_storage directive was used with a fold factor that was
+     * too small to store all the values of a producer needed by the
+     * consumer. */
+    halide_error_code_fold_factor_too_small = -26,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -513,6 +535,10 @@ extern int halide_error_buffer_argument_is_null(void *user_context, const char *
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
 extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
+                                 const char *loop_name);
+extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
+                                              int fold_factor, const char *loop_name, int required_extent);
 
 // @}
 
@@ -568,6 +594,39 @@ typedef enum halide_target_feature_t {
     halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
     halide_target_feature_end = 33 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
+
+/** This function is called internally by Halide in some situations to determine
+ * if the current execution environment can support the given set of 
+ * halide_target_feature_t flags. The implementation must do the following:
+ *
+ * -- If there are flags set in features that the function knows *cannot* be supported, return 0.
+ * -- Otherwise, return 1.
+ * -- Note that any flags set in features that the function doesn't know how to test should be ignored;
+ * this implies that a return value of 1 means "not known to be bad" rather than "known to be good".
+ *
+ * In other words: a return value of 0 means "It is not safe to use code compiled with these features", 
+ * while a return value of 1 means "It is not obviously unsafe to use code compiled with these features".
+ *
+ * The default implementation simply calls halide_default_can_use_target_features.
+ */
+extern int halide_can_use_target_features(uint64_t features);
+
+/** 
+ * This is the default implementation of halide_can_use_target_features; it is provided
+ * for convenience of user code that may wish to extend halide_can_use_target_features
+ * but continue providing existing support, e.g.
+ *
+ *     int halide_can_use_target_features(uint64_t features) {
+ *          if (features & halide_target_somefeature) {
+ *              if (!can_use_somefeature()) {
+ *                  return 0;
+ *              }
+ *          }
+ *          return halide_default_can_use_target_features(features);
+ *     }
+ */
+extern int halide_default_can_use_target_features(uint64_t features);
+
 
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always 64-bits).

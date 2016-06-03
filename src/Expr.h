@@ -252,7 +252,7 @@ struct Expr : public Internal::IRHandle {
  * map<Expr, Foo, ExprCompare> */
 struct ExprCompare {
     bool operator()(Expr a, Expr b) const {
-        return a.ptr < b.ptr;
+        return a.get() < b.get();
     }
 };
 
