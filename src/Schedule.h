@@ -7,9 +7,9 @@
 
 #include "Expr.h"
 
+#include <map>
+
 namespace Halide {
-
-
 
 /** Different ways to handle a tail case in a split when the
  * factor does not provably divide the extent. */
@@ -57,6 +57,8 @@ enum class TailStrategy {
 };
 
 namespace Internal {
+
+class IRMutator;
 
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
@@ -147,28 +149,38 @@ struct Bound {
 
 struct ScheduleContents;
 
-struct Specialization {
-    Expr condition;
-    IntrusivePtr<ScheduleContents> schedule;
-};
-
 struct StorageDim {
     std::string var;
     Expr alignment;
+    Expr fold_factor;
+    bool fold_forward;
 };
 
 class ReductionDomain;
+
+struct FunctionContents;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
  * innards. In the future it may become more encapsulated. */
 class Schedule {
     IntrusivePtr<ScheduleContents> contents;
+
 public:
 
     Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
+
+    /** Return a deep copy of this Schedule. It recursively deep copies all called
+     * functions, schedules, specializations, and reduction domains. This method
+     * takes a map of <old FunctionContents, deep-copied version> as input and
+     * would use the deep-copied FunctionContents from the map if exists instead
+     * of creating a new deep-copy to avoid creating deep-copies of the same
+     * FunctionContents multiple times.
+     */
+    EXPORT Schedule deep_copy(
+        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
@@ -227,13 +239,14 @@ public:
     std::vector<Bound> &bounds();
     // @}
 
-    /** You may create several specialized versions of a func with
-     * different schedules. They trigger when the condition is
-     * true. See \ref Func::specialize */
+    /** Mark calls of a function by 'f' to be replaced with its wrapper
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to the function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. See \ref Func::in for more details. */
     // @{
-    const std::vector<Specialization> &specializations() const;
-    const Specialization &add_specialization(Expr condition);
-    //std::vector<Specialization> &specializations();
+    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    EXPORT void add_wrapper(const std::string &f,
+                            const IntrusivePtr<Internal::FunctionContents> &wrapper);
     // @}
 
     /** At what sites should we inject the allocation and the
@@ -257,6 +270,10 @@ public:
     /** Pass an IRVisitor through to all Exprs referenced in the
      * Schedule. */
     void accept(IRVisitor *) const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * Schedule. */
+    void mutate(IRMutator *);
 };
 
 }

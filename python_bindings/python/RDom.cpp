@@ -5,6 +5,7 @@
 #include "add_operators.h"
 
 #include "../../src/RDom.h"
+#include "../../src/ImageParam.h"
 #include "../../src/IROperator.h" // for operations with RVar
 
 #include <string>

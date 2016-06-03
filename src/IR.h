@@ -338,6 +338,7 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     EXPORT static Stmt make(Stmt first, Stmt rest);
+    EXPORT static Stmt make(const std::vector<Stmt> &stmts);
 };
 
 /** An if-then-else block. 'else' may be undefined. */
@@ -423,11 +424,12 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
-        make_int64,
-        make_float64,
+        likely_if_innermost,
         register_destructor,
         div_round_to_zero,
-        mod_round_to_zero;
+        mod_round_to_zero,
+        call_cached_indirect_function,
+        signed_integer_overflow;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference
@@ -458,7 +460,7 @@ struct Call : public ExprNode<Call> {
             << "Value index out of range in call to halide function\n";
         internal_assert(func.has_pure_definition() || func.has_extern_definition())
             << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.contents, idx, Buffer(), Parameter());
+        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */

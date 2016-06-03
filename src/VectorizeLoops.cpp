@@ -22,7 +22,7 @@ class VectorizeLoops : public IRMutator {
         Expr replacement;
         string widening_suffix;
         Scope<Expr> scope;
-        Scope<int> internal_allocations;
+        Scope<int> vectorized_allocations;
 
         bool scalarized;
         int scalar_lane;
@@ -118,7 +118,7 @@ class VectorizeLoops : public IRMutator {
             Expr index = mutate(op->index);
 
             // Internal allocations always get vectorized.
-            if (internal_allocations.contains(op->name)) {
+            if (vectorized_allocations.contains(op->name)) {
                 int lanes = replacement.type().lanes();
                 Expr lanes_expr = make_const(index.type(), lanes);
                 if (index.type().is_scalar()) {
@@ -381,7 +381,7 @@ class VectorizeLoops : public IRMutator {
             Expr value = mutate(op->value);
             Expr index = mutate(op->index);
             // Internal allocations always get vectorized.
-            if (internal_allocations.contains(op->name)) {
+            if (vectorized_allocations.contains(op->name)) {
                 int lanes = replacement.type().lanes();
                 Expr lanes_expr = make_const(index.type(), lanes);
                 if (index.type().is_scalar()) {
@@ -482,7 +482,9 @@ class VectorizeLoops : public IRMutator {
             Expr new_expr;
 
             // The new expanded dimension is innermost.
-            new_extents.push_back(Expr(replacement.type().lanes()));
+            if (!scalarized) {
+                new_extents.push_back(Expr(replacement.type().lanes()));
+            }
 
             for (size_t i = 0; i < op->extents.size(); i++) {
                 new_extents.push_back(mutate(op->extents[i]));
@@ -501,11 +503,15 @@ class VectorizeLoops : public IRMutator {
                     << "Cannot vectorize an allocation with a varying new_expr per vector lane.\n";
             }
 
-            // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
-            // foo[x] -> foo[x*lanes + ramp(0, 1, lanes)]
-            internal_allocations.push(op->name, 0);
+            if (!scalarized) {
+                // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
+                // foo[x] -> foo[x*lanes + ramp(0, 1, lanes)]
+                vectorized_allocations.push(op->name, 0);
+            }
             Stmt body = mutate(op->body);
-            internal_allocations.pop(op->name);
+            if (!scalarized) {
+                vectorized_allocations.pop(op->name);
+            }
             stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
         }
 

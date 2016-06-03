@@ -19,11 +19,15 @@ else()
 endif()
 
 set(RUNTIME_CPP
+  aarch64_cpu_features
   android_clock
   android_host_cpu_count
   android_io
   android_opengl_context
+  android_tempfile
+  arm_cpu_features
   cache
+  can_use_target
   cuda
   destructors
   device_interface
@@ -38,14 +42,15 @@ set(RUNTIME_CPP
   linux_opengl_context
   matlab
   metadata
+  metal
+  metal_objc_arm
+  metal_objc_x86
   mingw_math
+  mips_cpu_features
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
   opencl
-  metal
-  metal_objc_arm
-  metal_objc_x86
   opengl
   openglcompute
   osx_clock
@@ -58,7 +63,9 @@ set(RUNTIME_CPP
   posix_get_symbol
   posix_io
   posix_print
+  posix_tempfile
   posix_thread_pool
+  powerpc_cpu_features
   profiler
   profiler_inlined
   renderscript
@@ -71,8 +78,10 @@ set(RUNTIME_CPP
   windows_get_symbol
   windows_io
   windows_opencl
+  windows_tempfile
   windows_thread_pool
   write_debug_image
+  x86_cpu_features
 )
 
 set (RUNTIME_LL
@@ -203,7 +212,6 @@ set(HEADER_FILES
   AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
-  BlockFlattening.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -229,6 +237,8 @@ set(HEADER_FILES
   CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
+  DeepCopy.h
+  Definition.h
   Deinterleave.h
   DeviceArgument.h
   DeviceInterface.h
@@ -252,6 +262,8 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   Image.h
+  ImageParam.h
+  Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
@@ -273,7 +285,8 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Output.h
+  OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -293,6 +306,7 @@ set(HEADER_FILES
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
   Solve.h
@@ -312,6 +326,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WrapCalls.h
   runtime/HalideRuntime.h
 )
 
@@ -349,7 +364,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AllocationBoundsInference.cpp
-  BlockFlattening.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
@@ -377,6 +391,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
+  DeepCopy.cpp
+  Definition.cpp
   Deinterleave.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
@@ -398,6 +414,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   Image.cpp
+  ImageParam.cpp
+  Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
@@ -416,9 +434,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ModulusRemainder.cpp
   Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  Output.cpp
+  OutputImageParam.cpp
   ParallelRVar.cpp
-  Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
   Pipeline.cpp
@@ -436,6 +453,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
@@ -455,6 +473,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WrapCalls.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}

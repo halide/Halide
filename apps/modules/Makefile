@@ -39,13 +39,13 @@ pipeline.o: generate_pipeline
 	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET) ./generate_pipeline
 
 # A library containing the output pipeline and also the library implementation
-pipeline.a: pipeline.o my_library_impl.a
+pipeline_all.a: pipeline.o my_library_impl.a
 	$(LD) -r -o final.o pipeline.o my_library_impl.a
-	ar rvs pipeline.a final.o
+	ar rvs pipeline_all.a final.o
 
 # A binary that runs the output pipeline on an image
-run_pipeline: run_pipeline.cpp pipeline.a
-	$(CXX) $(CXXFLAGS) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support $(LDFLAGS) $(PNGFLAGS)
+run_pipeline: run_pipeline.cpp pipeline_all.a
+	$(CXX) $(CXXFLAGS) run_pipeline.cpp pipeline_all.a -o run_pipeline -I ../support $(LDFLAGS) $(PNGFLAGS)
 
 out.png: run_pipeline
 	./run_pipeline ../images/gray.png out.png

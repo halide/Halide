@@ -13,6 +13,7 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "DebugToFile.h"
+#include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
@@ -38,6 +39,7 @@
 #include "SkipStages.h"
 #include "SlidingWindow.h"
 #include "Simplify.h"
+#include "SimplifySpecializations.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "Substitute.h"
@@ -48,6 +50,7 @@
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
+#include "WrapCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -57,10 +60,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 using std::map;
-using std::pair;
-using std::make_pair;
 
-Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
@@ -69,8 +70,18 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
+    // Create a deep-copy of the entire graph of Funcs.
+    std::tie(outputs, env) = deep_copy(outputs, env);
+
+    // Substitute in wrapper Funcs
+    env = wrap_func_calls(env);
+
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
+
+    // Try to simplify the RHS/LHS of a function definition by propagating its
+    // specializations' conditions
+    simplify_specializations(env);
 
     bool any_memoized = false;
 
@@ -132,7 +143,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
-    s = storage_folding(s);
+    s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";

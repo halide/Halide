@@ -10,6 +10,7 @@
 #include "Var.h"
 #include "Function.h"
 #include "Param.h"
+#include "OutputImageParam.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITModule.h"
@@ -18,6 +19,8 @@
 #include "Tuple.h"
 #include "Module.h"
 #include "Pipeline.h"
+
+#include <map>
 
 namespace Halide {
 
@@ -41,19 +44,20 @@ struct VarOrRVar {
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
-    Internal::Schedule schedule;
+    Internal::Definition definition;
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact, TailStrategy tail);
     std::string stage_name;
 public:
-    Stage(Internal::Schedule s, const std::string &n) :
-        schedule(s), stage_name(n) {s.touched() = true;}
+    Stage(Internal::Definition d, const std::string &n) : definition(d), stage_name(n) {
+        definition.schedule().touched() = true;
+    }
 
     /** Return the current Schedule associated with this Stage.  For
      * introspection only: to modify Schedule, use the Func
      * interface. */
-    const Internal::Schedule &get_schedule() const { return schedule; }
+    const Internal::Schedule &get_schedule() const { return definition.schedule(); }
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
@@ -440,7 +444,7 @@ public:
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
-     * directly; call compile_to_file instead. */
+     * directly; call compile_to_static_library or compile_to_file instead. */
     //@{
     EXPORT void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
@@ -454,7 +458,7 @@ public:
      * third. The name defaults to the same name as this halide
      * function. You don't actually have to have defined this function
      * yet to call this. You probably don't want to use this directly;
-     * call compile_to_file instead. */
+     * call compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
                                   const Target &target = get_target_from_environment());
 
@@ -498,6 +502,24 @@ public:
      */
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair, with the given
+     * arguments. Also names the C function to match the first
+     * argument.
+     */
+    EXPORT void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
+                                          const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair once for each target;
+     * each resulting function will be considered (in order) via halide_can_use_target_features()
+     * at runtime, with the first appropriate match being selected for subsequent use.
+     * This is typically useful for specializations that may vary unpredictably by machine
+     * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
+     * All targets must have identical arch-os-bits.
+     */
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                      const std::vector<Argument> &args,
+                                                      const std::vector<Target> &targets);
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -794,6 +816,107 @@ public:
         return (*this)(collected_args);
     }
     // @}
+
+    /** Creates and returns a new Func that wraps this Func. During
+     * compilation, Halide replaces all calls to this Func done by 'f'
+     * with calls to the wrapper. If this Func is already wrapped for
+     * use in 'f', will return the existing wrapper.
+     *
+     * For example, g.in(f) would rewrite a pipeline like this:
+     \code
+     g(x, y) = ...
+     f(x, y) = ... g(x, y) ...
+     \endcode
+     * into a pipeline like this:
+     \code
+     g(x, y) = ...
+     g_wrap(x, y) = g(x, y)
+     f(x, y) = ... g_wrap(x, y)
+     \endcode
+     *
+     * This has a variety of uses. You can use it to schedule this
+     * Func differently in the different places it is used:
+     \code
+     g(x, y) = ...
+     f1(x, y) = ... g(x, y) ...
+     f2(x, y) = ... g(x, y) ...
+     g.in(f1).compute_at(f1, y).vectorize(x, 8);
+     g.in(f2).compute_at(f2, x).unroll(x);
+     \endcode
+     *
+     * You can also use it to stage loads from this Func via some
+     * intermediate buffer (perhaps on the stack as in
+     * test/performance/block_transpose.cpp, or in shared GPU memory
+     * as in test/performance/wrap.cpp). In this we compute the
+     * wrapper at tiles of the consuming Funcs like so:
+     \code
+     g.compute_root()...
+     g.in(f).compute_at(f, tiles)...
+     \endcode
+     *
+     * Func::in() can also be used to compute pieces of a Func into a
+     * smaller scratch buffer (perhaps on the GPU) and then copy them
+     * into a larger output buffer one tile at a time. See
+     * apps/interpolate/interpolate.cpp for an example of this. In
+     * this case we compute the Func at tiles of its own wrapper:
+     \code
+     f.in(g).compute_root().gpu_tile(...)...
+     f.compute_at(f.in(g), tiles)...
+     \endcode
+     *
+     * A similar use of Func::in() wrapping Funcs with multiple update
+     * stages in a pure wrapper. The following code:
+     \code
+     f(x, y) = x + y;
+     f(x, y) += 5;
+     g(x, y) = f(x, y);
+     f.compute_root();
+     \endcode
+     *
+     * Is equivalent to:
+     \code
+     for y:
+       for x:
+         f(x, y) = x + y;
+     for y:
+       for x:
+         f(x, y) += 5
+     for y:
+       for x:
+         g(x, y) = f(x, y)
+     \endcode
+     * using Func::in(), we can write:
+     \code
+     f(x, y) = x + y;
+     f(x, y) += 5;
+     g(x, y) = f(x, y);
+     f.in(g).compute_root();
+     \endcode
+     * which instead produces:
+     \code
+     for y:
+       for x:
+         f(x, y) = x + y;
+         f(x, y) += 5
+         f_wrap(x, y) = f(x, y)
+     for y:
+       for x:
+         g(x, y) = f_wrap(x, y)
+     \endcode
+     */
+    EXPORT Func in(const Func &f);
+
+    /** Create and return a wrapper shared by all the Funcs in
+     * 'fs'. If any of the Funcs in 'fs' already have a custom
+     * wrapper, this will throw an error. */
+    EXPORT Func in(const std::vector<Func> &fs);
+
+    /** Create and return a global wrapper, which wraps all calls to
+     * this Func by any other Func. If a global wrapper already
+     * exists, returns it. The global wrapper is only used by callers
+     * for which no custom wrapper has been specified.
+    */
+    EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
@@ -1226,6 +1349,38 @@ public:
      * aligned to multiples of 16, use foo.align_storage(x, 16). */
     EXPORT Func &align_storage(Var dim, Expr alignment);
 
+    /** Store realizations of this function in a circular buffer of a
+     * given extent. This is more efficient when the extent of the
+     * circular buffer is a power of 2. If the fold factor is too
+     * small, or the dimension is not accessed monotonically, the
+     * pipeline will generate an error at runtime.
+     *
+     * The fold_forward option indicates that the new values of the
+     * producer are accessed by the consumer in a monotonically
+     * increasing order. Folding storage of producers is also
+     * supported if the new values are accessed in a monotonically
+     * decreasing order by setting fold_forward to false.
+     *
+     * For example, consider the pipeline:
+     \code
+     Func f, g;
+     Var x, y;
+     g(x, y) = x*y;
+     f(x, y) = g(x, y) + g(x, y+1);
+     \endcode
+     *
+     * If we schedule f like so:
+     *
+     \code
+     g.compute_at(f, y).store_root().fold_storage(y, 2);
+     \endcode
+     *
+     * Then g will be computed at each row of f and stored in a buffer
+     * with an extent in y of 2, alternately storing each computed row
+     * of g in row y=0 or y=1.
+     */
+    EXPORT Func &fold_storage(Var dim, Expr extent, bool fold_forward = true);
+
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.
      *
@@ -1528,12 +1683,11 @@ public:
      \endcode
      */
     EXPORT std::vector<Argument> infer_arguments() const;
-
 };
 
- /** JIT-Compile and run enough code to evaluate a Halide
-  * expression. This can be thought of as a scalar version of
-  * \ref Func::realize */
+/** JIT-Compile and run enough code to evaluate a Halide
+ * expression. This can be thought of as a scalar version of
+ * \ref Func::realize */
 template<typename T>
 NO_INLINE T evaluate(Expr e) {
     user_assert(e.type() == type_of<T>())
@@ -1618,6 +1772,16 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
 }
  // @}
 
+namespace Internal {
+
+inline void schedule_scalar(Func f) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
+        f.gpu_single_thread();
+    }
+}
+
+}  // namespace Internal
 
 /** JIT-Compile and run enough code to evaluate a Halide
  * expression. This can be thought of as a scalar version of
@@ -1630,12 +1794,9 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = e;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1654,12 +1815,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
         << t[1] << " of type " << t[1].type()
         << " as a scalar of type " << type_of<B>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1679,12 +1837,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << "Can't evaluate expression "
         << t[2] << " of type " << t[2].type()
         << " as a scalar of type " << type_of<C>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1710,12 +1865,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
         << t[3] << " of type " << t[3].type()
         << " as a scalar of type " << type_of<D>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);

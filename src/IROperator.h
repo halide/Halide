@@ -1880,6 +1880,13 @@ inline Expr likely(Expr e) {
                                 {e}, Internal::Call::PureIntrinsic);
 }
 
+/** Equivalent to likely, but only triggers a loop partitioning if
+ * found in an innermost loop. */
+inline Expr likely_if_innermost(Expr e) {
+    return Internal::Call::make(e.type(), Internal::Call::likely_if_innermost,
+                                {e}, Internal::Call::PureIntrinsic);
+}
+
 }
 
 #endif

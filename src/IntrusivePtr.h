@@ -77,8 +77,27 @@ private:
         }
     }
 
-public:
+protected:
     T *ptr;
+
+public:
+    /** Access the raw pointer in a variety of ways.
+     * Note that a "const IntrusivePtr<T>" is not the same thing as an
+     * IntrusivePtr<const T>. So the methods that return the ptr are
+     * const, despite not adding an extra const to T. */
+    // @{
+    T *get() const {
+        return ptr;
+    }
+
+    T &operator*() const {
+        return *ptr;
+    }
+
+    T *operator->() const {
+        return ptr;
+    }
+    // @}
 
     ~IntrusivePtr() {
         decref(ptr);
@@ -125,6 +144,10 @@ public:
      * equality of reference, not equality of value. */
     bool same_as(const IntrusivePtr &other) const {
         return ptr == other.ptr;
+    }
+
+    bool operator <(const IntrusivePtr<T> &other) const {
+        return ptr < other.ptr;
     }
 
 };
