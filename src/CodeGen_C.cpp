@@ -358,7 +358,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 name = extract_namespaces(op->name, namespaces);
-                for (auto const &ns : namespaces) {
+                for (const auto &ns : namespaces) {
                     stream << "namespace " << ns << " { ";
                 }
                 namespace_count = namespaces.size();
