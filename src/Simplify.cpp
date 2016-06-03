@@ -3818,7 +3818,7 @@ private:
         } else if (if_first &&
                    if_rest &&
                    !if_rest->else_case.defined() &&
-                   is_one(simplify((if_first->condition && if_rest->condition) == if_rest->condition))) {
+                   is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
             // Two ifs where the second condition is tighter than
             // the first condition.  The second if can be nested
             // inside the first one, because if it's true the

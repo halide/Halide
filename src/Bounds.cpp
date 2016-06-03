@@ -726,7 +726,7 @@ private:
 
         if (interval.has_upper_bound()) {
             if (val.min.defined() && expr_uses_var(interval.max, min_name)) {
-                interval.min = Let::make(min_name, val.min, interval.max);
+                interval.max = Let::make(min_name, val.min, interval.max);
             }
             if (val.max.defined() && expr_uses_var(interval.max, max_name)) {
                 interval.max = Let::make(max_name, val.max, interval.max);
