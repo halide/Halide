@@ -33,10 +33,6 @@ install:
   - wget http://llvm.org/releases/${LLVM_VERSION}/clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
   - tar xvf clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04.tar.xz
   - sudo cp -ar clang+llvm-${LLVM_VERSION}-x86_64-linux-gnu-ubuntu-14.04/* /usr
-  - echo $PATH
-  - export PATH=/usr/bin:$PATH
-  - which llvm-config
-  - llvm-config --version
   # Get libpng for the tutorials and apps
   - sudo apt-get -y install libpng-dev
   # For generating docs
