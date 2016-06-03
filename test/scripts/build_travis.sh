@@ -55,12 +55,13 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   export LLVM_CONFIG=/usr/bin/llvm-config
   export CLANG=/usr/bin/clang
+  ${LLVM_CONFIG} --cxxflags --libdir --bindir
 
   # Build and run internal tests
-  make
+  make LLVM_CONFIG=/usr/bin/llvm-config CLANG=/usr/bin/clang
 
   # Build the docs and run the tests
-  make doc test_correctness test_generators
+  make LLVM_CONFIG=/usr/bin/llvm-config CLANG=/usr/bin/clang doc test_correctness test_generators
 else
   echo "Unexpected BUILD_SYSTEM: \"${BUILD_SYSTEM}\""
   exit 1
