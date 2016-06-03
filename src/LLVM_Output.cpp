@@ -83,9 +83,9 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
     #if LLVM_VERSION == 37
-        llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
+    llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
     #else
-        llvm::DataLayout target_data_layout(target_machine->createDataLayout());
+    llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #endif
     if (!(target_data_layout == module.getDataLayout())) {
         internal_error << "Warning: module's data layout does not match target machine's\n"
