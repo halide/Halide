@@ -12,7 +12,6 @@ fi
 : ${LLVM_VERSION:?"LLVM_VERSION must be specified"}
 : ${BUILD_SYSTEM:?"BUILD_SYSTEM must be specified"}
 : ${CXX:?"CXX must be specified"}
-: ${BUILD_TYPE:?"BUILD_TYPE must be specified"}
 
 if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
