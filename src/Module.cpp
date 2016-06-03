@@ -1,5 +1,6 @@
 #include "Module.h"
 
+#include <array>
 #include <fstream>
 
 #include "CodeGen_C.h"
@@ -8,6 +9,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
+#include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
 
@@ -15,6 +17,18 @@ using Halide::Internal::debug;
 
 namespace Halide {
 namespace Internal {
+
+namespace {
+
+std::unique_ptr<TemporaryFile> make_temp_object_file(const std::string &base_path_name, 
+                                                     const std::string &suffix, 
+                                                     const Target &target) {
+    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
+    std::string base_name = split_string(base_path_name, "/").back() + suffix;
+    return std::unique_ptr<TemporaryFile>(new TemporaryFile(base_name, ext));
+}
+
+}  // namespace
 
 struct ModuleContents {
     mutable RefCount ref_count;
@@ -35,6 +49,8 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
 }
 
 }  // namespace Internal
+
+using namespace Halide::Internal;
 
 Module::Module(const std::string &name, const Target &target) :
     contents(new Internal::ModuleContents) {
@@ -104,13 +120,11 @@ void Module::compile(const Outputs &output_files) const {
             // needed directly, or as temporary inputs to create a static library.
             // If they are just temporary inputs, we delete them when we're done,
             // to minimize the cruft left laying around in build products directory.
-            std::unique_ptr<Internal::TemporaryFile> temp_file;
+            std::unique_ptr<TemporaryFile> temp_file;
 
             std::string object_name = output_files.object_name;
             if (object_name.empty()) {
-                const char* ext = target().os == Target::Windows && !target().has_feature(Target::MinGW) ? ".obj" : ".o";
-                auto base_name = Internal::split_string(output_files.static_library_name, "/").back();
-                temp_file.reset(new Internal::TemporaryFile(base_name, ext));
+                temp_file = make_temp_object_file(output_files.static_library_name, "", target());
                 object_name = temp_file->pathname();
             }
 
@@ -190,6 +204,131 @@ Outputs compile_standalone_runtime(const Outputs &output_files, Target t) {
 
 void compile_standalone_runtime(const std::string &object_filename, Target t) {
     compile_standalone_runtime(Outputs().object(object_filename), t);
+}
+
+void compile_multitarget(const std::string &fn_name, 
+                         const Outputs &output_files,
+                         const std::vector<Target> &targets, 
+                         ModuleProducer module_producer) {
+    user_assert(!fn_name.empty()) << "Function name must be specified.\n";
+    user_assert(!targets.empty()) << "Must specify at least one target.\n";
+
+    // TODO(srj): It's not clear whether it's sensible to support anything else here.
+    // For now, we simply fail if anything but .h/.a is requested -- even if
+    // there is only a single target.
+    user_assert(output_files.object_name.empty()) << "Cannot request object_name for compile_multitarget.\n";
+    user_assert(output_files.assembly_name.empty()) << "Cannot request assembly_name for compile_multitarget.\n";
+    user_assert(output_files.bitcode_name.empty()) << "Cannot request bitcode_name for compile_multitarget.\n";
+    user_assert(output_files.llvm_assembly_name.empty()) << "Cannot request llvm_assembly_name for compile_multitarget.\n";
+    user_assert(output_files.c_source_name.empty()) << "Cannot request c_source_name for compile_multitarget.\n";
+    user_assert(output_files.stmt_name.empty()) << "Cannot request stmt_name for compile_multitarget.\n";
+    user_assert(output_files.stmt_html_name.empty()) << "Cannot request stmt_html_name for compile_multitarget.\n";
+
+    // The final target in the list is considered "baseline", and is used
+    // for (e.g.) the runtime and shared code. It is often just os-arch-bits
+    // with no other features (though this is *not* a requirement).
+    const Target &base_target = targets.back();
+
+    // JIT makes no sense.
+    user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
+
+    // PNaCl might work, but is untested in this path.
+    user_assert(base_target.arch != Target::PNaCl) << "PNaCl not allowed for compile_multitarget.\n";
+
+    // If only one target, don't bother with the runtime feature detection wrapping.
+    if (targets.size() == 1) {
+        debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
+        module_producer(fn_name, base_target).compile(output_files);
+        return;
+    }
+
+    std::vector<std::unique_ptr<TemporaryFile>> all_outputs;
+    std::vector<Expr> wrapper_args;
+    std::vector<LoweredArgument> base_target_args;
+    for (const Target &target : targets) {
+        // arch-bits-os must be identical across all targets.
+        if (target.os != base_target.os ||
+            target.arch != base_target.arch ||
+            target.bits != base_target.bits) {
+            user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
+        }
+        // Some features must match across all targets.
+        static const std::array<Target::Feature, 6> must_match_features = {{
+            Target::CPlusPlusMangling,
+            Target::JIT,
+            Target::Matlab,
+            Target::NoRuntime,
+            Target::RegisterMetadata,
+            Target::UserContext,
+        }};
+        for (auto f : must_match_features) {
+            if (target.has_feature(f) != base_target.has_feature(f)) {
+                user_error << "All Targets must have feature " << f << " set identically for compile_multitarget.\n";
+                break;
+            }
+        }
+
+        // Each sub-target has a function name that is the 'real' name plus the target string.
+        auto suffix = "_" + replace_all(target.to_string(), "-", "_");
+        
+        std::string sub_fn_name = fn_name + suffix;
+        all_outputs.emplace_back(make_temp_object_file(output_files.static_library_name, suffix, target));
+
+        // We always produce the runtime separately
+        Module module = module_producer(sub_fn_name, target.with_feature(Target::NoRuntime));
+        module.compile(Outputs().object(all_outputs.back()->pathname()));
+
+        static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
+        uint64_t feature_bits = 0;
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            if (target.has_feature(static_cast<Target::Feature>(i))) {
+                feature_bits |= static_cast<uint64_t>(1) << i;
+            }
+        }
+
+        Expr can_use = Call::make(Int(32), "halide_can_use_target_features", {UIntImm::make(UInt(64), feature_bits)}, Call::Extern);
+
+        if (target == base_target) {
+            can_use = IntImm::make(Int(32), 1);
+            base_target_args = module.functions().back().args;
+        }
+
+        wrapper_args.push_back(can_use != 0);
+        wrapper_args.push_back(sub_fn_name);
+    }
+
+    // If we haven't specified "no runtime", build a runtime with the base target
+    // and add that to the result.
+    if (!base_target.has_feature(Target::NoRuntime)) {
+        const Target runtime_target = base_target.without_feature(Target::NoRuntime);
+        all_outputs.emplace_back(make_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
+        compile_standalone_runtime(Outputs().object(all_outputs.back()->pathname()), runtime_target);
+    }
+
+    Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
+    std::string private_result_name = unique_name(fn_name + "_result");
+    Expr private_result_var = Variable::make(Int(32), private_result_name);
+    Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
+    wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
+
+    Module wrapper_module(fn_name, base_target);
+    wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
+    all_outputs.emplace_back(make_temp_object_file(output_files.static_library_name, "_wrapper", base_target));
+    wrapper_module.compile(Outputs().object(all_outputs.back()->pathname()));
+
+    if (!output_files.c_header_name.empty()) { 
+        debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
+        wrapper_module.compile(Outputs().c_header(output_files.c_header_name));
+    }
+    if (!output_files.static_library_name.empty()) {
+        debug(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
+        std::vector<std::string> srcs;
+        for (const auto &output : all_outputs) {
+            debug(1) << "   compile_multitarget: linking temp file: " << output->pathname() << "\n";
+            srcs.push_back(output->pathname());
+        }
+        create_static_library(srcs, base_target, output_files.static_library_name);
+    }
 }
 
 }  // namespace Halide
