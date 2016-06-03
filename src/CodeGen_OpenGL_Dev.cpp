@@ -250,6 +250,18 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     id = oss.str();
 }
 
+void CodeGen_GLSL::visit(const IntImm *op) {
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
+    }
+}
+
+void CodeGen_GLSL::visit(const UIntImm *op) {
+    print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
+}
+
 void CodeGen_GLSL::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
