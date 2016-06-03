@@ -469,9 +469,9 @@ private:
                                        select_a->true_value + select_b->true_value,
                                        select_a->false_value + select_b->false_value));
         } else if (select_a &&
-                   is_const(b) &&
-                   (is_const(select_a->true_value) ||
-                    is_const(select_a->false_value))) {
+                   is_simple_const(b) &&
+                   (is_simple_const(select_a->true_value) ||
+                    is_simple_const(select_a->false_value))) {
             // select(c, c1, c2) + c3 -> select(c, c1+c3, c2+c3)
             expr = mutate(Select::make(select_a->condition,
                                        select_a->true_value + b,
