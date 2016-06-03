@@ -10,18 +10,12 @@ struct allocation_record {
 WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
     const size_t align = 128;
 
-    // Align the allocation size.
-    len = (len + align - 1) & ~(align - 1);
-
-    // Allocate enough space to hold information about the allocation prior to the pointer we return.
-    len += align;
-
-    void *original = halide_malloc(user_context, len);
+    void *original = halide_malloc(user_context, len + align + sizeof(allocation_record));
 
     // Store the original ptr before the pointer we return.
+    void *ret = reinterpret_cast<void *>(((reinterpret_cast<uintptr_t>(original) + align) / align) * align);
+
     allocation_record rec = { original };
-    void *ret = reinterpret_cast<char *>(original) + align;
-    halide_assert(user_context, sizeof(allocation_record) <= align);
     memcpy(reinterpret_cast<allocation_record *>(ret) - 1, &rec, sizeof(rec));
 
     if (ret && out_fd) {
