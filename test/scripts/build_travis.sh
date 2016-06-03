@@ -17,9 +17,9 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
   LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\.//' | cut -b1,2 )"
   mkdir -p build/ && cd build/
-  cmake -DLLVM_INCLUDE="/usr/include" \
-        -DLLVM_LIB="/usr/lib" \
-        -DLLVM_BIN="/usr/bin" \
+  cmake -DLLVM_INCLUDE="/usr/local/llvm/include" \
+        -DLLVM_LIB="/usr/local/llvm/lib" \
+        -DLLVM_BIN="/usr/local/llvm/bin" \
         -DLLVM_VERSION="${LLVM_VERSION_NO_DOT}" \
         -DHALIDE_SHARED_LIBRARY="${HALIDE_SHARED_LIBRARY}" \
         -DWITH_APPS=ON \
@@ -53,15 +53,15 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
       ${TESTCASE}
   done
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
-  export LLVM_CONFIG=/usr/bin/llvm-config
-  export CLANG=/usr/bin/clang
+  export LLVM_CONFIG=/usr/local/llvm/bin/llvm-config
+  export CLANG=/usr/local/llvm/bin/clang
   ${LLVM_CONFIG} --cxxflags --libdir --bindir
 
   # Build and run internal tests
-  make LLVM_CONFIG=/usr/bin/llvm-config CLANG=/usr/bin/clang
+  make
 
   # Build the docs and run the tests
-  make LLVM_CONFIG=/usr/bin/llvm-config CLANG=/usr/bin/clang doc test_correctness test_generators
+  make doc test_correctness test_generators
 else
   echo "Unexpected BUILD_SYSTEM: \"${BUILD_SYSTEM}\""
   exit 1
