@@ -233,7 +233,7 @@ private:
     template <typename T2 = T,
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
     T from_string_impl(const std::string &s) const {
-        return parse_target_string(s);
+        return Target(s);
     }
     template <typename T2 = T,
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>

@@ -29,9 +29,9 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
     // does not work with NaCl at the moment.
 
-    Expr no_overflow = const_true(1);
-    Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
-    Expr max_size = cast<int64_t>(0x7fffffff);
+    Expr no_overflow = const_true();
+    Expr total_size = make_const(Int(64), type.lanes() * type.bytes());
+    Expr max_size = make_const(Int(64), target.maximum_buffer_size());
     for (size_t i = 0; i < extents.size(); i++) {
         total_size *= extents[i];
         no_overflow = no_overflow && (total_size <= max_size);
@@ -45,7 +45,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
                                     {name, total_size, max_size}, Call::Extern));
     }
 
-    total_size = simplify(cast<int32_t>(total_size));
+    total_size = simplify(total_size);
     return codegen(total_size);
 }
 
@@ -66,8 +66,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
 
-        if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
+        if (stack_bytes > target.maximum_buffer_size()) {
+            const string str_max_size = target.has_feature(Target::LargeBuffers) ? "2^63 - 1" : "2^31 - 1";
+            user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
