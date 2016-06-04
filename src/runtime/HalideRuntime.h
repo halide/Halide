@@ -591,7 +591,8 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_end = 32 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_end = 33 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

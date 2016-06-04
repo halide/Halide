@@ -70,6 +70,7 @@ struct Target {
         Metal = halide_target_feature_metal,
         MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
+        LargeBuffers = halide_target_feature_large_buffers,
         FeatureEnd = halide_target_feature_end
     };
 
@@ -247,6 +248,13 @@ struct Target {
     template <typename data_t>
     int natural_vector_size() const {
         return natural_vector_size(type_of<data_t>());
+    }
+
+    /** Return the maximum buffer size in bytes supported on this
+     * Target. This is 2^31 - 1 except when the LargeBuffers feature
+     * is enabled, which expands the maximum to 2^63 - 1. */
+    int64_t maximum_buffer_size() const {
+        return has_feature(Halide::Target::LargeBuffers) ? 0x7fffffffffffffffLL : 0x7fffffff;
     }
 
     /** Was libHalide compiled with support for this target? */
