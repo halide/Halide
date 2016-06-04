@@ -296,27 +296,27 @@ struct AbstractCost {
       // update definition is evaluated to compute each value of
       // the function.
       if (!kv.second.is_pure()) {
-        for (const UpdateDefinition &u: kv.second.updates()) {
+        for (const Definition &u: kv.second.updates()) {
 
           int64_t ops = 1;
           int64_t loads = 0;
-          for (auto &e: u.values) {
+          for (auto &e: u.values()) {
             ExprCost cost_visitor;
             e.accept(&cost_visitor);
             ops += cost_visitor.ops;
             loads += cost_visitor.loads;
           }
 
-          for (auto &arg: u.args) {
+          for (auto &arg: u.args()) {
             ExprCost cost_visitor;
             arg.accept(&cost_visitor);
             ops += cost_visitor.ops;
             loads += cost_visitor.loads;
           }
 
-          if (u.domain.defined()) {
+          if (u.domain().defined()) {
             Box b;
-            for (auto &rvar: u.domain.domain()) {
+            for (auto &rvar: u.domain().domain()) {
               b.push_back(Interval(simplify(rvar.min),
                                    simplify(rvar.min + rvar.extent - 1)));
             }
@@ -401,13 +401,13 @@ struct DependenceAnalysis {
 
       // TODO: Check if this handling of updates is correct
       for (auto &update: curr_f.updates()) {
-        for (auto &val: update.values) {
+        for (auto &val: update.values()) {
           map<string, Box> curr_regions;
           Scope<Interval> curr_scope;
           int interval_index = 0;
           vector<Expr> exprs;
           exprs.push_back(val);
-          for (auto &arg: update.args) {
+          for (auto &arg: update.args()) {
             Interval simple_bounds = Interval(simplify(curr_bounds[interval_index].min),
                                               simplify(curr_bounds[interval_index].max));
             // Check for a pure variable
@@ -422,8 +422,8 @@ struct DependenceAnalysis {
             interval_index++;
           }
 
-          if (update.domain.defined()) {
-            for (auto &rvar: update.domain.domain()) {
+          if (update.domain().defined()) {
+            for (auto &rvar: update.domain().domain()) {
               Interval simple_bounds = Interval(rvar.min,
                                                 rvar.min + rvar.extent - 1);
               curr_scope.push(rvar.var, simple_bounds);
