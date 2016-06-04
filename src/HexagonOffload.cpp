@@ -260,20 +260,25 @@ public:
         compile_module_to_shared_object(device_code, object);
         //compile_module_to_shared_object(device_code, "/tmp/hex.so");
 #else
+        TemporaryFile tmp_bitcode("hex", ".bc");
+        TemporaryFile tmp_shared_object("hex", ".so");
         debug(1) << "Hexagon device code module: " << device_code << "\n";
-        device_code.compile(Outputs().bitcode("hex.bc"));
+        device_code.compile(Outputs().bitcode(tmp_bitcode.pathname()));
 
-        string hex_command = "${HL_HEXAGON_TOOLS}/bin/hexagon-clang hex.bc -fPIC -O3 -Wno-override-module -shared -o hex.so";
+        string hex_command = "${HL_HEXAGON_TOOLS}/bin/hexagon-clang ";
+        hex_command += tmp_bitcode.pathname();
+        hex_command += " -fPIC -O3 -Wno-override-module -shared ";
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
         if (device_code.target().has_feature(Target::HVX_128)) {
             hex_command += " -mhvx-double";
         }
+        hex_command += " -o " + tmp_shared_object.pathname();
         int result = system(hex_command.c_str());
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
-        std::ifstream so("hex.so", std::ios::binary | std::ios::ate);
+        std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
         object.resize(so.tellg());
         so.seekg(0, std::ios::beg);
         so.read(reinterpret_cast<char*>(&object[0]), object.size());
