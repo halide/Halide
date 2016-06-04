@@ -149,11 +149,6 @@ struct Bound {
 
 struct ScheduleContents;
 
-struct Specialization {
-    Expr condition;
-    IntrusivePtr<ScheduleContents> schedule;
-};
-
 struct StorageDim {
     std::string var;
     Expr alignment;
@@ -185,7 +180,7 @@ public:
      * FunctionContents multiple times.
      */
     EXPORT Schedule deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied) const;
+        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
@@ -249,14 +244,6 @@ public:
     // @{
     const std::vector<Bound> &estimates() const;
     std::vector<Bound> &estimates();
-    // @}
-
-    /** You may create several specialized versions of a func with
-     * different schedules. They trigger when the condition is
-     * true. See \ref Func::specialize */
-    // @{
-    const std::vector<Specialization> &specializations() const;
-    const Specialization &add_specialization(Expr condition);
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper

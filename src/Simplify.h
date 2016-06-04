@@ -29,6 +29,10 @@ EXPORT Expr simplify(Expr, bool simplify_lets = true,
                      const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
 
+/** A common use of the simplifier is to prove boolean expressions are
+ * true at compile time. Equivalent to is_one(simplify(e)) */
+EXPORT bool can_prove(Expr e);
+
 /** Simplify expressions found in a statement, but don't simplify
  * across different statements. This is safe to perform at an earlier
  * stage in lowering than full simplification of a stmt. */

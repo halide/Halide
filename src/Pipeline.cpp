@@ -21,8 +21,24 @@ using std::set;
 
 namespace {
 
+std::string output_name(const string &filename, const string &fn_name, const char* ext) {
+    return !filename.empty() ? filename : (fn_name + ext);
+}
+
 std::string output_name(const string &filename, const Module &m, const char* ext) {
-    return !filename.empty() ? filename : (m.name() + ext);
+    return output_name(filename, m.name(), ext);
+}
+
+Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
+    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
+    if (target.arch == Target::PNaCl) {
+        outputs = outputs.static_library(filename_prefix + ".a");
+    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+        outputs = outputs.static_library(filename_prefix + ".lib");
+    } else {
+        outputs = outputs.static_library(filename_prefix + ".a");
+    }
+    return outputs;
 }
 
 }  // namespace
@@ -245,16 +261,18 @@ void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const vector<Argument> &args,
                                          const Target &target) {
     Module m = compile_to_module(args, filename_prefix, target);
-    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
-        outputs = outputs.object(filename_prefix + ".lib");
-    } else {
-        outputs = outputs.object(filename_prefix + ".a");
-    }
+    Outputs outputs = static_library_outputs(filename_prefix, target);
     m.compile(outputs);
+}
+
+void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                     const std::vector<Argument> &args,
+                                                     const std::vector<Target> &targets) {
+    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+        return compile_to_module(args, name, target);
+    };
+    Outputs outputs = static_library_outputs(filename_prefix, targets.back());
+    compile_multitarget(generate_function_name(), outputs, targets, module_producer);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,

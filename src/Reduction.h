@@ -23,6 +23,15 @@ struct ReductionDomainContents;
 class ReductionDomain {
     IntrusivePtr<ReductionDomainContents> contents;
 public:
+    /** This lets you use a ReductionDomain as a key in a map of the form
+     * map<ReductionDomain, Foo, ReductionDomain::Compare> */
+    struct Compare {
+        bool operator()(const ReductionDomain &a, const ReductionDomain &b) const {
+            internal_assert(a.contents.defined() && b.contents.defined());
+            return a.contents < b.contents;
+        }
+    };
+
     /** Construct a new nullptr reduction domain */
     ReductionDomain() : contents(nullptr) {}
 
@@ -72,6 +81,10 @@ public:
     /** Check if a RDom has been frozen. If so, it is an error to add new
      * predicates. */
     EXPORT bool frozen() const;
+
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * ReductionDomain. */
+    void accept(IRVisitor *) const;
 
     /** Pass an IRMutator through to all Exprs referenced in the
      * ReductionDomain. */
