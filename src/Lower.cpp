@@ -165,7 +165,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, outputs, env);
+    s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (any_memoized) {
