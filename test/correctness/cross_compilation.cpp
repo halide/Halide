@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     };
 
     for (const std::string &t : targets) {
-        Target target = parse_target_string(t);
+        Target target(t);
         if (!target.supported()) continue;
         f.compile_to_file("test_object_" + t, std::vector<Argument>(), target);
         f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), target);

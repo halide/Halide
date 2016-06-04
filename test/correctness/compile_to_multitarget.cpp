@@ -6,15 +6,6 @@
 
 using namespace Halide;
 
-Target from_string(const char* target_string) {
-    Target t;
-    if (!t.from_string(target_string)) {
-        fprintf(stderr, "from_string failed\n");
-        exit(-1);
-    }
-    return t;
-}
-
 void testCompileToOutput(Func j) {
     std::string fn_object = "compile_to_multitarget";
 
@@ -22,8 +13,8 @@ void testCompileToOutput(Func j) {
     assert(!Internal::file_exists(fn_object) && "Output file already exists.");
 
     std::vector<Target> targets = {
-         from_string("host-profile-debug"),
-         from_string("host-profile"),
+        Target("host-profile-debug"),
+        Target("host-profile"),
     };
     j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
 #ifdef _MSC_VER
