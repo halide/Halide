@@ -19,14 +19,14 @@ uint64_t multiply_buffer_size_check_overflow(uint64_t size, uint64_t factor, con
     bool overflow = (result / factor) != size;
 
     // Check against the limits Halide internally assumes in its compiled code.
-    overflow |= (sizeof(size_t) == 4) && (result >= (1UL << 31));
+    overflow |= (sizeof(size_t) == 4) && ((result >> 31) != 0);
 
     // In 64-bit with LargeBuffers *not* set, the limit above is the
     // correct one, however at Buffer creation time we don't know what
     // pipelines it will be used in, so we must be conservative and
     // defer the error until the user actually passes the buffer into
     // a pipeline they shouldn't have.
-    overflow |= (sizeof(size_t) == 8) && (result >= (1UL << 63));
+    overflow |= (sizeof(size_t) == 8) && ((result >> 63) != 0);
 
     // Assert there was no overflow.
     user_assert(!overflow)
