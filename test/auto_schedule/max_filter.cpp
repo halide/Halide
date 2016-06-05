@@ -1,0 +1,81 @@
+// Circular-support max filter. Does some trickery to get O(r) per pixel for radius r, not O(r^2).
+
+#include "Halide.h"
+
+using namespace Halide;
+
+#include <iostream>
+#include <limits>
+
+int main(int argc, char **argv) {
+
+  int H = 1920;
+  int W = 1024;
+  Image<float> in(H, W, 3);
+
+  for (int y = 0; y < in.height(); y++) {
+    for (int x = 0; x < in.width(); x++) {
+      for (int c = 0; c < 3; c++) {
+        in(x, y, c) = rand() & 0xfff;
+      }
+    }
+  }
+
+  const int radius = 26;
+
+  Func input = BoundaryConditions::repeat_edge(in);
+
+  Var x, y, c, t;
+
+  const int slices = (int)(ceilf(logf(radius) / logf(2))) + 1;
+
+  // A sequence of vertically-max-filtered versions of the input,
+  // each filtered twice as tall as the previous slice. All filters
+  // are downward-looking.
+  Func vert_log;
+  vert_log(x, y, c, t) = input(x, y, c);
+  RDom r(-radius, in.height() + radius, 1, slices-1);
+  vert_log(x, r.x, c, r.y) = max(vert_log(x, r.x, c, r.y - 1),
+                                 vert_log(x, r.x + clamp((1<<(r.y-1)), 0, radius*2), c, r.y - 1));
+
+  // We're going to take a max filter of arbitrary diameter
+  // by maxing two samples from its floor log 2 (e.g. maxing two
+  // 8-high overlapping samples). This next Func tells us which
+  // slice to draw from for a given radius:
+  Func slice_for_radius;
+  slice_for_radius(t) = cast<int>(floor(log(2*t+1) / logf(2)));
+
+  // Produce every possible vertically-max-filtered version of the image:
+  Func vert;
+  // t is the blur radius
+  Expr slice = clamp(slice_for_radius(t), 0, slices);
+  Expr first_sample = vert_log(x, y - t, c, slice);
+  Expr second_sample = vert_log(x, y + t + 1 - clamp(1 << slice, 0, 2*radius), c, slice);
+  vert(x, y, c, t) = max(first_sample, second_sample);
+
+  Func filter_height;
+  RDom dy(0, radius+1);
+  filter_height(x) = sum(select(x*x + dy*dy < (radius+0.25f)*(radius+0.25f), 1, 0));
+
+  // Now take an appropriate horizontal max of them at each output pixel
+  Func final;
+  RDom dx(-radius, 2*radius+1);
+  final(x, y, c) = maximum(vert(x + dx, y, c, clamp(filter_height(dx), 0, radius+1)));
+
+  final.estimate(x, 0, in.width()).estimate(y, 0, in.height()).estimate(c, 0, in.channels());
+
+  // Auto schedule the pipeline
+  Target target = get_target_from_environment();
+  Pipeline p(final);
+
+  p.auto_schedule(target);
+
+  // Inspect the schedule
+  final.print_loop_nest();
+
+  // Run the schedule
+  Image<float> out = p.realize(in.width(), in.height(), in.channels());
+
+  printf("Success!\n");
+  return 0;
+}
