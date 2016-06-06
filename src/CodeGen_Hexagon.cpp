@@ -120,22 +120,21 @@ private:
     // 2. If unlock is to be called as a destructor, we are the highest level and hvx_locked should
     // be false.
     Stmt wrap_hvx_lock_unlock(Stmt s, bool unlock_as_destructor) {
-        if (uses_hvx(s)) {
-            if (unlock_as_destructor) {
-                internal_assert(!hvx_locked);
-                Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-                Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
-                                             {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
-                s = Block::make(Evaluate::make(hvx_unlock), s);
-            } else {
-                Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
-                s = Block::make(s, Evaluate::make(hvx_unlock));
-                if (hvx_locked) {
-                    s = Block::make(s, get_hvx_lock_and_check());
-                }
+        if (unlock_as_destructor) {
+            internal_assert(!hvx_locked);
+            Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+            Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
+                                         {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
+            s = Block::make(Evaluate::make(hvx_unlock), s);
+        } else {
+            Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
+            s = Block::make(s, Evaluate::make(hvx_unlock));
+            if (hvx_locked) {
+                s = Block::make(s, get_hvx_lock_and_check());
             }
-            s = Block::make(get_hvx_lock_and_check(), s);
         }
+        s = Block::make(get_hvx_lock_and_check(), s);
+
         return s;
     }
 public:
