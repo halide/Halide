@@ -29,13 +29,17 @@ int main(int argc, char **argv) {
     ImageParam input(UInt(8), 3);
     input.set(param_buf);
 
-    RDom r(0, input.extent(0), 0, input.extent(1), 0, input.extent(2));
     Var x;
     Func grand_total;
-    grand_total() = cast<uint64_t>(sum(cast<uint64_t>(input(r.x, r.y, r.z))));
+    grand_total() = cast<uint64_t>(input(0, 0, 0) + input(input.extent(0)-1, input.extent(1)-1, input.extent(2)-1));
     grand_total.set_error_handler(&halide_error);
 
     Target t = get_jit_target_from_environment();
+    if (t.bits == 32) {
+        printf("Skipping test on 32-bit targets\n");
+        return 0;
+    }
+
     t.set_feature(Target::LargeBuffers);
 
     grand_total.compile_jit(t);
