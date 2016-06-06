@@ -58,7 +58,8 @@ struct JITExtern;
 class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    std::vector<Buffer> validate_arguments(const std::vector<Argument> &args);
+    std::vector<Argument> infer_arguments(Internal::Stmt body);
+    std::vector<Buffer> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -172,6 +173,17 @@ public:
     EXPORT void compile_to_static_library(const std::string &filename_prefix,
                                           const std::vector<Argument> &args,
                                           const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair once for each target;
+     * each resulting function will be considered (in order) via halide_can_use_target_features()
+     * at runtime, with the first appropriate match being selected for subsequent use.
+     * This is typically useful for specializations that may vary unpredictably by machine
+     * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
+     * All targets must have identical arch-os-bits.
+     */
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                      const std::vector<Argument> &args,
+                                                      const std::vector<Target> &targets);
 
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -405,7 +417,7 @@ bool voidable_halide_type(Type &t) {
 template<>
 inline bool voidable_halide_type<void>(Type &t) {
     return true;
-}        
+}
 
 template <typename T>
 bool scalar_arg_type_or_buffer(Type &t) {

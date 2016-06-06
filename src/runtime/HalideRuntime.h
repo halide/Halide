@@ -4,6 +4,7 @@
 #ifndef COMPILING_HALIDE_RUNTIME
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #else
 #include "runtime_internal.h"
 #endif
@@ -47,6 +48,10 @@ extern "C" {
  *
  */
 
+// Forward-declare to suppress warnings if compiling as C.
+#ifndef BUFFER_T_DEFINED
+struct buffer_t;
+#endif
 
 /** Print a message to stderr. Main use is to support HL_TRACE
  * functionality, print, and print_when calls. Also called by the default
@@ -253,7 +258,7 @@ struct halide_device_interface;
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const halide_device_interface *device_interface);
+extern void halide_device_release(void *user_context, const struct halide_device_interface *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -266,14 +271,14 @@ extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                                 const halide_device_interface *device_interface);
+                                 const struct halide_device_interface *device_interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
 
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
 
@@ -316,7 +321,8 @@ extern void halide_memoization_cache_set_size(int64_t size);
  *  1: Success and cache miss.
  */
 extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+                                           struct buffer_t *realized_bounds, int32_t tuple_count,
+                                           struct buffer_t **tuple_buffers);
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
@@ -333,7 +339,8 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
  * the data into the cache.
  */
 extern int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                          buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
+                                          struct buffer_t *realized_bounds, int32_t tuple_count,
+                                          struct buffer_t **tuple_buffers);
 
 /** If halide_memoization_cache_lookup succeeds,
  * halide_memoization_cache_release must be called to signal the
@@ -591,8 +598,42 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_end = 32 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_end = 33 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
+
+/** This function is called internally by Halide in some situations to determine
+ * if the current execution environment can support the given set of 
+ * halide_target_feature_t flags. The implementation must do the following:
+ *
+ * -- If there are flags set in features that the function knows *cannot* be supported, return 0.
+ * -- Otherwise, return 1.
+ * -- Note that any flags set in features that the function doesn't know how to test should be ignored;
+ * this implies that a return value of 1 means "not known to be bad" rather than "known to be good".
+ *
+ * In other words: a return value of 0 means "It is not safe to use code compiled with these features", 
+ * while a return value of 1 means "It is not obviously unsafe to use code compiled with these features".
+ *
+ * The default implementation simply calls halide_default_can_use_target_features.
+ */
+extern int halide_can_use_target_features(uint64_t features);
+
+/** 
+ * This is the default implementation of halide_can_use_target_features; it is provided
+ * for convenience of user code that may wish to extend halide_can_use_target_features
+ * but continue providing existing support, e.g.
+ *
+ *     int halide_can_use_target_features(uint64_t features) {
+ *          if (features & halide_target_somefeature) {
+ *              if (!can_use_somefeature()) {
+ *                  return 0;
+ *              }
+ *          }
+ *          return halide_default_can_use_target_features(features);
+ *     }
+ */
+extern int halide_default_can_use_target_features(uint64_t features);
+
 
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always 64-bits).
@@ -767,9 +808,9 @@ struct halide_filter_argument_t {
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)
-    const halide_scalar_value_t *def;
-    const halide_scalar_value_t *min;
-    const halide_scalar_value_t *max;
+    const struct halide_scalar_value_t *def;
+    const struct halide_scalar_value_t *min;
+    const struct halide_scalar_value_t *max;
 };
 
 struct halide_filter_metadata_t {
@@ -783,7 +824,7 @@ struct halide_filter_metadata_t {
      * null. The order of arguments is not guaranteed (input and output arguments
      * may come in any order); however, it is guaranteed that all arguments
      * will have a unique name within a given filter. */
-    const halide_filter_argument_t* arguments;
+    const struct halide_filter_argument_t* arguments;
 
     /** The Target for which the filter was compiled. This is always
      * a canonical Target string (ie a product of Target::to_string). */
@@ -798,7 +839,7 @@ struct halide_filter_metadata_t {
  * the enumeration, or nonzero to terminate the enumeration. enumerate_context
  * is an arbitrary pointer you can use to provide a callback argument. */
 typedef int (*enumerate_func_t)(void* enumerate_context,
-    const halide_filter_metadata_t *metadata, int (*argv_func)(void **args));
+    const struct halide_filter_metadata_t *metadata, int (*argv_func)(void **args));
 
 /** If a filter is compiled with Target::RegisterMetadata, it will register itself
  * in an internal list at load time; halide_enumerate_registered_filters() allows
@@ -856,7 +897,7 @@ struct halide_profiler_pipeline_stats {
     const char *name;
 
     /** An array containing states for each Func in this pipeline. */
-    halide_profiler_func_stats *funcs;
+    struct halide_profiler_func_stats *funcs;
 
     /** The next pipeline_stats pointer. It's a void * because types
      * in the Halide runtime may not currently be recursive. */
@@ -892,10 +933,10 @@ struct halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
      * reordering the linked list of pipeline stats). */
-    halide_mutex lock;
+    struct halide_mutex lock;
 
     /** A linked list of stats gathered for each pipeline. */
-    halide_profiler_pipeline_stats *pipelines;
+    struct halide_profiler_pipeline_stats *pipelines;
 
     /** The amount of time the profiler thread sleeps between samples
      * in milliseconds. Defaults to 1 */
@@ -924,11 +965,11 @@ enum {
 
 /** Get a pointer to the global profiler state for programmatic
  * inspection. Lock it before using to pause the profiler. */
-extern halide_profiler_state *halide_profiler_get_state();
+extern struct halide_profiler_state *halide_profiler_get_state();
 
 /** Get a pointer to the pipeline state associated with pipeline_name.
  * This function grabs the global profiler state's lock on entry. */
-extern halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
+extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
 /** Reset all profiler state.
  * WARNING: Do NOT call this method while any halide pipeline is

@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -25,27 +26,50 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
 }
 
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
-    // Compute size from list of extents checking for 32-bit signed overflow.
-    // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
-    // does not work with NaCl at the moment.
+    // Compute size from list of extents checking for overflow.
 
-    Expr no_overflow = const_true(1);
-    Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
-    Expr max_size = cast<int64_t>(0x7fffffff);
+    Expr overflow = make_zero(UInt(64));
+    Expr total_size = make_const(UInt(64), type.lanes() * type.bytes());
+
+    // We'll multiply all the extents into the 64-bit value
+    // total_size. We'll also track (total_size >> 32) as a 64-bit
+    // value to check for overflow as we go. The loop invariant will
+    // be that either the overflow Expr is non-zero, or total_size_hi
+    // only occupies the bottom 32-bits. Overflow could be more simply
+    // checked for using division, but that's slower at runtime. This
+    // method generates much better assembly.
+    Expr total_size_hi = make_zero(UInt(64));
+
+    Expr low_mask = make_const(UInt(64), (uint64_t)(0xffffffff));
     for (size_t i = 0; i < extents.size(); i++) {
-        total_size *= extents[i];
-        no_overflow = no_overflow && (total_size <= max_size);
+        Expr next_extent = cast(UInt(32), extents[i]);
+
+        // Update total_size >> 32. This math can't overflow due to
+        // the loop invariant:
+        total_size_hi *= next_extent;
+        // Deal with carry from the low bits. Still can't overflow.
+        total_size_hi += ((total_size & low_mask) * next_extent) >> 32;
+
+        // Update total_size. This may overflow.
+        total_size *= next_extent;
+
+        // We can check for overflow by asserting that total_size_hi
+        // is still a 32-bit number.
+        overflow = overflow | (total_size_hi >> 32);
     }
 
+    Expr max_size = make_const(UInt(64), target.maximum_buffer_size());
+    Expr size_check = (overflow == 0) && (total_size <= max_size);
+
     // For constant-sized allocations this check should simplify away.
-    no_overflow = simplify(no_overflow);
-    if (!is_one(no_overflow)) {
-        create_assertion(codegen(no_overflow),
+    size_check = common_subexpression_elimination(simplify(size_check));
+    if (!is_one(size_check)) {
+        create_assertion(codegen(size_check),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
     }
 
-    total_size = simplify(cast<int32_t>(total_size));
+    total_size = simplify(total_size);
     return codegen(total_size);
 }
 
@@ -66,8 +90,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
 
-        if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
+        if (stack_bytes > target.maximum_buffer_size()) {
+            const string str_max_size = target.has_feature(Target::LargeBuffers) ? "2^63 - 1" : "2^31 - 1";
+            user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));

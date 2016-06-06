@@ -6,6 +6,8 @@
  * Defines Module, an IR container that fully describes a Halide program.
  */
 
+#include <functional>
+ 
 #include "IR.h"
 #include "Buffer.h"
 #include "ModulusRemainder.h"
@@ -107,9 +109,17 @@ EXPORT Module link_modules(const std::string &name, const std::vector<Module> &m
 EXPORT void compile_standalone_runtime(const std::string &object_filename, Target t);
 
 /** Create an object and/or static library file containing the Halide runtime for a given
- * target. For use with Target::NoRuntime. 
+ * target. For use with Target::NoRuntime. Return an Outputs with just the actual
+ * outputs filled in (typically, object_name and/or static_library_name).
  */
-EXPORT void compile_standalone_runtime(const Outputs &output_files, Target t);
+EXPORT Outputs compile_standalone_runtime(const Outputs &output_files, Target t);
+
+typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
+
+EXPORT void compile_multitarget(const std::string &fn_name, 
+                                const Outputs &output_files,
+                                const std::vector<Target> &targets, 
+                                ModuleProducer module_producer);
 
 }
 
