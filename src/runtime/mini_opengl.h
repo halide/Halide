@@ -23,6 +23,7 @@ typedef void GLvoid;
 #define GL_TRIANGLE_STRIP 0x0005
 #define GL_CULL_FACE 0x0B44
 #define GL_DEPTH_TEST 0x0B71
+#define GL_VIEWPORT 0x0BA2
 #define GL_PACK_ALIGNMENT 0x0D05
 #define GL_UNPACK_ALIGNMENT 0x0CF5
 #define GL_UNPACK_ROW_LENGTH 0x0CF2
@@ -53,6 +54,7 @@ typedef void GLvoid;
 #define GL_TEXTURE_WRAP_T 0x2803
 #define GL_CLAMP_TO_EDGE 0x812F
 #define GL_TEXTURE0 0x84C0
+#define GL_ACTIVE_TEXTURE 0x84E0
 
 typedef void (*PFNGLACTIVETEXTUREPROC) (GLenum texture);
 typedef void (*PFNGLBINDTEXTUREPROC)(GLenum target, GLuint texture);
@@ -112,6 +114,7 @@ typedef void (*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const GLvoid
 #define GL_INFO_LOG_LENGTH 0x8B84
 #define GL_IMPLEMENTATION_COLOR_READ_FORMAT 0x8B9B
 #define GL_IMPLEMENTATION_COLOR_READ_TYPE 0x8B9A
+#define GL_CURRENT_PROGRAM 0x8B8D
 
 typedef void (*PFNGLATTACHSHADERPROC) (GLuint program, GLuint shader);
 typedef void (*PFNGLCOMPILESHADERPROC) (GLuint shader);
@@ -137,6 +140,7 @@ typedef void (*PFNGLUNIFORM1FVPROC) (GLint location, GLsizei count, const GLfloa
 typedef void (*PFNGLUSEPROGRAMPROC) (GLuint program);
 typedef void (*PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
 typedef void (*PFNGLGETINTEGERV)(GLenum pname, GLint *data);
+typedef void (*PFNGLGETBOOLEANV)(GLenum pname, GLboolean *data);
 typedef void (*PFNGLFINISHPROC) (void);
 
 

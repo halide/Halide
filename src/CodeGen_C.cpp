@@ -358,7 +358,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 name = extract_namespaces(op->name, namespaces);
-                for (auto const &ns : namespaces) {
+                for (const auto &ns : namespaces) {
                     stream << "namespace " << ns << " { ";
                 }
                 namespace_count = namespaces.size();
@@ -1183,6 +1183,10 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        user_error << "Signed integer overflow occurred during constant-folding. Signed"
+            " integer overflow for int32 and int64 is undefined behavior in"
+            " Halide.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics

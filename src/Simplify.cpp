@@ -34,8 +34,7 @@ using std::vector;
 
 namespace {
 
-// Things that we can constant fold: Immediates and broadcasts of
-// immediates.
+// Things that we can constant fold: Immediates and broadcasts of immediates.
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
@@ -54,6 +53,15 @@ bool no_overflow_scalar_int(Type t) {
 // Returns true iff t does not have a well defined overflow behavior.
 bool no_overflow(Type t) {
     return t.is_float() || no_overflow_scalar_int(t.element_of());
+}
+
+// Make a poison value used when overflow is detected during constant
+// folding.
+Expr signed_integer_overflow_error(Type t) {
+    // Mark each call with an atomic counter, so that the errors can't
+    // cancel against each other.
+    static std::atomic<int> counter;
+    return Call::make(t, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
 }
@@ -276,6 +284,8 @@ private:
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
+        const Ramp *ramp_value = value.as<Ramp>();
+        const Add *add = value.as<Add>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -327,6 +337,20 @@ private:
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes));
+        } else if (ramp_value &&
+                   op->type.element_of() == Int(64) &&
+                   op->value.type().element_of() == Int(32)) {
+            // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
+            expr = mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
+                                     Cast::make(op->type.element_of(), ramp_value->stride),
+                                     ramp_value->lanes));
+        } else if (add &&
+                   op->type == Int(64) &&
+                   op->value.type() == Int(32) &&
+                   is_const(add->b)) {
+            // In the interest of moving constants outwards so they
+            // can cancel, pull the addition outside of the cast.
+            expr = mutate(Cast::make(op->type, add->a) + add->b);
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -413,8 +437,12 @@ private:
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
-            // const int + const int
-            expr = IntImm::make(a.type(), ia + ib);
+            if (no_overflow(a.type()) &&
+                add_would_overflow(a.type().bits(), ia, ib)) {
+                expr = signed_integer_overflow_error(a.type());
+            } else {
+                expr = IntImm::make(a.type(), ia + ib);
+            }
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
             // const uint + const uint
@@ -456,9 +484,9 @@ private:
                                        select_a->true_value + select_b->true_value,
                                        select_a->false_value + select_b->false_value));
         } else if (select_a &&
-                   is_const(b) &&
-                   (is_const(select_a->true_value) ||
-                    is_const(select_a->false_value))) {
+                   is_simple_const(b) &&
+                   (is_simple_const(select_a->true_value) ||
+                    is_simple_const(select_a->false_value))) {
             // select(c, c1, c2) + c3 -> select(c, c1+c3, c2+c3)
             expr = mutate(Select::make(select_a->condition,
                                        select_a->true_value + b,
@@ -694,6 +722,7 @@ private:
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -737,7 +766,12 @@ private:
         } else if (equal(a, b)) {
             expr = make_zero(op->type);
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = IntImm::make(a.type(), ia - ib);
+            if (no_overflow(a.type()) &&
+                sub_would_overflow(a.type().bits(), ia, ib)) {
+                expr = signed_integer_overflow_error(a.type());
+            } else {
+                expr = IntImm::make(a.type(), ia - ib);
+            }
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
             expr = UIntImm::make(a.type(), ua - ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
@@ -762,7 +796,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
-                                 broadcast_a->lanes);
+                                   broadcast_a->lanes);
         } else if (select_a && select_b &&
                    equal(select_a->condition, select_b->condition)) {
             // select(c, a, b) - select(c, d, e) -> select(c, a+d, b+e)
@@ -1013,22 +1047,22 @@ private:
             expr = make_zero(op->type);
         } else if (min_a &&
                    min_b &&
-                   is_zero(simplify((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
+                   is_zero(mutate((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
             // min(a, b) - min(c, d) where a-b == c-d -> b - d
             expr = mutate(min_a->b - min_b->b);
         } else if (max_a &&
                    max_b &&
-                   is_zero(simplify((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
+                   is_zero(mutate((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
             // max(a, b) - max(c, d) where a-b == c-d -> b - d
             expr = mutate(max_a->b - max_b->b);
         } else if (min_a &&
                    min_b &&
-                   is_zero(simplify((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
+                   is_zero(mutate((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
             // min(a, b) - min(c, d) where a-b == d-c -> b - c
             expr = mutate(min_a->b - min_b->a);
         } else if (max_a &&
                    max_b &&
-                   is_zero(simplify((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
+                   is_zero(mutate((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
             expr = mutate(max_a->b - max_b->a);
         } else if (no_overflow(op->type) &&
@@ -1179,7 +1213,12 @@ private:
         } else if (is_one(b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = IntImm::make(a.type(), ia * ib);
+            if (no_overflow(a.type()) &&
+                mul_would_overflow(a.type().bits(), ia, ib)) {
+                expr = signed_integer_overflow_error(a.type());
+            } else {
+                expr = IntImm::make(a.type(), ia * ib);
+            }
         } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
             expr = UIntImm::make(a.type(), ua * ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
@@ -2818,6 +2857,12 @@ private:
         const Call *cf = false_value.as<Call>();
         const Select *sel_t = true_value.as<Select>();
         const Select *sel_f = false_value.as<Select>();
+        const Add *add_t = true_value.as<Add>();
+        const Add *add_f = false_value.as<Add>();
+        const Sub *sub_t = true_value.as<Sub>();
+        const Sub *sub_f = false_value.as<Sub>();
+        const Mul *mul_t = true_value.as<Mul>();
+        const Mul *mul_f = false_value.as<Mul>();
 
         if (is_zero(condition)) {
             expr = false_value;
@@ -2875,6 +2920,76 @@ private:
                    equal(sel_f->true_value, true_value)) {
             // select(a, d, select(b, d, c)) -> select(a || b, d, c)
             expr = mutate(Select::make(condition || sel_f->condition, true_value, sel_f->false_value));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->a, add_f->a)) {
+            // select(c, a+b, a+d) -> a + select(x, b, d)
+            expr = mutate(add_t->a + Select::make(condition, add_t->b, add_f->b));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->a, add_f->b)) {
+            // select(c, a+b, d+a) -> a + select(x, b, d)
+            expr = mutate(add_t->a + Select::make(condition, add_t->b, add_f->a));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->b, add_f->a)) {
+            // select(c, b+a, a+d) -> a + select(x, b, d)
+            expr = mutate(add_t->b + Select::make(condition, add_t->a, add_f->b));
+        } else if (add_t &&
+                   add_f &&
+                   equal(add_t->b, add_f->b)) {
+            // select(c, b+a, d+a) -> select(x, b, d) + a
+            expr = mutate(Select::make(condition, add_t->a, add_f->a) + add_t->b);
+        } else if (sub_t &&
+                   sub_f &&
+                   equal(sub_t->a, sub_f->a)) {
+            // select(c, a-b, a-d) -> a - select(x, b, d)
+            expr = mutate(sub_t->a - Select::make(condition, sub_t->b, sub_f->b));
+        } else if (sub_t &&
+                   sub_f &&
+                   equal(sub_t->b, sub_f->b)) {
+            // select(c, b-a, d-a) -> select(x, b, d) - a
+            expr = mutate(Select::make(condition, sub_t->a, sub_f->a) - sub_t->b);\
+        } else if (add_t &&
+                   sub_f &&
+                   equal(add_t->a, sub_f->a)) {
+            // select(c, a+b, a-d) -> a + select(x, b, 0-d)
+            expr = mutate(add_t->a + Select::make(condition, add_t->b, make_zero(sub_f->b.type()) - sub_f->b));
+        } else if (add_t &&
+                   sub_f &&
+                   equal(add_t->b, sub_f->a)) {
+            // select(c, b+a, a-d) -> a + select(x, b, 0-d)
+            expr = mutate(add_t->b + Select::make(condition, add_t->a, make_zero(sub_f->b.type()) - sub_f->b));
+        } else if (sub_t &&
+                   add_f &&
+                   equal(sub_t->a, add_f->a)) {
+            // select(c, a-b, a+d) -> a + select(x, 0-b, d)
+            expr = mutate(sub_t->a + Select::make(condition, make_zero(sub_t->b.type()) - sub_t->b, add_f->b));
+        } else if (sub_t &&
+                   add_f &&
+                   equal(sub_t->a, add_f->b)) {
+            // select(c, a-b, d+a) -> a + select(x, 0-b, d)
+            expr = mutate(sub_t->a + Select::make(condition, make_zero(sub_t->b.type()) - sub_t->b, add_f->a));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->a, mul_f->a)) {
+            // select(c, a*b, a*d) -> a * select(x, b, d)
+            expr = mutate(mul_t->a * Select::make(condition, mul_t->b, mul_f->b));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->a, mul_f->b)) {
+            // select(c, a*b, d*a) -> a * select(x, b, d)
+            expr = mutate(mul_t->a * Select::make(condition, mul_t->b, mul_f->a));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->b, mul_f->a)) {
+            // select(c, b*a, a*d) -> a * select(x, b, d)
+            expr = mutate(mul_t->b * Select::make(condition, mul_t->a, mul_f->b));
+        } else if (mul_t &&
+                   mul_f &&
+                   equal(mul_t->b, mul_f->b)) {
+            // select(c, b*a, d*a) -> select(x, b, d) * a
+            expr = mutate(Select::make(condition, mul_t->a, mul_f->a) * mul_t->b);
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -3671,72 +3786,66 @@ private:
 
     void visit(const Block *op) {
         Stmt first = mutate(op->first);
+        Stmt rest = mutate(op->rest);
 
-        if (!op->rest.defined()) {
+        // Check if both halves start with a let statement.
+        const LetStmt *let_first = first.as<LetStmt>();
+        const LetStmt *let_rest = rest.as<LetStmt>();
+        const IfThenElse *if_first = first.as<IfThenElse>();
+        const IfThenElse *if_rest = rest.as<IfThenElse>();
+
+        // Check if first is a no-op.
+        if (is_no_op(first)) {
+            stmt = rest;
+        } else if (is_no_op(rest)) {
             stmt = first;
-        } else {
-            Stmt rest = mutate(op->rest);
+        } else if (let_first &&
+                   let_rest &&
+                   equal(let_first->value, let_rest->value)) {
 
-            // Check if both halves start with a let statement.
-            const LetStmt *let_first = first.as<LetStmt>();
-            const LetStmt *let_rest = rest.as<LetStmt>();
-            const IfThenElse *if_first = first.as<IfThenElse>();
-            const IfThenElse *if_rest = rest.as<IfThenElse>();
+            // Do both first and rest start with the same let statement (occurs when unrolling).
+            Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
 
-            // Check if first is a no-op.
-            if (is_no_op(first)) {
-                stmt = rest;
-            } else if (is_no_op(rest)) {
-                stmt = first;
-            } else if (let_first &&
-                       let_rest &&
-                       equal(let_first->value, let_rest->value)) {
-
-                // Do both first and rest start with the same let statement (occurs when unrolling).
-                Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
-
-                // We're just going to use the first name, so if the
-                // second name is different we need to rewrite it.
-                if (let_rest->name != let_first->name) {
-                    new_block = substitute(let_rest->name,
-                                           Variable::make(let_first->value.type(), let_first->name),
-                                           new_block);
-                }
-
-                stmt = LetStmt::make(let_first->name, let_first->value, new_block);
-            } else if (if_first &&
-                       if_rest &&
-                       equal(if_first->condition, if_rest->condition)) {
-                // Two ifs with matching conditions
-                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
-                Stmt else_case;
-                if (if_first->else_case.defined() && if_rest->else_case.defined()) {
-                    else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
-                } else if (if_first->else_case.defined()) {
-                    // We already simplified the body of the ifs.
-                    else_case = if_first->else_case;
-                } else {
-                    else_case = if_rest->else_case;
-                }
-                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
-            } else if (if_first &&
-                       if_rest &&
-                       !if_rest->else_case.defined() &&
-                       is_one(simplify((if_first->condition && if_rest->condition) == if_rest->condition))) {
-                // Two ifs where the second condition is tighter than
-                // the first condition.  The second if can be nested
-                // inside the first one, because if it's true the
-                // first one must also be true.
-                Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
-                Stmt else_case = mutate(if_first->else_case);
-                stmt = IfThenElse::make(if_first->condition, then_case, else_case);
-            } else if (op->first.same_as(first) &&
-                       op->rest.same_as(rest)) {
-                stmt = op;
-            } else {
-                stmt = Block::make(first, rest);
+            // We're just going to use the first name, so if the
+            // second name is different we need to rewrite it.
+            if (let_rest->name != let_first->name) {
+                new_block = substitute(let_rest->name,
+                                       Variable::make(let_first->value.type(), let_first->name),
+                                       new_block);
             }
 
+            stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+        } else if (if_first &&
+                   if_rest &&
+                   equal(if_first->condition, if_rest->condition)) {
+            // Two ifs with matching conditions
+            Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
+            Stmt else_case;
+            if (if_first->else_case.defined() && if_rest->else_case.defined()) {
+                else_case = mutate(Block::make(if_first->else_case, if_rest->else_case));
+            } else if (if_first->else_case.defined()) {
+                // We already simplified the body of the ifs.
+                else_case = if_first->else_case;
+            } else {
+                else_case = if_rest->else_case;
+            }
+            stmt = IfThenElse::make(if_first->condition, then_case, else_case);
+        } else if (if_first &&
+                   if_rest &&
+                   !if_rest->else_case.defined() &&
+                   is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
+            // Two ifs where the second condition is tighter than
+            // the first condition.  The second if can be nested
+            // inside the first one, because if it's true the
+            // first one must also be true.
+            Stmt then_case = mutate(Block::make(if_first->then_case, if_rest));
+            Stmt else_case = mutate(if_first->else_case);
+            stmt = IfThenElse::make(if_first->condition, then_case, else_case);
+        } else if (op->first.same_as(first) &&
+                   op->rest.same_as(rest)) {
+            stmt = op;
+        } else {
+            stmt = Block::make(first, rest);
         }
     }
 };
@@ -3763,6 +3872,12 @@ public:
 
 Stmt simplify_exprs(Stmt s) {
     return SimplifyExprs().mutate(s);
+}
+
+bool can_prove(Expr e) {
+    internal_assert(e.type().is_bool())
+        << "Argument to can_prove is not a boolean Expr: " << e << "\n";
+    return is_one(simplify(e));
 }
 
 namespace {
@@ -3857,6 +3972,18 @@ void check_casts() {
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
+
+    check(cast(Int(64, 3), ramp(5.5f, 2.0f, 3)),
+          cast(Int(64, 3), ramp(5.5f, 2.0f, 3)));
+    check(cast(Int(64, 3), ramp(x, 2, 3)),
+          ramp(cast(Int(64), x), cast(Int(64), 2), 3));
+
+    // Check cancellations can occur through casts
+    check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
+    // But only when overflow is undefined for the type
+    check(cast(UInt(8), x + 1) - cast(UInt(8), x),
+          cast(UInt(8), x + 1) - cast(UInt(8), x));
 }
 
 void check_algebra() {
@@ -4385,10 +4512,10 @@ void check_boolean() {
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
-                           Evaluate::make(select(b1, x+3, x+8) - select(b2, x+5, x+7))),
+                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
+                           Evaluate::make(select(b1, x+3, y+8) - select(b2, x+5, y+7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, x+4) + select(b2, x+5, x+7)),
+                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
@@ -4466,6 +4593,24 @@ void check_boolean() {
     check(max(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
           select(x == 2, max(y*3, y+8), max(y*7, 8)));
 
+    check(select(x == 2, x+1, x+5), x + select(x == 2, 1, 5));
+    check(select(x == 2, x+y, x+z), x + select(x == 2, y, z));
+    check(select(x == 2, y+x, x+z), x + select(x == 2, y, z));
+    check(select(x == 2, y+x, z+x), select(x == 2, y, z) + x);
+    check(select(x == 2, x+y, z+x), x + select(x == 2, y, z));
+    check(select(x == 2, x*2, x*5), x * select(x == 2, 2, 5));
+    check(select(x == 2, x*y, x*z), x * select(x == 2, y, z));
+    check(select(x == 2, y*x, x*z), x * select(x == 2, y, z));
+    check(select(x == 2, y*x, z*x), select(x == 2, y, z) * x);
+    check(select(x == 2, x*y, z*x), x * select(x == 2, y, z));
+    check(select(x == 2, x-y, x-z), x - select(x == 2, y, z));
+    check(select(x == 2, y-x, z-x), select(x == 2, y, z) - x);
+    check(select(x == 2, x+y, x-z), x + select(x == 2, y, 0-z));
+    check(select(x == 2, y+x, x-z), x + select(x == 2, y, 0-z));
+    check(select(x == 2, x-z, x+y), x + select(x == 2, 0-z, y));
+    check(select(x == 2, x-z, y+x), x + select(x == 2, 0-z, y));
+
+
     {
 
         Expr b[12];
@@ -4514,6 +4659,54 @@ void check_math() {
     check(ceil(ceil(x)), ceil(x));
 }
 
+void check_overflow() {
+    Expr overflowing[] = {
+        make_const(Int(32), 0x7fffffff) + 1,
+        make_const(Int(32), 0x7ffffff0) + 16,
+        (make_const(Int(32), 0x7fffffff) +
+         make_const(Int(32), 0x7fffffff)),
+        make_const(Int(32), 0x08000000) * 16,
+        (make_const(Int(32), 0x00ffffff) *
+         make_const(Int(32), 0x00ffffff)),
+        make_const(Int(32), 0x80000000) - 1,
+        0 - make_const(Int(32), 0x80000000),
+        make_const(Int(64), (int64_t)0x7fffffffffffffffLL) + 1,
+        make_const(Int(64), (int64_t)0x7ffffffffffffff0LL) + 16,
+        (make_const(Int(64), (int64_t)0x7fffffffffffffffLL) +
+         make_const(Int(64), (int64_t)0x7fffffffffffffffLL)),
+        make_const(Int(64), (int64_t)0x0800000000000000LL) * 16,
+        (make_const(Int(64), (int64_t)0x00ffffffffffffffLL) *
+         make_const(Int(64), (int64_t)0x00ffffffffffffffLL)),
+        make_const(Int(64), (int64_t)0x8000000000000000LL) - 1,
+        0 - make_const(Int(64), (int64_t)0x8000000000000000LL),
+    };
+    Expr not_overflowing[] = {
+        make_const(Int(32), 0x7ffffffe) + 1,
+        make_const(Int(32), 0x7fffffef) + 16,
+        make_const(Int(32), 0x07ffffff) * 2,
+        (make_const(Int(32), 0x0000ffff) *
+         make_const(Int(32), 0x00008000)),
+        make_const(Int(32), 0x80000001) - 1,
+        0 - make_const(Int(32), 0x7fffffff),
+        make_const(Int(64), (int64_t)0x7ffffffffffffffeLL) + 1,
+        make_const(Int(64), (int64_t)0x7fffffffffffffefLL) + 16,
+        make_const(Int(64), (int64_t)0x07ffffffffffffffLL) * 16,
+        (make_const(Int(64), (int64_t)0x00000000ffffffffLL) *
+         make_const(Int(64), (int64_t)0x0000000080000000LL)),
+        make_const(Int(64), (int64_t)0x8000000000000001LL) - 1,
+        0 - make_const(Int(64), (int64_t)0x7fffffffffffffffLL),
+    };
+
+    for (Expr e : overflowing) {
+        internal_assert(!is_const(simplify(e)))
+            << "Overflowing expression should not have simplified: " << e << "\n";
+    }
+    for (Expr e : not_overflowing) {
+        internal_assert(is_const(simplify(e)))
+            << "Non-everflowing expression should have simplified: " << e << "\n";
+    }
+}
+
 }
 
 void simplify_test() {
@@ -4528,6 +4721,7 @@ void simplify_test() {
     check_bounds();
     check_math();
     check_boolean();
+    check_overflow();
 
     // Check bitshift operations
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);

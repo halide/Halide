@@ -5,7 +5,7 @@ using namespace Halide;
 
 Target target;
 
-Var x, y, tx("tx"), ty("ty"), c("c");
+Var x, y, yi("yi"), yo("yo"), c("c");
 Func processed("processed");
 
 // Average two positive values rounding up
@@ -147,53 +147,15 @@ Func demosaic(Func deinterleaved) {
 
 
     /* THE SCHEDULE */
-    if (target.arch == Target::ARM) {
-        // Optimized for ARM
-        // Compute these in chunks over tiles, vectorized by 8
-        g_r.compute_at(processed, tx).vectorize(x, 8);
-        g_b.compute_at(processed, tx).vectorize(x, 8);
-        r_gr.compute_at(processed, tx).vectorize(x, 8);
-        b_gr.compute_at(processed, tx).vectorize(x, 8);
-        r_gb.compute_at(processed, tx).vectorize(x, 8);
-        b_gb.compute_at(processed, tx).vectorize(x, 8);
-        r_b.compute_at(processed, tx).vectorize(x, 8);
-        b_r.compute_at(processed, tx).vectorize(x, 8);
+    const int vec = target.natural_vector_size(UInt(16));
+    g_r.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
+    g_b.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
+    output.compute_at(processed, x)
+        .vectorize(x)
+        .unroll(y)
+        .reorder(c, x, y)
+        .unroll(c);
 
-        // These interleave in y, so unrolling them in y helps
-        output.compute_at(processed, tx)
-            .vectorize(x, 8)
-            .unroll(y, 2)
-            .reorder(c, x, y)
-            .bound(c, 0, 3).unroll(c);
-    } else if (target.arch == Target::X86) {
-        // Don't vectorize, because sse is bad at 16-bit interleaving
-        g_r.compute_at(processed, tx);
-        g_b.compute_at(processed, tx);
-        r_gr.compute_at(processed, tx);
-        b_gr.compute_at(processed, tx);
-        r_gb.compute_at(processed, tx);
-        b_gb.compute_at(processed, tx);
-        r_b.compute_at(processed, tx);
-        b_r.compute_at(processed, tx);
-
-        // These interleave in x and y, so unrolling them helps
-        output.compute_at(processed, tx)
-            .unroll(x, 2)
-            .unroll(y, 2)
-            .reorder(c, x, y)
-            .bound(c, 0, 3).unroll(c);
-    } else {
-        // Basic naive schedule
-        g_r.compute_root();
-        g_b.compute_root();
-        r_gr.compute_root();
-        b_gr.compute_root();
-        r_gb.compute_root();
-        b_gb.compute_root();
-        r_b.compute_root();
-        b_r.compute_root();
-        output.compute_root();
-    }
     return output;
 }
 
@@ -265,7 +227,7 @@ Func process(Func raw, Type result_type,
              ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
              Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
 
-    Var xi, yi;
+    Var yii, xi;
 
     Func denoised = hot_pixel_suppression(raw);
     Func deinterleaved = deinterleave(denoised);
@@ -279,50 +241,32 @@ Func process(Func raw, Type result_type,
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
 
-    processed.bound(c, 0, 3); // bound color loop 0-3, properly
-    if (target.arch == Target::ARM) {
-        // Compute in chunks over tiles, vectorized by 8
-        const int tile_size = 32;
-        denoised.compute_at(processed, tx)
-            .vectorize(x, 8);
-        deinterleaved.compute_at(processed, tx)
-            .vectorize(x, 8)
-            .reorder(c, x, y)
-            .unroll(c);
-        corrected.compute_at(processed, tx)
-            .vectorize(x, 4)
-            .reorder(c, x, y)
-            .unroll(c);
-        processed.compute_root()
-            .tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
-            .reorder(xi, yi, c, tx, ty)
-            .parallel(ty);
+    const int strip_size = 32;
+    const int vec = target.natural_vector_size(UInt(16));
+    denoised.compute_at(processed, yi).store_at(processed, yo)
+        .fold_storage(y, 8)
+        .vectorize(x, vec);
+    deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+        .fold_storage(y, 4)
+        .vectorize(x, vec)
+        .reorder(c, x, y)
+        .unroll(c);
+    corrected.compute_at(processed, x)
+        .vectorize(x, vec)
+        .reorder(c, x, y)
+        .unroll(c);
+    processed.compute_root()
+        .split(y, yo, yi, strip_size)
+        .split(yi, yi, yii, 2)
+        .split(x, x, xi, 2*vec)
+        .reorder(xi, c, yii, x, yi, yo)
+        .parallel(yo);
 
-        // We can generate slightly better code if we know the output is a whole number of tiles.
-        processed
-            .bound(x, 0, (out_width/tile_size)*tile_size)
-            .bound(y, 0, (out_height/tile_size)*tile_size);
-    } else if (target.arch == Target::X86) {
-        // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
-        const int tile_size = 128;
-        denoised.compute_at(processed, tx);
-        deinterleaved.compute_at(processed, tx);
-        corrected.compute_at(processed, tx);
-        processed.compute_root()
-            .tile(x, y, tx, ty, xi, yi, tile_size, tile_size)
-            .reorder(xi, yi, c, tx, ty)
-            .parallel(ty);
-
-        // We can generate slightly better code if we know the output is a whole number of tiles.
-        processed
-            .bound(x, 0, (out_width/tile_size)*tile_size)
-            .bound(y, 0, (out_height/tile_size)*tile_size);
-    } else {
-        denoised.compute_root();
-        deinterleaved.compute_root();
-        corrected.compute_root();
-        processed.compute_root();
-    }
+    // We can generate slightly better code if we know the splits divide the extent.
+    processed
+        .bound(c, 0, 3)
+        .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
+        .bound(y, 0, (out_height/strip_size)*strip_size);
 
     return processed;
 }

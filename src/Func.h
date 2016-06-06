@@ -44,19 +44,20 @@ struct VarOrRVar {
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
-    Internal::Schedule schedule;
+    Internal::Definition definition;
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact, TailStrategy tail);
     std::string stage_name;
 public:
-    Stage(Internal::Schedule s, const std::string &n) :
-        schedule(s), stage_name(n) {s.touched() = true;}
+    Stage(Internal::Definition d, const std::string &n) : definition(d), stage_name(n) {
+        definition.schedule().touched() = true;
+    }
 
     /** Return the current Schedule associated with this Stage.  For
      * introspection only: to modify Schedule, use the Func
      * interface. */
-    const Internal::Schedule &get_schedule() const { return schedule; }
+    const Internal::Schedule &get_schedule() const { return definition.schedule(); }
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
@@ -508,6 +509,17 @@ public:
      */
     EXPORT void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
                                           const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair once for each target;
+     * each resulting function will be considered (in order) via halide_can_use_target_features()
+     * at runtime, with the first appropriate match being selected for subsequent use.
+     * This is typically useful for specializations that may vary unpredictably by machine
+     * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
+     * All targets must have identical arch-os-bits.
+     */
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                      const std::vector<Argument> &args,
+                                                      const std::vector<Target> &targets);
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -1760,6 +1772,16 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
 }
  // @}
 
+namespace Internal {
+
+inline void schedule_scalar(Func f) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
+        f.gpu_single_thread();
+    }
+}
+
+}  // namespace Internal
 
 /** JIT-Compile and run enough code to evaluate a Halide
  * expression. This can be thought of as a scalar version of
@@ -1772,12 +1794,9 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = e;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1796,12 +1815,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
         << t[1] << " of type " << t[1].type()
         << " as a scalar of type " << type_of<B>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1821,12 +1837,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << "Can't evaluate expression "
         << t[2] << " of type " << t[2].type()
         << " as a scalar of type " << type_of<C>() << "\n";
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1852,12 +1865,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
         << t[3] << " of type " << t[3].type()
         << " as a scalar of type " << type_of<D>() << "\n";
 
-    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f() = t;
-    if (has_gpu_feature) {
-        f.gpu_single_thread();
-    }
+    Internal::schedule_scalar(f);
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);

@@ -20,8 +20,24 @@ using std::set;
 
 namespace {
 
+std::string output_name(const string &filename, const string &fn_name, const char* ext) {
+    return !filename.empty() ? filename : (fn_name + ext);
+}
+
 std::string output_name(const string &filename, const Module &m, const char* ext) {
-    return !filename.empty() ? filename : (m.name() + ext);
+    return output_name(filename, m.name(), ext);
+}
+
+Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
+    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
+    if (target.arch == Target::PNaCl) {
+        outputs = outputs.static_library(filename_prefix + ".a");
+    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+        outputs = outputs.static_library(filename_prefix + ".lib");
+    } else {
+        outputs = outputs.static_library(filename_prefix + ".a");
+    }
+    return outputs;
 }
 
 }  // namespace
@@ -239,16 +255,18 @@ void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const vector<Argument> &args,
                                          const Target &target) {
     Module m = compile_to_module(args, filename_prefix, target);
-    Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
-        outputs = outputs.object(filename_prefix + ".lib");
-    } else {
-        outputs = outputs.object(filename_prefix + ".a");
-    }
+    Outputs outputs = static_library_outputs(filename_prefix, target);
     m.compile(outputs);
+}
+
+void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                     const std::vector<Argument> &args,
+                                                     const std::vector<Target> &targets) {
+    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+        return compile_to_module(args, name, target);
+    };
+    Outputs outputs = static_library_outputs(filename_prefix, targets.back());
+    compile_multitarget(generate_function_name(), outputs, targets, module_producer);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,
@@ -273,11 +291,14 @@ class InferArguments : public IRGraphVisitor {
 public:
     vector<InferredArgument> &args;
 
-    InferArguments(vector<InferredArgument> &a,
-                   const vector<Function> &o) : args(a), outputs(o) {
+    InferArguments(vector<InferredArgument> &a, const vector<Function> &o, Stmt body)
+        : args(a), outputs(o) {
         args.clear();
         for (const Function &f : outputs) {
             visit_function(f);
+        }
+        if (body.defined()) {
+            body.accept(this);
         }
     }
 
@@ -390,21 +411,21 @@ private:
 
 } // namespace Internal
 
-vector<Argument> Pipeline::infer_arguments() {
+vector<Argument> Pipeline::infer_arguments(Stmt body) {
+
     user_assert(defined()) << "Can't infer arguments on an undefined Pipeline\n";
 
-    if (contents->inferred_args.empty()) {
-        // Infer an arguments vector by walking the IR
-        InferArguments infer_args(contents->inferred_args,
-                                  contents->outputs);
+    // Infer an arguments vector by walking the IR
+    InferArguments infer_args(contents->inferred_args,
+                              contents->outputs,
+                              body);
 
-        // Sort the Arguments with all buffers first (alphabetical by name),
-        // followed by all non-buffers (alphabetical by name).
-        std::sort(contents->inferred_args.begin(), contents->inferred_args.end());
+    // Sort the Arguments with all buffers first (alphabetical by name),
+    // followed by all non-buffers (alphabetical by name).
+    std::sort(contents->inferred_args.begin(), contents->inferred_args.end());
 
-        // Add the user context argument.
-        contents->inferred_args.push_back(contents->user_context_arg);
-    }
+    // Add the user context argument.
+    contents->inferred_args.push_back(contents->user_context_arg);
 
     // Return the inferred argument types, minus any constant images
     // (we'll embed those in the binary by default), and minus the user_context arg.
@@ -421,10 +442,14 @@ vector<Argument> Pipeline::infer_arguments() {
     return result;
 }
 
+vector<Argument> Pipeline::infer_arguments() {
+    return infer_arguments(Stmt());
+}
+
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args) {
-    infer_arguments();
+vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+    infer_arguments(body);
 
     vector<Buffer> images_to_embed;
 
@@ -554,7 +579,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<Buffer> global_images = validate_arguments(public_args);
+    vector<Buffer> global_images = validate_arguments(public_args, private_body);
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -640,8 +665,10 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Compile to a module
     Module module = compile_to_module(args, name, target);
 
-    // Make sure we're not embedding any images
-    internal_assert(module.buffers().empty());
+    // We need to infer the arguments again, because compiling (GPU
+    // and offload targets) might have added new buffers we need to
+    // embed.
+    infer_arguments(module.functions().back().body);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     // Compile to jit module

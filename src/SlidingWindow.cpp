@@ -89,6 +89,23 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
     using IRMutator::visit;
 
+    // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
+    // in the definition (including in its specializations)
+    bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+        const Variable *var = def.args()[dim_idx].as<Variable>();
+        if ((!var) || (var->name != dim)) {
+            return false;
+        }
+
+        for (const auto &s : def.specializations()) {
+            bool pure = is_dim_always_pure(s.definition, dim, dim_idx);
+            if (!pure) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void visit(const ProducerConsumer *op) {
         if (op->name != func.name()) {
             IRMutator::visit(op);
@@ -108,16 +125,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Region provided:\n";
 
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
+            const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
-                string var = prefix + func.args()[i];
+                string var = prefix + func_args[i];
                 internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
                 Expr min_req = scope.get(var + ".min");
                 Expr max_req = scope.get(var + ".max");
                 min_req = expand_expr(min_req, scope);
                 max_req = expand_expr(max_req, scope);
 
-                debug(3) << func.args()[i] << ":" << min_req << ", " << max_req  << "\n";
+                debug(3) << func_args[i] << ":" << min_req << ", " << max_req  << "\n";
                 if (expr_depends_on_var(min_req, loop_var) ||
                     expr_depends_on_var(max_req, loop_var)) {
                     if (!dim.empty()) {
@@ -126,7 +144,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         max_required = Expr();
                         break;
                     } else {
-                        dim = func.args()[i];
+                        dim = func_args[i];
                         dim_idx = i;
                         min_required = min_req;
                         max_required = max_req;
@@ -141,14 +159,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 return;
             }
 
-            // If the function is not pure in the given dimension, give up
+            // If the function is not pure in the given dimension, give up. We also
+            // need to make sure that it is pure in all the specializations
             bool pure = true;
-            for (const UpdateDefinition &i : func.updates()) {
-                const Variable *var = i.args[dim_idx].as<Variable>();
-                if (!var) {
-                    pure = false;
-                } else if (var->name != dim) {
-                    pure = false;
+            for (const Definition &def : func.updates()) {
+                pure = is_dim_always_pure(def, dim, dim_idx);
+                if (!pure) {
+                    break;
                 }
             }
             if (!pure) {
@@ -196,8 +213,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
 
             // If there's no overlap between adjacent iterations, we shouldn't slide.
-            if (is_one(simplify(min_required >= prev_max_plus_one)) ||
-                is_one(simplify(max_required <= prev_min_minus_one))) {
+            if (can_prove(min_required >= prev_max_plus_one) ||
+                can_prove(max_required <= prev_min_minus_one)) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
                          << " along loop variable " << loop_var
