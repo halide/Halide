@@ -242,9 +242,9 @@ struct Target {
      * is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
         if (bits == 64 && has_feature(LargeBuffers)) {
-            return 0x7fffffffffffffffLL;
+            return (((uint64_t)1) << 63) - 1;
         } else {
-            return 0x7fffffff;
+            return (((uint64_t)1) << 31) - 1;
         }
     }
 
