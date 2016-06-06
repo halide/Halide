@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     identity_uint8(x, y, z) = cast<uint8_t>(42);
 
     uint8_t c[4096];
-    memset(c, 42, sizeof(c));
+    memset(c, 99, sizeof(c));
 
     buffer_t buf;
     memset(&buf, 0, sizeof(buf));
@@ -33,18 +33,19 @@ int main(int argc, char **argv) {
 
     Buffer output_buf(UInt(8), &buf);
     Target t = get_jit_target_from_environment();
-    t.set_feature(Target::LargeBuffers);
+
+    if (t.bits != 32) {
+        identity_uint8.compile_jit(t.with_feature(Target::LargeBuffers));
+        identity_uint8.realize(output_buf);
+        assert(!error_occurred);
+
+        Image<uint8_t> output = output_buf;
+        assert(output(0, 0, 0) == 42);
+        assert(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1) == 42);
+    }
 
     identity_uint8.compile_jit(t);
     identity_uint8.realize(output_buf);
-    assert(!error_occurred);
-    Image<uint8_t> output = output_buf;
-    assert(output(0, 0, 0) == 42);
-    assert(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1) == 42);
-
-    identity_uint8.compile_jit(t.without_feature(Target::LargeBuffers));
-    identity_uint8.realize(output_buf);
-    assert(error_occurred);
     assert(error_occurred);
 
     printf("Success!\n");
