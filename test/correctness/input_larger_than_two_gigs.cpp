@@ -35,19 +35,16 @@ int main(int argc, char **argv) {
     grand_total.set_error_handler(&halide_error);
 
     Target t = get_jit_target_from_environment();
-    if (t.bits == 32) {
-        printf("Skipping test on 32-bit targets\n");
-        return 0;
+
+    Image<uint64_t> result;
+    if (t.bits != 32) {
+        grand_total.compile_jit(t.with_feature(Target::LargeBuffers));
+        result = grand_total.realize();
+        assert(!error_occurred);
+        assert(result(0) == (uint64_t)84);
     }
 
-    t.set_feature(Target::LargeBuffers);
-
     grand_total.compile_jit(t);
-    Image<uint64_t> result = grand_total.realize();
-    assert(!error_occurred);
-    assert(result(0) == (uint64_t)4096*4096*256*42);
-
-    grand_total.compile_jit(t.without_feature(Target::LargeBuffers));
     result = grand_total.realize();
     assert(error_occurred);
 
