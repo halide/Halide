@@ -32,8 +32,20 @@ int main(int argc, char **argv) {
     identity_uint8.set_error_handler(&halide_error);
 
     Buffer output_buf(UInt(8), &buf);
-    identity_uint8.realize(output_buf);
+    Target t = get_jit_target_from_environment();
+    t.set_feature(Target::LargeBuffers);
 
+    identity_uint8.compile_jit(t);
+    identity_uint8.realize(output_buf);
+    assert(!error_occurred);
+    Image<uint8_t> output = output_buf;
+    assert(output(0, 0, 0) == 42);
+    assert(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1) == 42);
+
+    identity_uint8.compile_jit(t.without_feature(Target::LargeBuffers));
+    identity_uint8.realize(output_buf);
     assert(error_occurred);
+    assert(error_occurred);
+
     printf("Success!\n");
 }

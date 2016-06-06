@@ -254,7 +254,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     auto target_strings = split_string(target_string, ",");
     std::vector<Target> targets;
     for (const auto &s : target_strings) {
-        targets.push_back(parse_target_string(s));
+        targets.push_back(Target(s));
     }
 
     if (!runtime_name.empty()) {
