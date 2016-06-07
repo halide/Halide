@@ -1,7 +1,8 @@
 #include "Halide.h"
 
 using namespace Halide;
-
+using namespace Halide::Internal;
+IRPrinter irp(std::cerr);
 Expr u16(Expr x) { return cast<uint16_t>(x); }
 Expr u8(Expr x) { return cast<uint8_t>(x); }
 
