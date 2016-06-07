@@ -462,9 +462,16 @@ struct DependenceAnalysis {
         Expr lower = f_reg.second[i].min;
         Expr upper = f_reg.second[i].max;
 
+        // TODO: Assumes estimates cannot be provided on input
+        // parameters like images. Need to have a better way of doing this
+        // where input parameters can have estimates attached to them.
+        //
+        // Also make the simplification take them into account.
+        bool in_env = (env.find(f_reg.first) != env.end());
+
         // Use the estimates if the lower and upper bounds cannot be
         // determined
-        if (!lower.as<IntImm>()) {
+        if (!lower.as<IntImm>() && in_env) {
           const Function &curr_f = env.at(f_reg.first);
           for (auto &b: curr_f.schedule().estimates()) {
             unsigned int num_pure_args = curr_f.args().size();
@@ -473,7 +480,7 @@ struct DependenceAnalysis {
           }
         }
 
-        if (!upper.as<IntImm>()) {
+        if (!upper.as<IntImm>() && in_env) {
           const Function &curr_f = env.at(f_reg.first);
           for (auto &b: curr_f.schedule().estimates()) {
             unsigned int num_pure_args = curr_f.args().size();
@@ -879,7 +886,7 @@ map<string, int64_t> Partitioner::evaluate_reuse(string func,
       if (prod.find(reg.first) == prod.end())
         continue;
       int64_t area = box_area(reg.second);
-      if (area > 0) {
+      if (area >= 0) {
         total_reuse += area;
       } else {
         total_reuse = -1;
@@ -1344,6 +1351,26 @@ void generate_schedules(const vector<Function> &outputs,
   // footprints go here
 
   // TODO: Partitioner which is capable of auto scheduling hierarchically
+  MachineParams arch_params;
+  arch_params.parallelism = 16;
+  arch_params.vec_len = 8;
+  arch_params.fast_mem_size = 1024;
+  arch_params.balance = 10;
+
+  Partitioner part(pipeline_bounds, arch_params, analy, outputs, false);
+
+  for (auto &f: env) {
+    FindAllCalls find;
+    f.second.accept(&find);
+    map<string, int64_t> reuse =
+        part.evaluate_reuse(f.first, find.calls);
+    debug(0) << f.first << '\n';
+    for (auto &dir: reuse) {
+      debug(0) << dir.first << " " << dir.second << ',';
+    }
+    debug(0) << '\n';
+  }
+
   // TODO: Auto scheduler modes
   // O1 Does not introduce any redundant compute but performs basic fusion
   // O2 No redundant compute basic fusion and reordering
