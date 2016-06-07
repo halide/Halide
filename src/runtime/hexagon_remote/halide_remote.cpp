@@ -22,12 +22,12 @@ typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
 #define MAX_WORKER_THREADS 4
-#define NUM_WORKER_THREADS_TO_CREATE 3
+#define NUM_WORKER_THREADS_TO_CREATE (MAX_WORKER_THREADS-1)
 #define STACK_SIZE 4096
 
 static char stack [MAX_WORKER_THREADS][STACK_SIZE] __attribute__ ((__aligned__(128)));
 qurt_sem_t wait_for_work;
-
+qurt_hvx_mode_t curr_hvx_mode;
 struct work {
     work *next_job;
     int (*f)(void *, int, uint8_t *);
@@ -119,6 +119,8 @@ void goto_work(work *owned_job) {
     int myjob;
     // You can work only if you get a lock on the work queue.
     unsigned int tid = qurt_thread_get_id();
+
+    bool locked = owned_job != NULL;
     FARF(LOW, "HVX_TP: %d: goto_work: Trying to get a lock on the work queue\n", tid);
 
     // ***********************
@@ -190,10 +192,25 @@ void goto_work(work *owned_job) {
         // ***************************
         work_queue.unlock();
 
+        if (!locked) {
+            int lock_status = qurt_hvx_lock(curr_hvx_mode);
+            if (lock_status != QURT_EOK) {
+                FARF(LOW, "HVX_TP: %d: goto_work: qurt_hvx_lock(%d) failed\n", tid, curr_hvx_mode);
+            } else {
+                FARF(LOW, "HVX_TP: %d: goto_work: qurt_hvx_lock(%d) succeeded.\n", tid, curr_hvx_mode);
+            }
+        }
+
         FARF(LOW, "HVX_TP: %d: goto_work: About to do_task, user_context = 0x%x, f = 0x%x x = %d \n", tid, job->user_context, job->f, myjob);
         int result = halide_do_task(job->user_context, job->f,
                                     myjob, job->closure);
         FARF(LOW, "HVX_TP: %d: goto_work: Finished do_task with status = %d\n", tid, result);
+
+        FARF(LOW, "HVX_TP: %d: goto_work: Unlocking hvx\n", tid);
+        qurt_hvx_unlock();
+        locked = false;
+
+        FARF(LOW, "HVX_TP: %d: goto_work: Unlocked hvx\n", tid);
         // ***********************
         // *** Lock work queue ***
         // ***********************
@@ -299,10 +316,13 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     // 4. Unlock global work queue.
     work_queue.unlock();
 
-    // 5. Wake up the other threads in the pool.
+    // 5. if an hvx context has already been locked, find out the mode.
+    curr_hvx_mode = (qurt_hvx_mode_t) qurt_hvx_get_mode();
+
+    // 6. Wake up the other threads in the pool.
     qurt_sem_add(&wait_for_work, size-1);
 
-    // 6. Do some work in the master queue.
+    // 7. Do some work in the master queue.
     goto_work(&job);
 
     FARF(LOW, "HVX_TP: Master Thread: Finished job\n");

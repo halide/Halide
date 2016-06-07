@@ -96,81 +96,6 @@ bool uses_hvx(Stmt s) {
 
 }  // namespace
 
-namespace {
-
-class InjectHVXLockUnlock: public IRMutator {
-private:
-    using IRMutator::visit;
-    Target target;
-    bool hvx_locked;
-    Stmt get_hvx_lock_and_check(bool as_destructor) {
-        if (as_destructor) {
-            Expr hvx_mode = target.has_feature(Target::HVX_128) ? reinterpret(Handle(), cast<uint64_t>(128))
-                : reinterpret(Handle(), cast<uint64_t>(64));
-            Expr hvx_lock = Call::make(Int(32), Call::register_destructor,
-                                       {Expr("halide_qurt_hvx_lock_as_destructor"), hvx_mode}, Call::Intrinsic);
-            return Evaluate::make(hvx_lock);
-        } else {
-            Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
-            Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
-            string hvx_lock_result_name = unique_name("hvx_lock_result");
-            Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
-            Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
-                                                AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
-            return check_hvx_lock;
-        }
-    }
-    Stmt get_hvx_unlock() {
-        Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-        Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
-                                     {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
-        return Evaluate::make(hvx_unlock);
-    }
-    // This works in a couple of different ways.
-    // There are two decisions to be made.
-    // 1. If unlock should be called as a destructor or as a regular call. In the case of
-    // inner loops, it should be a regular call. And in this case, if hvx_locked is true, we should
-    // reacquire the lock.
-    // 2. If unlock is to be called as a destructor, we are the highest level and hvx_locked should
-    // be false.
-    Stmt wrap_hvx_lock_unlock(Stmt s) {
-        s = Block::make(get_hvx_unlock(), s);
-        s = Block::make(get_hvx_lock_and_check(hvx_locked /*as_destructor*/), s);
-        // if (hvx_locked) {
-        //     s = Block::make(get_hvx_lock_and_check(true), s);
-        // } else {
-        //     s = Block::make(get_hvx_lock_and_check(false), s);
-        // }
-        return s;
-    }
-public:
-    Stmt mutate(Stmt s) {
-        if (uses_hvx(s)) {
-            if (!hvx_locked) {
-                s = wrap_hvx_lock_unlock(s);
-                hvx_locked = true;
-            }
-        }
-        s = IRMutator::mutate(s);
-        return s;
-    }
-    void visit(const For *op) {
-        if (op->for_type == ForType::Parallel) {
-            if (uses_hvx(op)) {
-                Stmt body = wrap_hvx_lock_unlock(op->body);
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
-            }
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-    InjectHVXLockUnlock(Target t) : target(t) , hvx_locked(false) {}
-};
-
-Stmt inject_hvx_lock_unlock(Stmt s, Target t) {
-    return InjectHVXLockUnlock(t).mutate(s);
-}
-} // namespace
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
                                    const std::string &simple_name, const std::string &extern_name) {
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
@@ -201,27 +126,24 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body);
 
-    debug(1) << "Adding halide_qurt_hvx_lock and unlock if needed... \n";
-    body = inject_hvx_lock_unlock(body, target);
+    if (uses_hvx(body)) {
+        debug(1) << "Adding calls to qurt_hvx_lock...\n";
+        // Modify the body to add a call to halide_qurt_hvx_lock, and
+        // register a destructor to call halide_qurt_hvx_unlock.
+        Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
+        Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
+        string hvx_lock_result_name = unique_name("hvx_lock_result");
+        Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
+        Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
+                                            AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
 
-    // if (uses_hvx(body)) {
-    //     debug(1) << "Adding calls to qurt_hvx_lock...\n";
-    //     // Modify the body to add a call to halide_qurt_hvx_lock, and
-    //     // register a destructor to call halide_qurt_hvx_unlock.
-    //     Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
-    //     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
-    //     string hvx_lock_result_name = unique_name("hvx_lock_result");
-    //     Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
-    //     Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
-    //                                         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
+        Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+        Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
+                                     {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
 
-    //     Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-    //     Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
-    //                                  {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
-
-    //     body = Block::make(Evaluate::make(hvx_unlock), body);
-    //     body = Block::make(check_hvx_lock, body);
-    // }
+        body = Block::make(Evaluate::make(hvx_unlock), body);
+        body = Block::make(check_hvx_lock, body);
+    }
 
     debug(1) << "Hexagon function body:\n";
     debug(1) << body << "\n";

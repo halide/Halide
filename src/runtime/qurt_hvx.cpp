@@ -53,9 +53,4 @@ WEAK int halide_qurt_hvx_unlock(void *user_context) {
 WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/) {
     halide_qurt_hvx_unlock(user_context);
 }
-WEAK void halide_qurt_hvx_lock_as_destructor(void *user_context, void *size) {
-    long int sz = (long) size;
-    halide_qurt_hvx_lock(user_context, sz);
-}
-
 }
