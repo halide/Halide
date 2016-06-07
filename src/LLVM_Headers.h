@@ -54,6 +54,9 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/ADT/StringMap.h>
+#if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
+#include <llvm/Object/ArchiveWriter.h>
+#endif
 #include <llvm/Object/ObjectFile.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3+
@@ -99,7 +102,7 @@
 #endif
 
 namespace Halide { namespace Internal {
-#if (LLVM_VERSION >= 36) && !(WITH_NATIVE_CLIENT)
+#if LLVM_VERSION >= 36
 typedef llvm::Metadata *LLVMMDNodeArgumentType;
 inline llvm::Metadata *value_as_metadata_type(llvm::Value *val) { return llvm::ValueAsMetadata::get(val); }
 #else

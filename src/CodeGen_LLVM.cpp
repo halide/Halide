@@ -436,7 +436,7 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    const std::vector<Argument> &args = f.args;
+    const std::vector<LoweredArgument> &args = f.args;
 
     if (f.linkage == LoweredFunc::External &&
         target.has_feature(Target::CPlusPlusMangling) &&
@@ -534,7 +534,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
 
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
-                              const std::string& extern_name, const std::vector<Argument>& args) {
+                              const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -574,12 +574,16 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
                 push_buffer(args[i].name, &arg);
             }
 
+            if (args[i].alignment.modulus != 0) {
+                alignment_info.push(args[i].name, args[i].alignment);
+            }
+
             i++;
         }
     }
 }
 
-void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
+void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     return_with_error_code(ConstantInt::get(i32, 0));
 
     // Remove the arguments from the symbol table
@@ -587,6 +591,10 @@ void CodeGen_LLVM::end_func(const std::vector<Argument>& args) {
         sym_pop(args[i].name);
         if (args[i].is_buffer()) {
             pop_buffer(args[i].name);
+        }
+
+        if (args[i].alignment.modulus != 0) {
+            alignment_info.pop(args[i].name);
         }
     }
 
@@ -814,7 +822,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<Argument> &args) {
+        const std::string &function_name, const std::vector<LoweredArgument> &args) {
     Constant *zero = ConstantInt::get(i32, 0);
 
     const int num_args = (int) args.size();
@@ -912,6 +920,10 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
+    // The optimization passes inject intrinsics that aren't legal for
+    // PNaCl. (e.g. vectorized floor).
+    if (target.arch == Target::PNaCl) return;
+
     if (debug::debug_level >= 3) {
         module->dump();
     }
@@ -929,7 +941,7 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.add(new DataLayoutPass());
     #endif
 
-    #if (LLVM_VERSION >= 37)
+    #if (LLVM_VERSION >= 37) && !WITH_NATIVE_CLIENT
     std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
@@ -1761,7 +1773,8 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < load_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, load_lanes - i);
                 Expr slice_base = simplify(ramp->base + i);
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, 1, slice_lanes);
+                Expr slice_stride = make_one(slice_base.type());
+                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
                 llvm::Type *slice_type = VectorType::get(llvm_type_of(op->type.element_of()), slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
@@ -1774,6 +1787,8 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
+            Expr stride_a = make_one(base_a.type());
+            Expr stride_b = make_one(base_b.type());
 
             // False indicates we should take the even-numbered lanes
             // from the load, true indicates we should take the
@@ -1801,8 +1816,8 @@ void CodeGen_LLVM::visit(const Load *op) {
             }
 
             // Do each load.
-            Expr ramp_a = Ramp::make(base_a, 1, ramp->lanes);
-            Expr ramp_b = Ramp::make(base_b, 1, ramp->lanes);
+            Expr ramp_a = Ramp::make(base_a, stride_a, ramp->lanes);
+            Expr ramp_b = Ramp::make(base_b, stride_b, ramp->lanes);
             Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param);
             Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param);
             Value *vec_a = codegen(load_a);
@@ -1821,7 +1836,8 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
-            Expr flipped_index = Ramp::make(flipped_base, 1, ramp->lanes);
+            Expr flipped_stride = make_one(flipped_base.type());
+            Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
             Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param);
 
             Value *flipped = codegen(flipped_load);
@@ -2614,6 +2630,149 @@ void CodeGen_LLVM::visit(const Call *op) {
             f->setCallingConv(CallingConv::C);
         }
         register_destructor(f, codegen(arg), Always);
+    } else if (op->is_intrinsic(Call::call_cached_indirect_function)) {
+        // Arguments to call_cached_indirect_function are of the form
+        //
+        //    cond_1, "sub_function_name_1",
+        //    cond_2, "sub_function_name_2",
+        //    ...
+        //    cond_N, "sub_function_name_N"
+        //
+        // This will generate code that corresponds (roughly) to
+        //
+        //    static FunctionPtr f = []{
+        //      if (cond_1) return sub_function_name_1;
+        //      if (cond_2) return sub_function_name_2;
+        //      ...
+        //      if (cond_N) return sub_function_name_N;
+        //    }
+        //    return f(args)
+        //
+        // i.e.: the conditions will be evaluated *in order*; the first one
+        // evaluating to true will have its corresponding function cached,
+        // which will be used to complete this (and all subsequent) calls.
+        //
+        // The final condition (cond_N) must evaluate to a constant TRUE
+        // value (so that the final function will be selected if all others
+        // fail); failure to do so will cause unpredictable results.
+        //
+        // There is currently no way to clear the cached function pointer.
+        //
+        // It is assumed/required that all of the conditions are "pure"; each
+        // must evaluate to the same value (within a given runtime environment)
+        // across multiple evaluations.
+        //
+        // It is assumed/required that all of the sub-functions have arguments
+        // (and return values) that are identical to those of this->function.
+        //
+        // Note that we require >= 4 arguments: fewer would imply
+        // only one condition+function pair, which is pointless to use
+        // (the function should always be called directly).
+        //
+        internal_assert(op->args.size() >= 4);
+        internal_assert(!(op->args.size() & 1));
+
+        // Gather information we need about each function.
+        struct SubFn {
+            llvm::Function *fn;
+            llvm::GlobalValue *fn_ptr;
+            Expr cond;
+        };
+        vector<SubFn> sub_fns;
+        for (size_t i = 0; i < op->args.size(); i += 2) {
+            const string sub_fn_name = op->args[i+1].as<StringImm>()->value;
+            llvm::Function *sub_fn = module->getFunction(sub_fn_name);
+            if (!sub_fn) {
+                debug(1) << "Did not find function " << sub_fn_name << ", assuming extern \"C\".\n";
+                vector<llvm::Type *> arg_types;
+                for (const auto &arg : function->args()) {
+                     arg_types.push_back(arg.getType());
+                }
+                llvm::Type *result_type = llvm_type_of(op->type);
+                FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+                sub_fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
+                                                sub_fn_name, module.get());
+                sub_fn->setCallingConv(CallingConv::C);
+            }
+
+            llvm::GlobalValue *sub_fn_ptr = module->getNamedValue(sub_fn_name);
+            if (!sub_fn_ptr) {
+                debug(1) << "Did not find function ptr " << sub_fn_name << ", assuming extern \"C\".\n";
+                sub_fn_ptr = new GlobalVariable(*module, sub_fn->getType(),
+                                                /*isConstant*/ true, GlobalValue::ExternalLinkage,
+                                                /*initializer*/ nullptr, sub_fn_name);
+            }
+            auto cond = op->args[i];
+            sub_fns.push_back({sub_fn, sub_fn_ptr, cond});
+        }
+
+        // Create a null-initialized global to track this object.
+        const auto base_fn = sub_fns.back().fn;
+        const string global_name = unique_name(base_fn->getName().str() + "_indirect_fn_ptr");
+        GlobalVariable *global = new GlobalVariable(
+            *module,
+            base_fn->getType(),
+            /*isConstant*/ false,
+            GlobalValue::PrivateLinkage,
+            ConstantPointerNull::get(base_fn->getType()),
+            global_name);
+        LoadInst *loaded_value = builder->CreateLoad(global);
+
+        BasicBlock *global_inited_bb = BasicBlock::Create(*context, "global_inited_bb", function);
+        BasicBlock *global_not_inited_bb = BasicBlock::Create(*context, "global_not_inited_bb", function);
+        BasicBlock *call_fn_bb = BasicBlock::Create(*context, "call_fn_bb", function);
+
+        // Only init the global if not already inited.
+        //
+        // Note that we deliberately do not attempt to make this threadsafe via (e.g.) mutexes;
+        // the requirements of the conditions above mean that multiple writes *should* only
+        // be able to re-write the same value, which is harmless for our purposes, and
+        // avoiding such code simplifies and speeds the resulting code.
+        //
+        // (Note that if we ever need to add a way to clear the cached function pointer,
+        // we may need to reconsider this, to avoid amusingly horrible race conditions.)
+        builder->CreateCondBr(builder->CreateIsNotNull(loaded_value),
+            global_inited_bb, global_not_inited_bb, very_likely_branch);
+
+        // Build the not-already-inited case
+        builder->SetInsertPoint(global_not_inited_bb);
+        llvm::Value *selected_value = nullptr;
+        for (int i = sub_fns.size() - 1; i >= 0; i--) {
+            const auto sub_fn = sub_fns[i];
+            if (!selected_value) {
+                selected_value = sub_fn.fn_ptr;
+            } else {
+                selected_value = builder->CreateSelect(codegen(sub_fn.cond),
+                                                       sub_fn.fn_ptr, selected_value);
+            }
+        }
+        builder->CreateStore(selected_value, global);
+        builder->CreateBr(call_fn_bb);
+
+        // Just an incoming edge for the Phi node
+        builder->SetInsertPoint(global_inited_bb);
+        builder->CreateBr(call_fn_bb);
+
+        builder->SetInsertPoint(call_fn_bb);
+        PHINode *phi = builder->CreatePHI(selected_value->getType(), 2);
+        phi->addIncoming(selected_value, global_not_inited_bb);
+        phi->addIncoming(loaded_value, global_inited_bb);
+
+        std::vector<llvm::Value *> call_args;
+        for (auto &arg : function->args()) {
+             call_args.push_back(&arg);
+        }
+
+#if LLVM_VERSION >= 37 && !WITH_NATIVE_CLIENT
+        llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
+#else
+        llvm::CallInst *call = builder->CreateCall(phi, call_args);
+#endif
+        value = call;
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        user_error << "Signed integer overflow occurred during constant-folding. Signed"
+            " integer overflow for int32 and int64 is undefined behavior in"
+            " Halide.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
@@ -3105,7 +3264,8 @@ void CodeGen_LLVM::visit(const Store *op) {
             for (int i = 0; i < store_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, store_lanes - i);
                 Expr slice_base = simplify(ramp->base + i);
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, 1, slice_lanes);
+                Expr slice_stride = make_one(slice_base.type());
+                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());

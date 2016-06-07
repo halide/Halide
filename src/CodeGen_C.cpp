@@ -130,18 +130,6 @@ const string globals =
     " u.as_uint = bits;\n"
     " return u.as_float;\n"
     "}\n"
-    "inline int64_t make_int64(int32_t hi, int32_t lo) {\n"
-    "    return (((int64_t)hi) << 32) | (uint32_t)lo;\n"
-    "}\n"
-    "inline double make_float64(int32_t i0, int32_t i1) {\n"
-    "    union {\n"
-    "        int32_t as_int32[2];\n"
-    "        double as_double;\n"
-    "    } u;\n"
-    "    u.as_int32[0] = i0;\n"
-    "    u.as_int32[1] = i1;\n"
-    "    return u.as_double;\n"
-    "}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
@@ -370,7 +358,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 name = extract_namespaces(op->name, namespaces);
-                for (auto const &ns : namespaces) {
+                for (const auto &ns : namespaces) {
                     stream << "namespace " << ns << " { ";
                 }
                 namespace_count = namespaces.size();
@@ -455,7 +443,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         << "Function '" << f.name << "'  has already been emitted.\n";
     emitted.insert(f.name);
 
-    const std::vector<Argument> &args = f.args;
+    const std::vector<LoweredArgument> &args = f.args;
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].type.handle_type != NULL) {
@@ -1195,6 +1183,10 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        user_error << "Signed integer overflow occurred during constant-folding. Signed"
+            " integer overflow for int32 and int64 is undefined behavior in"
+            " Halide.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics
@@ -1531,15 +1523,11 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
-    Argument float_arg("alpha", Argument::InputScalar, Float(32), 0);
-    Argument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    Argument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
-    vector<Argument> args(4);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;
-    args[3] = user_context_arg;
+    LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
+    LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
+    LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
+    vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");

@@ -424,11 +424,12 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
-        make_int64,
-        make_float64,
+        likely_if_innermost,
         register_destructor,
         div_round_to_zero,
-        mod_round_to_zero;
+        mod_round_to_zero,
+        call_cached_indirect_function,
+        signed_integer_overflow;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference

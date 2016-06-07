@@ -4,7 +4,7 @@ export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
 make process_viz && \
 ./process_viz ../images/rgb_small.png 4 1 1 0 out_small.png | \
-../../bin/HalideTraceViz -t 3000 \
+../../bin/HalideTraceViz -s 1920 1080 -t 3000 \
 -f input           0 65535 2 0 1 1     30 100 1 0 0 1 0 0 \
 -l input "input" 30 32 10 \
 -f gray            0 1    -1 0 1 5    370 100 1 0 0 1 \

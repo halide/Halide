@@ -1,10 +1,6 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifndef _MSC_VER
-#include <unistd.h>
-#endif
-
 using namespace Halide;
 
 
@@ -32,19 +28,21 @@ int main(int argc, char **argv) {
     };
 
     for (const std::string &t : targets) {
-        Target target = parse_target_string(t);
+        Target target(t);
         if (!target.supported()) continue;
         f.compile_to_file("test_object_" + t, std::vector<Argument>(), target);
+        f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), target);
 
-        #ifndef _MSC_VER
         std::string object_name = "test_object_" + t;
+        std::string lib_name = "test_lib_" + t;
         if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
             object_name += ".obj";
+            lib_name += ".lib";
         } else {
             object_name += ".o";
+            lib_name += ".a";
         }
-        assert(access(object_name.c_str(), F_OK) == 0 && "Output file not created.");
-        #endif
+        assert(Internal::file_exists(object_name) && "Output file not created.");
     }
 
     printf("Success!\n");

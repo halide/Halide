@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
         bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
     }
 
-    bilateral_grid.compile_to_file("bilateral_grid", {r_sigma, input}, target);
+    bilateral_grid.compile_to_static_library("bilateral_grid", {r_sigma, input}, target);
 
     return 0;
 }

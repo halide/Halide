@@ -98,11 +98,39 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 /** Replace all matches of the second string in the first string with the last string */
 EXPORT std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
 
-/** Return the final token of the name string using the given delimiter. */
-EXPORT std::string base_name(const std::string &name, char delim = '.');
-
 /** Split the source string using 'delim' as the divider. */
 EXPORT std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+
+/** Perform a left fold of a vector. Returns a default-constructed
+ * vector element if the vector is empty. Similar to std::accumulate
+ * but with a less clunky syntax. */
+template<typename T, typename Fn>
+T fold_left(const std::vector<T> &vec, Fn f) {
+    T result;
+    if (vec.empty()) {
+        return result;
+    }
+    result = vec[0];
+    for (size_t i = 1; i < vec.size(); i++) {
+        result = f(result, vec[i]);
+    }
+    return result;
+}
+
+/** Returns a right fold of a vector. Returns a default-constructed
+ * vector element if the vector is empty. */
+template<typename T, typename Fn>
+T fold_right(const std::vector<T> &vec, Fn f) {
+    T result;
+    if (vec.empty()) {
+        return result;
+    }
+    result = vec.back();
+    for (size_t i = vec.size()-1; i > 0; i--) {
+        result = f(vec[i-1], result);
+    }
+    return result;
+}
 
 template <typename T>
 inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
@@ -154,14 +182,53 @@ struct FileStat {
     uint32_t mode;
 };
 
+/** Create a unique file with a name of the form prefixXXXXXsuffix in an arbitrary
+ * (but writable) directory; this is typically /tmp, but the specific
+ * location is not guaranteed. (Note that the exact form of the file name
+ * may vary; in particular, the suffix may be ignored on Windows.)
+ * The file is created (but not opened), thus this can be called from
+ * different threads (or processes, e.g. when building with parallel make)
+ * without risking collision. Note that if this file is used as a temporary
+ * file, the caller is responsibly for deleting it. Neither the prefix nor suffix
+ * may contain a directory separator.
+ */
+std::string file_make_temp(const std::string &prefix, const std::string &suffix);
+
 /** Wrapper for access(). Asserts upon error. */
-bool file_exists(const std::string &name);
+EXPORT bool file_exists(const std::string &name);
 
 /** Wrapper for unlink(). Asserts upon error. */
-void file_unlink(const std::string &name);
+EXPORT void file_unlink(const std::string &name);
 
 /** Wrapper for stat(). Asserts upon error. */
-FileStat file_stat(const std::string &name);
+EXPORT FileStat file_stat(const std::string &name);
+
+/** A simple utility class that creates a temporary file in its ctor and
+ * deletes that file in its dtor; this is useful for temporary files that you
+ * want to ensure are deleted when exiting a certain scope. Since this is essentially
+ * just an RAII wrapper around file_make_temp() and file_unlink(), it has the same
+ * failure modes (i.e.: assertion upon error).
+ */
+class TemporaryFile final {
+public:
+    TemporaryFile(const std::string &prefix, const std::string &suffix)
+        : temp_path(file_make_temp(prefix, suffix)) {}
+    const std::string &pathname() const { return temp_path; }
+    ~TemporaryFile() { file_unlink(temp_path); }
+private:
+    const std::string temp_path;
+    TemporaryFile(const TemporaryFile &) = delete;
+    void operator=(const TemporaryFile &) = delete;
+};
+
+/** Routines to test if math would overflow for signed integers with
+ * the given number of bits. */
+// @{
+bool add_would_overflow(int bits, int64_t a, int64_t b);
+bool sub_would_overflow(int bits, int64_t a, int64_t b);
+bool mul_would_overflow(int bits, int64_t a, int64_t b);
+// @}
+
 
 }
 }

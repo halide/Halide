@@ -85,6 +85,8 @@ protected:
     using CodeGen_C::visit;
 
     void visit(const FloatImm *);
+    void visit(const UIntImm *);
+    void visit(const IntImm *);
 
     void visit(const Cast *);
     void visit(const Let *);

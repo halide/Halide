@@ -1,5 +1,6 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "LLVM_Runtime_Linker.h"
 #include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -82,9 +83,9 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
     #if LLVM_VERSION == 37
-        llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
+    llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
     #else
-        llvm::DataLayout target_data_layout(target_machine->createDataLayout());
+    llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #endif
     if (!(target_data_layout == module.getDataLayout())) {
         internal_error << "Warning: module's data layout does not match target machine's\n"
@@ -128,6 +129,57 @@ void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOSt
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
     module.print(out, nullptr);
+}
+
+void create_static_library(const std::vector<std::string> &src_files, const Target &target,
+                    const std::string &dst_file, bool deterministic) {
+    internal_assert(!src_files.empty());
+#if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
+    std::vector<llvm::NewArchiveIterator> new_members;
+    for (auto &src : src_files) {
+#if LLVM_VERSION == 37
+        new_members.push_back(llvm::NewArchiveIterator(src, src));
+#else
+        new_members.push_back(llvm::NewArchiveIterator(src));
+#endif
+    }
+    const bool write_symtab = true;
+    const auto kind = Internal::get_triple_for_target(target).isOSDarwin()
+        ? llvm::object::Archive::K_BSD
+        : llvm::object::Archive::K_GNU;
+#if LLVM_VERSION == 37
+    auto result = llvm::writeArchive(dst_file, new_members,
+                       write_symtab, kind,
+                       deterministic);
+#elif LLVM_VERSION == 38
+    const bool thin = false;
+    auto result = llvm::writeArchive(dst_file, new_members,
+                       write_symtab, kind,
+                       deterministic, thin);
+#else
+    const bool thin = false;
+    auto result = llvm::writeArchive(dst_file, new_members,
+                       write_symtab, kind,
+                       deterministic, thin, nullptr);
+#endif
+    internal_assert(!result.second) << "Failed to write archive: " << dst_file
+        << ", reason: " << result.second << "\n";
+#else  // <= 3.6 or PNacl
+    // LLVM 3.6-and-earlier don't expose the right API. Halide no longer officially
+    // supports these versions, but we still do some build-and-testing on them
+    // as a way to improve pnacl-llvm coverage (since it's somewhere between 3.6 and 3.7),
+    // so as a stopgap measure to allow Makefiles to rely on static_library output,
+    // shell out to 'ar' to do the work. This will hopefully be short-lived as even
+    // limited support for pre-3.7 shouldn't need to live much longer.
+    // (Also note that we don't use the "deterministic" flag since not all ar implementations
+    // support it.)
+    std::string command = "ar qsv " + dst_file;
+    for (auto &src : src_files) {
+        command += " " + src;
+    }
+    int result = system(command.c_str());
+    internal_assert(result == 0) << "shelling out to ar failed.\n";
+#endif
 }
 
 }  // namespace Halide

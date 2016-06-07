@@ -15,7 +15,10 @@ int main(int argc, char **argv) {
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> output(input.width(), input.height(), 1);
 
-    pipeline(input, output);
+    if (pipeline(input, output) != 0) {
+        printf("Failure.\n");
+        return 1;
+    }
 
     save_image(output, argv[2]);
 
