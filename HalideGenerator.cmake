@@ -68,37 +68,31 @@ function(halide_add_generator_dependency)
   set(FILTER_LIB "${args_GENERATED_FUNCTION}${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${args_GENERATED_FUNCTION}.h")
 
-  set(invoke_args "-g" "${args_GENERATOR_NAME}" "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS})
-  set(generator_exec ${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX})
+  set(generator_exec_args 
+      "-g" "${args_GENERATOR_NAME}" 
+      "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" 
+      "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS}
+  )
+  if(MSVC)
+    # In MSVC, the generator executable will be placed in a configuration specific
+    # directory specified by ${CMAKE_CFG_INTDIR}.
+    set(generator_exec "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
+  elseif(XCODE)
+    # In Xcode, the generator executable will be placed in a configuration specific
+    # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom build script.
+    set(generator_exec "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
+  else()
+    set(generator_exec "${CMAKE_BINARY_DIR}/bin/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
+  endif()
 
   # Add a custom target to invoke the GENERATOR_TARGET and output the Halide
-  # generated library
-  if (MSVC)
-    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                              "${SCRATCH_DIR}/${args_GENERATED_FUNCTION}.lib"
-      DEPENDS "${args_GENERATOR_TARGET}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${generator_exec}" ${invoke_args}
-      COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${SCRATCH_DIR}\\${args_GENERATED_FUNCTION}.lib"
-      WORKING_DIRECTORY "${SCRATCH_DIR}"
-      )
-  elseif(XCODE)
-    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-      DEPENDS "${args_GENERATOR_TARGET}"
-
-      # The generator executable will be placed in a configuration specific
-      # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom
-      # build script.
-      COMMAND "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${generator_exec}" ${invoke_args}
-
-      WORKING_DIRECTORY "${SCRATCH_DIR}"
-      )
-  else()
-    add_custom_command(OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-      DEPENDS "${args_GENERATOR_TARGET}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/${generator_exec}" ${invoke_args}
-      WORKING_DIRECTORY "${SCRATCH_DIR}"
-      )
-  endif()
+  # generated library.
+  add_custom_command(
+    OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+    DEPENDS "${args_GENERATOR_TARGET}"
+    COMMAND "${generator_exec}" ${generator_exec_args}
+    WORKING_DIRECTORY "${SCRATCH_DIR}"
+  )
 
   # Use a custom target to force it to run the generator before the
   # object file for the runner. The target name will start with the prefix

@@ -64,7 +64,7 @@ public:
     }
 
     IRCompareCache() {}
-    IRCompareCache(int b) : bits(b), entries(1 << bits) {}
+    IRCompareCache(int b) : bits(b), entries(static_cast<size_t>(1) << bits) {}
 };
 
 /** A wrapper about Exprs so that they can be deeply compared with a
