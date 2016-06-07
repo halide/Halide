@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
         //        f.hexagon().vectorize(x, vector_size).parallel(y, 16);
-        f.hexagon().parallel(y, 16);
+        f.hexagon().vectorize(x, vector_size).parallel(y, 16);
     } else {
         const int vector_size = target.natural_vector_size<uint8_t>();
         f.vectorize(x, vector_size).parallel(y, 16);
