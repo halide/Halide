@@ -22,8 +22,8 @@ typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
 #define MAX_WORKER_THREADS 4
-#define NUM_WORKER_THREADS_TO_CREATE 3
-#define STACK_SIZE 4096
+#define NUM_WORKER_THREADS_TO_CREATE (MAX_WORKER_THREADS - 1)
+#define STACK_SIZE 256 * 1024
 
 static char stack [MAX_WORKER_THREADS][STACK_SIZE] __attribute__ ((__aligned__(128)));
 qurt_sem_t wait_for_work;
@@ -116,7 +116,6 @@ int halide_do_task(void *user_context, halide_task_t f, int idx,
 // thread doesn't find any new work, it goes to sleep until awoken by
 // the master thread.
 void goto_work(work *owned_job) {
-    int myjob;
     // You can work only if you get a lock on the work queue.
     unsigned int tid = qurt_thread_get_id();
     FARF(LOW, "HVX_TP: %d: goto_work: Trying to get a lock on the work queue\n", tid);
@@ -158,8 +157,7 @@ void goto_work(work *owned_job) {
                 work_queue.lock();
                 continue;
             } else {
-                myjob = job->next;
-                FARF(LOW, "HVX_TP: %d: goto_work: Found a job working on x = %d\n", tid, myjob);
+                FARF(LOW, "HVX_TP: %d: goto_work: Found a job working on x = %d\n", tid, job->next);
             }
         } else {
             // We are here only if this thread owns a job that is not done.
@@ -172,12 +170,11 @@ void goto_work(work *owned_job) {
                 // This thread should have the lock now after having been woken up.
                 break;
             } else {
-                myjob = owned_job->next;
                 job = owned_job;
                 FARF(LOW, "HVX_TP: %d: goto_work: Owner about to work\n", tid);
             }
         }
-        job->next++;
+        int myjob = job->next++;
         job->active_workers++;
 
         // If all tasks of the job have been claimed, then pop the job off the stack.
@@ -200,6 +197,10 @@ void goto_work(work *owned_job) {
         work_queue.lock();
         if (result) {
             job->exit_status = result;
+            job->next = job->end;
+            work_queue.jobs = job->next_job;
+            work_queue.shutdown = true;
+            FARF(LOW, "HVX_TP: %d: goto_work: halide_do_task returned nonzero result = %d\n", tid, result);
         }
         job->active_workers--;
         FARF(LOW, "HVX_TP: %d: goto_work: reduced number of active workers to %d\n", tid);
@@ -234,7 +235,7 @@ void create_threads(int num_threads) {
     for (int i = 0; i < num_threads; ++i) {
         qurt_thread_attr_init(&thread_attr);
         qurt_thread_attr_set_stack_addr(&thread_attr, stack[i]);
-        qurt_thread_attr_set_stack_size(&thread_attr, 1024);
+        qurt_thread_attr_set_stack_size(&thread_attr, STACK_SIZE);
         qurt_thread_attr_set_priority(&thread_attr, 100);
         qurt_thread_create(&threads[i], &thread_attr, thread_server, (void *)i);
     }
