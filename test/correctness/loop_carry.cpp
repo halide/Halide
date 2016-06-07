@@ -5,8 +5,7 @@
 using namespace Halide;
 
 void dump_asm(Func f) {
-    Target t;
-    t.from_string("host-no_runtime-no_asserts-no_bounds_query");
+    Target t("host-no_runtime-no_asserts-no_bounds_query");
     f.compile_to_assembly("/dev/stdout", {}, t);
 }
 
