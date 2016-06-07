@@ -18,6 +18,7 @@ extern "C" {
 extern int halide_qurt_hvx_lock(void *user_context, int size);
 extern int halide_qurt_hvx_unlock(void *user_context);
 extern void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/);
+extern void halide_qurt_hvx_lock_as_destructor(void *user_context, void *size /*obj*/);
 // @}
 
 #ifdef __cplusplus

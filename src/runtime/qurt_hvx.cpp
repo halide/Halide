@@ -14,6 +14,8 @@ enum qurt_hvx_mode_t {
 
 extern int qurt_hvx_lock(qurt_hvx_mode_t);
 extern int qurt_hvx_unlock();
+extern int qurt_hvx_get_lock_val();
+extern int qurt_thread_get_id();
 
 WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
     qurt_hvx_mode_t mode;
@@ -24,15 +26,15 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
         error(user_context) << "HVX lock size must be 64 or 128.\n";
         return -1;
     }
-
-    debug(user_context) << "QuRT: qurt_hvx_lock(" << mode << ") ->\n";
+    int tid = qurt_thread_get_id();
+    debug(user_context) << "QuRT:" << tid << ": qurt_hvx_lock(" << mode << ") ->\n";
     int result = qurt_hvx_lock(mode);
-    debug(user_context) << "        " << result << "\n";
+    debug(user_context) << tid << ": result was        " << result << "\n";
     if (result != QURT_EOK) {
-        error(user_context) << "qurt_hvx_lock failed\n";
-        return -1;
+        error(user_context) << "qurt_hvx_lock failed, result = " << result << "\n";
+            return -1;
     }
-
+    debug(user_context) << tid << ": Returning 0 from qurt_hvx_lock\n";
     return 0;
 }
 
@@ -50,6 +52,10 @@ WEAK int halide_qurt_hvx_unlock(void *user_context) {
 
 WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/) {
     halide_qurt_hvx_unlock(user_context);
+}
+WEAK void halide_qurt_hvx_lock_as_destructor(void *user_context, void *size) {
+    long int sz = (long) size;
+    halide_qurt_hvx_lock(user_context, sz);
 }
 
 }
