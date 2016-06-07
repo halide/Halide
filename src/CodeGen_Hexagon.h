@@ -7,16 +7,16 @@
 
 #ifdef WITH_HEXAGON
 
+#if LLVM_VERSION < 39
+#error "Hexagon target requires LLVM version 3.9 or later."
+#endif
+
 #include "CodeGen_Posix.h"
 
 namespace llvm {
 namespace Intrinsic {
 
-#if LLVM_VERSION >= 39
 enum ID : unsigned;
-#else
-enum ID;
-#endif
 
 }
 }
