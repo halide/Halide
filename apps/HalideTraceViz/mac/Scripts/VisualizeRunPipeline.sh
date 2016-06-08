@@ -84,9 +84,9 @@ function VisualizeFunctions()
 {
     echo "${FUNCNAME[0]}"
 
-    local NIBLANK=0
-    local NIZOOM=8
-    local NICOST=1
+    local BLANK=0
+    local ZOOM=8
+    local COST=1
 
     local STRIDE0="1 0"
     local STRIDE1="0 1"
@@ -104,9 +104,10 @@ function VisualizeFunctions()
     -l input Input 2 24 1 \
     -l output Onput 516 24 1 \
 \
-    -f input 0 127 -1 $NIBLANK $NIZOOM $NICOST 0 26 $STRIDE0 $STRIDE1 \
-    -f output 1 128 -1 $NIBLANK $NIZOOM $NICOST 516 26 $STRIDE0 $STRIDE1 | \
-    ../../../components/ffmpeg/ffmpeg -r 30 -f rawvideo -pix_fmt bgra -s 1290X1024  -i - -y -pix_fmt yuv420p ../../movies/Brighten_schedule.mp4
+    -f input 0 127 -1 $BLANK $ZOOM $COST 0 26 $STRIDE0 $STRIDE1 \
+    -f output 1 128 -1 $BLANK $ZOOM $COST 516 26 $STRIDE0 $STRIDE1 | \
+    ../../../components/ffmpeg/ffmpeg -r 30 -f rawvideo -pix_fmt bgra \
+    -s 1290X1024  -i - -y -pix_fmt yuv420p ../../movies/Brighten_schedule.mp4
 
     cd $CURRENT_PATH
 }
