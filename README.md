@@ -379,13 +379,14 @@ LLVM 3.9 is currently under development. These are the same instructions as abov
 
 #### 2.       Download and install the Hexagon SDK and version 8.0 Hexagon Tools
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
-1)      Select the Hexagon Series 600 Software and download the 3.0 version for Linux.
-2)      untar the installer
-3)      Run the extracted installer to install the Hexagon SDK and Hexagon Tools, selecting
+  1. Select the Hexagon Series 600 Software and download the 3.0 version for Linux.
+  2. Un-tar the installer
+  3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools, selecting
 Installation of  Hexagon SDK into /location/of/SDK/Hexagon_SDK/3.0
 and the Hexagon tools into /location/of/SDK/Hexagon_Tools/8.0
-4)     Set an environment variable to point to the SDK installation location
-	export SDK_LOC=/location/of/SDK
+  4. Set an environment variable to point to the SDK installation location
+
+    export SDK_LOC=/location/of/SDK
 
 #### 3.       Build and run an example for Hexagon HVX
 In addition to running Hexagon code on device, Halide also supports running Hexagon code on the simulator from the Hexagon tools.
