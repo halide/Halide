@@ -9,6 +9,7 @@
 #include "IROperator.h"
 #include "IREquality.h"
 #include "ExprUsesVar.h"
+#include "Solve.h"
 
 namespace Halide {
 namespace Internal {
@@ -429,6 +430,19 @@ class VectorizeLoops : public IRMutator {
                 // multiple copies of the if statement.
                 debug(3) << "Scalarizing if then else\n";
                 stmt = scalarize(op);
+
+                // If the condition is likely, we should generate an all-true case.
+                const Call *c = cond.as<Call>();
+                if (c && (c->is_intrinsic(Call::likely) ||
+                          c->is_intrinsic(Call::likely_if_innermost))) {
+                    Expr all_true = const_true();
+                    for (int i = 0; i < lanes; i++) {
+                        all_true = all_true && extract_lane(c->args[0], i);
+                    }
+                    stmt =
+                        IfThenElse::make(Call::make(Bool(), c->name, {all_true}, Call::PureIntrinsic),
+                                         mutate(op->then_case), stmt);
+                }
             } else {
                 // It's an if statement on a scalar, we're ok to vectorize the innards.
                 debug(3) << "Not scalarizing if then else\n";
