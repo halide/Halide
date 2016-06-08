@@ -199,7 +199,6 @@ void goto_work(work *owned_job) {
             job->exit_status = result;
             job->next = job->end;
             work_queue.jobs = job->next_job;
-            work_queue.shutdown = true;
             FARF(LOW, "HVX_TP: %d: goto_work: halide_do_task returned nonzero result = %d\n", tid, result);
         }
         job->active_workers--;
