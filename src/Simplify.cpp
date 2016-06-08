@@ -3315,6 +3315,18 @@ private:
             } else {
                 expr = Call::make(op->type, op->name, new_args, op->call_type);
             }
+        } else if (op->is_intrinsic(Call::shuffle_vector) &&
+                   op->args.size() == 2 &&
+                   (op->args[0].as<Ramp>() ||
+                    op->args[0].as<Broadcast>())) {
+            // Extracting a single lane of a ramp or broadcast
+            if (const Ramp *r = op->args[0].as<Ramp>()) {
+                expr = mutate(r->base + op->args[1]*r->stride);
+            } else if (const Broadcast *b = op->args[0].as<Broadcast>()) {
+                expr = mutate(b->value);
+            } else {
+                internal_error << "Unreachable";
+            }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
