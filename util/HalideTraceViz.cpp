@@ -621,8 +621,8 @@ int run(int argc, char **argv) {
                     }
 
                     // Stores are orange, loads are blue.
-                    uint32_t color = p.event == 0 ? 0xffffdd44 : 0xff44ddff;
-
+                    const auto color = p.event == 0 ? 0xff44ddff : 0xffffdd44;
+                    
                     uint32_t image_color;
                     bool update_image = false;
 
