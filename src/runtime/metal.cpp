@@ -206,15 +206,23 @@ extern "C" {
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
-// - halide_acquire_cl_context should always store a valid context/command
-//   queue in ctx/q, or return an error code.
-// - A call to halide_acquire_cl_context is followed by a matching call to
-//   halide_release_cl_context. halide_acquire_cl_context should block while a
-//   previous call (if any) has not yet been released via halide_release_cl_context.
+// - halide_acquire_metal_context should always store a valid device/command
+//   queue in device/q, or return an error code.
+// - A call to halide_acquire_metal_context is followed by a matching call to
+//   halide_release_metal_context. halide_acquire_metal_context should block while a
+//   previous call (if any) has not yet been released via halide_release_metal_context.
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
                                       mtl_command_queue *&queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+
+    // If the device/q is not initialized, and we're not supposed to
+    // create one, just return.
+    if (!create && device == 0) {
+      device_ret = 0;
+      queue_ret = 0;
+      return 0;
+    }
 
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
@@ -239,7 +247,8 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
         }
     }
 
-    // If the context has not been initialized, initialize it now.
+    // If the device has already been initialized,
+    // ensure the queue has as well.
     halide_assert(user_context, queue != 0);
 
     device_ret = device;
