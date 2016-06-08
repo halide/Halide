@@ -23,7 +23,7 @@ using std::pair;
 using std::make_pair;
 
 // Utility functions
-int get_extent(const Interval &i) {
+int get_extent(const Interval& i) {
   if ((i.min.as<IntImm>()) && (i.max.as<IntImm>())) {
     const IntImm * bmin = i.min.as<IntImm>();
     const IntImm * bmax = i.max.as<IntImm>();
@@ -42,7 +42,7 @@ int get_extent(const Interval &i) {
   return -1;
 }
 
-int64_t box_area(Box &b) {
+int64_t box_area(Box& b) {
   int64_t box_area = 1;
   for(size_t i = 0; i < b.size(); i++) {
     // Maybe should check for unsigned integers and floats too
@@ -59,7 +59,7 @@ int64_t box_area(Box &b) {
   return box_area;
 }
 
-void set_schedule_defaults(map<string, Function> &env) {
+void set_schedule_defaults(map<string, Function>& env) {
   // Changing the default to compute root.
 
   // TODO: This ignores existing schedules specified by
@@ -95,10 +95,10 @@ void set_schedule_defaults(map<string, Function> &env) {
   }
 }
 
-bool check_estimates_on_outputs(const vector<Function> &outputs) {
+bool check_estimates_on_outputs(const vector<Function>& outputs) {
   bool estimates_avail = true;
-  for (auto &out : outputs) {
-    const vector<Bound> &estimates = out.schedule().estimates();
+  for (auto& out : outputs) {
+    const vector<Bound>& estimates = out.schedule().estimates();
     if (estimates.size() != out.args().size()) {
       estimates_avail = false;
       break;
@@ -246,8 +246,8 @@ struct AbstractCost {
     return make_pair(cost_visitor.ops, cost_visitor.loads);
   }
 
-  // TODO: Fix this for reductions
-  int64_t region_cost(string func, Box &region) {
+  int64_t region_cost(string func, Box& region,
+                      const set<string>& inlines = set<string>()) {
 
     int64_t area = box_area(region);
     if (area < 0) {
@@ -262,10 +262,11 @@ struct AbstractCost {
     return cost;
   }
 
-  int64_t region_cost(map<string, Box> &regions) {
+  int64_t region_cost(map<string, Box>& regions,
+                      const set<string>& inlines = set<string>()) {
 
     int64_t total_cost = 0;
-    for(auto &f: regions) {
+    for(auto& f: regions) {
       int64_t cost = region_cost(f.first, f.second);
       if (cost < 0) {
         return -1;
@@ -277,12 +278,12 @@ struct AbstractCost {
     return total_cost;
   }
 
-  pair<int64_t, int64_t> get_func_cost(const Function &f) {
+  pair<int64_t, int64_t> get_func_cost(const Function& f) {
 
     int64_t total_ops = 1;
     int64_t total_loads = 0;
     // TODO: revist how boundary conditions are handled
-    for (auto &e: f.values()) {
+    for (auto& e: f.values()) {
       ExprCost cost_visitor;
       e.accept(&cost_visitor);
       total_ops += cost_visitor.ops;
@@ -294,18 +295,18 @@ struct AbstractCost {
     // update definition is evaluated to compute each value of
     // the function.
     if (!f.is_pure()) {
-      for (const Definition &u: f.updates()) {
+      for (const Definition& u: f.updates()) {
 
         int64_t ops = 1;
         int64_t loads = 0;
-        for (auto &e: u.values()) {
+        for (auto& e: u.values()) {
           ExprCost cost_visitor;
           e.accept(&cost_visitor);
           ops += cost_visitor.ops;
           loads += cost_visitor.loads;
         }
 
-        for (auto &arg: u.args()) {
+        for (auto& arg: u.args()) {
           ExprCost cost_visitor;
           arg.accept(&cost_visitor);
           ops += cost_visitor.ops;
@@ -314,7 +315,7 @@ struct AbstractCost {
 
         if (u.domain().defined()) {
           Box b;
-          for (auto &rvar: u.domain().domain()) {
+          for (auto& rvar: u.domain().domain()) {
             b.push_back(Interval(simplify(rvar.min),
                                  simplify(rvar.min + rvar.extent - 1)));
           }
@@ -334,7 +335,7 @@ struct AbstractCost {
     return make_pair(total_ops, total_loads);
   }
 
-  AbstractCost(const map<string, Function> &env) {
+  AbstractCost(const map<string, Function>& env) {
     for (auto& kv : env) {
       func_cost[kv.first] = get_func_cost(kv.second);
     }
@@ -343,13 +344,13 @@ struct AbstractCost {
 
 struct DependenceAnalysis {
 
-  const map<string, Function> &env;
-  const FuncValueBounds &func_val_bounds;
+  const map<string, Function>& env;
+  const FuncValueBounds& func_val_bounds;
 
   // TODO: Build a cache for bounds queries
 
-  DependenceAnalysis(map<string, Function> &_env,
-                     const FuncValueBounds &_func_val_bounds):
+  DependenceAnalysis(map<string, Function>& _env,
+                     const FuncValueBounds& _func_val_bounds):
                      env(_env), func_val_bounds(_func_val_bounds) {}
 
   void simplify_box(Box& b) {
@@ -362,7 +363,7 @@ struct DependenceAnalysis {
   /* Compute the regions of producers required to compute a region of the function
      'f' given concrete sizes of the tile in each dimension. */
   map<string, Box> regions_required(Function f,
-                                    const vector<Interval> &conc_bounds) {
+                                    const vector<Interval>& conc_bounds) {
 
     map<string, Box> regions;
     // Add the function and its region to the queue
@@ -376,7 +377,7 @@ struct DependenceAnalysis {
       vector<Interval> curr_bounds = f_queue.front().second;
       f_queue.pop_front();
 
-      for (auto &val: curr_f.values()) {
+      for (auto& val: curr_f.values()) {
         map<string, Box> curr_regions;
         Scope<Interval> curr_scope;
         int interval_index = 0;
@@ -404,14 +405,14 @@ struct DependenceAnalysis {
       }
 
       // TODO: Check if this handling of updates is correct
-      for (auto &update: curr_f.updates()) {
-        for (auto &val: update.values()) {
+      for (auto& update: curr_f.updates()) {
+        for (auto& val: update.values()) {
           map<string, Box> curr_regions;
           Scope<Interval> curr_scope;
           int interval_index = 0;
           vector<Expr> exprs;
           exprs.push_back(val);
-          for (auto &arg: update.args()) {
+          for (auto& arg: update.args()) {
             Interval simple_bounds = Interval(simplify(curr_bounds[interval_index].min),
                                               simplify(curr_bounds[interval_index].max));
             // Check for a pure variable
@@ -427,14 +428,14 @@ struct DependenceAnalysis {
           }
 
           if (update.domain().defined()) {
-            for (auto &rvar: update.domain().domain()) {
+            for (auto& rvar: update.domain().domain()) {
               Interval simple_bounds = Interval(rvar.min,
                                                 rvar.min + rvar.extent - 1);
               curr_scope.push(rvar.var, simple_bounds);
             }
           }
 
-          for (auto &e: exprs) {
+          for (auto& e: exprs) {
             curr_regions = boxes_required(e, curr_scope, func_val_bounds);
             for (auto& reg: curr_regions) {
               // Merge region with an existing region for the function in
@@ -458,7 +459,7 @@ struct DependenceAnalysis {
     // Simplify
     map<string, Box> concrete_regions;
 
-    for (auto &f_reg : regions) {
+    for (auto& f_reg : regions) {
       simplify_box(f_reg.second);
 
       Box concrete_box;
@@ -476,8 +477,8 @@ struct DependenceAnalysis {
         // Use the estimates if the lower and upper bounds cannot be
         // determined
         if (!lower.as<IntImm>() && in_env) {
-          const Function &curr_f = env.at(f_reg.first);
-          for (auto &b: curr_f.schedule().estimates()) {
+          const Function& curr_f = env.at(f_reg.first);
+          for (auto& b: curr_f.schedule().estimates()) {
             unsigned int num_pure_args = curr_f.args().size();
             if (i < num_pure_args && b.var == curr_f.args()[i])
               lower = Expr(b.min.as<IntImm>()->value);
@@ -485,8 +486,8 @@ struct DependenceAnalysis {
         }
 
         if (!upper.as<IntImm>() && in_env) {
-          const Function &curr_f = env.at(f_reg.first);
-          for (auto &b: curr_f.schedule().estimates()) {
+          const Function& curr_f = env.at(f_reg.first);
+          for (auto& b: curr_f.schedule().estimates()) {
             unsigned int num_pure_args = curr_f.args().size();
             if (i < num_pure_args && b.var == curr_f.args()[i]) {
               const IntImm * bmin = b.min.as<IntImm>();
@@ -507,7 +508,7 @@ struct DependenceAnalysis {
   /* Compute the redundant regions computed while computing a tile of the function
      'f' given sizes of the tile in each dimension. */
   map<string, Box> redundant_regions(Function f, int dir,
-                                     const vector<Interval> &conc_bounds) {
+                                     const vector<Interval>& conc_bounds) {
 
     map<string, Box> regions = regions_required(f, conc_bounds);
 
@@ -548,7 +549,7 @@ struct DependenceAnalysis {
       }
     }
     // Simplify
-    for (auto &f : overalps)
+    for (auto& f : overalps)
       simplify_box(f.second);
 
     return overalps;
@@ -556,12 +557,12 @@ struct DependenceAnalysis {
 
 
   map<string, Box>
-      concrete_dep_regions(string name, vector<Interval> &bounds) {
+      concrete_dep_regions(string name, vector<Interval>& bounds) {
         return regions_required(env.at(name), bounds);
       }
 
   vector< map<string, Box> >
-      concrete_overlap_regions(string name, vector<Interval> &bounds) {
+      concrete_overlap_regions(string name, vector<Interval>& bounds) {
 
         vector< map<string, Box> > conc_overlaps;
         size_t num_args = env.at(name).args().size();
@@ -575,7 +576,7 @@ struct DependenceAnalysis {
       }
 };
 
-void disp_regions(map<string, Box> &regions) {
+void disp_regions(map<string, Box>& regions) {
     for (auto& reg: regions) {
         debug(0) << reg.first;
         debug(0) << reg.second;
@@ -583,15 +584,15 @@ void disp_regions(map<string, Box> &regions) {
     }
 }
 
-map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
-                                     const vector<Function> &outputs) {
+map<string, Box> get_pipeline_bounds(DependenceAnalysis& analy,
+                                     const vector<Function>& outputs) {
   map<string, Box> pipeline_bounds;
 
-  for (auto &out: outputs) {
+  for (auto& out: outputs) {
     vector<Interval> bounds;
     vector<string> vars = out.args();
     for (size_t i = 0; i < vars.size(); i++) {
-      for (auto &b: out.schedule().estimates())
+      for (auto& b: out.schedule().estimates())
         if (b.var == vars[i]) {
           Interval I = Interval(b.min, simplify(b.min + b.extent - 1));
           bounds.push_back(I);
@@ -648,7 +649,7 @@ struct Partitioner {
                           << choice.cons_group << '\n';
 
       stream << "Tile sizes:" << "[";
-      for (auto &s: choice.tile_sizes) {
+      for (auto& s: choice.tile_sizes) {
         stream << "(" << s.first << "," <<  s.second << ")";
       }
       stream << "]" << '\n';
@@ -684,19 +685,19 @@ struct Partitioner {
 
       stream << "Output:" << g.output << '\n';
       stream << "Memebers:" << '[';
-      for (auto &m: g.members) {
+      for (auto& m: g.members) {
         stream << m.name() << ",";
       }
       stream << "]" << '\n';
 
       stream << "Inlined:" << '[';
-      for (auto &in: g.inlined) {
+      for (auto& in: g.inlined) {
         stream << in << ",";
       }
       stream << "]" << '\n';
 
       stream << "Tile sizes:" << "[";
-      for (auto &s: g.tile_sizes) {
+      for (auto& s: g.tile_sizes) {
         stream << "(" << s.first << "," <<  s.second << ")";
       }
       stream << "]" << '\n';
@@ -719,19 +720,19 @@ struct Partitioner {
   // Levels that are targetted by the grouping algorithm
   enum Level {INLINE, FAST_MEM};
 
-  map<string, Box> &pipeline_bounds;
-  MachineParams &arch_params;
-  DependenceAnalysis &analy;
-  //map<string, pair<long long, long long> > &func_cost;
-  const vector<Function> &outputs;
+  map<string, Box>& pipeline_bounds;
+  MachineParams& arch_params;
+  DependenceAnalysis& analy;
+  //map<string, pair<long long, long long> >& func_cost;
+  const vector<Function>& outputs;
 
   //map<string, float > input_reuse;
 
   map<string, set<string> > children;
-  void disp_children(map<string, set<string> > &children) {
-    for (auto &f: children) {
+  void disp_children(map<string, set<string> >& children) {
+    for (auto& f: children) {
       debug(0) << f.first <<  ": [";
-      for (auto &c: f.second)
+      for (auto& c: f.second)
         debug(0) << c << ",";
       debug(0) << "]" << '\n';
     }
@@ -746,14 +747,14 @@ struct Partitioner {
 
   bool gpu_schedule;
 
-  Partitioner(map<string, Box> &_pipeline_bounds, MachineParams &_arch_params,
-              DependenceAnalysis &_analy, const vector<Function> &_outputs,
+  Partitioner(map<string, Box>& _pipeline_bounds, MachineParams& _arch_params,
+              DependenceAnalysis& _analy, const vector<Function>& _outputs,
               bool _gpu_schedule):
               pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
               analy(_analy), outputs(_outputs), gpu_schedule(_gpu_schedule) {
 
       // Place each function in its own group
-      for (auto &f: analy.env) {
+      for (auto& f: analy.env) {
         vector<Function> members;
         members.push_back(f.second);
         Group g(f.first, members);
@@ -761,9 +762,9 @@ struct Partitioner {
       }
 
       // Find consumers of each function relate groups with their children
-      for (auto &f: analy.env) {
+      for (auto& f: analy.env) {
         map<string, Function> calls = find_direct_calls(f.second);
-        for (auto &c: calls)
+        for (auto& c: calls)
           if (c.first != f.first)
             children[c.first].insert(f.first);
       }
@@ -778,7 +779,7 @@ struct Partitioner {
       // in the pipeline
     }
 
-  void merge_groups(FusionChoice &choice) {
+  void merge_groups(FusionChoice& choice) {
 
     string cand_group = choice.prod_group;
     string child_group = choice.cons_group;
@@ -788,7 +789,7 @@ struct Partitioner {
 
     groups.erase(cand_group);
 
-    vector<Function> &child_members = groups.at(child_group).members;
+    vector<Function>& child_members = groups.at(child_group).members;
     child_members.insert(child_members.end(),
                          cand_funcs.begin(), cand_funcs.end());
 
@@ -799,8 +800,8 @@ struct Partitioner {
 
     // Update the children mapping
     children.erase(cand_group);
-    for (auto &f: children) {
-      set<string> &cons = f.second;
+    for (auto& f: children) {
+      set<string>& cons = f.second;
       if (cons.find(cand_group) != cons.end()) {
         cons.erase(cand_group);
         cons.insert(child_group);
@@ -808,16 +809,16 @@ struct Partitioner {
     }
   }
 
-  void merge_group(InlineChoice &choice) {
+  void merge_group(InlineChoice& choice) {
 
     string cand_group = choice.prod_group;
 
     set<string> cand_group_children = children[cand_group];
-    for (auto &cg: cand_group_children) {
+    for (auto& cg: cand_group_children) {
       assert(groups.find(cg) != groups.end());
       vector<Function> cand_funcs = groups.at(cand_group).members;
 
-      vector<Function> &cg_members = groups.at(cg).members;
+      vector<Function>& cg_members = groups.at(cg).members;
       cg_members.insert(cg_members.end(),
                         cand_funcs.begin(), cand_funcs.end());
       // TODO: Look at all the members that need to be to be updated.
@@ -830,8 +831,8 @@ struct Partitioner {
 
     // Update the children mapping
     children.erase(cand_group);
-    for (auto &f: children) {
-      set<string> &cons = f.second;
+    for (auto& f: children) {
+      set<string>& cons = f.second;
       if (cons.find(cand_group) != cons.end()) {
         cons.erase(cand_group);
         cons.insert(cand_group_children.begin(),
@@ -848,36 +849,36 @@ struct Partitioner {
     }
   }
 
-  int64_t evaluate_choice(FusionChoice &choice);
-  int64_t evaluate_choice(InlineChoice &choice);
+  int64_t evaluate_choice(FusionChoice& choice);
+  int64_t evaluate_choice(InlineChoice& choice);
 
   Group fuse_groups(Group& g1, Group& g2);
 
-  GroupAnalysis analyze_group(const Group &g);
+  GroupAnalysis analyze_group(const Group& g);
   vector<Interval> get_bounds_from_tile_sizes(string func,
-                                              const map<string, int> &tile_sizes);
+                                              const map<string, int>& tile_sizes);
   void group(Partitioner::Level level);
   pair<vector<InlineChoice>, int64_t>
-      choose_candidate_fuse_inline(const vector< pair<string, string > > &cand_pairs);
+      choose_candidate_fuse_inline(const vector< pair<string, string > >& cand_pairs);
   pair<FusionChoice, int64_t>
-      choose_candidate_fuse_fast_mem(const vector< pair<string, string > > &cand_pairs);
-  map<string, int64_t> evaluate_reuse(string func, const set<string> &prod);
+      choose_candidate_fuse_fast_mem(const vector< pair<string, string > >& cand_pairs);
+  map<string, int64_t> evaluate_reuse(string func, const set<string>& prod);
 /*
-  Option choose_candidate(const vector< pair<string, string > > &cand_pairs);
+  Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
   void clear_schedules_fast_mem();
   void initialize_groups_fast_mem();
   void initialize_groups_inline();
   void update_function_costs();
   void tile_for_input_locality(bool init_pipeline_reuse = false);
-  vector<float> get_input_reuse(Function f, vector<string> &inputs);
+  vector<float> get_input_reuse(Function f, vector<string>& inputs);
 */
 };
 
 map<string, int64_t> Partitioner::evaluate_reuse(string func,
-                                                 const set<string> &prod) {
+                                                 const set<string>& prod) {
   map<string, int64_t> reuse;
   Function f = analy.env.at(func);
-  const vector<string> &args = f.args();
+  const vector<string>& args = f.args();
 
   map<string, int> tile_sizes;
   // TODO: Check if tile sizes of 1 in each dimension gives a reasonable
@@ -897,7 +898,7 @@ map<string, int64_t> Partitioner::evaluate_reuse(string func,
 
   for (size_t i = 0; i < args.size(); i++) {
     int64_t total_reuse = 0;
-    for (auto &reg: reuse_regions[i]) {
+    for (auto& reg: reuse_regions[i]) {
       // Discard all the regions not in procucer set
       if (prod.find(reg.first) == prod.end())
         continue;
@@ -917,17 +918,17 @@ map<string, int64_t> Partitioner::evaluate_reuse(string func,
 
 pair<vector<Partitioner::InlineChoice>, int64_t>
 Partitioner::choose_candidate_fuse_inline(
-    const vector<pair<string, string> > &cands) {
+    const vector<pair<string, string> >& cands) {
 
   pair<vector<Partitioner::InlineChoice>, int64_t> best;
   best.second = -1;
-  for (auto &p: cands) {
+  for (auto& p: cands) {
     internal_assert(p.second == "");
     // Compute the aggregate benefit for inlining into all the children
     int64_t overall_benefit = 0;
     vector<Partitioner::InlineChoice> choices;
 
-    for (auto &c: children[p.first]) {
+    for (auto& c: children[p.first]) {
       int64_t benefit = 0;
       // Get the output function of the child group
       Function output = analy.env.at(c);
@@ -968,7 +969,7 @@ Partitioner::choose_candidate_fuse_inline(
 
 pair<Partitioner::FusionChoice, int64_t>
 Partitioner::choose_candidate_fuse_fast_mem(
-    const vector< pair<string, string> > &cand_pairs) {
+    const vector< pair<string, string> >& cand_pairs) {
 
   map<string, int> tile_sizes;
   FusionChoice c("", "", tile_sizes);
@@ -1006,7 +1007,7 @@ Partitioner::choose_candidate_fuse_fast_mem(
 
   pair<FusionChoice, int64_t> best;
 
-  for (auto &p: cand_pairs) {
+  for (auto& p: cand_pairs) {
     pair<string, string> key = make_pair(p.first, p.second);
     FusionChoice cand_best;
 
@@ -1024,7 +1025,7 @@ Partitioner::choose_candidate_fuse_fast_mem(
 
     // Get the output function of the child group
     Function output = analy.env[p.second];
-    const vector<string> &args = output.args();
+    const vector<string>& args = output.args();
 
     cand_best.prod_group = p.first;
     cand_best.cons_group = p.second;
@@ -1087,10 +1088,10 @@ void Partitioner::group(Partitioner::Level level) {
   while(!fixpoint) {
     fixpoint = true;
     vector< pair<string, string> > cand;
-    for (auto &g: groups) {
+    for (auto& g: groups) {
 
       bool is_output = false;
-      for (auto &f: outputs) {
+      for (auto& f: outputs) {
         if (g.first == f.name())
           is_output = true;
       }
@@ -1111,7 +1112,7 @@ void Partitioner::group(Partitioner::Level level) {
     }
 
     debug(0) << "Current grouping candidates:" << '\n';
-    for (auto &p: cand) {
+    for (auto& p: cand) {
       debug(0) << "[" << p.first << "," <<  p.second << "]" << '\n';
     }
 
@@ -1122,14 +1123,14 @@ void Partitioner::group(Partitioner::Level level) {
       if (best.second >= 0) {
         string prod = best.first[0].prod_group;
 
-        for (auto &inline_choice: best.first) {
+        for (auto& inline_choice: best.first) {
           internal_assert(inline_choice.prod_group == prod);
           merge_group(inline_choice);
         }
 
         // Mark the entries of the fusion cache that need to be
         // invalidated
-        for (auto &c: children[prod]) {
+        for (auto& c: children[prod]) {
           for (auto& choice: fusion_cache) {
             if (choice.first.first == c ||
                 choice.first.second == c)
@@ -1164,9 +1165,9 @@ void Partitioner::group(Partitioner::Level level) {
 }
 
 vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
-                                                         const map<string, int> &tile_sizes) {
+                                                         const map<string, int>& tile_sizes) {
   vector<Interval> bounds;
-  const vector<string> &args = analy.env.at(func).args();
+  const vector<string>& args = analy.env.at(func).args();
 
   for (size_t i = 0; i < args.size(); i++) {
     if (tile_sizes.find(args[i]) != tile_sizes.end()) {
@@ -1192,7 +1193,7 @@ vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
   return bounds;
 }
 
-Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
+Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   // Estimating the number of accesses to slow memory
 
   // 1) Assume all loads are a miss if the working set does not fit
@@ -1214,10 +1215,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
   set<string> group_inputs;
 
-  for(auto &f: g.members) {
+  for(auto& f: g.members) {
     FindAllCalls find;
     analy.env.at(f.name()).accept(&find);
-    //for(auto &c: find.calls) {
+    //for(auto& c: find.calls) {
     //  if (std::find(g.members.begin(), g.members.end(), c) == g.members.end())
     //    group_inputs.insert(c);
     //}
@@ -1227,7 +1228,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
   uint64_t estimate_tiles = 1;
   uint64_t num_ele_per_tile = 1;
 
-  const vector<string> &args = analy.env.at(g.output).args();
+  const vector<string>& args = analy.env.at(g.output).args();
 
   for (size_t i = 0; i < args.size(); i++) {
     if (g.tile_sizes.find(args[i]) != g.tile_sizes.end()) {
@@ -1278,7 +1279,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
   // TODO: Do not count inlines while accounting for intermediate
   // storage when grouping for fast mem
-  for (auto &f: g.members)
+  for (auto& f: g.members)
     mem_reg[f.name()] = conc_reg[f.name()];
 
   mem_reg[g.output] = Box(bounds);
@@ -1290,26 +1291,27 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
   return g_analy;
 }
 
-Partitioner::Group Partitioner::fuse_groups(Group &prod_group,
-                                            Group &cons_group) {
+Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
+                                            Group& cons_group) {
 
   vector<Function> fused_members;
-  for(auto &f: prod_group.members)
+  for(auto& f: prod_group.members)
     fused_members.push_back(f);
-  for(auto &f: cons_group.members)
+  for(auto& f: cons_group.members)
     fused_members.push_back(f);
 
   Group fused_group(cons_group.output, fused_members);
 
-  for(auto &f: prod_group.inlined)
+  for(auto& f: prod_group.inlined)
     fused_group.inlined.insert(f);
-  for(auto &f: cons_group.inlined)
+  for(auto& f: cons_group.inlined)
     cons_group.inlined.insert(f);
 
   return fused_group;
 }
 
-int64_t Partitioner::evaluate_choice(InlineChoice &choice) {
+int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
+
   // Create a group that reflects the fusion choice and evaluate
   // the cost of the group
   Group prod_group = groups.at(choice.prod_group);
@@ -1327,10 +1329,7 @@ int64_t Partitioner::evaluate_choice(InlineChoice &choice) {
   return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
 }
 
-int64_t Partitioner::evaluate_choice(FusionChoice &choice) {
-  //disp_option(opt);
-
-  map<string, Box> conc_reg;
+int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
 
   // Create a group that reflects the fusion choice and evaluate
   // the cost of the group
@@ -1351,8 +1350,8 @@ int64_t Partitioner::evaluate_choice(FusionChoice &choice) {
   return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
 }
 
-void generate_schedules(const vector<Function> &outputs,
-                        const Target &target) {
+void generate_schedules(const vector<Function>& outputs,
+                        const Target& target) {
   // Compute an environment
   map<string, Function> env;
   for (Function f : outputs) {
@@ -1403,13 +1402,13 @@ void generate_schedules(const vector<Function> &outputs,
 
   Partitioner part(pipeline_bounds, arch_params, analy, outputs, false);
 
-  for (auto &f: env) {
+  for (auto& f: env) {
     FindAllCalls find;
     f.second.accept(&find);
     map<string, int64_t> reuse =
         part.evaluate_reuse(f.first, find.calls);
     debug(0) << f.first << '\n';
-    for (auto &dir: reuse) {
+    for (auto& dir: reuse) {
       debug(0) << dir.first << " " << dir.second << ',';
     }
     debug(0) << '\n';
