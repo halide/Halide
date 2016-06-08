@@ -783,7 +783,11 @@ struct Partitioner {
       // in the pipeline
     }
 
-  void merge_groups(string cand_group, string child_group) {
+  void merge_groups(FusionChoice &choice) {
+
+    string cand_group = choice.prod_group;
+    string child_group = choice.cons_group;
+
     assert(groups.find(child_group) != groups.end());
     vector<Function> cand_funcs = groups.at(cand_group).members;
 
@@ -792,6 +796,10 @@ struct Partitioner {
     vector<Function> &child_members = groups.at(child_group).members;
     child_members.insert(child_members.end(),
                          cand_funcs.begin(), cand_funcs.end());
+
+    // TODO: Update the child groups tile sizes. Look at all the members
+    // that need to be to be updated. Maybe merge should be a member of the
+    // group class so that it is more contained.
 
     // Update the children mapping
     children.erase(cand_group);
@@ -804,7 +812,9 @@ struct Partitioner {
     }
   }
 
-  void merge_group_into_all_children(string cand_group) {
+  void merge_group(InlineChoice &choice) {
+
+    string cand_group = choice.prod_group;
 
     set<string> cand_group_children = children[cand_group];
     for (auto &cg: cand_group_children) {
@@ -814,6 +824,10 @@ struct Partitioner {
       vector<Function> &cg_members = groups.at(cg).members;
       cg_members.insert(cg_members.end(),
                         cand_funcs.begin(), cand_funcs.end());
+      // TODO: Add prod_group to the set of of inlines in the child
+      // group. Look at all the members that need to be to be updated.
+      // Maybe merge should be a member of the group class so that
+      // it is more contained.
     }
 
     groups.erase(cand_group);
@@ -1066,84 +1080,85 @@ Partitioner::choose_candidate_fuse_fast_mem(
 }
 
 void Partitioner::group(Partitioner::Level level) {
-    // Partition the pipeline by iteratively merging groups until a fixpoint
-    bool fixpoint = false;
-    while(!fixpoint) {
-        fixpoint = true;
-        vector< pair<string, string> > cand;
-        for (auto &g: groups) {
+  // Partition the pipeline by iteratively merging groups until a fixpoint
+  bool fixpoint = false;
+  while(!fixpoint) {
+    fixpoint = true;
+    vector< pair<string, string> > cand;
+    for (auto &g: groups) {
 
-            bool is_output = false;
-            for (auto &f: outputs) {
-              if (g.first == f.name())
-                is_output = true;
-            }
+      bool is_output = false;
+      for (auto &f: outputs) {
+        if (g.first == f.name())
+          is_output = true;
+      }
 
-            if (is_output)
-                continue;
+      if (is_output)
+        continue;
 
-            if (children.find(g.first) != children.end()) {
-                int num_children = children[g.first].size();
-                // Find all the groups which have a single child
-                if (num_children == 1 && level == Partitioner::FAST_MEM) {
-                    cand.push_back(make_pair(g.first,
-                                             *children[g.first].begin()));
-                } else if(num_children > 0  && level == Partitioner::INLINE) {
-                    cand.push_back(make_pair(g.first, ""));
-                }
-            }
+      if (children.find(g.first) != children.end()) {
+        int num_children = children[g.first].size();
+        // Find all the groups which have a single child
+        if (num_children == 1 && level == Partitioner::FAST_MEM) {
+          cand.push_back(make_pair(g.first,
+                                   *children[g.first].begin()));
+        } else if(num_children > 0  && level == Partitioner::INLINE) {
+          cand.push_back(make_pair(g.first, ""));
         }
-
-        debug(0) << "Current grouping candidates:" << '\n';
-        for (auto &p: cand) {
-          debug(0) << "[" << p.first << "," <<  p.second << "]" << '\n';
-        }
-
-        vector<pair<string, string> > invalid_keys;
-        if (level == Partitioner::INLINE) {
-            pair<vector<InlineChoice>, int64_t> best;
-            best = choose_candidate_fuse_inline(cand);
-            if (best.second >= 0) {
-                string prod = best.first[0].prod_group;
-
-                for (auto &o: best.first)
-                    internal_assert(o.prod_group == prod);
-
-                // Mark the entries of the fusion cache that need to be
-                // invalidated
-                for (auto &c: children[prod]) {
-                    for (auto& choice: fusion_cache) {
-                        if (choice.first.first == c ||
-                                choice.first.second == c)
-                            invalid_keys.push_back(choice.first);
-                    }
-                }
-                merge_group_into_all_children(prod);
-                fixpoint = false;
-            }
-
-        } else {
-            pair<FusionChoice, int64_t> best
-                = choose_candidate_fuse_fast_mem(cand);
-            if (best.second >= 0) {
-
-                // Mark the entries of the fusion cache that need to be
-                // invalidated
-                for (auto& choice: fusion_cache) {
-                    if (choice.first.second == best.first.cons_group
-                            || choice.first.first == best.first.cons_group)
-                        invalid_keys.push_back(choice.first);
-                }
-
-                merge_groups(best.first.prod_group, best.first.cons_group);
-                fixpoint = false;
-            }
-        }
-
-        // Invalidate the fusion cache
-        for (auto& key: invalid_keys)
-            fusion_cache.erase(key);
+      }
     }
+
+    debug(0) << "Current grouping candidates:" << '\n';
+    for (auto &p: cand) {
+      debug(0) << "[" << p.first << "," <<  p.second << "]" << '\n';
+    }
+
+    vector<pair<string, string> > invalid_keys;
+    if (level == Partitioner::INLINE) {
+      pair<vector<InlineChoice>, int64_t> best;
+      best = choose_candidate_fuse_inline(cand);
+      if (best.second >= 0) {
+        string prod = best.first[0].prod_group;
+
+        for (auto &inline_choice: best.first) {
+          internal_assert(inline_choice.prod_group == prod);
+          merge_group(inline_choice);
+        }
+
+        // Mark the entries of the fusion cache that need to be
+        // invalidated
+        for (auto &c: children[prod]) {
+          for (auto& choice: fusion_cache) {
+            if (choice.first.first == c ||
+                choice.first.second == c)
+              invalid_keys.push_back(choice.first);
+          }
+        }
+        fixpoint = false;
+      }
+
+    } else {
+      pair<FusionChoice, int64_t> best
+          = choose_candidate_fuse_fast_mem(cand);
+      if (best.second >= 0) {
+
+        // Mark the entries of the fusion cache that need to be
+        // invalidated
+        for (auto& choice: fusion_cache) {
+          if (choice.first.second == best.first.cons_group
+              || choice.first.first == best.first.cons_group)
+            invalid_keys.push_back(choice.first);
+        }
+
+        merge_groups(best.first);
+        fixpoint = false;
+      }
+    }
+
+    // Invalidate the fusion cache
+    for (auto& key: invalid_keys)
+      fusion_cache.erase(key);
+  }
 }
 
 vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
@@ -1269,6 +1284,16 @@ void Partitioner::evaluate_group_cost(Group &g) {
 
 
 int64_t Partitioner::evaluate_choice(InlineChoice &choice) {
+  // Create a group that reflects the fusion choice and evaluate
+  // the cost of the group
+  Group prod_group = groups.at(choice.prod_group);
+  Group cons_group = groups.at(choice.cons_group);
+
+  vector<Function> fused_members;
+  for(auto &f: prod_group.members)
+    fused_members.push_back(f);
+  for(auto &f: cons_group.members)
+    fused_members.push_back(f);
   return 0;
 }
 
