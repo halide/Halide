@@ -106,7 +106,7 @@ function VisualizeFunctions()
 \
     -f input 0 127 -1 $BLANK $ZOOM $COST 0 26 $STRIDE0 $STRIDE1 \
     -f output 1 128 -1 $BLANK $ZOOM $COST 516 26 $STRIDE0 $STRIDE1 | \
-    ../../../components/ffmpeg/ffmpeg -r 30 -f rawvideo -pix_fmt bgra \
+    ../../../components/ffmpeg/ffmpeg -r 30 -f rawvideo -pix_fmt rgba \
     -s 1290X1024  -i - -y -pix_fmt yuv420p ../../movies/Brighten_schedule.mp4
 
     cd $CURRENT_PATH
