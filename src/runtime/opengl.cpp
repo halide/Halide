@@ -1157,11 +1157,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
     if (is_interleaved && is_packed) {
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host + buf->elem_size *
-            (buf->min[0] * buf->stride[0] +
-             buf->min[1] * buf->stride[1] +
-             buf->min[2] * buf->stride[2] +
-             buf->min[3] * buf->stride[3]);
+        uint8_t *host_ptr = buf->host;
         global_state.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, host_ptr);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(1)")) {
             return 1;
@@ -1286,11 +1282,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
     if (is_interleaved && is_packed && texture_channels == buffer_channels) {
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host + buf->elem_size *
-            (buf->min[0] * buf->stride[0] +
-             buf->min[1] * buf->stride[1] +
-             buf->min[2] * buf->stride[2] +
-             buf->min[3] * buf->stride[3]);
+        uint8_t *host_ptr = buf->host;
 #ifdef DEBUG_RUNTIME
         int64_t t1 = halide_current_time_ns(user_context);
 #endif

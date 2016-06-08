@@ -256,7 +256,11 @@ struct Target {
      * Target. This is 2^31 - 1 except when the LargeBuffers feature
      * is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        return has_feature(Halide::Target::LargeBuffers) ? 0x7fffffffffffffffLL : 0x7fffffff;
+        if (bits == 64 && has_feature(LargeBuffers)) {
+            return (((uint64_t)1) << 63) - 1;
+        } else {
+            return (((uint64_t)1) << 31) - 1;
+        }
     }
 
     /** Was libHalide compiled with support for this target? */
