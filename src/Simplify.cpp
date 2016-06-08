@@ -34,8 +34,7 @@ using std::vector;
 
 namespace {
 
-// Things that we can constant fold: Immediates and broadcasts of
-// immediates.
+// Things that we can constant fold: Immediates and broadcasts of immediates.
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
@@ -285,6 +284,8 @@ private:
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
+        const Ramp *ramp_value = value.as<Ramp>();
+        const Add *add = value.as<Add>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -336,6 +337,20 @@ private:
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes));
+        } else if (ramp_value &&
+                   op->type.element_of() == Int(64) &&
+                   op->value.type().element_of() == Int(32)) {
+            // cast(ramp(a, b, w)) -> ramp(cast(a), cast(b), w)
+            expr = mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
+                                     Cast::make(op->type.element_of(), ramp_value->stride),
+                                     ramp_value->lanes));
+        } else if (add &&
+                   op->type == Int(64) &&
+                   op->value.type() == Int(32) &&
+                   is_const(add->b)) {
+            // In the interest of moving constants outwards so they
+            // can cancel, pull the addition outside of the cast.
+            expr = mutate(Cast::make(op->type, add->a) + add->b);
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -707,6 +722,7 @@ private:
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
+
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -780,7 +796,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
-                                 broadcast_a->lanes);
+                                   broadcast_a->lanes);
         } else if (select_a && select_b &&
                    equal(select_a->condition, select_b->condition)) {
             // select(c, a, b) - select(c, d, e) -> select(c, a+d, b+e)
@@ -3956,6 +3972,18 @@ void check_casts() {
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
           (x + Expr(-0.5)) * (x + Expr(-0.5)));
+
+    check(cast(Int(64, 3), ramp(5.5f, 2.0f, 3)),
+          cast(Int(64, 3), ramp(5.5f, 2.0f, 3)));
+    check(cast(Int(64, 3), ramp(x, 2, 3)),
+          ramp(cast(Int(64), x), cast(Int(64), 2), 3));
+
+    // Check cancellations can occur through casts
+    check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
+    // But only when overflow is undefined for the type
+    check(cast(UInt(8), x + 1) - cast(UInt(8), x),
+          cast(UInt(8), x + 1) - cast(UInt(8), x));
 }
 
 void check_algebra() {

@@ -28,6 +28,27 @@ std::unique_ptr<TemporaryFile> make_temp_object_file(const std::string &base_pat
     return std::unique_ptr<TemporaryFile>(new TemporaryFile(base_name, ext));
 }
 
+// Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
+std::string add_suffix(const std::string &path, const std::string &suffix) {
+    const auto found = path.rfind(".");
+    if (found == std::string::npos) {
+        return path + suffix;
+    }
+    return path.substr(0, found) + suffix + path.substr(found);
+}
+
+Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
+    Outputs out;
+    if (!in.object_name.empty()) out.object_name = add_suffix(in.object_name, suffix);
+    if (!in.assembly_name.empty()) out.assembly_name = add_suffix(in.assembly_name, suffix);
+    if (!in.bitcode_name.empty()) out.bitcode_name = add_suffix(in.bitcode_name, suffix);
+    if (!in.llvm_assembly_name.empty()) out.llvm_assembly_name = add_suffix(in.llvm_assembly_name, suffix);
+    if (!in.c_source_name.empty()) out.c_source_name = add_suffix(in.c_source_name, suffix);
+    if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
+    if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
+    return out;
+}
+
 }  // namespace
 
 struct ModuleContents {
@@ -213,16 +234,11 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
 
-    // TODO(srj): It's not clear whether it's sensible to support anything else here.
-    // For now, we simply fail if anything but .h/.a is requested -- even if
-    // there is only a single target.
+    // You can't ask for .o files when doing this; it's not really useful,
+    // and would complicate output (we might have to do multiple passes
+    // if different values for NoRuntime are specified)... so just forbid
+    // it up front.
     user_assert(output_files.object_name.empty()) << "Cannot request object_name for compile_multitarget.\n";
-    user_assert(output_files.assembly_name.empty()) << "Cannot request assembly_name for compile_multitarget.\n";
-    user_assert(output_files.bitcode_name.empty()) << "Cannot request bitcode_name for compile_multitarget.\n";
-    user_assert(output_files.llvm_assembly_name.empty()) << "Cannot request llvm_assembly_name for compile_multitarget.\n";
-    user_assert(output_files.c_source_name.empty()) << "Cannot request c_source_name for compile_multitarget.\n";
-    user_assert(output_files.stmt_name.empty()) << "Cannot request stmt_name for compile_multitarget.\n";
-    user_assert(output_files.stmt_html_name.empty()) << "Cannot request stmt_html_name for compile_multitarget.\n";
 
     // The final target in the list is considered "baseline", and is used
     // for (e.g.) the runtime and shared code. It is often just os-arch-bits
@@ -242,7 +258,7 @@ void compile_multitarget(const std::string &fn_name,
         return;
     }
 
-    std::vector<std::unique_ptr<TemporaryFile>> all_outputs;
+    std::vector<std::unique_ptr<TemporaryFile>> all_temp_object_files;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     for (const Target &target : targets) {
@@ -270,13 +286,16 @@ void compile_multitarget(const std::string &fn_name,
 
         // Each sub-target has a function name that is the 'real' name plus the target string.
         auto suffix = "_" + replace_all(target.to_string(), "-", "_");
-        
         std::string sub_fn_name = fn_name + suffix;
-        all_outputs.emplace_back(make_temp_object_file(output_files.static_library_name, suffix, target));
 
-        // We always produce the runtime separately
+        // We always produce the runtime separately, so add NoRuntime explicitly.
         Module module = module_producer(sub_fn_name, target.with_feature(Target::NoRuntime));
-        module.compile(Outputs().object(all_outputs.back()->pathname()));
+        Outputs sub_out = add_suffixes(output_files, suffix);
+        if (sub_out.object_name.empty()) {
+            all_temp_object_files.emplace_back(make_temp_object_file(output_files.static_library_name, suffix, target));
+            sub_out.object_name = all_temp_object_files.back()->pathname();
+        }
+        module.compile(sub_out);
 
         static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
         uint64_t feature_bits = 0;
@@ -301,8 +320,8 @@ void compile_multitarget(const std::string &fn_name,
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
         const Target runtime_target = base_target.without_feature(Target::NoRuntime);
-        all_outputs.emplace_back(make_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
-        compile_standalone_runtime(Outputs().object(all_outputs.back()->pathname()), runtime_target);
+        all_temp_object_files.emplace_back(make_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
+        compile_standalone_runtime(Outputs().object(all_temp_object_files.back()->pathname()), runtime_target);
     }
 
     Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
@@ -313,8 +332,8 @@ void compile_multitarget(const std::string &fn_name,
 
     Module wrapper_module(fn_name, base_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
-    all_outputs.emplace_back(make_temp_object_file(output_files.static_library_name, "_wrapper", base_target));
-    wrapper_module.compile(Outputs().object(all_outputs.back()->pathname()));
+    all_temp_object_files.emplace_back(make_temp_object_file(output_files.static_library_name, "_wrapper", base_target));
+    wrapper_module.compile(Outputs().object(all_temp_object_files.back()->pathname()));
 
     if (!output_files.c_header_name.empty()) { 
         debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
@@ -323,7 +342,7 @@ void compile_multitarget(const std::string &fn_name,
     if (!output_files.static_library_name.empty()) {
         debug(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
         std::vector<std::string> srcs;
-        for (const auto &output : all_outputs) {
+        for (const auto &output : all_temp_object_files) {
             debug(1) << "   compile_multitarget: linking temp file: " << output->pathname() << "\n";
             srcs.push_back(output->pathname());
         }
