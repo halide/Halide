@@ -547,6 +547,36 @@ class EliminateInterleaves : public IRMutator {
 private:
     Scope<bool> vars;
 
+    // We need some special handling for expressions that are modified
+    // by eliminate_bool_vectors. mutate_with_interleave allows
+    // interleaves to be removed, but not added to the resulting
+    // expression, returned as a flag indicating the result should be
+    // interleaved instead. This is necessary because expressions
+    // returning boolean vectors can't be interleaved, the expression
+    // using it must be interleaved instead.
+    bool interleave_expr;
+    int allow_interleave_expr = 0;
+
+    std::pair<Expr, bool> mutate_with_interleave(Expr e) {
+        int old_allow_interleave_expr = allow_interleave_expr;
+        allow_interleave_expr = 1;
+        interleave_expr = false;
+        Expr ret = mutate(e);
+        allow_interleave_expr = old_allow_interleave_expr;
+        return std::make_pair(ret, interleave_expr);
+    }
+
+public:
+    Expr mutate(Expr e) {
+        --allow_interleave_expr;
+        Expr ret = IRMutator::mutate(e);
+        ++allow_interleave_expr;
+        return ret;
+    }
+    using IRMutator::mutate;
+
+private:
+
     // Check if x is an expression that is either an interleave, or
     // can pretend to be one (is a scalar or a broadcast).
     bool yields_interleave(Expr x) {
@@ -598,11 +628,20 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         // We only want to pull out an interleave if at least one of
-        // the operands is an actual interleave.
-        if (yields_removable_interleave({a, b})) {
+        // the operands is an actual interleave. Furthermore, we can
+        // only attempt to do this if we are allowing the expr to be
+        // interleaved via interleave_expr, or the result is not boolean.
+        bool can_interleave = op->type.bits() != 1;
+        if ((can_interleave || allow_interleave_expr == 0) && yields_removable_interleave({a, b})) {
             a = remove_interleave(a);
             b = remove_interleave(b);
-            expr = native_interleave(T::make(a, b));
+            expr = T::make(a, b);
+            if (can_interleave) {
+                expr = native_interleave(expr);
+            } else {
+                internal_assert(!interleave_expr);
+                interleave_expr = true;
+            }
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
@@ -623,33 +662,43 @@ private:
     void visit(const LE *op) { visit_binary(op); }
     void visit(const GT *op) { visit_binary(op); }
     void visit(const GE *op) { visit_binary(op); }
-    void visit(const And *op) { visit_binary(op); }
-    void visit(const Or *op) { visit_binary(op); }
 
+    // These next 3 nodes should not exist if we're vectorized, they
+    // should have been replaced with bitwise operations.
+    void visit(const And *op) {
+        internal_assert(op->type.is_scalar());
+        IRMutator::visit(op);
+    }
+    void visit(const Or *op) {
+        internal_assert(op->type.is_scalar());
+        IRMutator::visit(op);
+    }
     void visit(const Not *op) {
-        Expr a = mutate(op->a);
-        if (is_native_interleave(a)) {
-            a = remove_interleave(a);
-            expr = native_interleave(Not::make(a));
-        } else if (!a.same_as(op->a)) {
-            expr = Not::make(a);
-        } else {
-            expr = op;
-        }
+        internal_assert(op->type.is_scalar());
+        IRMutator::visit(op);
     }
 
     void visit(const Select *op) {
-        Expr cond = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
-        if (yields_removable_interleave({cond, true_value, false_value})) {
-            cond = remove_interleave(cond);
-            true_value = remove_interleave(true_value);
-            false_value = remove_interleave(false_value);
-            expr = native_interleave(Select::make(cond, true_value, false_value));
-        } else if (!cond.same_as(op->condition) ||
-                   !true_value.same_as(op->true_value) ||
-                   !false_value.same_as(op->false_value)) {
+
+        Expr cond;
+        if (yields_removable_interleave({true_value, false_value})) {
+            bool interleave;
+            std::tie(cond, interleave) = mutate_with_interleave(op->condition);
+            if (interleave) {
+                true_value = remove_interleave(true_value);
+                false_value = remove_interleave(false_value);
+                expr = native_interleave(Select::make(cond, true_value, false_value));
+                return;
+            }
+        } else {
+            cond = mutate(op->condition);
+        }
+
+        if (!cond.same_as(op->condition) ||
+            !true_value.same_as(op->true_value) ||
+            !false_value.same_as(op->false_value)) {
             expr = Select::make(cond, true_value, false_value);
         } else {
             expr = op;
@@ -712,46 +761,17 @@ private:
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
 
-    template <typename T>
-    void visit_binary_integer_cast(const Cast *cast, const T *op) {
-        // This is basically a two-in-one visitor combining
-        // visit_binary above, and visit(Cast) below. This is
-        // necessary to skip over the boolean vector during interleave
-        // simplification.
-        Type type = cast->type;
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
-
-        internal_assert(a.type().bits() == b.type().bits());
-        if (type.bits() == op->a.type().bits() &&
-            yields_removable_interleave({a, b})) {
-
-            a = remove_interleave(a);
-            b = remove_interleave(b);
-            expr = native_interleave(Cast::make(type, T::make(a, b)));
-        } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
-            expr = Cast::make(type, T::make(a, b));
-        } else {
-            expr = cast;
-        }
-    }
-
     void visit(const Cast *op) {
-        // Casts that are a result of eliminate_boolean_vectors need
-        // special handling, because we need to avoid attempting to
-        // generate an interleave of 1 bit integer vectors.
-        if (op->value.as<EQ>()) { visit_binary_integer_cast(op, op->value.as<EQ>()); }
-        else if (op->value.as<NE>()) { visit_binary_integer_cast(op, op->value.as<NE>()); }
-        else if (op->value.as<LT>()) { visit_binary_integer_cast(op, op->value.as<LT>()); }
-        else if (op->value.as<LE>()) { visit_binary_integer_cast(op, op->value.as<LE>()); }
-        else if (op->value.as<GT>()) { visit_binary_integer_cast(op, op->value.as<GT>()); }
-        else if (op->value.as<GE>()) { visit_binary_integer_cast(op, op->value.as<GE>()); }
-        // Other boolean operations producing boolean vectors should
-        // have been converted to bitwise operations.
-        else if (op->type.bits() == op->value.type().bits()) {
-            // We can move interleaves through casts of the same size.
-            Expr value = mutate(op->value);
-            if (is_native_interleave(value)) {
+        if (op->type.bits() == op->value.type().bits()) {
+            // We can only move interleaves through casts of the same size.
+
+            Expr value;
+            bool interleave;
+            std::tie(value, interleave) = mutate_with_interleave(op->value);
+
+            if (interleave) {
+                expr = native_interleave(Cast::make(op->type, value));
+            } else if (is_native_interleave(value)) {
                 value = remove_interleave(value);
                 expr = native_interleave(Cast::make(op->type, value));
             } else if (!value.same_as(op->value)) {
