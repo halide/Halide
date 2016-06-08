@@ -63,24 +63,21 @@ int64_t box_area(Box& b) {
 void set_schedule_defaults(map<string, Function>& env) {
   // Changing the default to compute root.
 
-  // TODO: This ignores existing schedules specified by
-  // the user atm and needs to be addressed when we have
-  // decided on a mechanism to inform the auto scheduler
-  // not to mess with an user specified schedule.
+  // TODO: This ignores existing schedules specified by the user atm and needs
+  // to be addressed when we have decided on a mechanism to inform the auto
+  // scheduler not to mess with an user specified schedule.
   for (auto& kv : env) {
-    // The shedule is marked touched when a user modifies
-    // the schedule. The idea is to keep the user specified
-    // schedule intact as much as possible.
-    // TODO: However, user specified schedules can have
-    // non-local effects and will not be captured by touched.
-    // For example:
-    // f.compute_at(g, y) now specifies constraints on the
-    // schedule of f as well as the schedule of g i.e., the
-    // variable y in g cannot be split or reordered since that
-    // may change user intent.
+    // TODO:
+    // The shedule is marked touched when a user modifies the schedule. The idea
+    // is to keep the user specified schedule intact as much as possible.
+    // However, user specified schedules can have non-local effects and will not
+    // be captured by touched.  For example: f.compute_at(g, y) now specifies
+    // constraints on the schedule of f as well as the schedule of g i.e., the
+    // variable y in g cannot be split or reordered since that may change user
+    // intent.
     //
-    // Open question is how to deal with the constraints induced
-    // by user specified schedules.
+    // Open question is how to deal with the constraints induced by user
+    // specified schedules.
     kv.second.schedule().store_level().func = "";
     kv.second.schedule().store_level().var = "__root";
     kv.second.schedule().compute_level().func = "";
@@ -278,8 +275,8 @@ struct AbstractCost {
 
     int64_t area = box_area(region);
     if (area < 0) {
-      // Area could not be determined therfore it is not
-      // possible to determine the cost as well
+      // Area could not be determined therfore it is not possible to determine
+      // the cost as well
       return make_pair(-1, -1);
     }
 
@@ -327,9 +324,8 @@ struct AbstractCost {
     }
 
     // Estimating cost when reductions are involved
-    // TODO: This assumes that the entire reduction of each
-    // update definition is evaluated to compute each value of
-    // the function.
+    // TODO: This assumes that the entire reduction of each update definition is
+    // evaluated to compute each value of the function.
     if (!f.is_pure()) {
       for (const Definition& u: f.updates()) {
 
@@ -398,8 +394,8 @@ struct DependenceAnalysis {
     }
   }
 
-  /* Compute the regions of producers required to compute a region of the function
-     'f' given concrete sizes of the tile in each dimension. */
+  // Compute the regions of producers required to compute a region of the
+  // function 'f' given concrete sizes of the tile in each dimension.
   map<string, Box> regions_required(Function f,
                                     const vector<Interval>& conc_bounds) {
 
@@ -429,8 +425,8 @@ struct DependenceAnalysis {
 
         curr_regions = boxes_required(val, curr_scope, func_val_bounds);
         for (auto& reg: curr_regions) {
-          // merge region with an existing region for the function in
-          // the global map
+          // merge region with an existing region for the function in the global
+          // map
           if (regions.find(reg.first) == regions.end())
             regions[reg.first] = reg.second;
           else
@@ -456,8 +452,8 @@ struct DependenceAnalysis {
             // Check for a pure variable
             const Variable *v = arg.as<Variable>();
             if (!v) {
-              // Need to evaluate boxes required on args that are not pure
-              // for potenial calls to other functions
+              // Need to evaluate boxes required on args that are not pure for
+              // potenial calls to other functions
               exprs.push_back(arg);
             } else {
               curr_scope.push(v->name, simple_bounds);
@@ -505,15 +501,14 @@ struct DependenceAnalysis {
         Expr lower = f_reg.second[i].min;
         Expr upper = f_reg.second[i].max;
 
-        // TODO: Assumes estimates cannot be provided on input
-        // parameters like images. Need to have a better way of doing this
-        // where input parameters can have estimates attached to them.
+        // TODO: Assumes estimates cannot be provided on input parameters like
+        // images. Need to have a better way of doing this where input
+        // parameters can have estimates attached to them.
         //
         // Also make the simplification take them into account.
         bool in_env = (env.find(f_reg.first) != env.end());
 
-        // Use the estimates if the lower and upper bounds cannot be
-        // determined
+        // Use the estimates if the lower and upper bounds cannot be determined
         if (!lower.as<IntImm>() && in_env) {
           const Function& curr_f = env.at(f_reg.first);
           for (auto& b: curr_f.schedule().estimates()) {
@@ -543,8 +538,8 @@ struct DependenceAnalysis {
     return concrete_regions;
   }
 
-  /* Compute the redundant regions computed while computing a tile of the function
-     'f' given sizes of the tile in each dimension. */
+  // Compute the redundant regions computed while computing a tile of the
+  // function 'f' given sizes of the tile in each dimension.
   map<string, Box> redundant_regions(Function f, int dir,
                                      const vector<Interval>& conc_bounds) {
 
@@ -568,8 +563,7 @@ struct DependenceAnalysis {
     map<string, Box> overalps;
     for (auto& reg: regions) {
       if (regions_shifted.find(reg.first) == regions.end()) {
-        // It will be interesting to log cases where this actually
-        // happens
+        // It will be interesting to log cases where this actually happens
         continue;
       } else {
         Box b = reg.second;
@@ -644,8 +638,7 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis& analy,
     regions[out.name()] = bounds;
 
     for (auto& reg: regions) {
-      // Merge region with an existing region for the function in
-      // the global map
+      // Merge region with an existing region for the function in the global map
       if (pipeline_bounds.find(reg.first) == pipeline_bounds.end())
         pipeline_bounds[reg.first] = reg.second;
       else
@@ -659,8 +652,8 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis& analy,
 struct Partitioner {
 
   struct InlineChoice {
-    // InlineChoice encodes the choice of the prod_group being inlined
-    // into the cons_group
+    // InlineChoice encodes the choice of the prod_group being inlined into the
+    // cons_group
     string prod_group;
     string cons_group;
     InlineChoice(string _prod_group, string _cons_group) :
@@ -761,7 +754,6 @@ struct Partitioner {
   map<string, Box>& pipeline_bounds;
   MachineParams& arch_params;
   DependenceAnalysis& analy;
-  //map<string, pair<long long, long long> >& func_cost;
   const vector<Function>& outputs;
 
   //map<string, float > input_reuse;
@@ -809,12 +801,11 @@ struct Partitioner {
 
       disp_children(children);
 
-      //TODO: Any preprocess inlining should go here and they
-      //should be added to the corresponding group as inlined
-      //members
+      //TODO: Any preprocess inlining should go here and they should be added to
+      //the corresponding group as inlined members
 
-      // Precompute the arithmetic and load costs for each function
-      // in the pipeline
+      // Precompute the arithmetic and load costs for each function in the
+      // pipeline
     }
 
   void merge_groups(FusionChoice& choice) {
@@ -831,9 +822,8 @@ struct Partitioner {
     child_members.insert(child_members.end(),
                          cand_funcs.begin(), cand_funcs.end());
 
-    // TODO: Look at all the members that need to be to be updated.
-    // Maybe merge should be a member of the group class so that it
-    // is more contained.
+    // TODO: Look at all the members that need to be to be updated. Maybe merge
+    // should be a member of the group class so that it is more contained.
     groups.at(child_group).tile_sizes = choice.tile_sizes;
 
     // Update the children mapping
@@ -859,9 +849,9 @@ struct Partitioner {
       vector<Function>& cg_members = groups.at(cg).members;
       cg_members.insert(cg_members.end(),
                         cand_funcs.begin(), cand_funcs.end());
-      // TODO: Look at all the members that need to be to be updated.
-      // Maybe merge should be a member of the group class so that
-      // it is more contained.
+      // TODO: Look at all the members that need to be to be updated. Maybe
+      // merge should be a member of the group class so that it is more
+      // contained.
       groups.at(cg).inlined.insert(cand_group);
     }
 
@@ -919,13 +909,12 @@ map<string, int64_t> Partitioner::evaluate_reuse(string func,
   const vector<string>& args = f.args();
 
   map<string, int> tile_sizes;
-  // TODO: Check if tile sizes of 1 in each dimension gives a reasonable
-  // answer or reuse should be evaluated at a much larger granularity or
-  // symbolically.
+  // TODO: Check if tile sizes of 1 in each dimension gives a reasonable answer
+  // or reuse should be evaluated at a much larger granularity or symbolically.
   // Using a symbolic version might be better if the objective is to find
-  // dimensions with no reuse. The only downside with the symbolic method
-  // is it totally at the mercy of the simplifier.
-  // Another option is sampling or using a larger granularity
+  // dimensions with no reuse. The only downside with the symbolic method is it
+  // totally at the mercy of the simplifier.  Another option is sampling or
+  // using a larger granularity
   for (size_t i = 0; i < args.size(); i++)
     tile_sizes[args[i]] = 1;
 
@@ -985,9 +974,9 @@ Partitioner::choose_candidate_fuse_inline(
                                       make_pair(cand_choice, benefit)));
       }
 
-      // Conservative strategy that only goes ahead with the fusion
-      // if all the fusions into the consumers are beneficial
-      // TODO: Create a test where this assumption breaks
+      // Conservative strategy that only goes ahead with the fusion if all the
+      // fusions into the consumers are beneficial TODO: Create a test where
+      // this assumption breaks
       if (benefit < 0) {
         overall_benefit = -1;
         break;
@@ -1234,22 +1223,20 @@ vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
 Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   // Estimating the number of accesses to slow memory
 
-  // 1) Assume all loads are a miss if the working set does not fit
-  // in cache. This ignores any locality that results from the
-  // iteration order. This is pretty aggresive in estimating the benefit
-  // of fusion.
+  // 1) Assume all loads are a miss if the working set does not fit in cache.
+  // This ignores any locality that results from the iteration order. This is
+  // pretty aggresive in estimating the benefit of fusion.
   //
-  // 2) Assume that the intermediates are loaded only once even if
-  // the do not fit in cache. It is a pretty good model for pipelines
-  // which are streaming in nature. This gives a conservative estimate
-  // of fusion benefit and does not accurately capture scenarios where
-  // there is significant reuse.
+  // 2) Assume that the intermediates are loaded only once even if the do not
+  // fit in cache. It is a pretty good model for pipelines which are streaming
+  // in nature. This gives a conservative estimate of fusion benefit and does
+  // not accurately capture scenarios where there is significant reuse.
   //
-  // The actual number of accesses will inbetween 2) and 1) for now
-  // going with model 1).
+  // The actual number of accesses will inbetween 2) and 1) for now going with
+  // model 1).
   //
-  // TODO: See if the model needs to be refined further to account
-  // for spatial locality and iteration order.
+  // TODO: See if the model needs to be refined further to account for spatial
+  // locality and iteration order.
 
   set<string> group_inputs;
 
@@ -1315,8 +1302,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
 
   map<string, Box> mem_reg;
 
-  // TODO: Do not count inlines while accounting for intermediate
-  // storage when grouping for fast mem
+  // TODO: Do not count inlines while accounting for intermediate storage when
+  // grouping for fast mem
   for (auto& f: g.members)
     mem_reg[f.name()] = conc_reg[f.name()];
 
