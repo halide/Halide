@@ -75,7 +75,7 @@ int check_correctness_double(const Image<int> &out, bool toggle1, bool toggle2) 
 }
 
 
-int single_memoize_test(bool toggle_val, int index) {
+int single_memoize_test(int index) {
     buffer_index = index;
 
     Param<bool> toggle;
@@ -92,16 +92,18 @@ int single_memoize_test(bool toggle_val, int index) {
 
     f2.compile_jit();
 
-    set_toggle1 = toggle_val;
-    toggle.set(set_toggle1);
-    Image<int> out = f2.realize(10);
-    if (check_correctness_single(out, set_toggle1) != 0) {
-        return -1;
+    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+        set_toggle1 = toggle_val;
+        toggle.set(set_toggle1);
+        Image<int> out = f2.realize(10);
+        if (check_correctness_single(out, set_toggle1) != 0) {
+            return -1;
+        }
     }
     return 0;
 }
 
-int tuple_memoize_test(bool toggle_val, int index) {
+int tuple_memoize_test(int index) {
     buffer_index = index;
 
     Param<bool> toggle;
@@ -119,22 +121,24 @@ int tuple_memoize_test(bool toggle_val, int index) {
 
     f2.compile_jit();
 
-    set_toggle1 = toggle_val;
-    toggle.set(set_toggle1);
-    Realization out = f2.realize(128);
-    Image<int> out0 = out[0];
-    Image<int> out1 = out[1];
+    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+        set_toggle1 = toggle_val;
+        toggle.set(set_toggle1);
+        Realization out = f2.realize(128);
+        Image<int> out0 = out[0];
+        Image<int> out1 = out[1];
 
-    if (check_correctness_single(out0, set_toggle1) != 0) {
-        return -1;
-    }
-    if (check_correctness_single(out1, set_toggle1) != 0) {
-        return -1;
+        if (check_correctness_single(out0, set_toggle1) != 0) {
+            return -1;
+        }
+        if (check_correctness_single(out1, set_toggle1) != 0) {
+            return -1;
+        }
     }
     return 0;
 }
 
-int non_trivial_allocate_predicate_test(bool toggle_val, int index) {
+int non_trivial_allocate_predicate_test(int index) {
     buffer_index = index;
 
     Param<bool> toggle;
@@ -156,17 +160,19 @@ int non_trivial_allocate_predicate_test(bool toggle_val, int index) {
 
     f3.compile_jit();
 
-    set_toggle1 = toggle_val;
-    set_toggle2 = toggle_val;
-    toggle.set(set_toggle1);
-    Image<int> out = f3.realize(10);
-    if (check_correctness_single(out, set_toggle1) != 0) {
-        return -1;
+    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+        set_toggle1 = toggle_val;
+        set_toggle2 = toggle_val;
+        toggle.set(set_toggle1);
+        Image<int> out = f3.realize(10);
+        if (check_correctness_single(out, set_toggle1) != 0) {
+            return -1;
+        }
     }
     return 0;
 }
 
-int double_memoize_test(bool toggle_val1, bool toggle_val2, int index) {
+int double_memoize_test(int index) {
     buffer_index = index;
 
     Param<bool> toggle1, toggle2;
@@ -187,65 +193,39 @@ int double_memoize_test(bool toggle_val1, bool toggle_val2, int index) {
 
     f3.compile_jit();
 
-    set_toggle1 = toggle_val1;
-    set_toggle2 = toggle_val2;
-    toggle1.set(set_toggle1);
-    toggle2.set(toggle_val2);
-    Image<int> out = f3.realize(10);
-    if (check_correctness_double(out, set_toggle1, set_toggle2) != 0) {
-        return -1;
+    for (int toggle_val1 = 0; toggle_val1 <= 1; toggle_val1++) {
+        for (int toggle_val2 = 0; toggle_val2 <= 1; toggle_val2++) {
+            set_toggle1 = toggle_val1;
+            set_toggle2 = toggle_val2;
+            toggle1.set(set_toggle1);
+            toggle2.set(toggle_val2);
+            Image<int> out = f3.realize(10);
+            if (check_correctness_double(out, set_toggle1, set_toggle2) != 0) {
+                return -1;
+            }
+        }
     }
     return 0;
 }
 
 int main(int argc, char **argv) {
-    printf("Running single_memoize_test with toggle set to TRUE\n");
-    if (single_memoize_test(true, 0) != 0) {
+    printf("Running single_memoize_test\n");
+    if (single_memoize_test(0) != 0) {
         return -1;
     }
 
-    printf("Running single_memoize_test with toggle set to FALSE\n");
-    if (single_memoize_test(false, 1) != 0) {
+    printf("Running tuple_memoize_test\n");
+    if (tuple_memoize_test(1) != 0) {
         return -1;
     }
 
-    printf("Running tuple_memoize_test with toggle set to TRUE\n");
-    if (tuple_memoize_test(true, 2) != 0) {
+    printf("Running non_trivial_allocate_predicate_test\n");
+    if (non_trivial_allocate_predicate_test(2) != 0) {
         return -1;
     }
 
-    printf("Running tuple_memoize_test with toggle set to FALSE\n");
-    if (tuple_memoize_test(false, 3) != 0) {
-        return -1;
-    }
-
-    printf("Running non_trivial_allocate_predicate_test with toggle set to TRUE\n");
-    if (non_trivial_allocate_predicate_test(true, 4) != 0) {
-        return -1;
-    }
-
-    printf("Running non_trivial_allocate_predicate_test with toggle set to FALSE\n");
-    if (non_trivial_allocate_predicate_test(false, 5) != 0) {
-        return -1;
-    }
-
-    printf("Running double_memoize_test with (toggle1, toogle2) = (TRUE, TRUE)\n");
-    if (double_memoize_test(true, true, 6) != 0) {
-        return -1;
-    }
-
-    printf("Running double_memoize_test with (toggle1, toogle2) = (TRUE, FALSE)\n");
-    if (double_memoize_test(true, false, 7) != 0) {
-        return -1;
-    }
-
-    printf("Running double_memoize_test with (toggle1, toogle2) = (FALSE, TRUE)\n");
-    if (double_memoize_test(false, true, 8) != 0) {
-        return -1;
-    }
-
-    printf("Running double_memoize_test with (toggle1, toogle2) = (FALSE, FALSE)\n");
-    if (double_memoize_test(false, false, 9) != 0) {
+    printf("Running double_memoize_test\n");
+    if (double_memoize_test(3) != 0) {
         return -1;
     }
 
