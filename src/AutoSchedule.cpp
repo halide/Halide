@@ -251,7 +251,8 @@ struct AbstractCost {
 
     int64_t area = box_area(region);
     if (area < 0) {
-      // Area could not be determined
+      // Area could not be determined therfore it is not
+      // possible to determine the cost as well
       return -1;
     }
     int64_t op_cost = func_cost[func].first;
@@ -276,63 +277,66 @@ struct AbstractCost {
     return total_cost;
   }
 
-  AbstractCost(const map<string, Function> &env) {
+  pair<int64_t, int64_t> get_func_cost(const Function &f) {
 
-    for (auto& kv : env) {
+    int64_t total_ops = 1;
+    int64_t total_loads = 0;
+    // TODO: revist how boundary conditions are handled
+    for (auto &e: f.values()) {
+      ExprCost cost_visitor;
+      e.accept(&cost_visitor);
+      total_ops += cost_visitor.ops;
+      total_loads += cost_visitor.loads;
+    }
 
-      func_cost[kv.first].first = 1;
-      func_cost[kv.first].second = 0;
+    // Estimating cost when reductions are involved
+    // TODO: This assumes that the entire reduction of each
+    // update definition is evaluated to compute each value of
+    // the function.
+    if (!f.is_pure()) {
+      for (const Definition &u: f.updates()) {
 
-      // TODO: revist how boundary conditions are handled
-      for (auto &e: kv.second.values()) {
-        ExprCost cost_visitor;
-        e.accept(&cost_visitor);
-        func_cost[kv.first].first += cost_visitor.ops;
-        func_cost[kv.first].second += cost_visitor.loads;
-      }
+        int64_t ops = 1;
+        int64_t loads = 0;
+        for (auto &e: u.values()) {
+          ExprCost cost_visitor;
+          e.accept(&cost_visitor);
+          ops += cost_visitor.ops;
+          loads += cost_visitor.loads;
+        }
 
-      // Estimating cost when reductions are involved
-      // TODO: This assumes that the entire reduction of each
-      // update definition is evaluated to compute each value of
-      // the function.
-      if (!kv.second.is_pure()) {
-        for (const Definition &u: kv.second.updates()) {
+        for (auto &arg: u.args()) {
+          ExprCost cost_visitor;
+          arg.accept(&cost_visitor);
+          ops += cost_visitor.ops;
+          loads += cost_visitor.loads;
+        }
 
-          int64_t ops = 1;
-          int64_t loads = 0;
-          for (auto &e: u.values()) {
-            ExprCost cost_visitor;
-            e.accept(&cost_visitor);
-            ops += cost_visitor.ops;
-            loads += cost_visitor.loads;
+        if (u.domain().defined()) {
+          Box b;
+          for (auto &rvar: u.domain().domain()) {
+            b.push_back(Interval(simplify(rvar.min),
+                                 simplify(rvar.min + rvar.extent - 1)));
           }
-
-          for (auto &arg: u.args()) {
-            ExprCost cost_visitor;
-            arg.accept(&cost_visitor);
-            ops += cost_visitor.ops;
-            loads += cost_visitor.loads;
-          }
-
-          if (u.domain().defined()) {
-            Box b;
-            for (auto &rvar: u.domain().domain()) {
-              b.push_back(Interval(simplify(rvar.min),
-                                   simplify(rvar.min + rvar.extent - 1)));
-            }
-            int64_t area = box_area(b);
-            if (area != -1) {
-              func_cost[kv.first].first += ops * area;
-              func_cost[kv.first].second += loads * area;
-            } else {
-              func_cost[kv.first].first = -1;
-              func_cost[kv.first].second = -1;
-              debug(0) << "Warning: could not determine the bounds of\
-                           the rdom in function " << kv.first << '\n';
-            }
+          int64_t area = box_area(b);
+          if (area != -1) {
+            total_ops += ops * area;
+            total_loads += loads * area;
+          } else {
+            total_ops = -1;
+            total_loads = -1;
+            debug(0) << "Warning: could not determine the bounds of\
+                     the rdom in function " << f.name() << '\n';
           }
         }
       }
+    }
+    return make_pair(total_ops, total_loads);
+  }
+
+  AbstractCost(const map<string, Function> &env) {
+    for (auto& kv : env) {
+      func_cost[kv.first] = get_func_cost(kv.second);
     }
   }
 };
