@@ -10,6 +10,7 @@
 #include "Bounds.h"
 #include "Var.h"
 #include "IRPrinter.h"
+#include "Inline.h"
 
 namespace Halide {
 namespace Internal {
@@ -143,6 +144,8 @@ class FindAllCalls : public IRVisitor {
 struct AbstractCost {
 
   /* Visitor for computing the arithmetic cost of a single value of a function*/
+  const map<string, Function> &env;
+
   class ExprCost : public IRVisitor {
    public:
     int ops;
@@ -240,52 +243,85 @@ struct AbstractCost {
 
   map<string, pair<int64_t, int64_t> > func_cost;
 
-  pair<int, int> get_expr_cost(Expr e) {
+  Expr perform_inline(Expr e, const set<string> &inlines = set<string>()) {
+
+    if (inlines.empty())
+      return e;
+
+    bool funcs_to_inline = false;
+    Expr inlined_expr = e;
+
+    do {
+      FindAllCalls find;
+      e.accept(&find);
+      set<string>& calls = find.calls;
+      for (auto& call: calls) {
+        if (inlines.find(call) != inlines.end()) {
+          funcs_to_inline = true;
+          inlined_expr = inline_function(inlined_expr, env.at(call));
+          break;
+        }
+      }
+    } while (funcs_to_inline);
+
+    return inlined_expr;
+  }
+
+  pair<int, int> get_expr_cost(Expr& e) {
     ExprCost cost_visitor;
     e.accept(&cost_visitor);
     return make_pair(cost_visitor.ops, cost_visitor.loads);
   }
 
-  int64_t region_cost(string func, Box& region,
-                      const set<string>& inlines = set<string>()) {
+  pair<int64_t, int64_t> region_cost(string func, Box& region,
+                                     const set<string>& inlines = set<string>()) {
 
     int64_t area = box_area(region);
     if (area < 0) {
       // Area could not be determined therfore it is not
       // possible to determine the cost as well
-      return -1;
+      return make_pair(-1, -1);
     }
-    int64_t op_cost = func_cost[func].first;
 
-    int64_t cost = area * (op_cost);
-    assert(cost >= 0);
+    pair<int64_t, int64_t> cost = inlines.empty() ? func_cost[func]:
+        get_func_cost(env.at(func), inlines);
+
+    cost.first *= area;
+    cost.second *= area;
+
+    assert(cost.first >= 0 && cost.second >=0);
     return cost;
   }
 
-  int64_t region_cost(map<string, Box>& regions,
-                      const set<string>& inlines = set<string>()) {
+  pair<int64_t, int64_t> region_cost(map<string, Box>& regions,
+                                     const set<string>& inlines = set<string>()) {
 
-    int64_t total_cost = 0;
+    pair<int64_t, int64_t> total_cost(0, 0);
     for(auto& f: regions) {
-      int64_t cost = region_cost(f.first, f.second);
-      if (cost < 0) {
-        return -1;
+      pair<int64_t, int64_t> cost = region_cost(f.first, f.second, inlines);
+      if (cost.first < 0) {
+        return cost;
       }
-      else
-        total_cost += cost;
+      else {
+        total_cost.first += cost.first;
+        total_cost.second += cost.second;
+      }
     }
-    assert(total_cost >= 0);
+
+    assert(total_cost.first >= 0 && total_cost.second >=0);
     return total_cost;
   }
 
-  pair<int64_t, int64_t> get_func_cost(const Function& f) {
+  pair<int64_t, int64_t> get_func_cost(const Function& f,
+                                       const set<string>& inlines = set<string>()) {
 
     int64_t total_ops = 1;
     int64_t total_loads = 0;
     // TODO: revist how boundary conditions are handled
     for (auto& e: f.values()) {
+      Expr inlined_expr = perform_inline(e, inlines);
       ExprCost cost_visitor;
-      e.accept(&cost_visitor);
+      inlined_expr.accept(&cost_visitor);
       total_ops += cost_visitor.ops;
       total_loads += cost_visitor.loads;
     }
@@ -300,15 +336,17 @@ struct AbstractCost {
         int64_t ops = 1;
         int64_t loads = 0;
         for (auto& e: u.values()) {
+          Expr inlined_expr = perform_inline(e, inlines);
           ExprCost cost_visitor;
-          e.accept(&cost_visitor);
+          inlined_expr.accept(&cost_visitor);
           ops += cost_visitor.ops;
           loads += cost_visitor.loads;
         }
 
         for (auto& arg: u.args()) {
+          Expr inlined_arg = perform_inline(arg, inlines);
           ExprCost cost_visitor;
-          arg.accept(&cost_visitor);
+          inlined_arg.accept(&cost_visitor);
           ops += cost_visitor.ops;
           loads += cost_visitor.loads;
         }
@@ -335,7 +373,7 @@ struct AbstractCost {
     return make_pair(total_ops, total_loads);
   }
 
-  AbstractCost(const map<string, Function>& env) {
+  AbstractCost(const map<string, Function>& _env) : env(_env) {
     for (auto& kv : env) {
       func_cost[kv.first] = get_func_cost(kv.second);
     }
