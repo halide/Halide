@@ -120,8 +120,8 @@ class VectorizeLoops : public IRMutator {
             // Internal allocations always get vectorized.
             if (vectorized_allocations.contains(op->name)) {
                 int lanes = replacement.type().lanes();
-                Expr lanes_expr = make_const(index.type(), lanes);
                 if (index.type().is_scalar()) {
+                    Expr lanes_expr = make_const(index.type(), lanes);
                     if (scalarized) {
                         index = Add::make(Mul::make(index, lanes_expr), scalar_lane);
                     } else {
@@ -129,8 +129,10 @@ class VectorizeLoops : public IRMutator {
                     }
                 } else {
                     internal_assert(!scalarized);
+                    Type scalar_index_type = index.type().with_lanes(1);
+                    Expr lanes_expr = make_const(scalar_index_type, lanes);
                     index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
-                    index = Add::make(index, Ramp::make(make_zero(index.type()), make_one(index.type()), lanes));
+                    index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
                 }
             }
 
@@ -383,8 +385,8 @@ class VectorizeLoops : public IRMutator {
             // Internal allocations always get vectorized.
             if (vectorized_allocations.contains(op->name)) {
                 int lanes = replacement.type().lanes();
-                Expr lanes_expr = make_const(index.type(), lanes);
                 if (index.type().is_scalar()) {
+                    Expr lanes_expr = make_const(index.type(), lanes);
                     if (scalarized) {
                         index = Add::make(Mul::make(index, lanes_expr), scalar_lane);
                     } else {
@@ -392,8 +394,10 @@ class VectorizeLoops : public IRMutator {
                     }
                 } else {
                     internal_assert(!scalarized);
+                    Type scalar_index_type = index.type().with_lanes(1);
+                    Expr lanes_expr = make_const(scalar_index_type, lanes);
                     index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
-                    index = Add::make(index, Ramp::make(make_zero(index.type()), make_one(index.type()), lanes));
+                    index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
                 }
             }
 
