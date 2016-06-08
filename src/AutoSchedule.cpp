@@ -663,16 +663,6 @@ struct Partitioner {
     // All the functions that belong to the group
     vector<Function> members;
 
-    // Estimate of arithmetic cost
-    int64_t arith_cost;
-    // Estimate of accesses to slow memory
-    int64_t mem_cost;
-    // Estimate of the parallelism
-    int64_t parallelism;
-    // Indicator to say if the cost of the group has been
-    // evaluated
-    bool cost_evaluated;
-
     // Reuse along dimensions of the group members
     map<string, map<string, int64_t> > reuse;
 
@@ -684,12 +674,7 @@ struct Partitioner {
     map<string, int> tile_sizes;
 
     Group(string _output, vector<Function> _members):
-      output(_output), members(_members) {
-        arith_cost = -1;
-        mem_cost = -1;
-        parallelism = -1;
-        cost_evaluated = false;
-      }
+      output(_output), members(_members) { }
 
     friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
 
@@ -712,11 +697,17 @@ struct Partitioner {
       }
       stream << "]" << '\n';
 
-      stream << "Arithmetic cost:" << g.arith_cost  << '\n';
-      stream << "Memory cost:" << g.mem_cost  << '\n';
-      stream << "Parallelism:" << g.parallelism  << '\n';
       return stream;
     }
+  };
+
+  struct GroupAnalysis {
+    // Estimate of arithmetic cost
+    int64_t arith_cost;
+    // Estimate of accesses to slow memory
+    int64_t mem_cost;
+    // Estimate of the parallelism
+    int64_t parallelism;
   };
 
   map<string, Group> groups;
@@ -797,9 +788,10 @@ struct Partitioner {
     child_members.insert(child_members.end(),
                          cand_funcs.begin(), cand_funcs.end());
 
-    // TODO: Update the child groups tile sizes. Look at all the members
-    // that need to be to be updated. Maybe merge should be a member of the
-    // group class so that it is more contained.
+    // TODO: Look at all the members that need to be to be updated.
+    // Maybe merge should be a member of the group class so that it
+    // is more contained.
+    groups.at(child_group).tile_sizes = choice.tile_sizes;
 
     // Update the children mapping
     children.erase(cand_group);
@@ -824,10 +816,10 @@ struct Partitioner {
       vector<Function> &cg_members = groups.at(cg).members;
       cg_members.insert(cg_members.end(),
                         cand_funcs.begin(), cand_funcs.end());
-      // TODO: Add prod_group to the set of of inlines in the child
-      // group. Look at all the members that need to be to be updated.
+      // TODO: Look at all the members that need to be to be updated.
       // Maybe merge should be a member of the group class so that
       // it is more contained.
+      groups.at(cg).inlined.insert(cand_group);
     }
 
     groups.erase(cand_group);
@@ -855,9 +847,11 @@ struct Partitioner {
   int64_t evaluate_choice(FusionChoice &choice);
   int64_t evaluate_choice(InlineChoice &choice);
 
-  void evaluate_group_cost(Group &g);
+  Group fuse_groups(Group& g1, Group& g2);
+
+  GroupAnalysis analyze_group(const Group &g);
   vector<Interval> get_bounds_from_tile_sizes(string func,
-                                              map<string, int> &tile_sizes);
+                                              const map<string, int> &tile_sizes);
   void group(Partitioner::Level level);
   pair<vector<InlineChoice>, int64_t>
       choose_candidate_fuse_inline(const vector< pair<string, string > > &cand_pairs);
@@ -884,7 +878,11 @@ map<string, int64_t> Partitioner::evaluate_reuse(string func,
   map<string, int> tile_sizes;
   // TODO: Check if tile sizes of 1 in each dimension gives a reasonable
   // answer or reuse should be evaluated at a much larger granularity or
-  // symbolically. Using a symbolic version might be more stable.
+  // symbolically.
+  // Using a symbolic version might be better if the objective is to find
+  // dimensions with no reuse. The only downside with the symbolic method
+  // is it totally at the mercy of the simplifier.
+  // Another option is sampling or using a larger granularity
   for (size_t i = 0; i < args.size(); i++)
     tile_sizes[args[i]] = 1;
 
@@ -1162,7 +1160,7 @@ void Partitioner::group(Partitioner::Level level) {
 }
 
 vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
-                                                         map<string, int> &tile_sizes) {
+                                                         const map<string, int> &tile_sizes) {
   vector<Interval> bounds;
   const vector<string> &args = analy.env.at(func).args();
 
@@ -1190,7 +1188,7 @@ vector<Interval> Partitioner::get_bounds_from_tile_sizes(string func,
   return bounds;
 }
 
-void Partitioner::evaluate_group_cost(Group &g) {
+Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
   // Estimating the number of accesses to slow memory
 
   // 1) Assume all loads are a miss if the working set does not fit
@@ -1280,32 +1278,16 @@ void Partitioner::evaluate_group_cost(Group &g) {
     mem_reg[f.name()] = conc_reg[f.name()];
 
   mem_reg[g.output] = Box(bounds);
+
+  GroupAnalysis g_analy;
+  g_analy.arith_cost = -1;
+  g_analy.mem_cost = -1;
+  g_analy.parallelism = -1;
+  return g_analy;
 }
 
-
-int64_t Partitioner::evaluate_choice(InlineChoice &choice) {
-  // Create a group that reflects the fusion choice and evaluate
-  // the cost of the group
-  Group prod_group = groups.at(choice.prod_group);
-  Group cons_group = groups.at(choice.cons_group);
-
-  vector<Function> fused_members;
-  for(auto &f: prod_group.members)
-    fused_members.push_back(f);
-  for(auto &f: cons_group.members)
-    fused_members.push_back(f);
-  return 0;
-}
-
-int64_t Partitioner::evaluate_choice(FusionChoice &choice) {
-  //disp_option(opt);
-
-  map<string, Box> conc_reg;
-
-  // Create a group that reflects the fusion choice and evaluate
-  // the cost of the group
-  Group prod_group = groups.at(choice.prod_group);
-  Group cons_group = groups.at(choice.cons_group);
+Partitioner::Group Partitioner::fuse_groups(Group &prod_group,
+                                            Group &cons_group) {
 
   vector<Function> fused_members;
   for(auto &f: prod_group.members)
@@ -1320,16 +1302,49 @@ int64_t Partitioner::evaluate_choice(FusionChoice &choice) {
   for(auto &f: cons_group.inlined)
     cons_group.inlined.insert(f);
 
-  fused_group.tile_sizes = choice.tile_sizes;
+  return fused_group;
+}
+
+int64_t Partitioner::evaluate_choice(InlineChoice &choice) {
+  // Create a group that reflects the fusion choice and evaluate
+  // the cost of the group
+  Group prod_group = groups.at(choice.prod_group);
+  Group cons_group = groups.at(choice.cons_group);
+
+  Group fused_group = fuse_groups(prod_group, cons_group);
 
   // Compare the cost with the costs of the groups without fusion
-  evaluate_group_cost(prod_group);
-  evaluate_group_cost(cons_group);
-  evaluate_group_cost(fused_group);
+  GroupAnalysis prod_analy = analyze_group(prod_group);
+  GroupAnalysis cons_analy = analyze_group(cons_group);
+  GroupAnalysis fused_analy = analyze_group(fused_group);
 
   // Return the overall benefit of the choice
   // TODO: Use the arch params to compute total work
-  return 0;
+  return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
+}
+
+int64_t Partitioner::evaluate_choice(FusionChoice &choice) {
+  //disp_option(opt);
+
+  map<string, Box> conc_reg;
+
+  // Create a group that reflects the fusion choice and evaluate
+  // the cost of the group
+  Group prod_group = groups.at(choice.prod_group);
+  Group cons_group = groups.at(choice.cons_group);
+
+  Group fused_group = fuse_groups(prod_group, cons_group);
+
+  fused_group.tile_sizes = choice.tile_sizes;
+
+  // Compare the cost with the costs of the groups without fusion
+  GroupAnalysis prod_analy = analyze_group(prod_group);
+  GroupAnalysis cons_analy = analyze_group(cons_group);
+  GroupAnalysis fused_analy = analyze_group(fused_group);
+
+  // Return the overall benefit of the choice
+  // TODO: Use the arch params to compute total work
+  return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
 }
 
 void generate_schedules(const vector<Function> &outputs,
