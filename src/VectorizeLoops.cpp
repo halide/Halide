@@ -17,6 +17,30 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+// For a given var, replace expressions like shuffle_vector(var, 4)
+// with var.4
+class ReplaceShuffleVectors : public IRMutator {
+    string var;
+
+    using IRMutator::visit;
+
+    void visit(const Call *op) {
+        const Variable *v;
+        const int64_t *i;
+        if (op->is_intrinsic(Call::shuffle_vector) &&
+            op->args.size() == 2 &&
+            (v = op->args[0].as<Variable>()) &&
+            v->name == var &&
+            (i = as_const_int(op->args[1]))) {
+            expr = Variable::make(op->type, var + "." + std::to_string(*i));
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+public:
+    ReplaceShuffleVectors(const string &v) : var(v) {}
+};
+
 class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {
         string var;
@@ -115,12 +139,12 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
-        void visit(const Load *op) {
-            Expr index = mutate(op->index);
+        Expr make_allocation_index(string alloc, Expr scalar_index) {
+            Expr index = mutate(scalar_index);
 
             // Internal allocations always get vectorized.
-            if (vectorized_allocations.contains(op->name)) {
-                int lanes = replacement.type().lanes();
+            if (vectorized_allocations.contains(alloc)) {
+                int lanes = vectorized_allocations.get(alloc);
                 if (index.type().is_scalar()) {
                     Expr lanes_expr = make_const(index.type(), lanes);
                     if (scalarized) {
@@ -130,12 +154,19 @@ class VectorizeLoops : public IRMutator {
                     }
                 } else {
                     internal_assert(!scalarized);
+                    internal_assert(lanes == index.type().lanes());
                     Type scalar_index_type = index.type().with_lanes(1);
                     Expr lanes_expr = make_const(scalar_index_type, lanes);
                     index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
                     index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
                 }
             }
+
+            return index;
+        }
+
+        void visit(const Load *op) {
+            Expr index = make_allocation_index(op->name, op->index);
 
             if (index.same_as(op->index)) {
                 expr = op;
@@ -326,6 +357,20 @@ class VectorizeLoops : public IRMutator {
 
             if (was_vectorized) {
                 scope.pop(op->name);
+
+                // Inner code might have extracted my lanes using
+                // shuffle_vector. If so we should define lets for the
+                // lanes and get it to use those instead.
+                Stmt new_body = ReplaceShuffleVectors(vectorized_name).mutate(mutated_body);
+                if (!mutated_body.same_as(new_body)) {
+                    Type t = mutated_value.type();
+                    for (int i = 0; i < t.lanes(); i++) {
+                        new_body = LetStmt::make(vectorized_name + "." + std::to_string(i),
+                                                 extract_lane(mutated_value, i),
+                                                 new_body);
+                    }
+                    mutated_body = new_body;
+                }
             }
 
             if (mutated_value.same_as(op->value) &&
@@ -382,25 +427,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Store *op) {
             Expr value = mutate(op->value);
-            Expr index = mutate(op->index);
-            // Internal allocations always get vectorized.
-            if (vectorized_allocations.contains(op->name)) {
-                int lanes = replacement.type().lanes();
-                if (index.type().is_scalar()) {
-                    Expr lanes_expr = make_const(index.type(), lanes);
-                    if (scalarized) {
-                        index = Add::make(Mul::make(index, lanes_expr), scalar_lane);
-                    } else {
-                        index = Ramp::make(Mul::make(index, lanes_expr), make_one(index.type()), lanes);
-                    }
-                } else {
-                    internal_assert(!scalarized);
-                    Type scalar_index_type = index.type().with_lanes(1);
-                    Expr lanes_expr = make_const(scalar_index_type, lanes);
-                    index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
-                    index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
-                }
-            }
+            Expr index = make_allocation_index(op->name, op->index);
 
             if (value.same_as(op->value) && index.same_as(op->index)) {
                 stmt = op;
@@ -469,10 +496,6 @@ class VectorizeLoops : public IRMutator {
 
             Expr min = mutate(op->min);
             Expr extent = mutate(op->extent);
-            user_assert(extent.type().is_scalar())
-                << "Can't vectorize a for loop with an extent that varies per vector "
-                << "lane. This is probably caused by scheduling something inside a "
-                << "vectorized dimension.";
 
             if (min.type().is_vector()) {
                 // Rebase the loop to zero and try again
@@ -483,7 +506,36 @@ class VectorizeLoops : public IRMutator {
                 return;
             }
 
-            Stmt body = mutate(op->body);
+            Stmt body = op->body;
+
+            if (extent.type().is_vector()) {
+                // Take the min and max over the lanes
+                Expr max_extent = extract_lane(extent, 0);
+                Expr min_extent = max_extent;
+                for (int i = 1; i < extent.type().lanes(); i++) {
+                    Expr e = extract_lane(extent, i);
+                    max_extent = Max::make(max_extent, e);
+                    min_extent = Min::make(min_extent, e);
+                }
+                Expr var = Variable::make(Int(32), op->name);
+
+                // We'll iterate up to the max over the lanes, but
+                // inject an if statement inside the loop that stops
+                // each lane from going too far.
+                extent = max_extent;
+                //Stmt guarded_body = IfThenElse::make(var < op->min + op->extent, body);
+                //body = IfThenElse::make(likely(var < op->min + op->extent), body);
+                debug(0) << op->min << "\n";
+                body = IfThenElse::make(var < op->min + op->extent, body);
+
+                // That if statement is going to scalarize, so also
+                // inject a version that can vectorize with a scalar
+                // condition guarding it.
+                //body = IfThenElse::make(likely(var < op->min + min_extent), body, guarded_body);
+                //body = IfThenElse::make(var < op->min + min_extent, body, guarded_body);
+            }
+
+            body = mutate(body);
 
             if (min.same_as(op->min) &&
                 extent.same_as(op->extent) &&
@@ -505,12 +557,20 @@ class VectorizeLoops : public IRMutator {
             }
 
             for (size_t i = 0; i < op->extents.size(); i++) {
-                new_extents.push_back(mutate(op->extents[i]));
-                // Only support scalar sizes for now. For vector sizes, we
-                // would need to take the horizontal max to convert to a
-                // scalar size.
-                user_assert(new_extents[i].type().is_scalar())
-                    << "Cannot vectorize an allocation with a varying size per vector lane.\n";
+                Expr extent = mutate(op->extents[i]);
+                // For vector sizes, take the max over the lanes. Note
+                // that we haven't changed the strides, which also may
+                // vary per lane. This is a bit weird, but the way we
+                // set up the vectorized memory means that lanes can't
+                // clobber each others' memory, so it doesn't matter.
+                if (extent.type().is_vector()) {
+                    Expr max_over_lanes = extract_lane(extent, 0);
+                    for (int i = 1; i < extent.type().lanes(); i++) {
+                        max_over_lanes = max(max_over_lanes, extract_lane(extent, i));
+                    }
+                    extent = max_over_lanes;
+                }
+                new_extents.push_back(extent);
             }
 
             if (op->new_expr.defined()) {
@@ -524,7 +584,7 @@ class VectorizeLoops : public IRMutator {
             if (!scalarized) {
                 // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
                 // foo[x] -> foo[x*lanes + ramp(0, 1, lanes)]
-                vectorized_allocations.push(op->name, 0);
+                vectorized_allocations.push(op->name, replacement.type().lanes());
             }
             Stmt body = mutate(op->body);
             if (!scalarized) {
