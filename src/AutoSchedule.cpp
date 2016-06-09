@@ -146,10 +146,12 @@ struct CostModel {
   class ExprCost : public IRVisitor {
    public:
     int ops;
-    int loads;
+    int byte_loads;
 
-    ExprCost() {
-      ops = 0; loads = 0;
+    const map<string, Function> &env;
+
+    ExprCost(const map<string, Function> &_env): env(_env) {
+      ops = 0; byte_loads = 0;
     }
 
     using IRVisitor::visit;
@@ -202,12 +204,14 @@ struct CostModel {
 
     // TODO: Figure out the right costs
     void visit(const Call * call) {
-      if (call->call_type == Call::Halide) {
-        loads+=1;
+      if (call->call_type == Call::Halide ||
+          call->call_type == Call::Image) {
+        const vector<Type>& types = env.at(call->name).output_types();
+        for(size_t i = 0; i < types.size(); i++)
+          byte_loads += types[i].bytes();
+        internal_assert(types.size() != 0);
       } else if (call->call_type == Call::Extern) {
         ops+=1;
-      } else if (call->call_type == Call::Image) {
-        loads+=1;
       } else if (call->call_type == Call::Intrinsic) {
         ops+=1;
       }
@@ -221,21 +225,21 @@ struct CostModel {
     }
     // Should not hit any of these IR nodes at this
     // stage of compilation
-    void visit(const Load *) { assert(0); }
-    void visit(const Ramp *) { assert(0); }
-    void visit(const Broadcast *) { assert(0); }
-    void visit(const LetStmt *) { assert(0); }
+    void visit(const Load *) { internal_assert(0); }
+    void visit(const Ramp *) { internal_assert(0); }
+    void visit(const Broadcast *) { internal_assert(0); }
+    void visit(const LetStmt *) { internal_assert(0); }
     void visit(const AssertStmt *) {}
-    void visit(const ProducerConsumer *) { assert(0); }
-    void visit(const For *) { assert(0); }
-    void visit(const Store *) { assert(0); }
-    void visit(const Provide *) { assert(0); }
-    void visit(const Allocate *) { assert(0); }
-    void visit(const Free *) { assert(0); }
-    void visit(const Realize *) { assert(0); }
-    void visit(const Block *) { assert(0); }
-    void visit(const IfThenElse *) { assert(0); }
-    void visit(const Evaluate *) { assert(0); }
+    void visit(const ProducerConsumer *) { internal_assert(0); }
+    void visit(const For *) { internal_assert(0); }
+    void visit(const Store *) { internal_assert(0); }
+    void visit(const Provide *) { internal_assert(0); }
+    void visit(const Allocate *) { internal_assert(0); }
+    void visit(const Free *) { internal_assert(0); }
+    void visit(const Realize *) { internal_assert(0); }
+    void visit(const Block *) { internal_assert(0); }
+    void visit(const IfThenElse *) { internal_assert(0); }
+    void visit(const Evaluate *) { internal_assert(0); }
   };
 
   map<string, pair<int64_t, int64_t> > func_cost;
@@ -265,9 +269,9 @@ struct CostModel {
   }
 
   pair<int, int> get_expr_cost(Expr& e) {
-    ExprCost cost_visitor;
+    ExprCost cost_visitor(env);
     e.accept(&cost_visitor);
-    return make_pair(cost_visitor.ops, cost_visitor.loads);
+    return make_pair(cost_visitor.ops, cost_visitor.byte_loads);
   }
 
   pair<int64_t, int64_t> region_cost(string func, Box& region,
@@ -281,12 +285,12 @@ struct CostModel {
     }
 
     pair<int64_t, int64_t> cost = inlines.empty() ? func_cost[func]:
-        get_func_cost(env.at(func), inlines);
+                                  get_func_cost(env.at(func), inlines);
 
     cost.first *= area;
     cost.second *= area;
 
-    assert(cost.first >= 0 && cost.second >=0);
+    internal_assert(cost.first >= 0 && cost.second >=0);
     return cost;
   }
 
@@ -305,7 +309,7 @@ struct CostModel {
       }
     }
 
-    assert(total_cost.first >= 0 && total_cost.second >=0);
+    internal_assert(total_cost.first >= 0 && total_cost.second >=0);
     return total_cost;
   }
 
@@ -317,10 +321,10 @@ struct CostModel {
     // TODO: revist how boundary conditions are handled
     for (auto& e: f.values()) {
       Expr inlined_expr = perform_inline(e, inlines);
-      ExprCost cost_visitor;
+      ExprCost cost_visitor(env);
       inlined_expr.accept(&cost_visitor);
       total_ops += cost_visitor.ops;
-      total_loads += cost_visitor.loads;
+      total_loads += cost_visitor.byte_loads;
     }
 
     // Estimating cost when reductions are involved
@@ -333,18 +337,18 @@ struct CostModel {
         int64_t loads = 0;
         for (auto& e: u.values()) {
           Expr inlined_expr = perform_inline(e, inlines);
-          ExprCost cost_visitor;
+          ExprCost cost_visitor(env);
           inlined_expr.accept(&cost_visitor);
           ops += cost_visitor.ops;
-          loads += cost_visitor.loads;
+          loads += cost_visitor.byte_loads;
         }
 
         for (auto& arg: u.args()) {
           Expr inlined_arg = perform_inline(arg, inlines);
-          ExprCost cost_visitor;
+          ExprCost cost_visitor(env);
           inlined_arg.accept(&cost_visitor);
           ops += cost_visitor.ops;
-          loads += cost_visitor.loads;
+          loads += cost_visitor.byte_loads;
         }
 
         if (u.domain().defined()) {
@@ -374,11 +378,14 @@ struct CostModel {
     const vector<Type>& types = f.output_types();
     for(size_t i = 0; i < types.size(); i++)
       size += types[i].bytes();
+    internal_assert(types.size() != 0);
+    /*
     if (size == 0) {
       // TODO: Fix me
-      // Hack to over come weirdness for inputs to the pipeline
+      // Hack to overcome weirdness for inputs to the pipeline
       size = 4;
     }
+    */
     return size;
   }
 
@@ -394,7 +401,7 @@ struct CostModel {
   }
 
   int64_t region_size(const map<string, Box>& regions,
-                      const set<string>& inlined) {
+                      const set<string>& inlined = set<string>()) {
 
     map<string, int> num_consumers;
     for(auto& f: regions)
@@ -443,7 +450,7 @@ struct CostModel {
           num_consumers[p.first] -= 1;
         if (num_consumers[p.first] == 0) {
           curr_size -= func_sizes.at(p.first);
-          assert(curr_size >= 0);
+          internal_assert(curr_size >= 0);
         }
       }
     }
@@ -651,14 +658,14 @@ struct DependenceAnalysis {
         Box b = reg.second;
         Box b_shifted = regions_shifted[reg.first];
         // The boxes should be of the same size
-        assert(b.size() == b_shifted.size());
+        internal_assert(b.size() == b_shifted.size());
         // The box used makes things complicated ignoring it for now
         Box b_intersect;
         for (unsigned int i = 0 ; i < b.size(); i++)
           b_intersect.push_back(interval_intersect(b[i], b_shifted[i]));
         // A function should appear once in the regions and therefore cannot
         // already be present in the overlaps map
-        assert(overalps.find(reg.first) == overalps.end());
+        internal_assert(overalps.find(reg.first) == overalps.end());
         overalps[reg.first] = b_intersect;
       }
     }
@@ -836,9 +843,8 @@ struct Partitioner {
   map<string, Box>& pipeline_bounds;
   MachineParams& arch_params;
   DependenceAnalysis& analy;
+  CostModel& cost_model;
   const vector<Function>& outputs;
-
-  //map<string, float > input_reuse;
 
   map<string, set<string> > children;
   void disp_children(map<string, set<string> >& children) {
@@ -850,20 +856,14 @@ struct Partitioner {
     }
   }
 
-  // These are pre-computed values that are used throughout the grouping
-  // TODO: see what is required and purge the rest
-  map<string, vector<int> > func_pure_dim_estimates;
-  map<string, map<string, int> > func_dim_estimates;
-  map<string, int64_t > func_op;
-  map<string, int64_t > func_size;
-
   bool gpu_schedule;
 
   Partitioner(map<string, Box>& _pipeline_bounds, MachineParams& _arch_params,
-              DependenceAnalysis& _analy, const vector<Function>& _outputs,
-              bool _gpu_schedule):
+              DependenceAnalysis& _analy, CostModel& _cost_model,
+              const vector<Function>& _outputs, bool _gpu_schedule):
               pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-              analy(_analy), outputs(_outputs), gpu_schedule(_gpu_schedule) {
+              analy(_analy), cost_model(_cost_model), outputs(_outputs),
+              gpu_schedule(_gpu_schedule) {
 
       // Place each function in its own group
       for (auto& f: analy.env) {
@@ -884,14 +884,11 @@ struct Partitioner {
       disp_children(children);
 
       // TODO: Any preprocess inlining should go here and they should be added to
-      //the corresponding group as inlined members
+      // the corresponding group as inlined members
 
       // TODO: FindAllCalls might be unnecessary and it probably can be
       // replaced by find_direct_calls
 
-      // TODO: Create the CostModel
-      // Precompute the arithmetic and load costs for each function in the
-      // pipeline
     }
 
   void merge_groups(FusionChoice& choice) {
@@ -899,7 +896,7 @@ struct Partitioner {
     string cand_group = choice.prod_group;
     string child_group = choice.cons_group;
 
-    assert(groups.find(child_group) != groups.end());
+    internal_assert(groups.find(child_group) != groups.end());
     vector<Function> cand_funcs = groups.at(cand_group).members;
 
     groups.erase(cand_group);
@@ -929,7 +926,7 @@ struct Partitioner {
 
     set<string> cand_group_children = children[cand_group];
     for (auto& cg: cand_group_children) {
-      assert(groups.find(cg) != groups.end());
+      internal_assert(groups.find(cg) != groups.end());
       vector<Function> cand_funcs = groups.at(cand_group).members;
 
       vector<Function>& cg_members = groups.at(cg).members;
@@ -1061,8 +1058,8 @@ Partitioner::choose_candidate_fuse_inline(
       }
 
       // Conservative strategy that only goes ahead with the fusion if all the
-      // fusions into the consumers are beneficial TODO: Create a test where
-      // this assumption breaks
+      // fusions into the consumers are beneficial
+      // TODO: Create a test where this assumption breaks
       if (benefit < 0) {
         overall_benefit = -1;
         break;
@@ -1325,6 +1322,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   // iteration order.
 
   set<string> group_inputs;
+  set<string> group_mem;
 
   for(auto& f: g.members) {
     FindAllCalls find;
@@ -1339,6 +1337,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
       }
       if (!is_member) {
         group_inputs.insert(c);
+      } else {
+        group_mem.insert(c);
       }
     }
   }
@@ -1358,55 +1358,48 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     }
   }
 
-  // Determining the size of the intermediates
+  // Get the regions of the pipeline required to compute a tile of the group
   vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
                                                        g.tile_sizes);
   map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
+  map<string, Box> group_reg, input_reg, touched_reg;
 
-  // disp_regions(conc_reg);
+  // Filtering out regions that belong to the group and are input to the group
+  for (auto& reg: conc_reg) {
+    if (group_mem.find(reg.first) != group_mem.end()) {
+      group_reg[reg.first] = reg.second;
+    } else if (group_inputs.find(reg.first) != group_inputs.end()) {
+      input_reg[reg.first] = reg.second;
+    }
+  }
 
-  // TODO: Edit the text on the cost model
-  // Cost model
-
-  // We currently assume a two level memory model. The fast_mem_size field in
-  // the arch parameters gives the size of the fast memory. Additionally, the
-  // ratio of load from fast memory vs slow memory is encoded in the machine
-  // parameters.
-
-  // We compute the size of the intermediate buffers that are required to
-  // compute the output of the group.
-
-  // inter_s = size of the intermediates in the fused group
-  // M = fast memory size
-  // s_c = the cost of loading from slow memory
-  // f_c = the cost of loading from fast memory
-  // op_c = the cost of computing an op
-
-  // The benefit of an option is the reduction in the number of operations
-  // that read/write to slow memory and the benefit is calculated per tile
-  //
-  // if inter_s fits in fast memory then
-  //    inter_s * s_c - (inter_s * f_c + (redundant_ops) * op_c)
-  //    => inter_s * (s_c - f_c) - (redundant_ops) * op_c
-  // else
-  //    hit = max(2M - inter_s, 0) assuming LRU
-  //    inter_s * s_c - (hit * f_c + (inter_s - hit) * s_c + (redundant_ops)
-  //                     * op_c)
-  //    => hit * (s_c - f_c) - (redundant_ops) * op_c
-
-  map<string, Box> mem_reg;
-
-  // TODO: Do not count inlines while accounting for intermediate storage when
-  // grouping for fast mem
-  for (auto& f: g.members)
-    mem_reg[f.name()] = conc_reg[f.name()];
-
-  mem_reg[g.output] = Box(bounds);
+  // Compute the cost of the region and the size of the intermediates
+  pair<int64_t, int64_t> tile_cost = cost_model.region_cost(group_reg, g.inlined);
+  int64_t tile_input_size = cost_model.region_size(input_reg);
+  int64_t tile_intermediate_size = cost_model.region_size(group_reg, g.inlined);
 
   GroupAnalysis g_analy;
   g_analy.arith_cost = -1;
   g_analy.mem_cost = -1;
   g_analy.parallelism = -1;
+
+  // The group could not be analyzed
+  if (tile_cost.first < 0 || tile_cost.second < 0 || tile_input_size < 0 ||
+      tile_intermediate_size < 0) {
+    return g_analy;
+  }
+
+  int64_t per_tile_mem_cost = tile_input_size;
+  int64_t per_tile_arith_cost = tile_cost.first;
+
+  if (tile_intermediate_size > arch_params.fast_mem_size) {
+    per_tile_mem_cost += tile_cost.second;
+  }
+
+  g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
+  g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
+  g_analy.parallelism = estimate_tiles;
+
   return g_analy;
 }
 
@@ -1519,7 +1512,10 @@ void generate_schedules(const vector<Function>& outputs,
   arch_params.fast_mem_size = 1024;
   arch_params.balance = 10;
 
-  Partitioner part(pipeline_bounds, arch_params, analy, outputs, false);
+  CostModel cost_model(env);
+
+  Partitioner part(pipeline_bounds, arch_params, analy,
+                   cost_model, outputs, false);
 
   for (auto& f: env) {
     FindAllCalls find;
