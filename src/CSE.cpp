@@ -21,7 +21,7 @@ namespace {
 // occur redundantly many times. This list should mirror the list in
 // the simplifier for lets, otherwise they'll just fight with each
 // other pointlessly.
-bool should_extract(Expr e, bool conservative) {
+bool should_extract(Expr e) {
     if (is_const(e)) {
         return false;
     }
@@ -30,34 +30,32 @@ bool should_extract(Expr e, bool conservative) {
         return false;
     }
 
-    if (conservative) {
-        if (const Broadcast *a = e.as<Broadcast>()) {
-            return should_extract(a->value, conservative);
-        }
+    if (const Broadcast *a = e.as<Broadcast>()) {
+        return should_extract(a->value);
+    }
 
-        if (const Cast *a = e.as<Cast>()) {
-            return should_extract(a->value, conservative);
-        }
+    if (const Cast *a = e.as<Cast>()) {
+        return should_extract(a->value);
+    }
 
-        if (const Add *a = e.as<Add>()) {
-            return !(is_const(a->a) || is_const(a->b));
-        }
+    if (const Add *a = e.as<Add>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
 
-        if (const Sub *a = e.as<Sub>()) {
-            return !(is_const(a->a) || is_const(a->b));
-        }
+    if (const Sub *a = e.as<Sub>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
 
-        if (const Mul *a = e.as<Mul>()) {
-            return !(is_const(a->a) || is_const(a->b));
-        }
+    if (const Mul *a = e.as<Mul>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
 
-        if (const Div *a = e.as<Div>()) {
-            return !(is_const(a->a) || is_const(a->b));
-        }
+    if (const Div *a = e.as<Div>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
 
-        if (const Ramp *a = e.as<Ramp>()) {
-            return !is_const(a->stride);
-        }
+    if (const Ramp *a = e.as<Ramp>()) {
+        return !is_const(a->stride);
     }
 
     return true;
@@ -172,9 +170,8 @@ public:
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
-    bool conservative;
 public:
-    ComputeUseCounts(GVN &g, bool c) : gvn(g), conservative(c) {}
+    ComputeUseCounts(GVN &g) : gvn(g) {}
 
     using IRGraphVisitor::include;
 
@@ -182,7 +179,7 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        if (!should_extract(e, conservative)) {
+        if (!should_extract(e)) {
             e.accept(this);
             return;
         }
@@ -229,7 +226,7 @@ public:
 
 } // namespace
 
-Expr common_subexpression_elimination(Expr e, bool conservative) {
+Expr common_subexpression_elimination(Expr e) {
 
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
@@ -239,7 +236,7 @@ Expr common_subexpression_elimination(Expr e, bool conservative) {
     GVN gvn;
     e = gvn.mutate(e);
 
-    ComputeUseCounts count_uses(gvn, conservative);
+    ComputeUseCounts count_uses(gvn);
     count_uses.include(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
@@ -284,21 +281,18 @@ Expr common_subexpression_elimination(Expr e, bool conservative) {
 namespace {
 
 class CSEEveryExprInStmt : public IRMutator {
-    bool conservative;
 public:
     using IRMutator::mutate;
 
     Expr mutate(Expr e) {
-        return common_subexpression_elimination(e, conservative);
+        return common_subexpression_elimination(e);
     }
-
-    CSEEveryExprInStmt(bool c) : conservative(c) {}
 };
 
 } // namespace
 
-Stmt common_subexpression_elimination(Stmt s, bool conservative) {
-    return CSEEveryExprInStmt(conservative).mutate(s);
+Stmt common_subexpression_elimination(Stmt s) {
+    return CSEEveryExprInStmt().mutate(s);
 }
 
 
