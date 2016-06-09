@@ -216,14 +216,6 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
-    // If the device/q is not initialized, and we're not supposed to
-    // create one, just return.
-    if (!create && device == 0) {
-      device_ret = 0;
-      queue_ret = 0;
-      return 0;
-    }
-
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
@@ -249,7 +241,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
 
     // If the device has already been initialized,
     // ensure the queue has as well.
-    halide_assert(user_context, queue != 0);
+    halide_assert(user_context, (device == 0) || (queue != 0));
 
     device_ret = device;
     queue_ret = queue;
