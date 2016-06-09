@@ -227,6 +227,11 @@ public:
         // pushes all reduction domains it encounters into the 'rdoms' set
         // for later use.
         void compute_exprs() {
+            // We need to clear 'exprs' and 'rdoms' first, in case compute_exprs()
+            // is called multiple times.
+            exprs.clear();
+            rdoms.clear();
+
             bool is_update = (stage != 0);
             vector<vector<CondValue>> result;
             if (!is_update) {
