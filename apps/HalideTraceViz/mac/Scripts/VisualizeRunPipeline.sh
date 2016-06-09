@@ -101,11 +101,12 @@ function VisualizeFunctions()
     HL_TRACE_FILE=/dev/stdout ./RunPipeline | \
     ./HalideTraceViz -s 1290 1024 -t 1 -d 100 \
 \
-    -l input Input 2 24 1 \
+    -l input Input  2   24 1 \
     -l output Onput 516 24 1 \
 \
-    -f input 0 127 -1 $BLANK $ZOOM $COST 0 26 $STRIDE0 $STRIDE1 \
+    -f input  0 127 -1 $BLANK $ZOOM $COST 0   26 $STRIDE0 $STRIDE1 \
     -f output 1 128 -1 $BLANK $ZOOM $COST 516 26 $STRIDE0 $STRIDE1 | \
+\
     ../../../components/ffmpeg/ffmpeg -r 30 -f rawvideo -pix_fmt rgba \
     -s 1290X1024  -i - -y -pix_fmt yuv420p ../../movies/Brighten_schedule.mp4
 
