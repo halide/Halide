@@ -392,8 +392,7 @@ In addition to running Hexagon code on device, Halide also supports running Hexa
 To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the simulator:
 
     export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.0/Tools/
-LD_LIBRARY_PATH=/.../Halide/src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:.
-make run-host
+    LD_LIBRARY_PATH=/.../Halide/src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
 
 #### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
 
