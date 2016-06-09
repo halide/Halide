@@ -9,6 +9,7 @@
 #include "Substitute.h"
 #include "Scope.h"
 #include "Bounds.h"
+#include "Lerp.h"
 
 namespace Halide {
 namespace Internal {
@@ -577,6 +578,17 @@ private:
             }
         }
         IRMutator::visit(op);
+    }
+
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::lerp)) {
+            // We need to lower lerps now to optimize the arithmetic
+            // that they generate.
+            internal_assert(op->args.size() == 3);
+            expr = mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
 public:
