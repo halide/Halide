@@ -1104,37 +1104,6 @@ Expr maybe_scalar(Expr x) {
 
 void CodeGen_Hexagon::visit(const Mul *op) {
     if (op->type.is_vector()) {
-        // Figure out if one of the operands is a scalar, and commute
-        // if it isn't the second operand.
-        Expr a = maybe_scalar(op->a);
-        Expr b = maybe_scalar(op->b);
-        if (a.type().is_scalar())
-            std::swap(a, b);
-
-        // Check if this is a multiplication by a power of 2.
-        int shift_amount;
-        if (is_const_power_of_two_integer(b, &shift_amount)) {
-            value = codegen(a << shift_amount);
-            return;
-        }
-
-        // Try to find an intrinsic for one of the operands being a scalar.
-        // All the non-widening vector by scalar multiplies expect a narrower
-        // scalar. Only two narrow types work, 8 bit and 16 bit. Start with
-        // the 8 bit ones
-        for (int bits : {8, 16}) {
-            Expr narrow_b = lossless_cast(b.type().with_bits(bits), b);
-            Expr opb = narrow_b.defined() ? narrow_b : b;
-            value = call_intrin(op->type,
-                                "halide.hexagon.mul" +
-                                type_suffix(a, opb),
-                                {a, opb},
-                                true /*maybe*/);
-            if (value) return;
-        }
-
-        // We didn't find an intrinsic for this type. Try again
-        // without the scalar operand.
         value = call_intrin(op->type,
                             "halide.hexagon.mul" + type_suffix(op->a, op->b),
                             {op->a, op->b},
@@ -1143,17 +1112,13 @@ void CodeGen_Hexagon::visit(const Mul *op) {
 
         // Hexagon has mostly widening multiplies. Try to find a
         // widening multiply we can use.
+        // TODO: It would probably be better to just define a bunch of
+        // mul.*.* functions in the runtime HVX modules so the above
+        // implementation can be used unconditionally.
         value = call_intrin(op->type,
-                            "halide.hexagon.mpy" + type_suffix(a, b),
-                            {a, b},
+                            "halide.hexagon.mpy" + type_suffix(op->a, op->b),
+                            {op->a, op->b},
                             true /*maybe*/);
-        if (!value) {
-            // Try again without the scalar operand.
-            value = call_intrin(op->type,
-                                "halide.hexagon.mpy" + type_suffix(op->a, op->b),
-                                {op->a, op->b},
-                                true /*maybe*/);
-        }
         if (value) {
             // We found a widening op, we need to narrow back
             // down. The widening multiply deinterleaved the result,
@@ -1165,7 +1130,9 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             return;
         }
 
-        internal_error << "Unhandled HVX multiply " << Expr(op) << "\n";
+        internal_error << "Unhandled HVX multiply "
+                       << op->a.type() << "*" << op->b.type() << "\n"
+                       << Expr(op) << "\n";
     } else {
         CodeGen_Posix::visit(op);
     }
