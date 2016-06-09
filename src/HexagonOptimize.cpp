@@ -273,13 +273,36 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
 };
 
-std::vector<Pattern> muls = {
+// Many of the following patterns are accumulating widening
+// operations, which need to both deinterleave the accumulator, and
+// reinterleave the result.
+const int ReinterleaveOp0 = Pattern::InterleaveResult | Pattern::DeinterleaveOp0;
+
+std::vector<Pattern> scalar_muls = {
+    // Multiplication by powers of 2.
+    { "halide.hexagon.shl.vub.ub", wild_u8x*bc(wild_u8), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vuh.uh", wild_u16x*bc(wild_u16), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vuw.uw", wild_u32x*bc(wild_u32), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vb.b", wild_i8x*bc(wild_i8), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vh.h", wild_i16x*bc(wild_i16), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vw.w", wild_i32x*bc(wild_i32), Pattern::ExactLog2Op1 },
+
     // Vector by scalar widening multiplies.
     { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
     { "halide.hexagon.mpy.vuh.uh", wild_u32x*bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vh.h",   wild_i32x*bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
 
+    // Non-widening scalar multiplication.
+    { "halide.hexagon.mul.vh.b", wild_i16x*bc(wild_i16), Pattern::NarrowOp1 },
+    { "halide.hexagon.mul.vw.h", wild_i32x*bc(wild_i32), Pattern::NarrowOp1 },
+    // TODO: There's also mul.vw.b. We currently generate mul.vw.h
+    // instead. I'm not sure mul.vw.b is faster, it might even be
+    // slower due to the extra step in broadcasting the scalar up to
+    // 32 bits.
+};
+
+std::vector<Pattern> muls = {
     // Widening multiplication
     { "halide.hexagon.mpy.vub.vub", wild_u16x*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vuh.vuh", wild_u32x*wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -288,12 +311,19 @@ std::vector<Pattern> muls = {
 
     { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
     { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 },
-};
+    // We need to check for the commuted versions of these patterns
+    // before the more general patterns below catch these ops. The
+    // other fix for this would be to break this into a third group of
+    // multiply patterns, so the commuted versions of these would get
+    // matched first.
+    { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::SwapOps01 },
+    { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 | Pattern::SwapOps01 },
 
-// Many of the following patterns are accumulating widening
-// operations, which need to both deinterleave the accumulator, and
-// reinterleave the result.
-const int ReinterleaveOp0 = Pattern::InterleaveResult | Pattern::DeinterleaveOp0;
+    // One operand widening multiplication.
+    { "halide.hexagon.mul.vw.vh", wild_i32x*wild_i32x, ReinterleaveOp0 | Pattern::NarrowOp1 },
+    { "halide.hexagon.mul.vw.vuh", wild_i32x*wild_i32x, ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
+    { "halide.hexagon.mul.vuw.vuh", wild_u32x*wild_u32x, ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
+};
 
 std::vector<Pattern> adds = {
     // Shift-accumulates.
@@ -427,28 +457,43 @@ Expr lossless_negate(Expr x) {
     return Expr();
 }
 
+template <typename T>
+Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IRMutator *mutator) {
+    Expr ret = apply_patterns(op, patterns, mutator);
+    if (!ret.same_as(op)) return ret;
+
+    // Try commuting the op
+    Expr commuted = T::make(op->b, op->a);
+    ret = apply_patterns(commuted, patterns, mutator);
+    if (!ret.same_as(commuted)) return ret;
+
+    return op;
+}
+
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
-    template <typename T>
-    void visit_commutative_op(const T *op, const vector<Pattern> &patterns) {
+    void visit(const Mul *op) {
         if (op->type.is_vector()) {
-            expr = apply_patterns(op, patterns, this);
+            expr = apply_commutative_patterns(op, scalar_muls, this);
             if (!expr.same_as(op)) return;
 
-            // Try commuting the op
-            Expr commuted = T::make(op->b, op->a);
-            expr = apply_patterns(commuted, patterns, this);
-            if (!expr.same_as(commuted)) return;
+            expr = apply_commutative_patterns(op, muls, this);
+            if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
     }
 
-    void visit(const Mul *op) { visit_commutative_op(op, muls); }
-    void visit(const Add *op) { visit_commutative_op(op, adds); }
+    void visit(const Add *op) {
+        if (op->type.is_vector()) {
+            expr = apply_commutative_patterns(op, adds, this);
+            if (!expr.same_as(op)) return;
+        }
+        IRMutator::visit(op);
+    }
 
     void visit(const Sub *op) {
         if (op->type.is_vector()) {
