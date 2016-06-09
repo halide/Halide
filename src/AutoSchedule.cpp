@@ -43,7 +43,7 @@ int get_extent(const Interval& i) {
   return -1;
 }
 
-int64_t box_area(Box& b) {
+int64_t box_area(const Box& b) {
   int64_t box_area = 1;
   for(size_t i = 0; i < b.size(); i++) {
     // Maybe should check for unsigned integers and floats too
@@ -138,7 +138,7 @@ class FindAllCalls : public IRVisitor {
   }
 };
 
-struct AbstractCost {
+struct CostModel {
 
   /* Visitor for computing the arithmetic cost of a single value of a function*/
   const map<string, Function> &env;
@@ -369,7 +369,89 @@ struct AbstractCost {
     return make_pair(total_ops, total_loads);
   }
 
-  AbstractCost(const map<string, Function>& _env) : env(_env) {
+  int64_t get_func_size_per_ele(const Function& f) {
+    int64_t size = 0;
+    const vector<Type>& types = f.output_types();
+    for(size_t i = 0; i < types.size(); i++)
+      size += types[i].bytes();
+    if (size == 0) {
+      // TODO: Fix me
+      // Hack to over come weirdness for inputs to the pipeline
+      size = 4;
+    }
+    return size;
+  }
+
+  int64_t region_size(string func, const Box &region) {
+    const Function& f = env.at(func);
+    int64_t area = box_area(region);
+    if (area < 0) {
+      // Area could not be determined
+      return -1;
+    }
+    int64_t size = get_func_size_per_ele(f);
+    return area * size;
+  }
+
+  int64_t region_size(const map<string, Box>& regions,
+                      const set<string>& inlined) {
+
+    map<string, int> num_consumers;
+    for(auto& f: regions)
+      num_consumers[f.first] = 0;
+
+    for(auto& f: regions) {
+      map<string, Function> prods = find_direct_calls(env.at(f.first));
+      for(auto& p: prods) {
+        if (regions.find(p.first) != regions.end())
+          num_consumers[p.first] += 1;
+      }
+    }
+
+    vector<Function> outs;
+    for(auto &f: num_consumers) {
+      if (f.second  == 0) {
+        outs.push_back(env.at(f.first));
+      }
+    }
+
+    // Realization order
+    vector<string> order = realization_order(outs, env);
+
+    int64_t working_set_size = 0;
+    int64_t curr_size = 0;
+
+    map<string, int64_t> func_sizes;
+    for(auto& f: regions) {
+      // Inlined functions do not have allocations
+      int64_t size = inlined.find(f.first) != inlined.end()? 0:
+                     region_size(f.first, f.second);
+      if (size < 0)
+        return -1;
+      else
+        func_sizes[f.first] = size;
+    }
+
+    for(auto& f: order) {
+      if (regions.find(f) != regions.end()) {
+        curr_size += func_sizes.at(f);
+      }
+      working_set_size = std::max(curr_size, working_set_size);
+      map<string, Function> prods = find_direct_calls(env.at(f));
+      for(auto& p: prods) {
+        if (num_consumers.find(p.first) != num_consumers.end())
+          num_consumers[p.first] -= 1;
+        if (num_consumers[p.first] == 0) {
+          curr_size -= func_sizes.at(p.first);
+          assert(curr_size >= 0);
+        }
+      }
+    }
+
+    return working_set_size;
+  }
+
+  CostModel(const map<string, Function>& _env) : env(_env) {
     for (auto& kv : env) {
       func_cost[kv.first] = get_func_cost(kv.second);
     }
@@ -791,7 +873,7 @@ struct Partitioner {
         groups.insert(make_pair(f.first, g));
       }
 
-      // Find consumers of each function relate groups with their children
+      // Find consumers of each function and relate groups with their children
       for (auto& f: analy.env) {
         map<string, Function> calls = find_direct_calls(f.second);
         for (auto& c: calls)
@@ -801,9 +883,13 @@ struct Partitioner {
 
       disp_children(children);
 
-      //TODO: Any preprocess inlining should go here and they should be added to
+      // TODO: Any preprocess inlining should go here and they should be added to
       //the corresponding group as inlined members
 
+      // TODO: FindAllCalls might be unnecessary and it probably can be
+      // replaced by find_direct_calls
+
+      // TODO: Create the CostModel
       // Precompute the arithmetic and load costs for each function in the
       // pipeline
     }
@@ -1227,7 +1313,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   // This ignores any locality that results from the iteration order. This is
   // pretty aggresive in estimating the benefit of fusion.
   //
-  // 2) Assume that the intermediates are loaded only once even if the do not
+  // 2) Assume that the intermediates are loaded only once even if they do not
   // fit in cache. It is a pretty good model for pipelines which are streaming
   // in nature. This gives a conservative estimate of fusion benefit and does
   // not accurately capture scenarios where there is significant reuse.
@@ -1235,18 +1321,26 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   // The actual number of accesses will inbetween 2) and 1) for now going with
   // model 1).
   //
-  // TODO: See if the model needs to be refined further to account for spatial
-  // locality and iteration order.
+  // TODO: Model needs to be refined further to account for spatial locality and
+  // iteration order.
 
   set<string> group_inputs;
 
   for(auto& f: g.members) {
     FindAllCalls find;
     analy.env.at(f.name()).accept(&find);
-    //for(auto& c: find.calls) {
-    //  if (std::find(g.members.begin(), g.members.end(), c) == g.members.end())
-    //    group_inputs.insert(c);
-    //}
+    for(auto& c: find.calls) {
+      bool is_member = false;
+      for (auto& m: g.members) {
+        if (m.name() == c) {
+          is_member = true;
+          break;
+        }
+      }
+      if (!is_member) {
+        group_inputs.insert(c);
+      }
+    }
   }
 
   // Count the number of tiles
