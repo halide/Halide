@@ -137,6 +137,7 @@ protected:
 #endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
+    std::vector<LoweredArgument> current_function_args;
     //@}
 
     /** The target we're generating code for */
