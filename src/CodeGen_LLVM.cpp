@@ -745,9 +745,15 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     llvm::Type *padding_bytes_type =
         buffer_t_type->getElementType(buffer_t_type->getNumElements()-1);
 
+    // For now, we assume buffers that aren't scalar are constant,
+    // while scalars can be mutated. This accomodates all our existing
+    // use cases, which is that all buffers are constant, except those
+    // used to store stateful module information in offloading runtimes.
+    bool constant = num_elems > 1;
+
     Constant *fields[] = {
         ConstantInt::get(i64, 0), // dev
-        create_binary_blob(array, buf.name() + ".data"), // host
+        create_binary_blob(array, buf.name() + ".data", constant), // host
         ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
         ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
@@ -3026,9 +3032,8 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
     }
 }
 
-Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name) {
+Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name, bool constant) {
     llvm::Type *type = ArrayType::get(i8, data.size());
-    bool constant = data.size() > 1024;
     GlobalVariable *global = new GlobalVariable(*module, type,
                                                 constant, GlobalValue::PrivateLinkage,
                                                 0, name);
