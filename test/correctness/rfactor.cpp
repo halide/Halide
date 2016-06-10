@@ -116,7 +116,7 @@ int simple_rfactor_test(bool compile_module) {
     g(r.x, r.y) = max(g(r.x, r.y) + f(r.x, r.y), g(r.x, r.y));
 
     Var u("u");
-    Func intm = g.update(0).rfactor({{r.y, u}});
+    Func intm = g.update(0).rfactor(r.y, u);
     intm.compute_root();
     intm.vectorize(u, 8);
     intm.update(0).vectorize(r.x, 2);
@@ -167,7 +167,7 @@ int reorder_split_rfactor_test(bool compile_module) {
 
     Var u("u"), v("v");
     Func intm1 = g.update(0).rfactor({{rxo, u}, {r.y, v}});
-    Func intm2 = g.update(0).rfactor({{r.y, v}});
+    Func intm2 = g.update(0).rfactor(r.y, v);
     intm2.compute_root();
     intm1.compute_at(intm2, rxo);
 
@@ -217,7 +217,7 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     g.update(0).reorder({r.z, rf});
 
     Var u("u"), v("v");
-    Func intm = g.update(0).rfactor({{r.z, u}});
+    Func intm = g.update(0).rfactor(r.z, u);
     RVar rfi("rfi"), rfo("rfo");
     intm.update(0).split(rf, rfi, rfo, 2);
 
@@ -342,7 +342,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
 
     Param<int> p;
     Var u("u");
-    Func intm = g.update(0).specialize(p >= 10).rfactor({{r.y, u}});
+    Func intm = g.update(0).specialize(p >= 10).rfactor(r.y, u);
     intm.compute_root();
     intm.vectorize(u, 8);
     intm.update(0).vectorize(r.x, 2);
@@ -464,7 +464,7 @@ int histogram_rfactor_test(bool compile_module) {
     hist.compute_root();
 
     Var u("u");
-    Func intm = hist.update(0).rfactor({{r.y, u}});
+    Func intm = hist.update(0).rfactor(r.y, u);
     intm.compute_root();
     intm.update(0).parallel(u);
 
@@ -525,14 +525,14 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     dot.update(0).split(r.x, rxo, rxi, 128);
 
     Var u("u");
-    Func intm1 = dot.update(0).rfactor({{rxo, u}});
+    Func intm1 = dot.update(0).rfactor(rxo, u);
     RVar rxio("rxio"), rxii("rxii");
     intm1.compute_root();
     intm1.update(0).parallel(u);
     intm1.update(0).split(rxi, rxio, rxii, 8);
 
     Var v("v");
-    Func intm2 = intm1.update(0).rfactor({{rxii, v}});
+    Func intm2 = intm1.update(0).rfactor(rxii, v);
     intm2.compute_at(intm1, u);
     intm2.update(0).vectorize(v, 8);
 
@@ -589,14 +589,14 @@ int tuple_rfactor_test(bool compile_module) {
     g.update(0).tile(x, y, xi, yi, 2, 2);
 
     Var u("u");
-    Func intm1 = g.update(0).rfactor({{r.y, u}});
+    Func intm1 = g.update(0).rfactor(r.y, u);
     intm1.update(0).parallel(u, 2);
     RVar rxi("rxi"), rxo("rxo");
     intm1.tile(x, y, xi, yi, 2, 2);
     intm1.update(0).split(r.x, rxo, rxi, 2);
 
     Var v("v");
-    Func intm2 = intm1.update(0).rfactor({{rxo, v}});
+    Func intm2 = intm1.update(0).rfactor(rxo, v);
     intm2.update(0).vectorize(v);
     intm2.compute_at(intm1, rxo);
 
@@ -676,8 +676,8 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     RVar rxi("rxi"), rxo("rxo");
     intm1.update(0).split(r.x, rxo, rxi, 2);
     Var t("t");
-    Func intm2 = intm1.update(0).specialize(q).rfactor({{rxi, t}});
-    Func intm3 = intm1.update(0).specialize(!q).rfactor({{rxo, t}});
+    Func intm2 = intm1.update(0).specialize(q).rfactor(rxi, t);
+    Func intm3 = intm1.update(0).specialize(!q).rfactor(rxo, t);
     Func intm4 = g.update(0).rfactor({{r.x, u}, {r.z, w}});
     intm4.update(0).vectorize(u);
 

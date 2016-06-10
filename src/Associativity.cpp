@@ -441,9 +441,7 @@ bool is_bin_op_associative(Expr bin_op, const string &op_x, const string &op_y, 
         rhs = solve_expression(rhs, v);
     }
 
-    lhs = common_subexpression_elimination(lhs);
-    rhs = common_subexpression_elimination(rhs);
-    Expr compare = simplify(lhs == rhs);
+    Expr compare = simplify(simplify(common_subexpression_elimination(lhs == rhs)));
     return is_one(compare);
 }
 
@@ -635,6 +633,14 @@ void associativity_test() {
                         true,
                         {{Expr(), make_const(Int(32), 0), {"", Expr()}, {"", 2}},
                          {Expr(), make_const(Int(32), 0), {"", Expr()}, {"", 3}},
+                         {Expr(), make_const(Int(32), 0), {"", f_call_2}, {"", z}},
+                        });
+
+    // f(x) = Tuple(min(f(x)[0], g(rx)), f(x)[1]*g(x)*2, f(x)[2] + z)
+    check_associativity("f", {x}, {min(f_call_0, g_call), f_call_1*g_call*2, f_call_2 + z},
+                        true,
+                        {{Expr(), Int(32).max(), {"", f_call_0}, {"", g_call}},
+                         {Expr(), make_const(Int(32), 1), {"", f_call_1}, {"", g_call*2}},
                          {Expr(), make_const(Int(32), 0), {"", f_call_2}, {"", z}},
                         });
 

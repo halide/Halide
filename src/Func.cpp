@@ -458,6 +458,10 @@ void apply_split_directive(const Split &s, vector<ReductionVariable> &rvars) {
 
 } // anonymous namespace
 
+Func Stage::rfactor(RVar r, Var v) {
+    return rfactor({{r, v}});
+}
+
 Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
 
