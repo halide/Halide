@@ -26,9 +26,6 @@ namespace Internal {
 
 using std::vector;
 using std::string;
-using std::ostringstream;
-using std::pair;
-using std::make_pair;
 
 using namespace llvm;
 
@@ -96,7 +93,7 @@ bool uses_hvx(Stmt s) {
 }  // namespace
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
-                                   const std::string &simple_name, const std::string &extern_name) {
+                                   const string &simple_name, const string &extern_name) {
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
@@ -191,7 +188,7 @@ void CodeGen_Hexagon::init_module() {
         Intrinsic::ID id;
         Type ret_type;
         const char *name;
-        std::vector<Type> arg_types;
+        vector<Type> arg_types;
         int flags;
     };
     HvxIntrinsic intrinsic_wrappers[] = {
@@ -423,20 +420,21 @@ void CodeGen_Hexagon::init_module() {
     }
 }
 
-llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret_ty, const std::string &name,
-                                                      const std::vector<Type> &arg_types, bool broadcast_scalar_word) {
+llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret_ty, const string &name,
+                                                      const vector<Type> &arg_types, bool broadcast_scalar_word) {
     internal_assert(id != Intrinsic::not_intrinsic);
     // Get the real intrinsic.
     llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
     return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar_word);
 }
-llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const std::string &name,
-                                                      std::vector<Type> arg_types, bool broadcast_scalar_word) {
+
+llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const string &name,
+                                                      vector<Type> arg_types, bool broadcast_scalar_word) {
     internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
 
     // Get the types of the arguments we want to pass.
-    std::vector<llvm::Type *> llvm_arg_types;
+    vector<llvm::Type *> llvm_arg_types;
     llvm_arg_types.reserve(arg_types.size());
     for (Type i : arg_types) {
         llvm_arg_types.push_back(llvm_type_of(i));
@@ -452,7 +450,7 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
     IRBuilderBase::InsertPoint here = builder->saveIP();
     builder->SetInsertPoint(block);
 
-    std::vector<Value *> args;
+    vector<Value *> args;
     for (Value &arg : wrapper->args()) {
         args.push_back(&arg);
     }
@@ -534,7 +532,7 @@ Value *CodeGen_Hexagon::create_bitcast(Value *v, llvm::Type *ty) {
 
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
                                          llvm::Function *F,
-                                         std::vector<Value *> Ops) {
+                                         vector<Value *> Ops) {
     llvm::FunctionType *FType = F->getFunctionType();
     internal_assert(FType->getNumParams() == Ops.size());
     for (unsigned I = 0; I < FType->getNumParams(); ++I) {
@@ -546,11 +544,11 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
                                          llvm::Intrinsic::ID id,
-                                         std::vector<Value *> Ops) {
+                                         vector<Value *> Ops) {
     return call_intrin_cast(ret_ty, Intrinsic::getDeclaration(module.get(), id), Ops);
 }
 
-Value *CodeGen_Hexagon::interleave_vectors(const std::vector<llvm::Value *> &v) {
+Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
     bool B128 = target.has_feature(Halide::Target::HVX_128);
     if (v.size() == 2) {
         Value *a = v[0];
@@ -598,7 +596,7 @@ namespace {
 
 // Check if indices form a strided ramp, allowing undef elements to
 // pretend to be part of the ramp.
-bool is_strided_ramp(const std::vector<int> &indices, int &start, int &stride) {
+bool is_strided_ramp(const vector<int> &indices, int &start, int &stride) {
     int size = static_cast<int>(indices.size());
 
     // To find the proposed start and stride, find two non-undef elements.
@@ -637,10 +635,7 @@ bool is_strided_ramp(const std::vector<int> &indices, int &start, int &stride) {
     return true;
 }
 
-bool is_concat_or_slice(const std::vector<int> &indices) {
-    std::vector<int> defined_indices;
-    defined_indices.reserve(indices.size());
-
+bool is_concat_or_slice(const vector<int> &indices) {
     // Skip undef elements at the beginning and the end.
     size_t begin = 0;
     while (begin < indices.size() && indices[begin] == -1) {
@@ -664,7 +659,7 @@ bool is_concat_or_slice(const std::vector<int> &indices) {
 }  // namespace
 
 Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
-                                        const std::vector<int> &indices) {
+                                        const vector<int> &indices) {
     llvm::Type *a_ty = a->getType();
     llvm::Type *b_ty = b->getType();
     internal_assert(a_ty == b_ty);
@@ -934,7 +929,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     return slice_vector(concat_vectors(result), 0, idx_elements);
 }
 
-Value *CodeGen_Hexagon::vlut(Value *lut, const std::vector<int> &indices) {
+Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     // TODO: We can take advantage of the fact that we know the
     // indices at compile time to implement a few
     // optimizations. First, we can avoid running the vlut
@@ -958,7 +953,8 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const std::vector<int> &indices) {
 }
 
 namespace {
-std::string type_suffix(Type type, bool signed_variants = true) {
+
+string type_suffix(Type type, bool signed_variants = true) {
     string prefix = type.is_vector() ? ".v" : ".";
     if (type.is_int() || !signed_variants) {
         switch (type.bits()) {
@@ -977,15 +973,15 @@ std::string type_suffix(Type type, bool signed_variants = true) {
     return "";
 }
 
-std::string type_suffix(Expr a, bool signed_variants = true) {
+string type_suffix(Expr a, bool signed_variants = true) {
     return type_suffix(a.type(), signed_variants);
 }
 
-std::string type_suffix(Expr a, Expr b, bool signed_variants = true) {
+string type_suffix(Expr a, Expr b, bool signed_variants = true) {
     return type_suffix(a, signed_variants) + type_suffix(b, signed_variants);
 }
 
-std::string type_suffix(const std::vector<Expr> &ops, bool signed_variants = true) {
+string type_suffix(const vector<Expr> &ops, bool signed_variants = true) {
     if (ops.empty()) return "";
     string suffix = type_suffix(ops.front(), signed_variants);
     for (size_t i = 1; i < ops.size(); i++) {
@@ -993,6 +989,7 @@ std::string type_suffix(const std::vector<Expr> &ops, bool signed_variants = tru
     }
     return suffix;
 }
+
 }  // namespace
 
 Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
@@ -1053,18 +1050,10 @@ bool CodeGen_Hexagon::use_soft_float_abi() const {
   return false;
 }
 
-static bool EmittedOnce = false;
 int CodeGen_Hexagon::native_vector_bits() const {
-  bool DoTrace = ! EmittedOnce;
-  EmittedOnce = true;
-  if (DoTrace)
-    debug(1) << (target.has_feature(Halide::Target::HVX_v62)
-             ? "v62\n" : "v60\n");
   if (target.has_feature(Halide::Target::HVX_128)) {
-    if (DoTrace) debug(1) << "128 Byte mode\n";
     return 128*8;
   } else {
-    if (DoTrace) debug(1) << "64 Byte mode\n";
     return 64*8;
   }
 }

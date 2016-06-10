@@ -1,8 +1,9 @@
-#ifndef HEXAGON_OFFLOAD_H
-#define HEXAGON_OFFLOAD_H
+#ifndef HALIDE_HEXAGON_OFFLOAD_H
+#define HALIDE_HEXAGON_OFFLOAD_H
 
-/** \file
- * Defines the lowering pass that vectorizes loops marked as such
+/** \file Defines a lowering pass to pull loops marked with the
+ * Hexagon device API to a separate module, and call them through the
+ * Hexagon host runtime module.
  */
 
 #include "Module.h"
@@ -10,8 +11,8 @@
 namespace Halide {
 namespace Internal {
 
-/* Lowering pass for Hexagon
- */
+/** pull loops marked with the Hexagon device API to a separate
+ * module, and call them through the Hexagon host runtime module. */
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target);
 
 }

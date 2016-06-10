@@ -2,7 +2,7 @@
 #define HALIDE_CODEGEN_HEXAGON_H
 
 /** \file
- * Defines the code-generator for producing ARM machine code
+ * Defines the code-generator for producing Hexagon machine code
  */
 
 #ifdef WITH_HEXAGON
