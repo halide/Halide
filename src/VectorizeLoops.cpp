@@ -10,15 +10,18 @@
 #include "IREquality.h"
 #include "ExprUsesVar.h"
 #include "Solve.h"
+#include "Simplify.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 using std::vector;
+using std::pair;
 
 // For a given var, replace expressions like shuffle_vector(var, 4)
-// with var.4
+// with var.lane.4
 class ReplaceShuffleVectors : public IRMutator {
     string var;
 
@@ -32,7 +35,7 @@ class ReplaceShuffleVectors : public IRMutator {
             (v = op->args[0].as<Variable>()) &&
             v->name == var &&
             (i = as_const_int(op->args[1]))) {
-            expr = Variable::make(op->type, var + "." + std::to_string(*i));
+            expr = Variable::make(op->type, var + ".lane." + std::to_string(*i));
         } else {
             IRMutator::visit(op);
         }
@@ -41,16 +44,175 @@ public:
     ReplaceShuffleVectors(const string &v) : var(v) {}
 };
 
+
+
+/** Find the exact max and min lanes of a vector expression. Not
+ * conservative like bounds_of_expr, but uses similar rules for some
+ * common node types where it can be exact. Assumes any vector
+ * variables defined externally also have .min_lane and .max_lane
+ * versions in scope. */
+Interval bounds_of_lanes(Expr e) {
+    if (const Add *add = e.as<Add>()) {
+        if (const Broadcast *b = add->b.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(add->a);
+            return {ia.min + b->value, ia.max + b->value};
+        } else if (const Broadcast *b = add->a.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(add->b);
+            return {b->value + ia.min, b->value + ia.max};
+        }
+    } else if (const Sub *sub = e.as<Sub>()) {
+        if (const Broadcast *b = sub->b.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(sub->a);
+            return {ia.min - b->value, ia.max - b->value};
+        } else if (const Broadcast *b = sub->a.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(sub->b);
+            return {b->value - ia.max, b->value - ia.max};
+        }
+    } else if (const Mul *mul = e.as<Mul>()) {
+        if (const Broadcast *b = mul->b.as<Broadcast>()) {
+            if (is_positive_const(b->value)) {
+                Interval ia = bounds_of_lanes(mul->a);
+                return {ia.min * b->value, ia.max * b->value};
+            } else if (is_negative_const(b->value)) {
+                Interval ia = bounds_of_lanes(mul->a);
+                return {ia.max * b->value, ia.min * b->value};
+            }
+        } else if (const Broadcast *b = mul->a.as<Broadcast>()) {
+            if (is_positive_const(b->value)) {
+                Interval ia = bounds_of_lanes(mul->b);
+                return {b->value * ia.min, b->value * ia.max};
+            } else if (is_negative_const(b->value)) {
+                Interval ia = bounds_of_lanes(mul->b);
+                return {b->value * ia.max, b->value * ia.min};
+            }
+        }
+    } else if (const Div *div = e.as<Div>()) {
+        if (const Broadcast *b = div->b.as<Broadcast>()) {
+            if (is_positive_const(b->value)) {
+                Interval ia = bounds_of_lanes(div->a);
+                return {ia.min / b->value, ia.max / b->value};
+            } else if (is_negative_const(b->value)) {
+                Interval ia = bounds_of_lanes(div->a);
+                return {ia.max / b->value, ia.min / b->value};
+            }
+        }
+    } else if (const And *and_ = e.as<And>()) {
+        if (const Broadcast *b = and_->b.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(and_->a);
+            return {ia.min && b->value, ia.max && b->value};
+        } else if (const Broadcast *b = and_->a.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(and_->b);
+            return {ia.min && b->value, ia.max && b->value};
+        }
+    } else if (const Or *or_ = e.as<Or>()) {
+        if (const Broadcast *b = or_->b.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(or_->a);
+            return {ia.min && b->value, ia.max && b->value};
+        } else if (const Broadcast *b = or_->a.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(or_->b);
+            return {ia.min && b->value, ia.max && b->value};
+        }
+    } else if (const Min *min = e.as<Min>()) {
+        if (const Broadcast *b = min->b.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(min->a);
+            return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
+        } else if (const Broadcast *b = min->a.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(min->b);
+            return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
+        }
+    } else if (const Max *max = e.as<Max>()) {
+        if (const Broadcast *b = max->b.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(max->a);
+            return {Max::make(ia.max, b->value), Max::make(ia.max, b->value)};
+        } else if (const Broadcast *b = max->a.as<Broadcast>()) {
+            Interval ia = bounds_of_lanes(max->b);
+            return {Max::make(ia.max, b->value), Max::make(ia.max, b->value)};
+        }
+    } else if (const Not *not_ = e.as<Not>()) {
+        Interval ia = bounds_of_lanes(not_->a);
+        return {!ia.max, !ia.min};
+    } else if (const Ramp *r = e.as<Ramp>()) {
+        Expr last_lane_idx = make_const(r->base.type(), r->lanes-1);
+        if (is_positive_const(r->stride)) {
+            return {r->base, r->base + last_lane_idx * r->stride};
+        } else if (is_negative_const(r->stride)) {
+            return {r->base + last_lane_idx * r->stride, r->base};
+        }
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return {b->value, b->value};
+    } else if (const Variable *var = e.as<Variable>()) {
+        return {Variable::make(var->type.element_of(), var->name + ".min_lane"),
+                Variable::make(var->type.element_of(), var->name + ".max_lane")};
+    } else if (const Let *let = e.as<Let>()) {
+        Interval ia = bounds_of_lanes(let->value);
+        Interval ib = bounds_of_lanes(let->body);
+        if (expr_uses_var(ib.min, let->name + ".min_lane")) {
+            ib.min = Let::make(let->name + ".min_lane", ia.min, ib.min);
+        }
+        if (expr_uses_var(ib.max, let->name + ".min_lane")) {
+            ib.max = Let::make(let->name + ".min_lane", ia.min, ib.max);
+        }
+        if (expr_uses_var(ib.min, let->name + ".max_lane")) {
+            ib.min = Let::make(let->name + ".max_lane", ia.max, ib.min);
+        }
+        if (expr_uses_var(ib.max, let->name + ".max_lane")) {
+            ib.max = Let::make(let->name + ".max_lane", ia.max, ib.max);
+        }
+        return ib;
+    }
+
+    // Take the explicit min and max over the lanes
+    Expr min_lane = extract_lane(e, 0);
+    Expr max_lane = min_lane;
+    for (int i = 1; i < e.type().lanes(); i++) {
+        Expr next_lane = extract_lane(e, i);
+        if (e.type().is_bool()) {
+            min_lane = And::make(min_lane, next_lane);
+            max_lane = Or::make(max_lane, next_lane);
+        } else {
+            min_lane = Min::make(min_lane, next_lane);
+            max_lane = Max::make(max_lane, next_lane);
+        }
+    }
+    return {min_lane, max_lane};
+};
+
+class RewriteAccessToVectorAlloc : public IRMutator {
+    Expr var;
+    string alloc;
+    int lanes;
+
+    using IRMutator::visit;
+
+    Expr mutate_index(string a, Expr index) {
+        index = mutate(index);
+        if (a == alloc) {
+            return index * lanes + var;
+        } else {
+            return index;
+        }
+    }
+
+    void visit(const Load *op) {
+        expr = Load::make(op->type, op->name, mutate_index(op->name, op->index), op->image, op->param);
+    }
+
+    void visit(const Store *op) {
+        stmt = Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index), op->param);
+    }
+
+public:
+    RewriteAccessToVectorAlloc(string v, string a, int l) :
+        var(Variable::make(Int(32), v)), alloc(a), lanes(l) {}
+};
+
 class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {
         string var;
         Expr replacement;
         string widening_suffix;
         Scope<Expr> scope;
-        Scope<int> vectorized_allocations;
-
-        bool scalarized;
-        int scalar_lane;
+        vector<pair<string, Expr>> containing_lets;
 
         Expr widen(Expr e, int lanes) {
             if (e.type().lanes() == lanes) {
@@ -85,12 +247,6 @@ class VectorizeLoops : public IRMutator {
                 expr = Variable::make(scope.get(op->name).type(), widened_name);
             } else {
                 expr = op;
-            }
-
-            if (scalarized) {
-                // When we're scalarized, we were supposed to hide all
-                // the vector vars in scope.
-                internal_assert(expr.type().is_scalar()) << op->name << " -> " << expr << "\n";
             }
         }
 
@@ -139,34 +295,8 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
-        Expr make_allocation_index(string alloc, Expr scalar_index) {
-            Expr index = mutate(scalar_index);
-
-            // Internal allocations always get vectorized.
-            if (vectorized_allocations.contains(alloc)) {
-                int lanes = vectorized_allocations.get(alloc);
-                if (index.type().is_scalar()) {
-                    Expr lanes_expr = make_const(index.type(), lanes);
-                    if (scalarized) {
-                        index = Add::make(Mul::make(index, lanes_expr), scalar_lane);
-                    } else {
-                        index = Ramp::make(Mul::make(index, lanes_expr), make_one(index.type()), lanes);
-                    }
-                } else {
-                    internal_assert(!scalarized);
-                    internal_assert(lanes == index.type().lanes());
-                    Type scalar_index_type = index.type().with_lanes(1);
-                    Expr lanes_expr = make_const(scalar_index_type, lanes);
-                    index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
-                    index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
-                }
-            }
-
-            return index;
-        }
-
         void visit(const Load *op) {
-            Expr index = make_allocation_index(op->name, op->index);
+            Expr index = mutate(op->index);
 
             if (index.same_as(op->index)) {
                 expr = op;
@@ -318,73 +448,79 @@ class VectorizeLoops : public IRMutator {
 
             Expr mutated_body = mutate(op->body);
 
-            if (was_vectorized) {
-                scope.pop(op->name);
-            }
-
-            // Check to see if the value and body were modified by this mutator
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 expr = op;
-            } else if (scalarized) {
-                expr = Let::make(op->name, mutated_value, mutated_body);
+            } else if (was_vectorized) {
+                scope.pop(op->name);
+                expr = Let::make(vectorized_name, mutated_value, mutated_body);
             } else {
-                // Otherwise create a new Let containing the original value
-                // expression plus the widened expression
-                expr = Let::make(op->name, op->value, mutated_body);
-
-                if (was_vectorized) {
-                    expr = Let::make(vectorized_name, mutated_value, expr);
-                }
+                expr = Let::make(op->name, mutated_value, mutated_body);
             }
         }
 
         void visit(const LetStmt *op) {
             Expr mutated_value = mutate(op->value);
+            std::string mutated_name = op->name;
 
             // Check if the value was vectorized by this mutator.
             bool was_vectorized = (!op->value.type().is_vector() &&
                                    mutated_value.type().is_vector());
 
-            std::string vectorized_name;
-
             if (was_vectorized) {
-                vectorized_name = op->name + widening_suffix;
+                mutated_name += widening_suffix;
                 scope.push(op->name, mutated_value);
+                // Also keep track of the original let, in case inner code scalarizes.
+                containing_lets.push_back({op->name, op->value});
             }
+
 
             Stmt mutated_body = mutate(op->body);
 
             if (was_vectorized) {
+                containing_lets.pop_back();
                 scope.pop(op->name);
 
                 // Inner code might have extracted my lanes using
-                // shuffle_vector. If so we should define lets for the
-                // lanes and get it to use those instead.
-                Stmt new_body = ReplaceShuffleVectors(vectorized_name).mutate(mutated_body);
-                if (!mutated_body.same_as(new_body)) {
-                    Type t = mutated_value.type();
-                    for (int i = 0; i < t.lanes(); i++) {
-                        new_body = LetStmt::make(vectorized_name + "." + std::to_string(i),
-                                                 extract_lane(mutated_value, i),
-                                                 new_body);
+                // extract_lane, which introduces a shuffle_vector. If
+                // so we should define separate lets for the lanes and
+                // get it to use those instead.
+                mutated_body = ReplaceShuffleVectors(mutated_name).mutate(mutated_body);
+
+                // Check if inner code wants my individual lanes.
+                Type t = mutated_value.type();
+                for (int i = 0; i < t.lanes(); i++) {
+                    string lane_name = mutated_name + ".lane." + std::to_string(i);
+                    if (stmt_uses_var(mutated_body, lane_name)) {
+                        mutated_body =
+                            LetStmt::make(lane_name, extract_lane(mutated_value, i), mutated_body);
                     }
-                    mutated_body = new_body;
+                }
+
+                // Inner code may also have wanted my max or min lane
+                bool uses_min_lane = stmt_uses_var(mutated_body, mutated_name + ".min_lane");
+                bool uses_max_lane = stmt_uses_var(mutated_body, mutated_name + ".max_lane");
+
+                if (uses_min_lane || uses_max_lane) {
+                    Interval i = bounds_of_lanes(mutated_value);
+
+                    if (uses_min_lane) {
+                        mutated_body =
+                            LetStmt::make(mutated_name + ".min_lane", i.min, mutated_body);
+                    }
+
+                    if (uses_max_lane) {
+                        mutated_body =
+                            LetStmt::make(mutated_name + ".max_lane", i.max, mutated_body);
+                    }
                 }
             }
 
             if (mutated_value.same_as(op->value) &&
                 mutated_body.same_as(op->body)) {
                 stmt = op;
-            } else if (scalarized) {
-                internal_assert(!was_vectorized);
-                stmt = LetStmt::make(op->name, mutated_value, mutated_body);
             } else {
-                stmt = LetStmt::make(op->name, op->value, mutated_body);
-
-                if (was_vectorized) {
-                    stmt = LetStmt::make(vectorized_name, mutated_value, stmt);
-                }
+                stmt = LetStmt::make(mutated_name, mutated_value, mutated_body);
             }
         }
 
@@ -427,7 +563,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Store *op) {
             Expr value = mutate(op->value);
-            Expr index = make_allocation_index(op->name, op->index);
+            Expr index = mutate(op->index);
 
             if (value.same_as(op->value) && index.same_as(op->index)) {
                 stmt = op;
@@ -461,16 +597,12 @@ class VectorizeLoops : public IRMutator {
                 if (c && (c->is_intrinsic(Call::likely) ||
                           c->is_intrinsic(Call::likely_if_innermost))) {
 
-                    // The meaning of the likely intrinsic is that Halide
-                    // should optimize for the case in which *every*
-                    // likely value is true. We can do that by generating
-                    // a scalar condition that checks if all lanes are
-                    // true, and marking that likely.
-
-                    Expr all_true = const_true();
-                    for (int i = 0; i < lanes; i++) {
-                        all_true = all_true && extract_lane(c->args[0], i);
-                    }
+                    // The meaning of the likely intrinsic is that
+                    // Halide should optimize for the case in which
+                    // *every* likely value is true. We can do that by
+                    // generating a scalar condition that checks if
+                    // the least-true lane is true.
+                    Expr all_true = bounds_of_lanes(c->args[0]).min;
 
                     // Wrap it in the same flavor of likely
                     all_true = Call::make(Bool(), c->name,
@@ -519,6 +651,8 @@ class VectorizeLoops : public IRMutator {
             Expr min = mutate(op->min);
             Expr extent = mutate(op->extent);
 
+            Stmt body = op->body;
+
             if (min.type().is_vector()) {
                 // Rebase the loop to zero and try again
                 Expr var = Variable::make(Int(32), op->name);
@@ -528,33 +662,14 @@ class VectorizeLoops : public IRMutator {
                 return;
             }
 
-            Stmt body = op->body;
-
             if (extent.type().is_vector()) {
-                // Take the min and max over the lanes
-                Expr max_extent = extract_lane(extent, 0);
-                Expr min_extent = max_extent;
-                for (int i = 1; i < extent.type().lanes(); i++) {
-                    Expr e = extract_lane(extent, i);
-                    max_extent = Max::make(max_extent, e);
-                    min_extent = Min::make(min_extent, e);
-                }
-                Expr var = Variable::make(Int(32), op->name);
-
                 // We'll iterate up to the max over the lanes, but
                 // inject an if statement inside the loop that stops
                 // each lane from going too far.
-                extent = max_extent;
-                //Stmt guarded_body = IfThenElse::make(var < op->min + op->extent, body);
-                //body = IfThenElse::make(likely(var < op->min + op->extent), body);
-                debug(0) << op->min << "\n";
-                body = IfThenElse::make(var < op->min + op->extent, body);
 
-                // That if statement is going to scalarize, so also
-                // inject a version that can vectorize with a scalar
-                // condition guarding it.
-                //body = IfThenElse::make(likely(var < op->min + min_extent), body, guarded_body);
-                //body = IfThenElse::make(var < op->min + min_extent, body, guarded_body);
+                extent = bounds_of_lanes(extent).max;
+                Expr var = Variable::make(Int(32), op->name);
+                body = IfThenElse::make(likely(var < op->min + op->extent), body);
             }
 
             body = mutate(body);
@@ -573,10 +688,10 @@ class VectorizeLoops : public IRMutator {
             std::vector<Expr> new_extents;
             Expr new_expr;
 
+            int lanes = replacement.type().lanes();
+
             // The new expanded dimension is innermost.
-            if (!scalarized) {
-                new_extents.push_back(Expr(replacement.type().lanes()));
-            }
+            new_extents.push_back(lanes);
 
             for (size_t i = 0; i < op->extents.size(); i++) {
                 Expr extent = mutate(op->extents[i]);
@@ -586,135 +701,78 @@ class VectorizeLoops : public IRMutator {
                 // set up the vectorized memory means that lanes can't
                 // clobber each others' memory, so it doesn't matter.
                 if (extent.type().is_vector()) {
-                    Expr max_over_lanes = extract_lane(extent, 0);
-                    for (int i = 1; i < extent.type().lanes(); i++) {
-                        max_over_lanes = max(max_over_lanes, extract_lane(extent, i));
-                    }
-                    extent = max_over_lanes;
+                    extent = bounds_of_lanes(extent).max;
                 }
                 new_extents.push_back(extent);
             }
 
             if (op->new_expr.defined()) {
                 new_expr = mutate(op->new_expr);
-            }
-            if (op->new_expr.defined()) {
                 user_assert(new_expr.type().is_scalar())
                     << "Cannot vectorize an allocation with a varying new_expr per vector lane.\n";
             }
 
-            if (!scalarized) {
-                // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
-                // foo[x] -> foo[x*lanes + ramp(0, 1, lanes)]
-                vectorized_allocations.push(op->name, replacement.type().lanes());
-            }
-            Stmt body = mutate(op->body);
-            if (!scalarized) {
-                vectorized_allocations.pop(op->name);
-            }
+            Stmt body = op->body;
+
+            // Rewrite loads and stores to this allocation like so:
+            // foo[x] -> foo[x*lanes + v]
+            body = RewriteAccessToVectorAlloc(var, op->name, lanes).mutate(body);
+
+            body = mutate(body);
+
             stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
         }
 
         Stmt scalarize(Stmt s) {
-            // To consider in the future: Perhaps scalarize should
-            // generate a serial loop instead of a fully unrolled
-            // thing to save code size. When we can't respect a
-            // request to vectorize, we effectively unroll instead. Is
-            // this really better than leaving it as a serial loop?
+            // Wrap a serial loop around it. Maybe LLVM will have
+            // better luck vectorizing it.
 
-            Stmt result;
-            int lanes = replacement.type().lanes();
-            Expr old_replacement = replacement;
-            internal_assert(!scalarized);
-            scalarized = true;
-
-            for (int i = 0; i < lanes; i++) {
-                // Replace the var with a scalar version in the appropriate lane.
-                replacement = extract_lane(old_replacement, i);
-                scalar_lane = i;
-
-                Stmt new_stmt = s;
-
-                // Hide all the vectors in scope with a scalar version
-                // in the appropriate lane.
-                for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
-                    string name = iter.name() + ".lane." + std::to_string(i);
-                    Expr lane = extract_lane(iter.value(), i);
-                    new_stmt = substitute(iter.name(), Variable::make(lane.type(), name), new_stmt);
-                    new_stmt = LetStmt::make(name, lane, new_stmt);
-                }
-
-                // Should only serve to rewrite access to internal allocations:
-                // foo[x] -> foo[x * lanes + i]
-                new_stmt = mutate(new_stmt);
-
-                if (i == 0) {
-                    result = new_stmt;
-                } else {
-                    result = Block::make(result, new_stmt);
-                }
+            // We'll need the original scalar versions of any containing lets.
+            for (size_t i = containing_lets.size(); i > 0; i--) {
+                const auto &l = containing_lets[i-1];
+                s = LetStmt::make(l.first, l.second, s);
             }
 
-            replacement = old_replacement;
-            scalarized = false;
+            int lanes = replacement.type().lanes();
+            s = For::make(var, 0, lanes, ForType::Serial, DeviceAPI::None, s);
 
-            return result;
+            return s;
         }
 
         Expr scalarize(Expr e) {
             // This method returns a select tree that produces a vector lanes
             // result expression
 
-            // TODO: Add an intrinisic to create a vector from a list of scalars
-            // instead of a select tree.
-
             Expr result;
 
             int lanes = replacement.type().lanes();
-            Expr old_replacement = replacement;
-            internal_assert(!scalarized);
-            scalarized = true;
 
             for (int i = lanes - 1; i >= 0; --i) {
-                // Extract a single lane from the vectorized variable expression
-                // substituted in by this mutator
-                replacement = extract_lane(old_replacement, i);
-                scalar_lane = i;
-
-                Expr new_expr = e;
-
                 // Hide all the vector let values in scope with a scalar version
                 // in the appropriate lane.
                 for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
                     string name = iter.name() + ".lane." + std::to_string(i);
                     Expr lane = extract_lane(iter.value(), i);
-                    new_expr = substitute(iter.name(), Variable::make(lane.type(), name), new_expr);
-                    new_expr = Let::make(name, lane, new_expr);
+                    e = substitute(iter.name(), Variable::make(lane.type(), name), e);
                 }
 
                 // Replace uses of the vectorized variable with the extracted
                 // lane expression
-                new_expr = substitute(var, scalar_lane, new_expr);
+                e = substitute(var, i, e);
 
                 if (i == lanes - 1) {
-                    result = Broadcast::make(new_expr,lanes);
+                    result = Broadcast::make(e, lanes);
                 } else {
-                    Expr cond = (old_replacement == Broadcast::make(scalar_lane, lanes));
-                    result = Select::make(cond, Broadcast::make(new_expr,lanes), result);
+                    Expr cond = (replacement == Broadcast::make(i, lanes));
+                    result = Select::make(cond, Broadcast::make(e, lanes), result);
                 }
             }
-
-            replacement = old_replacement;
-            scalarized = false;
 
             return result;
         }
 
-    public:
-        VectorSubs(string v, Expr r) : var(v), replacement(r),
-                                       scalarized(false), scalar_lane(0) {
-
-            std::ostringstream oss;
+      public:
+        VectorSubs(string v, Expr r) : var(v), replacement(r) {
             widening_suffix = ".x" + std::to_string(replacement.type().lanes());
         }
     };
@@ -733,12 +791,8 @@ class VectorizeLoops : public IRMutator {
 
             // Replace the var with a ramp within the body
             Expr for_var = Variable::make(Int(32), for_loop->name);
-            Expr replacement = Ramp::make(for_var, 1, extent->value);
-            Stmt body = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
-
-            // The for loop becomes a simple let statement
-            stmt = LetStmt::make(for_loop->name, for_loop->min, body);
-
+            Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
+            stmt = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
         } else {
             IRMutator::visit(for_loop);
         }
