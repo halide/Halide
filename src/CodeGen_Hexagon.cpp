@@ -43,18 +43,20 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // specific lowering in LLVM, minimizing the chances of the wrong
     // flag being set for the wrong module.
     if (!options_processed) {
-      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
-                                  "Halide HVX internal compiler\n");
-      // We need to EnableQuIC for LLVM and Halide (Unrolling).
-      char *s = strdup("HALIDE_LLVM_QUIC=-hexagon-small-data-threshold=0");
-      ::putenv(s);
-      cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_QUIC",
-                                  "Halide HVX quic option\n");
+        cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
+                                    "Halide HVX internal compiler\n");
+
+        std::vector<const char *> options = {
+            // Don't put small objects into .data sections, it causes
+            // issues with position independent code.
+            "-hexagon-small-data-threshold=0"
+        };
+        cl::ParseCommandLineOptions(options.size(), options.data());
     }
     options_processed = true;
 
     if (module.target().features_all_of({Halide::Target::HVX_128, Halide::Target::HVX_64})) {
-            internal_error << "Both HVX_64 and HVX_128 set at same time\n";
+        internal_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
 
     return llvm_module;
