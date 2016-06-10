@@ -56,8 +56,8 @@ class Stage {
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
                Expr factor, bool exact, TailStrategy tail);
-
     void remove(const std::string &var);
+    Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
 
 public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args)
@@ -101,7 +101,7 @@ public:
      * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
      * The rvars not listed in 'preserved' are removed from the original Func and
      * are lifted to the intermediate Func. The remaining rvars (the ones in
-     * 'preserved') is made pure in the intermediate Func. The intermediate Func's
+     * 'preserved') are made pure in the intermediate Func. The intermediate Func's
      * update definition will inherit all scheduling directives (e.g. split, etc.)
      * applied to the original Func's update definition.
      *
@@ -141,7 +141,10 @@ public:
      \endcode
      *
      */
+    // @{
     EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
+    EXPORT Func rfactor(RVar r, Var v);
+    // @}
 
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
@@ -177,7 +180,6 @@ public:
         return reorder(collected_args);
     }
 
-    EXPORT Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
 
