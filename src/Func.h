@@ -42,16 +42,39 @@ struct VarOrRVar {
     const bool is_rvar;
 };
 
+namespace Internal {
+struct Split;
+}
+
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
     Internal::Definition definition;
+    std::string stage_name;
+    std::vector<Var> dim_vars; // Pure Vars of the Function (from the init definition)
+
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
-    void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact, TailStrategy tail);
-    std::string stage_name;
+    void split(const std::string &old, const std::string &outer, const std::string &inner,
+               Expr factor, bool exact, TailStrategy tail);
+
+    void remove(const std::string &var);
+
 public:
-    Stage(Internal::Definition d, const std::string &n) : definition(d), stage_name(n) {
+    Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args)
+            : definition(d), stage_name(n), dim_vars(args) {
+        internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
+    }
+
+    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args)
+            : definition(d), stage_name(n) {
+        definition.schedule().touched() = true;
+
+        std::vector<Var> dim_vars(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            dim_vars[i] = Var(args[i]);
+        }
+        internal_assert(definition.args().size() == dim_vars.size());
     }
 
     /** Return the current Schedule associated with this Stage.  For
@@ -65,6 +88,60 @@ public:
 
     /** Return the name of this stage, e.g. "f.update(2)" */
     EXPORT const std::string &name() const;
+
+    /** Calling rfactor() on an associative update definition a Func will split
+     * the update into an intermediate which computes the partial results and
+     * replace the current update definition with a new definition which merges
+     * the partial results. If called on a init/pure definition, this will
+     * throw an error. rfactor() will automatically infer the associative reduction
+     * operator and identity of the operator. If it can't prove the operation
+     * is associative or if it cannot find an identity for that operator, this
+     * will throw an error.
+     *
+     * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
+     * The rvars not listed in 'preserved' are removed from the original Func and
+     * are lifted to the intermediate Func. The remaining rvars (the ones in
+     * 'preserved') is made pure in the intermediate Func. The intermediate Func's
+     * update definition will inherit all scheduling directives (e.g. split, etc.)
+     * applied to the original Func's update definition.
+     *
+     * For example, f.update(0).rfactor({{r.y, u}}) would rewrite a pipeline like this:
+     \code
+     f(x) = 0;
+     f(x) += g(r.x, r.y);
+     \endcode
+     * into a pipeline like this:
+     \code
+     f_intm(u, x) = 0;
+     f_intm(u, x) += g(r.x, u);
+
+     f(x) = 0;
+     f(x) = f_intm(r.y, x);
+     \endcode
+     *
+     * This has a variety of uses. You can use it to split computation of an associative reduction:
+     \code
+     f() = -inf;
+     RDom r(0, 96);
+     f() = max(f(), g(r.x));
+     f.update(0).split(r.x, rxo, rxi, 8);
+     f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u);
+     \endcode
+     *
+     *, which is equivalent to:
+     \code
+     for u = 0 to 11:
+       f_intm(u) = -inf
+     parallel for u = 0 to 11:
+       for rx1 = 0 to 7:
+         f_intm(u) = max(f_intm(u), g(8*u + rxi))
+     f() = -inf
+     for rxo = 0 to 11:
+         f() = max(f(), f_intm(u))
+     \endcode
+     *
+     */
+    EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
 
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
@@ -100,6 +177,7 @@ public:
         return reorder(collected_args);
     }
 
+    EXPORT Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
 
@@ -517,7 +595,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
@@ -732,9 +810,9 @@ public:
      * functions that return a single value. */
     EXPORT Tuple update_values(int idx = 0) const;
 
-    /** Get the reduction domain for an update definition, if there is
+    /** Get the RVars of the reduction domain for an update definition, if there is
      * one. */
-    EXPORT RDom reduction_domain(int idx = 0) const;
+    EXPORT std::vector<RVar> rvars(int idx = 0) const;
 
     /** Does this function have at least one update definition? */
     EXPORT bool has_update_definition() const;

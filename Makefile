@@ -257,6 +257,7 @@ SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
   AllocationBoundsInference.cpp \
+  Associativity.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
@@ -384,6 +385,7 @@ HEADER_FILES = \
   AddParameterChecks.h \
   AllocationBoundsInference.h \
   Argument.h \
+  Associativity.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
