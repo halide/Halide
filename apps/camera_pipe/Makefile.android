@@ -1,0 +1,80 @@
+include ../support/Makefile.inc
+
+TIMING_ITERATIONS ?= 5
+
+# This app requires a separate toolchain to be built from the Android NDK,
+# using the make-standalone-toolchain.sh script:
+#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
+#$ build/tools/make-standalone-toolchain.sh --arch=arm   --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
+CXX-host ?= $(CXX)
+CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
+CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-android-c++
+
+HOST=arm-64-android
+#TGT=hvx_128-debug
+TGT=hvx_128
+
+CXXFLAGS-host ?=
+CXXFLAGS-arm-64-android ?=
+CXXFLAGS-arm-32-android ?=
+
+CXXFLAGS += -DHL_HEXAGON_DEVICE
+#CXXFLAGS += -DHL_MEMINFO
+
+LDFLAGS-host ?= -lpthread -ldl -lm
+LDFLAGS-arm-64-android ?= -llog -fPIE -pie
+LDFLAGS-arm-32-android ?= -llog -fPIE -pie
+
+ARMFLAGS ?=
+#ARMFLAGS ?=-D__arm__ -march=armv7-a -mfloat-abi=softfp -mfpu=neon
+
+HALIDE_NOPNG=1
+ifdef HALIDE_NOPNG
+    PNGFLAGS-arm-64-android=-DHALIDE_NOPNG
+    PNGFLAGS-arm-32-android=-DHALIDE_NOPNG
+    INPUT=bayer_raw.pgm
+    #INPUT=bayer_256_304.pgm
+    OUTPUT=out.ppm
+else
+    PNGFLAGS-arm-64-android=-lpng12
+    PNGFLAGS-arm-32-android=-lpng12
+    INPUT=bayer_raw.png
+    OUTPUT=out.png
+endif
+
+.PHONY: all run-android clean
+
+all: process
+
+camera_pipe: ../../ camera_pipe.cpp
+	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
+
+curved.a: camera_pipe
+	HL_TARGET=$(HOST)-$(TGT) ./camera_pipe 8 # 8-bit output,
+
+fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
+	$(CXX-$(HOST)) $(CXXFLAGS) $(CXXFLAGS-$(HOST)) -c -Wall -O3 $< -o $@
+
+fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
+	$(CXX-$(HOST)) $(CXXFLAGS) $(CXXFLAGS-$(HOST)) $(ARMFLAGS) -c -Wall -O3 $< -o $@
+
+process: process.cpp curved.a fcam/Demosaic.o fcam/Demosaic_ARM.o
+	$(CXX-$(HOST)) $(CXXFLAGS) $(CXXFLAGS-$(HOST)) -Wall -O3 $^ -o $@ $(PNGFLAGS-$(HOST)) $(LDFLAGS-$(HOST))
+
+run-android: process
+	adb push process /data/
+	adb shell chmod +x /data/process
+	adb shell ls /data/$(INPUT)
+	if [[ `adb shell ls /data/$(INPUT) | grep "No such file"` ]]; then \
+	   echo "Copying $(INPUT) to device"; \
+	   adb push ../images/$(INPUT) /data/; \
+	else \
+	   echo "Found $(INPUT) already on device"; \
+	fi
+	adb shell rm /data/$(OUTPUT)
+	adb shell 'cd /data; ./process $(INPUT) 3700 2.0 50 $(TIMING_ITERATIONS) $(OUTPUT)'
+	adb pull /data/$(OUTPUT) .
+
+clean:
+	rm -f $(OUTPUT) process curved.a camera_pipe fcam/*.o
+
