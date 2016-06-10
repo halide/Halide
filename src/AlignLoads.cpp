@@ -18,6 +18,10 @@ Expr slice_vector(Expr vec, Expr start, Expr stride, int lanes) {
                       { vec, start, stride, lanes }, Call::PureIntrinsic);
 }
 
+// This mutator attempts to rewrite unaligned or strided loads to
+// sequences of aligned loads by loading aligned vectors that cover
+// the original unaligned load, and then slicing or shuffling the
+// intended vector out of the aligned vector.
 class AlignLoads : public IRMutator {
 public:
     AlignLoads(int alignment) : required_alignment(alignment) {}
@@ -116,7 +120,9 @@ private:
             // Slice the native load.
             expr = slice_vector(native_load, 0, 1, lanes);
             return;
-        } else if (lanes > native_lanes) {
+        }
+
+        if (lanes > native_lanes) {
             // This load is larger than a native vector. Load native
             // vectors, and concatenate the results.
             vector<Expr> slices;
@@ -127,7 +133,9 @@ private:
             }
             expr = Call::make(op->type, Call::concat_vectors, slices, Call::PureIntrinsic);
             return;
-        } else if (known_alignment && aligned_offset != 0) {
+        }
+
+        if (known_alignment && aligned_offset != 0) {
             // We know the offset of this load from an aligned
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
@@ -137,6 +145,7 @@ private:
             expr = slice_vector(aligned_load, aligned_offset, 1, lanes);
             return;
         }
+
         IRMutator::visit(op);
     }
 
