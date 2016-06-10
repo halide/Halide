@@ -36,13 +36,6 @@ int init_sim() {
         return -1;
     }
 
-    const HEX_4u_t stack_size = 1024 * 1024;  // 1 MB
-    status = sim->ConfigureStackInfo(0, 1024 * 1024);
-    if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ConfigureStackInfo failed: %d\n", status);
-        return -1;
-    }
-
     // memfill defaults to 0x1f on the simulator.
     // example: HL_HEXAGON_MEMFILL=0
     const char *memfill = getenv("HL_HEXAGON_MEMFILL");
