@@ -9,6 +9,7 @@
 #include "Substitute.h"
 #include "Scope.h"
 #include "Bounds.h"
+#include "Lerp.h"
 
 namespace Halide {
 namespace Internal {
@@ -139,29 +140,29 @@ Expr u8c(Expr e) { return u8(simplified_clamp(e, min_u8, max_u8)); }
 
 struct Pattern {
     enum Flags {
-        InterleaveResult = 1 << 0,  ///< After evaluating the pattern, interleave native vectors of the result.
-        SwapOps01 = 1 << 1,  ///< Swap operands 0 and 1 prior to substitution.
-        SwapOps12 = 1 << 2,  ///< Swap operands 1 and 2 prior to substitution.
-        ExactLog2Op1 = 1 << 3, ///< Replace operand 1 with its log base 2, if the log base 2 is exact.
-        ExactLog2Op2 = 1 << 4, ///< Save as above, but for operand 2.
+        InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
+        SwapOps01 = 1 << 1,  // Swap operands 0 and 1 prior to substitution.
+        SwapOps12 = 1 << 2,  // Swap operands 1 and 2 prior to substitution.
+        ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
+        ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
 
-        DeinterleaveOp0 = 1 << 5,  ///< Prior to evaluating the pattern, deinterleave native vectors of operand 0.
-        DeinterleaveOp1 = 1 << 6,  ///< Same as above, but for operand 1.
+        DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
+        DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
-        NarrowOp0 = 1 << 10,  ///< Replace operand 0 with its half-width equivalent.
-        NarrowOp1 = 1 << 11,  ///< Same as above, but for operand 1.
+        NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
+        NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 12,
         NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
 
-        NarrowUnsignedOp0 = 1 << 15,  ///< Similar to the above, but narrow to an unsigned half width type.
+        NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
         NarrowUnsignedOp1 = 1 << 16,
         NarrowUnsignedOp2 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
     };
-    string intrin;        ///< Name of the intrinsic
-    Expr pattern;         ///< The pattern to match against
+    string intrin;        // Name of the intrinsic
+    Expr pattern;         // The pattern to match against
     int flags;
 
     Pattern() {}
@@ -187,7 +188,7 @@ Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
-std::vector<Pattern> casts = {
+vector<Pattern> casts = {
     // Averaging
     { "halide.hexagon.avg.vub.vub", u8((wild_u16x + wild_u16x)/2), Pattern::NarrowOps },
     { "halide.hexagon.avg.vuh.vuh", u16((wild_u32x + wild_u32x)/2), Pattern::NarrowOps },
@@ -273,13 +274,36 @@ std::vector<Pattern> casts = {
     { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
 };
 
-std::vector<Pattern> muls = {
+// Many of the following patterns are instructions that widen only
+// operand 0, which need to both deinterleave operand 0, and then
+// re-interleave the result.
+const int ReinterleaveOp0 = Pattern::InterleaveResult | Pattern::DeinterleaveOp0;
+
+vector<Pattern> scalar_muls = {
+    // Multiplication by powers of 2.
+    { "halide.hexagon.shl.vub.ub", wild_u8x*bc(wild_u8), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vuh.uh", wild_u16x*bc(wild_u16), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vuw.uw", wild_u32x*bc(wild_u32), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vb.b", wild_i8x*bc(wild_i8), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vh.h", wild_i16x*bc(wild_i16), Pattern::ExactLog2Op1 },
+    { "halide.hexagon.shl.vw.w", wild_i32x*bc(wild_i32), Pattern::ExactLog2Op1 },
+
     // Vector by scalar widening multiplies.
     { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
     { "halide.hexagon.mpy.vuh.uh", wild_u32x*bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vh.h",   wild_i32x*bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
 
+    // Non-widening scalar multiplication.
+    { "halide.hexagon.mul.vh.b", wild_i16x*bc(wild_i16), Pattern::NarrowOp1 },
+    { "halide.hexagon.mul.vw.h", wild_i32x*bc(wild_i32), Pattern::NarrowOp1 },
+    // TODO: There's also mul.vw.b. We currently generate mul.vw.h
+    // instead. I'm not sure mul.vw.b is faster, it might even be
+    // slower due to the extra step in broadcasting the scalar up to
+    // 32 bits.
+};
+
+vector<Pattern> muls = {
     // Widening multiplication
     { "halide.hexagon.mpy.vub.vub", wild_u16x*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
     { "halide.hexagon.mpy.vuh.vuh", wild_u32x*wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -288,14 +312,21 @@ std::vector<Pattern> muls = {
 
     { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
     { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 },
+    // We need to check for the commuted versions of these patterns
+    // before the more general patterns below catch these ops. The
+    // other fix for this would be to break this into a third group of
+    // multiply patterns, so the commuted versions of these would get
+    // matched first.
+    { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::SwapOps01 },
+    { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 | Pattern::SwapOps01 },
+
+    // One operand widening multiplication.
+    { "halide.hexagon.mul.vw.vh", wild_i32x*wild_i32x, ReinterleaveOp0 | Pattern::NarrowOp1 },
+    { "halide.hexagon.mul.vw.vuh", wild_i32x*wild_i32x, ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
+    { "halide.hexagon.mul.vuw.vuh", wild_u32x*wild_u32x, ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
 };
 
-// Many of the following patterns are accumulating widening
-// operations, which need to both deinterleave the accumulator, and
-// reinterleave the result.
-const int ReinterleaveOp0 = Pattern::InterleaveResult | Pattern::DeinterleaveOp0;
-
-std::vector<Pattern> adds = {
+vector<Pattern> adds = {
     // Shift-accumulates.
     { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x >> bc(wild_i32)) },
     { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x << bc(wild_i32)) },
@@ -344,8 +375,12 @@ std::vector<Pattern> adds = {
     { "halide.hexagon.add_mul.vh.vh.vh", wild_i16x + wild_i16x*wild_i16x },
 };
 
-Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_mutator) {
-    std::vector<Expr> matches;
+// Attempt to apply one of the patterns to x. If a match is
+// successfully, the expression is replaced with a call using the
+// matched operands. Prior to substitution, the matches are mutated
+// with op_mutator.
+Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutator) {
+    vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, x, matches)) {
             // The Pattern::Narrow*Op* flags are ordered such that
@@ -409,6 +444,8 @@ Expr apply_patterns(Expr x, const std::vector<Pattern> &patterns, IRMutator *op_
     return x;
 }
 
+// Replace x with a negated version of x, if it can be done without
+// overflow.
 Expr lossless_negate(Expr x) {
     const Mul *m = x.as<Mul>();
     if (m) {
@@ -427,28 +464,43 @@ Expr lossless_negate(Expr x) {
     return Expr();
 }
 
+template <typename T>
+Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IRMutator *mutator) {
+    Expr ret = apply_patterns(op, patterns, mutator);
+    if (!ret.same_as(op)) return ret;
+
+    // Try commuting the op
+    Expr commuted = T::make(op->b, op->a);
+    ret = apply_patterns(commuted, patterns, mutator);
+    if (!ret.same_as(commuted)) return ret;
+
+    return op;
+}
+
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
-    template <typename T>
-    void visit_commutative_op(const T *op, const vector<Pattern> &patterns) {
+    void visit(const Mul *op) {
         if (op->type.is_vector()) {
-            expr = apply_patterns(op, patterns, this);
+            expr = apply_commutative_patterns(op, scalar_muls, this);
             if (!expr.same_as(op)) return;
 
-            // Try commuting the op
-            Expr commuted = T::make(op->b, op->a);
-            expr = apply_patterns(commuted, patterns, this);
-            if (!expr.same_as(commuted)) return;
+            expr = apply_commutative_patterns(op, muls, this);
+            if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
     }
 
-    void visit(const Mul *op) { visit_commutative_op(op, muls); }
-    void visit(const Add *op) { visit_commutative_op(op, adds); }
+    void visit(const Add *op) {
+        if (op->type.is_vector()) {
+            expr = apply_commutative_patterns(op, adds, this);
+            if (!expr.same_as(op)) return;
+        }
+        IRMutator::visit(op);
+    }
 
     void visit(const Sub *op) {
         if (op->type.is_vector()) {
@@ -474,11 +526,11 @@ private:
             // This pattern is weird (wo operands must match, result
             // needs 1 added) and we're unlikely to need another
             // pattern for max, so just match it directly.
-            static std::pair<std::string, Expr> cl[] = {
+            static pair<string, Expr> cl[] = {
                 { "halide.hexagon.cls.vh", max(count_leading_zeros(wild_i16x), count_leading_zeros(~wild_i16x)) },
                 { "halide.hexagon.cls.vw", max(count_leading_zeros(wild_i32x), count_leading_zeros(~wild_i32x)) },
             };
-            std::vector<Expr> matches;
+            vector<Expr> matches;
             for (const auto &i : cl) {
                 if (expr_match(i.second, expr, matches) && equal(matches[0], matches[1])) {
                     expr = Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
@@ -521,7 +573,7 @@ private:
 
             // If we didn't find a pattern, try using one of the
             // rewrites above.
-            std::vector<Expr> matches;
+            vector<Expr> matches;
             for (auto i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
                     Expr replacement = with_lanes(i.second, op->type.lanes());
@@ -532,6 +584,17 @@ private:
             }
         }
         IRMutator::visit(op);
+    }
+
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::lerp)) {
+            // We need to lower lerps now to optimize the arithmetic
+            // that they generate.
+            internal_assert(op->args.size() == 3);
+            expr = mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
 public:
@@ -547,6 +610,35 @@ class EliminateInterleaves : public IRMutator {
 private:
     Scope<bool> vars;
 
+    // We need some special handling for expressions that are modified
+    // by eliminate_bool_vectors. mutate_with_interleave allows
+    // interleaves to be removed, but not added to the resulting
+    // expression, returned as a flag indicating the result should be
+    // interleaved instead. This is necessary because expressions
+    // returning boolean vectors can't be interleaved, the expression
+    // using it must be interleaved instead.
+    bool interleave_expr;
+    int allow_interleave_expr = 0;
+
+    pair<Expr, bool> mutate_with_interleave(Expr e) {
+        int old_allow_interleave_expr = allow_interleave_expr;
+        allow_interleave_expr = 1;
+        interleave_expr = false;
+        Expr ret = mutate(e);
+        allow_interleave_expr = old_allow_interleave_expr;
+        return std::make_pair(ret, interleave_expr);
+    }
+
+public:
+    Expr mutate(Expr e) {
+        --allow_interleave_expr;
+        Expr ret = IRMutator::mutate(e);
+        ++allow_interleave_expr;
+        return ret;
+    }
+    using IRMutator::mutate;
+
+private:
     // Check if x is an expression that is either an interleave, or
     // can pretend to be one (is a scalar or a broadcast).
     bool yields_interleave(Expr x) {
@@ -564,7 +656,7 @@ private:
 
     // Check that at least one of exprs is an interleave, and that all
     // of the exprs can yield an interleave.
-    bool yields_removable_interleave(const std::vector<Expr> &exprs) {
+    bool yields_removable_interleave(const vector<Expr> &exprs) {
         bool any_is_interleave = false;
         for (const Expr &i : exprs) {
             if (is_native_interleave(i)) {
@@ -598,11 +690,20 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         // We only want to pull out an interleave if at least one of
-        // the operands is an actual interleave.
-        if (yields_removable_interleave({a, b})) {
+        // the operands is an actual interleave. Furthermore, we can
+        // only attempt to do this if we are allowing the expr to be
+        // interleaved via interleave_expr, or the result is not boolean.
+        bool can_interleave = op->type.bits() != 1;
+        if ((can_interleave || allow_interleave_expr == 0) && yields_removable_interleave({a, b})) {
             a = remove_interleave(a);
             b = remove_interleave(b);
-            expr = native_interleave(T::make(a, b));
+            expr = T::make(a, b);
+            if (can_interleave) {
+                expr = native_interleave(expr);
+            } else {
+                internal_assert(!interleave_expr);
+                interleave_expr = true;
+            }
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
@@ -623,44 +724,82 @@ private:
     void visit(const LE *op) { visit_binary(op); }
     void visit(const GT *op) { visit_binary(op); }
     void visit(const GE *op) { visit_binary(op); }
-    void visit(const And *op) { visit_binary(op); }
-    void visit(const Or *op) { visit_binary(op); }
 
+    // These next 3 nodes should not exist if we're vectorized, they
+    // should have been replaced with bitwise operations.
+    void visit(const And *op) {
+        internal_assert(op->type.is_scalar());
+        IRMutator::visit(op);
+    }
+    void visit(const Or *op) {
+        internal_assert(op->type.is_scalar());
+        IRMutator::visit(op);
+    }
     void visit(const Not *op) {
-        Expr a = mutate(op->a);
-        if (is_native_interleave(a)) {
-            a = remove_interleave(a);
-            expr = native_interleave(Not::make(a));
-        } else if (!a.same_as(op->a)) {
-            expr = Not::make(a);
-        } else {
-            expr = op;
-        }
+        internal_assert(op->type.is_scalar());
+        IRMutator::visit(op);
     }
 
     void visit(const Select *op) {
-        Expr cond = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
-        if (yields_removable_interleave({cond, true_value, false_value})) {
-            cond = remove_interleave(cond);
-            true_value = remove_interleave(true_value);
-            false_value = remove_interleave(false_value);
-            expr = native_interleave(Select::make(cond, true_value, false_value));
-        } else if (!cond.same_as(op->condition) ||
-                   !true_value.same_as(op->true_value) ||
-                   !false_value.same_as(op->false_value)) {
-            expr = Select::make(cond, true_value, false_value);
+
+        if (op->condition.type().is_vector()) {
+            // We need to be careful here; the condition is a boolean
+            // vector, so we need to use mutate_with_interleave so we
+            // don't attempt to interleave it directly. However, if
+            // mutate_with_interleave indicates that it wants to
+            // interleave the result, we *must* interleave the result of
+            // the select. To avoid being forced to unnecessarily
+            // deinterleave the true/false values, we check if they both
+            // yield a removable interleave, and then only proceed to
+            // mutate_with_interleave the condition if so.
+            Expr cond;
+            if (yields_interleave(true_value) && yields_interleave(false_value)) {
+                bool interleave;
+                std::tie(cond, interleave) = mutate_with_interleave(op->condition);
+                if (interleave) {
+                    true_value = remove_interleave(true_value);
+                    false_value = remove_interleave(false_value);
+                    expr = native_interleave(Select::make(cond, true_value, false_value));
+                    return;
+                }
+            } else {
+                cond = mutate(op->condition);
+            }
+
+            if (!cond.same_as(op->condition) ||
+                !true_value.same_as(op->true_value) ||
+                !false_value.same_as(op->false_value)) {
+                expr = Select::make(cond, true_value, false_value);
+            } else {
+                expr = op;
+            }
         } else {
-            expr = op;
+            Expr cond = mutate(op->condition);
+
+            // If the condition isn't a vector, we can just check if
+            // we should move an interleave from the true/false
+            // values.
+            if (yields_removable_interleave({true_value, false_value})) {
+                true_value = remove_interleave(true_value);
+                false_value = remove_interleave(false_value);
+                expr = native_interleave(Select::make(cond, true_value, false_value));
+            } else if (!cond.same_as(op->condition) ||
+                       !true_value.same_as(op->true_value) ||
+                       !false_value.same_as(op->false_value)) {
+                expr = Select::make(cond, true_value, false_value);
+            } else {
+                expr = op;
+            }
         }
     }
 
     // Make overloads of stmt/expr uses var so we can use it in a template.
-    static bool uses_var(Stmt s, const std::string &var) {
+    static bool uses_var(Stmt s, const string &var) {
         return stmt_uses_var(s, var);
     }
-    static bool uses_var(Expr e, const std::string &var) {
+    static bool uses_var(Expr e, const string &var) {
         return expr_uses_var(e, var);
     }
 
@@ -712,46 +851,17 @@ private:
     void visit(const Let *op) { visit_let(expr, op); }
     void visit(const LetStmt *op) { visit_let(stmt, op); }
 
-    template <typename T>
-    void visit_binary_integer_cast(const Cast *cast, const T *op) {
-        // This is basically a two-in-one visitor combining
-        // visit_binary above, and visit(Cast) below. This is
-        // necessary to skip over the boolean vector during interleave
-        // simplification.
-        Type type = cast->type;
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
-
-        internal_assert(a.type().bits() == b.type().bits());
-        if (type.bits() == op->a.type().bits() &&
-            yields_removable_interleave({a, b})) {
-
-            a = remove_interleave(a);
-            b = remove_interleave(b);
-            expr = native_interleave(Cast::make(type, T::make(a, b)));
-        } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
-            expr = Cast::make(type, T::make(a, b));
-        } else {
-            expr = cast;
-        }
-    }
-
     void visit(const Cast *op) {
-        // Casts that are a result of eliminate_boolean_vectors need
-        // special handling, because we need to avoid attempting to
-        // generate an interleave of 1 bit integer vectors.
-        if (op->value.as<EQ>()) { visit_binary_integer_cast(op, op->value.as<EQ>()); }
-        else if (op->value.as<NE>()) { visit_binary_integer_cast(op, op->value.as<NE>()); }
-        else if (op->value.as<LT>()) { visit_binary_integer_cast(op, op->value.as<LT>()); }
-        else if (op->value.as<LE>()) { visit_binary_integer_cast(op, op->value.as<LE>()); }
-        else if (op->value.as<GT>()) { visit_binary_integer_cast(op, op->value.as<GT>()); }
-        else if (op->value.as<GE>()) { visit_binary_integer_cast(op, op->value.as<GE>()); }
-        // Other boolean operations producing boolean vectors should
-        // have been converted to bitwise operations.
-        else if (op->type.bits() == op->value.type().bits()) {
-            // We can move interleaves through casts of the same size.
-            Expr value = mutate(op->value);
-            if (is_native_interleave(value)) {
+        if (op->type.bits() == op->value.type().bits()) {
+            // We can only move interleaves through casts of the same size.
+
+            Expr value;
+            bool interleave;
+            std::tie(value, interleave) = mutate_with_interleave(op->value);
+
+            if (interleave) {
+                expr = native_interleave(Cast::make(op->type, value));
+            } else if (is_native_interleave(value)) {
                 value = remove_interleave(value);
                 expr = native_interleave(Cast::make(op->type, value));
             } else if (!value.same_as(op->value)) {

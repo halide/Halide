@@ -268,7 +268,7 @@ protected:
     llvm::Constant *create_string_constant(const std::string &str);
 
     /** Put a binary blob in the module as a global variable and return a pointer to it. */
-    llvm::Constant *create_binary_blob(const std::vector<char> &data, const std::string &name);
+    llvm::Constant *create_binary_blob(const std::vector<char> &data, const std::string &name, bool constant = true);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);

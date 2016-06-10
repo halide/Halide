@@ -97,19 +97,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
-#if 1  // Use shared object from file
     const char *filename = (const char *)code;
-#else
-    const char *filename = "/data/halide_kernels.so";
-    FILE* fd = fopen(filename, "w");
-    if (!fd) {
-        halide_print(NULL, "fopen failed\n");
-        return -1;
-    }
-
-    fwrite(code, codeLen, 1, fd);
-    fclose(fd);
-#endif
     void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
     if (!lib) {
         halide_print(NULL, "dlopen failed\n");
@@ -202,10 +190,9 @@ extern "C" {
 // The global symbols with which we pass RPC commands and results.
 volatile int rpc_call = Message::None;
 
-#if 0
-volatile int rpc_args[16];
-#define RPC_ARG(i) rpc_args[i]
-#else
+// TODO: It would be better to use an array here (obviously), but I
+// couldn't figure out how to write to the array from the simulator
+// host side.
 volatile int rpc_arg0;
 volatile int rpc_arg1;
 volatile int rpc_arg2;
@@ -215,7 +202,6 @@ volatile int rpc_arg5;
 volatile int rpc_arg6;
 volatile int rpc_arg7;
 #define RPC_ARG(i) rpc_arg##i
-#endif
 
 volatile int rpc_ret = 0;
 

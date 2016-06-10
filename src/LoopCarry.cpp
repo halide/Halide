@@ -87,14 +87,22 @@ Expr is_linear(Expr e, const Scope<Expr> &linear) {
 class FindLoads : public IRGraphVisitor {
     using IRVisitor::visit;
 
+    // We don't use this set as the result directly, to avoid
+    // non-deterministic behavior due to pointers changing value from
+    // one run to the next.
+    set<const Load *> found;
+
     void visit(const Load *op) {
-        result.insert(op);
+        if (found.count(op) == 0) {
+            found.insert(op);
+            result.push_back(op);
+        }
         // Don't consider nested loads inside the index
         // IRVisitor::visit(op);
     }
 
 public:
-    set<const Load *> result;
+    vector<const Load *> result;
 };
 
 /** A helper for block_to_vector below. */

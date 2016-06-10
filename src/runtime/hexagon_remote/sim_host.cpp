@@ -105,7 +105,9 @@ int write_memory(int dest, const void *src, int size) {
     assert(sim);
 
     while (size > 0) {
-        // WriteMemory only works with powers of 2, so align down.
+        // WriteMemory only works with powers of 2, so align down. It
+        // also only writes up to 8 bytes, so we need to do this
+        // repeatedly until we've finished copying the buffer.
         int next = 1;
         if (size >= 8) next = 8;
         else if (size >= 4) next = 4;
@@ -127,14 +129,14 @@ int read_memory(void *dest, int src, int size) {
     assert(sim);
 
     while (size > 0) {
-        // WriteMemory only works with powers of 2, so align down.
+        // This is the same logic as in write_memory above.
         int next = 1;
         if (size >= 8) next = 8;
         else if (size >= 4) next = 4;
         else if (size >= 2) next = 2;
         HEXAPI_Status status = sim->ReadMemory(src, next, dest);
         if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::WriteMemory failed: %d\n", status);
+            printf("HexagonWrapper::ReadMemory failed: %d\n", status);
             return -1;
         }
 
@@ -158,21 +160,7 @@ int send_message(int msg, const std::vector<int> &arguments) {
     }
     if (0 != write_memory(remote_msg, &msg, 4)) { return -1; }
 
-#if 0
-    HEX_4u_t remote_args = 0;
-    status = sim->ReadSymbolValue("rpc_args", &remote_args);
-    if (status != HEX_STAT_SUCCESS) {
-        printf("HexagonWrapper::ReadSymbolValue(rpc_args) failed: %d\n", status);
-        return -1;
-    }
-
-    // remote_args maybe is a pointer? Dereference?
-    //read_memory(&remote_args, remote_args, 4);
-
-    // Set the message and arguments.
-    if (0 != write_memory(remote_args, &arguments[0], arguments.size() * 4)) { return -1; }
-#else
-    // Can't seem to write to an array. Pass arguments to individual variables.
+    // The arguments are individual numbered variables.
     for (size_t i = 0; i < arguments.size(); i++) {
         HEX_4u_t remote_arg = 0;
         std::string rpc_arg = "rpc_arg" + std::to_string(i);
@@ -183,7 +171,6 @@ int send_message(int msg, const std::vector<int> &arguments) {
         }
         if (0 != write_memory(remote_arg, &arguments[i], 4)) { return -1; }
     }
-#endif
 
     HEX_4u_t remote_ret = 0;
     status = sim->ReadSymbolValue("rpc_ret", &remote_ret);
@@ -194,6 +181,8 @@ int send_message(int msg, const std::vector<int> &arguments) {
 
     HEXAPI_CoreState state;
     if (msg == Message::Break) {
+        // If we're trying to end the remote simulation, just run
+        // until completion.
         HEX_4u_t result;
         state = sim->Run(&result);
         if (state != HEX_CORE_FINISHED) {
@@ -202,6 +191,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
         }
         return 0;
     } else {
+        // If we want to return and continue simulating, we execute
+        // 1000 cycles at a time, until the remote indicates it has
+        // completed handling the current message.
         do {
             HEX_4u_t cycles;
             state = sim->Step(1000, &cycles);
@@ -231,12 +223,17 @@ public:
     remote_buffer(int dataLen) : dataLen(dataLen) {
         if (dataLen > 0) {
             data = send_message(Message::Alloc, {dataLen});
+            if (data == 0) {
+                printf("Failed to allocate %d bytes in the Hexagon simulation.\n", dataLen);
+            }
         } else {
             data = 0;
         }
     }
     remote_buffer(const void *data, int dataLen) : remote_buffer(dataLen) {
-        write_memory(this->data, data, dataLen);
+        if (this->data != 0) {
+            write_memory(this->data, data, dataLen);
+        }
     }
     remote_buffer(const host_buffer &host_buf) : remote_buffer(host_buf.data, host_buf.dataLen) {}
 
@@ -303,12 +300,15 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     std::vector<remote_buffer> remote_output_buffers;
     std::vector<remote_buffer> remote_input_scalars;
 
-    for (int i = 0; i < input_buffersLen; i++)
+    for (int i = 0; i < input_buffersLen; i++) {
         remote_input_buffers.emplace_back(input_buffersPtrs[i]);
-    for (int i = 0; i < output_buffersLen; i++)
+    }
+    for (int i = 0; i < output_buffersLen; i++) {
         remote_output_buffers.emplace_back(output_buffersPtrs[i]);
-    for (int i = 0; i < input_scalarsLen; i++)
+    }
+    for (int i = 0; i < input_scalarsLen; i++) {
         remote_input_scalars.emplace_back(input_scalarsPtrs[i]);
+    }
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_input_buffersPtrs(&remote_input_buffers[0], input_buffersLen * sizeof(remote_buffer));
@@ -335,8 +335,9 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     }
 
     // Copy the outputs back.
-    for (int i = 0; i < output_buffersLen; i++)
+    for (int i = 0; i < output_buffersLen; i++) {
         read_memory(output_buffersPtrs[i].data, remote_output_buffers[i].data, output_buffersPtrs[i].dataLen);
+    }
 
     return ret;
 }
