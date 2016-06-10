@@ -60,6 +60,36 @@ int64_t box_area(const Box& b) {
   return box_area;
 }
 
+class FindAllCalls : public IRVisitor {
+ public:
+  set<string> calls;
+  using IRVisitor::visit;
+
+  void visit(const Call *call) {
+    // See if images need to be included
+    if (call->call_type == Call::Halide ||
+        call->call_type == Call::Image) {
+      calls.insert(call->name);
+    }
+    for (size_t i = 0; (i < call->args.size()); i++)
+      call->args[i].accept(this);
+  }
+};
+
+class FindImageInputs : public IRVisitor {
+ public:
+  map<string, Type> input_type;
+  using IRVisitor::visit;
+
+  void visit(const Call *call) {
+    if (call->call_type == Call::Image) {
+      input_type[call->name] = call->type;
+    }
+    for (size_t i = 0; (i < call->args.size()); i++)
+      call->args[i].accept(this);
+  }
+};
+
 void set_schedule_defaults(map<string, Function>& env) {
   // Changing the default to compute root.
 
@@ -122,40 +152,12 @@ struct MachineParams {
   unsigned int balance;
 };
 
-class FindAllCalls : public IRVisitor {
- public:
-  set<string> calls;
-  using IRVisitor::visit;
-
-  void visit(const Call *call) {
-    // See if images need to be included
-    if (call->call_type == Call::Halide ||
-        call->call_type == Call::Image) {
-      calls.insert(call->name);
-    }
-    for (size_t i = 0; (i < call->args.size()); i++)
-      call->args[i].accept(this);
-  }
-};
-
-class FindImageInputs : public IRVisitor {
- public:
-  map<string, Type> input_type;
-  using IRVisitor::visit;
-
-  void visit(const Call *call) {
-    if (call->call_type == Call::Image) {
-      input_type[call->name] = call->image.type();
-    }
-    for (size_t i = 0; (i < call->args.size()); i++)
-      call->args[i].accept(this);
-  }
-};
-
 struct CostModel {
 
   /* Visitor for computing the arithmetic cost of a single value of a function*/
   const map<string, Function> &env;
+  map<string, pair<int64_t, int64_t> > func_cost;
+  map<string, Type> inputs;
 
   class ExprCost : public IRVisitor {
    public:
@@ -215,23 +217,24 @@ struct CostModel {
     }
 
     void visit(const Call * call) {
-      if (call->call_type == Call::Halide) {
-        //Function f(call->func);
-        //byte_loads += f.output_types()[call->value_index].bytes();
-        //internal_assert(f.output_types().size() != 0);
+      if (call->call_type == Call::Halide ||
+          call->call_type == Call::Image) {
+        byte_loads += call->type.bytes();
       } else if (call->call_type == Call::Extern) {
         // There is no visibility into an extern stage so there is
         // no way to know the cost of the call statically. This may
         // require profiling or user annotation
-        ops+=1;
+        //
+        // For now making this a large constant so that functions with
+        // extern stages are forced to be compute_root
+        ops+=999;
       } else if (call->call_type == Call::Intrinsic) {
         // TODO: Figure out the right costs based on intrinsic type
         ops+=1;
         // TODO: There is a PureIntrinsic too figure out what it is
         // and how to cost it
-      } else if (call->call_type == Call::Image) {
-        byte_loads += call->image.type().bytes();
       }
+
       for (size_t i = 0; (i < call->args.size()); i++)
         call->args[i].accept(this);
     }
@@ -258,8 +261,6 @@ struct CostModel {
     void visit(const IfThenElse *) { internal_assert(0); }
     void visit(const Evaluate *) { internal_assert(0); }
   };
-
-  map<string, pair<int64_t, int64_t> > func_cost;
 
   Expr perform_inline(Expr e, const set<string> &inlines = set<string>()) {
 
@@ -406,8 +407,8 @@ struct CostModel {
       // Area could not be determined
       return -1;
     }
-    int64_t size = get_func_value_size(f);
-    return area * size;
+    int64_t size_per_ele = get_func_value_size(f);
+    return area * size_per_ele;
   }
 
   int64_t region_size(const map<string, Box>& regions,
@@ -468,9 +469,37 @@ struct CostModel {
     return working_set_size;
   }
 
+  int64_t input_region_size(string input, const Box &region) {
+    int64_t area = box_area(region);
+    if (area < 0) {
+      // Area could not be determined
+      return -1;
+    }
+    int64_t size_per_ele = inputs.at(input).bytes();
+    return area * size_per_ele;
+  }
+
+  int64_t input_region_size(const map<string, Box>& input_regions) {
+    int64_t total_size = 0;
+    for (auto& reg: input_regions) {
+      int64_t size = input_region_size(reg.first, reg.second);
+      if (size < 0) {
+        return -1;
+      } else {
+        total_size += size;
+      }
+    }
+    return total_size;
+  }
+
   CostModel(const map<string, Function>& _env) : env(_env) {
     for (auto& kv : env) {
       func_cost[kv.first] = get_func_cost(kv.second);
+      FindImageInputs find;
+      kv.second.accept(&find);
+      for (auto& in: find.input_type) {
+        inputs[in.first] = in.second;
+      }
     }
   }
 };
@@ -1372,20 +1401,24 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
                                                        g.tile_sizes);
   map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
-  map<string, Box> group_reg, input_reg, touched_reg;
+  map<string, Box> group_reg, prod_reg, input_reg;
 
   // Filtering out regions that belong to the group and are input to the group
   for (auto& reg: conc_reg) {
     if (group_mem.find(reg.first) != group_mem.end()) {
       group_reg[reg.first] = reg.second;
     } else if (group_inputs.find(reg.first) != group_inputs.end()) {
-      input_reg[reg.first] = reg.second;
+      if (analy.env.find(reg.first) != analy.env.end())
+        prod_reg[reg.first] = reg.second;
+      else
+        input_reg[reg.first] = reg.second;
     }
   }
 
   // Compute the cost of the region and the size of the intermediates
   pair<int64_t, int64_t> tile_cost = cost_model.region_cost(group_reg, g.inlined);
-  int64_t tile_input_size = cost_model.region_size(input_reg);
+  int64_t tile_input_size = cost_model.region_size(prod_reg) +
+                            cost_model.input_region_size(input_reg);
   int64_t tile_intermediate_size = cost_model.region_size(group_reg, g.inlined);
 
   GroupAnalysis g_analy;
@@ -1440,6 +1473,18 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
   Group cons_group = groups.at(choice.cons_group);
 
   Group fused_group = fuse_groups(prod_group, cons_group);
+
+  // Set the tile sizes to one along all dimensions of the consumer
+  // group
+  map<string, int> tile_sizes;
+
+  Function out_func = analy.env.at(cons_group.output);
+  const vector<string>& args = out_func.args();
+  for (auto& arg: args) {
+    tile_sizes[arg] = 1;
+  }
+
+  fused_group.tile_sizes = tile_sizes;
 
   // Compare the cost with the costs of the groups without fusion
   GroupAnalysis prod_analy = analyze_group(prod_group);
