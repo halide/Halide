@@ -138,6 +138,20 @@ class FindAllCalls : public IRVisitor {
   }
 };
 
+class FindImageInputs : public IRVisitor {
+ public:
+  map<string, Type> input_type;
+  using IRVisitor::visit;
+
+  void visit(const Call *call) {
+    if (call->call_type == Call::Image) {
+      input_type[call->name] = call->image.type();
+    }
+    for (size_t i = 0; (i < call->args.size()); i++)
+      call->args[i].accept(this);
+  }
+};
+
 struct CostModel {
 
   /* Visitor for computing the arithmetic cost of a single value of a function*/
@@ -148,9 +162,7 @@ struct CostModel {
     int ops;
     int byte_loads;
 
-    const map<string, Function> &env;
-
-    ExprCost(const map<string, Function> &_env): env(_env) {
+    ExprCost() {
       ops = 0; byte_loads = 0;
     }
 
@@ -202,18 +214,23 @@ struct CostModel {
       ops+=1;
     }
 
-    // TODO: Figure out the right costs
     void visit(const Call * call) {
-      if (call->call_type == Call::Halide ||
-          call->call_type == Call::Image) {
-        const vector<Type>& types = env.at(call->name).output_types();
-        for(size_t i = 0; i < types.size(); i++)
-          byte_loads += types[i].bytes();
-        internal_assert(types.size() != 0);
+      if (call->call_type == Call::Halide) {
+        //Function f(call->func);
+        //byte_loads += f.output_types()[call->value_index].bytes();
+        //internal_assert(f.output_types().size() != 0);
       } else if (call->call_type == Call::Extern) {
+        // There is no visibility into an extern stage so there is
+        // no way to know the cost of the call statically. This may
+        // require profiling or user annotation
         ops+=1;
       } else if (call->call_type == Call::Intrinsic) {
+        // TODO: Figure out the right costs based on intrinsic type
         ops+=1;
+        // TODO: There is a PureIntrinsic too figure out what it is
+        // and how to cost it
+      } else if (call->call_type == Call::Image) {
+        byte_loads += call->image.type().bytes();
       }
       for (size_t i = 0; (i < call->args.size()); i++)
         call->args[i].accept(this);
@@ -223,8 +240,8 @@ struct CostModel {
       let->value.accept(this);
       let->body.accept(this);
     }
-    // Should not hit any of these IR nodes at this
-    // stage of compilation
+
+    // Should not hit any of these IR nodes at this stage of compilation
     void visit(const Load *) { internal_assert(0); }
     void visit(const Ramp *) { internal_assert(0); }
     void visit(const Broadcast *) { internal_assert(0); }
@@ -269,7 +286,7 @@ struct CostModel {
   }
 
   pair<int, int> get_expr_cost(Expr& e) {
-    ExprCost cost_visitor(env);
+    ExprCost cost_visitor;
     e.accept(&cost_visitor);
     return make_pair(cost_visitor.ops, cost_visitor.byte_loads);
   }
@@ -321,7 +338,7 @@ struct CostModel {
     // TODO: revist how boundary conditions are handled
     for (auto& e: f.values()) {
       Expr inlined_expr = perform_inline(e, inlines);
-      ExprCost cost_visitor(env);
+      ExprCost cost_visitor;
       inlined_expr.accept(&cost_visitor);
       total_ops += cost_visitor.ops;
       total_loads += cost_visitor.byte_loads;
@@ -337,7 +354,7 @@ struct CostModel {
         int64_t loads = 0;
         for (auto& e: u.values()) {
           Expr inlined_expr = perform_inline(e, inlines);
-          ExprCost cost_visitor(env);
+          ExprCost cost_visitor;
           inlined_expr.accept(&cost_visitor);
           ops += cost_visitor.ops;
           loads += cost_visitor.byte_loads;
@@ -345,7 +362,7 @@ struct CostModel {
 
         for (auto& arg: u.args()) {
           Expr inlined_arg = perform_inline(arg, inlines);
-          ExprCost cost_visitor(env);
+          ExprCost cost_visitor;
           inlined_arg.accept(&cost_visitor);
           ops += cost_visitor.ops;
           loads += cost_visitor.byte_loads;
@@ -373,19 +390,12 @@ struct CostModel {
     return make_pair(total_ops, total_loads);
   }
 
-  int64_t get_func_size_per_ele(const Function& f) {
+  int64_t get_func_value_size(const Function& f) {
     int64_t size = 0;
     const vector<Type>& types = f.output_types();
     for(size_t i = 0; i < types.size(); i++)
       size += types[i].bytes();
     internal_assert(types.size() != 0);
-    /*
-    if (size == 0) {
-      // TODO: Fix me
-      // Hack to overcome weirdness for inputs to the pipeline
-      size = 4;
-    }
-    */
     return size;
   }
 
@@ -396,7 +406,7 @@ struct CostModel {
       // Area could not be determined
       return -1;
     }
-    int64_t size = get_func_size_per_ele(f);
+    int64_t size = get_func_value_size(f);
     return area * size;
   }
 
@@ -1326,7 +1336,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
 
   for(auto& f: g.members) {
     FindAllCalls find;
-    analy.env.at(f.name()).accept(&find);
+    f.accept(&find);
     for(auto& c: find.calls) {
       bool is_member = false;
       for (auto& m: g.members) {
@@ -1500,10 +1510,6 @@ void generate_schedules(const vector<Function>& outputs,
   map<string, Box> pipeline_bounds = get_pipeline_bounds(analy, outputs);
   disp_regions(pipeline_bounds);
 
-  // Initialize the cost model
-  // TODO: Build a class which encapsulates the cost model
-  // TODO: Arithmetic cost model and functions which help in computing
-  // footprints go here
 
   // TODO: Partitioner which is capable of auto scheduling hierarchically
   MachineParams arch_params;
@@ -1512,6 +1518,7 @@ void generate_schedules(const vector<Function>& outputs,
   arch_params.fast_mem_size = 1024;
   arch_params.balance = 10;
 
+  // Initialize the cost model
   CostModel cost_model(env);
 
   Partitioner part(pipeline_bounds, arch_params, analy,
