@@ -35,11 +35,11 @@ struct ion_handle_data {
 WEAK int dev_ion_fd = -1;
 WEAK halide_mutex thread_lock = { { 0 } };
 
-// The default implementation of halide_hexagon_get_descriptor uses the global
+// The default implementation of halide_ion_get_descriptor uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of get_descriptor must implement the following
 // behavior:
-// - halide_hexagon_get_descriptor should always store a valid file descriptor to
+// - halide_ion_get_descriptor should always store a valid file descriptor to
 //   /dev/ion in fd, or return an error code.
 extern "C" WEAK int halide_ion_get_descriptor(void *user_context, int *fd, bool create = true) {
     // TODO: Should we use a more "assertive" assert? these asserts do
