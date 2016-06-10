@@ -19,7 +19,7 @@ using std::vector;
 
 namespace {
 
-// Replace the parameter objects of loads/stores witha new parameter
+// Replace the parameter objects of loads/stores with a new parameter
 // object.
 class ReplaceParams : public IRMutator {
     const std::map<std::string, Parameter> &replacements;
@@ -255,11 +255,6 @@ public:
         }
 
         // Compile the device code.
-        std::vector<uint8_t> object;
-#if 0
-        compile_module_to_shared_object(device_code, object);
-        //compile_module_to_shared_object(device_code, "/tmp/hex.so");
-#else
         TemporaryFile tmp_bitcode("hex", ".bc");
         TemporaryFile tmp_shared_object("hex", ".so");
         debug(1) << "Hexagon device code module: " << device_code << "\n";
@@ -279,10 +274,10 @@ public:
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
         std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
-        object.resize(so.tellg());
+        internal_assert(so.good()) << "failed to open temporary shared object.";
+        std::vector<uint8_t> object(so.tellg());
         so.seekg(0, std::ios::beg);
         so.read(reinterpret_cast<char*>(&object[0]), object.size());
-#endif
 
         // Put the compiled object into a buffer.
         size_t code_size = object.size();
@@ -300,12 +295,24 @@ public:
 }
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
+    // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
-    for (Target::Feature i : {Target::Debug, Target::NoAsserts, Target::HVX_64, Target::HVX_128, Target::HVX_v62}) {
+
+    // These feature flags are propagated from the host target to the
+    // device module.
+    static const Target::Feature shared_features[] = {
+        Target::Debug,
+        Target::NoAsserts,
+        Target::HVX_64,
+        Target::HVX_128,
+        Target::HVX_v62
+    };
+    for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
             target = target.with_feature(i);
         }
     }
+
     InjectHexagonRpc injector(target);
     s = injector.inject(s);
     return s;

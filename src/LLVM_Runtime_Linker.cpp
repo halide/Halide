@@ -798,7 +798,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
-            modules.push_back(get_initmod_errors(c, bits_64, debug));
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
