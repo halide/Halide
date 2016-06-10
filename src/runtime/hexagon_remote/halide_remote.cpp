@@ -28,7 +28,6 @@ typedef halide_hexagon_remote_buffer buffer;
 static char stack [MAX_WORKER_THREADS][STACK_SIZE] __attribute__ ((__aligned__(128)));
 qurt_sem_t wait_for_work;
 //qurt_cond_t work_in_queue;
-qurt_hvx_mode_t curr_hvx_mode;
 struct work {
     work *next_job;
     int (*f)(void *, int, uint8_t *);
@@ -38,6 +37,7 @@ struct work {
     int active_workers;
     int exit_status;
     qurt_cond_t wakeup_owner;
+    qurt_hvx_mode_t curr_hvx_mode;
     // A job can be in the following states.
     // claimed - When the thread_pool has started work on the entire job, but not necessarily
     //           completed it. Condition: next >= end.
@@ -196,11 +196,11 @@ void goto_work(work *owned_job) {
         work_queue.unlock();
 
         if (!locked) {
-            int lock_status = qurt_hvx_lock(curr_hvx_mode);
+            int lock_status = qurt_hvx_lock(job->curr_hvx_mode);
             if (lock_status != QURT_EOK) {
-                FARF(LOW, "HVX_TP: %d: goto_work: qurt_hvx_lock(%d) failed\n", tid, curr_hvx_mode);
+                FARF(LOW, "HVX_TP: %d: goto_work: qurt_hvx_lock(%d) failed\n", tid, job->curr_hvx_mode);
             } else {
-                FARF(LOW, "HVX_TP: %d: goto_work: qurt_hvx_lock(%d) succeeded.\n", tid, curr_hvx_mode);
+                FARF(LOW, "HVX_TP: %d: goto_work: qurt_hvx_lock(%d) succeeded.\n", tid, job->curr_hvx_mode);
             }
         }
 
@@ -317,22 +317,20 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     job.active_workers = 0;  // Nobody is working on this yet
     qurt_cond_init(&job.wakeup_owner);
     job.next_job = work_queue.jobs;
+    job.curr_hvx_mode = (qurt_hvx_mode_t) qurt_hvx_get_mode();
+    FARF(LOW, "HVX_TP: Master Thread: curr_hvx_mode = %d\n", job.curr_hvx_mode);
     work_queue.jobs = &job;
 
     // 4. Unlock global work queue.
     work_queue.unlock();
 
-    // 5. if an hvx context has already been locked, find out the mode.
-    curr_hvx_mode = (qurt_hvx_mode_t) qurt_hvx_get_mode();
-
-    FARF(LOW, "HVX_TP: Master Thread: curr_hvx_mode = %d\n", curr_hvx_mode);
-    // 6. Wake up the other threads in the pool.
+    // 5. Wake up the other threads in the pool.
     qurt_sem_add(&wait_for_work, size);
 
-    // 7. Do some work in the master queue.
+    // 6. Do some work in the master queue.
     goto_work(&job);
 
-    qurt_hvx_lock(curr_hvx_mode);
+    qurt_hvx_lock(job.curr_hvx_mode);
     FARF(LOW, "HVX_TP: Master Thread: Finished job\n");
     return job.exit_status;
 }
