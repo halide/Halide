@@ -84,19 +84,10 @@ int context_count = 0;
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
-#if 1  // Use shared object from file
+    // Currently, the 'code' is actually just a path to a shared
+    // object. It would be nice to find a way to pass the code
+    // directly, without needing to go through the file system.
     const char *filename = (const char *)code;
-#else
-    const char *filename = "/data/halide_kernels.so";
-    FILE* fd = fopen(filename, "w");
-    if (!fd) {
-        halide_print(NULL, "fopen failed");
-        return -1;
-    }
-
-    fwrite(code, codeLen, 1, fd);
-    fclose(fd);
-#endif
     void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
     if (!lib) {
         halide_print(NULL, "dlopen failed");
@@ -142,16 +133,6 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
             halide_print(NULL, "HAP_power_set(HAP_power_set_apptype) failed");
             return -1;
         }
-/*
-        request.type = HAP_power_set_DCVS;
-        request.dcvs.dcvs_enable = FALSE;
-        request.dcvs.dcvs_option = HAP_DCVS_ADJUST_UP_DOWN;
-        retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            halide_print(NULL, "HAP_power_set(HAP_power_set_DCVS) failed");
-            return -1;
-        }
-*/
 
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = TRUE;
