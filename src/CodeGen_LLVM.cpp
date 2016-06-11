@@ -1560,32 +1560,7 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 
 void CodeGen_LLVM::visit(const Select *op) {
-    // For now we always generate select nodes, but the code is here
-    // for if then elses if we need it
-    if (false && op->condition.type().is_scalar()) {
-        // Codegen an if-then-else so we don't go to the expense of
-        // generating both vectors
-
-        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
-
-        builder->SetInsertPoint(true_bb);
-        Value *true_value = codegen(op->true_value);
-        builder->CreateBr(after_bb);
-
-        builder->SetInsertPoint(false_bb);
-        Value *false_value = codegen(op->false_value);
-        builder->CreateBr(after_bb);
-
-        builder->SetInsertPoint(after_bb);
-        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-        phi->addIncoming(true_value, true_bb);
-        phi->addIncoming(false_value, false_bb);
-
-        value = phi;
-    } else if (op->type == Int(32)) {
+    if (op->type == Int(32)) {
         // llvm has a performance bug inside of loop strength
         // reduction that barfs on long chains of selects. To avoid
         // it, we use bit-masking instead.
