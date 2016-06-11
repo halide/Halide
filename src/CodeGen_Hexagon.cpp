@@ -1294,15 +1294,20 @@ void CodeGen_Hexagon::visit(const Select *op) {
         builder->SetInsertPoint(true_bb);
         Value *true_value = codegen(op->true_value);
         builder->CreateBr(after_bb);
+        // The true value might have jumped to a new block (e.g. if there was a
+        // nested select). To generate a correct PHI node, grab the current
+        // block.
+        BasicBlock *true_pred = builder->GetInsertBlock();
 
         builder->SetInsertPoint(false_bb);
         Value *false_value = codegen(op->false_value);
         builder->CreateBr(after_bb);
+        BasicBlock *false_pred = builder->GetInsertBlock();
 
         builder->SetInsertPoint(after_bb);
         PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-        phi->addIncoming(true_value, true_bb);
-        phi->addIncoming(false_value, false_bb);
+        phi->addIncoming(true_value, true_pred);
+        phi->addIncoming(false_value, false_pred);
 
         value = phi;
     } else {
