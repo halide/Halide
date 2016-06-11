@@ -45,7 +45,7 @@ int get_extent(const Interval& i) {
 
 int64_t box_area(const Box& b) {
   int64_t box_area = 1;
-  for(size_t i = 0; i < b.size(); i++) {
+  for (size_t i = 0; i < b.size(); i++) {
     // Maybe should check for unsigned integers and floats too
     int64_t extent = get_extent(b[i]);
     if (extent > 0 && box_area > 0)
@@ -108,17 +108,13 @@ void set_schedule_defaults(map<string, Function>& env) {
     //
     // Open question is how to deal with the constraints induced by user
     // specified schedules.
-    kv.second.schedule().store_level().func = "";
-    kv.second.schedule().store_level().var = "__root";
-    kv.second.schedule().compute_level().func = "";
-    kv.second.schedule().compute_level().var = "__root";
+    kv.second.schedule().store_level() = LoopLevel::root();
+    kv.second.schedule().compute_level() = LoopLevel::root();
 
     // Initializing the schedules for update definitions
     for (size_t u = 0; u < kv.second.updates().size(); u++) {
-      kv.second.update_schedule(u).store_level().func = "";
-      kv.second.update_schedule(u).store_level().var = "__root";
-      kv.second.update_schedule(u).compute_level().func = "";
-      kv.second.update_schedule(u).compute_level().var = "__root";
+      kv.second.update_schedule(u).store_level() = LoopLevel::root();
+      kv.second.update_schedule(u).compute_level() = LoopLevel::root();
     }
   }
 }
@@ -271,11 +267,12 @@ struct CostModel {
     Expr inlined_expr = e;
 
     do {
+      funcs_to_inline = false;
       FindAllCalls find;
-      e.accept(&find);
+      inlined_expr.accept(&find);
       set<string>& calls = find.calls;
       for (auto& call: calls) {
-        if (inlines.find(call) != inlines.end()) {
+        if (inlines.find(call) != inlines.end() && env.at(call).is_pure()) {
           funcs_to_inline = true;
           inlined_expr = inline_function(inlined_expr, env.at(call));
           break;
@@ -316,7 +313,13 @@ struct CostModel {
                                      const set<string>& inlines = set<string>()) {
 
     pair<int64_t, int64_t> total_cost(0, 0);
-    for(auto& f: regions) {
+    for (auto& f: regions) {
+      // The cost for inlined functions will be accounted in the consumer
+      // of the inlined function
+      if (inlines.find(f.first) != inlines.end() &&
+          env.at(f.first).is_pure())
+        continue;
+
       pair<int64_t, int64_t> cost = region_cost(f.first, f.second, inlines);
       if (cost.first < 0) {
         return cost;
@@ -394,7 +397,7 @@ struct CostModel {
   int64_t get_func_value_size(const Function& f) {
     int64_t size = 0;
     const vector<Type>& types = f.output_types();
-    for(size_t i = 0; i < types.size(); i++)
+    for (size_t i = 0; i < types.size(); i++)
       size += types[i].bytes();
     internal_assert(types.size() != 0);
     return size;
@@ -415,19 +418,19 @@ struct CostModel {
                       const set<string>& inlined = set<string>()) {
 
     map<string, int> num_consumers;
-    for(auto& f: regions)
+    for (auto& f: regions)
       num_consumers[f.first] = 0;
 
-    for(auto& f: regions) {
+    for (auto& f: regions) {
       map<string, Function> prods = find_direct_calls(env.at(f.first));
-      for(auto& p: prods) {
+      for (auto& p: prods) {
         if (regions.find(p.first) != regions.end())
           num_consumers[p.first] += 1;
       }
     }
 
     vector<Function> outs;
-    for(auto &f: num_consumers) {
+    for (auto &f: num_consumers) {
       if (f.second  == 0) {
         outs.push_back(env.at(f.first));
       }
@@ -440,7 +443,10 @@ struct CostModel {
     int64_t curr_size = 0;
 
     map<string, int64_t> func_sizes;
-    for(auto& f: regions) {
+    for (auto& f: inlined)
+      debug(0) << f << '\n';
+
+    for (auto& f: regions) {
       // Inlined functions do not have allocations
       int64_t size = inlined.find(f.first) != inlined.end()? 0:
                      region_size(f.first, f.second);
@@ -450,18 +456,20 @@ struct CostModel {
         func_sizes[f.first] = size;
     }
 
-    for(auto& f: order) {
+    for (auto& f: order) {
       if (regions.find(f) != regions.end()) {
         curr_size += func_sizes.at(f);
+        debug(0) << "Bumping working set size:" << f << " " << curr_size << '\n';
       }
       working_set_size = std::max(curr_size, working_set_size);
       map<string, Function> prods = find_direct_calls(env.at(f));
-      for(auto& p: prods) {
-        if (num_consumers.find(p.first) != num_consumers.end())
+      for (auto& p: prods) {
+        if (num_consumers.find(p.first) != num_consumers.end()) {
           num_consumers[p.first] -= 1;
-        if (num_consumers[p.first] == 0) {
-          curr_size -= func_sizes.at(p.first);
-          internal_assert(curr_size >= 0);
+          if (num_consumers[p.first] == 0) {
+            curr_size -= func_sizes.at(p.first);
+            internal_assert(curr_size >= 0);
+          }
         }
       }
     }
@@ -843,7 +851,7 @@ struct Partitioner {
     friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
 
       stream << "Output:" << g.output << '\n';
-      stream << "Memebers:" << '[';
+      stream << "Members:" << '[';
       for (auto& m: g.members) {
         stream << m.name() << ",";
       }
@@ -1079,9 +1087,6 @@ Partitioner::choose_candidate_fuse_inline(
 
     for (auto& c: children[p.first]) {
       int64_t benefit = 0;
-      // Get the output function of the child group
-      Function output = analy.env.at(c);
-
       InlineChoice cand_choice(p.first, c);
 
       // Check if the pair has been evaluated for inline fusion before
@@ -1363,10 +1368,14 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   set<string> group_inputs;
   set<string> group_mem;
 
-  for(auto& f: g.members) {
+  for (auto& f: g.members)
+    debug(0) << f.name() << '\n';
+
+  for (auto& f: g.members) {
+    group_mem.insert(f.name());
     FindAllCalls find;
     f.accept(&find);
-    for(auto& c: find.calls) {
+    for (auto& c: find.calls) {
       bool is_member = false;
       for (auto& m: g.members) {
         if (m.name() == c) {
@@ -1376,8 +1385,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
       }
       if (!is_member) {
         group_inputs.insert(c);
-      } else {
-        group_mem.insert(c);
       }
     }
   }
@@ -1401,6 +1408,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
                                                        g.tile_sizes);
   map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
+  conc_reg[g.output] = Box(bounds);
+
   map<string, Box> group_reg, prod_reg, input_reg;
 
   // Filtering out regions that belong to the group and are input to the group
@@ -1414,6 +1423,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         input_reg[reg.first] = reg.second;
     }
   }
+
+  debug(0) << g;
 
   // Compute the cost of the region and the size of the intermediates
   pair<int64_t, int64_t> tile_cost = cost_model.region_cost(group_reg, g.inlined);
@@ -1435,6 +1446,12 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
   int64_t per_tile_mem_cost = tile_input_size;
   int64_t per_tile_arith_cost = tile_cost.first;
 
+  debug(0) << "Tile cost:" << '\n';
+  debug(0) << tile_cost.first << '\n';
+  debug(0) << tile_cost.second << '\n';
+  debug(0) << estimate_tiles << '\n';
+
+  debug(0) << "Tile intermediate size:" << tile_intermediate_size << '\n';
   if (tile_intermediate_size > arch_params.fast_mem_size) {
     per_tile_mem_cost += tile_cost.second;
   }
@@ -1450,16 +1467,16 @@ Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
                                             Group& cons_group) {
 
   vector<Function> fused_members;
-  for(auto& f: prod_group.members)
+  for (auto& f: prod_group.members)
     fused_members.push_back(f);
-  for(auto& f: cons_group.members)
+  for (auto& f: cons_group.members)
     fused_members.push_back(f);
 
   Group fused_group(cons_group.output, fused_members);
 
-  for(auto& f: prod_group.inlined)
+  for (auto& f: prod_group.inlined)
     fused_group.inlined.insert(f);
-  for(auto& f: cons_group.inlined)
+  for (auto& f: cons_group.inlined)
     cons_group.inlined.insert(f);
 
   return fused_group;
@@ -1486,6 +1503,11 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
 
   fused_group.tile_sizes = tile_sizes;
 
+  for (auto& f: prod_group.members)
+    fused_group.inlined.insert(f.name());
+  for (auto& f: cons_group.inlined)
+    fused_group.inlined.insert(f);
+
   // Compare the cost with the costs of the groups without fusion
   GroupAnalysis prod_analy = analyze_group(prod_group);
   GroupAnalysis cons_analy = analyze_group(cons_group);
@@ -1493,7 +1515,10 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
 
   // Return the overall benefit of the choice
   // TODO: Use the arch params to compute total work
-  return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
+  int64_t benefit = prod_analy.arith_cost + cons_analy.arith_cost -
+                    fused_analy.arith_cost;
+  debug(0) << benefit << '\n';
+  return benefit;
 }
 
 int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
@@ -1506,6 +1531,11 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
   Group fused_group = fuse_groups(prod_group, cons_group);
 
   fused_group.tile_sizes = choice.tile_sizes;
+
+  for (auto& f: prod_group.inlined)
+    fused_group.inlined.insert(f);
+  for (auto& f: cons_group.inlined)
+    fused_group.inlined.insert(f);
 
   // Compare the cost with the costs of the groups without fusion
   GroupAnalysis prod_analy = analyze_group(prod_group);
@@ -1528,9 +1558,6 @@ void generate_schedules(const vector<Function>& outputs,
 
   // Compute a realization order
   vector<string> order = realization_order(outputs, env);
-
-  // Set the schedule defaults for each funtion in the environment
-  set_schedule_defaults(env);
 
   // Compute the expression costs for each function in the pipeline
 
@@ -1581,6 +1608,10 @@ void generate_schedules(const vector<Function>& outputs,
     debug(0) << '\n';
   }
 
+  part.group(Partitioner::INLINE);
+
+  part.disp_grouping();
+
   // TODO: Auto scheduler modes
   // O1 Does not introduce any redundant compute but performs basic fusion
   // O2 No redundant compute basic fusion and reordering
@@ -1593,9 +1624,12 @@ void generate_schedules(const vector<Function>& outputs,
   // TODO: Boundary conditions
 
   // TODO: Realize the generated schedule
+
+  // Set the schedule defaults for each funtion in the environment
+  set_schedule_defaults(env);
+
   // GPU
   // ...
-
 }
 
 }
