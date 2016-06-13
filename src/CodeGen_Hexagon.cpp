@@ -41,7 +41,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // TODO: This should be set on the module itself, or some other
     // safer way to pass this through to the target specific lowering
     // passes. We set the option here (after the base class'
-    // implementaiton of compile) because it is the last
+    // implementation of compile) because it is the last
     // Hexagon-specific code to run prior to invoking the target
     // specific lowering in LLVM, minimizing the chances of the wrong
     // flag being set for the wrong module.
@@ -726,7 +726,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 
     // Try to rewrite shuffles of (maybe strided) ramps.
-    int start, stride;
+    int start = 0, stride = 0;
     if (!is_strided_ramp(indices, start, stride)) {
         if (is_concat_or_slice(indices) || element_bits > 16) {
             // Let LLVM handle concat or slices.
