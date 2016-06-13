@@ -5,7 +5,7 @@
  * Defines the code-generator for producing Hexagon machine code
  */
 
-#ifdef WITH_HEXAGON
+#if WITH_HEXAGON
 
 #if LLVM_VERSION < 39
 #error "Hexagon target requires LLVM version 3.9 or later."
