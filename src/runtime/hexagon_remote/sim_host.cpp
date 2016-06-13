@@ -252,7 +252,7 @@ public:
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
     }
-    remote_buffer &operator = (remote_buffer &&move) {
+    remote_buffer &operator=(remote_buffer &&move) {
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
         return *this;
