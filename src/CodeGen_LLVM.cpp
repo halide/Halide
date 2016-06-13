@@ -441,17 +441,16 @@ struct MangledNames {
     string metadata_name;
 };
 
-MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
+MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType linkage, 
+                               const std::vector<LoweredArgument> &args, const Target &target) {
     std::vector<std::string> namespaces;
     MangledNames names;
-    names.simple_name = extract_namespaces(f.name, namespaces);
+    names.simple_name = extract_namespaces(name, namespaces);
     names.extern_name = names.simple_name;
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    const std::vector<LoweredArgument> &args = f.args;
-
-    if (f.linkage == LoweredFunc::External &&
+    if (linkage == LoweredFunc::External &&
         target.has_feature(Target::CPlusPlusMangling) &&
         !target.has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
         std::vector<ExternFuncArgument> mangle_args;
@@ -470,6 +469,10 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
     }
     return names;
+}
+
+MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
+    return get_mangled_names(f.name, f.linkage, f.args, target);
 }
 
 }  // namespace
@@ -548,6 +551,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
 void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
                               const std::string& extern_name, const std::vector<LoweredArgument>& args) {
+    current_function_args = args;
+
     // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -612,6 +617,8 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     }
 
     internal_assert(!verifyFunction(*function));
+
+    current_function_args.clear();
 }
 
   void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
@@ -2702,9 +2709,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<SubFn> sub_fns;
         for (size_t i = 0; i < op->args.size(); i += 2) {
             const string sub_fn_name = op->args[i+1].as<StringImm>()->value;
+            string extern_sub_fn_name = sub_fn_name;
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
             if (!sub_fn) {
-                debug(1) << "Did not find function " << sub_fn_name << ", assuming extern \"C\".\n";
+                extern_sub_fn_name = get_mangled_names(sub_fn_name, LoweredFunc::External, current_function_args, get_target()).extern_name;
+                debug(1) << "Did not find function " << sub_fn_name << ", assuming extern \"C\" " << extern_sub_fn_name << "\n";
                 vector<llvm::Type *> arg_types;
                 for (const auto &arg : function->args()) {
                      arg_types.push_back(arg.getType());
@@ -2712,16 +2721,16 @@ void CodeGen_LLVM::visit(const Call *op) {
                 llvm::Type *result_type = llvm_type_of(op->type);
                 FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
                 sub_fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
-                                                sub_fn_name, module.get());
+                                                extern_sub_fn_name, module.get());
                 sub_fn->setCallingConv(CallingConv::C);
             }
 
-            llvm::GlobalValue *sub_fn_ptr = module->getNamedValue(sub_fn_name);
+            llvm::GlobalValue *sub_fn_ptr = module->getNamedValue(extern_sub_fn_name);
             if (!sub_fn_ptr) {
-                debug(1) << "Did not find function ptr " << sub_fn_name << ", assuming extern \"C\".\n";
+                debug(1) << "Did not find function ptr " << extern_sub_fn_name << ", assuming extern \"C\".\n";
                 sub_fn_ptr = new GlobalVariable(*module, sub_fn->getType(),
                                                 /*isConstant*/ true, GlobalValue::ExternalLinkage,
-                                                /*initializer*/ nullptr, sub_fn_name);
+                                                /*initializer*/ nullptr, extern_sub_fn_name);
             }
             auto cond = op->args[i];
             sub_fns.push_back({sub_fn, sub_fn_ptr, cond});
