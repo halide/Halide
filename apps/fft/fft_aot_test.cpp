@@ -43,37 +43,6 @@ buffer_t complex_buffer(float *storage, int32_t y_size = kSize) {
     return buf;
 }
 
-void print_buffer(const float *buffer, const char *label, float scale = 1.0f) {
-    std::cout << label << std::endl;
-    for (int j = 0; j < kSize; j++) {
-        for (int i = 0; i < kSize; i++) {
-            std::cout << std::setw(6) << buffer[i + j * kSize] * scale << " ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-
-void print_complex_buffer(const float *buffer, const char *label, float scale = 1.0f) {
-    std::cout << label << std::endl;
-    for (int j = 0; j < kSize; j++) {
-        for (int i = 0; i < kSize; i++) {
-            float real = buffer[(i + j * kSize) * 2];
-            float imaginary = buffer[(i + j * kSize) * 2 + 1];
-            
-#if 0
-            std::cout << "(" << std::setw(6) << hypot(real, imaginary) * scale << ", " <<
-              std::setw(6) << atan2(imaginary, real) * 360 / (2 * kPi) << "), ";
-#else
-            std::cout << "(" << std::setw(6) << real * scale << ", " <<
-              std::setw(6) << imaginary * scale << "), ";
-#endif
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
-}
-
 int main(int argc, char **argv) {
     // Full size, complex, buffers. Not all of which will be used for some cases.
     float input[kSize * kSize * 2] = {0};
