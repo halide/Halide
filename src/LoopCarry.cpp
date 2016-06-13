@@ -131,42 +131,6 @@ Expr scratch_index(int i, Type t) {
     }
 }
 
-/** Substitute an expr for a var in a graph. */
-class GraphSubstitute : public IRGraphMutator {
-    string var;
-    Expr value;
-
-    using IRGraphMutator::visit;
-
-    void visit(const Variable *op) {
-        if (op->name == var) {
-            expr = value;
-        } else {
-            expr = op;
-        }
-    }
-
-public:
-
-    GraphSubstitute(const string &var, Expr value) : var(var), value(value) {}
-};
-
-/** Substitute an Expr for another Expr in a graph. Unlike substitute,
- * this only checks for shallow equality. */
-class GraphSubstituteExpr : public IRGraphMutator {
-    Expr find, replace;
-public:
-
-    using IRGraphMutator::mutate;
-
-    Expr mutate(Expr e) {
-        if (e.same_as(find)) return replace;
-        return IRGraphMutator::mutate(e);
-    }
-
-    GraphSubstituteExpr(Expr find, Expr replace) : find(find), replace(replace) {}
-};
-
 /** Substitute in all let Exprs in a piece of IR. Doesn't substitute
  * in let stmts, as this may change the meaning of the IR (e.g. by
  * moving a load after a store). Produces graphs of IR, so don't use
@@ -179,7 +143,7 @@ class SubstituteInAllLets : public IRGraphMutator {
     void visit(const Let *op) {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
-        expr = GraphSubstitute(op->name, value).mutate(body);
+        expr = graph_substitute(op->name, value, body);
     }
 };
 
@@ -439,7 +403,7 @@ class LoopCarryOverLoop : public IRMutator {
                 Expr scratch_idx = scratch_index(i, orig_load->type);
                 Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, Buffer(), Parameter());
                 for (const Load *l : loads[c[i]]) {
-                    core = GraphSubstituteExpr(l, load_from_scratch).mutate(core);
+                    core = graph_substitute(l, load_from_scratch, core);
                 }
 
                 if (i == c.size() - 1) {
