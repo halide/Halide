@@ -24,17 +24,17 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz -s 192 192 -t 1 -d 10000 -h 4 -f gr
 make_gif lesson_05_row_major.gif 10
 
 # col maj
-cat tmp/trace.bin | ../../bin/HalideTraceViz -s 192 192 -t 1 -d 10000 -h 4 -f gradient_col_maj 0 6 -1 0 32 2 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 192x192 -i /dev/stdin tmp/frames_%04d.tif
+cat tmp/trace.bin | ../../bin/HalideTraceViz -s 192 192 -t 1 -d 10000 -h 4 -f gradient_col_major 0 6 -1 0 32 2 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 192x192 -i /dev/stdin tmp/frames_%04d.tif
 
 make_gif lesson_05_col_major.gif 10
 
 # vectors
-cat tmp/trace.bin | ../../bin/HalideTraceViz -s 320 192 -t 1 -d 10000 -h 4 -f gradient_in_vect 0 11 -1 0 32 1 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 320x192 -i /dev/stdin tmp/frames_%04d.tif
+cat tmp/trace.bin | ../../bin/HalideTraceViz -s 320 192 -t 1 -d 10000 -h 4 -f gradient_in_vectors 0 11 -1 0 32 1 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 320x192 -i /dev/stdin tmp/frames_%04d.tif
 
 make_gif lesson_05_vectors.gif 10
 
 # size-7 with a split of size 3
-cat tmp/trace.bin | ../../bin/HalideTraceViz -s 288 192 -t 1 -d 10000 -h 4 -f gradient_split_7 0 9 -1 0 32 2 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 288x192 -i /dev/stdin tmp/frames_%04d.tif
+cat tmp/trace.bin | ../../bin/HalideTraceViz -s 288 128 -t 1 -d 10000 -h 4 -f gradient_split_7x2 0 9 -1 0 32 2 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 288x128 -i /dev/stdin tmp/frames_%04d.tif
 
 make_gif lesson_05_split_7_by_3.gif 10
 
@@ -44,7 +44,7 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz -s 320 320 -t 1 -d 10000 -h 10 -f g
 make_gif lesson_05_tiled.gif 8
 
 # fused parallel tiles
-cat tmp/trace.bin | ../../bin/HalideTraceViz -s 320 320 -t 1 -d 10000 -h 4 -f gradient_fused_t 0 14 -1 0 32 1 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 320x320 -i /dev/stdin tmp/frames_%04d.tif
+cat tmp/trace.bin | ../../bin/HalideTraceViz -s 320 320 -t 1 -d 10000 -h 4 -f gradient_fused_tiles 0 14 -1 0 32 1 32 32 1 0 0 1 | avconv -f rawvideo -pix_fmt bgr32 -s 320x320 -i /dev/stdin tmp/frames_%04d.tif
 
 make_gif lesson_05_parallel_tiles.gif 8
 
