@@ -158,7 +158,7 @@ int send_message(int msg, const std::vector<int> &arguments) {
         printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
-    if (0 != write_memory(remote_msg, &msg, 4)) { return -1; }
+    if (write_memory(remote_msg, &msg, 4) != 0) { return -1; }
 
     // The arguments are individual numbered variables.
     for (size_t i = 0; i < arguments.size(); i++) {
@@ -169,7 +169,7 @@ int send_message(int msg, const std::vector<int> &arguments) {
             printf("HexagonWrapper::ReadSymbolValue(%s) failed: %d\n", rpc_arg.c_str(), status);
             return -1;
         }
-        if (0 != write_memory(remote_arg, &arguments[i], 4)) { return -1; }
+        if (write_memory(remote_arg, &arguments[i], 4) != 0) { return -1; }
     }
 
     HEX_4u_t remote_ret = 0;
@@ -197,10 +197,14 @@ int send_message(int msg, const std::vector<int> &arguments) {
         do {
             HEX_4u_t cycles;
             state = sim->Step(1000, &cycles);
-            read_memory(&msg, remote_msg, 4);
+            if (read_memory(&msg, remote_msg, 4) != 0) {
+                return -1;
+            }
             if (msg == Message::None) {
                 HEX_4u_t ret = 0;
-                read_memory(&ret, remote_ret, 4);
+                if (read_memory(&ret, remote_ret, 4)) {
+                    return -1;
+                }
                 return ret;
             }
         } while (state == HEX_CORE_SUCCESS);
@@ -255,7 +259,7 @@ public:
     }
 
     remote_buffer(const remote_buffer &) = delete;
-    remote_buffer &operator = (const remote_buffer &) = delete;
+    remote_buffer &operator=(const remote_buffer &) = delete;
 };
 
 extern "C" {
@@ -271,9 +275,10 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 
     // Run the init kernels command.
     ret = send_message(Message::InitKernels, {remote_code.data, codeLen, remote_module_ptr.data});
+    if (ret != 0) return ret;
 
     // Get the module ptr.
-    read_memory(module_ptr, remote_module_ptr.data, 4);
+    ret = read_memory(module_ptr, remote_module_ptr.data, 4);
 
     return ret;
 }
@@ -325,6 +330,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
          remote_input_buffersPtrs.data, input_buffersLen,
          remote_output_buffersPtrs.data, output_buffersLen,
          remote_input_scalarsPtrs.data, input_scalarsLen});
+    if (ret != 0) return ret;
 
     HEX_8u_t cycles_end = 0;
     sim->GetSimulatedCycleCount(&cycles_end);
@@ -336,7 +342,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 
     // Copy the outputs back.
     for (int i = 0; i < output_buffersLen; i++) {
-        read_memory(output_buffersPtrs[i].data, remote_output_buffers[i].data, output_buffersPtrs[i].dataLen);
+        ret = read_memory(output_buffersPtrs[i].data, remote_output_buffers[i].data, output_buffersPtrs[i].dataLen);
+        if (ret != 0) return ret;
     }
 
     return ret;

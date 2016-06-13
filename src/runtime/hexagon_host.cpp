@@ -48,14 +48,13 @@ WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_register_buf_fn remote_register_buf = NULL;
 
 template <typename T>
-T get_symbol(void *user_context, void *host_lib, const char* name) {
+void get_symbol(void *user_context, void *host_lib, const char* name, T &sym) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
-    T sym = (T)halide_get_library_symbol(host_lib, name);
+    sym = (T)halide_get_library_symbol(host_lib, name);
     debug(user_context) << "        " << (void *)sym << "\n";
     if (!sym) {
         error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
     }
-    return sym;
 }
 
 // Load the hexagon remote runtime.
@@ -78,13 +77,14 @@ WEAK int init_hexagon_runtime(void *user_context) {
     }
 
     // Get the symbols we need from the library.
-    remote_initialize_kernels = get_symbol<remote_initialize_kernels_fn>(user_context, host_lib, "halide_hexagon_remote_initialize_kernels");
+
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
     if (!remote_initialize_kernels) return -1;
-    remote_get_symbol = get_symbol<remote_get_symbol_fn>(user_context, host_lib, "halide_hexagon_remote_get_symbol");
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
     if (!remote_get_symbol) return -1;
-    remote_run = get_symbol<remote_run_fn>(user_context, host_lib, "halide_hexagon_remote_run");
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
-    remote_release_kernels = get_symbol<remote_release_kernels_fn>(user_context, host_lib, "halide_hexagon_remote_release_kernels");
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
     if (!remote_release_kernels) return -1;
 
     // There's an optional symbol in libadsprpc.so that enables
@@ -289,19 +289,19 @@ WEAK int halide_hexagon_run(void *user_context,
         (remote_buffer *)__builtin_alloca(arg_count * sizeof(remote_buffer));
 
     // Map the arguments.
-    // First grab the input buffers.
+    // First grab the input buffers (bit 0 of flags is set).
     remote_buffer *input_buffers = mapped_buffers;
     int input_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x1,
                                            input_buffers);
     if (input_buffer_count < 0) return input_buffer_count;
 
-    // Then the output buffers.
+    // Then the output buffers (bit 1 of flags is set).
     remote_buffer *output_buffers = input_buffers + input_buffer_count;
     int output_buffer_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x2, 0x2,
                                             output_buffers);
     if (output_buffer_count < 0) return output_buffer_count;
 
-    // And the input scalars.
+    // And the input scalars (neither bits 0 or 1 of flags is set).
     remote_buffer *input_scalars = output_buffers + output_buffer_count;
     int input_scalar_count = map_arguments(user_context, arg_count, arg_sizes, args, arg_flags, 0x3, 0x0,
                                            input_scalars);

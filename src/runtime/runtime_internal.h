@@ -194,16 +194,6 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
     return ret;
 }
 
-// http://www.cse.yorku.ca/~oz/hash.html
-template <typename Iterator>
-inline size_t hash(Iterator begin, Iterator end) {
-    size_t h = 5381;
-    for (Iterator i = begin; i != end; i++) {
-        h = h * 33 + static_cast<size_t>(*i);
-    }
-    return h;
-}
-
 }}}
 
 
