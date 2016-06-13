@@ -236,6 +236,8 @@ public:
     }
     remote_buffer(const void *data, int dataLen) : remote_buffer(dataLen) {
         if (this->data != 0) {
+            // Return value ignored, this is a constructor, we don't
+            // have exceptions, and we already printed an error.
             write_memory(this->data, data, dataLen);
         }
     }
