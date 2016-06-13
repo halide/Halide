@@ -98,15 +98,15 @@ Expr with_lanes(Expr x, int lanes) {
     return WithLanes(lanes).mutate(x);
 }
 
-Expr u8(Expr E) { return cast(UInt(8, E.type().lanes()), E); }
-Expr i8(Expr E) { return cast(Int(8, E.type().lanes()), E); }
-Expr u16(Expr E) { return cast(UInt(16, E.type().lanes()), E); }
-Expr i16(Expr E) { return cast(Int(16, E.type().lanes()), E); }
-Expr u32(Expr E) { return cast(UInt(32, E.type().lanes()), E); }
-Expr i32(Expr E) { return cast(Int(32, E.type().lanes()), E); }
-Expr u64(Expr E) { return cast(UInt(64, E.type().lanes()), E); }
-Expr i64(Expr E) { return cast(Int(64, E.type().lanes()), E); }
-Expr bc(Expr E) { return Broadcast::make(E, 0); }
+Expr u8(Expr x) { return cast(UInt(8, x.type().lanes()), x); }
+Expr i8(Expr x) { return cast(Int(8, x.type().lanes()), x); }
+Expr u16(Expr x) { return cast(UInt(16, x.type().lanes()), x); }
+Expr i16(Expr x) { return cast(Int(16, x.type().lanes()), x); }
+Expr u32(Expr x) { return cast(UInt(32, x.type().lanes()), x); }
+Expr i32(Expr x) { return cast(Int(32, x.type().lanes()), x); }
+Expr u64(Expr x) { return cast(UInt(64, x.type().lanes()), x); }
+Expr i64(Expr x) { return cast(Int(64, x.type().lanes()), x); }
+Expr bc(Expr x) { return Broadcast::make(x, 0); }
 
 Expr min_i8 = i8(Int(8).min());
 Expr max_i8 = i8(Int(8).max());
