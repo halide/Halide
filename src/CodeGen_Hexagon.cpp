@@ -17,13 +17,6 @@
 #include "CSE.h"
 #include "LoopCarry.h"
 
-#ifdef WITH_HEXAGON
-
-// LLVM Hexagon HVX intrinsics are broken up into 64B and 128B versions, for example,
-// llvm::Intrinsic::hexagon_V6_vaddh and llvm::Intrinsic::hexagon_V6_vaddh_128B. This
-// macro selects the 64B or 128B mode depending on the value of is_128B.
-#define IPICK(is_128B, i64) (is_128B ? i64##_128B : i64)
-
 namespace Halide {
 namespace Internal {
 
@@ -31,6 +24,22 @@ using std::vector;
 using std::string;
 
 using namespace llvm;
+
+// LLVM Hexagon HVX intrinsics are broken up into 64B and 128B versions, for example,
+// llvm::Intrinsic::hexagon_V6_vaddh and llvm::Intrinsic::hexagon_V6_vaddh_128B. This
+// macro selects the 64B or 128B mode depending on the value of is_128B. There's a
+// further dirty hack here: these intrinsics aren't defined in LLVM older than 3.9. To
+// avoid needing to #ifdef random patches of code, we just replace all LLVM intrinsics
+// with not_intrinsic.
+#ifdef WITH_HEXAGON
+#if LLVM_VERSION < 39
+#error "Hexagon target requires LLVM version 3.9 or later."
+#endif
+
+#define IPICK(is_128B, i64) (is_128B ? i64##_128B : i64)
+#else
+#define IPICK(is_128B, i64) (is_128B ? Intrinsic::not_intrinsic : Intrinsic::not_intrinsic)
+#endif
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {}
 
@@ -433,11 +442,11 @@ void CodeGen_Hexagon::init_module() {
     }
 }
 
-llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(Intrinsic::ID id, Type ret_ty, const string &name,
+llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(int id, Type ret_ty, const string &name,
                                                       const vector<Type> &arg_types, bool broadcast_scalar_word) {
     internal_assert(id != Intrinsic::not_intrinsic);
     // Get the real intrinsic.
-    llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), id);
+    llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
     return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar_word);
 }
 
@@ -556,9 +565,10 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 }
 
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
-                                         llvm::Intrinsic::ID id,
+                                         int id,
                                          vector<Value *> Ops) {
-    return call_intrin_cast(ret_ty, Intrinsic::getDeclaration(module.get(), id), Ops);
+    llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
+    return call_intrin_cast(ret_ty, intrin, Ops);
 }
 
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
@@ -1388,5 +1398,3 @@ void CodeGen_Hexagon::visit(const NE *op) {
 }
 
 }}
-
-#endif  // WITH_HEXAGON

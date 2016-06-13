@@ -5,21 +5,7 @@
  * Defines the code-generator for producing Hexagon machine code
  */
 
-#if WITH_HEXAGON
-
-#if LLVM_VERSION < 39
-#error "Hexagon target requires LLVM version 3.9 or later."
-#endif
-
 #include "CodeGen_Posix.h"
-
-namespace llvm {
-namespace Intrinsic {
-
-enum ID : unsigned;
-
-}
-}
 
 namespace Halide {
 namespace Internal {
@@ -46,7 +32,7 @@ protected:
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
 
-    llvm::Function *define_hvx_intrinsic(llvm::Intrinsic::ID intrin, Type ret_ty,
+    llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
                                          const std::string &name,
                                          const std::vector<Type> &arg_types,
                                          bool broadcast_scalar_word = false);
@@ -88,7 +74,7 @@ protected:
     ///@{
     llvm::Value *call_intrin_cast(llvm::Type *ret_ty, llvm::Function *F,
                                   std::vector<llvm::Value *> Ops);
-    llvm::Value *call_intrin_cast(llvm::Type *ret_ty, llvm::Intrinsic::ID id,
+    llvm::Value *call_intrin_cast(llvm::Type *ret_ty, int id,
                                   std::vector<llvm::Value *> Ops);
     ///@}
 
@@ -126,7 +112,5 @@ protected:
 };
 
 }}
-
-#endif  // WITH_HEXAGON
 
 #endif
