@@ -132,9 +132,9 @@ public:
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &allow_race_conditions();
-    // @}
 
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
+    // @}
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -519,7 +519,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
@@ -1310,7 +1310,8 @@ public:
     /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
-    /** Schedule for execution on Hexagon. */
+    /** Schedule for execution on Hexagon. When a loop is marked with
+     * Hexagon, that loop is executed on a Hexagon DSP. */
     EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
 
     /** Specify how the storage for the function is laid out. These

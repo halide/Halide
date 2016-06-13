@@ -376,7 +376,7 @@ vector<Pattern> adds = {
 };
 
 // Attempt to apply one of the patterns to x. If a match is
-// successfully, the expression is replaced with a call using the
+// successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
 Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutator) {
@@ -504,7 +504,7 @@ private:
 
     void visit(const Sub *op) {
         if (op->type.is_vector()) {
-            // Try negating op->b, and using an add pattern if successful.
+            // Try negating op->b, using an add pattern if successful.
             Expr neg_b = lossless_negate(op->b);
             if (neg_b.defined()) {
                 Expr add = Add::make(op->a, neg_b);
@@ -523,7 +523,7 @@ private:
         IRMutator::visit(op);
 
         if (op->type.is_vector()) {
-            // This pattern is weird (wo operands must match, result
+            // This pattern is weird (two operands must match, result
             // needs 1 added) and we're unlikely to need another
             // pattern for max, so just match it directly.
             static pair<string, Expr> cl[] = {
@@ -876,7 +876,7 @@ private:
 
     bool is_interleavable(const Call *op) {
         // These calls can have interleaves moved from operands to the
-        // result.
+        // result...
         static set<string> interleavable = {
             Call::bitwise_and,
             Call::bitwise_not,
@@ -889,9 +889,9 @@ private:
         };
         if (interleavable.count(op->name) != 0) return true;
 
-        // These calls cannot. Furthermore, these calls have the same
-        // return type as the arguments, which means our test below
-        // will be inaccurate.
+        // ...these calls cannot. Furthermore, these calls have the
+        // same return type as the arguments, which means our test
+        // below will be inaccurate.
         static set<string> not_interleavable = {
             "halide.hexagon.interleave.vb",
             "halide.hexagon.interleave.vh",

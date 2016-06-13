@@ -34,6 +34,7 @@ pipeline_hvx128-%.o: pipeline
 process-%: process.cpp pipeline_cpu-%.o pipeline_hvx64-%.o pipeline_hvx128-%.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline_cpu-$*.o pipeline_hvx64-$*.o pipeline_hvx128-$*.o -o process-$* $(LDFLAGS-$*)
 
+# This requires root: adb root && adb wait-for-device && adb remount
 run-%-android: process-%-android
 	adb push process-$*-android /data/
 	adb shell chmod +x /data/process-$*-android

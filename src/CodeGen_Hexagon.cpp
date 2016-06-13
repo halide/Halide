@@ -59,7 +59,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     options_processed = true;
 
     if (module.target().features_all_of({Halide::Target::HVX_128, Halide::Target::HVX_64})) {
-        internal_error << "Both HVX_64 and HVX_128 set at same time\n";
+        user_error << "Both HVX_64 and HVX_128 set at same time\n";
     }
 
     return llvm_module;
@@ -95,6 +95,27 @@ bool uses_hvx(Stmt s) {
     return uses.uses_hvx;
 }
 
+// Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
+// as a destructor if successful.
+Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
+    // Modify the stmt to add a call to halide_qurt_hvx_lock, and
+    // register a destructor to call halide_qurt_hvx_unlock.
+    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
+    Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
+    string hvx_lock_result_name = unique_name("hvx_lock_result");
+    Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
+    Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
+                                        AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
+
+    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+    Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
+                                 {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
+
+    stmt = Block::make(Evaluate::make(hvx_unlock), stmt);
+    stmt = Block::make(check_hvx_lock, stmt);
+    return stmt;
+}
+
 }  // namespace
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
@@ -113,7 +134,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = simplify(body);
     debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 
-    debug(1) << "Forwarding stores across loop iterations...\n";
+    debug(1) << "Carrying values across loop iterations...\n";
+    // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
     debug(2) << "Lowering after forwarding stores:\n" << body << "\n\n";
@@ -129,21 +151,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     if (uses_hvx(body)) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
-        // Modify the body to add a call to halide_qurt_hvx_lock, and
-        // register a destructor to call halide_qurt_hvx_unlock.
-        Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
-        Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
-        string hvx_lock_result_name = unique_name("hvx_lock_result");
-        Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
-        Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
-                                            AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
-
-        Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-        Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
-                                     {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
-
-        body = Block::make(Evaluate::make(hvx_unlock), body);
-        body = Block::make(check_hvx_lock, body);
+        body = acquire_hvx_context(body, target);
     }
 
     debug(1) << "Hexagon function body:\n";
@@ -183,7 +191,7 @@ void CodeGen_Hexagon::init_module() {
     Type u32x2 = u32x1.with_lanes(u32x1.lanes() * 2);
 
     // LLVM's HVX vector intrinsics don't include the type of the
-    // operands, they all operate on 32 bit integer vectors. To make
+    // operands, they all operate on vectors of 32 bit integers. To make
     // it easier to generate code, we define wrapper intrinsics with
     // the correct type (plus the necessary bitcasts).
     struct HvxIntrinsic {
@@ -1038,29 +1046,31 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
 }
 
 string CodeGen_Hexagon::mcpu() const {
-  if (target.has_feature(Halide::Target::HVX_v62))
-    return "hexagonv62";
-  else
-    return "hexagonv60";
+    if (target.has_feature(Halide::Target::HVX_v62)) {
+        return "hexagonv62";
+    } else {
+        return "hexagonv60";
+    }
 }
 
 string CodeGen_Hexagon::mattrs() const {
-  if (target.has_feature(Halide::Target::HVX_128))
-      return "+hvx,+hvx-double";
-  else
-      return "+hvx";
+    if (target.has_feature(Halide::Target::HVX_128)) {
+        return "+hvx,+hvx-double";
+    } else {
+        return "+hvx";
+    }
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
-  return false;
+    return false;
 }
 
 int CodeGen_Hexagon::native_vector_bits() const {
-  if (target.has_feature(Halide::Target::HVX_128)) {
-    return 128*8;
-  } else {
-    return 64*8;
-  }
+    if (target.has_feature(Halide::Target::HVX_128)) {
+        return 128*8;
+    } else {
+        return 64*8;
+    }
 }
 
 void CodeGen_Hexagon::visit(const Add *op) {
