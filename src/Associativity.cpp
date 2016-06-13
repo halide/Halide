@@ -74,11 +74,10 @@ class ConvertSelfRef : public IRMutator {
     // call node refer to?
     int value_index;
     string op_x;
-    map<int, Expr> *self_ref_subs;
     bool is_conditional;
 
     void visit(const Call *op) {
-        if (is_not_associative) {
+        if (is_solvable) {
             return;
         }
         IRMutator::visit(op);
@@ -90,38 +89,28 @@ class ConvertSelfRef : public IRMutator {
                 << "Func should not have been defined for a self-reference\n";
             internal_assert(args.size() == op->args.size())
                 << "Self-reference should have the same number of args as the original\n";
-            if (is_conditional && (op->value_index == value_index)) {
+            if (op->value_index != value_index) {
+                debug(4) << "Self-reference of " << op->name
+                         << " with different index. Cannot prove associativity\n";
+            } else if (is_conditional && (op->value_index == value_index)) {
                 debug(4) << "Self-reference of " << op->name
                          << " inside a conditional. Operation is not associative\n";
-                is_not_associative = true;
+                is_solvable = true;
                 return;
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (!equal(op->args[i], args[i])) {
                     debug(4) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
-                    is_not_associative = true;
+                    is_solvable = true;
                     return;
                 }
             }
             // Substitute the call
-            const auto &iter = self_ref_subs->find(op->value_index);
-            if (iter != self_ref_subs->end()) {
-                const Variable *v = iter->second.as<Variable>();
-                internal_assert(v);
-                internal_assert(v->type == op->type);
-                debug(4) << "   Substituting Call " << op->name << " at value index "
-                         << op->value_index << " with " << v->name << "\n";
-                expr = iter->second;
-            } else {
-                debug(4) << "   Substituting Call " << op->name << " at value index "
-                         << op->value_index << " with " << op_x << "\n";
-                expr = Variable::make(op->type, op_x);
-                self_ref_subs->emplace(op->value_index, expr);
-            }
-            if (op->value_index == value_index) {
-                current_x = op;
-            }
+            debug(4) << "   Substituting Call " << op->name << " at value index "
+                     << op->value_index << " with " << op_x << "\n";
+            expr = Variable::make(op->type, op_x);
+            x_part = op;
         }
     }
 
@@ -142,400 +131,138 @@ class ConvertSelfRef : public IRMutator {
     }
 
 public:
-    ConvertSelfRef(const string &f, const vector<Expr> &args, int idx,
-                   const string &x, map<int, Expr> *subs) :
-        func(f), args(args), value_index(idx), op_x(x), self_ref_subs(subs),
-        is_conditional(false), is_not_associative(false) {}
-
-    bool is_not_associative;
-    Expr current_x;
-};
-
-// Given an update definition of a Func of the form: update(_x, ...), where '_x'
-// is the self-reference to the Func, try to infer a single Var '_y' that is the
-// remainder of the op not including '_x'. For example, min(_x, 2*g(r.x) + 4)
-// is converted into min(_x, _y), where '_y' is 2*g(r.x) + 4. If there is no
-// single Var that satisfies requirement, set 'is_solvable' to false.
-class ExtractBinaryOp : public IRMutator {
-    using IRMutator::visit;
-
-    const string func;
-    const vector<Expr> args;
-    map<int, Expr> self_ref_subs;
-    string op_y;
-    map<Expr, string, ExprCompare> y_subs;
-
-    enum OpType {
-        OP_X,       // x only or mixed of x/constant
-        OP_Y,       // y only
-        OP_MIXED,   // mixed of x/y
-    };
-
-    OpType type;
-
-    bool is_x(const string &name) {
-        for (const auto &iter : self_ref_subs) {
-            const Variable *v = iter.second.as<Variable>();
-            internal_assert(v);
-            if (v->name == name) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    template<typename T>
-    void visit_unary_op(const T *op) {
-        type = OP_Y;
-        current_y = Expr(op);
-        expr = Variable::make(op->type, op_y);
-    }
-
-    void visit(const IntImm *op)    { visit_unary_op<IntImm>(op); }
-    void visit(const UIntImm *op)   { visit_unary_op<UIntImm>(op); }
-    void visit(const FloatImm *op)  { visit_unary_op<FloatImm>(op); }
-    void visit(const StringImm *op) { visit_unary_op<StringImm>(op); }
-
-    void visit(const Variable *op) {
-        if (!is_solvable) {
-            return;
-        }
-        if (is_x(op->name)) {
-            type = OP_X;
-            expr = op;
-            return;
-        }
-        type = OP_Y;
-        current_y = Expr(op);
-        expr = Variable::make(op->type, op_y);
-    }
-
-    void visit(const Cast *op) {
-        if (!is_solvable) {
-            return;
-        }
-        Expr val = mutate(op->value);
-        if (type == OP_Y) {
-            current_y = Expr(op);
-            expr = Variable::make(op->type, op_y);
-        } else {
-            // Either x or pair of x/y
-            expr = Cast::make(op->type, val);
-        }
-    }
-
-    template<typename T, typename Opp>
-    void visit_binary_op(const T *op) {
-        if (!is_solvable) {
-            return;
-        }
-        Expr a = mutate(op->a);
-        OpType a_type = type;
-        Expr b = mutate(op->b);
-        OpType b_type = type;
-
-        internal_assert(a.type() == b.type());
-        if ((a_type == OP_MIXED) || (b_type == OP_MIXED)) {
-            is_solvable = false;
-            return;
-        }
-        if ((a_type == OP_X) && (b_type == OP_X)) {
-            is_solvable = false;
-            return;
-        }
-
-        if ((a_type == OP_X) || (b_type == OP_X)) {
-            // Pair of x and y
-            type = OP_MIXED;
-            expr = Opp::make(a, b);
-        } else {
-            internal_assert((a_type == OP_Y) && (b_type == OP_Y));
-            type = OP_Y;
-            current_y = Expr(op);
-            expr = Variable::make(op->type, op_y);
-        }
-    }
-
-    void visit(const Add *op) { visit_binary_op<Add, Add>(op); }
-    void visit(const Sub *op) { visit_binary_op<Sub, Sub>(op); }
-    void visit(const Mul *op) { visit_binary_op<Mul, Mul>(op); }
-    void visit(const Div *op) { visit_binary_op<Div, Div>(op); }
-    void visit(const Mod *op) { visit_binary_op<Mod, Mod>(op); }
-    void visit(const Min *op) { visit_binary_op<Min, Min>(op); }
-    void visit(const Max *op) { visit_binary_op<Max, Max>(op); }
-    void visit(const And *op) { visit_binary_op<And, And>(op); }
-    void visit(const Or *op) { visit_binary_op<Or, Or>(op); }
-    void visit(const LE *op) { visit_binary_op<LE, LE>(op); }
-    void visit(const LT *op) { visit_binary_op<LT, LT>(op); }
-    void visit(const GE *op) { visit_binary_op<GE, GE>(op); }
-    void visit(const GT *op) { visit_binary_op<GT, GT>(op); }
-    void visit(const EQ *op) { visit_binary_op<EQ, EQ>(op); }
-    void visit(const NE *op) { visit_binary_op<NE, NE>(op); }
-
-    void visit(const Load *op) {
-        internal_error << "Can't handle Load\n";
-    }
-
-    void visit(const Ramp *op) {
-        internal_error << "Can't handle Ramp\n";
-    }
-
-    void visit(const Broadcast *op) {
-        internal_error << "Can't handle Broadcast\n";
-    }
-
-    void visit(const Let *op) {
-        internal_error << "Let should have been substituted before calling this mutator\n";
-    }
-
-    void visit(const Select *op) {
-        if (!is_solvable) {
-            return;
-        }
-
-        Expr old_y;
-
-        Expr cond = mutate(op->condition);
-        if ((type != OP_X)) {
-            if (y_subs.count(current_y) == 0) {
-                old_y = current_y;
-            } else {
-                // We already have substitute for 'current_y' (e.g. Var 'y' from
-                // other Tuple element), use that instead of creating a new
-                // Var
-                cond = substitute(op_y, Variable::make(current_y.type(), y_subs[current_y]), cond);
-            }
-        }
-        if (!is_solvable) {
-            return;
-        }
-
-        Expr true_value = mutate(op->true_value);
-        if (!is_solvable) {
-            return;
-        }
-        if (type == OP_MIXED) {
-            // select(x + g(y1), x + g(y2), ...) is not solvable (it's not associative)
-            is_solvable = false;
-            return;
-        } else if (type == OP_Y) {
-            if (old_y.defined()) {
-                if (!equal(old_y, current_y)) {
-                    if (is_const(current_y)) {
-                        current_y = old_y;
-                    } else if (!is_const(old_y)) {
-                        is_solvable = false;
-                        return;
-                    }
-                }
-            }
-            old_y = current_y;
-        }
-
-        Expr false_value = mutate(op->false_value);
-        if (!is_solvable) {
-            return;
-        }
-        if (type == OP_MIXED) {
-            is_solvable = false;
-            return;
-        } else if (type == OP_Y) {
-            if (old_y.defined()) {
-                if (!equal(old_y, current_y)) {
-                    if (is_const(current_y)) {
-                        current_y = old_y;
-                    } else if (!is_const(old_y)) {
-                        is_solvable = false;
-                        return;
-                    }
-                }
-            }
-            old_y = current_y;
-        }
-        expr = Select::make(cond, true_value, false_value);
-    }
-
-    void visit(const Not *op) {
-        if (!is_solvable) {
-            return;
-        }
-        Expr a = mutate(op->a);
-        if (type == OP_Y) {
-            current_y = Expr(op);
-            expr = Variable::make(op->type, op_y);
-        } else {
-            expr = Not::make(a);
-        }
-    }
-
-    void visit(const Call *op) {
-        if (!is_solvable) {
-            return;
-        }
-        if (op->call_type != Call::Halide) {
-            is_solvable = false;
-            return;
-        }
-
-        // Mutate the args
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr new_args = mutate(op->args[i]);
-            if (type != OP_Y) {
-                is_solvable = false;
-                return;
-            }
-        }
-        internal_assert(type == OP_Y);
-        current_y = Expr(op);
-        expr = Variable::make(op->type, op_y);
-    }
-
-public:
-    ExtractBinaryOp(const string &f, const vector<Expr> &args, const map<int, Expr> &x_subs,
-                      const string &y, const map<Expr, string, ExprCompare> &y_subs) :
-        func(f), args(args), self_ref_subs(x_subs), op_y(y), y_subs(y_subs), is_solvable(true) {}
+    ConvertSelfRef(const string &f, const vector<Expr> &args, int idx, const string &x) :
+        func(f), args(args), value_index(idx), op_x(x), is_conditional(false),
+        is_solvable(false) {}
 
     bool is_solvable;
-    Expr current_y;
+    Expr x_part;
 };
 
-// Given a binary expression operator 'bin_op' in the form of op(x, y), find
-// the identity of the operator. If the identity is not in [0, 1, +inf, -inf],
-// this returns undefined Expr
-Expr find_identity(Expr bin_op, const string &op_x, const string &op_y, Type t) {
-    vector<Expr> possible_identities = {make_const(t, 0), make_const(t, 1), t.min(), t.max()};
-    // For unary op (the one where 'x' does not appear), any value would be fine
-    for (const Expr &val : possible_identities) {
-        Expr subs = substitute(op_y, val, bin_op);
-        subs = common_subexpression_elimination(subs);
-        Expr compare = simplify(subs == Variable::make(t, op_x));
-        if (is_one(compare)) {
-            return val;
-        }
+template<typename T>
+bool visit_associative_binary_op(const string &op_x, const string &op_y, Expr x_part,
+                                 Expr lhs, Expr rhs, AssociativeOp &op) {
+    const Variable *var_a = lhs.as<Variable>();
+    if (!var_a || (var_a->name != op_x)) {
+        debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
+        return false;
+    } else if (expr_uses_var(rhs, op_x)) {
+        debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
+        return false;
+    } else {
+        // op(x, y)
+        op.x = {op_x, x_part};
+        op.y = {op_y, rhs};
     }
-    debug(4) << "Failed to find identity of " << bin_op << "\n";
-    return Expr(); // Fail to find the identity
+    return true;
 }
 
-// Given a binary expression operator 'bin_op' in the form of op(x, y), prove that
-// 'bin_op' is associative, i.e. prove that (x op y) op z == x op (y op z).
-// TODO(psuriana): The current implementation can't prove associativity of select()
-// as in argmax/argmin
-bool is_bin_op_associative(Expr bin_op, const string &op_x, const string &op_y, Type t) {
+bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
+                            Expr e, AssociativeOp &op) {
+    Type t = e.type();
     Expr x = Variable::make(t, op_x);
     Expr y = Variable::make(t, op_y);
-    string op_z = unique_name("_z");
-    Expr z = Variable::make(t, op_z);
 
-    Expr lhs = substitute(op_y, z, bin_op);
-    lhs = substitute(op_x, bin_op, lhs);
-
-    Expr rhs = substitute({{op_x, y}, {op_y, z}}, bin_op);
-    rhs = substitute(op_y, rhs, bin_op);
-
-    // Canonicalize the lhs and rhs before comparing them so that we get
-    // a better chance of simplifying the equality.
-    vector<string> vars = {op_x, op_y, op_z};
-    for (const string &v : vars) {
-        lhs = solve_expression(lhs, v);
-        rhs = solve_expression(rhs, v);
+    if (!x_part.defined()) { // op(y)
+        if (is_const(e)) {
+            // Update with a constant is associative and the identity can be
+            // anything since it's going to be replaced anyway
+            op.op = y;
+            op.identity = make_const(t, 0);
+            op.x = {"", Expr()};
+            op.y = {op_y, e};
+            return true;
+        } else {
+            debug(4) << "Update by non-constant is not associative: " << e << "\n";
+            return false;
+        }
     }
 
-    Expr compare = simplify(simplify(common_subexpression_elimination(lhs == rhs)));
-    return is_one(compare);
+    if (const Add *a = e.as<Add>()) {
+        op.op = x + y;
+        op.identity = make_const(t, 0);
+        return visit_associative_binary_op<Add>(op_x, op_y, x_part, a->a, a->b, op);
+    } else if (const Sub *s = e.as<Sub>()) {
+        op.op = x + y;
+        op.identity = make_const(t, 0);
+        return visit_associative_binary_op<Sub>(op_x, op_y, x_part, s->a, s->b, op);
+    } else if (const Mul *m = e.as<Mul>()) {
+        op.op = x * y;
+        op.identity = make_const(t, 1);
+        return visit_associative_binary_op<Mul>(op_x, op_y, x_part, m->a, m->b, op);
+    } else if (const Min *m = e.as<Min>()) {
+        op.op = Min::make(x, y);
+        op.identity = t.max();
+        return visit_associative_binary_op<Min>(op_x, op_y, x_part, m->a, m->b, op);
+    } else if (const Max *m = e.as<Max>()) {
+        op.op = Max::make(x, y);
+        op.identity = t.min();
+        return visit_associative_binary_op<Max>(op_x, op_y, x_part, m->a, m->b, op);
+    } else if (const And *a = e.as<And>()) {
+        op.op = And::make(x, y);
+        op.identity = make_const(t, 1);
+        return visit_associative_binary_op<And>(op_x, op_y, x_part, a->a, a->b, op);
+    } else if (const Or *o = e.as<Or>()) {
+        op.op = Or::make(x, y);
+        op.identity = make_const(t, 0);
+        return visit_associative_binary_op<Or>(op_x, op_y, x_part, o->a, o->b, op);
+    } else if (e.as<Let>()) {
+        internal_error << "Let should have been substituted before calling this function\n";
+    } else {
+        debug(4) << "Can't prove associativity of " << e << "\n";
+        return false;
+    }
+    return false;
 }
 
 } // anonymous namespace
 
 
+// TODO(psuriana): This does not handle cross-dependencies of tuple elements.
+// It also is not able to handle associative select() (e.g. argmin/argmax)
 pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Expr> args,
                                                       vector<Expr> exprs) {
     vector<AssociativeOp> ops;
-    map<int, Expr> self_ref_subs;
     map<Expr, string, ExprCompare> y_subs;
 
+    for (Expr &arg : args) {
+        arg = common_subexpression_elimination(arg);
+        arg = simplify(arg);
+        arg = SubstituteInAllLets().mutate(arg);
+    }
+
     // For a Tuple of exprs to be associative, each element of the Tuple
-    // has to be associative
+    // has to be associative. This does not handle dependencies across
+    // Tuple's elements
     for (size_t idx = 0; idx < exprs.size(); ++idx) {
-        Expr expr = simplify(exprs[idx]);
-        for (Expr &arg : args) {
-            arg = common_subexpression_elimination(arg);
-            arg = simplify(arg);
-            arg = SubstituteInAllLets().mutate(arg);
-        }
         string op_x = unique_name("_x_" + std::to_string(idx));
         string op_y = unique_name("_y_" + std::to_string(idx));
 
+        Expr expr = simplify(exprs[idx]);
+
         // Replace any self-reference to Func 'f' with a Var
-        ConvertSelfRef csr(f, args, idx, op_x, &self_ref_subs);
+        ConvertSelfRef csr(f, args, idx, op_x);
         expr = csr.mutate(expr);
-        if (csr.is_not_associative) {
+        if (csr.is_solvable) {
             return std::make_pair(false, vector<AssociativeOp>());
         }
 
         expr = common_subexpression_elimination(expr);
         expr = simplify(expr);
-        expr = SubstituteInAllLets().mutate(expr);
-        for (const auto &iter : self_ref_subs) {
-            const Variable *v = iter.second.as<Variable>();
-            internal_assert(v);
-            expr = solve_expression(expr, v->name); // Move 'x' to the left as possible
-        }
+        expr = solve_expression(expr, op_x); // Move 'x' to the left as possible
         if (!expr.defined()) {
             return std::make_pair(false, vector<AssociativeOp>());
         }
-        // Need to substitute in all lets again since 'solve_expression' might
-        // introduce some new let stmts
         expr = SubstituteInAllLets().mutate(expr);
 
         // Try to infer the 'y' part of the operator. If we couldn't find
         // a single 'y' that satisfy the operator, give up
-        ExtractBinaryOp conv(f, args, self_ref_subs, op_y, y_subs);
-        expr = conv.mutate(expr);
-        if (!conv.is_solvable) {
+        AssociativeOp op;
+        bool is_associative = extract_associative_op(op_x, op_y, csr.x_part, expr, op);
+        if (!is_associative) {
             return std::make_pair(false, vector<AssociativeOp>());
         }
-
-        Expr y_part = conv.current_y;
-        internal_assert(y_part.defined());
-        y_subs.emplace(y_part, op_y);
-
-        if (self_ref_subs.count(idx) == 0) {
-            internal_assert(!csr.current_x.defined());
-            if (is_const(y_part)) {
-                // Update with a constant is associative and the identity can be
-                // anything since it's going to be replaced anyway
-                ops.push_back({expr, 0, {"", Expr()}, {op_y, y_part}});
-                continue;
-            } else {
-                debug(4) << "Update by non-constant is not associative\n";
-                return std::make_pair(false, vector<AssociativeOp>());
-            }
-        }
-
-        internal_assert(self_ref_subs.count(idx));
-        internal_assert(csr.current_x.defined());
-
-        Type type_y = y_part.type();
-        Type type_x = self_ref_subs[idx].type();
-        if (type_y != type_x) {
-            return std::make_pair(false, vector<AssociativeOp>());
-        }
-
-        // After we managed to extract the operator, try to prove its
-        // associativity
-        if (!is_bin_op_associative(expr, op_x, op_y, type_y)){
-            return std::make_pair(false, vector<AssociativeOp>());
-        }
-
-        // We managed to prove associativity of the operator. Now, try to
-        // find its identity
-        Expr identity = find_identity(expr, op_x, op_y, type_y);
-        if (!identity.defined()) {
-            // Failed to find an identity
-            return std::make_pair(false, vector<AssociativeOp>());
-        }
-        ops.push_back({expr, identity, {op_x, csr.current_x}, {op_y, y_part}});
+        ops.push_back(op);
     }
     return std::make_pair(true, ops);
 }
@@ -590,16 +317,24 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
                 << "Checking associativity: " << print_args(f, args, exprs) << "\n"
                 << "  Expect y: " << ops[i].y.second << "\n"
                 << "  instead of " << op.y.second << "\n";
+            Expr expected_op = substitute(
+                ops[i].y.first, Variable::make(op.y.second.type(), op.y.first), ops[i].op);
+            if (op.x.second.defined()) {
+                expected_op = substitute(
+                    ops[i].x.first, Variable::make(op.x.second.type(), op.x.first), expected_op);
+            }
+            internal_assert(equal(op.op, expected_op))
+                << "Checking associativity: " << print_args(f, args, exprs) << "\n"
+                << "  Expect bin op: " << expected_op << "\n"
+                << "  instead of " << op.op << "\n";
+
+            debug(4) << "\nExpected op: " << expected_op << "\n";
+            debug(4) << "Operator: " << op.op << "\n";
+            debug(4) << "   identity: " << op.identity << "\n";
+            debug(4) << "   x: " << op.x.first << " -> " << op.x.second << "\n";
+            debug(4) << "   y: " << op.y.first << " -> " << op.y.second << "\n";
         }
     }
-
-    for (const auto &op : result.second) {
-        debug(4) << "Operator: " << op.op << "\n";
-        debug(4) << "   identity: " << op.identity << "\n";
-        debug(4) << "   x: " << op.x.first << " -> " << op.x.second << "\n";
-        debug(4) << "   y: " << op.y.first << " -> " << op.y.second << "\n";
-    }
-    debug(4) << "\n";
 }
 
 } // anonymous namespace
@@ -618,30 +353,30 @@ void associativity_test() {
 
     // f(x) = min(f(x), int16(z))
     check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
-                        true, {{Expr(), Int(32).max(), {"", f_call_0}, {"", y + Cast::make(Int(16), z)}}});
+                        true, {{min(x, y), Int(32).max(), {"x", f_call_0}, {"y", y + Cast::make(Int(16), z)}}});
 
     // f(x) = f(x) + g(rx) + y + z
     check_associativity("f", {x}, {y + z + f_call_0},
-                        true, {{Expr(), make_const(Int(32), 0), {"", f_call_0}, {"", y + z}}});
+                        true, {{x + y, make_const(Int(32), 0), {"x", f_call_0}, {"y", y + z}}});
 
     // f(x) = max(y, f(x))
     check_associativity("f", {x}, {max(y, f_call_0)},
-                        true, {{Expr(), Int(32).min(), {"", f_call_0}, {"", y}}});
+                        true, {{max(x, y), Int(32).min(), {"x", f_call_0}, {"y", y}}});
 
     // f(x) = Tuple(2, 3, f(x)[2] + z)
     check_associativity("f", {x}, {2, 3, f_call_2 + z},
                         true,
-                        {{Expr(), make_const(Int(32), 0), {"", Expr()}, {"", 2}},
-                         {Expr(), make_const(Int(32), 0), {"", Expr()}, {"", 3}},
-                         {Expr(), make_const(Int(32), 0), {"", f_call_2}, {"", z}},
+                        {{y, make_const(Int(32), 0), {"", Expr()}, {"y", 2}},
+                         {y, make_const(Int(32), 0), {"", Expr()}, {"y", 3}},
+                         {x + y, make_const(Int(32), 0), {"x", f_call_2}, {"y", z}},
                         });
 
     // f(x) = Tuple(min(f(x)[0], g(rx)), f(x)[1]*g(x)*2, f(x)[2] + z)
     check_associativity("f", {x}, {min(f_call_0, g_call), f_call_1*g_call*2, f_call_2 + z},
                         true,
-                        {{Expr(), Int(32).max(), {"", f_call_0}, {"", g_call}},
-                         {Expr(), make_const(Int(32), 1), {"", f_call_1}, {"", g_call*2}},
-                         {Expr(), make_const(Int(32), 0), {"", f_call_2}, {"", z}},
+                        {{min(x, y), Int(32).max(), {"x", f_call_0}, {"y", g_call}},
+                         {x * y, make_const(Int(32), 1), {"x", f_call_1}, {"y", g_call*2}},
+                         {x + y, make_const(Int(32), 0), {"x", f_call_2}, {"y", z}},
                         });
 
     // f(x) = max(f(x) + g(rx), g(rx)) -> not associative
@@ -650,11 +385,11 @@ void associativity_test() {
 
     // f(x) = max(f(x) + g(rx), f(x) - 3) -> f(x) + max(g(rx) - 3)
     check_associativity("f", {x}, {max(f_call_0 + g_call, f_call_0 - 3)},
-                        true, {{Expr(), 0, {"", f_call_0}, {"", max(g_call, -3)}}});
+                        true, {{x + y, 0, {"x", f_call_0}, {"y", max(g_call, -3)}}});
 
-    // f(x) = f(x) - g(rx) -> not associative
+    // f(x) = f(x) - g(rx) -> Is associative given that the merging operator is +
     check_associativity("f", {x}, {f_call_0 - g_call},
-                        false, {});
+                        true, {{x + y, 0, {"x", f_call_0}, {"y", g_call}}});
 
     std::cout << "Associativity test passed" << std::endl;
 }

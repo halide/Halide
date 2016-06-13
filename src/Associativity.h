@@ -15,7 +15,7 @@ namespace Halide {
 namespace Internal {
 
 struct AssociativeOp {
-	Expr op;
+	Expr op; // op(x, y)
 	Expr identity;
 	std::pair<std::string, Expr> x;
 	std::pair<std::string, Expr> y;
@@ -29,10 +29,10 @@ struct AssociativeOp {
  * definition.
  *
  * For instance, f(x) = min(f(x), g(r.x)) will return true and it will also return
- * {{min(_x_0, _y_0), {{_x_0, f(x)}, {_y_0, g(r.x)}}, +inf}}, where the first Expr
- * is the equivalent binary operator, the second vector contains the corresponding
- * definition of each variable in the binary operator, and the last element is the
- * identity of the binary operator.
+ * {{min(_x_0, _y_0), +inf, {_x_0, f(x)}, {_y_0, g(r.x)}}}, where the first Expr
+ * is the equivalent binary operator, the second Expr is identity of the binary
+ * operator, the third and the last pair contain the corresponding definition of
+ * each variable in the binary operator. For unary operator, 'x' is not set.
  */
 std::pair<bool, std::vector<AssociativeOp>> prove_associativity(
 	const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
