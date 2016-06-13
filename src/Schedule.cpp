@@ -202,6 +202,14 @@ bool Schedule::allow_race_conditions() const {
 }
 
 void Schedule::accept(IRVisitor *visitor) const {
+    for (const ReductionVariable &r : rvars()) {
+        if (r.min.defined()) {
+            r.min.accept(visitor);
+        }
+        if (r.extent.defined()) {
+            r.extent.accept(visitor);
+        }
+    }
     for (const Split &s : splits()) {
         if (s.factor.defined()) {
             s.factor.accept(visitor);
