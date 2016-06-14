@@ -333,7 +333,7 @@ WEAK int halide_hexagon_run(void *user_context,
 
 WEAK int halide_hexagon_device_release(void *user_context) {
     debug(user_context)
-        << "Ion: halide_hexagon_device_release (user_context: " <<  user_context << ")\n";
+        << "Hexagon: halide_hexagon_device_release (user_context: " <<  user_context << ")\n";
 
     ScopedMutexLock lock(&thread_lock);
 
@@ -341,7 +341,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
     module_state *state = state_list;
     while (state) {
         if (state->module) {
-            debug(user_context) << "    halide_hexagon_remote_release_kernels " << state
+            debug(user_context) << "    halide_remote_release_kernels " << state
                                 << " (" << state->module << ") -> ";
             int result = remote_release_kernels(state->module, state->size);
             debug(user_context) << "        " << result << "\n";
@@ -359,7 +359,7 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
     if (result != 0) return result;
 
     debug(user_context)
-        << "Ion: halide_hexagon_device_malloc (user_context: " << user_context
+        << "Hexagon: halide_hexagon_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     if (buf->dev) {
@@ -436,7 +436,7 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
 
 WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     debug(user_context)
-        << "Ion: halide_hexagon_device_free (user_context: " << user_context
+        << "Hexagon: halide_hexagon_device_free (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     #ifdef DEBUG_RUNTIME
@@ -444,6 +444,7 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     #endif
 
     void *ion = halide_hexagon_detach_device_handle(user_context, buf);
+    debug(user_context) << "    ion_free ion=" << ion << "\n";
     ion_free(user_context, ion);
 
     if (remote_register_buf) {
@@ -508,7 +509,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
     }
 
     debug(user_context)
-        <<  "Ion: halide_hexagon_copy_to_device (user_context: " << user_context
+        <<  "Hexagon: halide_hexagon_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     #ifdef DEBUG_RUNTIME
@@ -532,7 +533,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
 
 WEAK int halide_hexagon_copy_to_host(void *user_context, buffer_t* buf) {
     debug(user_context)
-        << "Ion: halide_hexagon_copy_to_host (user_context: " << user_context
+        << "Hexagon: halide_hexagon_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     #ifdef DEBUG_RUNTIME
@@ -556,7 +557,7 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, buffer_t* buf) {
 
 WEAK int halide_hexagon_device_sync(void *user_context, struct buffer_t *) {
     debug(user_context)
-        << "Ion: halide_cuda_device_sync (user_context: " << user_context << ")\n";
+        << "Hexagon: halide_hexagon_device_sync (user_context: " << user_context << ")\n";
     // Nothing to do.
     return 0;
 }
