@@ -276,7 +276,7 @@ public:
             if (path && path[0]) {
                 hex_command = string(path) + "/bin/hexagon-clang";
             } else {
-                internal_error << "Unable to find hexagon-clang";
+                user_error << "Unable to find hexagon-clang: neither HL_HEXAGON_CLANG nor HL_HEXAGON_TOOLS are set properly.";
             }
         }
 
