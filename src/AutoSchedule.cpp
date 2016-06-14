@@ -1033,8 +1033,8 @@ struct Partitioner {
             choose_candidate_fuse_fast_mem(const vector< pair<string, string > >& cand_pairs);
     map<string, int64_t> evaluate_reuse(string func, const set<string>& prod);
     map<string, int> get_pure_dim_estimates(const string& f);
-    string generate_cpu_schedule();
-    string generate_group_cpu_schedule(const Group& g);
+    string generate_cpu_schedule(const Target& t);
+    string generate_group_cpu_schedule(const Group& g, const Target& t);
     /*
        Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
        void clear_schedules_fast_mem();
@@ -1518,7 +1518,37 @@ map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
     return mem_bounds;
 }
 
-string Partitioner::generate_group_cpu_schedule(const Group& g) {
+pair<VarOrRVar, VarOrRVar>
+split_dim(Func f_handle, VarOrRVar v, int factor,
+          string in_suffix, string out_suffix,
+          map<string, int> &estimates, string &sched) {
+    // Create new variables for the split dimensions
+    string arg_name = v.name();
+    string inner_name = f_handle.name() + "_" + arg_name + in_suffix;
+    string outer_name = f_handle.name() + "_" + arg_name + out_suffix;
+    VarOrRVar inner(inner_name), outer(outer_name);
+
+    sched += "Var " + inner_name + "(\"" + outer_name + "\")" + ";\n";
+    sched += "Var " + outer_name + "(\"" + outer_name + "\")" + ";\n";
+
+    f_handle.split(v, outer, inner, factor);
+
+    sched += f_handle.name() +
+            ".split(" + arg_name + ',' + outer_name + ',' + inner_name +
+            ',' + std::to_string(factor) + ";\n";
+
+    internal_assert(estimates.find(arg_name) != estimates.end());
+
+    estimates[inner_name] = factor;
+    estimates[outer_name] =
+            std::ceil((float)estimates.at(arg_name)/factor);
+    estimates.erase(arg_name);
+
+    return make_pair(inner, outer);
+}
+
+string Partitioner::generate_group_cpu_schedule(const Group& g,
+                                                const Target& t) {
     string sched = "";
     Function g_out = analy.env.at(g.output);
 
@@ -1540,29 +1570,13 @@ string Partitioner::generate_group_cpu_schedule(const Group& g) {
             string arg_name = v.name();
             int tile_size = g.tile_sizes.at(arg_name);
             if (tile_size > 1) {
-                // Create new variables for the split dimensions
-                string inner_name = g.output + "_" + arg_name + "_o";
-                string outer_name = g.output + "_" + arg_name + "_i";
-                VarOrRVar inner(inner_name), outer(outer_name);
+                pair<VarOrRVar, VarOrRVar> tile_vars =
+                        split_dim(f_handle, v, tile_size, "_i", "_o",
+                                  out_estimates, sched);
 
-                sched += "Var " + inner_name + "(\"" +  outer_name+ "\")" + ";\n";
-                sched += "Var " + outer_name + "(\"" +  outer_name+ "\")" + ";\n";
+                inner_dims.push_back(tile_vars.first);
+                outer_dims.push_back(tile_vars.second);
 
-                f_handle.split(v, outer, inner, tile_size);
-
-                sched += f_handle.name() +
-                        ".split(" + arg_name + ',' + outer_name + ',' + inner_name + ','
-                        + std::to_string(tile_size) + ";\n";
-
-                outer_dims.push_back(outer);
-                inner_dims.push_back(inner);
-
-                internal_assert(out_estimates.find(arg_name) != out_estimates.end());
-
-                out_estimates[inner_name] = tile_size;
-                out_estimates[outer_name] =
-                        std::ceil((float)out_estimates.at(arg_name)/tile_size);
-                out_estimates.erase(arg_name);
             } else {
                 outer_dims.push_back(v);
             }
@@ -1588,32 +1602,32 @@ string Partitioner::generate_group_cpu_schedule(const Group& g) {
         sched += f_handle.name() + ".reorder(" + var_order + ");\n";
     }
 
+    // Vectorize the innermost dimension
+    // TODO: Explore scenarios where vectorizing an outer dimension
+    // makes more sense
+    Var vec_dim = f_handle.args()[0];
+    if (out_estimates.find(vec_dim.name()) != out_estimates.end()) {
+        // Set the vector length as the maximum of the values produced by a
+        // function
+        int vec_len = 0;
+        for (auto& type: g_out.output_types()) {
+            vec_len = std::max(vec_len, t.natural_vector_size(type));
+        }
+        if (out_estimates[vec_dim.name()] >= vec_len) {
+            pair<VarOrRVar, VarOrRVar> vec_vars =
+                    split_dim(f_handle, vec_dim, vec_len, "_vi", "_vo",
+                              out_estimates, sched);
+            f_handle.vectorize(vec_vars.first);
+            sched += f_handle.name() + ".vectorize(" +
+                     vec_vars.first.name() + ");\n";
+        }
+    }
     /*
        for (auto& f_inline: g.inlined) {
        Func inline_handle(analy.env.at(f_inline));
        inline_handle.compute_root();
        }*/
     /*
-    // Realizing the tiling and updating the dimension estimates
-    int num_tile_dims = 0;
-    for(auto &v: pure_vars) {
-    int index = -1;
-    for (int i = 0; i < (int)dims.size() - 1; i++) {
-    if (dims[i].var == v) {
-    index = i;
-    break;
-    }
-    }
-    assert(index!=-1);
-    if (tile_sizes_pure[v] > 1) {
-    split_dim(g_out.schedule(), index, tile_sizes_pure[v],
-    out_estimates, "tile");
-    move_dim_to_outermost(g_out.schedule(), index + 1);
-    } else if (tile_sizes_pure[v] == 1) {
-    move_dim_to_outermost(g_out.schedule(), index);
-    }
-    num_tile_dims++;
-    }
 
     int num_fused_dims = 0;
     int parallelism = part.arch_params.parallelism;
@@ -1805,9 +1819,9 @@ for (auto &m: part.groups[g_name]) {
 return "";
 }
 
-string Partitioner::generate_cpu_schedule() {
+string Partitioner::generate_cpu_schedule(const Target& t) {
     for (auto& g: groups)
-        generate_group_cpu_schedule(g.second);
+        generate_group_cpu_schedule(g.second, t);
     return "";
 }
 
@@ -1893,7 +1907,7 @@ void generate_schedules(const vector<Function>& outputs,
 
     // Set the schedule defaults for each function in the environment
     //set_schedule_defaults(env);
-    part.generate_cpu_schedule();
+    part.generate_cpu_schedule(target);
 
     // GPU
     // ...
