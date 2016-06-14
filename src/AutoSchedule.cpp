@@ -1033,8 +1033,8 @@ struct Partitioner {
             choose_candidate_fuse_fast_mem(const vector< pair<string, string > >& cand_pairs);
     map<string, int64_t> evaluate_reuse(string func, const set<string>& prod);
     map<string, int> get_pure_dim_estimates(const string& f);
-    void generate_cpu_schedule();
-    void generate_group_cpu_schedule(const Group& g);
+    string generate_cpu_schedule();
+    string generate_group_cpu_schedule(const Group& g);
     /*
        Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
        void clear_schedules_fast_mem();
@@ -1045,19 +1045,6 @@ struct Partitioner {
        vector<float> get_input_reuse(Function f, vector<string>& inputs);
        */
 };
-
-map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
-    map<string, Box> mem_bounds;
-    vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
-                                                         g.tile_sizes);
-    map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
-    for (auto& f: g.members) {
-        if (conc_reg.find(f.name()) != conc_reg.end()) {
-            mem_bounds[f.name()] = conc_reg[f.name()];
-        }
-    }
-    return mem_bounds;
-}
 
 map<string, int64_t> Partitioner::evaluate_reuse(string func,
                                                  const set<string>& prod) {
@@ -1507,8 +1494,7 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
     return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
 }
 
-map<string, int>
-Partitioner::get_pure_dim_estimates(const string& f) {
+map<string, int> Partitioner::get_pure_dim_estimates(const string& f) {
     map<string, int> dim_estimates;
     const vector<string>& args = analy.env.at(f).args();
     const vector<Dim>& dims = analy.env.at(f).schedule().dims();
@@ -1519,11 +1505,22 @@ Partitioner::get_pure_dim_estimates(const string& f) {
     return dim_estimates;
 }
 
-void Partitioner::generate_group_cpu_schedule(const Group& g) {
-    // Create a tiled traversal for the output of the group
+map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
+    map<string, Box> mem_bounds;
+    vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
+                                                         g.tile_sizes);
+    map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
+    for (auto& f: g.members) {
+        if (conc_reg.find(f.name()) != conc_reg.end()) {
+            mem_bounds[f.name()] = conc_reg[f.name()];
+        }
+    }
+    return mem_bounds;
+}
+
+string Partitioner::generate_group_cpu_schedule(const Group& g) {
+    string sched = "";
     Function g_out = analy.env.at(g.output);
-    // The dimension names that will be tiled
-    // vector<Dim> &dims = g_out.schedule().dims();
 
     // Get estimates of pipeline bounds
     map<string, int> org_out_estimates = get_pure_dim_estimates(g.output);
@@ -1532,6 +1529,64 @@ void Partitioner::generate_group_cpu_schedule(const Group& g) {
     map<string, Box> group_bounds = get_group_member_bounds(g);
     Func f_handle(g_out);
     f_handle.compute_root();
+    sched += f_handle.name() + ".compute_root()" + ";\n";
+
+    // Realize tiling and update the dimension estimates
+    vector<VarOrRVar> outer_dims;
+    vector<VarOrRVar> inner_dims;
+
+    for (auto &v: f_handle.args()) {
+        if (g.tile_sizes.find(v.name()) != g.tile_sizes.end()) {
+            string arg_name = v.name();
+            int tile_size = g.tile_sizes.at(arg_name);
+            if (tile_size > 1) {
+                // Create new variables for the split dimensions
+                string inner_name = g.output + "_" + arg_name + "_o";
+                string outer_name = g.output + "_" + arg_name + "_i";
+                VarOrRVar inner(inner_name), outer(outer_name);
+
+                sched += "Var " + inner_name + "(\"" +  outer_name+ "\")" + ";\n";
+                sched += "Var " + outer_name + "(\"" +  outer_name+ "\")" + ";\n";
+
+                f_handle.split(v, outer, inner, tile_size);
+
+                sched += f_handle.name() +
+                        ".split(" + arg_name + ',' + outer_name + ',' + inner_name + ','
+                        + std::to_string(tile_size) + ";\n";
+
+                outer_dims.push_back(outer);
+                inner_dims.push_back(inner);
+
+                internal_assert(out_estimates.find(arg_name) != out_estimates.end());
+
+                out_estimates[inner_name] = tile_size;
+                out_estimates[outer_name] =
+                        std::ceil((float)out_estimates.at(arg_name)/tile_size);
+                out_estimates.erase(arg_name);
+            } else {
+                outer_dims.push_back(v);
+            }
+        } else {
+            inner_dims.push_back(v);
+        }
+    }
+
+    // Reorder the tile dimensions
+    if (outer_dims.size() > 0) {
+        vector<VarOrRVar> ordering;
+        for (auto& v: outer_dims)
+            ordering.push_back(v);
+        for (auto& v: inner_dims)
+            ordering.push_back(v);
+
+        f_handle.reorder(ordering);
+
+        string var_order = ordering[0].name();
+        for (auto& v: ordering) {
+            var_order += ',' + v.name();
+        }
+        sched += f_handle.name() + ".reorder(" + var_order + ");\n";
+    }
 
     /*
        for (auto& f_inline: g.inlined) {
@@ -1746,11 +1801,14 @@ for (auto &m: part.groups[g_name]) {
 }
 // std::cerr << "Finished group members "  <<  g_out.name() << std::endl;
 */
+
+return "";
 }
 
-void Partitioner::generate_cpu_schedule() {
+string Partitioner::generate_cpu_schedule() {
     for (auto& g: groups)
         generate_group_cpu_schedule(g.second);
+    return "";
 }
 
 void generate_schedules(const vector<Function>& outputs,
