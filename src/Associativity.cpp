@@ -8,7 +8,6 @@
 #include "ExprUsesVar.h"
 #include "CSE.h"
 
-#include <set>
 #include <sstream>
 
 namespace Halide {
@@ -16,7 +15,6 @@ namespace Internal {
 
 using std::map;
 using std::pair;
-using std::set;
 using std::string;
 using std::vector;
 
@@ -218,7 +216,7 @@ bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
 } // anonymous namespace
 
 
-// TODO(psuriana): This does not handle cross-dependencies of tuple elements.
+// TODO(psuriana): This does not handle cross-dependencies among tuple elements.
 // It also is not able to handle associative select() (e.g. argmin/argmax)
 pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Expr> args,
                                                       vector<Expr> exprs) {
