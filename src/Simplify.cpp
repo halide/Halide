@@ -3398,6 +3398,19 @@ private:
                 expr = op;
             }
         } else if (op->call_type == Call::PureExtern &&
+                   op->name == "pow_f32") {
+            Expr arg0 = mutate(op->args[0]);
+            Expr arg1 = mutate(op->args[1]);
+            const double *f0 = as_const_float(arg0);
+            const double *f1 = as_const_float(arg1);
+            if (f0 && f1) {
+                expr = FloatImm::make(arg0.type(), std::pow(*f0, *f1));
+            } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
+                expr = Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::PureExtern &&
                    (op->name == "floor_f32" || op->name == "ceil_f32" ||
                     op->name == "round_f32" || op->name == "trunc_f32")) {
             internal_assert(op->args.size() == 1);
