@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  Var x("x"), y("y"), xi("xi"), yi("yi");
+  Var x("x"), y("y");
 
   int num_stencils = 15;
 

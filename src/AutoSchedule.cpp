@@ -309,7 +309,7 @@ struct CostModel {
     pair<int64_t, int64_t> region_cost(string func, Box& region,
                                        const set<string>& inlines = set<string>()) {
 
-        Function curr_f = env.at(func);
+        const Function &curr_f = env.at(func);
         int64_t area = box_area(region);
         if (area < 0) {
             // Area could not be determined therfore it is not possible to
@@ -349,26 +349,31 @@ struct CostModel {
             Box update_region;
             if (u.domain().defined()) {
                 for (auto& rvar: u.domain().domain()) {
-                    curr_scope.push(rvar.var, Interval(simplify(rvar.min),
-                                    simplify(rvar.min + rvar.extent - 1)));
+                    curr_scope.push(rvar.var,
+                                    Interval(simplify(rvar.min),
+                                             simplify(rvar.min + rvar.extent - 1)));
                 }
-                for (const Expr& arg: u.args()) {
-                    Interval arg_bounds = bounds_of_expr_in_scope(arg, curr_scope);
-                    update_region.push_back(arg_bounds);
-                }
-                int64_t area = box_area(update_region);
-                debug(0) << "Area:" << area << '\n';
-                if (area != -1) {
-                    region_cost.first += cost[index].first * area;
-                    region_cost.second += cost[index].second * area;
-                } else {
-                    region_cost.first = -1;
-                    region_cost.second = -1;
-                    debug(0) << "Warning: could not determine the bounds of\
-                             the rdom in function " << curr_f.name() << '\n';
-                }
+            }
+            for (const Expr& arg: u.args()) {
+                Interval arg_bounds = bounds_of_expr_in_scope(arg, curr_scope);
+                update_region.push_back(Interval(simplify(arg_bounds.min),
+                                                 simplify(arg_bounds.max)));
+            }
+            int64_t area = box_area(update_region);
+            /*
+            debug(0) << update_region;
+            debug(0) << "Area:" << area << '\n';
+            */
+            if (area != -1) {
+                region_cost.first += cost[index].first * area;
+                region_cost.second += cost[index].second * area;
             } else {
-                return make_pair(-1, -1);
+                region_cost.first = -1;
+                region_cost.second = -1;
+                debug(0) << "Warning: could not determine the bounds of\
+                             update definition " << index << "in function "
+                             << curr_f.name() << '\n';
+                return region_cost;
             }
         }
 
@@ -554,7 +559,7 @@ struct CostModel {
             func_cost[kv.first] = get_func_cost(kv.second);
             int stage = 0;
             for (auto& cost: func_cost[kv.first]) {
-                debug(0) << "Func:" << kv.first << "Stage:" << stage << "," << cost.first << '\n';
+                debug(0) << "Func:" << kv.first << ",Stage:" << stage << "," << cost.first << '\n';
                 stage++;
             }
             FindImageInputs find;
@@ -1495,8 +1500,14 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
 
     // Return the overall benefit of the choice
     // TODO: Use the arch params to compute total work
-    int64_t benefit = prod_analy.arith_cost + cons_analy.arith_cost -
-            fused_analy.arith_cost;
+    int64_t benefit;
+    if (prod_analy.arith_cost >= 0 && cons_analy.arith_cost >= 0 &&
+        fused_analy.arith_cost >=0) {
+        benefit = prod_analy.arith_cost + cons_analy.arith_cost -
+                  fused_analy.arith_cost;
+    } else {
+        benefit = -1;
+    }
 
     debug(0) << "\nProd Group:\n" << prod_group << '\n';
     debug(0) << "Cons Group:\n" << cons_group;
