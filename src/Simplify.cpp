@@ -3456,8 +3456,6 @@ private:
             const Mod *mod = new_value.as<Mod>();
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
-            const LE *le = new_value.as<LE>();
-            const LT *lt = new_value.as<LT>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
             const Variable *var_b = nullptr;
@@ -3492,22 +3490,6 @@ private:
             } else if (mod && is_const(mod->b)) {
                 replacement = substitute(new_name, Mod::make(new_var, mod->b), replacement);
                 new_value = mod->a;
-            } else if (false && le && is_const(le->a)) {
-                new_value = le->b;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LE::make(le->a, new_var), replacement);
-            } else if (false && le && is_const(le->b)) {
-                new_value = le->a;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LE::make(new_var, le->b), replacement);
-            } else if (false && lt && is_const(lt->a)) {
-                new_value = lt->b;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LT::make(lt->a, new_var), replacement);
-            } else if (false && lt && is_const(lt->b)) {
-                new_value = lt->a;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LT::make(new_var, lt->b), replacement);
             } else if (ramp && is_const(ramp->stride)) {
                 new_value = ramp->base;
                 new_var = Variable::make(new_value.type(), new_name);
