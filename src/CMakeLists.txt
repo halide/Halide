@@ -379,6 +379,7 @@ ENDIF()
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
+  AlignLoads.cpp
   AllocationBoundsInference.cpp
   BoundaryConditions.cpp
   Bounds.cpp
