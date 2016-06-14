@@ -86,12 +86,17 @@ Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(p
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
-                       Expr pred, bool is_init)
+                       const ReductionDomain &rdom, bool is_init)
                        : contents(new DefinitionContents) {
     contents->is_init = is_init;
-    contents->predicate = pred;
     contents->values = values;
     contents->args = args;
+    if (rdom.defined()) {
+        contents->predicate = rdom.predicate();
+        for (size_t i = 0; i < rdom.domain().size(); i++) {
+            contents->schedule.rvars().push_back(rdom.domain()[i]);
+        }
+    }
 }
 
 // Return deep-copy of Definition

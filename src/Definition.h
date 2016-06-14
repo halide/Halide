@@ -45,7 +45,7 @@ public:
 
     /** Construct a Definition with the supplied args, values, and reduction domain. */
     EXPORT Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
-                      Expr pred, bool is_init);
+                      const ReductionDomain &rdom, bool is_init);
 
     /** Construct an empty Definition. By default, it is a init definition. */
     EXPORT Definition();

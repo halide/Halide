@@ -620,8 +620,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             deleter.mutate(check.reduction_domain.predicate()));
     }
 
-    Expr condition = check.reduction_domain.defined() ? check.reduction_domain.predicate() : const_true();
-    Definition r(args, values, condition, false);
+    Definition r(args, values, check.reduction_domain, false);
     internal_assert(!r.is_init()) << "Should have been an update definition\n";
 
     // First add any reduction domain
@@ -635,8 +634,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
-
-            r.schedule().rvars().push_back(rvar);
 
             Dim d = {v, ForType::Serial, DeviceAPI::None, pure, true};
             r.schedule().dims().push_back(d);
