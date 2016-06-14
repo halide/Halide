@@ -266,7 +266,21 @@ public:
         debug(1) << "Hexagon device code module: " << device_code << "\n";
         device_code.compile(Outputs().bitcode(tmp_bitcode.pathname()));
 
-        string hex_command = "${HL_HEXAGON_TOOLS}/bin/hexagon-clang ";
+        string hex_command;
+
+        const char *path = getenv("HL_HEXAGON_CLANG");
+        if (path && path[0]) {
+            hex_command = path;
+        } else {
+            path = getenv("HL_HEXAGON_TOOLS");
+            if (path && path[0]) {
+                hex_command = string(path) + "/bin/hexagon-clang";
+            } else {
+                internal_error << "Unable to find hexagon-clang";
+            }
+        }
+
+        hex_command += " ";
         hex_command += tmp_bitcode.pathname();
         hex_command += " -fPIC -O3 -Wno-override-module -shared ";
         if (device_code.target().has_feature(Target::HVX_v62)) {
