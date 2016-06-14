@@ -177,16 +177,6 @@ void check(string op, int vector_width, Expr e) {
     }
 }
 
-Expr i64(Expr e) { return cast(Int(64), e); }
-Expr u64(Expr e) { return cast(UInt(64), e); }
-Expr i32(Expr e) { return cast(Int(32), e); }
-Expr u32(Expr e) { return cast(UInt(32), e); }
-Expr i16(Expr e) { return cast(Int(16), e); }
-Expr u16(Expr e) { return cast(UInt(16), e); }
-Expr i8(Expr e) { return cast(Int(8), e); }
-Expr u8(Expr e) { return cast(UInt(8), e); }
-Expr f32(Expr e) { return cast(Float(32), e); }
-Expr f64(Expr e) { return cast(Float(64), e); }
 
 const int min_i8 = -128, max_i8 = 127;
 const int min_i16 = -32768, max_i16 = 32767;
@@ -195,12 +185,7 @@ const int max_u8 = 255;
 const int max_u16 = 65535;
 Expr max_u32 = UInt(32).max();
 
-Expr i32c(Expr e) { return cast(Int(32), clamp(e, min_i32, max_i32)); }
-Expr u32c(Expr e) { return cast(UInt(32), clamp(e, 0, max_u32)); }
-Expr i16c(Expr e) { return cast(Int(16), clamp(e, min_i16, max_i16)); }
-Expr u16c(Expr e) { return cast(UInt(16), clamp(e, 0, max_u16)); }
-Expr i8c(Expr e) { return cast(Int(8), clamp(e, min_i8, max_i8)); }
-Expr u8c(Expr e) { return cast(UInt(8), clamp(e, 0, max_u8)); }
+using namespace Halide::ConciseCasts;
 
 void check_sse_all() {
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);

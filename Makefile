@@ -405,6 +405,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_Renderscript_Dev.h \
   CodeGen_X86.h \
+  ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
   Debug.h \
