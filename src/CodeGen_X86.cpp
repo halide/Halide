@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "CodeGen_X86.h"
+#include "ConciseCasts.h"
 #include "JITModule.h"
 #include "IROperator.h"
 #include "IRMatch.h"
@@ -17,6 +18,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 
+using namespace Halide::ConciseCasts;
 using namespace llvm;
 
 CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
@@ -31,46 +33,6 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
     user_assert(t.os != Target::NaCl) << "llvm build not configured with native client enabled.\n";
     #endif
 }
-
-Expr _i64(Expr e) {
-    return cast(Int(64, e.type().lanes()), e);
-}
-
-Expr _u64(Expr e) {
-    return cast(UInt(64, e.type().lanes()), e);
-}
-Expr _i32(Expr e) {
-    return cast(Int(32, e.type().lanes()), e);
-}
-
-Expr _u32(Expr e) {
-    return cast(UInt(32, e.type().lanes()), e);
-}
-
-Expr _i16(Expr e) {
-    return cast(Int(16, e.type().lanes()), e);
-}
-
-Expr _u16(Expr e) {
-    return cast(UInt(16, e.type().lanes()), e);
-}
-
-Expr _i8(Expr e) {
-    return cast(Int(8, e.type().lanes()), e);
-}
-
-Expr _u8(Expr e) {
-    return cast(UInt(8, e.type().lanes()), e);
-}
-
-Expr _f32(Expr e) {
-    return cast(Float(32, e.type().lanes()), e);
-}
-
-Expr _f64(Expr e) {
-    return cast(Float(64, e.type().lanes()), e);
-}
-
 
 namespace {
 
@@ -284,37 +246,37 @@ void CodeGen_X86::visit(const Cast *op) {
 
     static Pattern patterns[] = {
         {false, true, Int(8, 16), "llvm.x86.sse2.padds.b",
-         _i8(clamp(wild_i16x_ + wild_i16x_, -128, 127))},
+         i8c(wild_i16x_ + wild_i16x_)},
         {false, true, Int(8, 16), "llvm.x86.sse2.psubs.b",
-         _i8(clamp(wild_i16x_ - wild_i16x_, -128, 127))},
+         i8c(wild_i16x_ - wild_i16x_)},
         {false, true, UInt(8, 16), "llvm.x86.sse2.paddus.b",
-         _u8(min(wild_u16x_ + wild_u16x_, 255))},
+         u8c(wild_u16x_ + wild_u16x_)},
         {false, true, UInt(8, 16), "llvm.x86.sse2.psubus.b",
-         _u8(max(wild_i16x_ - wild_i16x_, 0))},
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
         {false, true, Int(16, 8), "llvm.x86.sse2.padds.w",
-         _i16(clamp(wild_i32x_ + wild_i32x_, -32768, 32767))},
+         i16c(wild_i32x_ + wild_i32x_)},
         {false, true, Int(16, 8), "llvm.x86.sse2.psubs.w",
-         _i16(clamp(wild_i32x_ - wild_i32x_, -32768, 32767))},
+         i16c(wild_i32x_ - wild_i32x_)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.paddus.w",
-         _u16(min(wild_u32x_ + wild_u32x_, 65535))},
+         u16c(wild_u32x_ + wild_u32x_)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.psubus.w",
-         _u16(max(wild_i32x_ - wild_i32x_, 0))},
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
         {false, true, Int(16, 8), "llvm.x86.sse2.pmulh.w",
-         _i16((wild_i32x_ * wild_i32x_) / 65536)},
+         i16((wild_i32x_ * wild_i32x_) / 65536)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.pmulhu.w",
-         _u16((wild_u32x_ * wild_u32x_) / 65536)},
+         u16((wild_u32x_ * wild_u32x_) / 65536)},
         {false, true, UInt(8, 16), "llvm.x86.sse2.pavg.b",
-         _u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.pavg.w",
-         _u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
         {false, false, Int(16, 8), "packssdwx8",
-         _i16(clamp(wild_i32x_, -32768, 32767))},
+         i16c(wild_i32x_)},
         {false, false, Int(8, 16), "packsswbx16",
-         _i8(clamp(wild_i16x_, -128, 127))},
+         i8c(wild_i16x_)},
         {false, false, UInt(8, 16), "packuswbx16",
-         _u8(clamp(wild_i16x_, 0, 255))},
+         u8c(wild_i16x_)},
         {true, false, UInt(16, 8), "packusdwx8",
-         _u16(clamp(wild_i32x_, 0, 65535))}
+         u16c(wild_i32x_)}
     };
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
@@ -373,7 +335,7 @@ Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
     Type ty = a.type();
     if (ty.is_vector() && ty.bits() == 16) {
         // We can use pmulhu for this op.
-        Expr p = _u16(_u32(a) * _u32(b) / 65536);
+        Expr p = u16(u32(a) * u32(b) / 65536);
         if (shr) {
             p = p >> shr;
         }
