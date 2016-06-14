@@ -61,6 +61,14 @@ int64_t box_area(const Box& b) {
     return box_area;
 }
 
+void disp_regions(map<string, Box>& regions) {
+    for (auto& reg: regions) {
+        debug(0) << reg.first;
+        debug(0) << reg.second;
+        debug(0) << "\n";
+    }
+}
+
 class FindAllCalls : public IRVisitor {
  public:
   set<string> calls;
@@ -153,7 +161,7 @@ struct CostModel {
 
     /* Visitor for computing the arithmetic cost of a single value of a function*/
     const map<string, Function> &env;
-    map<string, pair<int64_t, int64_t> > func_cost;
+    map<string, vector<pair<int64_t, int64_t> > > func_cost;
     map<string, Type> inputs;
 
     class ExprCost : public IRVisitor {
@@ -281,7 +289,6 @@ struct CostModel {
             }
         } while (funcs_to_inline);
 
-        /*
         ExprCost cost;
         e.accept(&cost);
         debug(0) << "Original:" << e << "," << cost.ops << '\n';
@@ -289,7 +296,6 @@ struct CostModel {
         ExprCost cost_inlined;
         inlined_expr.accept(&cost_inlined);
         debug(0) << "Inlined:" << inlined_expr << "," << cost_inlined.ops << '\n';
-        */
 
         return inlined_expr;
     }
@@ -303,27 +309,78 @@ struct CostModel {
     pair<int64_t, int64_t> region_cost(string func, Box& region,
                                        const set<string>& inlines = set<string>()) {
 
+        Function curr_f = env.at(func);
         int64_t area = box_area(region);
         if (area < 0) {
-            // Area could not be determined therfore it is not possible to determine
-            // the cost as well
+            // Area could not be determined therfore it is not possible to
+            // determine the cost as well
             return make_pair(-1, -1);
         }
 
-        pair<int64_t, int64_t> cost = inlines.empty() ? func_cost[func]:
-                get_func_cost(env.at(func), inlines);
+        vector< pair<int64_t, int64_t> > cost = inlines.empty() ? func_cost[func]:
+                                                get_func_cost(curr_f, inlines);
 
-        cost.first *= area;
-        cost.second *= area;
+        int index = 0;
+        pair<int64_t, int64_t> region_cost;
+        region_cost.first = area * cost[index].first;
+        region_cost.second = area * cost[index].first;
 
-        internal_assert(cost.first >= 0 && cost.second >=0);
-        return cost;
+        // Compute the bounds of the update definitions and the cost of
+        // evaluating the region
+
+        // Add all the pure var bounds to the scope
+        Scope<Interval> curr_scope;
+        int interval_index = 0;
+
+        for (auto& arg: curr_f.args()) {
+            Interval simple_bounds =
+                    Interval(simplify(region[interval_index].min),
+                             simplify(region[interval_index].max));
+            curr_scope.push(arg, simple_bounds);
+            interval_index++;
+        }
+
+        // This method of costing update definitions assumes that the domain
+        // of the pure vars across all the update definitions is the same
+        // which may not be true. This will be prone to overestimating the
+        // cost.
+        for (const Definition& u: curr_f.updates()) {
+            index++;
+            Box update_region;
+            if (u.domain().defined()) {
+                for (auto& rvar: u.domain().domain()) {
+                    curr_scope.push(rvar.var, Interval(simplify(rvar.min),
+                                    simplify(rvar.min + rvar.extent - 1)));
+                }
+                for (const Expr& arg: u.args()) {
+                    Interval arg_bounds = bounds_of_expr_in_scope(arg, curr_scope);
+                    update_region.push_back(arg_bounds);
+                }
+                int64_t area = box_area(update_region);
+                debug(0) << "Area:" << area << '\n';
+                if (area != -1) {
+                    region_cost.first += cost[index].first * area;
+                    region_cost.second += cost[index].second * area;
+                } else {
+                    region_cost.first = -1;
+                    region_cost.second = -1;
+                    debug(0) << "Warning: could not determine the bounds of\
+                             the rdom in function " << curr_f.name() << '\n';
+                }
+            } else {
+                return make_pair(-1, -1);
+            }
+        }
+
+        internal_assert(region_cost.first >= 0 && region_cost.second >=0);
+        return region_cost;
     }
 
     pair<int64_t, int64_t> region_cost(map<string, Box>& regions,
                                        const set<string>& inlines = set<string>()) {
 
         pair<int64_t, int64_t> total_cost(0, 0);
+        disp_regions(regions);
         for (auto& f: regions) {
             // The cost for inlined functions will be accounted in the consumer
             // of the inlined function
@@ -345,9 +402,10 @@ struct CostModel {
         return total_cost;
     }
 
-    pair<int64_t, int64_t> get_func_cost(const Function& f,
-                                         const set<string>& inlines = set<string>()) {
+    vector< pair<int64_t, int64_t> >
+    get_func_cost(const Function& f, const set<string>& inlines = set<string>()) {
 
+        vector< pair<int64_t, int64_t> > func_costs;
         int64_t total_ops = 1;
         int64_t total_loads = 0;
         // TODO: revist how boundary conditions are handled
@@ -359,12 +417,11 @@ struct CostModel {
             total_loads += cost_visitor.byte_loads;
         }
 
+        func_costs.push_back(make_pair(total_ops, total_loads));
+
         // Estimating cost when reductions are involved
-        // TODO: This assumes that the entire reduction of each update definition is
-        // evaluated to compute each value of the function.
         if (!f.is_pure()) {
             for (const Definition& u: f.updates()) {
-
                 int64_t ops = 1;
                 int64_t loads = 0;
                 for (auto& e: u.values()) {
@@ -383,26 +440,10 @@ struct CostModel {
                     loads += cost_visitor.byte_loads;
                 }
 
-                if (u.domain().defined()) {
-                    Box b;
-                    for (auto& rvar: u.domain().domain()) {
-                        b.push_back(Interval(simplify(rvar.min),
-                                             simplify(rvar.min + rvar.extent - 1)));
-                    }
-                    int64_t area = box_area(b);
-                    if (area != -1) {
-                        total_ops += ops * area;
-                        total_loads += loads * area;
-                    } else {
-                        total_ops = -1;
-                        total_loads = -1;
-                        debug(0) << "Warning: could not determine the bounds of\
-                                 the rdom in function " << f.name() << '\n';
-                    }
-                }
+                func_costs.push_back(make_pair(ops, loads));
             }
         }
-        return make_pair(total_ops, total_loads);
+        return func_costs;
     }
 
     int64_t get_func_value_size(const Function& f) {
@@ -511,6 +552,11 @@ struct CostModel {
     CostModel(const map<string, Function>& _env) : env(_env) {
         for (auto& kv : env) {
             func_cost[kv.first] = get_func_cost(kv.second);
+            int stage = 0;
+            for (auto& cost: func_cost[kv.first]) {
+                debug(0) << "Func:" << kv.first << "Stage:" << stage << "," << cost.first << '\n';
+                stage++;
+            }
             FindImageInputs find;
             kv.second.accept(&find);
             for (auto& in: find.input_type) {
@@ -561,7 +607,7 @@ struct DependenceAnalysis {
                 int interval_index = 0;
 
                 for (auto& arg: curr_f.args()) {
-                    Interval simple_bounds = 
+                    Interval simple_bounds =
                             Interval(simplify(curr_bounds[interval_index].min),
                                      simplify(curr_bounds[interval_index].max));
                     curr_scope.push(arg, simple_bounds);
@@ -592,9 +638,9 @@ struct DependenceAnalysis {
                     vector<Expr> exprs;
                     exprs.push_back(val);
                     for (auto& arg: update.args()) {
-                        Interval simple_bounds = 
+                        Interval simple_bounds =
                                 Interval(simplify(curr_bounds[interval_index].min),
-                                         simplify(curr_bounds[interval_index].max));                    
+                                         simplify(curr_bounds[interval_index].max));
                         // Check for a pure variable
                         const Variable *v = arg.as<Variable>();
                         if (!v) {
@@ -753,14 +799,6 @@ struct DependenceAnalysis {
                 return conc_overlaps;
             }
 };
-
-void disp_regions(map<string, Box>& regions) {
-    for (auto& reg: regions) {
-        debug(0) << reg.first;
-        debug(0) << reg.second;
-        debug(0) << "\n";
-    }
-}
 
 map<string, Box> get_pipeline_bounds(DependenceAnalysis& analy,
                                      const vector<Function>& outputs) {
@@ -1459,11 +1497,10 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
     // TODO: Use the arch params to compute total work
     int64_t benefit = prod_analy.arith_cost + cons_analy.arith_cost -
             fused_analy.arith_cost;
-    /*
+
     debug(0) << "\nProd Group:\n" << prod_group << '\n';
     debug(0) << "Cons Group:\n" << cons_group;
     debug(0) << "Benefit:" << benefit << "\n\n";
-    */
 
     return benefit;
 }
