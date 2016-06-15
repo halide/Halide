@@ -1,4 +1,5 @@
 #include "HexagonOptimize.h"
+#include "ConciseCasts.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRMatch.h"
@@ -18,6 +19,8 @@ using std::set;
 using std::vector;
 using std::string;
 using std::pair;
+
+using namespace Halide::ConciseCasts;
 
 Expr native_interleave(Expr x) {
     string fn;
@@ -97,46 +100,6 @@ public:
 Expr with_lanes(Expr x, int lanes) {
     return WithLanes(lanes).mutate(x);
 }
-
-Expr u8(Expr x) { return cast(UInt(8, x.type().lanes()), x); }
-Expr i8(Expr x) { return cast(Int(8, x.type().lanes()), x); }
-Expr u16(Expr x) { return cast(UInt(16, x.type().lanes()), x); }
-Expr i16(Expr x) { return cast(Int(16, x.type().lanes()), x); }
-Expr u32(Expr x) { return cast(UInt(32, x.type().lanes()), x); }
-Expr i32(Expr x) { return cast(Int(32, x.type().lanes()), x); }
-Expr u64(Expr x) { return cast(UInt(64, x.type().lanes()), x); }
-Expr i64(Expr x) { return cast(Int(64, x.type().lanes()), x); }
-Expr bc(Expr x) { return Broadcast::make(x, 0); }
-
-Expr min_i8 = i8(Int(8).min());
-Expr max_i8 = i8(Int(8).max());
-Expr min_u8 = u8(UInt(8).min());
-Expr max_u8 = u8(UInt(8).max());
-Expr min_i16 = i16(Int(16).min());
-Expr max_i16 = i16(Int(16).max());
-Expr min_u16 = u16(UInt(16).min());
-Expr max_u16 = u16(UInt(16).max());
-Expr min_i32 = i32(Int(32).min());
-Expr max_i32 = i32(Int(32).max());
-Expr min_u32 = u32(UInt(32).min());
-Expr max_u32 = u32(UInt(32).max());
-
-// The simplifier eliminates max(x, 0) for unsigned x, so make sure
-// our patterns reflect the same.
-Expr simplified_clamp(Expr x, Expr min, Expr max) {
-    if (x.type().is_uint() && is_zero(min)) {
-        return Halide::min(x, max);
-    } else {
-        return clamp(x, min, max);
-    }
-}
-
-Expr i32c(Expr e) { return i32(simplified_clamp(e, min_i32, max_i32)); }
-Expr u32c(Expr e) { return u32(simplified_clamp(e, min_u32, max_u32)); }
-Expr i16c(Expr e) { return i16(simplified_clamp(e, min_i16, max_i16)); }
-Expr u16c(Expr e) { return u16(simplified_clamp(e, min_u16, max_u16)); }
-Expr i8c(Expr e) { return i8(simplified_clamp(e, min_i8, max_i8)); }
-Expr u8c(Expr e) { return u8(simplified_clamp(e, min_u8, max_u8)); }
 
 struct Pattern {
     enum Flags {
