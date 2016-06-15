@@ -39,15 +39,16 @@ Func repeat_edge(const Func &source,
 
 Func constant_exterior(const Func &source, Tuple value,
                        const std::vector<std::pair<Expr, Expr>> &bounds) {
-    std::vector<Var> args(source.args());
+    std::vector<Var> source_args = source.args();
+    std::vector<Var> args(source_args);
     user_assert(args.size() >= bounds.size()) <<
         "constant_exterior called with more bounds (" << bounds.size() <<
-        ") than dimensions (" << source.args().size() << ") Func " <<
+        ") than dimensions (" << source_args.size() << ") Func " <<
         source.name() << "has.\n";
 
     Expr out_of_bounds = cast<bool>(false);
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = source.args()[i];
+        Var arg_var = source_args[i];
         Expr min = bounds[i].first;
         Expr extent = bounds[i].second;
 

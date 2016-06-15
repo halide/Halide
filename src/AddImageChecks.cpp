@@ -250,7 +250,7 @@ Stmt add_image_checks(Stmt s,
             Expr actual_min = Variable::make(Int(32), actual_min_name, image, param, rdom);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
-            if (!touched[j].min.defined() || !touched[j].max.defined()) {
+            if (!touched[j].is_bounded()) {
                 user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
@@ -304,15 +304,15 @@ Stmt add_image_checks(Stmt s,
             }
             lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
 
-            // Insert checks to make sure the total size of all input
-            // and output buffers is <= 2^31 - 1.  And that no product
-            // of extents overflows 2^31 - 1. This second test is
-            // likely only needed if a fuse directive is used in the
-            // schedule to combine multiple extents, but it is here
-            // for extra safety. Ultimately we will want to make
-            // Halide handle larger single buffers, at least on 64-bit
-            // systems.
-            Expr max_size = cast<int64_t>(0x7fffffff);
+            // On 32-bit systems, insert checks to make sure the total
+            // size of all input and output buffers is <= 2^31 - 1.
+            // And that no product of extents overflows 2^31 - 1. This
+            // second test is likely only needed if a fuse directive
+            // is used in the schedule to combine multiple extents,
+            // but it is here for extra safety. On targets with the
+            // LargeBuffers feature, the maximum size is 2^63 - 1.
+            Expr max_size = make_const(Int(64), t.maximum_buffer_size());
+            Expr max_extent = make_const(Int(64), 0x7fffffff);
             Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);

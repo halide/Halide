@@ -250,6 +250,14 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     id = oss.str();
 }
 
+void CodeGen_GLSL::visit(const IntImm *op) {
+    print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
+}
+
+void CodeGen_GLSL::visit(const UIntImm *op) {
+    print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
+}
+
 void CodeGen_GLSL::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
@@ -389,7 +397,11 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         return ".rg";
     } else {
         // GLSL 1.0 Section 5.5 supports subscript based vector indexing
-        return std::string("[") + ((e.type()!=Int(32)) ? "(int)" : "") + print_expr(e) + "]";
+        std::string id = print_assignment(e.type(), print_expr(e));
+        if (e.type() != Int(32)) {
+          id = "int(" + id + ")";
+        }
+        return std::string("[" + id + "]");
     }
 }
 
@@ -441,8 +453,9 @@ void CodeGen_GLSL::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::glsl_texture_store)) {
         internal_assert(op->args.size() == 6);
         std::string sval = print_expr(op->args[5]);
+        std::string suffix = get_vector_suffix(op->args[4]);
         do_indent();
-        stream << "gl_FragColor" << get_vector_suffix(op->args[4])
+        stream << "gl_FragColor" << suffix
                << " = " << sval;
         if (op->args[5].type().is_uint()) {
             stream << " / " << print_expr(cast<float>(op->args[5].type().max()));
@@ -886,7 +899,8 @@ void CodeGen_GLSL::test() {
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
                             {string("buf"), 0, 0, 0},
                             Call::Intrinsic);
-    check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
+    check(load4, "int $ = int(0);\n"
+                 "vec4 $ = texture2D($buf, vec2($, $));\n");
 
     check(log(1.0f), "float $ = log(1.0);\n");
     check(exp(1.0f), "float $ = exp(1.0);\n");

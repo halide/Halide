@@ -233,7 +233,7 @@ private:
     template <typename T2 = T,
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
     T from_string_impl(const std::string &s) const {
-        return parse_target_string(s);
+        return Target(s);
     }
     template <typename T2 = T,
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
@@ -514,15 +514,15 @@ protected:
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
-    template <typename T> Expr cast(Expr e) const { return Halide::cast<T>(e); }
-    inline Expr cast(Halide::Type t, Expr e) const { return Halide::cast(t, e); }
+    template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
+    static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using Image = Halide::Image<T>;
     template <typename T> using Param = Halide::Param<T>;
-    inline Type Bool(int lanes = 1) const { return Halide::Bool(lanes); }
-    inline Type Float(int bits, int lanes = 1) const { return Halide::Float(bits, lanes); }
-    inline Type Int(int bits, int lanes = 1) const { return Halide::Int(bits, lanes); }
-    inline Type UInt(int bits, int lanes = 1) const { return Halide::UInt(bits, lanes); }
+    static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
+    static inline Type Float(int bits, int lanes = 1) { return Halide::Float(bits, lanes); }
+    static inline Type Int(int bits, int lanes = 1) { return Halide::Int(bits, lanes); }
+    static inline Type UInt(int bits, int lanes = 1) { return Halide::UInt(bits, lanes); }
 };
 
 namespace Internal {
@@ -537,7 +537,8 @@ public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_javascript;
+        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_javascript;
+
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -548,7 +549,7 @@ public:
         EmitOptions()
             : emit_o(true), emit_h(true), emit_cpp(false), emit_assembly(false),
               emit_bitcode(false), emit_stmt(false), emit_stmt_html(false),
-              emit_javascript(false) {}
+	      emit_static_library(true), emit_javascript(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
@@ -604,9 +605,9 @@ public:
     EXPORT void emit_filter(const std::string &output_dir, const std::string &function_name = "",
                             const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
-    // Call build() and produce a Module for the result. 
+    // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
-    EXPORT Module build_module(const std::string &function_name = "", 
+    EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
 
 protected:

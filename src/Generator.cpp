@@ -85,6 +85,13 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_stmt_html) {
         output_files.stmt_html_name = base_path + get_extension(".html", options);
     }
+    if (options.emit_static_library) {
+        if (is_windows_coff) {
+            output_files.static_library_name = base_path + get_extension(".lib", options);
+        } else {
+            output_files.static_library_name = base_path + get_extension(".a", options);
+        }
+    }
     if (options.emit_javascript) {
         output_files.javascript_name = base_path + get_extension(".js", options);
     }
@@ -119,8 +126,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, stmt, javascript]. "
-                          "If omitted, default value is [o, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, javascript]. "
+                          "If omitted, default value is [static_library, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -201,12 +208,12 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     GeneratorBase::EmitOptions emit_options;
     // Ensure all flags start as false.
-    emit_options.emit_o = emit_options.emit_h = false;
+    emit_options.emit_static_library = emit_options.emit_h = false;
 
     std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
-        // If omitted or empty, assume .o and .h
-        emit_options.emit_o = emit_options.emit_h = true;
+        // If omitted or empty, assume .a and .h
+        emit_options.emit_static_library = emit_options.emit_h = true;
     } else {
         // If anything specified, only emit what is enumerated
         for (const std::string &opt : emit_flags) {
@@ -224,11 +231,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_o = true;
             } else if (opt == "h") {
                 emit_options.emit_h = true;
+            } else if (opt == "static_library") {
+                emit_options.emit_static_library = true;
             } else if (opt == "javascript") {
                 emit_options.emit_javascript = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, stmt, javascript], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, javascript], ignoring.\n";
             }
         }
     }
@@ -248,24 +257,44 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
 
     const auto target_string = generator_args["target"];
-    const Target target = parse_target_string(target_string);
+    auto target_strings = split_string(target_string, ",");
+    std::vector<Target> targets;
+    for (const auto &s : target_strings) {
+        targets.push_back(Target(s));
+    }
 
     if (!runtime_name.empty()) {
+        if (targets.size() != 1) {
+            cerr << "Only one target allowed here";
+            return 1;
+        }
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
-        Outputs output_files = compute_outputs(target, base_path, emit_options);
-        // For runtime, it only makes sense to output object files (for now), so ignore
-        // everything else. (Soon, this will also support static libraries.)
-        compile_standalone_runtime(output_files.object_name, target);
+        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
+        compile_standalone_runtime(output_files, targets[0]);
     }
 
     if (!generator_name.empty()) {
-        std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
-        if (gen == nullptr) {
-            cerr << "Unknown generator: " << generator_name << "\n";
-            cerr << kUsage;
-            return 1;
+        std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
+        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
+        auto module_producer = [&generator_name, &generator_args, &cerr]
+            (const std::string &name, const Target &target) -> Module {
+                auto sub_generator_args = generator_args;
+                sub_generator_args["target"] = target.to_string();
+                // Must re-create each time since each instance will have a different Target
+                auto gen = GeneratorRegistry::create(generator_name, sub_generator_args);
+                if (gen == nullptr) {
+                    cerr << "Unknown generator: " << generator_name << "\n";
+                    exit(1);
+                }
+                return gen->build_module(name);
+            };
+        if (targets.size() > 1) {
+            compile_multitarget(function_name, output_files, targets, module_producer);
+        } else {
+            // compile_multitarget() will fail if we request anything but library and/or header,
+            // so defer directly to Module::compile if there is a single target.
+            module_producer(function_name, targets[0]).compile(output_files);
         }
-        gen->emit_filter(output_dir, function_name, file_base_name, emit_options);
     }
 
     return 0;

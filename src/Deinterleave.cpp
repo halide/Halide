@@ -1,5 +1,4 @@
 #include "Deinterleave.h"
-#include "BlockFlattening.h"
 #include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -653,7 +652,7 @@ class Interleaver : public IRMutator {
 
             // Generate a single interleaving store.
             t = t.with_lanes(lanes*stores.size());
-            Expr index = Ramp::make(base, make_one(Int(32)), t.lanes());
+            Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
             Expr value = Call::make(t, Call::interleave_vectors, args, Call::PureIntrinsic);
             Stmt new_store = Store::make(store->name, value, index, store->param);
 
@@ -682,7 +681,6 @@ class Interleaver : public IRMutator {
 };
 
 Stmt rewrite_interleavings(Stmt s) {
-    s = flatten_blocks(s);
     return Interleaver().mutate(s);
 }
 

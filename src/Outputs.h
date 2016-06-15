@@ -46,6 +46,10 @@ struct Outputs {
      * output is desired. */
     std::string stmt_html_name;
 
+    /** The name of the emitted static library file. Empty if no static library
+     * output is desired. */
+    std::string static_library_name;
+
     /** The name of the emitted javascript file. Empty if no javascript
      * output is desired. */
     std::string javascript_name;
@@ -111,6 +115,14 @@ struct Outputs {
     Outputs stmt_html(const std::string &stmt_html_name) {
         Outputs updated = *this;
         updated.stmt_html_name = stmt_html_name;
+        return updated;
+    }
+
+    /** Make a new Outputs struct that emits everything this one does
+     * and also a static library file with the given name. */
+    Outputs static_library(const std::string &static_library_name) {
+        Outputs updated = *this;
+        updated.static_library_name = static_library_name;
         return updated;
     }
 

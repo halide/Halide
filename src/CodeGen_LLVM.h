@@ -121,8 +121,8 @@ protected:
      * appropriate cleanup code. */
     // @{
     virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
-                            const std::string &extern_name, const std::vector<Argument> &args);
-    virtual void end_func(const std::vector<Argument> &args);
+                            const std::string &extern_name, const std::vector<LoweredArgument> &args);
+    virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
@@ -166,6 +166,7 @@ protected:
 #endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
+    std::vector<LoweredArgument> current_function_args;
     //@}
 
     /** The target we're generating code for */
@@ -224,6 +225,7 @@ protected:
     Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
     Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
     Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
@@ -232,7 +234,6 @@ protected:
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
     Expr wild_f32x_, wild_f64x_;
-
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;
@@ -486,6 +487,9 @@ protected:
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
 
+    /** Get the result of modulus-remainder analysis for a given expr. */
+    ModulusRemainder get_alignment_info(Expr e);
+
 private:
 
     /** All the values in scope at the current code location during
@@ -510,7 +514,7 @@ private:
      * pointer-to-constant-data.
      */
     llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
-        const std::string &function_name, const std::vector<Argument> &args);
+        const std::string &function_name, const std::vector<LoweredArgument> &args);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);

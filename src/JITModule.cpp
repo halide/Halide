@@ -346,12 +346,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-    #if LLVM_VERSION < 36 || WITH_NATIVE_CLIENT
-    // >= 3.6 there is only mcjit. Native client is currently in a
-    // place between 3.5 and 3.6
-    #if !WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 36
+    // >= 3.6 there is only mcjit.
     engine_builder.setUseMCJIT(true);
-    #endif
     //JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
     //engine_builder.setJITMemoryManager(memory_manager);
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);

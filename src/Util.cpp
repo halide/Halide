@@ -12,12 +12,16 @@
 #include <io.h>
 #else
 #include <unistd.h>
+#include <stdlib.h>
 #endif
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #ifdef __linux__
 #include <linux/limits.h>  // For PATH_MAX
+#endif
+#ifdef _WIN32
+#include <windows.h>
 #endif
 
 namespace Halide {
@@ -173,14 +177,6 @@ string replace_all(const string &str, const string &find, const string &replace)
     return result;
 }
 
-string base_name(const string &name, char delim) {
-    size_t off = name.rfind(delim);
-    if (off == string::npos) {
-        return name;
-    }
-    return name.substr(off+1);
-}
-
 string make_entity_name(void *stack_ptr, const string &type, char prefix) {
     string name = Introspection::get_variable_name(stack_ptr, type);
 
@@ -254,6 +250,68 @@ FileStat file_stat(const std::string &name) {
             static_cast<uint32_t>(a.st_uid),
             static_cast<uint32_t>(a.st_gid),
             static_cast<uint32_t>(a.st_mode)};
+}
+
+std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
+    internal_assert(prefix.find("/") == string::npos &&
+                    prefix.find("\\") == string::npos &&
+                    suffix.find("/") == string::npos &&
+                    suffix.find("\\") == string::npos);
+    #ifdef _WIN32
+    // Windows implementations of mkstemp() try to create the file in the root
+    // directory, which is... problematic.
+    TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
+    DWORD ret = GetTempPath(MAX_PATH, tmp_path);
+    internal_assert(ret != 0);
+    // Note that GetTempFileName() actually creates the file.
+    ret = GetTempFileName(tmp_path, prefix.c_str(), 0, tmp_file);
+    internal_assert(ret != 0);
+    return std::string(tmp_file);
+    #else
+    std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
+    // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
+    std::vector<char> buf(templ.size() + 1);
+    strcpy(&buf[0], templ.c_str());
+    int fd = mkstemps(&buf[0], suffix.size());
+    internal_assert(fd != -1) << "Unable to create temp file for (" << &buf[0] << ")\n";
+    close(fd);
+    return std::string(&buf[0]);
+    #endif
+}
+
+bool add_would_overflow(int bits, int64_t a, int64_t b) {
+    int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
+    int64_t min_val = -max_val - 1;
+    return
+        ((b > 0 && a > max_val - b) || // (a + b) > max_val, rewritten to avoid overflow
+         (b < 0 && a < min_val - b));  // (a + b) < min_val, rewritten to avoid overflow
+}
+
+bool sub_would_overflow(int bits, int64_t a, int64_t b) {
+    int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
+    int64_t min_val = -max_val - 1;
+    return
+        ((b < 0 && a > max_val + b) || // (a - b) > max_val, rewritten to avoid overflow
+         (b > 0 && a < min_val + b));  // (a - b) < min_val, rewritten to avoid overflow
+}
+
+bool mul_would_overflow(int bits, int64_t a, int64_t b) {
+    int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
+    int64_t min_val = -max_val - 1;
+    if (a == 0) {
+        return false;
+    } else if (a == -1) {
+        return b == min_val;
+    } else {
+        // Do the multiplication as a uint64, for which overflow is
+        // well defined, then cast the bits back to int64 to get
+        // multiplication modulo 2^64.
+        int64_t ab = (int64_t)((uint64_t)a)*((uint64_t)b);
+        // The first two clauses catch overflow mod 2^bits, assuming
+        // no 64-bit overflow occurs, and the third clause catches
+        // 64-bit overflow.
+        return ab < min_val || ab > max_val || (ab / a != b);
+    }
 }
 
 }

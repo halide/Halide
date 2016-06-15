@@ -418,7 +418,7 @@ int main(int argc, char **argv) {
     bool success = true;
     success &= f_mod<float,double,32>();
 
-    for (int vector_width = 1; vector_width <= 4; vector_width *= 2) {
+    for (int vector_width = 1; vector_width <= 16; vector_width *= 2) {
         if (target.supports_type(UInt(64))) {
             success &= div_mod<uint8_t,uint64_t,8>(vector_width);
             success &= div_mod<uint16_t,uint64_t,16>(vector_width);

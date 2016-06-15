@@ -58,7 +58,8 @@ struct JITExtern;
 class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    std::vector<Buffer> validate_arguments(const std::vector<Argument> &args);
+    std::vector<Argument> infer_arguments(Internal::Stmt body);
+    std::vector<Buffer> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
 
     std::pair<std::vector<const void *>, std::vector<Argument>>
     prepare_jit_call_arguments(Realization dst, const Target &target);
@@ -113,7 +114,7 @@ public:
      * object file, with the given filename (which should probably end in
      * .o or .obj), type signature, and C function name (which defaults to
      * the same name as this halide function. You probably don't want to
-     * use this directly; call compile_to_file instead. */
+     * use this directly; call compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_object(const std::string &filename,
                                   const std::vector<Argument> &,
                                   const std::string &fn_name,
@@ -124,7 +125,7 @@ public:
      * the second argument, and a name given by the third. You don't
      * actually have to have defined any of these functions yet to
      * call this. You probably don't want to use this directly; call
-     * compile_to_file instead. */
+     * compile_to_static_library or compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename,
                                   const std::vector<Argument> &,
                                   const std::string &fn_name,
@@ -175,6 +176,24 @@ public:
     EXPORT void compile_to_file(const std::string &filename_prefix,
                                 const std::vector<Argument> &args,
                                 const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair, with the given
+     * arguments. Also names the C function to match the filename
+     * argument. */
+    EXPORT void compile_to_static_library(const std::string &filename_prefix,
+                                          const std::vector<Argument> &args,
+                                          const Target &target = get_target_from_environment());
+
+    /** Compile to static-library file and header pair once for each target;
+     * each resulting function will be considered (in order) via halide_can_use_target_features()
+     * at runtime, with the first appropriate match being selected for subsequent use.
+     * This is typically useful for specializations that may vary unpredictably by machine
+     * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
+     * All targets must have identical arch-os-bits.
+     */
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+                                                      const std::vector<Argument> &args,
+                                                      const std::vector<Target> &targets);
 
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
@@ -408,7 +427,7 @@ bool voidable_halide_type(Type &t) {
 template<>
 inline bool voidable_halide_type<void>(Type &t) {
     return true;
-}        
+}
 
 template <typename T>
 bool scalar_arg_type_or_buffer(Type &t) {
