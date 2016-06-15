@@ -37,6 +37,15 @@ EXPORT Expr substitute(Expr find, Expr replacement, Expr expr);
 EXPORT Stmt substitute(Expr find, Expr replacement, Stmt stmt);
 // @}
 
+/** Substitutions where the IR may be a general graph (and not just a
+ * DAG). */
+// @{
+Expr graph_substitute(std::string name, Expr replacement, Expr expr);
+Stmt graph_substitute(std::string name, Expr replacement, Stmt stmt);
+Expr graph_substitute(Expr find, Expr replacement, Expr expr);
+Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt);
+// @}
+
 }
 }
 

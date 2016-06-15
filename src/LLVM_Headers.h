@@ -85,7 +85,7 @@
 #include <llvm/IR/MDBuilder.h>
 #endif
 
-#if WITH_NATIVE_CLIENT
+#if defined(WITH_NATIVE_CLIENT)
 #include <llvm/Transforms/NaCl.h>
 #endif
 

@@ -267,7 +267,8 @@ enum class DeviceAPI {
     GLSL,
     Renderscript,
     OpenGLCompute,
-    Metal
+    Metal,
+    Hexagon
 };
 
 /** An array containing all the device apis. Useful for iterating

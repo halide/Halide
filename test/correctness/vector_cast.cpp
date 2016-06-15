@@ -24,6 +24,16 @@ bool is_type_supported(int vec_width, const Target &target) {
     return target.supports_type(type_of<T>().with_lanes(vec_width));
 }
 
+template <>
+bool is_type_supported<float>(int vec_width, const Target &target) {
+    return vec_width == 1 || !target.features_any_of({Target::HVX_64, Target::HVX_128});
+}
+
+template <>
+bool is_type_supported<double>(int vec_width, const Target &target) {
+    return vec_width == 1 || !target.features_any_of({Target::HVX_64, Target::HVX_128});
+}
+
 template<typename A, typename B>
 bool test(int vec_width, const Target &target) {
     if (!is_type_supported<A>(vec_width, target) || !is_type_supported<B>(vec_width, target)) {
@@ -48,8 +58,14 @@ bool test(int vec_width, const Target &target) {
 
     if (target.has_gpu_feature()) {
         f.gpu_tile(x, 64);
-    } else if (vec_width > 1) {
-        f.vectorize(x, vec_width);
+    } else {
+        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            // TODO: Non-native vector widths hang the compiler here.
+            //f.hexagon();
+        }
+        if (vec_width > 1) {
+            f.vectorize(x, vec_width);
+        }
     }
 
     Image<B> output(W, H);
