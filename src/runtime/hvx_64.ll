@@ -1,0 +1,266 @@
+declare void @llvm.trap() noreturn nounwind
+
+declare <16 x i32> @llvm.hexagon.V6.lo(<32 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.hi(<32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32>, <16 x i32>, i32)
+declare <32 x i32> @llvm.hexagon.V6.vdealvdd(<16 x i32>, <16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vasrwhsat(<16 x i32>, <16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vsathub(<16 x i32>, <16 x i32>)
+
+define weak_odr <32 x i32> @halide.hexagon.interleave.vw(<32 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg)
+  %r = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %o, <16 x i32> %e, i32 -4)
+  ret <32 x i32> %r
+}
+
+define weak_odr <64 x i16> @halide.hexagon.interleave.vh(<64 x i16> %arg) nounwind uwtable readnone alwaysinline {
+  %arg_32 = bitcast <64 x i16> %arg to <32 x i32>
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg_32)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg_32)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %o, <16 x i32> %e, i32 -2)
+  %r = bitcast <32 x i32> %r_32 to <64 x i16>
+  ret <64 x i16> %r
+}
+
+define weak_odr <128 x i8> @halide.hexagon.interleave.vb(<128 x i8> %arg) nounwind uwtable readnone alwaysinline {
+  %arg_32 = bitcast <128 x i8> %arg to <32 x i32>
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg_32)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg_32)
+  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.vshuffvdd(<16 x i32> %o, <16 x i32> %e, i32 -1)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
+}
+
+
+declare <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32>, <16 x i32>)
+
+define weak_odr <32 x i32> @halide.hexagon.deinterleave.vw(<32 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg)
+  %r = call <32 x i32> @llvm.hexagon.V6.vdealvdd(<16 x i32> %o, <16 x i32> %e, i32 -4)
+  ret <32 x i32> %r
+}
+
+define weak_odr <64 x i16> @halide.hexagon.deinterleave.vh(<64 x i16> %arg) nounwind uwtable readnone alwaysinline {
+  %arg_32 = bitcast <64 x i16> %arg to <32 x i32>
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg_32)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg_32)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vdealvdd(<16 x i32> %o, <16 x i32> %e, i32 -2)
+  %r = bitcast <32 x i32> %r_32 to <64 x i16>
+  ret <64 x i16> %r
+}
+
+define weak_odr <128 x i8> @halide.hexagon.deinterleave.vb(<128 x i8> %arg) nounwind uwtable readnone alwaysinline {
+  %arg_32 = bitcast <128 x i8> %arg to <32 x i32>
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg_32)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg_32)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vdealvdd(<16 x i32> %o, <16 x i32> %e, i32 -1)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
+}
+
+declare <16 x i32> @llvm.hexagon.V6.lvsplatw(i32)
+
+define weak_odr i16 @halide.hexagon.dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %arg_i16 = zext i8 %arg to i16
+  %arg_i16_s = shl i16 %arg_i16, 8
+  %r = or i16 %arg_i16, %arg_i16_s
+  ret i16 %r
+}
+
+define weak_odr i32 @halide.hexagon.dup2.h(i16 %arg) nounwind uwtable readnone alwaysinline {
+  %arg_i32 = zext i16 %arg to i32
+  %arg_i32_s = shl i32 %arg_i32, 16
+  %r = or i32 %arg_i32, %arg_i32_s
+  ret i32 %r
+}
+
+define weak_odr i32 @halide.hexagon.dup4.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %dup2 = call i16 @halide.hexagon.dup2.b(i8 %arg)
+  %dup4 = call i32 @halide.hexagon.dup2.h(i16 %dup2)
+  ret i32 %dup4
+}
+
+define weak_odr <64 x i8> @halide.hexagon.splat.b(i8 %arg) nounwind uwtable readnone alwaysinline {
+  %dup4 = call i32 @halide.hexagon.dup4.b(i8 %arg)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 %dup4)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
+
+define weak_odr <32 x i16> @halide.hexagon.splat.h(i16 %arg) nounwind uwtable readnone alwaysinline {
+  %dup2 = call i32 @halide.hexagon.dup2.h(i16 %arg)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 %dup2)
+  %r = bitcast <16 x i32> %r_32 to <32 x i16>
+  ret <32 x i16> %r
+}
+
+; Implement various 32 bit multiplications.
+declare <16 x i32> @llvm.hexagon.V6.vaslw(<16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vlsrw(<16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vmpyieoh(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vmpyiowh(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vmpyiewuh(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vaddw(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vshufeh(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vshufoh(<16 x i32>, <16 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32>, <16 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vaddw.dv(<32 x i32>, <32 x i32>)
+
+define weak_odr <16 x i32> @halide.hexagon.mul.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab_lo = call <16 x i32> @llvm.hexagon.V6.vmpyiewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab_hi = call <16 x i32> @llvm.hexagon.V6.vmpyieoh(<16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vaddw(<16 x i32> %ab_hi, <16 x i32> %ab_lo)
+  ret <16 x i32> %ab
+}
+
+define weak_odr <32 x i32> @halide.hexagon.mul.vw.vh(<32 x i32> %a, <32 x i16> %b) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %a)
+  %a_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %a)
+  %b_hi = bitcast <32 x i16> %b to <16 x i32>
+  %b_lo = call <16 x i32> @llvm.hexagon.V6.vaslw(<16 x i32> %b_hi, i32 16)
+  %ab_lo = call <16 x i32> @llvm.hexagon.V6.vmpyiowh(<16 x i32> %a_lo, <16 x i32> %b_lo)
+  %ab_hi = call <16 x i32> @llvm.hexagon.V6.vmpyiowh(<16 x i32> %a_hi, <16 x i32> %b_hi)
+  %ab = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %ab_hi, <16 x i32> %ab_lo)
+  ret <32 x i32> %ab
+}
+
+define weak_odr <32 x i32> @halide.hexagon.mul.vw.vuh(<32 x i32> %a, <32 x i16> %b) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %a)
+  %a_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %a)
+  %b_lo = bitcast <32 x i16> %b to <16 x i32>
+  %b_hi = call <16 x i32> @llvm.hexagon.V6.vlsrw(<16 x i32> %b_lo, i32 16)
+  %ab_lo = call <16 x i32> @llvm.hexagon.V6.vmpyiewuh(<16 x i32> %a_lo, <16 x i32> %b_lo)
+  %ab_hi = call <16 x i32> @llvm.hexagon.V6.vmpyiewuh(<16 x i32> %a_hi, <16 x i32> %b_hi)
+  %ab = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %ab_hi, <16 x i32> %ab_lo)
+  ret <32 x i32> %ab
+}
+
+define weak_odr <32 x i32> @halide.hexagon.mul.vuw.vuh(<32 x i32> %a, <32 x i16> %b) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %a)
+  %a_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %a)
+  %a_e = call <16 x i32> @llvm.hexagon.V6.vshufeh(<16 x i32> %a_hi, <16 x i32> %a_lo)
+  %a_o = call <16 x i32> @llvm.hexagon.V6.vshufoh(<16 x i32> %a_hi, <16 x i32> %a_lo)
+  %b_32 = bitcast <32 x i16> %b to <16 x i32>
+  %ab_e = call <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32> %a_e, <16 x i32> %b_32)
+  %ab_o = call <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32> %a_o, <16 x i32> %b_32)
+  %ab_o_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %ab_o)
+  %ab_o_shifted_lo = call <16 x i32> @llvm.hexagon.V6.vaslw(<16 x i32> %ab_o_lo, i32 16)
+  %ab_o_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %ab_o)
+  %ab_o_shifted_hi = call <16 x i32> @llvm.hexagon.V6.vaslw(<16 x i32> %ab_o_hi, i32 16)
+  %ab_o_shifted = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %ab_o_shifted_hi, <16 x i32> %ab_o_shifted_lo)
+  %ab = call <32 x i32> @llvm.hexagon.V6.vaddw.dv(<32 x i32> %ab_e, <32 x i32> %ab_o_shifted)
+  ret <32 x i32> %ab
+}
+
+; Hexagon is missing shifts for byte sized operands.
+declare <16 x i32> @llvm.hexagon.V6.vaslh(<16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vasrh(<16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vlsrh(<16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vaslhv(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vasrhv(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vlsrhv(<16 x i32>, <16 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vsb(<16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32>, <16 x i32>)
+
+define weak_odr <64 x i8> @halide.hexagon.shl.vub.ub(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+  %a_32 = bitcast <64 x i8> %a to <16 x i32>
+  %bw = zext i8 %b to i32
+  %aw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %a_32)
+  %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
+  %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
+  %sw_lo = call <16 x i32> @llvm.hexagon.V6.vaslh(<16 x i32> %aw_lo, i32 %bw)
+  %sw_hi = call <16 x i32> @llvm.hexagon.V6.vaslh(<16 x i32> %aw_hi, i32 %bw)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32> %sw_hi, <16 x i32> %sw_lo)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
+
+define weak_odr <64 x i8> @halide.hexagon.shl.vb.b(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+  ; A shift left is the same whether it is signed or not.
+  %u = tail call <64 x i8> @halide.hexagon.shl.vub.ub(<64 x i8> %a, i8 %b)
+  ret <64 x i8> %u
+}
+
+define weak_odr <64 x i8> @halide.hexagon.shr.vub.ub(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+  %a_32 = bitcast <64 x i8> %a to <16 x i32>
+  %bw = zext i8 %b to i32
+  %aw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %a_32)
+  %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
+  %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
+  %sw_lo = call <16 x i32> @llvm.hexagon.V6.vlsrh(<16 x i32> %aw_lo, i32 %bw)
+  %sw_hi = call <16 x i32> @llvm.hexagon.V6.vlsrh(<16 x i32> %aw_hi, i32 %bw)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32> %sw_hi, <16 x i32> %sw_lo)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
+
+define weak_odr <64 x i8> @halide.hexagon.shr.vb.b(<64 x i8> %a, i8 %b) nounwind uwtable readnone alwaysinline {
+  %a_32 = bitcast <64 x i8> %a to <16 x i32>
+  %bw = zext i8 %b to i32
+  %aw = call <32 x i32> @llvm.hexagon.V6.vsb(<16 x i32> %a_32)
+  %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
+  %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
+  %sw_lo = call <16 x i32> @llvm.hexagon.V6.vasrh(<16 x i32> %aw_lo, i32 %bw)
+  %sw_hi = call <16 x i32> @llvm.hexagon.V6.vasrh(<16 x i32> %aw_hi, i32 %bw)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32> %sw_hi, <16 x i32> %sw_lo)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
+
+
+define weak_odr <64 x i8> @halide.hexagon.shl.vub.vub(<64 x i8> %a, <64 x i8> %b) nounwind uwtable readnone alwaysinline {
+  %a_32 = bitcast <64 x i8> %a to <16 x i32>
+  %b_32 = bitcast <64 x i8> %b to <16 x i32>
+  %aw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %a_32)
+  %bw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %b_32)
+  %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
+  %bw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %bw)
+  %sw_lo = call <16 x i32> @llvm.hexagon.V6.vaslhv(<16 x i32> %aw_lo, <16 x i32> %bw_lo)
+  %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
+  %bw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %bw)
+  %sw_hi = call <16 x i32> @llvm.hexagon.V6.vaslhv(<16 x i32> %aw_hi, <16 x i32> %bw_hi)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32> %sw_hi, <16 x i32> %sw_lo)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
+
+define weak_odr <64 x i8> @halide.hexagon.shl.vb.vb(<64 x i8> %a, <64 x i8> %b) nounwind uwtable readnone alwaysinline {
+  ; A shift left is the same whether it is signed or not.
+  %u = tail call <64 x i8> @halide.hexagon.shl.vub.vub(<64 x i8> %a, <64 x i8> %b)
+  ret <64 x i8> %u
+}
+
+define weak_odr <64 x i8> @halide.hexagon.shr.vub.vub(<64 x i8> %a, <64 x i8> %b) nounwind uwtable readnone alwaysinline {
+  %a_32 = bitcast <64 x i8> %a to <16 x i32>
+  %b_32 = bitcast <64 x i8> %b to <16 x i32>
+  %aw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %a_32)
+  %bw = call <32 x i32> @llvm.hexagon.V6.vzb(<16 x i32> %b_32)
+  %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
+  %bw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %bw)
+  %sw_lo = call <16 x i32> @llvm.hexagon.V6.vlsrhv(<16 x i32> %aw_lo, <16 x i32> %bw_lo)
+  %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
+  %bw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %bw)
+  %sw_hi = call <16 x i32> @llvm.hexagon.V6.vlsrhv(<16 x i32> %aw_hi, <16 x i32> %bw_hi)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32> %sw_hi, <16 x i32> %sw_lo)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
+
+define weak_odr <64 x i8> @halide.hexagon.shr.vb.vb(<64 x i8> %a, <64 x i8> %b) nounwind uwtable readnone alwaysinline {
+  %a_32 = bitcast <64 x i8> %a to <16 x i32>
+  %b_32 = bitcast <64 x i8> %b to <16 x i32>
+  %aw = call <32 x i32> @llvm.hexagon.V6.vsb(<16 x i32> %a_32)
+  %bw = call <32 x i32> @llvm.hexagon.V6.vsb(<16 x i32> %b_32)
+  %aw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %aw)
+  %bw_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %bw)
+  %sw_lo = call <16 x i32> @llvm.hexagon.V6.vasrhv(<16 x i32> %aw_lo, <16 x i32> %bw_lo)
+  %aw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %aw)
+  %bw_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %bw)
+  %sw_hi = call <16 x i32> @llvm.hexagon.V6.vasrhv(<16 x i32> %aw_hi, <16 x i32> %bw_hi)
+  %r_32 = tail call <16 x i32> @llvm.hexagon.V6.vshuffeb(<16 x i32> %sw_hi, <16 x i32> %sw_lo)
+  %r = bitcast <16 x i32> %r_32 to <64 x i8>
+  ret <64 x i8> %r
+}
