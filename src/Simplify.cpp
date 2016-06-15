@@ -3378,6 +3378,16 @@ private:
                 expr = op;
             }
         } else if (op->call_type == Call::PureExtern &&
+                   op->name == "sqrt_f32") {
+            Expr arg = mutate(op->args[0]);
+            if (const double *f = as_const_float(arg)) {
+                expr = FloatImm::make(arg.type(), std::sqrt(*f));
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -3394,6 +3404,19 @@ private:
                 expr = FloatImm::make(arg.type(), std::exp(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::PureExtern &&
+                   op->name == "pow_f32") {
+            Expr arg0 = mutate(op->args[0]);
+            Expr arg1 = mutate(op->args[1]);
+            const double *f0 = as_const_float(arg0);
+            const double *f1 = as_const_float(arg1);
+            if (f0 && f1) {
+                expr = FloatImm::make(arg0.type(), std::pow(*f0, *f1));
+            } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
+                expr = Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
             } else {
                 expr = op;
             }
@@ -4659,8 +4682,11 @@ void check_boolean() {
 void check_math() {
     Var x = Var("x");
 
+    check(sqrt(4.0f), 2.0f);
     check(log(0.5f + 0.5f), 0.0f);
     check(exp(log(2.0f)), 2.0f);
+    check(pow(4.0f, 0.5f), 2.0f);
+    check(round(1000.0f*pow(exp(1.0f), log(10.0f))), 10000.0f);
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
