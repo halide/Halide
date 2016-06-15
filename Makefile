@@ -635,10 +635,10 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
 ifneq (,$(WITH_HEXAGON))
+ifneq (,$(HL_HEXAGON_TOOLS))
 TEST_LD_FLAGS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
-#ifneq (,$(HL_HEXAGON_TOOLS))
 TEST_LD_FLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
-#endif
+endif
 endif
 endif
 
