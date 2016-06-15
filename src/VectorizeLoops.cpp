@@ -9,6 +9,7 @@
 #include "IROperator.h"
 #include "IREquality.h"
 #include "ExprUsesVar.h"
+#include "Solve.h"
 
 namespace Halide {
 namespace Internal {
@@ -121,15 +122,18 @@ class VectorizeLoops : public IRMutator {
             if (vectorized_allocations.contains(op->name)) {
                 int lanes = replacement.type().lanes();
                 if (index.type().is_scalar()) {
+                    Expr lanes_expr = make_const(index.type(), lanes);
                     if (scalarized) {
-                        index = Add::make(Mul::make(index, lanes), scalar_lane);
+                        index = Add::make(Mul::make(index, lanes_expr), scalar_lane);
                     } else {
-                        index = Ramp::make(Mul::make(index, lanes), 1, lanes);
+                        index = Ramp::make(Mul::make(index, lanes_expr), make_one(index.type()), lanes);
                     }
                 } else {
                     internal_assert(!scalarized);
-                    index = Mul::make(index, Broadcast::make(lanes, lanes));
-                    index = Add::make(index, Ramp::make(0, 1, lanes));
+                    Type scalar_index_type = index.type().with_lanes(1);
+                    Expr lanes_expr = make_const(scalar_index_type, lanes);
+                    index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
+                    index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
                 }
             }
 
@@ -383,15 +387,18 @@ class VectorizeLoops : public IRMutator {
             if (vectorized_allocations.contains(op->name)) {
                 int lanes = replacement.type().lanes();
                 if (index.type().is_scalar()) {
+                    Expr lanes_expr = make_const(index.type(), lanes);
                     if (scalarized) {
-                        index = Add::make(Mul::make(index, lanes), scalar_lane);
+                        index = Add::make(Mul::make(index, lanes_expr), scalar_lane);
                     } else {
-                        index = Ramp::make(Mul::make(index, lanes), 1, lanes);
+                        index = Ramp::make(Mul::make(index, lanes_expr), make_one(index.type()), lanes);
                     }
                 } else {
                     internal_assert(!scalarized);
-                    index = Mul::make(index, Broadcast::make(lanes, lanes));
-                    index = Add::make(index, Ramp::make(0, 1, lanes));
+                    Type scalar_index_type = index.type().with_lanes(1);
+                    Expr lanes_expr = make_const(scalar_index_type, lanes);
+                    index = Mul::make(index, Broadcast::make(lanes_expr, lanes));
+                    index = Add::make(index, Ramp::make(make_zero(scalar_index_type), make_one(scalar_index_type), lanes));
                 }
             }
 
@@ -418,11 +425,46 @@ class VectorizeLoops : public IRMutator {
                      << "Old: " << op->condition << "\n"
                      << "New: " << cond << "\n";
             if (lanes > 1) {
-                // It's an if statement on a vector of
-                // conditions. We'll have to scalarize and make
-                // multiple copies of the if statement.
-                debug(3) << "Scalarizing if then else\n";
-                stmt = scalarize(op);
+                // We have an if statement with a vector condition,
+                // which would mean control flow divergence within the
+                // SIMD lanes.
+
+                // First check if the condition is marked as likely.
+                const Call *c = cond.as<Call>();
+                if (c && (c->is_intrinsic(Call::likely) ||
+                          c->is_intrinsic(Call::likely_if_innermost))) {
+
+                    // The meaning of the likely intrinsic is that Halide
+                    // should optimize for the case in which *every*
+                    // likely value is true. We can do that by generating
+                    // a scalar condition that checks if all lanes are
+                    // true, and marking that likely.
+
+                    Expr all_true = const_true();
+                    for (int i = 0; i < lanes; i++) {
+                        all_true = all_true && extract_lane(c->args[0], i);
+                    }
+
+                    // Wrap it in the same flavor of likely
+                    all_true = Call::make(Bool(), c->name,
+                                          {all_true}, Call::PureIntrinsic);
+
+                    // We should strip the likelies from the case
+                    // that's going to scalarize, because it's no
+                    // longer likely.
+                    Stmt without_likelies =
+                        IfThenElse::make(op->condition.as<Call>()->args[0],
+                                         op->then_case, op->else_case);
+
+                    stmt =
+                        IfThenElse::make(all_true,
+                                         mutate(op->then_case),
+                                         scalarize(without_likelies));
+                } else {
+                    // It's some arbitrary vector condition. Scalarize
+                    // it.
+                    stmt = scalarize(op);
+                }
             } else {
                 // It's an if statement on a scalar, we're ok to vectorize the innards.
                 debug(3) << "Not scalarizing if then else\n";
@@ -514,6 +556,12 @@ class VectorizeLoops : public IRMutator {
         }
 
         Stmt scalarize(Stmt s) {
+            // To consider in the future: Perhaps scalarize should
+            // generate a serial loop instead of a fully unrolled
+            // thing to save code size. When we can't respect a
+            // request to vectorize, we effectively unroll instead. Is
+            // this really better than leaving it as a serial loop?
+
             Stmt result;
             int lanes = replacement.type().lanes();
             Expr old_replacement = replacement;

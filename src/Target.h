@@ -70,6 +70,7 @@ struct Target {
         Metal = halide_target_feature_metal,
         MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
+        LargeBuffers = halide_target_feature_large_buffers,
         FeatureEnd = halide_target_feature_end
     };
 
@@ -80,6 +81,24 @@ struct Target {
             set_feature(initial_features[i]);
         }
     }
+
+    /** Given a string of the form used in HL_TARGET
+     * (e.g. "x86-64-avx"), construct the Target it specifies. Note
+     * that this always starts with the result of get_host_target(),
+     * replacing only the parts found in the target string, so if you
+     * omit (say) an OS specification, the host OS will be used
+     * instead. An empty string is exactly equivalent to
+     * get_host_target().
+     *
+     * Invalid target strings will fail with a user_error.
+     */
+    // @{
+    EXPORT explicit Target(const std::string &s);
+    EXPORT explicit Target(const char *s);
+    // @}
+
+    /** Check if a target string is valid. */
+    EXPORT static bool validate_target_string(const std::string &s);
 
     void set_feature(Feature f, bool value = true) {
         if (f == FeatureEnd) return;
@@ -191,37 +210,6 @@ struct Target {
      */
     EXPORT std::string to_string() const;
 
-    /**
-     * Parse the contents of 'target' and merge into 'this',
-     * replacing only the parts that are specified. (e.g., if 'target' specifies
-     * only an arch, only the arch field of 'this' will be changed, leaving
-     * the other fields untouched). Any features specified in 'target'
-     * are added to 'this', whether or not originally present.
-     *
-     * If the string contains unknown tokens, or multiple tokens of the
-     * same category (e.g. multiple arch values), return false
-     * (possibly leaving 'this' munged). (Multiple feature specifications
-     * will not cause a failure.)
-     *
-     * If 'target' contains "host" as the first token, it replaces the entire
-     * contents of 'this' with get_host_target(), then proceeds to parse the
-     * remaining tokens (allowing for things like "host-opencl" to mean
-     * "host configuration, but with opencl added").
-     *
-     * Note that unlike parse_from_string(), this will never print to cerr or
-     * assert in the event of a parse failure. Note also that an empty target
-     * string is essentially a no-op, leaving 'this' unaffected.
-     */
-    EXPORT bool merge_string(const std::string &target);
-
-    /**
-     * Like merge_string(), but reset the contents of 'this' first.
-     */
-    EXPORT bool from_string(const std::string &target) {
-        *this = Target();
-        return merge_string(target);
-    }
-
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
     int natural_vector_size(Halide::Type t) const {
@@ -249,6 +237,17 @@ struct Target {
         return natural_vector_size(type_of<data_t>());
     }
 
+    /** Return the maximum buffer size in bytes supported on this
+     * Target. This is 2^31 - 1 except when the LargeBuffers feature
+     * is enabled, which expands the maximum to 2^63 - 1. */
+    int64_t maximum_buffer_size() const {
+        if (bits == 64 && has_feature(LargeBuffers)) {
+            return (((uint64_t)1) << 63) - 1;
+        } else {
+            return (((uint64_t)1) << 31) - 1;
+        }
+    }
+
     /** Was libHalide compiled with support for this target? */
     EXPORT bool supported() const;
 
@@ -270,15 +269,6 @@ EXPORT Target get_target_from_environment();
  * and OS of the target do not match the host target, so this is only
  * useful for controlling the feature set. */
 EXPORT Target get_jit_target_from_environment();
-
-/** Given a string of the form used in HL_TARGET (e.g. "x86-64-avx"),
- * return the Target it specifies. Note that this always starts with
- * the result of get_host_target(), replacing only the parts found in the
- * target string, so if you omit (say) an OS specification, the host OS
- * will be used instead. An empty string is exactly equivalent to get_host_target().
- */
-EXPORT Target parse_target_string(const std::string &target);
-
 
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns

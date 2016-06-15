@@ -11,11 +11,15 @@ class RemoveTrivialForLoops : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
+        if (for_loop->device_api != DeviceAPI::None) {
+            // Don't assume any device API loops are trivial.
+            IRMutator::visit(for_loop);
+            return;
+        }
+
         Stmt body = mutate(for_loop->body);
 
-        bool gpu_loop = CodeGen_GPU_Dev::is_gpu_var(for_loop->name);
-
-        if (!gpu_loop && is_one(for_loop->extent)) {
+        if (is_one(for_loop->extent)) {
             if (for_loop->for_type == ForType::Parallel) {
                 std::cerr << "Warning: Parallel for loop over "
                           << for_loop->name << " has extent one. "
@@ -28,7 +32,7 @@ class RemoveTrivialForLoops : public IRMutator {
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (is_zero(for_loop->extent)) {
             stmt = Evaluate::make(0);
-        } else if (!gpu_loop && is_zero(simplify(for_loop->extent > 1))) {
+        } else if (can_prove(for_loop->extent <= 1)) {
             // Loop has at most one iteration
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
             stmt = IfThenElse::make(for_loop->extent > 0, stmt, Stmt());
@@ -44,7 +48,6 @@ class RemoveTrivialForLoops : public IRMutator {
 Stmt remove_trivial_for_loops(Stmt s) {
     return RemoveTrivialForLoops().mutate(s);
 }
-
 
 }
 }
