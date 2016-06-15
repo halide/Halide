@@ -2076,7 +2076,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = shuffle_vectors(codegen(op->args[0]), indices);
 
         if (op->type.is_scalar()) {
-            value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+            value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
         }
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
         vector<Value *> args;
