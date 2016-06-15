@@ -60,6 +60,9 @@ bool is_native_deinterleave(Expr x) {
 
 namespace {
 
+// Broadcast to an unknown number of lanes, for making patterns.
+Expr bc(Expr x) { return Broadcast::make(x, 0); }
+
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
 class WithLanes : public IRMutator {
