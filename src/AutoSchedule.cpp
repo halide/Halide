@@ -150,6 +150,52 @@ bool check_estimates_on_outputs(const vector<Function>& outputs) {
     return estimates_avail;
 }
 
+struct Stage {
+    string func_name;
+    int stage_num;
+    Stage(string _func_name, int _stage_num) :
+          func_name(_func_name), stage_num(_stage_num) { }
+
+    bool operator==(const Stage& other_stage) const {
+        return (func_name == other_stage.func_name) &&
+               (stage_num == other_stage.stage_num);
+    }
+
+    bool operator < ( const Stage &other_stage ) const {
+        return func_name < other_stage.func_name ||
+                (func_name == other_stage.func_name &&
+                 stage_num < other_stage.stage_num) ;
+    }
+
+    friend std::ostream& operator<<(std::ostream& stream, const Stage& s) {
+        stream << "(" << s.func_name << "," << s.stage_num << ")";
+        return stream;
+    }
+};
+
+struct Edge {
+    Stage prod;
+    Stage cons;
+    Edge(Stage _prod, Stage _cons) :
+         prod(_prod), cons(_cons) { }
+
+    bool operator==(const Edge& other_edge) const {
+        return (prod == other_edge.prod) &&
+               (cons == other_edge.cons);
+    }
+
+    bool operator < ( const Edge &other_edge ) const {
+        return prod < other_edge.prod ||
+                (prod == other_edge.prod &&
+                 cons < other_edge.cons) ;
+    }
+
+    friend std::ostream& operator<<(std::ostream& stream, const Edge& e) {
+        stream << "(" << e.prod << "->" << e.cons << ")";
+        return stream;
+    }
+};
+
 struct MachineParams {
     unsigned int parallelism;
     unsigned int vec_len;
@@ -841,21 +887,21 @@ struct Partitioner {
     struct InlineChoice {
         // InlineChoice encodes the choice of the prod_group being inlined into the
         // cons_group
-        string prod_group;
-        string cons_group;
-        InlineChoice(string _prod_group, string _cons_group) :
+        Stage prod_group;
+        Stage cons_group;
+        InlineChoice(Stage _prod_group, Stage _cons_group) :
             prod_group(_prod_group), cons_group(_cons_group) {}
     };
 
     struct FusionChoice {
         // FusionChoice encodes the choice of the prod_group being merged with
         // the cons_group at the granularity of the tile given by tile_sizes
-        string prod_group;
-        string cons_group;
+        Stage prod_group;
+        Stage cons_group;
         // Tile sizes along the output of the consumer group
         map<string, int> tile_sizes;
 
-        FusionChoice(string _prod_group, string _cons_group,
+        FusionChoice(Stage _prod_group, Stage _cons_group,
                      map<string, int>& _tile_sizes) :
             prod_group(_prod_group), cons_group(_cons_group),
             tile_sizes(_tile_sizes) {}
@@ -877,12 +923,12 @@ struct Partitioner {
 
     };
 
-    map<pair<string, string>, pair<InlineChoice, int64_t>> inline_cache;
-    map<pair<string, string>, pair<FusionChoice, int64_t> > fusion_cache;
+    map<Edge, pair<InlineChoice, int64_t>> inline_cache;
+    map<Edge, pair<FusionChoice, int64_t>> fusion_cache;
 
     struct Group {
-        // The output function representing the group
-        string output;
+        // The output stage representing the group
+        Stage output;
         // All the functions that belong to the group
         vector<Function> members;
 
@@ -896,12 +942,12 @@ struct Partitioner {
         // the group and compute all the members of the group at that granularity
         map<string, int> tile_sizes;
 
-        Group(string _output, vector<Function> _members):
+        Group(Stage _output, vector<Function> _members):
               output(_output), members(_members) { }
 
         friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
 
-            stream << "Output:" << g.output << '\n';
+            stream << "Output Stage:" << g.output << '\n';
             stream << "Members:" << '[';
             for (auto& m: g.members) {
                 stream << m.name() << ",";
@@ -933,7 +979,7 @@ struct Partitioner {
         int64_t parallelism;
     };
 
-    map<string, Group> groups;
+    map<Stage, Group> groups;
 
     // Levels that are targetted by the grouping algorithm
     enum Level {INLINE, FAST_MEM};
@@ -944,12 +990,13 @@ struct Partitioner {
     CostModel& cost_model;
     const vector<Function>& outputs;
 
-    map<string, set<string> > children;
-    void disp_children(map<string, set<string> >& children) {
+    map<Stage, set<Stage> > children;
+    void disp_children(map<Stage, set<Stage > >& children) {
         for (auto& f: children) {
-            debug(0) << f.first <<  ": [";
-            for (auto& c: f.second)
+            debug(0) << f.first << ": [";
+            for (auto& c: f.second) {
                 debug(0) << c << ",";
+            }
             debug(0) << "]" << '\n';
         }
     }
@@ -963,20 +1010,66 @@ struct Partitioner {
         analy(_analy), cost_model(_cost_model), outputs(_outputs),
         gpu_schedule(_gpu_schedule) {
 
-            // Place each function in its own group
+            // Place each stage of a function in its own group
             for (auto& f: analy.env) {
+
+                int stage = 0;
                 vector<Function> members;
                 members.push_back(f.second);
-                Group g(f.first, members);
-                groups.insert(make_pair(f.first, g));
+                Stage s(f.first, stage);
+                Group g(s, members);
+                groups.insert(make_pair(s, g));
+
+                for (size_t u = 0; u < f.second.updates().size(); u++) {
+                    stage++;
+                    vector<Function> members;
+                    members.push_back(f.second);
+                    Stage s(f.first, stage);
+                    Group g(s, members);
+                    groups.insert(make_pair(s, g));
+                }
             }
 
             // Find consumers of each function and relate groups with their children
             for (auto& f: analy.env) {
-                map<string, Function> calls = find_direct_calls(f.second);
-                for (auto& c: calls)
-                    if (c.first != f.first)
-                        children[c.first].insert(f.first);
+                int stage = 0;
+                FindAllCalls find;
+                f.second.definition().accept(&find);
+                for (const string& c: find.calls) {
+                    if (c != f.first && analy.env.find(c) != analy.env.end()) {
+                        // Consumer depends on the last stage of the producer
+                        int final_stage = analy.env.at(c).updates().size();
+
+                        Stage prod_stage(c, final_stage);
+                        Stage cons_stage(f.first, stage);
+
+                        children[prod_stage].insert(cons_stage);
+                    }
+                }
+
+                for (size_t u = 0; u < f.second.updates().size(); u++) {
+                    stage++;
+
+                    FindAllCalls ufind;
+                    f.second.update(u).accept(&ufind);
+                    for (const string& c: ufind.calls) {
+                        if (c != f.first && analy.env.find(c) != analy.env.end()) {
+                            // Consumer depends on the last stage of the producer
+                            int final_stage = analy.env.at(c).updates().size();
+
+                            Stage prod_stage(c, final_stage);
+                            Stage cons_stage(f.first, stage);
+
+                            children[prod_stage].insert(cons_stage);
+                        }
+                    }
+
+                    // Add dependencies between all the stages in a function
+                    Stage prod_stage(f.first, u);
+                    Stage cons_stage(f.first, stage);
+
+                    children[prod_stage].insert(cons_stage);
+                }
             }
 
             disp_children(children);
@@ -986,13 +1079,12 @@ struct Partitioner {
 
             // TODO: FindAllCalls might be unnecessary and it probably can be
             // replaced by find_direct_calls
-
         }
 
     void merge_groups(FusionChoice& choice) {
 
-        string cand_group = choice.prod_group;
-        string child_group = choice.cons_group;
+        Stage cand_group = choice.prod_group;
+        Stage child_group = choice.cons_group;
 
         internal_assert(groups.find(child_group) != groups.end());
         vector<Function> cand_funcs = groups.at(cand_group).members;
@@ -1010,7 +1102,7 @@ struct Partitioner {
         // Update the children mapping
         children.erase(cand_group);
         for (auto& f: children) {
-            set<string>& cons = f.second;
+            set<Stage>& cons = f.second;
             if (cons.find(cand_group) != cons.end()) {
                 cons.erase(cand_group);
                 cons.insert(child_group);
@@ -1020,9 +1112,9 @@ struct Partitioner {
 
     void merge_group(InlineChoice& choice) {
 
-        string cand_group = choice.prod_group;
+        Stage cand_group = choice.prod_group;
 
-        set<string> cand_group_children = children[cand_group];
+        set<Stage> cand_group_children = children[cand_group];
         for (auto& cg: cand_group_children) {
             internal_assert(groups.find(cg) != groups.end());
             vector<Function> cand_funcs = groups.at(cand_group).members;
@@ -1033,7 +1125,7 @@ struct Partitioner {
             // TODO: Look at all the members that need to be to be updated. Maybe
             // merge should be a member of the group class so that it is more
             // contained.
-            groups.at(cg).inlined.insert(cand_group);
+            groups.at(cg).inlined.insert(cand_group.func_name);
         }
 
         groups.erase(cand_group);
@@ -1041,7 +1133,7 @@ struct Partitioner {
         // Update the children mapping
         children.erase(cand_group);
         for (auto& f: children) {
-            set<string>& cons = f.second;
+            set<Stage>& cons = f.second;
             if (cons.find(cand_group) != cons.end()) {
                 cons.erase(cand_group);
                 cons.insert(cand_group_children.begin(),
@@ -1052,7 +1144,7 @@ struct Partitioner {
 
     void disp_grouping() {
         for (auto& g: groups) {
-            debug(0) << "Group " <<  g.first    << " : [" ;
+            debug(0) << "Group " <<  g.first << " : [" ;
             debug(0) << g.second;
             debug(0) << "]" << '\n';
         }
@@ -1140,21 +1232,24 @@ Partitioner::choose_candidate_fuse_inline(
         int64_t overall_benefit = 0;
         vector<Partitioner::InlineChoice> choices;
 
-        for (auto& c: children[p.first]) {
+        int final_stage = analy.env.at(p.first).updates().size();
+        Stage prod(p.first, final_stage);
+
+        for (auto& c: children[prod]) {
             int64_t benefit = 0;
-            InlineChoice cand_choice(p.first, c);
+            InlineChoice cand_choice(prod, c);
 
-            pair<string, string> prod_cons = make_pair(p.first, c);
+            Edge e(prod, c);
             // Check if the pair has been evaluated for inline fusion before
-            if (inline_cache.find(prod_cons) != inline_cache.end()) {
+            if (inline_cache.find(e) != inline_cache.end()) {
 
-                benefit = inline_cache.at(prod_cons).second;
+                benefit = inline_cache.at(e).second;
 
             } else {
                 benefit = evaluate_choice(cand_choice);
                 // Cache the result of the evaluation for the pair
-                inline_cache.insert(make_pair(prod_cons,
-                                              make_pair(cand_choice, benefit)));
+                inline_cache.insert(
+                        make_pair(e, make_pair(cand_choice, benefit)));
             }
 
             // Conservative strategy that only goes ahead with the fusion if all the
@@ -1170,6 +1265,8 @@ Partitioner::choose_candidate_fuse_inline(
             }
         }
 
+        // TODO: The grouping process can be non-deterministic when the costs
+        // of two choices are equal
         if (best.second < overall_benefit
             /*||
               (best.second == overall_benefit &&
@@ -1186,7 +1283,7 @@ Partitioner::choose_candidate_fuse_fast_mem(
         const vector< pair<string, string> >& cand_pairs) {
 
     map<string, int> tile_sizes;
-    FusionChoice c("", "", tile_sizes);
+    FusionChoice c(Stage("", 0), Stage("", 0), tile_sizes);
     return make_pair(c, 0);
 
     // The choose candidate operates by considering a wide variety of
@@ -1223,11 +1320,11 @@ void Partitioner::group(Partitioner::Level level) {
     while(!fixpoint) {
         fixpoint = true;
         vector< pair<string, string> > cand;
-        for (auto& g: groups) {
+        for (const pair<Stage, Group>& g: groups) {
 
             bool is_output = false;
-            for (auto& f: outputs) {
-                if (g.first == f.name())
+            for (const Function& f: outputs) {
+                if (g.first.func_name == f.name())
                     is_output = true;
             }
 
@@ -1238,10 +1335,12 @@ void Partitioner::group(Partitioner::Level level) {
                 int num_children = children[g.first].size();
                 // Find all the groups which have a single child
                 if (num_children == 1 && level == Partitioner::FAST_MEM) {
-                    cand.push_back(make_pair(g.first,
-                                             *children[g.first].begin()));
+                    string prod_name = g.first.func_name;
+                    string cons_name = (*children[g.first].begin()).func_name;
+                    cand.push_back(make_pair(prod_name, cons_name));
                 } else if(num_children > 0  && level == Partitioner::INLINE) {
-                    cand.push_back(make_pair(g.first, ""));
+                    string prod_name = g.first.func_name;
+                    cand.push_back(make_pair(prod_name, ""));
                 }
             }
         }
@@ -1251,19 +1350,19 @@ void Partitioner::group(Partitioner::Level level) {
             debug(0) << "[" << p.first << "," <<    p.second << "]" << '\n';
         }
 
-        vector<pair<string, string> > invalid_keys;
+        vector<Edge> invalid_keys;
         if (level == Partitioner::INLINE) {
             pair<vector<InlineChoice>, int64_t> best;
             best = choose_candidate_fuse_inline(cand);
             if (best.second >= 0) {
-                string prod = best.first[0].prod_group;
+                Stage prod = best.first[0].prod_group;
 
                 // Mark the entries of the fusion cache that need to be
                 // invalidated
                 for (auto& c: children.at(prod)) {
                     for (auto& choice: inline_cache) {
-                        if (choice.first.first == c ||
-                            choice.first.second == c)
+                        if (choice.first.prod == c ||
+                            choice.first.cons == c)
                             invalid_keys.push_back(choice.first);
                     }
                 }
@@ -1287,8 +1386,8 @@ void Partitioner::group(Partitioner::Level level) {
                 // Mark the entries of the fusion cache that need to be
                 // invalidated
                 for (auto& choice: fusion_cache) {
-                    if (choice.first.second == best.first.cons_group
-                        || choice.first.first == best.first.cons_group)
+                    if (choice.first.prod == best.first.cons_group
+                        || choice.first.cons == best.first.cons_group)
                         invalid_keys.push_back(choice.first);
                 }
 
@@ -1371,26 +1470,29 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         }
     }
 
+    string out_func_name = out_func_name;
     // Count the number of tiles
     uint64_t estimate_tiles = 1;
     uint64_t num_ele_per_tile = 1;
 
-    const vector<string>& args = analy.env.at(g.output).args();
+    const vector<string>& args = analy.env.at(out_func_name).args();
 
     for (size_t i = 0; i < args.size(); i++) {
         if (g.tile_sizes.find(args[i]) != g.tile_sizes.end()) {
             int size = g.tile_sizes.at(args[i]);
-            int extent = get_extent(pipeline_bounds.at(g.output)[i]);
+            int extent = get_extent(pipeline_bounds.at(out_func_name)[i]);
             estimate_tiles *= std::ceil((float)extent/size);
             num_ele_per_tile *= size;
         }
     }
 
     // Get the regions of the pipeline required to compute a tile of the group
-    vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
+    vector<Interval> bounds = get_bounds_from_tile_sizes(out_func_name,
                                                          g.tile_sizes);
-    map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
-    conc_reg[g.output] = Box(bounds);
+    map<string, Box> conc_reg = analy.concrete_dep_regions(out_func_name,
+                                                           bounds);
+    // FIXME: Accouting of the output region in the region cost is incorrect
+    conc_reg[out_func_name] = Box(bounds);
 
     map<string, Box> group_reg, prod_reg, input_reg;
 
@@ -1478,7 +1580,7 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
     // group
     map<string, int> tile_sizes;
 
-    Function out_func = analy.env.at(cons_group.output);
+    Function out_func = analy.env.at(cons_group.output.func_name);
     const vector<string>& args = out_func.args();
     for (auto& arg: args) {
         tile_sizes[arg] = 1;
@@ -1553,9 +1655,11 @@ map<string, int> Partitioner::get_pure_dim_estimates(const string& f) {
 
 map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
     map<string, Box> mem_bounds;
-    vector<Interval> bounds = get_bounds_from_tile_sizes(g.output,
+    string out_func_name = g.output.func_name;
+    vector<Interval> bounds = get_bounds_from_tile_sizes(out_func_name,
                                                          g.tile_sizes);
-    map<string, Box> conc_reg = analy.concrete_dep_regions(g.output, bounds);
+    map<string, Box> conc_reg = analy.concrete_dep_regions(out_func_name,
+                                                           bounds);
     for (auto& f: g.members) {
         if (conc_reg.find(f.name()) != conc_reg.end()) {
             mem_bounds[f.name()] = conc_reg[f.name()];
@@ -1596,10 +1700,12 @@ split_dim(Func f_handle, VarOrRVar v, int factor,
 string Partitioner::generate_group_cpu_schedule(const Group& g,
                                                 const Target& t) {
     string sched = "";
-    Function g_out = analy.env.at(g.output);
+    string out_func_name = g.output.func_name;
+    Function g_out = analy.env.at(out_func_name);
 
     // Get estimates of pipeline bounds
-    map<string, int> pure_out_estimates = get_pure_dim_estimates(g.output);
+    map<string, int> pure_out_estimates =
+            get_pure_dim_estimates(out_func_name);
     map<string, int> out_estimates = pure_out_estimates;
 
     map<string, Box> group_bounds = get_group_member_bounds(g);
@@ -1870,7 +1976,7 @@ return "";
 string Partitioner::generate_cpu_schedule(const Target& t) {
     string sched = "";
 
-    for (const pair<string, Group>& g: groups) {
+    for (const pair<Stage, Group>& g: groups) {
         for (const string& inline_func: g.second.inlined) {
             Function f = analy.env.at(inline_func);
             Func f_handle(f);
