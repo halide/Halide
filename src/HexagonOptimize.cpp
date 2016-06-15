@@ -3,7 +3,6 @@
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "IREquality.h"
-#include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "CSE.h"
 #include "Simplify.h"
