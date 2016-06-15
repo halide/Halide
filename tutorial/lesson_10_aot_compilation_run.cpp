@@ -94,9 +94,9 @@ int main(int argc, char **argv) {
     // image type you're using.
 
     // Now that we've setup our input and output buffers, we can call
-    // our function. Looking in the header file, it's signature is:
+    // our function. Looking in the header file, its signature is:
 
-    // int lesson_10_halide(buffer_t *_input, const int32_t _offset, buffer_t *_brighter);
+    // int lesson_10_halide(buffer_t *_input_buffer, uint8_t _offset, buffer_t *_brighter_buffer);
 
     // The return value is an error code. It's zero on success.
 

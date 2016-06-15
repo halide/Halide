@@ -171,11 +171,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf)
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
-    if (op->call_type != Call::Intrinsic) {
-        CodeGen_C::visit(op);
-        return;
-    }
-    if (op->name == Call::interleave_vectors) {
+    if (op->is_intrinsic(Call::interleave_vectors)) {
         int op_lanes = op->type.lanes();
         internal_assert(op->args.size() > 0);
         int arg_lanes = op->args[0].type().lanes();

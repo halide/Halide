@@ -251,22 +251,44 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
 
     const auto target_string = generator_args["target"];
-    const Target target = parse_target_string(target_string);
+    auto target_strings = split_string(target_string, ",");
+    std::vector<Target> targets;
+    for (const auto &s : target_strings) {
+        targets.push_back(Target(s));
+    }
 
     if (!runtime_name.empty()) {
+        if (targets.size() != 1) {
+            cerr << "Only one target allowed here";
+            return 1;
+        }
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
-        Outputs output_files = compute_outputs(target, base_path, emit_options);
-        compile_standalone_runtime(output_files, target);
+        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
+        compile_standalone_runtime(output_files, targets[0]);
     }
 
     if (!generator_name.empty()) {
-        std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
-        if (gen == nullptr) {
-            cerr << "Unknown generator: " << generator_name << "\n";
-            cerr << kUsage;
-            return 1;
+        std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
+        Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
+        auto module_producer = [&generator_name, &generator_args, &cerr]
+            (const std::string &name, const Target &target) -> Module {
+                auto sub_generator_args = generator_args;
+                sub_generator_args["target"] = target.to_string();
+                // Must re-create each time since each instance will have a different Target
+                auto gen = GeneratorRegistry::create(generator_name, sub_generator_args);
+                if (gen == nullptr) {
+                    cerr << "Unknown generator: " << generator_name << "\n";
+                    exit(1);
+                }
+                return gen->build_module(name);
+            };
+        if (targets.size() > 1) {
+            compile_multitarget(function_name, output_files, targets, module_producer);
+        } else {
+            // compile_multitarget() will fail if we request anything but library and/or header,
+            // so defer directly to Module::compile if there is a single target.
+            module_producer(function_name, targets[0]).compile(output_files);
         }
-        gen->emit_filter(output_dir, function_name, file_base_name, emit_options);
     }
 
     return 0;
