@@ -827,7 +827,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 int element_bytes = element_bits / 8;
                 Value *packed = call_intrin_cast(native2_ty,
                                                  IPICK(is_128B, Intrinsic::hexagon_V6_vdealvdd),
-                                                 {ab_i1, ab_i0, ConstantInt::get(i32, -element_bytes)});
+                                                 {ab_i1, ab_i0, ConstantInt::get(i32_t, -element_bytes)});
                 Intrinsic::ID intrin =
                     start == 0 ? IPICK(is_128B, Intrinsic::hexagon_V6_lo) : IPICK(is_128B, Intrinsic::hexagon_V6_hi);
                 ret_i = call_intrin_cast(native_ty, intrin, {packed});
@@ -926,7 +926,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
-                Value *mask = ConstantInt::get(i32, lut_passes*j + k);
+                Value *mask = ConstantInt::get(i32_t, lut_passes*j + k);
                 if (result_i == nullptr) {
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut_id,
@@ -974,7 +974,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
             min_index = std::min(min_index, i);
             max_index = std::max(max_index, i);
         }
-        llvm_indices.push_back(ConstantInt::get(i8, i));
+        llvm_indices.push_back(ConstantInt::get(i8_t, i));
     }
 
     return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
