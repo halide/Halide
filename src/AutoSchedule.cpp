@@ -360,10 +360,8 @@ struct CostModel {
                                                  simplify(arg_bounds.max)));
             }
             int64_t area = box_area(update_region);
-            /*
-            debug(0) << update_region;
+            debug(0) << update_region << '\n';
             debug(0) << "Area:" << area << '\n';
-            */
             if (area != -1) {
                 region_cost.first += cost[index].first * area;
                 region_cost.second += cost[index].second * area;
@@ -1601,8 +1599,8 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
     Function g_out = analy.env.at(g.output);
 
     // Get estimates of pipeline bounds
-    map<string, int> org_out_estimates = get_pure_dim_estimates(g.output);
-    map<string, int> out_estimates = org_out_estimates;
+    map<string, int> pure_out_estimates = get_pure_dim_estimates(g.output);
+    map<string, int> out_estimates = pure_out_estimates;
 
     map<string, Box> group_bounds = get_group_member_bounds(g);
     Func f_handle(g_out);
@@ -1635,10 +1633,11 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
 
     // Reorder the tile dimensions
     if (outer_dims.size() > 0) {
+
         vector<VarOrRVar> ordering;
-        for (auto& v: outer_dims)
-            ordering.push_back(v);
         for (auto& v: inner_dims)
+            ordering.push_back(v);
+        for (auto& v: outer_dims)
             ordering.push_back(v);
 
         f_handle.reorder(ordering);
@@ -1652,7 +1651,8 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
 
     // Vectorize the innermost dimension
     // TODO: Explore scenarios where vectorizing an outer dimension
-    // makes more sense
+    // makes more sense. For example, when the inner most dimension
+    // does not have enough iterations
     Var vec_dim = f_handle.args()[0];
     if (out_estimates.find(vec_dim.name()) != out_estimates.end()) {
         // Set the vector length as the maximum of the values produced by a
@@ -1670,36 +1670,36 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
                      vec_vars.first.name() + ");\n";
         }
     }
-    /*
-       for (auto& f_inline: g.inlined) {
-       Func inline_handle(analy.env.at(f_inline));
-       inline_handle.compute_root();
-       }*/
-    /*
 
-    int num_fused_dims = 0;
-    int parallelism = part.arch_params.parallelism;
-
-    //std::cerr << "Start vectorization pure dims "
-    //                      <<  g_out.name() << std::endl;
-    {
-    // Vectorize first
-    Schedule &s = g_out.schedule();
-    if (check_dim_size(s, 0, part.arch_params.vec_len, out_estimates))
-    simple_vectorize(g_out, out_estimates, 0, part.arch_params.vec_len);
-    else if (check_dim_size(s, 0, 8, out_estimates))
-    simple_vectorize(g_out, out_estimates, 0, 8);
-    else if (check_dim_size(s, 0, 4, out_estimates))
-    simple_vectorize(g_out, out_estimates, 0, 4);
-
-    int outer_dim = -1;
-    bool can_par = pick_dim_to_parallelize(g_out, out_estimates,
-    parallelism, num_tile_dims,
-    outer_dim, num_fused_dims);
-
-    if (auto_par && outer_dim !=-1 && can_par)
-    parallelize_dim(g_out.schedule(), outer_dim);
+    // Parallelize pure definition
+    unsigned int pure_def_par = 1;
+    // TODO: Investigate if it is better to pull one large dimension and
+    // parallelize over it versus generating nested parallelism
+    //
+    // Go from the outer to the inner most loop till sufficient parallelism
+    // is achieved
+    vector<Dim>& dims = g_out.schedule().dims();
+    for (int d = dims.size() - 2; d >= 0; d--) {
+        string var_name = dims[d].var;
+        if (pure_def_par > arch_params.parallelism) {
+            // Enough parallelism to saturate target machine
+            break;
+        }
+        if (out_estimates.find(var_name) != out_estimates.end()) {
+            f_handle.parallel(VarOrRVar(var_name, false));
+            sched += f_handle.name() + ".parallel(" + var_name + ");\n";
+            pure_def_par *= out_estimates[var_name];
+        } else {
+            break;
+        }
     }
+
+    if (pure_def_par < arch_params.parallelism) {
+        debug(0) << "Warning: insuffcient parallelism for " <<
+                 f_handle.name() << '\n';
+    }
+
+    /*
 
     //std::cerr << "Finished pure dims "    <<  g_out.name() << std::endl;
     if (!g_out.is_pure()) {
@@ -1868,9 +1868,25 @@ return "";
 }
 
 string Partitioner::generate_cpu_schedule(const Target& t) {
+    string sched = "";
+
+    for (const pair<string, Group>& g: groups) {
+        for (const string& inline_func: g.second.inlined) {
+            Function f = analy.env.at(inline_func);
+            Func f_handle(f);
+            // TODO: inling functions with update definitions has different
+            // behavior than pure functions. They may need to be computed above
+            // the inner most vector loop to avoid complications with varying
+            // extents across different vector lanes.
+            // The default is compute inline but setting it explicitly
+            f_handle.compute_inline();
+            sched += f_handle.name() + ".compute_inline()" + ";\n";
+        }
+    }
+
     for (auto& g: groups)
-        generate_group_cpu_schedule(g.second, t);
-    return "";
+        sched += generate_group_cpu_schedule(g.second, t);
+    return sched;
 }
 
 void generate_schedules(const vector<Function>& outputs,
