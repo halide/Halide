@@ -19,6 +19,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -26,6 +27,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "Profiling.h"
@@ -179,7 +181,8 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::Renderscript)) {
+        t.has_feature(Target::Renderscript) ||
+        (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
@@ -260,6 +263,10 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    debug(1) << "Splitting off Hexagon offload...\n";
+    s = inject_hexagon_rpc(s, t);
+    debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

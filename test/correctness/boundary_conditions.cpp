@@ -8,10 +8,14 @@ using namespace Halide::BoundaryConditions;
 Var x("x"), y("y");
 
 void schedule_test(Func f, int vector_width, const Target &t) {
+    if (vector_width != 1) {
+        f.vectorize(x, vector_width);
+    }
     if (t.has_gpu_feature()) {
         f.gpu_tile(x, y, 4, 4);
-    } else if (vector_width != 1) {
-        f.vectorize(x, vector_width);
+    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // TODO: Non-native vector widths hang the compiler here.
+        //f.hexagon();
     }
 }
 
