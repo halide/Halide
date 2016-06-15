@@ -314,10 +314,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::PNaCl) {
         return make_codegen<CodeGen_PNaCl>(target, context);
-#ifdef WITH_HEXAGON
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
-#endif
     }
 
     user_error << "Unknown target architecture: "
@@ -441,7 +439,7 @@ struct MangledNames {
     string metadata_name;
 };
 
-MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType linkage, 
+MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType linkage,
                                const std::vector<LoweredArgument> &args, const Target &target) {
     std::vector<std::string> namespaces;
     MangledNames names;

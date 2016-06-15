@@ -41,7 +41,12 @@ using namespace llvm;
 #define IPICK(is_128B, i64) (is_128B ? Intrinsic::not_intrinsic : Intrinsic::not_intrinsic)
 #endif
 
-CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {}
+CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
+#if !(WITH_HEXAGON)
+    user_error << "hexagon not enabled for this build of Halide.\n";
+#endif
+    user_assert(llvm_Hexagon_enabled) << "llvm build not configured with Hexagon target enabled.\n";
+}
 
 std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     auto llvm_module = CodeGen_Posix::compile(module);
