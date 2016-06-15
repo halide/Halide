@@ -3,6 +3,7 @@
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "IREquality.h"
+#include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "CSE.h"
 #include "Simplify.h"
@@ -986,49 +987,37 @@ private:
     using IRMutator::visit;
 };
 
-// Find a conservative upper bound of an expression.
-class UpperBound : public IRMutator {
-    using IRMutator::visit;
+// Find an upper bound of bounds.max - bounds.min.
+Expr span_of_bounds(Interval bounds) {
+    internal_assert(bounds.is_bounded());
 
-    void visit(const Sub *op) {
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
+    const Min *min_min = bounds.min.as<Min>();
+    const Max *min_max = bounds.min.as<Max>();
+    const Min *max_min = bounds.max.as<Min>();
+    const Max *max_max = bounds.max.as<Max>();
+    const Add *min_add = bounds.min.as<Add>();
+    const Add *max_add = bounds.max.as<Add>();
+    const Sub *min_sub = bounds.min.as<Sub>();
+    const Sub *max_sub = bounds.max.as<Sub>();
 
-        const Min *min_a = a.as<Min>();
-        const Min *min_b = b.as<Min>();
-        const Max *max_a = a.as<Max>();
-        const Max *max_b = b.as<Max>();
-
-        if (max_a && max_b) {
-            if (equal(max_a->b, max_b->b)) {
-                expr = mutate(simplify(max_a->a - max_b->a));
-                return;
-            }
-        }
-
-        if (min_a && min_b) {
-            if (equal(min_a->b, min_b->b)) {
-                expr = mutate(simplify(min_a->a - min_b->a));
-                return;
-            }
-        }
-
-        if (!a.same_as(op->a) || !b.same_as(op->b)) {
-            expr = Sub::make(a, b);
-        } else {
-            expr = op;
-        }
+    if (min_min && max_min && equal(min_min->b, max_min->b)) {
+        return span_of_bounds({min_min->a, max_min->a});
+    } else if (min_max && max_max && equal(min_max->b, max_max->b)) {
+        return span_of_bounds({min_max->a, max_max->a});
+    } else if (min_add && max_add && equal(min_add->b, max_add->b)) {
+        return span_of_bounds({min_add->a, max_add->a});
+    } else if (min_sub && max_sub && equal(min_sub->b, max_sub->b)) {
+        return span_of_bounds({min_sub->a, max_sub->a});
+    } else {
+        return bounds.max - bounds.min;
     }
-};
-
-Expr upper_bound(Expr x) {
-    return simplify(UpperBound().mutate(x));
 }
 
 // Replace indirect loads with dynamic_shuffle intrinsics where
 // possible.
 class OptimizeShuffles : public IRMutator {
     Scope<Interval> bounds;
+    std::vector<std::pair<string, Expr>> lets;
 
     using IRMutator::visit;
 
@@ -1044,7 +1033,11 @@ class OptimizeShuffles : public IRMutator {
         }
     }
 
-    void visit(const Let *op) { visit_let(op); }
+    void visit(const Let *op) {
+        lets.push_back({op->name, op->value});
+        visit_let(op);
+        lets.pop_back();
+    }
     void visit(const LetStmt *op) { visit_let(op); }
 
     void visit(const Load *op) {
@@ -1056,32 +1049,35 @@ class OptimizeShuffles : public IRMutator {
 
         Expr index = mutate(op->index);
         Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
-        Expr index_span = index_bounds.max - index_bounds.min;
-        index_span = common_subexpression_elimination(index_span);
-        index_span = simplify(index_span);
-        index_span = upper_bound(index_span);
+        if (index_bounds.is_bounded()) {
+            Expr index_span = span_of_bounds(index_bounds);
+            index_span = common_subexpression_elimination(index_span);
+            index_span = simplify(index_span);
 
-        if (is_one(simplify(index_span < 256))) {
-            // This is a lookup within an up to 256 element array. We
-            // can use dynamic_shuffle for this.
-            int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
-            Expr base = simplify(index_bounds.min);
+            if (can_prove(index_span < 256)) {
+                // This is a lookup within an up to 256 element array. We
+                // can use dynamic_shuffle for this.
+                int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
+                Expr base = simplify(index_bounds.min);
 
-            // Load all of the possible indices loaded from the
-            // LUT. Note that for clamped ramps, this loads up to 1
-            // vector past the max. CodeGen_Hexagon::allocation_padding
-            // returns a native vector size to account for this.
-            Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
-                                  Ramp::make(base, 1, const_extent),
-                                  op->image, op->param);
+                // Load all of the possible indices loaded from the
+                // LUT. Note that for clamped ramps, this loads up to 1
+                // vector past the max. CodeGen_Hexagon::allocation_padding
+                // returns a native vector size to account for this.
+                Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
+                                      Ramp::make(base, 1, const_extent),
+                                      op->image, op->param);
 
-            // We know the size of the LUT is not more than 256, so we
-            // can safely cast the index to 8 bit, which
-            // dynamic_shuffle requires.
-            index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
+                // We know the size of the LUT is not more than 256, so we
+                // can safely cast the index to 8 bit, which
+                // dynamic_shuffle requires.
+                index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
 
-            expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
-        } else if (!index.same_as(op->index)) {
+                expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
+                return;
+            }
+        }
+        if (!index.same_as(op->index)) {
             expr = Load::make(op->type, op->name, index, op->image, op->param);
         } else {
             expr = op;
