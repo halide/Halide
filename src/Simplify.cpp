@@ -1480,6 +1480,7 @@ private:
             expr = mutate(add_a->a/b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    sub_a &&
+                   !is_zero(b) &&
                    equal(sub_a->a, b)) {
             // (x - y)/x -> (-y)/x + 1
             expr = mutate((make_zero(op->type) - sub_a->b)/b + make_one(op->type));
