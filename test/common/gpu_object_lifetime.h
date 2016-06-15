@@ -17,6 +17,7 @@ struct ObjectType {
 };
 
 ObjectType object_types[] = {
+    // OpenCL objects
     ObjectType("clCreateContext", "clReleaseContext", true),
     ObjectType("clCreateCommandQueue", "clReleaseCommandQueue", true),
     // This handles both "clCreateProgramWithSource" and
@@ -25,13 +26,19 @@ ObjectType object_types[] = {
     ObjectType("clCreateBuffer", "clReleaseMemObject"),
     ObjectType("clCreateKernel", "clReleaseKernel"),
 
+    // CUDA objects
     ObjectType("cuCtxCreate", "cuCtxDestroy", true),
     ObjectType("cuModuleLoad", "cuModuleUnload"),
     ObjectType("cuMemAlloc", "cuMemFree"),
 
+    // Metal objects
     ObjectType("Allocating: MTLCreateSystemDefaultDevice", "Releasing: MTLCreateSystemDefaultDevice", true),
     ObjectType("Allocating: new_command_queue", "Releasing: new_command_queue"),
-    ObjectType("Allocating: new_library_with_source", "Releasing: new_library_with_source")
+    ObjectType("Allocating: new_library_with_source", "Releasing: new_library_with_source"),
+
+    // Hexagon objects
+    ObjectType("halide_remote_initialize_kernels", "halide_remote_release_kernels"),
+    ObjectType("ion_alloc", "ion_free"),
 };
 
 const int object_type_count = sizeof(object_types)/sizeof(object_types[0]);

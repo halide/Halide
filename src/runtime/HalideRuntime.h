@@ -123,8 +123,12 @@ extern halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t do_p
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
+//@{
 typedef int (*halide_do_task_t)(void *, halide_task_t, int, uint8_t *);
 extern halide_do_task_t halide_set_custom_do_task(halide_do_task_t do_task);
+extern int halide_do_task(void *user_context, halide_task_t f, int idx,
+                          uint8_t *closure);
+//@}
 
 /** Spawn a thread, independent of halide's thread pool. */
 extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
@@ -373,7 +377,7 @@ extern void halide_memoization_cache_cleanup();
  * without risking collision. Note that the caller is always responsible
  * for deleting this file. Returns nonzero value if an error occurs.
  */
-extern int halide_create_temp_file(void *user_context, 
+extern int halide_create_temp_file(void *user_context,
   const char *prefix, const char *suffix,
   char *path_buf, size_t path_buf_size);
 
@@ -599,11 +603,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
 
     halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
-    halide_target_feature_end = 33 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+
+    halide_target_feature_hvx_64 = 33, ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128 = 34, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62 = 35, ///< Enable Hexagon v62 architecture.
+
+    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
- * if the current execution environment can support the given set of 
+ * if the current execution environment can support the given set of
  * halide_target_feature_t flags. The implementation must do the following:
  *
  * -- If there are flags set in features that the function knows *cannot* be supported, return 0.
@@ -611,14 +620,14 @@ typedef enum halide_target_feature_t {
  * -- Note that any flags set in features that the function doesn't know how to test should be ignored;
  * this implies that a return value of 1 means "not known to be bad" rather than "known to be good".
  *
- * In other words: a return value of 0 means "It is not safe to use code compiled with these features", 
+ * In other words: a return value of 0 means "It is not safe to use code compiled with these features",
  * while a return value of 1 means "It is not obviously unsafe to use code compiled with these features".
  *
  * The default implementation simply calls halide_default_can_use_target_features.
  */
 extern int halide_can_use_target_features(uint64_t features);
 
-/** 
+/**
  * This is the default implementation of halide_can_use_target_features; it is provided
  * for convenience of user code that may wish to extend halide_can_use_target_features
  * but continue providing existing support, e.g.

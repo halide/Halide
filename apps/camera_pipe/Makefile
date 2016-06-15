@@ -2,6 +2,8 @@ include ../support/Makefile.inc
 
 all: process
 
+TIMING_ITERATIONS ?= 5
+
 camera_pipe: ../../ camera_pipe.cpp
 	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
 
@@ -18,7 +20,7 @@ process: process.cpp curved.a fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS) -ldl -lpthread
 
 out.png: process
-	./process ../images/bayer_raw.png 3700 2.0 50 5 out.png
+	./process ../images/bayer_raw.png 3700 2.0 50 $(TIMING_ITERATIONS) out.png
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
