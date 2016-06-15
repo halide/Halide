@@ -230,7 +230,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-                #if WITH_NATIVE_CLIENT
+                #if defined(WITH_NATIVE_CLIENT)
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-S32");
                 #elif LLVM_VERSION >= 37
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
