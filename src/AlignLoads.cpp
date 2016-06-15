@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "AlignLoads.h"
 #include "IRMutator.h"
 #include "IROperator.h"
