@@ -123,10 +123,10 @@ Interval bounds_of_lanes(Expr e) {
     } else if (const Max *max = e.as<Max>()) {
         if (const Broadcast *b = max->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(max->a);
-            return {Max::make(ia.max, b->value), Max::make(ia.max, b->value)};
+            return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
         } else if (const Broadcast *b = max->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(max->b);
-            return {Max::make(ia.max, b->value), Max::make(ia.max, b->value)};
+            return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
         }
     } else if (const Not *not_ = e.as<Not>()) {
         Interval ia = bounds_of_lanes(not_->a);
