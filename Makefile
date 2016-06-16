@@ -27,6 +27,7 @@ PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
+
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
@@ -45,6 +46,7 @@ BUILD_BIT_SIZE ?=
 GENGEN_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
@@ -55,6 +57,11 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
+ifeq ($(LLVM_VERSION_TIMES_10),39)
+WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
+else
+WITH_HEXAGON ?=
+endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
@@ -109,6 +116,9 @@ AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
+HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
+HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
+
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 
@@ -116,6 +126,7 @@ CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
+CXX_FLAGS += $(HEXAGON_CXX_FLAGS)
 CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
@@ -140,7 +151,7 @@ print-%:
 	@echo '$*=$($*)'
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
 LLVM_SHARED_LIBS =
 else
 LLVM_STATIC_LIBS =
@@ -256,6 +267,7 @@ TMP_DIR     = $(BUILD_DIR)/tmp
 SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
+  AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   Associativity.cpp \
   BoundaryConditions.cpp \
@@ -267,6 +279,7 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
+  CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
@@ -299,6 +312,8 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
+  HexagonOffload.cpp \
+  HexagonOptimize.cpp \
   Image.cpp \
   ImageParam.cpp \
   Interval.cpp \
@@ -320,6 +335,7 @@ SOURCE_FILES = \
   Lerp.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
+  LoopCarry.cpp \
   Lower.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
@@ -383,6 +399,7 @@ BITWRITER_SOURCE_FILES = \
 HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
+  AlignLoads.h \
   AllocationBoundsInference.h \
   Argument.h \
   Associativity.h \
@@ -429,6 +446,8 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  HexagonOffload.h \
+  HexagonOptimize.h \
   runtime/HalideRuntime.h \
   Image.h \
   ImageParam.h \
@@ -453,6 +472,7 @@ HEADER_FILES = \
   Lerp.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
+  LoopCarry.h \
   Lower.h \
   MainPage.h \
   MatlabWrapper.h \
@@ -512,6 +532,8 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
+  android_ion \
+  android_mman \
   android_opengl_context \
   android_tempfile \
   arm_cpu_features \
@@ -521,13 +543,16 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_ion \
   fake_thread_pool \
   float16_t \
   gcd_thread_pool \
   gpu_device_selection \
+  hexagon_host \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
+  linux_mman \
   linux_opengl_context \
   matlab \
   metadata \
@@ -538,6 +563,7 @@ RUNTIME_CPP_COMPONENTS = \
   mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
+  noos \
   nacl_host_cpu_count \
   opencl \
   opengl \
@@ -557,6 +583,8 @@ RUNTIME_CPP_COMPONENTS = \
   powerpc_cpu_features \
   profiler \
   profiler_inlined \
+  qurt_allocator \
+  qurt_hvx \
   renderscript \
   runtime_api \
   ssp \
@@ -576,6 +604,8 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
+  hvx_64 \
+  hvx_128 \
   mips \
   pnacl_math \
   posix_math \
@@ -587,11 +617,14 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
+                            $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
+                            $(INCLUDE_DIR)/HalideRuntimeQurt.h \
                             $(INCLUDE_DIR)/HalideRuntimeRenderscript.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
@@ -600,6 +633,16 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+
+# Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
+ifeq ($(UNAME), Linux)
+ifneq (,$(WITH_HEXAGON))
+ifneq (,$(HL_HEXAGON_TOOLS))
+TEST_LD_FLAGS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
+TEST_LD_FLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
+endif
+endif
+endif
 
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
@@ -664,7 +707,6 @@ endif
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 
-# -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
@@ -1090,8 +1132,7 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	        $(ROOT_DIR)/apps/images \
 	        $(ROOT_DIR)/apps/support \
                 apps; \
-	  mkdir -p tools; \
-	  cp $(ROOT_DIR)/tools/* tools/; \
+	  cp -r $(ROOT_DIR)/tools .; \
 	fi
 	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)

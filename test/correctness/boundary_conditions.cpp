@@ -8,10 +8,14 @@ using namespace Halide::BoundaryConditions;
 Var x("x"), y("y");
 
 void schedule_test(Func f, int vector_width, const Target &t) {
-    if (t.has_gpu_feature()) {
-        f.gpu_tile(x, y, 4, 4);
-    } else if (vector_width != 1) {
+    if (vector_width != 1) {
         f.vectorize(x, vector_width);
+    }
+    if (t.has_gpu_feature() && vector_width <= 16) {
+        f.gpu_tile(x, y, 2, 2);
+    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // TODO: Non-native vector widths hang the compiler here.
+        //f.hexagon();
     }
 }
 
@@ -157,7 +161,7 @@ int main(int argc, char **argv) {
         std::cout << "repeat_edge\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_repeat_edge(
@@ -194,7 +198,7 @@ int main(int argc, char **argv) {
         std::cout << "constant_exterior\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             const uint8_t exterior = 42;
 
@@ -233,7 +237,7 @@ int main(int argc, char **argv) {
         std::cout << "repeat_image\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_repeat_image(
@@ -270,7 +274,7 @@ int main(int argc, char **argv) {
         std::cout << "mirror_image\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_mirror_image(
@@ -307,7 +311,7 @@ int main(int argc, char **argv) {
         std::cout << "mirror_interior\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_mirror_interior(
