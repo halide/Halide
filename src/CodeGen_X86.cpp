@@ -131,21 +131,19 @@ void CodeGen_X86::visit(const Sub *op) {
 }
 
 void CodeGen_X86::visit(const GT *op) {
-    Type t = op->a.type();
-    int bits = t.lanes() * t.bits();
-    if (t.is_scalar()) {
-        // LLVM is fine for scalars
-        CodeGen_Posix::visit(op);
-    } else {
+    if (op->type.is_vector()) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
-        Value *a = codegen(op->a), *b = codegen(op->b);
+
+        Type t = op->a.type();
+        int bits = t.lanes() * t.bits();
 
         int slice_size = 128 / t.bits();
         if (target.has_feature(Target::AVX) && bits > 128) {
             slice_size = 256 / t.bits();
         }
 
+        Value *a = codegen(op->a), *b = codegen(op->b);
         vector<Value *> result;
         for (int i = 0; i < op->type.lanes(); i += slice_size) {
             Value *sa = slice_vector(a, i, slice_size);
@@ -163,25 +161,26 @@ void CodeGen_X86::visit(const GT *op) {
 
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
+    } else {
+        CodeGen_Posix::visit(op);
     }
+
 }
 
 void CodeGen_X86::visit(const EQ *op) {
-    Type t = op->a.type();
-    int bits = t.lanes() * t.bits();
-    if (t.is_scalar()) {
-        // LLVM is fine for scalars
-        CodeGen_Posix::visit(op);
-    } else {
+    if (op->type.is_vector()) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
-        Value *a = codegen(op->a), *b = codegen(op->b);
+
+        Type t = op->a.type();
+        int bits = t.lanes() * t.bits();
 
         int slice_size = 128 / t.bits();
         if (target.has_feature(Target::AVX) && bits > 128) {
             slice_size = 256 / t.bits();
         }
 
+        Value *a = codegen(op->a), *b = codegen(op->b);
         vector<Value *> result;
         for (int i = 0; i < op->type.lanes(); i += slice_size) {
             Value *sa = slice_vector(a, i, slice_size);
@@ -197,6 +196,8 @@ void CodeGen_X86::visit(const EQ *op) {
 
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
+    } else {
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -217,9 +218,8 @@ void CodeGen_X86::visit(const NE *op) {
 }
 
 void CodeGen_X86::visit(const Select *op) {
-
-    // LLVM handles selects on vector conditions much better at native width
     if (op->condition.type().is_vector()) {
+        // LLVM handles selects on vector conditions much better at native width
         Value *cond = codegen(op->condition);
         Value *true_val = codegen(op->true_value);
         Value *false_val = codegen(op->false_value);
