@@ -3378,6 +3378,16 @@ private:
                 expr = op;
             }
         } else if (op->call_type == Call::PureExtern &&
+                   op->name == "sqrt_f32") {
+            Expr arg = mutate(op->args[0]);
+            if (const double *f = as_const_float(arg)) {
+                expr = FloatImm::make(arg.type(), std::sqrt(*f));
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::PureExtern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
             if (const double *f = as_const_float(arg)) {
@@ -3394,6 +3404,19 @@ private:
                 expr = FloatImm::make(arg.type(), std::exp(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::PureExtern &&
+                   op->name == "pow_f32") {
+            Expr arg0 = mutate(op->args[0]);
+            Expr arg1 = mutate(op->args[1]);
+            const double *f0 = as_const_float(arg0);
+            const double *f1 = as_const_float(arg1);
+            if (f0 && f1) {
+                expr = FloatImm::make(arg0.type(), std::pow(*f0, *f1));
+            } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
+                expr = Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
             } else {
                 expr = op;
             }
@@ -3456,8 +3479,6 @@ private:
             const Mod *mod = new_value.as<Mod>();
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
-            const LE *le = new_value.as<LE>();
-            const LT *lt = new_value.as<LT>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
             const Variable *var_b = nullptr;
@@ -3492,22 +3513,6 @@ private:
             } else if (mod && is_const(mod->b)) {
                 replacement = substitute(new_name, Mod::make(new_var, mod->b), replacement);
                 new_value = mod->a;
-            } else if (false && le && is_const(le->a)) {
-                new_value = le->b;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LE::make(le->a, new_var), replacement);
-            } else if (false && le && is_const(le->b)) {
-                new_value = le->a;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LE::make(new_var, le->b), replacement);
-            } else if (false && lt && is_const(lt->a)) {
-                new_value = lt->b;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LT::make(lt->a, new_var), replacement);
-            } else if (false && lt && is_const(lt->b)) {
-                new_value = lt->a;
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, LT::make(new_var, lt->b), replacement);
             } else if (ramp && is_const(ramp->stride)) {
                 new_value = ramp->base;
                 new_var = Variable::make(new_value.type(), new_name);
@@ -4659,8 +4664,11 @@ void check_boolean() {
 void check_math() {
     Var x = Var("x");
 
+    check(sqrt(4.0f), 2.0f);
     check(log(0.5f + 0.5f), 0.0f);
     check(exp(log(2.0f)), 2.0f);
+    check(pow(4.0f, 0.5f), 2.0f);
+    check(round(1000.0f*pow(exp(1.0f), log(10.0f))), 10000.0f);
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);

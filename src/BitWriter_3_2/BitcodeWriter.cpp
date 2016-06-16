@@ -513,6 +513,18 @@ static void WriteModuleInfo(const Module *M,
     Vals.push_back(getEncodedLinkage(GV));
     Vals.push_back(Log2_32(GV.getAlignment())+1);
     Vals.push_back(GV.hasSection() ? SectionMap[GV.getSection()] : 0);
+#if LLVM_VERSION >= 39
+    if (GV.isThreadLocal() ||
+        GV.getVisibility() != GlobalValue::DefaultVisibility ||
+        GV.hasGlobalUnnamedAddr() || GV.isExternallyInitialized()) {
+      Vals.push_back(getEncodedVisibility(GV));
+      Vals.push_back(getEncodedThreadLocalMode(GV));
+      Vals.push_back(GV.hasGlobalUnnamedAddr()); // This may not be correct...
+      Vals.push_back(GV.isExternallyInitialized());
+    } else {
+      AbbrevToUse = SimpleGVarAbbrev;
+    }
+#else
     if (GV.isThreadLocal() ||
         GV.getVisibility() != GlobalValue::DefaultVisibility ||
         GV.hasUnnamedAddr() || GV.isExternallyInitialized()) {
@@ -523,7 +535,7 @@ static void WriteModuleInfo(const Module *M,
     } else {
       AbbrevToUse = SimpleGVarAbbrev;
     }
-
+#endif
     Stream.EmitRecord(bitc::MODULE_CODE_GLOBALVAR, Vals, AbbrevToUse);
     Vals.clear();
   }
@@ -541,7 +553,11 @@ static void WriteModuleInfo(const Module *M,
     Vals.push_back(F.hasSection() ? SectionMap[F.getSection()] : 0);
     Vals.push_back(getEncodedVisibility(F));
     Vals.push_back(F.hasGC() ? GCMap[F.getGC()] : 0);
+#if LLVM_VERSION >= 39
+    Vals.push_back(F.hasGlobalUnnamedAddr());
+#else
     Vals.push_back(F.hasUnnamedAddr());
+#endif
 
     unsigned AbbrevToUse = 0;
     Stream.EmitRecord(bitc::MODULE_CODE_FUNCTION, Vals, AbbrevToUse);
