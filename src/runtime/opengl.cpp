@@ -241,29 +241,13 @@ WEAK void GlobalState::SaveGLState() {
     this->GetBooleanv(GL_DEPTH_TEST, &(saved_state.depth_test));
 
 #ifdef DEBUG_RUNTIME
-    debug(NULL) << "Saved OpenGL state:\n "
-      << "\tactive texture: " << saved_state.active_texture << "\n"
-      << "\tprogram: "  << saved_state.program << "\n"
-      << "\tviewport: (" << saved_state.viewport[0] << ", "
-                         << saved_state.viewport[1] << ", "
-                         << saved_state.viewport[2] << ", "
-                         << saved_state.viewport[3] << ")\n"
-      << "\tcull face: " << saved_state.cull_face << "\n"
-      << "\tdepth test: " << saved_state.depth_test << "\n";
+    debug(NULL) << "Saved OpenGL state\n";
 #endif
 }
 
 WEAK void GlobalState::RestoreGLState() {
 #ifdef DEBUG_RUNTIME
-    debug(NULL) << "Restoring OpenGL state:\n "
-      << "\tactive texture: " << saved_state.active_texture << "\n"
-      << "\tprogram: "  << saved_state.program << "\n"
-      << "\tviewport: (" << saved_state.viewport[0] << ", "
-                         << saved_state.viewport[1] << ", "
-                         << saved_state.viewport[2] << ", "
-                         << saved_state.viewport[3] << ")\n"
-      << "\tcull face: " << saved_state.cull_face << "\n"
-      << "\tdepth test: " << saved_state.depth_test << "\n";
+    debug(NULL) << "Restoring OpenGL state\n";
 #endif
 
     this->ActiveTexture(saved_state.active_texture);
