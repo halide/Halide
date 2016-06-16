@@ -53,7 +53,11 @@ Var x("x");
 
 void schedule(Func f, const Target &t) {
     // TODO: Add GPU schedule where supported.
-    f.vectorize(x, 16);
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.hexagon().vectorize(x, 32);
+    } else {
+        f.vectorize(x, 16);
+    }
 }
 
 template <typename T>

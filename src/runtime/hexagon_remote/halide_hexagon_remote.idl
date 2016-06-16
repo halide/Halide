@@ -1,0 +1,20 @@
+interface halide_hexagon_remote
+{
+    typedef sequence<octet> buffer;
+    typedef unsigned long handle_t;
+
+    // Routine to initialize a module on the remote side. Returns a pointer to the module.
+    long initialize_kernels(in buffer code, rout handle_t module_ptr);
+
+    // Get a symbol from the module.
+    handle_t get_symbol(in handle_t module_ptr, in sequence<char> name);
+
+    // Routine to run a pipeline on the remote side.
+    long run(in handle_t module_ptr, in handle_t symbol,
+             in sequence<buffer> input_buffers,
+             rout sequence<buffer> output_buffers,
+             in sequence<buffer> input_scalars);
+
+    // Routine to clean up a module on the remote side.
+    long release_kernels(in handle_t module_ptr, in long size);
+};
