@@ -1749,7 +1749,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 }
 
 Func &Func::hexagon(VarOrRVar x) {
-    Stage(func.definition(), name()).hexagon(x);
+    Stage(func.definition(), name(), args()).hexagon(x);
     return *this;
 }
 

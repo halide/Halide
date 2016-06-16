@@ -20,47 +20,6 @@ using std::vector;
 
 namespace {
 
-/** Substitute an expr for a var in a graph. */
-class GraphSubstitute : public IRGraphMutator {
-    string var;
-    Expr value;
-
-    using IRGraphMutator::visit;
-
-    void visit(const Variable *op) {
-        if (op->name == var) {
-            expr = value;
-        } else {
-            expr = op;
-        }
-    }
-
-public:
-    GraphSubstitute(const string &var, Expr value) : var(var), value(value) {}
-};
-
-/** Substitute in all let Exprs in a piece of IR. Doesn't substitute
- * in let stmts, as this may change the meaning of the IR (e.g. by
- * moving a load after a store). Produces graphs of IR, so don't use
- * non-graph-aware visitors or mutators on it until you've CSE'd the
- * result. */
-class SubstituteInAllLets : public IRGraphMutator {
-
-    using IRGraphMutator::visit;
-
-    void visit(const Let *op) {
-        Expr value = mutate(op->value);
-        Expr body = mutate(op->body);
-        expr = GraphSubstitute(op->name, value).mutate(body);
-    }
-
-    void visit(const LetStmt *op) {
-        Expr value = mutate(op->value);
-        Stmt body = mutate(op->body);
-        stmt = GraphSubstitute(op->name, value).mutate(body);
-    }
-};
-
 // Replace self-reference to Func 'func' with arguments 'args' at index
 // 'value_index' in the Expr/Stmt with Var 'substitute'
 class ConvertSelfRef : public IRMutator {
@@ -226,7 +185,7 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
     for (Expr &arg : args) {
         arg = common_subexpression_elimination(arg);
         arg = simplify(arg);
-        arg = SubstituteInAllLets().mutate(arg);
+        arg = substitute_in_all_lets(arg);
     }
 
     // For a Tuple of exprs to be associative, each element of the Tuple
@@ -251,7 +210,7 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
         if (!expr.defined()) {
             return std::make_pair(false, vector<AssociativeOp>());
         }
-        expr = SubstituteInAllLets().mutate(expr);
+        expr = substitute_in_all_lets(expr);
 
         // Try to infer the 'y' part of the operator. If we couldn't find
         // a single 'y' that satisfy the operator, give up
