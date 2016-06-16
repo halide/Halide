@@ -133,7 +133,7 @@ void CodeGen_X86::visit(const Sub *op) {
 void CodeGen_X86::visit(const GT *op) {
     Type t = op->a.type();
     int bits = t.lanes() * t.bits();
-    if (t.lanes() == 1) {
+    if (t.is_scalar()) {
         // LLVM is fine for scalars
         CodeGen_Posix::visit(op);
     } else {
@@ -169,7 +169,7 @@ void CodeGen_X86::visit(const GT *op) {
 void CodeGen_X86::visit(const EQ *op) {
     Type t = op->a.type();
     int bits = t.lanes() * t.bits();
-    if (t.lanes() == 1) {
+    if (t.is_scalar()) {
         // LLVM is fine for scalars
         CodeGen_Posix::visit(op);
     } else {
