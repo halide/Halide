@@ -26,12 +26,23 @@ bool is_type_supported(int vec_width, const Target &target) {
 
 template <>
 bool is_type_supported<float>(int vec_width, const Target &target) {
-    return vec_width == 1 || !target.features_any_of({Target::HVX_64, Target::HVX_128});
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        return vec_width == 1;
+    } else {
+        return true;
+    }
 }
 
 template <>
 bool is_type_supported<double>(int vec_width, const Target &target) {
-    return vec_width == 1 || !target.features_any_of({Target::HVX_64, Target::HVX_128});
+    if (target.has_feature(Target::OpenCL) &&
+        !target.has_feature(Target::CLDoubles)) {
+        return false;
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        return vec_width == 1;
+    } else {
+        return true;
+    }
 }
 
 template<typename A, typename B>
