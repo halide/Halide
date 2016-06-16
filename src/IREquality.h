@@ -102,11 +102,17 @@ struct ExprWithCompareCache {
 };
 
 /** Compare IR nodes for equality of value. Traverses entire IR
- * tree. For equality of reference, use Expr::same_as */
+ * tree. For equality of reference, use Expr::same_as. If you're
+ * comparing non-CSE'd Exprs, use graph_equal, which is safe for nasty
+ * graphs of IR nodes. */
 // @{
 EXPORT bool equal(Expr a, Expr b);
 EXPORT bool equal(Stmt a, Stmt b);
+EXPORT bool graph_equal(Expr a, Expr b);
+EXPORT bool graph_equal(Stmt a, Stmt b);
 // @}
+
+
 
 EXPORT void ir_equality_test();
 

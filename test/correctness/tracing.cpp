@@ -26,8 +26,10 @@ void print_event(event e) {
                                  "Produce",
                                  "Update",
                                  "Consume",
-                                 "End consume"};
-    assert(e.event_type >= 0 && e.event_type <= 8);
+                                 "End consume",
+                                 "Begin pipeline",
+                                 "End pipeline"};
+    assert(e.event_type >= 0 && e.event_type <= 10);
     printf("%s ", event_types[e.event_type]);
 
     printf("%c.%d[", e.func, e.value_index);
@@ -201,4 +203,3 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-
