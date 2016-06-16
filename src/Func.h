@@ -125,12 +125,12 @@ public:
      RDom r(0, 96);
      f() = max(f(), g(r.x));
      f.update(0).split(r.x, rxo, rxi, 8);
-     f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u);
+     f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
      \endcode
      *
      *, which is equivalent to:
      \code
-     for u = 0 to 11:
+     parallel for u = 0 to 11:
        f_intm(u) = -inf
      parallel for u = 0 to 11:
        for rx1 = 0 to 7:

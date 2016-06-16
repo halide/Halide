@@ -814,7 +814,10 @@ int subtraction_rfactor_test() {
     f(x, y) = x + y;
     f.compute_root();
 
-    RDom r(10, 20, 30, 40);
+    Param<int> inner_extent, outer_extent;
+    RDom r(10, inner_extent, 30, outer_extent);
+    inner_extent.set(20);
+    outer_extent.set(40);
 
     ref(x, y) = 40;
     ref(x, y) -= f(r.x, r.y);

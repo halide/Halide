@@ -145,8 +145,12 @@ struct Dim {
     std::string var;
     ForType for_type;
     DeviceAPI device_api;
-    bool pure;
-    bool is_rvar;
+
+    enum Type {PureVar = 0, PureRVar, ImpureRVar};
+    Type dim_type;
+
+    bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
+    bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
 };
 
 struct Bound {

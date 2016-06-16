@@ -48,7 +48,9 @@ Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt);
 
 /** Substitute in all let Exprs in a piece of IR. Doesn't substitute
  * in let stmts, as this may change the meaning of the IR (e.g. by
- * moving a load after a store). */
+ * moving a load after a store). Produces graphs of IR, so don't use
+ * non-graph-aware visitors or mutators on it until you've CSE'd the
+ * result. */
 // @{
 Expr substitute_in_all_lets(Expr expr);
 Stmt substitute_in_all_lets(Stmt stmt);
