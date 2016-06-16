@@ -25,12 +25,13 @@ public:
 
     // Gain to apply to the FFT. This is folded into gains already
     // being applied to the FFT. A gain of 1.0f indicates an
-    // unnormalized FFT. 1 / sqrt(N) gives a unitary transform 1/N
-    // gives a normalized transform for the forward direction. (Where
-    // "N" is the number of output elements of the FFT, the product of
-    // the dimensions for a complex FFT and the product of all the
-    // dimensions except the last and the last divided by 2 all minus
-    // 1 for a real FFT.)
+    // unnormalized FFT. 1 / sqrt(N) gives a unitary transform such that
+    // forward and inverse operations have the same gain without changing
+    // signal magnitude.
+    // A common convention is 1/N for the forward direction and 1 for the
+    // inverse.
+    // "N" above is the size of the input, which is the product of
+    // the dimensions.
     GeneratorParam<float> gain{"gain", 1.0f};
 
     // The following option specifies that a particular vector width should be
@@ -49,15 +50,15 @@ public:
     GeneratorParam<bool> parallel{"parallel", false};
 
     // Indicates forward or inverse Fourier transform --
-    // samples_to_frequency maps to a sign of -1 in the FFT and
-    // frequency_to_samples is a sign of 1.
+    // "samples_to_frequency" maps to a forward FFT. (Other packages sometimes call this a sign of -1)
+    // "frequency_to_samples" maps to a forward FFT. (Other packages sometimes call this a sign of +1)
     GeneratorParam<FFTDirection> direction{"direction", FFTDirection::SamplesToFrequency,
         fft_direction_enum_map() };
 
-    // Whether the input is real or complex
+    // Whether the input is "real" or "complex".
     GeneratorParam<FFTNumberType> input_number_type{"input_number_type",
         FFTNumberType::Real, fft_number_type_enum_map() };
-    // Whether the output is real or complex
+    // Whether the output is "real" or "complex".
     GeneratorParam<FFTNumberType> output_number_type{"output_number_type",
         FFTNumberType::Real, fft_number_type_enum_map() };
 
@@ -68,6 +69,16 @@ public:
     // TODO(zalman): Add support for 3D and maybe 4D FFTs
 
     // The input buffer. Must be separate from the output.
+    // Only Float(32) is supported.
+    //
+    // For a real input FFT, this should have the following shape:
+    // Dim0: extent = size0, stride = 1
+    // Dim1: extent = size1 / 2 - 1, stride = size0
+    //
+    // For a complex input FFT, this should have the following shape:
+    // Dim0: extent = 2, stride = 1 -- real followed by imaginary components
+    // Dim1: extent = size0, stride = 2
+    // Dim2: extent = size1, stride = size0 * 2
     ImageParam input;
 
     Func build() {
