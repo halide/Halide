@@ -188,21 +188,20 @@ void CodeGen_Hexagon::init_module() {
     Type u16 = UInt(16);
     Type u32 = UInt(32);
 
-    // Define some confusingly named vectors that are 1x and 2x the
-    // Hexagon HVX width.
-    Type i8x1 = i8.with_lanes(native_vector_bits() / 8);
-    Type i16x1 = i16.with_lanes(native_vector_bits() / 16);
-    Type i32x1 = i32.with_lanes(native_vector_bits() / 32);
-    Type u8x1 = u8.with_lanes(native_vector_bits() / 8);
-    Type u16x1 = u16.with_lanes(native_vector_bits() / 16);
-    Type u32x1 = u32.with_lanes(native_vector_bits() / 32);
+    // Define vectors that are 1x and 2x the Hexagon HVX width.
+    Type i8v1 = i8.with_lanes(native_vector_bits() / 8);
+    Type i16v1 = i16.with_lanes(native_vector_bits() / 16);
+    Type i32v1 = i32.with_lanes(native_vector_bits() / 32);
+    Type u8v1 = u8.with_lanes(native_vector_bits() / 8);
+    Type u16v1 = u16.with_lanes(native_vector_bits() / 16);
+    Type u32v1 = u32.with_lanes(native_vector_bits() / 32);
 
-    Type i8x2 = i8x1.with_lanes(i8x1.lanes() * 2);
-    Type i16x2 = i16x1.with_lanes(i16x1.lanes() * 2);
-    Type i32x2 = i32x1.with_lanes(i32x1.lanes() * 2);
-    Type u8x2 = u8x1.with_lanes(u8x1.lanes() * 2);
-    Type u16x2 = u16x1.with_lanes(u16x1.lanes() * 2);
-    Type u32x2 = u32x1.with_lanes(u32x1.lanes() * 2);
+    Type i8v2 = i8v1.with_lanes(i8v1.lanes() * 2);
+    Type i16v2 = i16v1.with_lanes(i16v1.lanes() * 2);
+    Type i32v2 = i32v1.with_lanes(i32v1.lanes() * 2);
+    Type u8v2 = u8v1.with_lanes(u8v1.lanes() * 2);
+    Type u16v2 = u16v1.with_lanes(u16v1.lanes() * 2);
+    Type u32v2 = u32v1.with_lanes(u32v1.lanes() * 2);
 
     // LLVM's HVX vector intrinsics don't include the type of the
     // operands, they all operate on vectors of 32 bit integers. To make
@@ -220,220 +219,220 @@ void CodeGen_Hexagon::init_module() {
     };
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vzb), u16x2,  "zxt.vub", {u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vzh), u32x2,  "zxt.vuh", {u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16x2,  "sxt.vb",  {i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32x2,  "sxt.vh",  {i16x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vzb), u16v2,  "zxt.vub", {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vzh), u32v2,  "zxt.vuh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16v2,  "sxt.vb",  {i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32v2,  "sxt.vh",  {i16v1} },
 
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vshuffeb), i8x1,  "trunc.vh",  {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vshufeh),  i16x1, "trunc.vw",  {i32x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vshuffob), i8x1,  "trunclo.vh",  {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vshufoh),  i16x1, "trunclo.vw",  {i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vshuffeb), i8v1,  "trunc.vh",  {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vshufeh),  i16v1, "trunc.vw",  {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vshuffob), i8v1,  "trunclo.vh",  {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vshufoh),  i16v1, "trunclo.vw",  {i32v2} },
 
         // Downcast with saturation:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsathub),  u8x1,  "trunc_satub.vh",  {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsatwh),   i16x1, "trunc_sath.vw",   {i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsathub),  u8v1,  "trunc_satub.vh",  {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsatwh),   i16v1, "trunc_sath.vw",   {i32v2} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhub), u8x1,  "trunc_satub_rnd.vh", {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhb),  i8x1,  "trunc_satb_rnd.vh",  {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundwuh), u16x1, "trunc_satuh_rnd.vw", {i32x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundwh),  i16x1, "trunc_sath_rnd.vw",  {i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhub), u8v1,  "trunc_satub_rnd.vh", {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhb),  i8v1,  "trunc_satb_rnd.vh",  {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundwuh), u16v1, "trunc_satuh_rnd.vw", {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vroundwh),  i16v1, "trunc_sath_rnd.vw",  {i32v2} },
 
         // vpack does not interleave its input.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackhub_sat), u8x1,  "pack_satub.vh", {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwuh_sat), u16x1, "pack_satuh.vw", {i32x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackhb_sat),  i8x1,  "pack_satb.vh",  {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16x1, "pack_sath.vw",  {i32x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8x1,  "pack.vh",       {i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16x1, "pack.vw",       {i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackhub_sat), u8v1,  "pack_satub.vh", {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwuh_sat), u16v1, "pack_satuh.vw", {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackhb_sat),  i8v1,  "pack_satb.vh",  {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16v1, "pack_sath.vw",  {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8v1,  "pack.vh",       {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16v1, "pack.vw",       {i32v2} },
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
         // operands, because it works with two's complement arithmetic.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddb),     i8x1,  "add.vb.vb",     {i8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh),     i16x1, "add.vh.vh",     {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw),     i32x1, "add.vw.vw",     {i32x1, i32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddb_dv),  i8x2,  "add.vb.vb.dv",  {i8x2,  i8x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh_dv),  i16x2, "add.vh.vh.dv",  {i16x2, i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw_dv),  i32x2, "add.vw.vw.dv",  {i32x2, i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddb),     i8v1,  "add.vb.vb",     {i8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh),     i16v1, "add.vh.vh",     {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw),     i32v1, "add.vw.vw",     {i32v1, i32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddb_dv),  i8v2,  "add.vb.vb.dv",  {i8v2,  i8v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh_dv),  i16v2, "add.vh.vh.dv",  {i16v2, i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw_dv),  i32v2, "add.vw.vw.dv",  {i32v2, i32v2} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb),     i8x1,  "sub.vb.vb",     {i8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh),     i16x1, "sub.vh.vh",     {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw),     i32x1, "sub.vw.vw",     {i32x1, i32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb_dv),  i8x2,  "sub.vb.vb.dv",  {i8x2,  i8x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh_dv),  i16x2, "sub.vh.vh.dv",  {i16x2, i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw_dv),  i32x2, "sub.vw.vw.dv",  {i32x2, i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb),     i8v1,  "sub.vb.vb",     {i8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh),     i16v1, "sub.vh.vh",     {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw),     i32v1, "sub.vw.vw",     {i32v1, i32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb_dv),  i8v2,  "sub.vb.vb.dv",  {i8v2,  i8v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh_dv),  i16v2, "sub.vh.vh.dv",  {i16v2, i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw_dv),  i32v2, "sub.vw.vw.dv",  {i32v2, i32v2} },
 
 
         // Adds/subtract of unsigned values with saturation.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat),    u8x1,  "satub_add.vub.vub",    {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat),    u16x1, "satuh_add.vuh.vuh",    {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat),     i16x1, "sath_add.vh.vh",       {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat),     i32x1, "satw_add.vw.vw",       {i32x1, i32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat_dv), u8x2,  "satub_add.vub.vub.dv", {u8x2,  u8x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat_dv), u16x2, "satuh_add.vuh.vuh.dv", {u16x2, u16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16x2, "sath_add.vh.vh.dv",    {i16x2, i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32x2, "satw_add.vw.vw.dv",    {i32x2, i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat),    u8v1,  "satub_add.vub.vub",    {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat),    u16v1, "satuh_add.vuh.vuh",    {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat),     i16v1, "sath_add.vh.vh",       {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat),     i32v1, "satw_add.vw.vw",       {i32v1, i32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat_dv), u8v2,  "satub_add.vub.vub.dv", {u8v2,  u8v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat_dv), u16v2, "satuh_add.vuh.vuh.dv", {u16v2, u16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16v2, "sath_add.vh.vh.dv",    {i16v2, i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat),    u8x1,  "satub_sub.vub.vub",    {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat),    u16x1, "satuh_sub.vuh.vuh",    {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhsat),     i16x1, "sath_sub.vh.vh",       {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubwsat),     i32x1, "satw_sub.vw.vw",       {i32x1, i32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat_dv), u8x2,  "satub_sub.vub.vub.dv", {u8x2,  u8x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat_dv), u16x2, "satuh_sub.vuh.vuh.dv", {u16x2, u16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhsat_dv),  i16x2, "sath_sub.vh.vh.dv",    {i16x2, i16x2} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubwsat_dv),  i32x2, "satw_sub.vw.vw.dv",    {i32x2, i32x2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat),    u8v1,  "satub_sub.vub.vub",    {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat),    u16v1, "satuh_sub.vuh.vuh",    {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhsat),     i16v1, "sath_sub.vh.vh",       {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubwsat),     i32v1, "satw_sub.vw.vw",       {i32v1, i32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat_dv), u8v2,  "satub_sub.vub.vub.dv", {u8v2,  u8v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat_dv), u16v2, "satuh_sub.vuh.vuh.dv", {u16v2, u16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhsat_dv),  i16v2, "sath_sub.vh.vh.dv",    {i16v2, i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubwsat_dv),  i32v2, "satw_sub.vw.vw.dv",    {i32v2, i32v2} },
 
         // Absolute value:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsh),   u16x1, "abs.vh", {i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsw),   u32x1, "abs.vw", {i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsh),   u16v1, "abs.vh", {i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsw),   u32v1, "abs.vw", {i32v1} },
 
         // Absolute difference:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffub),  u8x1,  "absd.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffuh),  u16x1, "absd.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffh),   u16x1, "absd.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffw),   u32x1, "absd.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffub),  u8v1,  "absd.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffuh),  u16v1, "absd.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffh),   u16v1, "absd.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffw),   u32v1, "absd.vw.vw",   {i32v1, i32v1} },
 
         // Averaging:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgub), u8x1,  "avg.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavguh), u16x1, "avg.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgh),  i16x1, "avg.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgw),  i32x1, "avg.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgub), u8v1,  "avg.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavguh), u16v1, "avg.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgh),  i16v1, "avg.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgw),  i32v1, "avg.vw.vw",   {i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgubrnd), u8x1,  "avg_rnd.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavguhrnd), u16x1, "avg_rnd.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavghrnd),  i16x1, "avg_rnd.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgwrnd),  i32x1, "avg_rnd.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgubrnd), u8v1,  "avg_rnd.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavguhrnd), u16v1, "avg_rnd.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavghrnd),  i16v1, "avg_rnd.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgwrnd),  i32v1, "avg_rnd.vw.vw",   {i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgub), i8x1,  "navg.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgh),  i16x1, "navg.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgw),  i32x1, "navg.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgub), i8v1,  "navg.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgh),  i16v1, "navg.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgw),  i32v1, "navg.vw.vw",   {i32v1, i32v1} },
 
         // Non-widening multiplication:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyih),  i16x1, "mul.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyihb), i16x1, "mul.vh.b",    {i16x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwh), i32x1, "mul.vw.h",    {i32x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwb), i32x1, "mul.vw.b",    {i32x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyih),  i16v1, "mul.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyihb), i16v1, "mul.vh.b",    {i16v1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwh), i32v1, "mul.vw.h",    {i32v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwb), i32v1, "mul.vw.b",    {i32v1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyih_acc),  i16x1, "add_mul.vh.vh.vh",   {i16x1, i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyihb_acc), i16x1, "add_mul.vh.vh.b",    {i16x1, i16x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwh_acc), i32x1, "add_mul.vw.vw.h",    {i32x1, i32x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwb_acc), i32x1, "add_mul.vw.vw.b",    {i32x1, i32x1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyih_acc),  i16v1, "add_mul.vh.vh.vh",   {i16v1, i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyihb_acc), i16v1, "add_mul.vh.vh.b",    {i16v1, i16v1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwh_acc), i32v1, "add_mul.vw.vw.h",    {i32v1, i32v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyiwb_acc), i32v1, "add_mul.vw.vw.b",    {i32v1, i32v1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Widening vector multiplication:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyubv), u16x2, "mpy.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuhv), u32x2, "mpy.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybv),  i16x2, "mpy.vb.vb",   {i8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhv),  i32x2, "mpy.vh.vh",   {i16x1, i16x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyubv), u16v2, "mpy.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuhv), u32v2, "mpy.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybv),  i16v2, "mpy.vb.vb",   {i8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhv),  i32v2, "mpy.vh.vh",   {i16v1, i16v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyubv_acc), u16x2, "add_mpy.vuh.vub.vub", {u16x2, u8x1, u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuhv_acc), u32x2, "add_mpy.vuw.vuh.vuh", {u32x2, u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybv_acc),  i16x2, "add_mpy.vh.vb.vb",    {i16x2, i8x1, i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhv_acc),  i32x2, "add_mpy.vw.vh.vh",    {i32x2, i16x1, i16x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyubv_acc), u16v2, "add_mpy.vuh.vub.vub", {u16v2, u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuhv_acc), u32v2, "add_mpy.vuw.vuh.vuh", {u32v2, u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybv_acc),  i16v2, "add_mpy.vh.vb.vb",    {i16v2, i8v1, i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhv_acc),  i32v2, "add_mpy.vw.vh.vh",    {i32v2, i16v1, i16v1} },
 
         // Inconsistencies: both are vector instructions despite the
         // missing 'v', and the signedness is indeed swapped.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybusv), i16x2, "mpy.vub.vb",  {u8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhus),  i32x2, "mpy.vh.vuh",  {i16x1, u16x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybusv), i16v2, "mpy.vub.vb",  {u8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhus),  i32v2, "mpy.vh.vuh",  {i16v1, u16v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybusv_acc), i16x2, "add_mpy.vh.vub.vb",  {i16x2, u8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhus_acc),  i32x2, "add_mpy.vw.vh.vuh",  {i32x2, i16x1, u16x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybusv_acc), i16v2, "add_mpy.vh.vub.vb",  {i16v2, u8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhus_acc),  i32v2, "add_mpy.vw.vh.vuh",  {i32v2, i16v1, u16v1} },
 
         // Widening scalar multiplication:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyub),  u16x2, "mpy.vub.ub",  {u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuh),  u32x2, "mpy.vuh.uh",  {u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyh),   i32x2, "mpy.vh.h",    {i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus), i16x2, "mpy.vub.b",   {u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyub),  u16v2, "mpy.vub.ub",  {u8v1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuh),  u32v2, "mpy.vuh.uh",  {u16v1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyh),   i32v2, "mpy.vh.h",    {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus), i16v2, "mpy.vub.b",   {u8v1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyub_acc),   u16x2, "add_mpy.vuh.vub.ub",   {u16x2, u8x1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuh_acc),   u32x2, "add_mpy.vuw.vuh.uh",   {u32x2, u16x1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus_acc),  i16x2, "add_mpy.vh.vub.b",     {i16x2, u8x1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsat_acc), i32x2, "satw_add_mpy.vw.vh.h", {i32x2, i16x1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyub_acc),   u16v2, "add_mpy.vuh.vub.ub",   {u16v2, u8v1,  u8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuh_acc),   u32v2, "add_mpy.vuw.vuh.uh",   {u32v2, u16v1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus_acc),  i16v2, "add_mpy.vh.vub.b",     {i16v2, u8v1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsat_acc), i32v2, "satw_add_mpy.vw.vh.h", {i32v2, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmux), i8x1,  "mux.vb.vb",  {i8x1,  i8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmux), i16x1, "mux.vh.vh",  {i16x1, i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmux), i32x1, "mux.vw.vw",  {i32x1, i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmux), i8v1,  "mux.vb.vb",  {i8v1,  i8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmux), i16v1, "mux.vh.vh",  {i16v1, i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmux), i32v1, "mux.vw.vw",  {i32v1, i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_veqb), i8x1,  "eq.vb.vb",  {i8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_veqh), i16x1, "eq.vh.vh",  {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_veqw), i32x1, "eq.vw.vw",  {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_veqb), i8v1,  "eq.vb.vb",  {i8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_veqh), i16v1, "eq.vh.vh",  {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_veqw), i32v1, "eq.vw.vw",  {i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtub), i8x1,  "gt.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtuh), i16x1, "gt.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtuw), i32x1, "gt.vuw.vuw", {u32x1, u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtb),  i8x1,  "gt.vb.vb",   {i8x1,  i8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vgth),  i16x1, "gt.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtw),  i32x1, "gt.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtub), i8v1,  "gt.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtuh), i16v1, "gt.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtuw), i32v1, "gt.vuw.vuw", {u32v1, u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtb),  i8v1,  "gt.vb.vb",   {i8v1,  i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vgth),  i16v1, "gt.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vgtw),  i32v1, "gt.vw.vw",   {i32v1, i32v1} },
 
         // Min/max:
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxub), u8x1,  "max.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxuh), u16x1, "max.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxh),  i16x1, "max.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxw),  i32x1, "max.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxub), u8v1,  "max.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxuh), u16v1, "max.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxh),  i16v1, "max.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmaxw),  i32v1, "max.vw.vw",   {i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vminub), u8x1,  "min.vub.vub", {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vminuh), u16x1, "min.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vminh),  i16x1, "min.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vminw),  i32x1, "min.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vminub), u8v1,  "min.vub.vub", {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vminuh), u16v1, "min.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vminh),  i16v1, "min.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vminw),  i32v1, "min.vw.vw",   {i32v1, i32v1} },
 
         // Shifts
         // We map arithmetic and logical shifts to just "shr", depending on type.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrhv), u16x1, "shr.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrwv), u32x1, "shr.vuw.vuw", {u32x1, u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhv), i16x1, "shr.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwv), i32x1, "shr.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrhv), u16v1, "shr.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrwv), u32v1, "shr.vuw.vuw", {u32v1, u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhv), i16v1, "shr.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwv), i32v1, "shr.vw.vw",   {i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), u16x1, "shl.vuh.vuh", {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), u32x1, "shl.vuw.vuw", {u32x1, u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), i16x1, "shl.vh.vh",   {i16x1, i16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), i32x1, "shl.vw.vw",   {i32x1, i32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), u16v1, "shl.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), u32v1, "shl.vuw.vuw", {u32v1, u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslhv), i16v1, "shl.vh.vh",   {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslwv), i32v1, "shl.vw.vw",   {i32v1, i32v1} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrh),  u16x1, "shr.vuh.uh", {u16x1, u16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrw),  u32x1, "shr.vuw.uw", {u32x1, u32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh),  i16x1, "shr.vh.h",   {i16x1, i16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw),  i32x1, "shr.vw.w",   {i32x1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrh),  u16v1, "shr.vuh.uh", {u16v1, u16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vlsrw),  u32v1, "shr.vuw.uw", {u32v1, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh),  i16v1, "shr.vh.h",   {i16v1, i16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw),  i32v1, "shr.vw.w",   {i32v1, i32} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  u16x1, "shl.vuh.uh", {u16x1, u16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  u32x1, "shl.vuw.uw", {u32x1, u32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  i16x1, "shl.vh.h",   {i16x1, i16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  i32x1, "shl.vw.w",   {i32x1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  u16v1, "shl.vuh.uh", {u16v1, u16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  u32v1, "shl.vuw.uw", {u32v1, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  i16v1, "shl.vh.h",   {i16v1, i16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  i32v1, "shl.vw.w",   {i32v1, i32} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw_acc), i32x1, "add_shr.vw.vw.w", {i32x1, i32x1, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw_acc), i32x1, "add_shl.vw.vw.w", {i32x1, i32x1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw_acc), i32v1, "add_shr.vw.vw.w", {i32v1, i32v1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw_acc), i32v1, "add_shl.vw.vw.w", {i32v1, i32v1, i32} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwh), i16x1, "trunc_shr.vw.w",   {i32x2, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhubsat), u8x1, "trunc_satub_shr.vh.h",  {i16x2, i16} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwuhsat), u16x1, "trunc_satuh_shr.vw.w", {i32x2, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwhsat),  i16x1, "trunc_sath_shr.vw.w",  {i32x2, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwh), i16v1, "trunc_shr.vw.w",   {i32v2, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrhubsat), u8v1, "trunc_satub_shr.vh.h",  {i16v2, i16} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwuhsat), u16v1, "trunc_satuh_shr.vw.w", {i32v2, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrwhsat),  i16v1, "trunc_sath_shr.vw.w",  {i32v2, i32} },
 
         // Bitwise operators
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u8x1,  "and.vb.vb",  {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u16x1, "and.vh.vh",  {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u32x1, "and.vw.vw",  {u32x1, u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vor),   u8x1,  "or.vb.vb",   {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vor),   u16x1, "or.vh.vh",   {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vor),   u32x1, "or.vw.vw",   {u32x1, u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vxor),  u8x1,  "xor.vb.vb",  {u8x1,  u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vxor),  u16x1, "xor.vh.vh",  {u16x1, u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vxor),  u32x1, "xor.vw.vw",  {u32x1, u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u8x1,  "not.vb",     {u8x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u16x1, "not.vh",     {u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32x1, "not.vw",     {u32x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u8v1,  "and.vb.vb",  {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u16v1, "and.vh.vh",  {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vand),  u32v1, "and.vw.vw",  {u32v1, u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vor),   u8v1,  "or.vb.vb",   {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vor),   u16v1, "or.vh.vh",   {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vor),   u32v1, "or.vw.vw",   {u32v1, u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vxor),  u8v1,  "xor.vb.vb",  {u8v1,  u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vxor),  u16v1, "xor.vh.vh",  {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vxor),  u32v1, "xor.vw.vw",  {u32v1, u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u8v1,  "not.vb",     {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u16v1, "not.vh",     {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32v1, "not.vw",     {u32v1} },
 
         // Broadcasts
-        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32x1,  "splat.w", {u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
 
         // Bit counting
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vcl0h), u16x1, "clz.vh", {u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vcl0w), u32x1, "clz.vw", {u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnormamth), u16x1, "cls.vh", {u16x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vnormamtw), u32x1, "cls.vw", {u32x1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vpopcounth), u16x1, "popcount.vh", {u16x1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vcl0h), u16v1, "clz.vh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vcl0w), u32v1, "clz.vw", {u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnormamth), u16v1, "cls.vh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vnormamtw), u32v1, "cls.vw", {u32v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpopcounth), u16v1, "popcount.vh", {u16v1} },
         // TODO: If we need it, we could implement a popcountw in the
         // runtime module that uses popcounth, and horizontally add
         // each pair of lanes.
