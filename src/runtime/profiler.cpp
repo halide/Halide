@@ -318,7 +318,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 int percent = 0;
                 if (p->time != 0) {
-                    percent = fs->time / (p->time / 100);
+                    percent = (100*fs->time) / p->time;
                 }
                 sstr << "(" << percent << "%)";
                 while (sstr.size() < 50) sstr << " ";

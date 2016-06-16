@@ -444,8 +444,18 @@ bool equal(Expr a, Expr b) {
     return IRComparer().compare_expr(a, b) == IRComparer::Equal;
 }
 
+bool graph_equal(Expr a, Expr b) {
+    IRCompareCache cache(8);
+    return IRComparer(&cache).compare_expr(a, b) == IRComparer::Equal;
+}
+
 bool equal(Stmt a, Stmt b) {
     return IRComparer().compare_stmt(a, b) == IRComparer::Equal;
+}
+
+bool graph_equal(Stmt a, Stmt b) {
+    IRCompareCache cache(8);
+    return IRComparer(&cache).compare_stmt(a, b) == IRComparer::Equal;
 }
 
 bool IRDeepCompare::operator()(const Expr &a, const Expr &b) const {
