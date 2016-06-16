@@ -253,8 +253,8 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
 }
 
 namespace {
-bool var_name_match(string candidate, string var, bool assert_on=true) {
-    internal_assert(!assert_on || var.find('.') == string::npos)
+bool var_name_match(string candidate, string var) {
+    internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
     if (candidate == var) return true;
@@ -276,7 +276,7 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].pure && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
+            if (!dims[i].is_pure() && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -382,12 +382,12 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
-// Apply split directives on the reduction variables. Remove the old RVar from
-// the list and add the split result (inner and outer RVars) to the list.
+/** Apply split directives on the reduction variables. Remove the old RVar from
+ * the list and add the split result (inner and outer RVars) to the list. */
 void apply_split(const Split &s, vector<ReductionVariable> &rvars) {
     internal_assert(s.is_split());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return var_name_match(s.old_var, rv.var, false); });
+        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Splitting " << iter->var << " into " << s.outer << " and " << s.inner << "\n";
         Expr old_extent = iter->extent;
@@ -400,14 +400,14 @@ void apply_split(const Split &s, vector<ReductionVariable> &rvars) {
     }
 }
 
-// Apply fuse directives on the reduction variables. Remove the fused RVars from
-// the list and add the fused RVar to the list.
+/** Apply fuse directives on the reduction variables. Remove the fused RVars from
+ * the list and add the fused RVar to the list. */
 void apply_fuse(const Split &s, vector<ReductionVariable> &rvars) {
     internal_assert(s.is_fuse());
     const auto iter_outer = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return var_name_match(s.outer, rv.var, false); });
+        [&s](const ReductionVariable& rv) { return (s.outer == rv.var); });
     const auto iter_inner = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return var_name_match(s.inner, rv.var, false); });
+        [&s](const ReductionVariable& rv) { return (s.inner == rv.var); });
 
     if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
         debug(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
@@ -419,12 +419,12 @@ void apply_fuse(const Split &s, vector<ReductionVariable> &rvars) {
     }
 }
 
-// Apply purify directives on the reduction variables. Purify replace a RVar
-// with a Var, thus, the RVar needs to be removed from the list.
+/** Apply purify directives on the reduction variables. Purify replace a RVar
+ * with a Var, thus, the RVar needs to be removed from the list. */
 void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
     internal_assert(s.is_purify());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return var_name_match(s.old_var, rv.var, false); });
+        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
                  << ", deleting it from the rvars list\n";
@@ -432,18 +432,18 @@ void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
     }
 }
 
-// Apply rename directives on the reduction variables.
+/** Apply rename directives on the reduction variables. */
 void apply_rename(const Split &s, vector<ReductionVariable> &rvars) {
     internal_assert(s.is_rename());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return var_name_match(s.old_var, rv.var, false); });
+        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
     }
 }
 
-// Apply scheduling directives (e.g. split, fuse, etc.) on the reduction variables.
+/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction variables. */
 void apply_split_directive(const Split &s, vector<ReductionVariable> &rvars) {
     if (s.is_split()) {
         apply_split(s, rvars);
@@ -480,7 +480,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     bool is_assoc;
     vector<AssociativeOp> ops;
     std::tie(is_assoc, ops) = prove_associativity(func_name, args, values);
-    user_assert(is_assoc) << "Failed to call rfactor() since it can't prove associativity of the operator\n";
+    user_assert(is_assoc)
+        << "Failed to call rfactor() on " << stage_name
+        << " since it can't prove associativity of the operator\n";
     internal_assert(ops.size() == values.size());
 
     vector<Split> &splits = definition.schedule().splits();
@@ -496,7 +498,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
             // Check that the RVar are in the dims list
             const auto iter = std::find_if(dims.begin(), dims.end(),
                 [&rv](const Dim& dim) { return var_name_match(dim.var, rv.name()); });
-            user_assert((iter != dims.end()) && (*iter).is_rvar)
+            user_assert((iter != dims.end()) && (*iter).is_rvar())
                 << "In schedule for " << stage_name
                 << ", can't perform rfactor() on " << rv.name()
                 << " since it is not in the reduction domain\n"
@@ -556,7 +558,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
 
     // List of RVars for the new reduction domain. Any RVars not in 'rvars_kept'
-    // are removed from the RDom.
+    // are removed from the RDom
     {
         vector<ReductionVariable> temp;
         for (const auto &rv : rvars) {
@@ -573,11 +575,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     RDom f_rdom(rvars);
 
 
-    // Init definition of the intermediate Func.
+    // Init definition of the intermediate Func
 
     // Compute args of the init definition of the intermediate Func.
     // Replace the RVars, which are in 'rvars_kept', with the specified new pure
-    // Vars. Also, add the pure Vars of the original definition as part of the args.
+    // Vars. Also, add the pure Vars of the original init definition as part of
+    // the args.
+    // For example, if we have the following Func f:
+    //   f(x, y) = 10
+    //   f(r.x, r.y) += h(r.x, r.y)
+    // Calling f.update(0).rfactor({{r.y, u}}) will generate the following
+    // intermediate Func:
+    //   f_intm(u, x, y) = 0
+    //   f_intm(u, r.x, u) += h(r.x, u)
+
     vector<Var> init_args;
     init_args.insert(init_args.end(), vars_rename.begin(), vars_rename.end());
     init_args.insert(init_args.end(), dim_vars.begin(), dim_vars.end());
@@ -595,7 +606,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // We need to substitute the reference to the old RDom's RVars with
     // the new RDom's RVars. Also, substitute the reference to RVars which
-    // are in 'rvars_kept' with their corresponding new pure Vars.
+    // are in 'rvars_kept' with their corresponding new pure Vars
     map<string, Expr> substitution_map;
     for (size_t i = 0; i < intm_rvars.size(); ++i) {
         substitution_map[intm_rvars[i].var] = intm_rdom[i];
@@ -609,7 +620,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         update_args[i + vars_rename.size()] = arg;
     }
 
-    // Compute the predicates for the intermediate Func and the new update definition.
+    // Compute the predicates for the intermediate Func and the new update definition
     const vector<Expr> predicates = definition.split_predicate();
     for (const Expr &pred : predicates) {
         Expr subs_pred = substitute(substitution_map, pred);
@@ -638,7 +649,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original
-    // update definition (e.g. split, parallelize, vectorize, etc.).
+    // update definition (e.g. split, parallelize, vectorize, etc.)
     intm.function().update(0).schedule().dims() = dims;
     intm.function().update(0).schedule().splits() = splits;
 
@@ -648,15 +659,15 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         intm.update(0).purify(rvars_kept[i], vars_rename[i]);
     }
 
-    // Determine the dims of the new update definition.
-    // Since we're replacing the lifted RVars with Vars in the Func's update
-    // definition, we need to add the pure Vars to the dims list if they are
-    // not already in the list
+    // Determine the dims of the new update definition
+
+    // Add pure Vars from the original init definition to the dims list
+    // if they are not already in the list
     for (const Var &v : dim_vars) {
         const auto iter = std::find_if(dims.begin(), dims.end(),
             [&v](const Dim& dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, true, false};
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
             dims.insert(dims.end()-1, d);
         }
     }
@@ -665,7 +676,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         remove(rv);
     }
 
-    // Define the new update definition which refers to the intermediate Func
+    // Define the new update definition which refers to the intermediate Func.
+    // Using the same example as above, the new update definition is:
+    //   f(x, y) += f_intm(r.y, x, y)
 
     // Args for store in the new update definition
     vector<Expr> f_store_args(dim_vars.size());
@@ -754,7 +767,6 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
             dims[i+1].var = outer_name;
-            dims[i+1].pure = dims[i].pure;
         }
     }
 
@@ -804,12 +816,12 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     string inner_name, outer_name, fused_name;
     vector<Dim> &dims = definition.schedule().dims();
 
-    bool outer_pure = false;
+    Dim::Type outer_type = Dim::Type::PureRVar;
     for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, outer.name())) {
             found_outer = true;
             outer_name = dims[i].var;
-            outer_pure = dims[i].pure;
+            outer_type = dims[i].dim_type;
             dims.erase(dims.begin() + i);
         }
     }
@@ -827,7 +839,16 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
             inner_name = dims[i].var;
             fused_name = inner_name + "." + fused.name();
             dims[i].var = fused_name;
-            dims[i].pure &= outer_pure;
+
+            internal_assert(
+                (dims[i].is_rvar() && ((outer_type == Dim::Type::PureRVar) ||
+                                       (outer_type == Dim::Type::ImpureRVar))) ||
+                (!dims[i].is_rvar() && (outer_type == Dim::Type::PureVar)));
+
+            if (dims[i].is_rvar()) {
+                dims[i].dim_type = (dims[i].dim_type == Dim::Type::PureRVar) && (outer_type == Dim::Type::PureRVar) ?
+                    Dim::Type::PureRVar : Dim::Type::ImpureRVar;
+            }
         }
     }
 
@@ -902,7 +923,7 @@ Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
     vector<Dim> &dims = schedule.dims();
 
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, old_var.name(), false)) {
+        if (var_name_match(dims[i].var, old_var.name())) {
             found = true;
             old_name = dims[i].var;
             dims[i].var = new_name;
@@ -933,7 +954,7 @@ void Stage::remove(const string &var) {
     string old_name = var;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var, false)) {
+        if (dims[i].var == var) {
             found = true;
             old_name = dims[i].var;
             dims.erase(dims.begin() + i);
@@ -1217,9 +1238,9 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, con
 
     // Look for illegal reorderings
     for (size_t i = 0; i < idx.size(); i++) {
-        if (dims[idx[i]].pure) continue;
+        if (dims[idx[i]].is_pure()) continue;
         for (size_t j = i+1; j < idx.size(); j++) {
-            if (dims[idx[j]].pure) continue;
+            if (dims[idx[j]].is_pure()) continue;
 
             if (idx[i] > idx[j]) {
                 user_error

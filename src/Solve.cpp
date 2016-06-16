@@ -331,7 +331,7 @@ private:
     }
 
     template<typename T>
-    void visit_min_max_op(const T *op) {
+    void visit_min_max_op(const T *op, bool is_min) {
         bool old_uses_var = uses_var;
         uses_var = false;
         Expr a = mutate(op->a);
@@ -381,34 +381,34 @@ private:
                 expr = mutate(T::make(add_a->a, add_b->a)) + add_a->b;
             } else if (add_a && equal(add_a->a, b)) {
                 // op(f(x) + a, f(x)) -> f(x) + op(a, 0)
-                expr = mutate(b + T::make(add_a->b, 0));
+                expr = mutate(b + T::make(add_a->b, make_zero(op->type)));
             } else if (add_b && equal(add_b->a, a)) {
                 // op(f(x), f(x) + a) -> f(x) + op(a, 0)
-                expr = mutate(a + T::make(add_b->b, 0));
+                expr = mutate(a + T::make(add_b->b, make_zero(op->type)));
             } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
                 // op(f(x) - a, f(x) - b) -> f(x) - op(a, b)
                 expr = mutate(sub_a->a - T::make(sub_a->b, sub_b->b));
             } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
-                // op(f(x) - a, g(x) - a) -> op(f(x), g(x)) - a;
+                // op(f(x) - a, g(x) - a) -> op(f(x), g(x)) - a
                 expr = mutate(T::make(sub_a->a, sub_b->a)) - sub_a->b;
             } else if (sub_a && equal(sub_a->a, b)) {
                 // op(f(x) - a, f(x)) -> f(x) - op(a, 0)
-                expr = mutate(b - T::make(sub_a->b, 0));
+                expr = mutate(b - T::make(sub_a->b, make_zero(op->type)));
             } else if (sub_b && equal(sub_b->a, a)) {
                 // op(f(x), f(x) - a) -> f(x) - op(a, 0)
-                expr = mutate(a - T::make(sub_b->b, 0));
-            } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
-                // op(f(x)*a, f(x)*b) -> f(x)*op(a, b)
-                expr = mutate(mul_a->a * T::make(mul_a->b, mul_b->b));
-            } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
-                // op(f(x)*a, g(x)*a) -> op(f(x), g(x))*a;
+                expr = mutate(a - T::make(sub_b->b, make_zero(op->type)));
+            } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_positive_const(mul_a->b)) {
+                // Positive a: min(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
+                //             max(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
                 expr = mutate(T::make(mul_a->a, mul_b->a)) * mul_a->b;
-            } else if (mul_a && equal(mul_a->a, b)) {
-                // op(f(x)*a, f(x)) -> f(x) * op(a, 1)
-                expr = mutate(b * T::make(mul_a->b, 1));
-            } else if (mul_b && equal(mul_b->a, a)) {
-                // op(f(x), f(x)*a) -> f(x) * op(a, 1)
-                expr = mutate(a * T::make(mul_b->b, 1));
+            } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b) && is_negative_const(mul_a->b)) {
+                if (is_min) {
+                    // Negative a: min(f(x)*a, g(x)*a) -> max(f(x), g(x))*a
+                    expr = mutate(Max::make(mul_a->a, mul_b->a)) * mul_a->b;
+                } else {
+                    // Negative a: max(f(x)*a, g(x)*a) -> min(f(x), g(x))*a
+                    expr = mutate(Min::make(mul_a->a, mul_b->a)) * mul_a->b;
+                }
             } else {
                 fail(T::make(a, b));
             }
@@ -429,11 +429,11 @@ private:
     }
 
     void visit(const Min *op) {
-        visit_min_max_op(op);
+        visit_min_max_op(op, true);
     }
 
     void visit(const Max *op) {
-        visit_min_max_op(op);
+        visit_min_max_op(op, false);
     }
 
     template<typename T>
@@ -1299,8 +1299,6 @@ void solve_test() {
     check_solve(5*y + 3*x == 2, ((x == ((2 - (5*y))/3)) && (((2 - (5*y)) % 3) == 0)));
     check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
     check_solve(min(x + y, x + 5), x + min(y, 5));
-    check_solve(min(x*2, x*y), x*min(2, y));
-    check_solve(min(x*z, x*y*z), x*min(z, y*z));
 
     // A let statement
     check_solve(Let::make("z", 3 + 5*x, y + z < 8),

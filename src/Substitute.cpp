@@ -189,11 +189,6 @@ Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt) {
     return GraphSubstituteExpr(find, replacement).mutate(stmt);
 }
 
-/** Substitute in all let Exprs in a piece of IR. Doesn't substitute
- * in let stmts, as this may change the meaning of the IR (e.g. by
- * moving a load after a store). Produces graphs of IR, so don't use
- * non-graph-aware visitors or mutators on it until you've CSE'd the
- * result. */
 class SubstituteInAllLets : public IRGraphMutator {
 
     using IRGraphMutator::visit;

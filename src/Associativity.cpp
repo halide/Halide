@@ -34,7 +34,7 @@ class ConvertSelfRef : public IRMutator {
     bool is_conditional;
 
     void visit(const Call *op) {
-        if (is_solvable) {
+        if (!is_solvable) {
             return;
         }
         IRMutator::visit(op);
@@ -52,14 +52,14 @@ class ConvertSelfRef : public IRMutator {
             } else if (is_conditional && (op->value_index == value_index)) {
                 debug(4) << "Self-reference of " << op->name
                          << " inside a conditional. Operation is not associative\n";
-                is_solvable = true;
+                is_solvable = false;
                 return;
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (!equal(op->args[i], args[i])) {
                     debug(4) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
-                    is_solvable = true;
+                    is_solvable = false;
                     return;
                 }
             }
@@ -89,10 +89,9 @@ class ConvertSelfRef : public IRMutator {
 
 public:
     ConvertSelfRef(const string &f, const vector<Expr> &args, int idx, const string &x) :
-        func(f), args(args), value_index(idx), op_x(x), is_conditional(false),
-        is_solvable(false) {}
+        func(f), args(args), value_index(idx), op_x(x), is_conditional(false) {}
 
-    bool is_solvable;
+    bool is_solvable = true;
     Expr x_part;
 };
 
@@ -121,18 +120,13 @@ bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
     Expr y = Variable::make(t, op_y);
 
     if (!x_part.defined()) { // op(y)
-        if (is_const(e)) {
-            // Update with a constant is associative and the identity can be
-            // anything since it's going to be replaced anyway
-            op.op = y;
-            op.identity = make_const(t, 0);
-            op.x = {"", Expr()};
-            op.y = {op_y, e};
-            return true;
-        } else {
-            debug(4) << "Update by non-constant is not associative: " << e << "\n";
-            return false;
-        }
+        // Update with no self-recurrence is associative and the identity can be
+        // anything since it's going to be replaced anyway
+        op.op = y;
+        op.identity = make_const(t, 0);
+        op.x = {"", Expr()};
+        op.y = {op_y, e};
+        return true;
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -200,7 +194,7 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
         // Replace any self-reference to Func 'f' with a Var
         ConvertSelfRef csr(f, args, idx, op_x);
         expr = csr.mutate(expr);
-        if (csr.is_solvable) {
+        if (!csr.is_solvable) {
             return std::make_pair(false, vector<AssociativeOp>());
         }
 
@@ -258,7 +252,7 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
     internal_assert(result.first == is_associative)
         << "Checking associativity: " << print_args(f, args, exprs) << "\n"
         << "  Expect is_associative: " << is_associative << "\n"
-        << "  instead of " << is_associative << "\n";
+        << "  instead of " << result.first << "\n";
     if (is_associative) {
         for (size_t i = 0; i < ops.size(); ++i) {
             const AssociativeOp &op = result.second[i];
@@ -274,8 +268,11 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
                 << "Checking associativity: " << print_args(f, args, exprs) << "\n"
                 << "  Expect y: " << ops[i].y.second << "\n"
                 << "  instead of " << op.y.second << "\n";
-            Expr expected_op = substitute(
-                ops[i].y.first, Variable::make(op.y.second.type(), op.y.first), ops[i].op);
+            Expr expected_op = ops[i].op;
+            if (op.y.second.defined()) {
+                expected_op = substitute(
+                    ops[i].y.first, Variable::make(op.y.second.type(), op.y.first), expected_op);
+            }
             if (op.x.second.defined()) {
                 expected_op = substitute(
                     ops[i].x.first, Variable::make(op.x.second.type(), op.x.first), expected_op);
@@ -308,7 +305,7 @@ void associativity_test() {
     Expr g_call = Call::make(Int(32), "g", {rx}, Call::CallType::Halide, nullptr, 0);
 
 
-    // f(x) = min(f(x), int16(z))
+    /*// f(x) = min(f(x), int16(z))
     check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
                         true, {{min(x, y), Int(32).max(), {"x", f_call_0}, {"y", y + Cast::make(Int(16), z)}}});
 
@@ -347,6 +344,14 @@ void associativity_test() {
     // f(x) = f(x) - g(rx) -> Is associative given that the merging operator is +
     check_associativity("f", {x}, {f_call_0 - g_call},
                         true, {{x + y, 0, {"x", f_call_0}, {"y", g_call}}});
+
+    // f(x) = min(4, g(rx)) -> trivially associative
+    check_associativity("f", {x}, {min(4, g_call)},
+                        true, {{y, make_const(Int(32), 0), {"", Expr()}, {"y", min(g_call, 4)}}});*/
+
+    // f(x) = f(x) -> associative but doesn't really make any sense, so we'll treat it as non-associative
+    check_associativity("f", {x}, {f_call_0},
+                        false, {});
 
     std::cout << "Associativity test passed" << std::endl;
 }
