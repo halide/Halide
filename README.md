@@ -352,3 +352,89 @@ Planned features:
   * Support for integer textures and arithmetic
 
   * Compute shaders
+
+
+Halide for Hexagon HVX
+======================
+Halide supports offloading work to Qualcomm Hexagon DSP on Qualcomm Snapdragon 820
+devices or newer. The Hexagon DSP provides a set of 64 and 128 byte vector
+instructions - the Hexagon Vector eXtensions (HVX). HVX is well suited to image
+processing, and Halide for Hexagon HVX will generate the appropriate HVX vector
+instructions from a program authored in Halide.
+
+Halide can be used to compile Hexagon object files directly, by using a target such
+as `hexagon-32-qurt-hvx_64` or `hexagon-32-qurt-hvx_128`.
+
+Halide can also be used to offload parts of a pipeline to Hexagon using the `hexagon`
+scheduling directive. To enable the `hexagon` scheduling directive, include the
+`hvx_64` or `hvx_128` target features in your target. The currently supported
+combination of targets is to use the HVX target features with an x86 linux
+host (to use the simulator) or with an ARM android target (to use Hexagon DSP hardware).
+For examples of using the `hexagon` scheduling directive on both the simulator and a
+Hexagon DSP, see the HelloHexagon example app.
+
+To build and run an example app using the Hexagon target,
+  1. Obtain and build LLVM and Clang v3.9 or later from llvm.org
+  2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
+  3. Build and run an example for Hexagon HVX
+
+#### 1. Obtain and build LLVM and clang v3.9 or later from llvm.org
+LLVM 3.9 is currently under development. These are the same instructions as above for
+building Clang/LLVM, but for trunk Clang/LLVM instead of 3.7.
+
+    cd <path to llvm>
+    svn co http://llvm.org/svn/llvm-project/llvm/trunk .
+    svn co http://llvm.org/svn/llvm-project/cfe/trunk ./tools/clang
+    # Or:
+    #    git clone http://llvm.org/git/llvm.git .
+    #    git clone http://llvm.org/git/clang.git llvm/tools
+    mkdir build
+    cd build
+    cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+    make -j8
+    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+    export CLANG=<path to llvm>/build/bin/clang
+
+#### 2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
+Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
+  1. Select the Hexagon Series 600 Software and download the 3.0 version for Linux.
+  2. untar the installer
+  3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools, selecting
+  Installation of Hexagon SDK into /location/of/SDK/Hexagon\_SDK/3.0 and the Hexagon tools into /location/of/SDK/Hexagon\_Tools/8.0
+  4. Set an environment variable to point to the SDK installation location
+
+    export SDK_LOC=/location/of/SDK
+
+#### 3. Build and run an example for Hexagon HVX
+In addition to running Hexagon code on device, Halide also supports running Hexagon
+code on the simulator from the Hexagon tools.
+
+To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the simulator:
+
+    export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.0/Tools/
+    LD_LIBRARY_PATH=/.../Halide/src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
+
+#### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
+
+The device needs to be prepared to run Halide Hexagon code. Halide uses a small
+runtime library that must be present on the device. The device must be signed as
+a debug device to run Hexagon code, or the libhalide\_hexagon\_remote\_skel.so
+library must be signed. Refer to the Hexagon SDK documentation for more information
+about signing Hexagon binaries (see: Hexagon\_SDK/3.0/docs/Tools\_Signing.html).
+
+    adb shell mkdir -p /system/lib/rfsa/adsp
+    adb push src/runtime/hexagon_remote/bin/arm-32-android/libhalide_hexagon_host.so /system/lib/
+    adb push src/runtime/hexagon_remote/bin/arm-64-android/libhalide_hexagon_host.so /system/lib64/
+    adb push src/runtime/hexagon_remote/bin/v60/libhalide_hexagon_remote_skel.so /system/lib/rfsa/adsp/
+
+To build the example for Android, first ensure that you have a standalone toolchain
+created from the NDK using the make-standalone-toolchain.sh script:
+
+    export ANDROID_NDK_HOME=$SDK_LOC/Hexagon_SDK/3.0/tools/android-ndk-r10d/
+    export ANDROID_ARM64_TOOLCHAIN=<path to put new arm64 toolchain>
+    $ANDROID_NDK_HOME/build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
+
+Now build and run the HelloHexagon example:
+
+    export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.0/Tools/
+    make run-arm-64-android
