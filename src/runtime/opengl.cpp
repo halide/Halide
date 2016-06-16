@@ -63,7 +63,8 @@
     GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
     GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
     GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                              \
-    GLFUNC(PFNGLGETBOOLEANV, GetBooleanv);
+    GLFUNC(PFNGLGETBOOLEANV, GetBooleanv);                              \
+    GLFUNC(PFNGLFINISHPROC, Finish);
 
 // List of all OpenGL functions used by the runtime, which may not
 // exist due to an older or less capable version of GL. In using any
@@ -180,8 +181,8 @@ struct ModuleState {
 // running a filter.
 struct SavedGLState {
     GLint active_texture;
-	  GLint program;
-	  GLint viewport[4];
+          GLint program;
+          GLint viewport[4];
     GLboolean cull_face;
     GLboolean depth_test;
 };
@@ -1861,7 +1862,14 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_device_sync).";
         return 1;
     }
-    // TODO: glFinish()
+#ifdef DEBUG_RUNTIME
+    int64_t t0 = halide_current_time_ns(user_context);
+#endif
+    global_state.Finish();
+#ifdef DEBUG_RUNTIME
+    int64_t t1 = halide_current_time_ns(user_context);
+    debug(user_context) << "halide_opengl_device_sync: took " << (t1 - t0) / 1e3 << "usec\n";
+#endif
     return 0;
 }
 
