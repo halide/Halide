@@ -4253,7 +4253,7 @@ void check_algebra() {
     check(x/1, x);
     check(x/x, 1);
     check(1/x, 0);
-    check((-1)/x, select(0 < x, 1, -1));
+    check((-1)/x, select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
     check((x / 3) / 4, x / 12);
@@ -4281,9 +4281,9 @@ void check_algebra() {
     check((z - x*y)/x, z/x - y);
     check((z - y*x)/x, z/x - y);
 
-    check((x+y)/x, 1 + y/x);
+    check((x+y)/x, y/x + 1);
     check((y+x)/x, y/x + 1);
-    check((x-y)/x, 1 + (-y)/x);
+    check((x-y)/x, (-y)/x + 1);
     check((y-x)/x, y/x + (-1));
 
     check(((x+y)+z)/x, (y+z)/x + 1);
