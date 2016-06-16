@@ -20,6 +20,9 @@ int main(int argc, char **argv) {
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, 16, 16);
             f.update().gpu_tile(x, y, 16, 16);
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon(y).vectorize(x, 32);
+            f.update().hexagon(y).vectorize(x, 32);
         }
 
         Realization result = f.realize(1024, 1024);
@@ -54,11 +57,15 @@ int main(int argc, char **argv) {
         // Schedule the pure step and the odd update steps on the gpu
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, 16, 16);
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            f.hexagon(y).vectorize(x, 32);
         }
         for (int i = 0; i < 10; i ++) {
 	    if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, 16, 16);
+                } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+                    f.update(i).hexagon(y).vectorize(x, 32);
                 }
 	    } else {
 		f.update(i);
@@ -100,6 +107,8 @@ int main(int argc, char **argv) {
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, 16, 16);
+                } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+                    f.update(i).hexagon(y).vectorize(x, 32);
                 }
             } else {
                 f.update(i);
@@ -144,6 +153,8 @@ int main(int argc, char **argv) {
             } else {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, 16, 16);
+                } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+                    f.update(i).hexagon(y).vectorize(x, 32);
                 }
             }
         }

@@ -1398,6 +1398,11 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
+Stage &Stage::hexagon(VarOrRVar x) {
+    set_dim_device_api(x, DeviceAPI::Hexagon);
+    return *this;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -1741,6 +1746,11 @@ Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
 
 Func &Func::glsl(Var x, Var y, Var c) {
     return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
+}
+
+Func &Func::hexagon(VarOrRVar x) {
+    Stage(func.definition(), name()).hexagon(x);
+    return *this;
 }
 
 Func &Func::reorder_storage(Var x, Var y) {
