@@ -5,15 +5,16 @@
 #include <vector>
 #include <sstream>
 #include <cassert>
+#include <memory>
 
 typedef unsigned int handle_t;
 
-HexagonWrapper *sim = NULL;
+std::unique_ptr<HexagonWrapper> sim;
 
 int init_sim() {
     if (sim) return 0;
 
-    sim = new HexagonWrapper(HEX_CPU_V60);
+    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V60));
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
