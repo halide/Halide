@@ -246,19 +246,19 @@ void CodeGen_X86::visit(const Cast *op) {
 
     static Pattern patterns[] = {
         {false, true, Int(8, 16), "llvm.x86.sse2.padds.b",
-         i8c(wild_i16x_ + wild_i16x_)},
+         i8_sat(wild_i16x_ + wild_i16x_)},
         {false, true, Int(8, 16), "llvm.x86.sse2.psubs.b",
-         i8c(wild_i16x_ - wild_i16x_)},
+         i8_sat(wild_i16x_ - wild_i16x_)},
         {false, true, UInt(8, 16), "llvm.x86.sse2.paddus.b",
-         u8c(wild_u16x_ + wild_u16x_)},
+         u8_sat(wild_u16x_ + wild_u16x_)},
         {false, true, UInt(8, 16), "llvm.x86.sse2.psubus.b",
          u8(max(wild_i16x_ - wild_i16x_, 0))},
         {false, true, Int(16, 8), "llvm.x86.sse2.padds.w",
-         i16c(wild_i32x_ + wild_i32x_)},
+         i16_sat(wild_i32x_ + wild_i32x_)},
         {false, true, Int(16, 8), "llvm.x86.sse2.psubs.w",
-         i16c(wild_i32x_ - wild_i32x_)},
+         i16_sat(wild_i32x_ - wild_i32x_)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.paddus.w",
-         u16c(wild_u32x_ + wild_u32x_)},
+         u16_sat(wild_u32x_ + wild_u32x_)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.psubus.w",
          u16(max(wild_i32x_ - wild_i32x_, 0))},
         {false, true, Int(16, 8), "llvm.x86.sse2.pmulh.w",
@@ -270,13 +270,13 @@ void CodeGen_X86::visit(const Cast *op) {
         {false, true, UInt(16, 8), "llvm.x86.sse2.pavg.w",
          u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
         {false, false, Int(16, 8), "packssdwx8",
-         i16c(wild_i32x_)},
+         i16_sat(wild_i32x_)},
         {false, false, Int(8, 16), "packsswbx16",
-         i8c(wild_i16x_)},
+         i8_sat(wild_i16x_)},
         {false, false, UInt(8, 16), "packuswbx16",
-         u8c(wild_i16x_)},
+         u8_sat(wild_i16x_)},
         {true, false, UInt(16, 8), "packusdwx8",
-         u16c(wild_i32x_)}
+         u16_sat(wild_i32x_)}
     };
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {

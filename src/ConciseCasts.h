@@ -55,11 +55,11 @@ inline Expr u8(Expr e) {
     return cast(UInt(8, e.type().lanes()), e);
 }
 
-inline Expr i8c(Expr e) {
+inline Expr i8_sat(Expr e) {
     return cast(Int(8, e.type().lanes()), clamp(e, -128, 127));
 }
 
-inline Expr u8c(Expr e) {
+inline Expr u8_sat(Expr e) {
     if (e.type().is_uint()) {
         return cast(UInt(8, e.type().lanes()), min(e, 255));
     } else {
@@ -67,11 +67,11 @@ inline Expr u8c(Expr e) {
     }
 }
 
-inline Expr i16c(Expr e) {
+inline Expr i16_sat(Expr e) {
     return cast(Int(16, e.type().lanes()), clamp(e, -32768, 32767));
 }
 
-inline Expr u16c(Expr e) {
+inline Expr u16_sat(Expr e) {
     if (e.type().is_uint()) {
         return cast(UInt(16, e.type().lanes()), min(e, 65535));
     } else {
@@ -79,11 +79,11 @@ inline Expr u16c(Expr e) {
     }
 }
 
-inline Expr i32c(Expr e) {
+inline Expr i32_sat(Expr e) {
     return cast(Int(32, e.type().lanes()), clamp(e, Int(32).min(), Int(32).max()));
 }
 
-inline Expr u32c(Expr e) {
+inline Expr u32_sat(Expr e) {
     if (e.type().is_uint()) {
         return cast(UInt(32, e.type().lanes()), min(e, UInt(32).max()));
     } else {

@@ -151,48 +151,48 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         }
     }
 
-    casts.push_back(Pattern("vqshiftns.v8i8",  "sqshrn.v8i8",  8, i8c(wild_i16x_/wild_i16x_),  Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16c(wild_i32x_/wild_i32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32c(wild_i64x_/wild_i64x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v8i8",  "uqshrn.v8i8",  8, u8c(wild_u16x_/wild_u16x_),  Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16c(wild_u32x_/wild_u32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32c(wild_u64x_/wild_u64x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v8i8",  "sqshrun.v8i8",  8, u8c(wild_i16x_/wild_i16x_),  Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16c(wild_i32x_/wild_i32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32c(wild_i64x_/wild_i64x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v8i8",  "sqshrn.v8i8",  8, i8_sat(wild_i16x_/wild_i16x_),  Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_/wild_i32x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_/wild_i64x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v8i8",  "uqshrn.v8i8",  8, u8_sat(wild_u16x_/wild_u16x_),  Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_/wild_u32x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_/wild_u64x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v8i8",  "sqshrun.v8i8",  8, u8_sat(wild_i16x_/wild_i16x_),  Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_/wild_i32x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_/wild_i64x_), Pattern::RightShift));
 
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
-    casts.push_back(Pattern("vqshifts.v8i8",  "sqshl.v8i8",  8, i8c(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v4i16", "sqshl.v4i16", 4, i16c(i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v2i32", "sqshl.v2i32", 2, i32c(i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v8i8",  "uqshl.v8i8",  8, u8c(u16(wild_u8x8)*wild_u16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v4i16", "uqshl.v4i16", 4, u16c(u32(wild_u16x4)*wild_u32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v2i32", "uqshl.v2i32", 2, u32c(u64(wild_u32x2)*wild_u64x2), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v8i8",  "sqshlu.v8i8",  8, u8c(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16c(i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32c(i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v8i8",  "sqshl.v8i8",  8, i8_sat(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v4i16", "sqshl.v4i16", 4, i16_sat(i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v8i8",  "uqshl.v8i8",  8, u8_sat(u16(wild_u8x8)*wild_u16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(u32(wild_u16x4)*wild_u32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(u64(wild_u32x2)*wild_u64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v8i8",  "sqshlu.v8i8",  8, u8_sat(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
 
     // We use the 128-bit version for all other vector widths.
-    casts.push_back(Pattern("vqshifts.v16i8", "sqshl.v16i8", 16, i8c(i16(wild_i8x_)*wild_i16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v8i16", "sqshl.v8i16",  8, i16c(i32(wild_i16x_)*wild_i32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v4i32", "sqshl.v4i32",  4, i32c(i64(wild_i32x_)*wild_i64x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v16i8", "uqshl.v16i8",  16, u8c(u16(wild_u8x_)*wild_u16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v8i16", "uqshl.v8i16",  8, u16c(u32(wild_u16x_)*wild_u32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v4i32", "uqshl.v4i32",  4, u32c(u64(wild_u32x_)*wild_u64x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v16i8", "sqshlu.v16i8", 16, u8c(i16(wild_i8x_)*wild_i16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v8i16", "sqshlu.v8i16", 8, u16c(i32(wild_i16x_)*wild_i32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v4i32", "sqshlu.v4i32", 4, u32c(i64(wild_i32x_)*wild_i64x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v16i8", "sqshl.v16i8", 16, i8_sat(i16(wild_i8x_)*wild_i16x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v8i16", "sqshl.v8i16",  8, i16_sat(i32(wild_i16x_)*wild_i32x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v4i32", "sqshl.v4i32",  4, i32_sat(i64(wild_i32x_)*wild_i64x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v16i8", "uqshl.v16i8",  16, u8_sat(u16(wild_u8x_)*wild_u16x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v8i16", "uqshl.v8i16",  8, u16_sat(u32(wild_u16x_)*wild_u32x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v4i32", "uqshl.v4i32",  4, u32_sat(u64(wild_u32x_)*wild_u64x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v16i8", "sqshlu.v16i8", 16, u8_sat(i16(wild_i8x_)*wild_i16x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v8i16", "sqshlu.v8i16", 8, u16_sat(i32(wild_i16x_)*wild_i32x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v4i32", "sqshlu.v4i32", 4, u32_sat(i64(wild_i32x_)*wild_i64x_), Pattern::LeftShift));
 
-    casts.push_back(Pattern("vqmovns.v8i8",  "sqxtn.v8i8",    8,   i8c(wild_i16x_)));
-    casts.push_back(Pattern("vqmovns.v4i16", "sqxtn.v4i16",   4,  i16c(wild_i32x_)));
-    casts.push_back(Pattern("vqmovns.v2i32", "sqxtn.v2i32",   2,  i32c(wild_i64x_)));
-    casts.push_back(Pattern("vqmovnu.v8i8",  "uqxtn.v8i8",    8,   u8c(wild_u16x_)));
-    casts.push_back(Pattern("vqmovnu.v4i16", "uqxtn.v4i16",   4,  u16c(wild_u32x_)));
-    casts.push_back(Pattern("vqmovnu.v2i32", "uqxtn.v2i32",   2,  u32c(wild_u64x_)));
-    casts.push_back(Pattern("vqmovnsu.v8i8",  "sqxtun.v8i8",  8,   u8c(wild_i16x_)));
-    casts.push_back(Pattern("vqmovnsu.v4i16", "sqxtun.v4i16", 4,  u16c(wild_i32x_)));
-    casts.push_back(Pattern("vqmovnsu.v2i32", "sqxtun.v2i32", 2,  u32c(wild_i64x_)));
+    casts.push_back(Pattern("vqmovns.v8i8",  "sqxtn.v8i8",    8,   i8_sat(wild_i16x_)));
+    casts.push_back(Pattern("vqmovns.v4i16", "sqxtn.v4i16",   4,  i16_sat(wild_i32x_)));
+    casts.push_back(Pattern("vqmovns.v2i32", "sqxtn.v2i32",   2,  i32_sat(wild_i64x_)));
+    casts.push_back(Pattern("vqmovnu.v8i8",  "uqxtn.v8i8",    8,   u8_sat(wild_u16x_)));
+    casts.push_back(Pattern("vqmovnu.v4i16", "uqxtn.v4i16",   4,  u16_sat(wild_u32x_)));
+    casts.push_back(Pattern("vqmovnu.v2i32", "uqxtn.v2i32",   2,  u32_sat(wild_u64x_)));
+    casts.push_back(Pattern("vqmovnsu.v8i8",  "sqxtun.v8i8",  8,   u8_sat(wild_i16x_)));
+    casts.push_back(Pattern("vqmovnsu.v4i16", "sqxtun.v4i16", 4,  u16_sat(wild_i32x_)));
+    casts.push_back(Pattern("vqmovnsu.v2i32", "sqxtun.v2i32", 2,  u32_sat(wild_i64x_)));
 
     // Overflow for int32 is not defined by Halide, so for those we can take
     // advantage of special add-and-halve instructions.
