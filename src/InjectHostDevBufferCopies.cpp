@@ -197,7 +197,11 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
         Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
-        return call_extern_and_assert("halide_device_malloc", {buf, device_interface});
+        Stmt device_malloc = call_extern_and_assert("halide_device_malloc", {buf, device_interface});
+        Stmt destructor =
+            Evaluate::make(Call::make(Int(32), Call::register_destructor,
+                                      {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
+        return Block::make(device_malloc, destructor);
     }
 
     enum CopyDirection {
