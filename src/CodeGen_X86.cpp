@@ -93,21 +93,19 @@ void CodeGen_X86::visit(const Sub *op) {
 }
 
 void CodeGen_X86::visit(const GT *op) {
-    Type t = op->a.type();
-    int bits = t.lanes() * t.bits();
-    if (t.lanes() == 1 || bits % 128 == 0) {
-        // LLVM is fine for native vector widths or scalars
-        CodeGen_Posix::visit(op);
-    } else {
+    if (op->type.is_vector()) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
-        Value *a = codegen(op->a), *b = codegen(op->b);
+
+        Type t = op->a.type();
+        int bits = t.lanes() * t.bits();
 
         int slice_size = 128 / t.bits();
         if (target.has_feature(Target::AVX) && bits > 128) {
             slice_size = 256 / t.bits();
         }
 
+        Value *a = codegen(op->a), *b = codegen(op->b);
         vector<Value *> result;
         for (int i = 0; i < op->type.lanes(); i += slice_size) {
             Value *sa = slice_vector(a, i, slice_size);
@@ -125,25 +123,26 @@ void CodeGen_X86::visit(const GT *op) {
 
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
+    } else {
+        CodeGen_Posix::visit(op);
     }
+
 }
 
 void CodeGen_X86::visit(const EQ *op) {
-    Type t = op->a.type();
-    int bits = t.lanes() * t.bits();
-    if (t.lanes() == 1 || bits % 128 == 0) {
-        // LLVM is fine for native vector widths or scalars
-        CodeGen_Posix::visit(op);
-    } else {
+    if (op->type.is_vector()) {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
-        Value *a = codegen(op->a), *b = codegen(op->b);
+
+        Type t = op->a.type();
+        int bits = t.lanes() * t.bits();
 
         int slice_size = 128 / t.bits();
         if (target.has_feature(Target::AVX) && bits > 128) {
             slice_size = 256 / t.bits();
         }
 
+        Value *a = codegen(op->a), *b = codegen(op->b);
         vector<Value *> result;
         for (int i = 0; i < op->type.lanes(); i += slice_size) {
             Value *sa = slice_vector(a, i, slice_size);
@@ -159,6 +158,8 @@ void CodeGen_X86::visit(const EQ *op) {
 
         value = concat_vectors(result);
         value = slice_vector(value, 0, t.lanes());
+    } else {
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -179,51 +180,33 @@ void CodeGen_X86::visit(const NE *op) {
 }
 
 void CodeGen_X86::visit(const Select *op) {
-
-    // LLVM doesn't correctly use pblendvb for u8 vectors that aren't
-    // width 16, so we peephole optimize them to intrinsics.
-    struct Pattern {
-        string intrin;
-        Expr pattern;
-    };
-
-    static Pattern patterns[] = {
-        {"pblendvb_ult_i8x16", select(wild_u8x_ < wild_u8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_ult_i8x16", select(wild_u8x_ < wild_u8x_, wild_u8x_, wild_u8x_)},
-        {"pblendvb_slt_i8x16", select(wild_i8x_ < wild_i8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_slt_i8x16", select(wild_i8x_ < wild_i8x_, wild_u8x_, wild_u8x_)},
-        {"pblendvb_ule_i8x16", select(wild_u8x_ <= wild_u8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_ule_i8x16", select(wild_u8x_ <= wild_u8x_, wild_u8x_, wild_u8x_)},
-        {"pblendvb_sle_i8x16", select(wild_i8x_ <= wild_i8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_sle_i8x16", select(wild_i8x_ <= wild_i8x_, wild_u8x_, wild_u8x_)},
-        {"pblendvb_ne_i8x16", select(wild_u8x_ != wild_u8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_ne_i8x16", select(wild_u8x_ != wild_u8x_, wild_u8x_, wild_u8x_)},
-        {"pblendvb_ne_i8x16", select(wild_i8x_ != wild_i8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_ne_i8x16", select(wild_i8x_ != wild_i8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_eq_i8x16", select(wild_u8x_ == wild_u8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_eq_i8x16", select(wild_u8x_ == wild_u8x_, wild_u8x_, wild_u8x_)},
-        {"pblendvb_eq_i8x16", select(wild_i8x_ == wild_i8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_eq_i8x16", select(wild_i8x_ == wild_i8x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_i8x16", select(wild_u1x_, wild_i8x_, wild_i8x_)},
-        {"pblendvb_i8x16", select(wild_u1x_, wild_u8x_, wild_u8x_)}
-    };
-
-    if (target.has_feature(Target::SSE41) &&
-        op->condition.type().is_vector() &&
-        op->type.bits() == 8 &&
-        op->type.lanes() != 16) {
-
-        vector<Expr> matches;
-        for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
-            if (expr_match(patterns[i].pattern, op, matches)) {
-                value = call_intrin(op->type, 16, patterns[i].intrin, matches);
-                return;
-            }
+    if (op->condition.type().is_vector()) {
+        // LLVM handles selects on vector conditions much better at native width
+        Value *cond = codegen(op->condition);
+        Value *true_val = codegen(op->true_value);
+        Value *false_val = codegen(op->false_value);
+        Type t = op->true_value.type();
+        int slice_size = 128 / t.bits();
+        if (t.bits() * t.lanes() > 128 &&
+            ((t.is_float() && target.has_feature(Target::AVX)) ||
+             target.has_feature(Target::AVX2))) {
+            slice_size *= 2;
         }
+
+        vector<Value *> result;
+        for (int i = 0; i < t.lanes(); i += slice_size) {
+            Value *st = slice_vector(true_val, i, slice_size);
+            Value *sf = slice_vector(false_val, i, slice_size);
+            Value *sc = slice_vector(cond, i, slice_size);
+            Value *slice_value = builder->CreateSelect(sc, st, sf);
+            result.push_back(slice_value);
+        }
+
+        value = concat_vectors(result);
+        value = slice_vector(value, 0, t.lanes());
+    } else {
+        CodeGen_Posix::visit(op);
     }
-
-    CodeGen_Posix::visit(op);
-
 }
 
 void CodeGen_X86::visit(const Cast *op) {
@@ -345,7 +328,7 @@ Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
 }
 
 void CodeGen_X86::visit(const Min *op) {
-    if (!op->type.is_vector()) {
+    if (LLVM_VERSION >= 39 || op->type.is_scalar()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -363,28 +346,13 @@ void CodeGen_X86::visit(const Min *op) {
         value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
         value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", {op->a, op->b});
-    } else if (op->type.element_of() == Float(32)) {
-        if (op->type.lanes() % 8 == 0 && target.has_feature(Target::AVX)) {
-            // This condition should possibly be > 4, rather than a
-            // multiple of 8, but shuffling in undefs seems to work
-            // poorly with avx.
-            value = call_intrin(op->type, 8, "min_f32x8", {op->a, op->b});
-        } else {
-            value = call_intrin(op->type, 4, "min_f32x4", {op->a, op->b});
-        }
-    } else if (op->type.element_of() == Float(64)) {
-         if (op->type.lanes() % 4 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 4, "min_f64x4", {op->a, op->b});
-        } else {
-            value = call_intrin(op->type, 2, "min_f64x2", {op->a, op->b});
-        }
     } else {
         CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Max *op) {
-    if (!op->type.is_vector()) {
+    if (LLVM_VERSION >= 39 || op->type.is_scalar()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -402,18 +370,6 @@ void CodeGen_X86::visit(const Max *op) {
         value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", {op->a, op->b});
     } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
         value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", {op->a, op->b});
-    } else if (op->type.element_of() == Float(32)) {
-        if (op->type.lanes() % 8 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 8, "max_f32x8", {op->a, op->b});
-        } else {
-            value = call_intrin(op->type, 4, "max_f32x4", {op->a, op->b});
-        }
-    } else if (op->type.element_of() == Float(64)) {
-      if (op->type.lanes() % 4 == 0 && target.has_feature(Target::AVX)) {
-            value = call_intrin(op->type, 4, "max_f64x4", {op->a, op->b});
-        } else {
-            value = call_intrin(op->type, 2, "max_f64x2", {op->a, op->b});
-        }
     } else {
         CodeGen_Posix::visit(op);
     }
