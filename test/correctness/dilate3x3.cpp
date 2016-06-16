@@ -37,6 +37,8 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         dilate3x3.gpu_tile(x, y, 16, 16);
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        dilate3x3.hexagon().vectorize(x, 64);
     } else {
         dilate3x3.vectorize(x, target.natural_vector_size<uint8_t>());
     }
