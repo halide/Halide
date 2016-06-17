@@ -136,11 +136,9 @@ void CodeGen_X86::visit(const GT *op) {
         // split it up ourselves.
 
         Type t = op->a.type();
-        int bits = t.lanes() * t.bits();
-
         int slice_size = 128 / t.bits();
-        if (target.has_feature(Target::AVX) && bits > 128) {
-            slice_size = 256 / t.bits();
+        if (slice_size < t.lanes()) {
+            slice_size = target.natural_vector_size(t);
         }
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -173,11 +171,9 @@ void CodeGen_X86::visit(const EQ *op) {
         // split it up ourselves.
 
         Type t = op->a.type();
-        int bits = t.lanes() * t.bits();
-
         int slice_size = 128 / t.bits();
-        if (target.has_feature(Target::AVX) && bits > 128) {
-            slice_size = 256 / t.bits();
+        if (slice_size < t.lanes()) {
+            slice_size = target.natural_vector_size(t);
         }
 
         Value *a = codegen(op->a), *b = codegen(op->b);
@@ -225,10 +221,8 @@ void CodeGen_X86::visit(const Select *op) {
         Value *false_val = codegen(op->false_value);
         Type t = op->true_value.type();
         int slice_size = 128 / t.bits();
-        if (t.bits() * t.lanes() > 128 &&
-            ((t.is_float() && target.has_feature(Target::AVX)) ||
-             target.has_feature(Target::AVX2))) {
-            slice_size *= 2;
+        if (slice_size < t.lanes()) {
+            slice_size = target.natural_vector_size(t);
         }
 
         vector<Value *> result;
