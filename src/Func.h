@@ -44,6 +44,7 @@ struct VarOrRVar {
 
 namespace Internal {
 struct Split;
+struct StorageDim;
 }
 
 /** A single definition of a Func. May be a pure or update definition. */
@@ -51,6 +52,7 @@ class Stage {
     Internal::Definition definition;
     std::string stage_name;
     std::vector<Var> dim_vars; // Pure Vars of the Function (from the init definition)
+    std::vector<Internal::StorageDim> storage_dims;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
@@ -60,14 +62,16 @@ class Stage {
     Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
 
 public:
-    Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args)
-            : definition(d), stage_name(n), dim_vars(args) {
+    Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
+          const std::vector<Internal::StorageDim> &sdims)
+            : definition(d), stage_name(n), dim_vars(args), storage_dims(sdims) {
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
 
-    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args)
-            : definition(d), stage_name(n) {
+    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
+          const std::vector<Internal::StorageDim> &sdims)
+            : definition(d), stage_name(n), storage_dims(sdims) {
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -102,42 +106,57 @@ public:
      * The rvars not listed in 'preserved' are removed from the original Func and
      * are lifted to the intermediate Func. The remaining rvars (the ones in
      * 'preserved') are made pure in the intermediate Func. The intermediate Func's
-     * update definition will inherit all scheduling directives (e.g. split, etc.)
-     * applied to the original Func's update definition.
+     * update definition inherits all scheduling directives (e.g. split,fuse, etc.)
+     * applied to the original Func's update definition. The loop order of the
+     * intermediate Func's update definition is the same as the original, albeit
+     * the lifted RVars are replaced by the new pure Vars. The loop order of the
+     * intermediate Func's init definition from innermost to outermost is the args'
+     * order of the original Func's init definition followed by the new pure Vars.
+     *
+     * The intermediate Func also inherits storage order from the original Func
+     * with the new pure Vars added to the outermost.
      *
      * For example, f.update(0).rfactor({{r.y, u}}) would rewrite a pipeline like this:
      \code
-     f(x) = 0;
-     f(x) += g(r.x, r.y);
+     f(x, y) = 0;
+     f(x, y) += g(r.x, r.y);
      \endcode
      * into a pipeline like this:
      \code
-     f_intm(u, x) = 0;
-     f_intm(u, x) += g(r.x, u);
+     f_intm(x, y, u) = 0;
+     f_intm(x, y, u) += g(r.x, u);
 
-     f(x) = 0;
-     f(x) = f_intm(r.y, x);
+     f(x, y) = 0;
+     f(x, y) = f_intm(x, y, r.y);
      \endcode
      *
      * This has a variety of uses. You can use it to split computation of an associative reduction:
      \code
-     f() = -inf;
+     f(x, y) = 10;
      RDom r(0, 96);
-     f() = max(f(), g(r.x));
-     f.update(0).split(r.x, rxo, rxi, 8);
+     f(x, y) = max(f(x, y), g(x, y, r.x));
+     f.update(0).split(r.x, rxo, rxi, 8).reorder(y, x).parallel(x);
      f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
      \endcode
      *
      *, which is equivalent to:
      \code
      parallel for u = 0 to 11:
-       f_intm(u) = -inf
-     parallel for u = 0 to 11:
-       for rx1 = 0 to 7:
-         f_intm(u) = max(f_intm(u), g(8*u + rxi))
-     f() = -inf
-     for rxo = 0 to 11:
-         f() = max(f(), f_intm(u))
+       for y:
+         for x:
+           f_intm(x, y, u) = -inf
+     parallel for x:
+       for y:
+         parallel for u = 0 to 11:
+           for rxi = 0 to 7:
+             f_intm(x, y, u) = max(f_intm(x, y, u), g(8*u + rxi))
+     for y:
+       for x:
+         f(x, y) = 10
+     parallel for x:
+       for y:
+         for rxo = 0 to 11:
+           f(x, y) = max(f(x, y), f_intm(x, y, u))
      \endcode
      *
      */
