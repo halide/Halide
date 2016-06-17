@@ -114,6 +114,7 @@ int simple_rfactor_test(bool compile_module) {
     g(x, y) = 40;
     RDom r(10, 20, 30, 40);
     g(r.x, r.y) = max(g(r.x, r.y) + f(r.x, r.y), g(r.x, r.y));
+    g.reorder_storage(y, x);
 
     Var u("u");
     Func intm = g.update(0).rfactor(r.y, u);
