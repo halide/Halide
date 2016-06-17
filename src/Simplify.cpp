@@ -4281,15 +4281,15 @@ void check_algebra() {
     check((z - x*y)/x, z/x - y);
     check((z - y*x)/x, z/x - y);
 
-    check((x+y)/x, y/x + 1);
-    check((y+x)/x, y/x + 1);
-    check((x-y)/x, (-y)/x + 1);
-    check((y-x)/x, y/x + (-1));
+    check((x + y)/x, y/x + 1);
+    check((y + x)/x, y/x + 1);
+    check((x - y)/x, (-y)/x + 1);
+    check((y - x)/x, y/x + (-1));
 
-    check(((x+y)+z)/x, (y+z)/x + 1);
-    check(((y+x)+z)/x, (y+z)/x + 1);
-    check((y+(x+z))/x, (y+z)/x + 1);
-    check((y+(z+x))/x, (y+z)/x + 1);
+    check(((x + y) + z)/x, (y + z)/x + 1);
+    check(((y + x) + z)/x, (y + z)/x + 1);
+    check((y + (x + z))/x, (y + z)/x + 1);
+    check((y + (z + x))/x, (y + z)/x + 1);
 
     check(xf / 4.0f, xf * 0.25f);
 
