@@ -23,6 +23,8 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
+  android_ion
+  android_mman
   android_opengl_context
   android_tempfile
   arm_cpu_features
@@ -32,13 +34,16 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
+  fake_ion
   fake_thread_pool
   float16_t
   gcd_thread_pool
   gpu_device_selection
+  hexagon_host
   ios_io
   linux_clock
   linux_host_cpu_count
+  linux_mman
   linux_opengl_context
   matlab
   metadata
@@ -50,6 +55,7 @@ set(RUNTIME_CPP
   module_aot_ref_count
   module_jit_ref_count
   nacl_host_cpu_count
+  noos
   opencl
   opengl
   openglcompute
@@ -68,6 +74,8 @@ set(RUNTIME_CPP
   powerpc_cpu_features
   profiler
   profiler_inlined
+  qurt_allocator
+  qurt_hvx
   renderscript
   runtime_api
   ssp
@@ -88,6 +96,8 @@ set (RUNTIME_LL
   aarch64
   arm
   arm_no_neon
+  hvx_64
+  hvx_128
   mips
   pnacl_math
   posix_math
@@ -222,6 +232,7 @@ set(HEADER_FILES
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Hexagon.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -254,6 +265,8 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
+  HexagonOffload.h
+  HexagonOptimize.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -277,6 +290,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   Lambda.h
   Lerp.h
+  LoopCarry.h
   Lower.h
   MainPage.h
   MatlabWrapper.h
@@ -340,10 +354,12 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
 
 configure_file(runtime/HalideRuntime.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeCuda.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeHexagonHost.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenCL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeMetal.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
@@ -364,6 +380,7 @@ ENDIF()
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
+  AlignLoads.cpp
   AllocationBoundsInference.cpp
   BoundaryConditions.cpp
   Bounds.cpp
@@ -374,6 +391,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_C.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
+  CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
@@ -407,6 +425,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
+  HexagonOffload.cpp
+  HexagonOptimize.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -428,6 +448,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Output.cpp
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
+  LoopCarry.cpp
   Lower.cpp
   MatlabWrapper.cpp
   Memoization.cpp
@@ -508,46 +529,51 @@ target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
 
 if (TARGET_NATIVE_CLIENT)
-  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT")
+  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT=1")
 endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
-  target_compile_definitions(Halide PRIVATE "-DWITH_X86")
+  target_compile_definitions(Halide PRIVATE "-DWITH_X86=1")
   list(APPEND LLVM_COMPONENTS x86)
 endif()
 
 if (TARGET_ARM)
-  target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
+  target_compile_definitions(Halide PRIVATE "-DWITH_ARM=1")
   list(APPEND LLVM_COMPONENTS arm)
 endif()
 
 if (TARGET_AARCH64)
-  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
+  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64=1")
   list(APPEND LLVM_COMPONENTS aarch64)
 endif()
 
+if (TARGET_HEXAGON)
+  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON=1")
+  list(APPEND LLVM_COMPONENTS hexagon)
+endif()
+
 if (TARGET_PTX)
-  target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
+  target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
   list(APPEND LLVM_COMPONENTS nvptx)
 endif()
 
 if (TARGET_OPENCL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
 endif()
 
 if (TARGET_OPENGL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL=1")
 endif()
 
 if (TARGET_MIPS)
-  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
+  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS=1")
   list(APPEND LLVM_COMPONENTS mips)
 endif()
 
 if (TARGET_METAL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")

@@ -132,6 +132,8 @@ public:
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &allow_race_conditions();
+
+    EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
     // @}
 };
 
@@ -517,7 +519,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
@@ -1317,6 +1319,10 @@ public:
     /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
+    /** Schedule for execution on Hexagon. When a loop is marked with
+     * Hexagon, that loop is executed on a Hexagon DSP. */
+    EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
+
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
      * example, foo.reorder_storage(y, x) tells Halide to use
@@ -1787,6 +1793,9 @@ inline void schedule_scalar(Func f) {
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
         f.gpu_single_thread();
+    }
+    if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
+        f.hexagon();
     }
 }
 
