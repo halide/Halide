@@ -1,4 +1,5 @@
 #include "CodeGen_PowerPC.h"
+#include "ConciseCasts.h"
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "Util.h"
@@ -10,6 +11,7 @@ namespace Internal {
 using std::vector;
 using std::string;
 
+using namespace Halide::ConciseCasts;
 using namespace llvm;
 
 CodeGen_PowerPC::CodeGen_PowerPC(Target t) : CodeGen_Posix(t) {
@@ -38,49 +40,6 @@ const char* CodeGen_PowerPC::altivec_int_type_name(const Type& t) {
     return nullptr;  // not a recognized int type.
 }
 
-namespace {
-
-Expr _i64(Expr e) {
-    return cast(Int(64, e.type().lanes()), e);
-}
-
-Expr _u64(Expr e) {
-    return cast(UInt(64, e.type().lanes()), e);
-}
-Expr _i32(Expr e) {
-    return cast(Int(32, e.type().lanes()), e);
-}
-
-Expr _u32(Expr e) {
-    return cast(UInt(32, e.type().lanes()), e);
-}
-
-Expr _i16(Expr e) {
-    return cast(Int(16, e.type().lanes()), e);
-}
-
-Expr _u16(Expr e) {
-    return cast(UInt(16, e.type().lanes()), e);
-}
-
-Expr _i8(Expr e) {
-    return cast(Int(8, e.type().lanes()), e);
-}
-
-Expr _u8(Expr e) {
-    return cast(UInt(8, e.type().lanes()), e);
-}
-
-Expr _f32(Expr e) {
-    return cast(Float(32, e.type().lanes()), e);
-}
-
-Expr _f64(Expr e) {
-    return cast(Float(64, e.type().lanes()), e);
-}
-
-}
-
 void CodeGen_PowerPC::visit(const Cast *op) {
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors in here.
@@ -100,41 +59,41 @@ void CodeGen_PowerPC::visit(const Cast *op) {
 
     static Pattern patterns[] = {
         {false, true, Int(8, 16), "llvm.ppc.altivec.vaddsbs",
-         _i8(clamp(wild_i16x_ + wild_i16x_, -128, 127))},
+         i8_sat(wild_i16x_ + wild_i16x_)},
         {false, true, Int(8, 16), "llvm.ppc.altivec.vsubsbs",
-         _i8(clamp(wild_i16x_ - wild_i16x_, -128, 127))},
+         i8_sat(wild_i16x_ - wild_i16x_)},
         {false, true, UInt(8, 16), "llvm.ppc.altivec.vaddubs",
-         _u8(min(wild_u16x_ + wild_u16x_, 255))},
+         u8_sat(wild_u16x_ + wild_u16x_)},
         {false, true, UInt(8, 16), "llvm.ppc.altivec.vsububs",
-         _u8(max(wild_i16x_ - wild_i16x_, 0))},
+         u8(max(wild_i16x_ - wild_i16x_, 0))},
         {false, true, Int(16, 8), "llvm.ppc.altivec.vaddshs",
-         _i16(clamp(wild_i32x_ + wild_i32x_, -32768, 32767))},
+         i16_sat(wild_i32x_ + wild_i32x_)},
         {false, true, Int(16, 8), "llvm.ppc.altivec.vsubshs",
-         _i16(clamp(wild_i32x_ - wild_i32x_, -32768, 32767))},
+         i16_sat(wild_i32x_ - wild_i32x_)},
         {false, true, UInt(16, 8), "llvm.ppc.altivec.vadduhs",
-         _u16(min(wild_u32x_ + wild_u32x_, 65535))},
+         u16_sat(wild_u32x_ + wild_u32x_)},
         {false, true, UInt(16, 8), "llvm.ppc.altivec.vsubuhs",
-         _u16(max(wild_i32x_ - wild_i32x_, 0))},
+         u16(max(wild_i32x_ - wild_i32x_, 0))},
         {false, true, Int(32, 4), "llvm.ppc.altivec.vaddsws",
-         _i32(clamp(wild_i64x_ + wild_i64x_, min_i32, max_i32))},
+         i32_sat(wild_i64x_ + wild_i64x_)},
         {false, true, Int(32, 4), "llvm.ppc.altivec.vsubsws",
-         _i32(clamp(wild_i64x_ - wild_i64x_, min_i32, max_i32))},
+         i32_sat(wild_i64x_ - wild_i64x_)},
         {false, true, UInt(32, 4), "llvm.ppc.altivec.vadduws",
-         _u32(min(wild_u64x_ + wild_u64x_, max_u32))},
+         u32_sat(wild_u64x_ + wild_u64x_)},
         {false, true, UInt(32, 4), "llvm.ppc.altivec.vsubuws",
-         _u32(max(wild_i64x_ - wild_i64x_, 0))},
+         u32(max(wild_i64x_ - wild_i64x_, 0))},
         {false, true, Int(8, 16), "llvm.ppc.altivec.vavgsb",
-         _i8(((wild_i16x_ + wild_i16x_) + 1) / 2)},
+         i8(((wild_i16x_ + wild_i16x_) + 1) / 2)},
         {false, true, UInt(8, 16), "llvm.ppc.altivec.vavgub",
-         _u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {false, true, Int(16, 8), "llvm.ppc.altivec.vavgsh",
-         _i16(((wild_i32x_ + wild_i32x_) + 1) / 2)},
+         i16(((wild_i32x_ + wild_i32x_) + 1) / 2)},
         {false, true, UInt(16, 8), "llvm.ppc.altivec.vavguh",
-         _u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
         {false, true, Int(32, 4), "llvm.ppc.altivec.vavgsw",
-         _i32(((wild_i64x_ + wild_i64x_) + 1) / 2)},
+         i32(((wild_i64x_ + wild_i64x_) + 1) / 2)},
         {false, true, UInt(32, 4), "llvm.ppc.altivec.vavguw",
-         _u32(((wild_u64x_ + wild_u64x_) + 1) / 2)},
+         u32(((wild_u64x_ + wild_u64x_) + 1) / 2)},
     };
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
@@ -168,7 +127,7 @@ void CodeGen_PowerPC::visit(const Min *op) {
         CodeGen_Posix::visit(op);
         return;
     }
-    
+
     bool vsx = target.has_feature(Target::VSX);
     bool arch_2_07 = target.has_feature(Target::POWER_ARCH_2_07);
 
