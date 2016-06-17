@@ -169,6 +169,64 @@ extern int32_t halide_debug_to_file(void *user_context, const char *filename,
                                     int32_t type_code,
                                     struct buffer_t *buf);
 
+/** Types in the halide type system. They can be ints, unsigned ints,
+ * or floats (of various bit-widths), or a handle (which is always 64-bits).
+ * Note that the int/uint/float values do not imply a specific bit width
+ * (the bit width is expected to be encoded in a separate value).
+ */
+typedef enum halide_type_code_t
+#if __cplusplus >= 201103L
+: uint8_t
+#endif
+{
+    halide_type_int = 0,   //!< signed integers
+    halide_type_uint = 1,  //!< unsigned integers
+    halide_type_float = 2, //!< floating point numbers
+    halide_type_handle = 3 //!< opaque pointer type (void *)
+} halide_type_code_t;
+
+// Note that while __attribute__ can go before or after the declaration,
+// __declspec apparently is only allowed before.
+#ifndef HALIDE_ATTRIBUTE_ALIGN
+    #ifdef _MSC_VER
+        #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
+    #else
+        #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
+    #endif
+#endif
+
+/** A runtime tag for a type in the halide type system. Can be ints,
+ * unsigned ints, or floats of various bit-widths (the 'bits'
+ * field). Can also be vectors of the same (by setting the 'lanes'
+ * field to something larger than one). This struct should be
+ * exactly 32-bits in size. */
+struct halide_type_t {
+    /** The basic type code: signed integer, unsigned integer, or floating point. */
+#if __cplusplus >= 201103L
+    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
+#else
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
+#endif
+
+    /** The number of bits of precision of a single scalar value of this type. */
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
+
+    /** How many elements in a vector. This is 1 for scalar types. */
+    HALIDE_ATTRIBUTE_ALIGN(2) uint16_t lanes;
+
+#ifdef __cplusplus
+    /** Construct a runtime representation of a Halide type from:
+     * code: The fundamental type from an enum.
+     * bits: The bit size of one element.
+     * lanes: The number of vector elements in the type. */
+    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+        : code(code), bits(bits), lanes(lanes) {
+    }
+
+    /** Size in bytes for a single element, even if width is not 1, of this type. */
+    size_t bytes() { return (bits + 7) / 8; }
+#endif
+};
 
 enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_store = 1,
@@ -181,16 +239,12 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_begin_pipeline = 8,
                               halide_trace_end_pipeline = 9};
 
-// TODO: Update to use halide_type_t
-// Tracking issue filed here: https://github.com/halide/Halide/issues/980
 #pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
     enum halide_trace_event_code event;
     int32_t parent_id;
-    int32_t type_code;
-    int32_t bits;
-    int32_t vector_width;
+    halide_type_t type;
     int32_t value_index;
     void *value;
     int32_t dimensions;
@@ -644,65 +698,6 @@ extern int halide_can_use_target_features(uint64_t features);
 extern int halide_default_can_use_target_features(uint64_t features);
 
 
-/** Types in the halide type system. They can be ints, unsigned ints,
- * or floats (of various bit-widths), or a handle (which is always 64-bits).
- * Note that the int/uint/float values do not imply a specific bit width
- * (the bit width is expected to be encoded in a separate value).
- */
-typedef enum halide_type_code_t
-#if __cplusplus >= 201103L
-: uint8_t
-#endif
-{
-    halide_type_int = 0,   //!< signed integers
-    halide_type_uint = 1,  //!< unsigned integers
-    halide_type_float = 2, //!< floating point numbers
-    halide_type_handle = 3 //!< opaque pointer type (void *)
-} halide_type_code_t;
-
-// Note that while __attribute__ can go before or after the declaration,
-// __declspec apparently is only allowed before.
-#ifndef HALIDE_ATTRIBUTE_ALIGN
-    #ifdef _MSC_VER
-        #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
-    #else
-        #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
-    #endif
-#endif
-
-/** A runtime tag for a type in the halide type system. Can be ints,
- * unsigned ints, or floats of various bit-widths (the 'bits'
- * field). Can also be vectors of the same (by setting the 'lanes'
- * field to something larger than one). This struct should be
- * exactly 32-bits in size. */
-struct halide_type_t {
-    /** The basic type code: signed integer, unsigned integer, or floating point. */
-#if __cplusplus >= 201103L
-    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
-#else
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
-#endif
-
-    /** The number of bits of precision of a single scalar value of this type. */
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
-
-    /** How many elements in a vector. This is 1 for scalar types. */
-    HALIDE_ATTRIBUTE_ALIGN(2) uint16_t lanes;
-
-#ifdef __cplusplus
-    /** Construct a runtime representation of a Halide type from:
-     * code: The fundamental type from an enum.
-     * bits: The bit size of one element.
-     * lanes: The number of vector elements in the type. */
-    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
-        : code(code), bits(bits), lanes(lanes) {
-    }
-
-    /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; }
-#endif
-};
-
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
@@ -812,8 +807,7 @@ struct halide_filter_argument_t {
     const char *name;       // name of the argument; will never be null or empty.
     int32_t kind;           // actually halide_argument_kind_t
     int32_t dimensions;     // always zero for scalar arguments
-    int32_t type_code;      // actually halide_type_code_t
-    int32_t type_bits;      // [1, 8, 16, 32, 64]
+    halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)

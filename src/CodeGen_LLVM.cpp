@@ -854,12 +854,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
+
+        StructType *type_t_type = module->getTypeByName("struct.halide_type_t");
+        internal_assert(type_t_type) << "Did not find halide_type_t in module.\n";
+
+        Constant *type_fields[] = {
+            ConstantInt::get(i8_t, args[arg].type.code()),
+            ConstantInt::get(i8_t, args[arg].type.bits()),
+            ConstantInt::get(i16_t, 1)
+        };
+        Constant *type = ConstantStruct::get(type_t_type, type_fields);
+
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
-            ConstantInt::get(i32_t, args[arg].type.code()),
-            ConstantInt::get(i32_t, args[arg].type.bits()),
+            type,
             embed_constant_expr(args[arg].def),
             embed_constant_expr(args[arg].min),
             embed_constant_expr(args[arg].max)
@@ -2420,17 +2430,38 @@ void CodeGen_LLVM::visit(const Call *op) {
             coords = Constant::getNullValue(i32_t->getPointerTo());
         }
 
+        StructType *halide_type_t_type = module->getTypeByName("struct.halide_type_t");
+        internal_assert(halide_type_t_type) << "Did not find halide_type_t in module.\n";
+        Value *halide_type = create_alloca_at_entry(halide_type_t_type, 1);
+
+        Value *halide_type_members[3] = {
+            ConstantInt::get(i8_t, type.code()),
+            ConstantInt::get(i8_t, type.bits()),
+            ConstantInt::get(i16_t, type.lanes())
+        };
+
+        for (size_t i = 0; i < sizeof(halide_type_members)/sizeof(halide_type_members[0]); i++) {
+            Value *field_ptr =
+                builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+                    halide_type_t_type,
+#endif
+                    halide_type,
+                    0,
+                    i);
+            builder->CreateStore(halide_type_members[i], field_ptr);
+        }
+        halide_type = builder->CreateLoad(halide_type);
+
         StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
         user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
         Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
 
-        Value *members[10] = {
+        Value *members[8] = {
             name,
             event_type,
             realization_id,
-            ConstantInt::get(i32_t, type.code()),
-            ConstantInt::get(i32_t, type.bits()),
-            ConstantInt::get(i32_t, type.lanes()),
+            halide_type,
             value_index,
             value_stored_array,
             ConstantInt::get(i32_t, int_args * type.lanes()),
