@@ -328,7 +328,7 @@ private:
             // 32 bits.
         };
         
-        vector<Pattern> muls = {
+        static vector<Pattern> muls = {
             // Widening multiplication
             { "halide.hexagon.mpy.vub.vub", wild_u16x*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
             { "halide.hexagon.mpy.vuh.vuh", wild_u32x*wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
