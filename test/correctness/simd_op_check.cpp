@@ -179,16 +179,6 @@ void check(string op, int vector_width, Expr e) {
     }
 }
 
-Expr i64(Expr e) { return cast(Int(64), e); }
-Expr u64(Expr e) { return cast(UInt(64), e); }
-Expr i32(Expr e) { return cast(Int(32), e); }
-Expr u32(Expr e) { return cast(UInt(32), e); }
-Expr i16(Expr e) { return cast(Int(16), e); }
-Expr u16(Expr e) { return cast(UInt(16), e); }
-Expr i8(Expr e) { return cast(Int(8), e); }
-Expr u8(Expr e) { return cast(UInt(8), e); }
-Expr f32(Expr e) { return cast(Float(32), e); }
-Expr f64(Expr e) { return cast(Float(64), e); }
 
 const int min_i8 = -128, max_i8 = 127;
 const int min_i16 = -32768, max_i16 = 32767;
@@ -197,12 +187,7 @@ const int max_u8 = 255;
 const int max_u16 = 65535;
 Expr max_u32 = UInt(32).max();
 
-Expr i32c(Expr e) { return cast(Int(32), clamp(e, min_i32, max_i32)); }
-Expr u32c(Expr e) { return cast(UInt(32), clamp(e, 0, max_u32)); }
-Expr i16c(Expr e) { return cast(Int(16), clamp(e, min_i16, max_i16)); }
-Expr u16c(Expr e) { return cast(UInt(16), clamp(e, 0, max_u16)); }
-Expr i8c(Expr e) { return cast(Int(8), clamp(e, min_i8, max_i8)); }
-Expr u8c(Expr e) { return cast(UInt(8), clamp(e, 0, max_u8)); }
+using namespace Halide::ConciseCasts;
 
 void check_sse_all() {
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
@@ -233,15 +218,15 @@ void check_sse_all() {
             check("psubd",   2*w, i32_1 - i32_2);
         }
 
-        check("paddsb",  8*w, i8c(i16(i8_1) + i16(i8_2)));
+        check("paddsb",  8*w, i8_sat(i16(i8_1) + i16(i8_2)));
         // Add a test with a constant as there was a bug on this.
-        check("paddsb",  8*w, i8c(i16(i8_1) + i16(3)));
-        check("psubsb",  8*w, i8c(i16(i8_1) - i16(i8_2)));
+        check("paddsb",  8*w, i8_sat(i16(i8_1) + i16(3)));
+        check("psubsb",  8*w, i8_sat(i16(i8_1) - i16(i8_2)));
         check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
         check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
 
-        check("paddsw",  4*w, i16c(i32(i16_1) + i32(i16_2)));
-        check("psubsw",  4*w, i16c(i32(i16_1) - i32(i16_2)));
+        check("paddsw",  4*w, i16_sat(i32(i16_1) + i32(i16_2)));
+        check("psubsw",  4*w, i16_sat(i32(i16_1) - i32(i16_2)));
         check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
         check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
         check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -353,9 +338,9 @@ void check_sse_all() {
         check("psubq", w, i64_1 - i64_2);
         check("pmuludq", w, u64_1 * u64_2);
 
-        check("packssdw", 4*w, i16c(i32_1));
-        check("packsswb", 8*w, i8c(i16_1));
-        check("packuswb", 8*w, u8c(i16_1));
+        check("packssdw", 4*w, i16_sat(i32_1));
+        check("packsswb", 8*w, i8_sat(i16_1));
+        check("packuswb", 8*w, u8_sat(i16_1));
     }
 
     // SSE 3
@@ -416,7 +401,7 @@ void check_sse_all() {
             check("roundpd", w, ceil(f64_1));
 
             check("pcmpeqq", w, select(i64_1 == i64_2, i64(1), i64(2)));
-            check("packusdw", 4*w, u16c(i32_1));
+            check("packusdw", 4*w, u16_sat(i32_1));
         }
     }
 
@@ -483,14 +468,14 @@ void check_sse_all() {
     if (use_avx2) {
         check("vpaddb", 32, u8_1 + u8_2);
         check("vpsubb", 32, u8_1 - u8_2);
-        check("vpaddsb", 32, i8c(i16(i8_1) + i16(i8_2)));
-        check("vpsubsb", 32, i8c(i16(i8_1) - i16(i8_2)));
+        check("vpaddsb", 32, i8_sat(i16(i8_1) + i16(i8_2)));
+        check("vpsubsb", 32, i8_sat(i16(i8_1) - i16(i8_2)));
         check("vpaddusb", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
         check("vpsubusb", 32, u8(max(i16(u8_1) - i16(u8_2), 0)));
         check("vpaddw", 16, u16_1 + u16_2);
         check("vpsubw", 16, u16_1 - u16_2);
-        check("vpaddsw", 16, i16c(i32(i16_1) + i32(i16_2)));
-        check("vpsubsw", 16, i16c(i32(i16_1) - i32(i16_2)));
+        check("vpaddsw", 16, i16_sat(i32(i16_1) + i32(i16_2)));
+        check("vpsubsw", 16, i16_sat(i32(i16_1) - i32(i16_2)));
         check("vpaddusw", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
         check("vpsubusw", 16, u16(max(i32(u16_1) - i32(u16_2), 0)));
         check("vpaddd", 8, i32_1 + i32_2);
@@ -519,9 +504,9 @@ void check_sse_all() {
         check("vpsubq", 8, i64_1 - i64_2);
         check("vpmuludq", 8, u64_1 * u64_2);
 
-        check("vpackssdw", 16, i16c(i32_1));
-        check("vpacksswb", 32, i8c(i16_1));
-        check("vpackuswb", 32, u8c(i16_1));
+        check("vpackssdw", 16, i16_sat(i32_1));
+        check("vpacksswb", 32, i8_sat(i16_1));
+        check("vpackuswb", 32, u8_sat(i16_1));
 
         check("vpabsb", 32, abs(i8_1));
         check("vpabsw", 16, abs(i16_1));
@@ -987,9 +972,9 @@ void check_neon_all() {
         */
 
         // VQADD    I       -       Saturating Add
-        check(arm32 ? "vqadd.s8"  : "sqadd", 8*w,  i8c(i16(i8_1)  + i16(i8_2)));
-        check(arm32 ? "vqadd.s16" : "sqadd", 4*w, i16c(i32(i16_1) + i32(i16_2)));
-        check(arm32 ? "vqadd.s32" : "sqadd", 2*w, i32c(i64(i32_1) + i64(i32_2)));
+        check(arm32 ? "vqadd.s8"  : "sqadd", 8*w,  i8_sat(i16(i8_1)  + i16(i8_2)));
+        check(arm32 ? "vqadd.s16" : "sqadd", 4*w, i16_sat(i32(i16_1) + i32(i16_2)));
+        check(arm32 ? "vqadd.s32" : "sqadd", 2*w, i32_sat(i64(i32_1) + i64(i32_2)));
 
         check(arm32 ? "vqadd.u8"  : "uqadd", 8*w,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
         check(arm32 ? "vqadd.u16" : "uqadd", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
@@ -1007,17 +992,17 @@ void check_neon_all() {
         // Not sure why I'd use these
 
         // VQMOVN   I       -       Saturating Move and Narrow
-        check(arm32 ? "vqmovn.s16" : "sqxtn", 8*w,  i8c(i16_1));
-        check(arm32 ? "vqmovn.s32" : "sqxtn", 4*w, i16c(i32_1));
-        check(arm32 ? "vqmovn.s64" : "sqxtn", 2*w, i32c(i64_1));
+        check(arm32 ? "vqmovn.s16" : "sqxtn", 8*w,  i8_sat(i16_1));
+        check(arm32 ? "vqmovn.s32" : "sqxtn", 4*w, i16_sat(i32_1));
+        check(arm32 ? "vqmovn.s64" : "sqxtn", 2*w, i32_sat(i64_1));
         check(arm32 ? "vqmovn.u16" : "uqxtn", 8*w,  u8(min(u16_1, max_u8)));
         check(arm32 ? "vqmovn.u32" : "uqxtn", 4*w, u16(min(u32_1, max_u16)));
         check(arm32 ? "vqmovn.u64" : "uqxtn", 2*w, u32(min(u64_1, max_u32)));
 
         // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
-        check(arm32 ? "vqmovun.s16" : "sqxtun", 8*w, u8c(i16_1));
-        check(arm32 ? "vqmovun.s32" : "sqxtun", 4*w, u16c(i32_1));
-        check(arm32 ? "vqmovun.s64" : "sqxtun", 2*w, u32c(i64_1));
+        check(arm32 ? "vqmovun.s16" : "sqxtun", 8*w, u8_sat(i16_1));
+        check(arm32 ? "vqmovun.s32" : "sqxtun", 4*w, u16_sat(i32_1));
+        check(arm32 ? "vqmovun.s64" : "sqxtun", 2*w, u32_sat(i64_1));
 
         // VQNEG    I       -       Saturating Negate
         check(arm32 ? "vqneg.s8" : "sqneg",  8*w, -max(i8_1,  -max_i8));
@@ -1031,36 +1016,36 @@ void check_neon_all() {
         // We use the non-rounding form of these (at worst we do an extra add)
 
         // VQSHL    I       -       Saturating Shift Left
-        check(arm32 ? "vqshl.s8"  : "sqshl", 8*w,  i8c(i16(i8_1)*16));
-        check(arm32 ? "vqshl.s16" : "sqshl", 4*w, i16c(i32(i16_1)*16));
-        check(arm32 ? "vqshl.s32" : "sqshl", 2*w, i32c(i64(i32_1)*16));
+        check(arm32 ? "vqshl.s8"  : "sqshl", 8*w,  i8_sat(i16(i8_1)*16));
+        check(arm32 ? "vqshl.s16" : "sqshl", 4*w, i16_sat(i32(i16_1)*16));
+        check(arm32 ? "vqshl.s32" : "sqshl", 2*w, i32_sat(i64(i32_1)*16));
         check(arm32 ? "vqshl.u8"  : "uqshl",  8*w,  u8(min(u16(u8_1 )*16, max_u8)));
         check(arm32 ? "vqshl.u16" : "uqshl", 4*w, u16(min(u32(u16_1)*16, max_u16)));
         check(arm32 ? "vqshl.u32" : "uqshl", 2*w, u32(min(u64(u32_1)*16, max_u32)));
 
         // VQSHLU   I       -       Saturating Shift Left Unsigned
-        check(arm32 ? "vqshlu.s8"  : "sqshlu", 8*w,  u8c(i16(i8_1)*16));
-        check(arm32 ? "vqshlu.s16" : "sqshlu", 4*w, u16c(i32(i16_1)*16));
-        check(arm32 ? "vqshlu.s32" : "sqshlu", 2*w, u32c(i64(i32_1)*16));
+        check(arm32 ? "vqshlu.s8"  : "sqshlu", 8*w,  u8_sat(i16(i8_1)*16));
+        check(arm32 ? "vqshlu.s16" : "sqshlu", 4*w, u16_sat(i32(i16_1)*16));
+        check(arm32 ? "vqshlu.s32" : "sqshlu", 2*w, u32_sat(i64(i32_1)*16));
 
 
         // VQSHRN   I       -       Saturating Shift Right Narrow
         // VQSHRUN  I       -       Saturating Shift Right Unsigned Narrow
-        check(arm32 ? "vqshrn.s64"  : "sqshrn",  2*w, i32c(i64_1/16));
-        check(arm32 ? "vqshrun.s64" : "sqshrun", 2*w, u32c(i64_1/16));
+        check(arm32 ? "vqshrn.s64"  : "sqshrn",  2*w, i32_sat(i64_1/16));
+        check(arm32 ? "vqshrun.s64" : "sqshrun", 2*w, u32_sat(i64_1/16));
         check(arm32 ? "vqshrn.u16"  : "uqshrn", 8*w,  u8(min(u16_1/16, max_u8)));
         check(arm32 ? "vqshrn.u32"  : "uqshrn", 4*w, u16(min(u32_1/16, max_u16)));
         check(arm32 ? "vqshrn.u64"  : "uqshrn", 2*w, u32(min(u64_1/16, max_u32)));
 
         // VQSUB    I       -       Saturating Subtract
-        check(arm32 ? "vqsub.s8"  : "sqsub", 8*w,  i8c(i16(i8_1)  - i16(i8_2)));
-        check(arm32 ? "vqsub.s16" : "sqsub", 4*w, i16c(i32(i16_1) - i32(i16_2)));
-        check(arm32 ? "vqsub.s32" : "sqsub", 2*w, i32c(i64(i32_1) - i64(i32_2)));
+        check(arm32 ? "vqsub.s8"  : "sqsub", 8*w,  i8_sat(i16(i8_1)  - i16(i8_2)));
+        check(arm32 ? "vqsub.s16" : "sqsub", 4*w, i16_sat(i32(i16_1) - i32(i16_2)));
+        check(arm32 ? "vqsub.s32" : "sqsub", 2*w, i32_sat(i64(i32_1) - i64(i32_2)));
 
         // N.B. Saturating subtracts are expressed by widening to a *signed* type
-        check(arm32 ? "vqsub.u8"  : "uqsub",  8*w,  u8c(i16(u8_1)  - i16(u8_2)));
-        check(arm32 ? "vqsub.u16" : "uqsub", 4*w, u16c(i32(u16_1) - i32(u16_2)));
-        check(arm32 ? "vqsub.u32" : "uqsub", 2*w, u32c(i64(u32_1) - i64(u32_2)));
+        check(arm32 ? "vqsub.u8"  : "uqsub",  8*w,  u8_sat(i16(u8_1)  - i16(u8_2)));
+        check(arm32 ? "vqsub.u16" : "uqsub", 4*w, u16_sat(i32(u16_1) - i32(u16_2)));
+        check(arm32 ? "vqsub.u32" : "uqsub", 2*w, u32_sat(i64(u32_1) - i64(u32_2)));
 
         // VRADDHN  I       -       Rounding Add and Narrow Returning High Half
         /* No rounding ops
@@ -1358,10 +1343,10 @@ void check_hvx_all() {
     check("vadd(v*.b,v*.b)", hvx_width/1, i8_1 + i8_2);
     check("vadd(v*.h,v*.h)", hvx_width/2, i16_1 + i16_2);
     check("vadd(v*.w,v*.w)", hvx_width/4, i32_1 + i32_2);
-    check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8c(u16(u8_1 + u16(u8_2))));
-    check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16c(u32(u16_1 + u32(u16_2))));
-    check("vadd(v*.h,v*.h):sat", hvx_width/2, i16c(i32(i16_1 + i32(i16_2))));
-    check("vadd(v*.w,v*.w):sat", hvx_width/4, i32c(i64(i32_1 + i64(i32_2))));
+    check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(u16(u8_1 + u16(u8_2))));
+    check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(u32(u16_1 + u32(u16_2))));
+    check("vadd(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1 + i32(i16_2))));
+    check("vadd(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1 + i64(i32_2))));
 
     check("vsub(v*.b,v*.b)", hvx_width/1, u8_1 - u8_2);
     check("vsub(v*.h,v*.h)", hvx_width/2, u16_1 - u16_2);
@@ -1369,10 +1354,10 @@ void check_hvx_all() {
     check("vsub(v*.b,v*.b)", hvx_width/1, i8_1 - i8_2);
     check("vsub(v*.h,v*.h)", hvx_width/2, i16_1 - i16_2);
     check("vsub(v*.w,v*.w)", hvx_width/4, i32_1 - i32_2);
-    check("vsub(v*.ub,v*.ub):sat", hvx_width/1, u8c(i16(u8_1 - i16(u8_2))));
-    check("vsub(v*.uh,v*.uh):sat", hvx_width/2, u16c(i32(u16_1 - i32(u16_2))));
-    check("vsub(v*.h,v*.h):sat", hvx_width/2, i16c(i32(i16_1 - i32(i16_2))));
-    check("vsub(v*.w,v*.w):sat", hvx_width/4, i32c(i64(i32_1 - i64(i32_2))));
+    check("vsub(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(i16(u8_1 - i16(u8_2))));
+    check("vsub(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(i32(u16_1 - i32(u16_2))));
+    check("vsub(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1 - i32(i16_2))));
+    check("vsub(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1 - i64(i32_2))));
 
     // Double vector versions of the above
     check("vadd(v*:*.b,v*:*.b)", hvx_width*2, u8_1 + u8_2);
@@ -1381,10 +1366,10 @@ void check_hvx_all() {
     check("vadd(v*:*.b,v*:*.b)", hvx_width*2, i8_1 + i8_2);
     check("vadd(v*:*.h,v*:*.h)", hvx_width/1, i16_1 + i16_2);
     check("vadd(v*:*.w,v*:*.w)", hvx_width/2, i32_1 + i32_2);
-    check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8c(u16(u8_1 + u16(u8_2))));
-    check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(u32(u16_1 + u32(u16_2))));
-    check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16c(i32(i16_1 + i32(i16_2))));
-    check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32c(i64(i32_1 + i64(i32_2))));
+    check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8_sat(u16(u8_1 + u16(u8_2))));
+    check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(u32(u16_1 + u32(u16_2))));
+    check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1 + i32(i16_2))));
+    check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1 + i64(i32_2))));
 
     check("vsub(v*:*.b,v*:*.b)", hvx_width*2, u8_1 - u8_2);
     check("vsub(v*:*.h,v*:*.h)", hvx_width/1, u16_1 - u16_2);
@@ -1392,10 +1377,10 @@ void check_hvx_all() {
     check("vsub(v*:*.b,v*:*.b)", hvx_width*2, i8_1 - i8_2);
     check("vsub(v*:*.h,v*:*.h)", hvx_width/1, i16_1 - i16_2);
     check("vsub(v*:*.w,v*:*.w)", hvx_width/2, i32_1 - i32_2);
-    check("vsub(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8c(i16(u8_1 - i16(u8_2))));
-    check("vsub(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16c(i32(u16_1 - i32(u16_2))));
-    check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16c(i32(i16_1 - i32(i16_2))));
-    check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32c(i64(i32_1 - i64(i32_2))));
+    check("vsub(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8_sat(i16(u8_1 - i16(u8_2))));
+    check("vsub(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(i32(u16_1 - i32(u16_2))));
+    check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1 - i32(i16_2))));
+    check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1 - i64(i32_2))));
 
     check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
     check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
@@ -1405,9 +1390,9 @@ void check_hvx_all() {
     check("vavg(v*.h,v*.h):rnd", hvx_width/2, i16((i32(i16_1) + i32(i16_2) + 1)/2));
     check("vavg(v*.w,v*.w)", hvx_width/4, i32((i64(i32_1) + i64(i32_2))/2));
     check("vavg(v*.w,v*.w):rnd", hvx_width/4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
-    check("vnavg(v*.ub,v*.ub)", hvx_width/1, i8c((i16(u8_1) - i16(u8_2))/2));
-    check("vnavg(v*.h,v*.h)", hvx_width/2, i16c((i32(i16_1) - i32(i16_2))/2));
-    check("vnavg(v*.w,v*.w)", hvx_width/4, i32c((i64(i32_1) - i64(i32_2))/2));
+    check("vnavg(v*.ub,v*.ub)", hvx_width/1, i8_sat((i16(u8_1) - i16(u8_2))/2));
+    check("vnavg(v*.h,v*.h)", hvx_width/2, i16_sat((i32(i16_1) - i32(i16_2))/2));
+    check("vnavg(v*.w,v*.w)", hvx_width/4, i32_sat((i64(i32_1) - i64(i32_2))/2));
 
     // The behavior of shifts larger than the type behave differently
     // on HVX vs. the scalar processor, so we clamp.
@@ -1417,9 +1402,9 @@ void check_hvx_all() {
     check("vasr(v*.h,v*.h)", hvx_width/1, i8_1 >> (i8_2 % 8));
     check("vasr(v*.h,v*.h)", hvx_width/2, i16_1 >> (i16_2 % 16));
     check("vasr(v*.w,v*.w)", hvx_width/4, i32_1 >> (i32_2 % 32));
-    check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8c(i16_1 >> 4));
-    check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c(i32_1 >> 8));
-    check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16c(i32_1 >> 8));
+    check("vasr(v*.h,v*.h,r*):sat", hvx_width/1, u8_sat(i16_1 >> 4));
+    check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16_sat(i32_1 >> 8));
+    check("vasr(v*.w,v*.w,r*):sat", hvx_width/2, i16_sat(i32_1 >> 8));
     check("vasr(v*.w,v*.w,r*)", hvx_width/2, i16(i32_1 >> 8));
     check("vasl(v*.h,v*.h)", hvx_width/1, u8_1 << (u8_2 % 8));
     check("vasl(v*.h,v*.h)", hvx_width/2, u16_1 << (u16_2 % 16));
@@ -1491,30 +1476,30 @@ void check_hvx_all() {
     check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(u8_1));
     check("vlut16(v*.b,v*.h,r*)", hvx_width/2, in_u16(clamp(u16_1, 0, 15)));
 
-    check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i16_1));
-    check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8c(i16_1));
-    check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width/2, u16c(i32_1));
-    check("v*.h = vpack(v*.w,v*.w):sat", hvx_width/2, i16c(i32_1));
+    check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8_sat(i16_1));
+    check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8_sat(i16_1));
+    check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width/2, u16_sat(i32_1));
+    check("v*.h = vpack(v*.w,v*.w):sat", hvx_width/2, i16_sat(i32_1));
     // vpack doesn't interleave its inputs, which means it doesn't
     // simplify with widening. This is preferable for when the
     // pipeline doesn't widen to begin with, as in the above
     // tests. However, if the pipeline does widen, we want to generate
     // different instructions that have a built in interleaving that
     // we can cancel with the deinterleaving from widening.
-    check("v*.ub = vsat(v*.h,v*.h)", hvx_width/1, u8c(i16(i8_1) << 8));
-    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16c(i32(i16_1) << 16));
-    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u8c(i32(i16_1) >> 4));
-    check("v*.h = vsat(v*.w,v*.w)", hvx_width/2, i16c(i32(i16_1) << 16));
+    check("v*.ub = vsat(v*.h,v*.h)", hvx_width/1, u8_sat(i16(i8_1) << 8));
+    check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16_sat(i32(i16_1) << 16));
+    check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u8_sat(i32(i16_1) >> 4));
+    check("v*.h = vsat(v*.w,v*.w)", hvx_width/2, i16_sat(i32(i16_1) << 16));
 
     // Also check double saturating narrows.
-    check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8c(i32_1));
-    check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8c(i32_1));
-    check("v*.h = vsat(v*.w,v*.w)", hvx_width/1, u8c(i32(i16_1) << 8));
+    check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8_sat(i32_1));
+    check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8_sat(i32_1));
+    check("v*.h = vsat(v*.w,v*.w)", hvx_width/1, u8_sat(i32(i16_1) << 8));
 
-    check("vround(v*.h,v*.h)", hvx_width/1, u8c((i32(i16_1) + 128)/256));
-    check("vround(v*.h,v*.h)", hvx_width/1, i8c((i32(i16_1) + 128)/256));
-    check("vround(v*.w,v*.w)", hvx_width/2, u16c((i64(i32_1) + 32768)/65536));
-    check("vround(v*.w,v*.w)", hvx_width/2, i16c((i64(i32_1) + 32768)/65536));
+    check("vround(v*.h,v*.h)", hvx_width/1, u8_sat((i32(i16_1) + 128)/256));
+    check("vround(v*.h,v*.h)", hvx_width/1, i8_sat((i32(i16_1) + 128)/256));
+    check("vround(v*.w,v*.w)", hvx_width/2, u16_sat((i64(i32_1) + 32768)/65536));
+    check("vround(v*.w,v*.w)", hvx_width/2, i16_sat((i64(i32_1) + 32768)/65536));
 
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_u8(x/2), in_u8((x+16)/2)));
     check("vshuff(v*,v*,r*)", hvx_width*2, select((x%2) == 0, in_i8(x/2), in_i8((x+16)/2)));
@@ -1708,9 +1693,9 @@ void check_altivec_all() {
     // Basic AltiVec SIMD instructions.
     for (int w = 1; w <= 4; w++) {
         // Vector Integer Add Instructions.
-        check("vaddsbs", 16*w, i8c(i16( i8_1) + i16( i8_2)));
-        check("vaddshs", 8*w, i16c(i32(i16_1) + i32(i16_2)));
-        check("vaddsws", 4*w, i32c(i64(i32_1) + i64(i32_2)));
+        check("vaddsbs", 16*w, i8_sat(i16( i8_1) + i16( i8_2)));
+        check("vaddshs", 8*w, i16_sat(i32(i16_1) + i32(i16_2)));
+        check("vaddsws", 4*w, i32_sat(i64(i32_1) + i64(i32_2)));
         check("vaddubm", 16*w, i8_1 +  i8_2);
         check("vadduhm", 8*w, i16_1 + i16_2);
         check("vadduwm", 4*w, i32_1 + i32_2);
@@ -1719,9 +1704,9 @@ void check_altivec_all() {
         check("vadduws", 4*w, u32(min(u64(u32_1) + u64(u32_2), max_u32)));
 
         // Vector Integer Subtract Instructions.
-        check("vsubsbs", 16*w, i8c(i16( i8_1) - i16( i8_2)));
-        check("vsubshs", 8*w, i16c(i32(i16_1) - i32(i16_2)));
-        check("vsubsws", 4*w, i32c(i64(i32_1) - i64(i32_2)));
+        check("vsubsbs", 16*w, i8_sat(i16( i8_1) - i16( i8_2)));
+        check("vsubshs", 8*w, i16_sat(i32(i16_1) - i32(i16_2)));
+        check("vsubsws", 4*w, i32_sat(i64(i32_1) - i64(i32_2)));
         check("vsububm", 16*w, i8_1 -  i8_2);
         check("vsubuhm", 8*w, i16_1 - i16_2);
         check("vsubuwm", 4*w, i32_1 - i32_2);
