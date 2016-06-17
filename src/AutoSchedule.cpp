@@ -676,7 +676,7 @@ DependenceAnalysis::concrete_overlap_regions(Function f, int stage_num,
 
     vector< map<string, Box> > conc_overlaps;
 
-    const Definition& def = get_stage_definition(f, stage_num);
+    Definition def = get_stage_definition(f, stage_num);
     const vector<Dim>& dims = def.schedule().dims();
 
     for (int d = 0; d < (int)dims.size(); d++) {
@@ -712,7 +712,7 @@ DimBounds
 DependenceAnalysis::get_stage_bounds(Function f, int stage_num,
                                      const DimBounds& pure_bounds) {
     DimBounds bounds;
-    const Definition& def = get_stage_definition(f, stage_num);
+    Definition def = get_stage_definition(f, stage_num);
 
     // Assumes that the domain of the pure vars across all the update
     // definitions is the same which may not be true. This can overestimate
@@ -749,23 +749,22 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
     map<string, Box> regions;
     // Add the function and its region to the queue
     deque< pair<Stage, DimBounds> > f_queue;
-    Stage start(f.name(), stage_num);
+    Stage start(f, stage_num);
     f_queue.push_back(make_pair(start, bounds));
 
     // Recursively compute the regions required
     while(!f_queue.empty()) {
+        Stage s = f_queue.front().first;
+        DimBounds curr_bounds = f_queue.front().second;
 
-        const Stage& s = f_queue.front().first;
-        const DimBounds& curr_bounds = f_queue.front().second;
-        f_queue.pop_front();
-
-        const Definition& def = get_stage_definition(s.func, s.stage_num);
+        Definition def = get_stage_definition(s.func, s.stage_num);
         Scope<Interval> curr_scope;
 
         const vector<Dim>& dims = def.schedule().dims();
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
+
             Interval simple_bounds =
                     Interval(simplify(curr_bounds.at(dims[d].var).min),
                              simplify(curr_bounds.at(dims[d].var).max));
@@ -777,9 +776,10 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             map<string, Box> curr_regions =
                     boxes_required(val, curr_scope, func_val_bounds);
 
-            for (auto& arg: def.args()) {
+            for (const Expr& arg: def.args()) {
                 map<string, Box> arg_regions =
                         boxes_required(arg, curr_scope, func_val_bounds);
+
                 // Merge the regions with the regions found while looking at
                 // the values
                 for (auto& reg: arg_regions) {
@@ -806,22 +806,30 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     Function prod_func = env.at(reg.first);
                     DimBounds prod_pure_bounds;
                     const vector<string>& args = prod_func.args();
+
+                    internal_assert(reg.second.size() == args.size());
+
                     for (size_t v = 0; v < args.size(); v++) {
                         prod_pure_bounds[args[v]] = reg.second[v];
                     }
 
-                    const vector<DimBounds>& prod_bounds =
-                            get_stage_bounds(env.at(reg.first), prod_pure_bounds);
+                    vector<DimBounds> prod_bounds =
+                                get_stage_bounds(env.at(reg.first),
+                                                 prod_pure_bounds);
 
-                    int num_stages = prod_func.updates().size() + 1;
-                    for (int prod_s = 0; prod_s < num_stages; prod_s++) {
-                        Stage prod_stage(prod_func.name(), prod_s);
+                    size_t num_stages = prod_func.updates().size() + 1;
+
+                    internal_assert(prod_bounds.size() == num_stages);
+
+                    for (size_t prod_s = 0; prod_s < num_stages; prod_s++) {
+                        Stage prod_stage(prod_func, prod_s);
                         f_queue.push_back(make_pair(prod_stage,
                                                     prod_bounds[prod_s]));
                     }
                 }
             }
         }
+        f_queue.pop_front();
     }
 
     // Simplify
@@ -1013,7 +1021,7 @@ struct Partitioner {
         // The output stage representing the group
         Stage output;
         // All the functions that belong to the group
-        vector<Function> members;
+        vector<Stage> members;
 
         // Reuse along dimensions of the group members
         map<string, map<string, int64_t> > reuse;
@@ -1025,7 +1033,7 @@ struct Partitioner {
         // the group and compute all the members of the group at that granularity
         map<string, int> tile_sizes;
 
-        Group(Stage _output, vector<Function> _members):
+        Group(Stage _output, vector<Stage> _members):
               output(_output), members(_members) { }
 
         friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
@@ -1033,7 +1041,7 @@ struct Partitioner {
             stream << "Output Stage:" << g.output << '\n';
             stream << "Members:" << '[';
             for (auto& m: g.members) {
-                stream << m.name() << ",";
+                stream << m << ",";
             }
             stream << "]" << '\n';
 
@@ -1074,7 +1082,7 @@ struct Partitioner {
     const vector<Function>& outputs;
 
     map<Stage, set<Stage> > children;
-    void disp_children(map<Stage, set<Stage > >& children) {
+    void disp_children(map<Stage, set<Stage>>& children) {
         for (auto& f: children) {
             debug(0) << f.first << ": [";
             for (auto& c: f.second) {
@@ -1095,63 +1103,43 @@ struct Partitioner {
 
             // Place each stage of a function in its own group
             for (auto& f: analy.env) {
-
-                int stage = 0;
-                vector<Function> members;
-                members.push_back(f.second);
-                Stage s(f.first, stage);
-                Group g(s, members);
-                groups.insert(make_pair(s, g));
-
-                for (size_t u = 0; u < f.second.updates().size(); u++) {
-                    stage++;
-                    vector<Function> members;
-                    members.push_back(f.second);
-                    Stage s(f.first, stage);
-                    Group g(s, members);
-                    groups.insert(make_pair(s, g));
+                int num_stages = f.second.updates().size() + 1;
+                for (int s = 0; s < num_stages; s++) {
+                    Stage stg(f.second, s);
+                    Group g(stg, {stg});
+                    groups.insert(make_pair(stg, g));
                 }
             }
 
             // Find consumers of each function and relate groups with their children
             for (auto& f: analy.env) {
-                int stage = 0;
-                FindAllCalls find;
-                f.second.definition().accept(&find);
-                for (const string& c: find.calls) {
-                    if (c != f.first && analy.env.find(c) != analy.env.end()) {
-                        // Consumer depends on the last stage of the producer
-                        int final_stage = analy.env.at(c).updates().size();
+                int num_stages = f.second.updates().size() + 1;
+                for (int s = 0; s < num_stages; s++) {
 
-                        Stage prod_stage(c, final_stage);
-                        Stage cons_stage(f.first, stage);
+                    FindAllCalls find;
+                    Definition def = get_stage_definition(f.second, s);
+                    def.accept(&find);
 
-                        children[prod_stage].insert(cons_stage);
-                    }
-                }
-
-                for (size_t u = 0; u < f.second.updates().size(); u++) {
-                    stage++;
-
-                    FindAllCalls ufind;
-                    f.second.update(u).accept(&ufind);
-                    for (const string& c: ufind.calls) {
+                    for (const string& c: find.calls) {
                         if (c != f.first && analy.env.find(c) != analy.env.end()) {
                             // Consumer depends on the last stage of the producer
-                            int final_stage = analy.env.at(c).updates().size();
+                            Function prod_func = analy.env.at(c);
+                            int final_stage = prod_func.updates().size();
 
-                            Stage prod_stage(c, final_stage);
-                            Stage cons_stage(f.first, stage);
+                            Stage prod_stage(prod_func, final_stage);
+                            Stage cons_stage(f.second, s);
 
                             children[prod_stage].insert(cons_stage);
                         }
                     }
 
-                    // Add dependencies between all the stages in a function
-                    Stage prod_stage(f.first, u);
-                    Stage cons_stage(f.first, stage);
+                    if (s > 0) {
+                        // Add dependencies between all the stages in a function
+                        Stage prod_stage(f.second, s-1);
+                        Stage cons_stage(f.second, s);
 
-                    children[prod_stage].insert(cons_stage);
+                        children[prod_stage].insert(cons_stage);
+                    }
                 }
             }
 
@@ -1170,11 +1158,11 @@ struct Partitioner {
         Stage child_group = choice.cons_group;
 
         internal_assert(groups.find(child_group) != groups.end());
-        vector<Function> cand_funcs = groups.at(cand_group).members;
+        vector<Stage>& cand_funcs = groups.at(cand_group).members;
 
         groups.erase(cand_group);
 
-        vector<Function>& child_members = groups.at(child_group).members;
+        vector<Stage>& child_members = groups.at(child_group).members;
         child_members.insert(child_members.end(),
                              cand_funcs.begin(), cand_funcs.end());
 
@@ -1200,9 +1188,9 @@ struct Partitioner {
         set<Stage> cand_group_children = children[cand_group];
         for (auto& cg: cand_group_children) {
             internal_assert(groups.find(cg) != groups.end());
-            vector<Function> cand_funcs = groups.at(cand_group).members;
+            vector<Stage>& cand_funcs = groups.at(cand_group).members;
 
-            vector<Function>& cg_members = groups.at(cg).members;
+            vector<Stage>& cg_members = groups.at(cg).members;
             cg_members.insert(cg_members.end(),
                               cand_funcs.begin(), cand_funcs.end());
             // TODO: Look at all the members that need to be to be updated. Maybe
@@ -1521,7 +1509,7 @@ void Partitioner::group(Partitioner::Level level) {
 
 DimBounds Partitioner::get_bounds(const Stage& s) {
 
-    const Definition& def = get_stage_definition(s.func, s.stage_num);
+    Definition def = get_stage_definition(s.func, s.stage_num);
     DimBounds bounds;
 
     const vector<string>& args = s.func.args();
@@ -1542,7 +1530,7 @@ DimBounds
 Partitioner::get_bounds_from_tile_sizes(const Stage& s,
                                         const map<string, int>& tile_sizes) {
 
-    const Definition& def = get_stage_definition(s.func, s.stage_num);
+    Definition def = get_stage_definition(s.func, s.stage_num);
     map<string, Interval> bounds;
 
     const map<string, Interval>& def_bounds = get_bounds(s);
@@ -1601,20 +1589,17 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     set<string> group_inputs;
     set<string> group_mem;
 
-    for (auto& f: g.members) {
-        group_mem.insert(f.name());
+    for (auto& stg: g.members) {
+        group_mem.insert(stg.func.name());
+
         FindAllCalls find;
-        // Only need to consider the functions used by
-        // the stage represented by the group
-        if (f.name() == out_f_name) {
-            def.accept(&find);
-        } else {
-            f.accept(&find);
-        }
+        Definition stg_def = get_stage_definition(stg.func, stg.stage_num);
+
+        stg_def.accept(&find);
         for (auto& c: find.calls) {
             bool is_member = false;
             for (auto& m: g.members) {
-                if (m.name() == c) {
+                if (m.func.name() == c) {
                     is_member = true;
                     break;
                 }
@@ -1702,17 +1687,16 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     */
 
     return g_analy;
-    debug(0) << "End" << '\n';
 }
 
 Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
                                             Group& cons_group) {
 
-    vector<Function> fused_members;
-    for (auto& f: prod_group.members)
-        fused_members.push_back(f);
-    for (auto& f: cons_group.members)
-        fused_members.push_back(f);
+    vector<Stage> fused_members;
+    for (auto& s: prod_group.members)
+        fused_members.push_back(s);
+    for (auto& s: cons_group.members)
+        fused_members.push_back(s);
 
     Group fused_group(cons_group.output, fused_members);
 
@@ -1746,7 +1730,7 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
     }
 
     if (cons_group.output.stage_num != 0) {
-        const Definition& def =
+        Definition def =
                 out_func.updates()[cons_group.output.stage_num - 1];
         if (def.domain().defined()) {
             for (auto& rvar: def.domain().domain()) {
@@ -1758,9 +1742,9 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
 
     fused_group.tile_sizes = tile_sizes;
 
-    for (auto& f: prod_group.members)
-        fused_group.inlined.insert(f.name());
-    for (auto& f: cons_group.inlined)
+    for (const Stage& s: prod_group.members)
+        fused_group.inlined.insert(s.func.name());
+    for (const string& f: cons_group.inlined)
         fused_group.inlined.insert(f);
 
     // Compare the cost with the costs of the groups without fusion
@@ -1783,7 +1767,6 @@ int64_t Partitioner::evaluate_choice(InlineChoice& choice) {
     debug(0) << "Cons Group:\n" << cons_group;
     debug(0) << "Benefit:" << benefit << "\n\n";
 
-    debug(0) << "End" << '\n';
     return benefit;
 }
 
@@ -1832,9 +1815,9 @@ map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
     map<string, Box> conc_reg =
             analy.concrete_dep_regions(g.output.func,
                                        g.output.stage_num, bounds);
-    for (auto& f: g.members) {
-        if (conc_reg.find(f.name()) != conc_reg.end()) {
-            mem_bounds[f.name()] = conc_reg[f.name()];
+    for (const Stage& s: g.members) {
+        if (conc_reg.find(s.func.name()) != conc_reg.end()) {
+            mem_bounds[s.func.name()] = conc_reg[s.func.name()];
         }
     }
     return mem_bounds;
@@ -2218,19 +2201,23 @@ void generate_schedules(const vector<Function>& outputs,
     Partitioner part(pipeline_bounds, arch_params, analy,
                      cost_model, outputs, false);
 
-    // FIXME Compute reuse
-    /*
+    // Compute reuse
     for (auto& f: env) {
         FindAllCalls find;
         f.second.accept(&find);
-        map<string, int64_t> reuse =
-                part.evaluate_reuse(f.first, find.calls);
-        debug(0) << f.first << '\n';
-        for (auto& dir: reuse) {
-            debug(0) << dir.first << " " << dir.second << ',';
+        int num_stages = f.second.updates().size() + 1;
+        for (int s = 0; s < num_stages; s++) {
+            Stage curr_s(f.second, s);
+            map<string, int64_t> reuse =
+                    part.evaluate_reuse(curr_s, find.calls);
+            debug(0) << curr_s << '\n';
+            for (auto& dir: reuse) {
+                debug(0) << dir.first << " " << dir.second << ',';
+            }
+
+            debug(0) << '\n';
         }
-        debug(0) << '\n';
-    }*/
+    }
 
     part.group(Partitioner::INLINE);
 
