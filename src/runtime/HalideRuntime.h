@@ -881,19 +881,19 @@ struct halide_profiler_func_stats {
     const char *name;
 
     /** The current memory allocation of this Func. */
-    int memory_current;
+    uint64_t memory_current;
 
     /** The peak memory allocation of this Func. */
-    int memory_peak;
+    uint64_t memory_peak;
 
     /** The total memory allocation of this Func. */
-    int memory_total;
+    uint64_t memory_total;
+
+    /** The peak stack allocation of this Func threads. */
+    uint64_t stack_peak;
 
     /** The total number of memory allocation of this Func. */
     int num_allocs;
-
-    /** The peak stack allocation of this Func threads. */
-    int stack_peak;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -925,13 +925,13 @@ struct halide_profiler_pipeline_stats {
     int samples;
 
     /** The current memory allocation of funcs in this pipeline. */
-    int memory_current;
+    uint64_t memory_current;
 
     /** The peak memory allocation of funcs in this pipeline. */
-    int memory_peak;
+    uint64_t memory_peak;
 
     /** The total memory allocation of funcs in this pipeline. */
-    int memory_total;
+    uint64_t memory_total;
 
     /** The total number of memory allocation of funcs in this pipeline. */
     int num_allocs;
