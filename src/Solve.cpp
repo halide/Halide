@@ -595,6 +595,28 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
+    Interval interval_union(Interval ia, Interval ib) {
+        if (outer) {
+            // The regular union is already conservative in the right direction
+            return Interval::make_union(ia, ib);
+        } else {
+            // If we can prove there's overlap, we can still use the regular union
+            Interval intersection = Interval::make_intersection(ia, ib);
+            if (!intersection.is_empty() &&
+                (!intersection.is_bounded() ||
+                 can_prove(intersection.min <= intersection.max))) {
+                return Interval::make_union(ia, ib);
+            } else {
+                // Just take one of the two sides
+                if (ia.is_empty()) {
+                    return ib;
+                } else {
+                    return ia;
+                }
+            }
+        }
+    }
+
     void visit(const And *op) {
         op->a.accept(this);
         Interval ia = result;
@@ -609,7 +631,7 @@ class SolveForInterval : public IRVisitor {
             debug(3) << "And union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = Interval::make_union(ia, ib);
+            result = interval_union(ia, ib);
         }
     }
 
@@ -627,7 +649,7 @@ class SolveForInterval : public IRVisitor {
             debug(3) << "Or union:" << Expr(op) << "\n"
                      << "  " << ia.min << " " << ia.max << "\n"
                      << "  " << ib.min << " " << ib.max << "\n";
-            result = Interval::make_union(ia, ib);
+            result = interval_union(ia, ib);
         }
     }
 
