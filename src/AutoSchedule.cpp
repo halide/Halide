@@ -1681,11 +1681,20 @@ Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
 int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
 
     // Create a group that reflects the fusion choice and evaluate the cost
-    // of the group. Check if the stage of the producer group is the last.
-    Group prod = groups.at(Stage(choice.prod, 0));
-    Group cons = groups.at(choice.cons);
+    // of the group.
+    Function prod_f = analy.env.at(choice.prod);
+    int num_prod_stages = prod_f.updates().size() + 1;
+    vector<Group> prod_groups;
+    for (int s = 0 ; s < num_prod_stages; s++) {
+        Stage prod_s(prod_f, s);
+        prod_groups.push_back(groups.at(prod_s));
+    }
 
-    Group fused = fuse_groups(prod, cons);
+    Group cons = groups.at(choice.cons);
+    Group fused = cons;
+    for (auto &prod_g: prod_groups) {
+        fused = fuse_groups(prod_g, fused);
+    }
 
     // Set the tile sizes to one along all dimensions of the consumer
     // group
@@ -1702,28 +1711,50 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
 
     fused.tile_sizes = tile_sizes;
 
-    for (const Stage& s: prod.members)
-        fused.inlined.insert(s.func.name());
+    for (auto &prod_g: prod_groups) {
+        for (const Stage& s: prod_g.members)
+            fused.inlined.insert(s.func.name());
+    }
+
     for (const string& f: cons.inlined)
         fused.inlined.insert(f);
 
     // Compare the cost with the costs of the groups without fusion
-    GroupAnalysis prod_analy = analyze_group(prod);
+    vector<GroupAnalysis> prod_analy;
+    for (auto &prod_g: prod_groups) {
+        GroupAnalysis analyg = analyze_group(prod_g);
+        prod_analy.push_back(analyg);
+    }
+
     GroupAnalysis cons_analy = analyze_group(cons);
     GroupAnalysis fused_analy = analyze_group(fused);
 
     // Return the overall benefit of the choice
     // TODO: Use the arch params to compute total work
     int64_t benefit;
-    if (prod_analy.arith_cost >= 0 && cons_analy.arith_cost >= 0 &&
-        fused_analy.arith_cost >=0) {
-        benefit = prod_analy.arith_cost + cons_analy.arith_cost -
+    int64_t prod_arith_cost = 0;
+
+    for (auto &analyg: prod_analy) {
+        if (analyg.arith_cost >= 0) {
+            prod_arith_cost += analyg.arith_cost;
+        } else {
+            prod_arith_cost = -1;
+            break;
+        }
+    }
+
+    if (prod_arith_cost >= 0 && cons_analy.arith_cost >= 0 &&
+        fused_analy.arith_cost >= 0) {
+        benefit = prod_arith_cost + cons_analy.arith_cost -
                   fused_analy.arith_cost;
     } else {
         benefit = -1;
     }
 
-    debug(0) << "\nProd Group:\n" << prod << '\n';
+    debug(0) << "\nProd Groups:\n";
+    for (auto &prod_g: prod_groups) {
+        debug(0) << prod_g << '\n';
+    }
     debug(0) << "Cons Group:\n" << cons << '\n';
     debug(0) << "Fused Group:\n" << fused << '\n';
     debug(0) << "Benefit:" << benefit << "\n\n";
