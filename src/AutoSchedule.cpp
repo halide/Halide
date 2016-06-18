@@ -344,7 +344,7 @@ struct CostModel {
     pair<int64_t, int64_t> stage_region_cost(string func, int stage, Box &region,
                                              const set<string> &inlines = set<string>()) {
         Function curr_f = env.at(func);
-        Definition def = get_stage_definition(func, stage);
+        Definition def = get_stage_definition(curr_f, stage);
 
         // This method of costing update definitions assumes that the domain
         // of the pure vars across all the update definitions is the same
@@ -366,7 +366,7 @@ struct CostModel {
         Box stage_region;
 
         const vector<Dim> &dims = def.schedule().dims();
-        for (int d = 0 ; d < (int)dims.size() - 1; d++) {
+        for (int d = 0; d < (int)dims.size() - 1; d++) {
             stage_region.push_back(bounds.at(dims[d].var));
         }
 
@@ -411,7 +411,6 @@ struct CostModel {
                                        const set<string>& inlines = set<string>()) {
 
         pair<int64_t, int64_t> total_cost(0, 0);
-        disp_regions(regions);
         for (auto& f: regions) {
             // The cost for inlined functions will be accounted in the consumer
             // of the inlined function
@@ -438,7 +437,7 @@ struct CostModel {
                   const set<string>& inlines = set<string>()) {
 
         vector< pair<int64_t, int64_t> > func_costs;
-        int64_t total_ops = 1;
+        int64_t total_ops = 0;
         int64_t total_loads = 0;
         // TODO: revist how boundary conditions are handled
         for (auto& e: f.values()) {
@@ -454,7 +453,7 @@ struct CostModel {
         // Estimating cost when reductions are involved
         if (!f.is_pure()) {
             for (const Definition& u: f.updates()) {
-                int64_t ops = 1;
+                int64_t ops = 0;
                 int64_t loads = 0;
                 for (auto& e: u.values()) {
                     Expr inlined_expr = perform_inline(e, inlines);
@@ -1188,7 +1187,9 @@ struct Partitioner {
                 // TODO: Look at all the members that need to be to be updated. Maybe
                 // merge should be a member of the group class so that it is more
                 // contained.
-                groups.at(cg).inlined.insert(cand_group.func.name());
+                for (auto &stg: cand_funcs) {
+                    groups.at(cg).inlined.insert(stg.func.name());
+                }
             }
 
             groups.erase(cand_group);
@@ -1591,9 +1592,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
             analy.regions_required(g.output.func,
                                        g.output.stage_num, tile_bounds);
 
-    // FIXME: Accouting of the output region in the region cost is incorrect
-    // conc_reg[out_f_name] = Box(bounds);
-
     map<string, Box> group_reg, prod_reg, input_reg;
 
     // Filtering out regions that belong to the group and are input to the group
@@ -1614,14 +1612,27 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
                               cost_model.input_region_size(input_reg);
     int64_t tile_intermediate_size = cost_model.region_size(group_reg, g.inlined);
 
+    Box out_box;
+
+    const vector<string> &args = g.output.func.args();
+    for (size_t d = 0; d < args.size(); d++ ) {
+        out_box.push_back(stg_bounds[args[d]]);
+    }
+
+    pair<int64_t, int64_t> out_cost =
+            cost_model.stage_region_cost(g.output.func.name(),
+                                         g.output.stage_num,
+                                         out_box, g.inlined);
+
     GroupAnalysis g_analy;
     g_analy.arith_cost = -1;
     g_analy.mem_cost = -1;
     g_analy.parallelism = -1;
 
     // The group could not be analyzed
-    if (tile_cost.first < 0 || tile_cost.second < 0 || tile_input_size < 0 ||
-        tile_intermediate_size < 0) {
+    if (tile_cost.first < 0 || tile_cost.second < 0 ||
+        tile_input_size < 0 || tile_intermediate_size < 0 ||
+        out_cost.first < 0 || out_cost.second < 0) {
         return g_analy;
     }
 
@@ -1632,7 +1643,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         per_tile_mem_cost += tile_cost.second;
     }
 
-    g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
+    g_analy.arith_cost = per_tile_arith_cost * estimate_tiles + out_cost.first;
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
@@ -1671,45 +1682,35 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
 
     // Create a group that reflects the fusion choice and evaluate the cost
     // of the group. Check if the stage of the producer group is the last.
-    Group prod_group = groups.at(Stage(choice.prod, 0));
-    Group cons_group = groups.at(choice.cons);
+    Group prod = groups.at(Stage(choice.prod, 0));
+    Group cons = groups.at(choice.cons);
 
-    Group fused_group = fuse_groups(prod_group, cons_group);
+    Group fused = fuse_groups(prod, cons);
 
     // Set the tile sizes to one along all dimensions of the consumer
     // group
     map<string, int> tile_sizes;
 
-    // FIXME: Compute the tile sizes
-    /*
-    const Function& out_func = cons_group.output.func;
-    const vector<Dim>& dims = out_func.args();
-    for (auto& arg: pure_args) {
-        tile_sizes[arg] = 1;
+    const Function &cons_f = cons.output.func;
+    Definition def = get_stage_definition(cons_f,
+                                          cons.output.stage_num);
+
+    const vector<Dim> &dims = def.schedule().dims();
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
+        tile_sizes[dims[d].var] = 1;
     }
 
-    if (cons_group.output.stage_num != 0) {
-        Definition def =
-                out_func.updates()[cons_group.output.stage_num - 1];
-        if (def.domain().defined()) {
-            for (auto& rvar: def.domain().domain()) {
-                tile_sizes[rvar.var] = 1;
-            }
-        }
-    }
-    */
+    fused.tile_sizes = tile_sizes;
 
-    fused_group.tile_sizes = tile_sizes;
-
-    for (const Stage& s: prod_group.members)
-        fused_group.inlined.insert(s.func.name());
-    for (const string& f: cons_group.inlined)
-        fused_group.inlined.insert(f);
+    for (const Stage& s: prod.members)
+        fused.inlined.insert(s.func.name());
+    for (const string& f: cons.inlined)
+        fused.inlined.insert(f);
 
     // Compare the cost with the costs of the groups without fusion
-    GroupAnalysis prod_analy = analyze_group(prod_group);
-    GroupAnalysis cons_analy = analyze_group(cons_group);
-    GroupAnalysis fused_analy = analyze_group(fused_group);
+    GroupAnalysis prod_analy = analyze_group(prod);
+    GroupAnalysis cons_analy = analyze_group(cons);
+    GroupAnalysis fused_analy = analyze_group(fused);
 
     // Return the overall benefit of the choice
     // TODO: Use the arch params to compute total work
@@ -1722,9 +1723,9 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
         benefit = -1;
     }
 
-    debug(0) << "\nProd Group:\n" << prod_group << '\n';
-    debug(0) << "Cons Group:\n" << cons_group << '\n';
-    debug(0) << "Fused Group:\n" << fused_group << '\n';
+    debug(0) << "\nProd Group:\n" << prod << '\n';
+    debug(0) << "Cons Group:\n" << cons << '\n';
+    debug(0) << "Fused Group:\n" << fused << '\n';
     debug(0) << "Benefit:" << benefit << "\n\n";
 
     return benefit;
