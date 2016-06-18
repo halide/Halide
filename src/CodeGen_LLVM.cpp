@@ -149,8 +149,9 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     value(nullptr),
     very_likely_branch(nullptr),
     target(t),
-    void_t(nullptr), i1(nullptr), i8(nullptr), i16(nullptr), i32(nullptr), i64(nullptr),
-    f16(nullptr), f32(nullptr), f64(nullptr),
+    void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
+    i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
+    f16_t(nullptr), f32_t(nullptr), f64_t(nullptr),
     buffer_t_type(nullptr),
     metadata_t_type(nullptr),
     argument_t_type(nullptr),
@@ -381,31 +382,31 @@ void CodeGen_LLVM::init_context() {
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
-    i1 = llvm::Type::getInt1Ty(*context);
-    i8 = llvm::Type::getInt8Ty(*context);
-    i16 = llvm::Type::getInt16Ty(*context);
-    i32 = llvm::Type::getInt32Ty(*context);
-    i64 = llvm::Type::getInt64Ty(*context);
-    f16 = llvm::Type::getHalfTy(*context);
-    f32 = llvm::Type::getFloatTy(*context);
-    f64 = llvm::Type::getDoubleTy(*context);
+    i1_t = llvm::Type::getInt1Ty(*context);
+    i8_t = llvm::Type::getInt8Ty(*context);
+    i16_t = llvm::Type::getInt16Ty(*context);
+    i32_t = llvm::Type::getInt32Ty(*context);
+    i64_t = llvm::Type::getInt64Ty(*context);
+    f16_t = llvm::Type::getHalfTy(*context);
+    f32_t = llvm::Type::getFloatTy(*context);
+    f64_t = llvm::Type::getDoubleTy(*context);
 
-    i8x8 = VectorType::get(i8, 8);
-    i8x16 = VectorType::get(i8, 16);
-    i8x32 = VectorType::get(i8, 32);
-    i16x4 = VectorType::get(i16, 4);
-    i16x8 = VectorType::get(i16, 8);
-    i16x16 = VectorType::get(i16, 16);
-    i32x2 = VectorType::get(i32, 2);
-    i32x4 = VectorType::get(i32, 4);
-    i32x8 = VectorType::get(i32, 8);
-    i64x2 = VectorType::get(i64, 2);
-    i64x4 = VectorType::get(i64, 4);
-    f32x2 = VectorType::get(f32, 2);
-    f32x4 = VectorType::get(f32, 4);
-    f32x8 = VectorType::get(f32, 8);
-    f64x2 = VectorType::get(f64, 2);
-    f64x4 = VectorType::get(f64, 4);
+    i8x8 = VectorType::get(i8_t, 8);
+    i8x16 = VectorType::get(i8_t, 16);
+    i8x32 = VectorType::get(i8_t, 32);
+    i16x4 = VectorType::get(i16_t, 4);
+    i16x8 = VectorType::get(i16_t, 8);
+    i16x16 = VectorType::get(i16_t, 16);
+    i32x2 = VectorType::get(i32_t, 2);
+    i32x4 = VectorType::get(i32_t, 4);
+    i32x8 = VectorType::get(i32_t, 8);
+    i64x2 = VectorType::get(i64_t, 2);
+    i64x4 = VectorType::get(i64_t, 4);
+    f32x2 = VectorType::get(f32_t, 2);
+    f32x4 = VectorType::get(f32_t, 4);
+    f32x8 = VectorType::get(f32_t, 8);
+    f64x2 = VectorType::get(f64_t, 2);
+    f64x4 = VectorType::get(f64_t, 4);
 }
 
 
@@ -562,7 +563,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     }
 
     // Make our function
-    FunctionType *func_t = FunctionType::get(i32, arg_types, false);
+    FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
 
     // Mark the buffer args as no alias
@@ -600,7 +601,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
 }
 
 void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
-    return_with_error_code(ConstantInt::get(i32, 0));
+    return_with_error_code(ConstantInt::get(i32_t, 0));
 
     // Remove the arguments from the symbol table
     for (size_t i = 0; i < args.size(); i++) {
@@ -650,7 +651,7 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
         builder->SetInsertPoint(destructor_block);
         // The first instruction in the destructor block is a phi node
         // that collects the error code.
-        PHINode *error_code = builder->CreatePHI(i32, 0);
+        PHINode *error_code = builder->CreatePHI(i32_t, 0);
 
         // Calls to destructors will get inserted here.
 
@@ -668,7 +669,7 @@ BasicBlock *CodeGen_LLVM::get_destructor_block() {
 Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *obj, DestructorType when) {
 
     // Create a null-initialized stack slot to track this object
-    llvm::Type *void_ptr = i8->getPointerTo();
+    llvm::Type *void_ptr = i8_t->getPointerTo();
     llvm::Value *stack_slot = create_alloca_at_entry(void_ptr, 1, true);
 
     // Cast the object to llvm's representation of void *
@@ -698,7 +699,7 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
 
     llvm::Value *should_call =
         (when == Always) ?
-        ConstantInt::get(i1, 1) :
+        ConstantInt::get(i1_t, 1) :
         builder->CreateIsNotNull(error_code);
 
     llvm::Function *call_destructor = module->getFunction("call_destructor");
@@ -718,7 +719,7 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
-    Value *should_call = ConstantInt::get(i1, 1);
+    Value *should_call = ConstantInt::get(i1_t, 1);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
 }
@@ -745,7 +746,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
-    llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
+    llvm::ArrayType *i32_array = ArrayType::get(i32_t, 4);
 
     llvm::Type *padding_bytes_type =
         buffer_t_type->getElementType(buffer_t_type->getNumElements()-1);
@@ -757,14 +758,14 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
     bool constant = num_elems > 1;
 
     Constant *fields[] = {
-        ConstantInt::get(i64, 0), // dev
+        ConstantInt::get(i64_t, 0), // dev
         create_binary_blob(array, buf.name() + ".data", constant), // host
-        ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
-        ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
-        ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
-        ConstantInt::get(i32, b.elem_size),
-        ConstantInt::get(i8, 1), // host_dirty
-        ConstantInt::get(i8, 0), // dev_dirty
+        ConstantArray::get(i32_array, get_constants(i32_t, b.extent, b.extent + 4)),
+        ConstantArray::get(i32_array, get_constants(i32_t, b.stride, b.stride + 4)),
+        ConstantArray::get(i32_array, get_constants(i32_t, b.min, b.min + 4)),
+        ConstantInt::get(i32_t, b.elem_size),
+        ConstantInt::get(i8_t, 1), // host_dirty
+        ConstantInt::get(i8_t, 0), // dev_dirty
         Constant::getNullValue(padding_bytes_type)
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
@@ -772,7 +773,7 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
 
     // Finally, dump it in the symbol table
-    Constant *zero[] = {ConstantInt::get(i32, 0)};
+    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
 #if LLVM_VERSION >= 37
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, zero);
 #else
@@ -800,7 +801,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
             GlobalValue::PrivateLinkage,
             constant);
 
-    Constant *zero[] = {ConstantInt::get(i32, 0)};
+    Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
 #if LLVM_VERSION >= 37
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
@@ -814,8 +815,8 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
 // args. This is easier for the JIT to call than a function with an
 // unknown (at compile time) argument list.
 llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
-    llvm::Type *args_t[] = {i8->getPointerTo()->getPointerTo()};
-    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, args_t, false);
+    llvm::Type *args_t[] = {i8_t->getPointerTo()->getPointerTo()};
+    llvm::FunctionType *func_t = llvm::FunctionType::get(i32_t, args_t, false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, module.get());
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
     builder->SetInsertPoint(block);
@@ -847,18 +848,28 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
         const std::string &function_name, const std::vector<LoweredArgument> &args) {
-    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *zero = ConstantInt::get(i32_t, 0);
 
     const int num_args = (int) args.size();
 
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
+
+        StructType *type_t_type = module->getTypeByName("struct.halide_type_t");
+        internal_assert(type_t_type) << "Did not find halide_type_t in module.\n";
+
+        Constant *type_fields[] = {
+            ConstantInt::get(i8_t, args[arg].type.code()),
+            ConstantInt::get(i8_t, args[arg].type.bits()),
+            ConstantInt::get(i16_t, 1)
+        };
+        Constant *type = ConstantStruct::get(type_t_type, type_fields);
+
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
-            ConstantInt::get(i32, args[arg].kind),
-            ConstantInt::get(i32, args[arg].dimensions),
-            ConstantInt::get(i32, args[arg].type.code()),
-            ConstantInt::get(i32, args[arg].type.bits()),
+            ConstantInt::get(i32_t, args[arg].kind),
+            ConstantInt::get(i32_t, args[arg].dimensions),
+            type,
             embed_constant_expr(args[arg].def),
             embed_constant_expr(args[arg].min),
             embed_constant_expr(args[arg].max)
@@ -876,7 +887,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     Value *zeros[] = {zero, zero};
     Constant *metadata_fields[] = {
         /* version */ zero,
-        /* num_arguments */ ConstantInt::get(i32, num_args),
+        /* num_arguments */ ConstantInt::get(i32_t, num_args),
 #if LLVM_VERSION >= 37
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
 #else
@@ -912,7 +923,7 @@ void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Function *me
     internal_assert(register_t_type) << "Could not find register_t_type in initial module\n";
 
     Constant *list_node_fields[] = {
-        Constant::getNullValue(i8->getPointerTo()),
+        Constant::getNullValue(i8_t->getPointerTo()),
         metadata_getter,
         argv_wrapper
     };
@@ -1168,9 +1179,9 @@ Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
 }
 
 Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32, 0);
-    llvm::Value *field = ConstantInt::get(i32, 2);
-    llvm::Value *idx = ConstantInt::get(i32, i);
+    llvm::Value *zero = ConstantInt::get(i32_t, 0);
+    llvm::Value *field = ConstantInt::get(i32_t, 2);
+    llvm::Value *idx = ConstantInt::get(i32_t, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
 #if LLVM_VERSION >= 37
@@ -1182,9 +1193,9 @@ Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
 }
 
 Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32, 0);
-    llvm::Value *field = ConstantInt::get(i32, 3);
-    llvm::Value *idx = ConstantInt::get(i32, i);
+    llvm::Value *zero = ConstantInt::get(i32_t, 0);
+    llvm::Value *field = ConstantInt::get(i32_t, 3);
+    llvm::Value *idx = ConstantInt::get(i32_t, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
 #if LLVM_VERSION >= 37
@@ -1196,9 +1207,9 @@ Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
 }
 
 Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32, 0);
-    llvm::Value *field = ConstantInt::get(i32, 4);
-    llvm::Value *idx = ConstantInt::get(i32, i);
+    llvm::Value *zero = ConstantInt::get(i32_t, 0);
+    llvm::Value *field = ConstantInt::get(i32_t, 4);
+    llvm::Value *idx = ConstantInt::get(i32_t, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
 #if LLVM_VERSION >= 37
@@ -1572,7 +1583,7 @@ void CodeGen_LLVM::visit(const Select *op) {
         Value *cmp = codegen(op->condition);
         Value *a = codegen(op->true_value);
         Value *b = codegen(op->false_value);
-        cmp = builder->CreateIntCast(cmp, i32, true);
+        cmp = builder->CreateIntCast(cmp, i32_t, true);
         a = builder->CreateAnd(a, cmp);
         cmp = builder->CreateNot(cmp);
         b = builder->CreateAnd(b, cmp);
@@ -1639,7 +1650,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Va
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
-        index = builder->CreateIntCast(index, i64, true);
+        index = builder->CreateIntCast(index, i64_t, true);
     }
 
     return builder->CreateInBoundsGEP(base_address, index);
@@ -1857,7 +1868,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             Value *stride = codegen(ramp->stride);
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->lanes; i++) {
-                Value *lane = ConstantInt::get(i32, i);
+                Value *lane = ConstantInt::get(i32_t, i);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
@@ -1875,7 +1886,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
-                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
         } else {
@@ -1883,11 +1894,11 @@ void CodeGen_LLVM::visit(const Load *op) {
             Value *index = codegen(op->index);
             Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.lanes(); i++) {
-                Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
+                Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32_t, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
-                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
         }
@@ -1921,14 +1932,14 @@ void CodeGen_LLVM::visit(const Ramp *op) {
                     base = builder->CreateAdd(base, stride);
                 }
             }
-            value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
+            value = builder->CreateInsertElement(value, base, ConstantInt::get(i32_t, i));
         }
     }
 }
 
 llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
     Constant *undef = UndefValue::get(VectorType::get(v->getType(), lanes));
-    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *zero = ConstantInt::get(i32_t, 0);
     v = builder->CreateInsertElement(undef, v, zero);
     Constant *zeros = ConstantVector::getSplat(lanes, zero);
     return builder->CreateShuffleVector(v, undef, zeros);
@@ -2027,7 +2038,7 @@ void CodeGen_LLVM::scalarize(Expr e) {
 
     for (int i = 0; i < e.type().lanes(); i++) {
         Value *v = codegen(extract_lane(e, i));
-        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
     }
     value = result;
 }
@@ -2058,7 +2069,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = shuffle_vectors(arg, indices);
 
         if (op->type.is_scalar()) {
-            value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+            value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
         }
     } else if (op->is_intrinsic(Call::slice_vector)) {
         internal_assert(op->args.size() == 4);
@@ -2075,7 +2086,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = shuffle_vectors(codegen(op->args[0]), indices);
 
         if (op->type.is_scalar()) {
-            value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+            value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
         }
     } else if (op->is_intrinsic(Call::interleave_vectors)) {
         vector<Value *> args;
@@ -2261,7 +2272,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args[0].type().is_handle())
             << "The first argument to create_buffer_t must be a Handle\n";
         Value *host_ptr = codegen(op->args[0]);
-        host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
+        host_ptr = builder->CreatePointerCast(host_ptr, i8_t->getPointerTo());
         builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
 
         // Type check integer arguments
@@ -2287,16 +2298,16 @@ void CodeGen_LLVM::visit(const Call *op) {
                 extent = codegen(op->args[i*3+3]);
                 stride = codegen(op->args[i*3+4]);
             } else {
-                min = extent = stride = ConstantInt::get(i32, 0);
+                min = extent = stride = ConstantInt::get(i32_t, 0);
             }
             builder->CreateStore(min, buffer_min_ptr(buffer, i));
             builder->CreateStore(extent, buffer_extent_ptr(buffer, i));
             builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
         }
 
-        builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
-        builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
-        builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i8_t, 0), buffer_host_dirty_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i8_t, 0), buffer_dev_dirty_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i64_t, 0), buffer_dev_ptr(buffer));
 
         value = buffer;
     } else if (op->is_intrinsic(Call::extract_buffer_host)) {
@@ -2320,7 +2331,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Value *extent = buffer_extent(buffer, idx->value);
         Value *min = buffer_min(buffer, idx->value);
         Value *max_plus_one = builder->CreateNSWAdd(min, extent);
-        value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32, 1));
+        value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32_t, 1));
     } else if (op->is_intrinsic(Call::rewrite_buffer)) {
         int dims = ((int)(op->args.size())-2)/3;
         internal_assert((int)(op->args.size()) == dims*3 + 2);
@@ -2336,9 +2347,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
         }
         for (int i = dims; i < 4; i++) {
-            builder->CreateStore(ConstantInt::get(i32, 0), buffer_min_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32, 0), buffer_extent_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32, 0), buffer_stride_ptr(buffer, i));
+            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_min_ptr(buffer, i));
+            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_extent_ptr(buffer, i));
+            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_stride_ptr(buffer, i));
         }
 
         // From the point of view of the continued code (a containing assert stmt), this returns true.
@@ -2348,17 +2359,17 @@ void CodeGen_LLVM::visit(const Call *op) {
         Value *buffer = codegen(op->args[0]);
         Value *arg = codegen(op->args[1]);
         builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
-        value = ConstantInt::get(i32, 0);
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::set_dev_dirty)) {
         internal_assert(op->args.size() == 2);
         Value *buffer = codegen(op->args[0]);
         Value *arg = codegen(op->args[1]);
         builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
-        value = ConstantInt::get(i32, 0);
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::null_handle)) {
         internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
         internal_assert(op->type.is_handle()) << "null_handle must return a Handle type\n";
-        value = ConstantPointerNull::get(i8->getPointerTo());
+        value = ConstantPointerNull::get(i8_t->getPointerTo());
     } else if (op->is_intrinsic(Call::address_of)) {
         internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
         internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
@@ -2397,7 +2408,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Value *value_stored_array = create_alloca_at_entry(llvm_type_of(type), 1);
         Value *value_stored = codegen(op->args[4]);
         builder->CreateStore(value_stored, value_stored_array);
-        value_stored_array = builder->CreatePointerCast(value_stored_array, i8->getPointerTo());
+        value_stored_array = builder->CreatePointerCast(value_stored_array, i8_t->getPointerTo());
 
         // Allocate and populate a stack array for the integer args
         Value *coords;
@@ -2414,25 +2425,46 @@ void CodeGen_LLVM::visit(const Call *op) {
                         i);
                 builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
             }
-            coords = builder->CreatePointerCast(coords, i32->getPointerTo());
+            coords = builder->CreatePointerCast(coords, i32_t->getPointerTo());
         } else {
-            coords = Constant::getNullValue(i32->getPointerTo());
+            coords = Constant::getNullValue(i32_t->getPointerTo());
         }
+
+        StructType *halide_type_t_type = module->getTypeByName("struct.halide_type_t");
+        internal_assert(halide_type_t_type) << "Did not find halide_type_t in module.\n";
+        Value *halide_type = create_alloca_at_entry(halide_type_t_type, 1);
+
+        Value *halide_type_members[3] = {
+            ConstantInt::get(i8_t, type.code()),
+            ConstantInt::get(i8_t, type.bits()),
+            ConstantInt::get(i16_t, type.lanes())
+        };
+
+        for (size_t i = 0; i < sizeof(halide_type_members)/sizeof(halide_type_members[0]); i++) {
+            Value *field_ptr =
+                builder->CreateConstInBoundsGEP2_32(
+#if LLVM_VERSION >= 37
+                    halide_type_t_type,
+#endif
+                    halide_type,
+                    0,
+                    i);
+            builder->CreateStore(halide_type_members[i], field_ptr);
+        }
+        halide_type = builder->CreateLoad(halide_type);
 
         StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
         user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
         Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
 
-        Value *members[10] = {
+        Value *members[8] = {
             name,
             event_type,
             realization_id,
-            ConstantInt::get(i32, type.code()),
-            ConstantInt::get(i32, type.bits()),
-            ConstantInt::get(i32, type.lanes()),
+            halide_type,
             value_index,
             value_stored_array,
-            ConstantInt::get(i32, int_args * type.lanes()),
+            ConstantInt::get(i32_t, int_args * type.lanes()),
             coords};
 
         for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
@@ -2583,7 +2615,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (buf_size > 8192) buf_size = 8192;
 
             // Allocate a stack array to hold the message.
-            llvm::Value *buf = create_alloca_at_entry(i8, buf_size);
+            llvm::Value *buf = create_alloca_at_entry(i8_t, buf_size);
 
             llvm::Value *dst = buf;
             llvm::Value *buf_end = builder->CreateConstGEP1_32(buf, buf_size);
@@ -2613,16 +2645,16 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {
                     call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
-                    call_args.push_back(ConstantInt::get(i32, 1));
+                    call_args.push_back(ConstantInt::get(i32_t, 1));
                     dst = builder->CreateCall(append_int64, call_args);
                 } else if (t.is_uint()) {
                     call_args.push_back(codegen(Cast::make(UInt(64), op->args[i])));
-                    call_args.push_back(ConstantInt::get(i32, 1));
+                    call_args.push_back(ConstantInt::get(i32_t, 1));
                     dst = builder->CreateCall(append_uint64, call_args);
                 } else if (t.is_float()) {
                     call_args.push_back(codegen(Cast::make(Float(64), op->args[i])));
                     // Use scientific notation for doubles
-                    call_args.push_back(ConstantInt::get(i32, t.bits() == 64 ? 1 : 0));
+                    call_args.push_back(ConstantInt::get(i32_t, t.bits() == 64 ? 1 : 0));
                     dst = builder->CreateCall(append_double, call_args);
                 } else {
                     internal_assert(t.is_handle());
@@ -2650,7 +2682,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(arg.type().is_handle());
         llvm::Function *f = module->getFunction(fn->value);
         if (!f) {
-            llvm::Type *arg_types[] = {i8->getPointerTo(), i8->getPointerTo()};
+            llvm::Type *arg_types[] = {i8_t->getPointerTo(), i8_t->getPointerTo()};
             FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
             f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
             f->setCallingConv(CallingConv::C);
@@ -2944,7 +2976,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 // lane in turn and do one scalar call to the function.
                 value = UndefValue::get(result_type);
                 for (int i = 0; i < op->type.lanes(); i++) {
-                    Value *idx = ConstantInt::get(i32, i);
+                    Value *idx = ConstantInt::get(i32_t, i);
                     vector<Value *> arg_lane(args.size());
                     for (size_t j = 0; j < args.size(); j++) {
                         if (args[j]->getType()->isVectorTy()) {
@@ -3015,7 +3047,7 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
 }
 
 Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name, bool constant) {
-    llvm::Type *type = ArrayType::get(i8, data.size());
+    llvm::Type *type = ArrayType::get(i8_t, data.size());
     GlobalVariable *global = new GlobalVariable(*module, type,
                                                 constant, GlobalValue::PrivateLinkage,
                                                 0, name);
@@ -3023,7 +3055,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     global->setInitializer(ConstantDataArray::get(*context, data_array));
     global->setAlignment(32);
 
-    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
 #if LLVM_VERSION >= 37
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
@@ -3043,9 +3075,9 @@ void CodeGen_LLVM::create_assertion(Value *cond, Expr message, llvm::Value *erro
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
     if (vt) {
-        Value *scalar_cond = builder->CreateExtractElement(cond, ConstantInt::get(i32, 0));
+        Value *scalar_cond = builder->CreateExtractElement(cond, ConstantInt::get(i32_t, 0));
         for (unsigned i = 1; i < vt->getNumElements(); i++) {
-            Value *lane = builder->CreateExtractElement(cond, ConstantInt::get(i32, i));
+            Value *lane = builder->CreateExtractElement(cond, ConstantInt::get(i32_t, i));
             scalar_cond = builder->CreateAnd(scalar_cond, lane);
         }
         cond = scalar_cond;
@@ -3121,7 +3153,7 @@ void CodeGen_LLVM::visit(const For *op) {
         builder->SetInsertPoint(loop_bb);
 
         // Make our phi node.
-        PHINode *phi = builder->CreatePHI(i32, 2);
+        PHINode *phi = builder->CreatePHI(i32_t, 2);
         phi->addIncoming(min, preheader_bb);
 
         // Within the loop, the variable is equal to the phi value
@@ -3131,7 +3163,7 @@ void CodeGen_LLVM::visit(const For *op) {
         codegen(op->body);
 
         // Update the counter
-        Value *next_var = builder->CreateNSWAdd(phi, ConstantInt::get(i32, 1));
+        Value *next_var = builder->CreateNSWAdd(phi, ConstantInt::get(i32_t, 1));
 
         // Add the back-edge to the phi node
         phi->addIncoming(next_var, builder->GetInsertBlock());
@@ -3160,9 +3192,9 @@ void CodeGen_LLVM::visit(const For *op) {
         pack_closure(closure_t, ptr, closure, symbol_table, buffer_t_type, builder);
 
         // Make a new function that does one iteration of the body of the loop
-        llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
-        llvm::Type *args_t[] = {voidPointerType, i32, voidPointerType};
-        FunctionType *func_t = FunctionType::get(i32, args_t, false);
+        llvm::Type *voidPointerType = (llvm::Type *)(i8_t->getPointerTo());
+        llvm::Type *args_t[] = {voidPointerType, i32_t, voidPointerType};
+        FunctionType *func_t = FunctionType::get(i32_t, args_t, false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par_for_" + function->getName() + "_" + op->name, module.get());
@@ -3209,7 +3241,7 @@ void CodeGen_LLVM::visit(const For *op) {
         codegen(op->body);
 
         // Return success
-        return_with_error_code(ConstantInt::get(i32, 0));
+        return_with_error_code(ConstantInt::get(i32_t, 0));
 
         // Move the builder back to the main function and call do_par_for
         builder->restoreIP(call_site);
@@ -3217,7 +3249,7 @@ void CodeGen_LLVM::visit(const For *op) {
         internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
         do_par_for->setDoesNotAlias(5);
         //do_par_for->setDoesNotCapture(5);
-        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
+        ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
         Value *args[] = {user_context, function, min, extent, ptr};
         debug(4) << "Creating call to do_par_for\n";
         Value *result = builder->CreateCall(do_par_for, args);
@@ -3232,7 +3264,7 @@ void CodeGen_LLVM::visit(const For *op) {
         destructor_block = parent_destructor_block;
 
         // Check for success
-        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
         create_assertion(did_succeed, Expr(), result);
 
     } else {
@@ -3306,7 +3338,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             Value *stride = codegen(ramp->stride);
             // Scatter without generating the indices as a vector
             for (int i = 0; i < ramp->lanes; i++) {
-                Constant *lane = ConstantInt::get(i32, i);
+                Constant *lane = ConstantInt::get(i32_t, i);
                 Value *v = builder->CreateExtractElement(val, lane);
                 if (const_stride) {
                     // Use a constant offset from the base pointer
@@ -3330,7 +3362,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             // Scatter
             Value *index = codegen(op->index);
             for (int i = 0; i < value_type.lanes(); i++) {
-                Value *lane = ConstantInt::get(i32, i);
+                Value *lane = ConstantInt::get(i32_t, i);
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
@@ -3390,7 +3422,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     } else {
         builder->SetInsertPoint(entry, entry->getFirstInsertionPt());
     }
-    Value *size = ConstantInt::get(i32, n);
+    Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(native_vector_bits() / 8);
@@ -3407,7 +3439,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
 Value *CodeGen_LLVM::get_user_context() const {
     Value *ctx = sym_get("__user_context", false);
     if (!ctx) {
-        ctx = ConstantPointerNull::get(i8->getPointerTo()); // void*
+        ctx = ConstantPointerNull::get(i8_t->getPointerTo()); // void*
     }
     return ctx;
 }
@@ -3554,11 +3586,11 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
     for (size_t i = 0; i < llvm_indices.size(); i++) {
         if (indices[i] >= 0) {
             internal_assert(indices[i] < (int)a->getType()->getVectorNumElements() * 2);
-            llvm_indices[i] = ConstantInt::get(i32, indices[i]);
+            llvm_indices[i] = ConstantInt::get(i32_t, indices[i]);
         } else {
             // Only let -1 be undef.
             internal_assert(indices[i] == -1);
-            llvm_indices[i] = UndefValue::get(i32);
+            llvm_indices[i] = UndefValue::get(i32_t);
         }
     }
 

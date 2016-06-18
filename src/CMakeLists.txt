@@ -245,6 +245,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  ConciseCasts.h
   CPlusPlusMangle.h
   Debug.h
   DebugToFile.h

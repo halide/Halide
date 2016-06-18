@@ -24,13 +24,13 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
     int fd = halide_get_trace_file(user_context);
     if (fd > 0) {
         // A 48-byte header. The first 6 bytes are metadata, then the rest is a zero-terminated string.
-        uint8_t clamped_width = e->vector_width < 256 ? e->vector_width : 255;
+        uint8_t clamped_width = e->type.lanes < 256 ? e->type.lanes : 255;
         uint8_t clamped_dimensions = e->dimensions < 256 ? e->dimensions : 255;
 
         // Upgrade the bit count to a power of two, because that's
         // how it will be stored on the stack.
         int bytes = 1;
-        while (bytes*8 < e->bits) bytes <<= 1;
+        while (bytes*8 < e->type.bits) bytes <<= 1;
 
         // Compute the size of each portion of the tracing packet
         size_t header_bytes = 48;
@@ -43,8 +43,8 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         ((int32_t *)buffer)[0] = my_id;
         ((int32_t *)buffer)[1] = e->parent_id;
         buffer[8] = e->event;
-        buffer[9] = e->type_code;
-        buffer[10] = e->bits;
+        buffer[9] = e->type.code;
+        buffer[10] = e->type.bits;
         buffer[11] = clamped_width;
         buffer[12] = e->value_index;
         buffer[13] = clamped_dimensions;
@@ -81,7 +81,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
-        while (print_bits < e->bits) print_bits <<= 1;
+        while (print_bits < e->type.bits) print_bits <<= 1;
         halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
         // Otherwise, use halide_print and a plain-text format
@@ -100,12 +100,12 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         bool print_value = (e->event < 2);
 
         ss << event_types[e->event] << " " << e->func << "." << e->value_index << "(";
-        if (e->vector_width > 1) {
+        if (e->type.lanes > 1) {
             ss << "<";
         }
         for (int i = 0; i < e->dimensions; i++) {
             if (i > 0) {
-                if ((e->vector_width > 1) && (i % e->vector_width) == 0) {
+                if ((e->type.lanes > 1) && (i % e->type.lanes) == 0) {
                     ss << ">, <";
                 } else {
                     ss << ", ";
@@ -113,23 +113,23 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
             }
             ss << e->coordinates[i];
         }
-        if (e->vector_width > 1) {
+        if (e->type.lanes > 1) {
             ss << ">)";
         } else {
             ss << ")";
         }
 
         if (print_value) {
-            if (e->vector_width > 1) {
+            if (e->type.lanes > 1) {
                 ss << " = <";
             } else {
                 ss << " = ";
             }
-            for (int i = 0; i < e->vector_width; i++) {
+            for (int i = 0; i < e->type.lanes; i++) {
                 if (i > 0) {
                     ss << ", ";
                 }
-                if (e->type_code == 0) {
+                if (e->type.code == 0) {
                     if (print_bits == 8) {
                         ss << ((int8_t *)(e->value))[i];
                     } else if (print_bits == 16) {
@@ -139,7 +139,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                     } else {
                         ss << ((int64_t *)(e->value))[i];
                     }
-                } else if (e->type_code == 1) {
+                } else if (e->type.code == 1) {
                     if (print_bits == 8) {
                         ss << ((uint8_t *)(e->value))[i];
                     } else if (print_bits == 16) {
@@ -149,7 +149,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                     } else {
                         ss << ((uint64_t *)(e->value))[i];
                     }
-                } else if (e->type_code == 2) {
+                } else if (e->type.code == 2) {
                     halide_assert(user_context, print_bits >= 16 && "Tracing a bad type");
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
@@ -158,11 +158,11 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                     } else {
                         ss << ((double *)(e->value))[i];
                     }
-                } else if (e->type_code == 3) {
+                } else if (e->type.code == 3) {
                     ss << ((void **)(e->value))[i];
                 }
             }
-            if (e->vector_width > 1) {
+            if (e->type.lanes > 1) {
                 ss << ">";
             }
         }
