@@ -341,11 +341,36 @@ struct CostModel {
         return make_pair(cost_visitor.ops, cost_visitor.byte_loads);
     }
 
-    pair<int64_t, int64_t> region_cost(string func, Box& region,
-                                       const set<string>& inlines = set<string>()) {
+    pair<int64_t, int64_t> stage_region_cost(string func, int stage, Box &region,
+                                             const set<string> &inlines = set<string>()) {
+        Function curr_f = env.at(func);
+        Definition def = get_stage_definition(func, stage);
 
-        const Function &curr_f = env.at(func);
-        int64_t area = box_area(region);
+        // This method of costing update definitions assumes that the domain
+        // of the pure vars across all the update definitions is the same
+        // which may not be true. This will be prone to overestimating the
+        // cost.
+        DimBounds bounds;
+        const vector<string> &args = curr_f.args();
+        for (size_t d = 0; d < args.size(); d++) {
+            bounds[args[d]] = region[d];
+        }
+
+        if (def.domain().defined()) {
+            for (auto &rvar: def.domain().domain()) {
+                bounds[rvar.var] = Interval(simplify(rvar.min),
+                                            simplify(rvar.min + rvar.extent - 1));
+            }
+        }
+
+        Box stage_region;
+
+        const vector<Dim> &dims = def.schedule().dims();
+        for (int d = 0 ; d < (int)dims.size() - 1; d++) {
+            stage_region.push_back(bounds.at(dims[d].var));
+        }
+
+        int64_t area = box_area(stage_region);
         if (area < 0) {
             // Area could not be determined therfore it is not possible to
             // determine the cost as well
@@ -353,60 +378,28 @@ struct CostModel {
         }
 
         vector< pair<int64_t, int64_t> > cost = inlines.empty() ? func_cost[func]:
-                get_func_cost(curr_f, inlines);
+                                                get_func_cost(curr_f, inlines);
 
-        int index = 0;
+        return make_pair(area * cost[stage].first, area * cost[stage].second);
+
+    }
+
+    pair<int64_t, int64_t> region_cost(string func, Box& region,
+                                       const set<string> &inlines = set<string>()) {
+
+        Function curr_f = env.at(func);
         pair<int64_t, int64_t> region_cost;
-        region_cost.first = area * cost[index].first;
-        region_cost.second = area * cost[index].first;
 
-        // Compute the bounds of the update definitions and the cost of
-        // evaluating the region
+        int num_stages = curr_f.updates().size() + 1;
+        for (int s = 0; s < num_stages; s++) {
 
-        // Add all the pure var bounds to the scope
-        Scope<Interval> curr_scope;
-        int interval_index = 0;
-
-        for (auto& arg: curr_f.args()) {
-            Interval simple_bounds =
-                    Interval(simplify(region[interval_index].min),
-                             simplify(region[interval_index].max));
-            curr_scope.push(arg, simple_bounds);
-            interval_index++;
-        }
-
-        // This method of costing update definitions assumes that the domain
-        // of the pure vars across all the update definitions is the same
-        // which may not be true. This will be prone to overestimating the
-        // cost.
-        for (const Definition& u: curr_f.updates()) {
-            index++;
-            Box update_region;
-            if (u.domain().defined()) {
-                for (auto& rvar: u.domain().domain()) {
-                    curr_scope.push(rvar.var,
-                                    Interval(simplify(rvar.min),
-                                             simplify(rvar.min + rvar.extent - 1)));
-                }
-            }
-            for (const Expr& arg: u.args()) {
-                Interval arg_bounds = bounds_of_expr_in_scope(arg, curr_scope);
-                update_region.push_back(Interval(simplify(arg_bounds.min),
-                                                 simplify(arg_bounds.max)));
-            }
-            int64_t area = box_area(update_region);
-            debug(0) << update_region << '\n';
-            debug(0) << "Area:" << area << '\n';
-            if (area != -1) {
-                region_cost.first += cost[index].first * area;
-                region_cost.second += cost[index].second * area;
+            pair<int64_t, int64_t> stage_cost =
+                            stage_region_cost(func, s, region, inlines);
+            if (stage_cost.first >= 0) {
+                region_cost.first += stage_cost.first;
+                region_cost.second += stage_cost.second;
             } else {
-                region_cost.first = -1;
-                region_cost.second = -1;
-                debug(0) << "Warning: could not determine the bounds of\
-                         update definition " << index << "in function "
-                         << curr_f.name() << '\n';
-                return region_cost;
+                return make_pair(-1, -1);
             }
         }
 
@@ -629,13 +622,8 @@ struct DependenceAnalysis {
     map<string, Box> redundant_regions(Function f, int stage_num, string var,
                                        const DimBounds& bounds);
 
-    map<string, Box> concrete_dep_regions(Function f, int stage_num,
-                                          const DimBounds& bounds) {
-        return regions_required(f, stage_num, bounds);
-    }
-
-    map<string, Box> concrete_dep_regions(Function f,
-                                          const DimBounds& pure_bounds);
+    map<string, Box> regions_required(Function f,
+                                      const DimBounds& pure_bounds);
 
     DimBounds get_stage_bounds(Function f, int stage_num,
                                const DimBounds& pure_bounds);
@@ -643,12 +631,11 @@ struct DependenceAnalysis {
     vector<DimBounds> get_stage_bounds(Function f,
                                        const DimBounds& pure_bounds);
     vector<map<string, Box>>
-    concrete_overlap_regions(Function f, int stage_num,
-                             const DimBounds& bounds);
+    overlap_regions(Function f, int stage_num, const DimBounds& bounds);
 };
 
 vector<map<string, Box>>
-DependenceAnalysis::concrete_overlap_regions(Function f, int stage_num,
+DependenceAnalysis::overlap_regions(Function f, int stage_num,
                                              const DimBounds& bounds) {
 
     vector< map<string, Box> > conc_overlaps;
@@ -665,14 +652,14 @@ DependenceAnalysis::concrete_overlap_regions(Function f, int stage_num,
 }
 
 map<string, Box>
-DependenceAnalysis::concrete_dep_regions(Function f,
+DependenceAnalysis::regions_required(Function f,
                                          const DimBounds& pure_bounds) {
     map<string, Box> regions;
     int num_stages = f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
 
         DimBounds bounds = get_stage_bounds(f, s, pure_bounds);
-        map<string, Box> stage_regions = concrete_dep_regions(f, s, bounds);
+        map<string, Box> stage_regions = regions_required(f, s, bounds);
 
         for (auto& reg: stage_regions) {
             // Merge region with an existing region for the function
@@ -933,7 +920,7 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis& analy,
         }
 
         map<string, Box> regions =
-                analy.concrete_dep_regions(out, pure_bounds);
+                analy.regions_required(out, pure_bounds);
 
         // Add the output region to the pipeline bounds as well
         regions[out.name()] = out_box;
@@ -1286,7 +1273,7 @@ map<string, int64_t> Partitioner::evaluate_reuse(const Stage& s,
     DimBounds bounds = get_bounds_from_tile_sizes(s, tile_sizes);
 
     vector< map<string, Box> > reuse_regions =
-            analy.concrete_overlap_regions(s.func, s.stage_num, bounds);
+                analy.overlap_regions(s.func, s.stage_num, bounds);
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         int64_t total_reuse = 0;
@@ -1553,9 +1540,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     // iteration order.
 
     // Get the definition corresponding to the group output
-    string out_f_name = g.output.func.name();
-    const Function& g_out = analy.env.at(out_f_name);
-
     Definition def = get_stage_definition(g.output.func, g.output.stage_num);
 
     set<string> group_inputs;
@@ -1586,23 +1570,26 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     uint64_t estimate_tiles = 1;
     uint64_t num_ele_per_tile = 1;
 
-    const vector<string>& args = g_out.args();
+    const vector<Dim>& dims = def.schedule().dims();
 
-    for (size_t i = 0; i < args.size(); i++) {
-        if (g.tile_sizes.find(args[i]) != g.tile_sizes.end()) {
-            int size = g.tile_sizes.at(args[i]);
-            int extent = get_extent(pipeline_bounds.at(out_f_name)[i]);
+    DimBounds stg_bounds = get_bounds(g.output);
+
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
+        string var = dims[d].var;
+        if (g.tile_sizes.find(var) != g.tile_sizes.end()) {
+            int size = g.tile_sizes.at(var);
+            int extent = get_extent(stg_bounds.at(var));
             estimate_tiles *= std::ceil((float)extent/size);
             num_ele_per_tile *= size;
         }
     }
 
     // Get the regions of the pipeline required to compute a tile of the group
-    DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
+    DimBounds tile_bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
 
     map<string, Box> conc_reg =
-            analy.concrete_dep_regions(g.output.func,
-                                       g.output.stage_num, bounds);
+            analy.regions_required(g.output.func,
+                                       g.output.stage_num, tile_bounds);
 
     // FIXME: Accouting of the output region in the region cost is incorrect
     // conc_reg[out_f_name] = Box(bounds);
@@ -1624,7 +1611,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost = cost_model.region_cost(group_reg, g.inlined);
     int64_t tile_input_size = cost_model.region_size(prod_reg) +
-            cost_model.input_region_size(input_reg);
+                              cost_model.input_region_size(input_reg);
     int64_t tile_intermediate_size = cost_model.region_size(group_reg, g.inlined);
 
     GroupAnalysis g_analy;
@@ -1736,7 +1723,8 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
     }
 
     debug(0) << "\nProd Group:\n" << prod_group << '\n';
-    debug(0) << "Cons Group:\n" << cons_group;
+    debug(0) << "Cons Group:\n" << cons_group << '\n';
+    debug(0) << "Fused Group:\n" << fused_group << '\n';
     debug(0) << "Benefit:" << benefit << "\n\n";
 
     return benefit;
@@ -1785,8 +1773,8 @@ map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
 
     DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
     map<string, Box> conc_reg =
-            analy.concrete_dep_regions(g.output.func,
-                                       g.output.stage_num, bounds);
+            analy.regions_required(g.output.func,
+                                   g.output.stage_num, bounds);
     for (const Stage& s: g.members) {
         if (conc_reg.find(s.func.name()) != conc_reg.end()) {
             mem_bounds[s.func.name()] = conc_reg[s.func.name()];
@@ -2111,6 +2099,7 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
             // behavior than pure functions. They may need to be computed above
             // the inner most vector loop to avoid complications with varying
             // extents across different vector lanes.
+
             // The default is compute inline but setting it explicitly
             f_handle.compute_inline();
             sched += f_handle.name() + ".compute_inline()" + ";\n";
