@@ -180,10 +180,10 @@ void check(string op, int vector_width, Expr e) {
 }
 
 
-const int min_i8 = -128, max_i8 = 127;
-const int min_i16 = -32768, max_i16 = 32767;
-const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
-const int max_u8 = 255;
+const int max_i8  = 127;
+const int max_i16 = 32767;
+const int max_i32 = 0x7fffffff;
+const int max_u8  = 255;
 const int max_u16 = 65535;
 Expr max_u32 = UInt(32).max();
 
