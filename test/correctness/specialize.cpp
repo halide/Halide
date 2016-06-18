@@ -14,7 +14,7 @@ void reset_trace() {
 int my_trace(void *user_context, const halide_trace_event *ev) {
 
     if (ev->event == halide_trace_store) {
-        if (ev->vector_width > 1) {
+        if (ev->type.lanes > 1) {
             vector_store = true;
         } else {
             scalar_store = true;
