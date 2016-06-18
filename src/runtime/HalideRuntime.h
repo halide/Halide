@@ -871,9 +871,6 @@ struct halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
-    /** The name of this Func. A global constant string. */
-    const char *name;
-
     /** The current memory allocation of this Func. */
     uint64_t memory_current;
 
@@ -886,6 +883,9 @@ struct halide_profiler_func_stats {
     /** The peak stack allocation of this Func threads. */
     uint64_t stack_peak;
 
+    /** The name of this Func. A global constant string. */
+    const char *name;
+
     /** The total number of memory allocation of this Func. */
     int num_allocs;
 };
@@ -895,6 +895,15 @@ struct halide_profiler_func_stats {
 struct halide_profiler_pipeline_stats {
     /** Total time spent inside this pipeline (in nanoseconds) */
     uint64_t time;
+
+    /** The current memory allocation of funcs in this pipeline. */
+    uint64_t memory_current;
+
+    /** The peak memory allocation of funcs in this pipeline. */
+    uint64_t memory_peak;
+
+    /** The total memory allocation of funcs in this pipeline. */
+    uint64_t memory_total;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
@@ -917,15 +926,6 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;
-
-    /** The current memory allocation of funcs in this pipeline. */
-    uint64_t memory_current;
-
-    /** The peak memory allocation of funcs in this pipeline. */
-    uint64_t memory_peak;
-
-    /** The total memory allocation of funcs in this pipeline. */
-    uint64_t memory_total;
 
     /** The total number of memory allocation of funcs in this pipeline. */
     int num_allocs;
