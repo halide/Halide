@@ -98,7 +98,7 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c
 	mkdir -p $(@D)
-	$(CC-$*) $(CCFLAGS-$*) $^ -shared -o $@
+	$(CC-$*) $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so $^ -shared -o $@
 
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h
@@ -127,7 +127,7 @@ bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
 	mkdir -p bin/host
-	$(CC-host) $^ $(CCFLAGS-host) -shared -o $@
+	$(CC-host) $^ $(CCFLAGS-host) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
 .PHONY: clean
 clean:
