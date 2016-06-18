@@ -88,17 +88,20 @@ public:
     std::vector<Expr> &values();
     // @}
 
+    /** Get the predicate on the definition */
+    // @{
+    const Expr &predicate() const;
+    Expr &predicate();
+    // @}
+
+    /** Split predicate into vector of ANDs. If there is no predicate (i.e. this
+     * definition is always valid), this returns an empty vector. */
+    EXPORT std::vector<Expr> split_predicate() const;
+
     /** Get the default (no-specialization) schedule associated with this definition. */
     // @{
     const Schedule &schedule() const;
     Schedule &schedule();
-    // @}
-
-    /** Get the default (no-specialization) reduction domain associated with this
-     * function's definition. */
-    // @{
-    const ReductionDomain &domain() const;
-    void set_domain(const ReductionDomain &d);
     // @}
 
     /** You may create several specialized versions of a func with
