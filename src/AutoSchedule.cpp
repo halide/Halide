@@ -36,12 +36,6 @@ int get_extent(const Interval& i) {
         else
             return 0;
     }
-    /* TODO Check if this is necessary at some point
-       else {
-       Expr diff = simplify(i.max - i.min);
-       if (diff.as<IntImm>())
-       return diff.as<IntImm>()->value;
-       } */
     return -1;
 }
 
@@ -1246,15 +1240,22 @@ struct Partitioner {
     pair<FusionChoice, int64_t>
     choose_candidate_fuse_fast_mem(const vector<pair<string, string>>& cand_pairs);
 
-    map<string, int64_t> evaluate_reuse(const FStage& stg, const set<string>& prod);
-    map<string, int> get_stage_estimates(const FStage& stg);
-    string generate_cpu_schedule(const Target& t);
-    string generate_group_cpu_schedule(const Group& g, const Target& t);
+    map<string, int64_t> evaluate_reuse(const FStage &stg,
+                                        const set<string> &prod);
+    map<string, int> get_stage_estimates(const FStage &stg);
+    string generate_cpu_schedule(const Target &t);
+    string generate_group_cpu_schedule(const Group &g, const Target &t);
 
-    DimBounds get_bounds(const FStage& stg);
+    DimBounds get_bounds(const FStage &stg);
 
-    DimBounds get_bounds_from_tile_sizes(const FStage& stg,
-                                         const map<string, int>& tile_sizes);
+    DimBounds get_bounds_from_tile_sizes(const FStage &stg,
+                                         const map<string, int> &tile_sizes);
+
+    vector<map<string, int>> generate_tile_configs(const FStage &stg);
+
+    pair<map<string, int>, GroupAnalysis>
+    find_best_tile_config(const Group &g);
+
     /*
        Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
        void clear_schedules_fast_mem();
@@ -1366,6 +1367,94 @@ Partitioner::choose_candidate_fuse_inline(
         }
     }
     return best;
+}
+
+vector<map<string, int>>
+Partitioner::generate_tile_configs(const FStage &stg) {
+
+    Definition def = get_stage_definition(stg.func, stg.stage_num);
+    const vector<Dim> &dims = def.schedule().dims();
+
+    set<string> pure_vars;
+    for (const string& arg: stg.func.args()) {
+        pure_vars.insert(arg);
+    }
+
+    // Get the dimensions that are going to be tiled in this stage.
+    // skipping rvars for now.
+    vector<string> tile_vars;
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
+        if (pure_vars.find(dims[d].var) != pure_vars.end()) {
+            tile_vars.push_back(dims[d].var);
+        }
+    }
+
+    vector<int> size_variants = {1, 4, 8, 16, 32, 64, 128, 256};
+    vector<map<string, int>> tile_configs;
+
+    // Skewed tile configurations
+    for (size_t i = 0; i < tile_vars.size(); i++) {
+        for (auto &dim_size: size_variants) {
+            map<string, int> tiling;
+            for (size_t j = 0; j < tile_vars.size(); j++) {
+                if (j < i) {
+                    tiling[tile_vars[j]] = j == 0 ?
+                                           std::max(dim_size, 64): dim_size;
+                } else {
+                    tiling[tile_vars[j]] =
+                            size_variants[size_variants.size() - 1];
+                }
+            }
+            tile_configs.push_back(tiling);
+        }
+    }
+
+    // Square tile configurations
+    for (auto &dim_size: size_variants) {
+        map<string, int> tiling;
+        for (size_t j = 0; j < tile_vars.size(); j++) {
+            tiling[tile_vars[j]] = j == 0 ?
+                                   std::max(dim_size, 64): dim_size;
+        }
+        tile_configs.push_back(tiling);
+    }
+
+    return tile_configs;
+}
+
+pair<map<string, int>, Partitioner::GroupAnalysis>
+Partitioner::find_best_tile_config(const Group &g) {
+    // Initialize to no tiling
+    map<string, int> no_tile_config;
+    Group no_tile = g;
+    no_tile.tile_sizes = no_tile_config;
+
+    GroupAnalysis best_analy = analyze_group(no_tile);
+    map<string, int> best_config = no_tile_config;
+
+    if (best_analy.arith_cost < 0) {
+        return make_pair(best_config, best_analy);
+    }
+
+    // Generate tiling configurations
+    vector<map<string, int>> configs = generate_tile_configs(g.output);
+
+    for (auto &config: configs) {
+        Group new_group = g;
+        new_group.tile_sizes = config;
+
+        GroupAnalysis new_analy = analyze_group(new_group);
+
+        // TODO: Add parallelism constraints
+        if ((new_analy.arith_cost >= 0) && (new_analy.mem_cost >= 0) &&
+            (new_analy.arith_cost <= best_analy.arith_cost) &&
+            (new_analy.mem_cost < best_analy.mem_cost)) {
+            best_config = config;
+            best_analy = new_analy;
+        }
+    }
+
+    return make_pair(best_config, best_analy);
 }
 
 pair<Partitioner::FusionChoice, int64_t>
@@ -2173,13 +2262,9 @@ void generate_schedules(const vector<Function>& outputs,
     // O2 No redundant compute basic fusion and reordering
     // O3 Trades-offs redundant work for enhancing locality and parallelism
 
-    // TODO: Realize the generated schedule
-    // CPU
+    // TODO: Better handling of boundary conditions
+    // TODO: GPU scheduling
 
-    // TODO: Update definitions
-    // TODO: Boundary conditions
-
-    // TODO: Realize the generated schedule
 
     // Set the schedule defaults for each function in the environment
     //set_schedule_defaults(env);
