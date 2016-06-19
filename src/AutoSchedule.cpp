@@ -12,6 +12,7 @@
 #include "IRPrinter.h"
 #include "Inline.h"
 #include "Func.h"
+#include "ParallelRVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -69,31 +70,31 @@ void disp_regions(map<string, Box>& regions) {
     }
 }
 
-struct Stage {
+struct FStage {
     Function func;
     uint32_t stage_num;
-    Stage(Function _func, uint32_t _stage_num) :
+    FStage(Function _func, uint32_t _stage_num) :
           func(_func), stage_num(_stage_num) { }
 
-    bool operator==(const Stage& other_stage) const {
+    bool operator==(const FStage& other_stage) const {
         return (func.name() == other_stage.func.name()) &&
                (stage_num == other_stage.stage_num);
     }
 
-    bool operator<(const Stage &other_stage) const {
+    bool operator<(const FStage &other_stage) const {
         return func.name() < other_stage.func.name() ||
                 (func.name() == other_stage.func.name() &&
                  stage_num < other_stage.stage_num) ;
     }
 
-    friend std::ostream& operator<<(std::ostream& stream, const Stage& s) {
+    friend std::ostream& operator<<(std::ostream& stream, const FStage& s) {
         stream << "(" << s.func.name() << "," << s.stage_num << ")";
         return stream;
     }
 };
 
 typedef map<string, Interval> DimBounds;
-typedef map<Stage, DimBounds> StageBounds;
+typedef map<FStage, DimBounds> FStageBounds;
 
 struct MachineParams {
     uint32_t parallelism;
@@ -585,7 +586,7 @@ struct CostModel {
             func_cost[kv.first] = get_func_cost(kv.second);
             int stage = 0;
             for (auto& cost: func_cost[kv.first]) {
-                debug(0) << "Func:" << kv.first << ",Stage:" << stage << "," << cost.first << '\n';
+                debug(0) << "Func:" << kv.first << ",FStage:" << stage << "," << cost.first << '\n';
                 stage++;
             }
             FindImageInputs find;
@@ -711,13 +712,13 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
     map<string, Box> regions;
     // Add the function and its region to the queue
-    deque< pair<Stage, DimBounds> > f_queue;
-    Stage start(f, stage_num);
+    deque< pair<FStage, DimBounds> > f_queue;
+    FStage start(f, stage_num);
     f_queue.push_back(make_pair(start, bounds));
 
     // Recursively compute the regions required
     while(!f_queue.empty()) {
-        Stage s = f_queue.front().first;
+        FStage s = f_queue.front().first;
         DimBounds curr_bounds = f_queue.front().second;
 
         Definition def = get_stage_definition(s.func, s.stage_num);
@@ -785,7 +786,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     internal_assert(prod_bounds.size() == num_stages);
 
                     for (size_t prod_s = 0; prod_s < num_stages; prod_s++) {
-                        Stage prod_stage(prod_func, prod_s);
+                        FStage prod_stage(prod_func, prod_s);
                         f_queue.push_back(make_pair(prod_stage,
                                                     prod_bounds[prod_s]));
                     }
@@ -942,11 +943,11 @@ struct Partitioner {
         // FusionChoice encodes the choice of the prod_group being merged with
         // the cons_group at the granularity of the tile given by tile_sizes
         string prod;
-        Stage cons;
+        FStage cons;
         // Tile sizes along the output of the consumer group
         map<string, int> tile_sizes;
 
-        FusionChoice(string _prod, Stage _cons,
+        FusionChoice(string _prod, FStage _cons,
                      const map<string, int>& _tile_sizes = map<string, int>()) :
                      prod(_prod), cons(_cons), tile_sizes(_tile_sizes) {}
 
@@ -981,9 +982,9 @@ struct Partitioner {
 
     struct Group {
         // The output stage representing the group
-        Stage output;
+        FStage output;
         // All the functions that belong to the group
-        vector<Stage> members;
+        vector<FStage> members;
 
         // Reuse along dimensions of the group members
         map<string, map<string, int64_t> > reuse;
@@ -995,12 +996,12 @@ struct Partitioner {
         // the group and compute all the members of the group at that granularity
         map<string, int> tile_sizes;
 
-        Group(Stage _output, vector<Stage> _members):
+        Group(FStage _output, vector<FStage> _members):
               output(_output), members(_members) { }
 
         friend std::ostream& operator <<(std::ostream& stream, const Group& g) {
 
-            stream << "Output Stage:" << g.output << '\n';
+            stream << "Output FStage:" << g.output << '\n';
             stream << "Members:" << '[';
             for (auto& m: g.members) {
                 stream << m << ",";
@@ -1032,7 +1033,7 @@ struct Partitioner {
         int64_t parallelism;
     };
 
-    map<Stage, Group> groups;
+    map<FStage, Group> groups;
 
     // Levels that are targetted by the grouping algorithm
     enum Level {INLINE, FAST_MEM};
@@ -1043,8 +1044,8 @@ struct Partitioner {
     CostModel& cost_model;
     const vector<Function>& outputs;
 
-    map<Stage, set<Stage> > children;
-    void disp_children(map<Stage, set<Stage>>& children) {
+    map<FStage, set<FStage> > children;
+    void disp_children(map<FStage, set<FStage>>& children) {
         for (auto& f: children) {
             debug(0) << f.first << ": [";
             for (auto& c: f.second) {
@@ -1067,7 +1068,7 @@ struct Partitioner {
             for (auto& f: analy.env) {
                 int num_stages = f.second.updates().size() + 1;
                 for (int s = 0; s < num_stages; s++) {
-                    Stage stg(f.second, s);
+                    FStage stg(f.second, s);
                     Group g(stg, {stg});
                     groups.insert(make_pair(stg, g));
                 }
@@ -1088,8 +1089,8 @@ struct Partitioner {
                             Function prod_func = analy.env.at(c);
                             int final_stage = prod_func.updates().size();
 
-                            Stage prod_stage(prod_func, final_stage);
-                            Stage cons_stage(f.second, s);
+                            FStage prod_stage(prod_func, final_stage);
+                            FStage cons_stage(f.second, s);
 
                             children[prod_stage].insert(cons_stage);
                         }
@@ -1097,8 +1098,8 @@ struct Partitioner {
 
                     if (s > 0) {
                         // Add dependencies between all the stages in a function
-                        Stage prod_stage(f.second, s-1);
-                        Stage cons_stage(f.second, s);
+                        FStage prod_stage(f.second, s-1);
+                        FStage cons_stage(f.second, s);
 
                         children[prod_stage].insert(cons_stage);
                     }
@@ -1119,14 +1120,14 @@ struct Partitioner {
         Function prod_f = analy.env.at(choice.prod);
         size_t num_stages = prod_f.updates().size() + 1;
 
-        Stage child_group = choice.cons;
+        FStage child_group = choice.cons;
         internal_assert(groups.find(child_group) != groups.end());
-        vector<Stage>& child_members = groups.at(child_group).members;
+        vector<FStage>& child_members = groups.at(child_group).members;
 
         for (size_t s = 0; s < num_stages; s++) {
-            Stage cand_group(prod_f, s);
+            FStage cand_group(prod_f, s);
 
-            vector<Stage> cand_funcs = groups.at(cand_group).members;
+            vector<FStage> cand_funcs = groups.at(cand_group).members;
             groups.erase(cand_group);
 
             child_members.insert(child_members.end(),
@@ -1139,7 +1140,7 @@ struct Partitioner {
             // Update the children mapping
             children.erase(cand_group);
             for (auto& f: children) {
-                set<Stage>& cons = f.second;
+                set<FStage>& cons = f.second;
                 if (cons.find(cand_group) != cons.end()) {
                     cons.erase(cand_group);
                     cons.insert(child_group);
@@ -1149,39 +1150,53 @@ struct Partitioner {
 
         groups.at(child_group).tile_sizes = choice.tile_sizes;
 
-        // Mark the entries of the fusion cache that need to be invalidated
+        // Invalidate entries of the fusion cache
+        vector<FusionChoice> invalid_keys;
         for (auto& choice: fusion_cache) {
             if (choice.first.prod == child_group.func.name()
                 || choice.first.cons == child_group)
-                fusion_cache.erase(choice.first);
+                invalid_keys.push_back(choice.first);
+        }
+
+        for (auto &key: invalid_keys) {
+            internal_assert(fusion_cache.find(key) !=
+                            fusion_cache.end());
+            fusion_cache.erase(key);
         }
     }
 
-    void merge_groups_inline(FusionChoice& choice) {
+    void merge_groups_inline(FusionChoice &choice) {
 
         Function prod_f = analy.env.at(choice.prod);
         size_t num_stages = prod_f.updates().size() + 1;
 
-        Stage final_stage(prod_f, num_stages - 1);
-        set<Stage> cand_group_children = children[final_stage];
+        FStage final_stage(prod_f, num_stages - 1);
+        set<FStage> cand_group_children = children[final_stage];
 
         // Invalidate entries of the fusion cache
-        for (auto& c: cand_group_children) {
-            for (auto& choice: fusion_cache) {
+        vector<FusionChoice> invalid_keys;
+        for (auto &c: cand_group_children) {
+            for (auto &choice: fusion_cache) {
                 if (choice.first.prod == c.func.name() ||
                     choice.first.cons == c)
-                    fusion_cache.erase(choice.first);
+                invalid_keys.push_back(choice.first);
             }
         }
 
+        for (auto &key: invalid_keys) {
+            internal_assert(fusion_cache.find(key) !=
+                            fusion_cache.end());
+            fusion_cache.erase(key);
+        }
+
         for (size_t s = 0; s < num_stages; s++) {
-            Stage cand_group(prod_f, s);
+            FStage cand_group(prod_f, s);
 
             for (auto& cg: cand_group_children) {
                 internal_assert(groups.find(cg) != groups.end());
-                vector<Stage> cand_funcs = groups.at(cand_group).members;
+                vector<FStage> cand_funcs = groups.at(cand_group).members;
 
-                vector<Stage>& cg_members = groups.at(cg).members;
+                vector<FStage>& cg_members = groups.at(cg).members;
                 cg_members.insert(cg_members.end(),
                                   cand_funcs.begin(), cand_funcs.end());
                 // TODO: Look at all the members that need to be to be updated. Maybe
@@ -1197,7 +1212,7 @@ struct Partitioner {
             // Update the children mapping
             children.erase(cand_group);
             for (auto& f: children) {
-                set<Stage>& cons = f.second;
+                set<FStage>& cons = f.second;
                 if (cons.find(cand_group) != cons.end()) {
                     cons.erase(cand_group);
                     cons.insert(cand_group_children.begin(),
@@ -1231,14 +1246,14 @@ struct Partitioner {
     pair<FusionChoice, int64_t>
     choose_candidate_fuse_fast_mem(const vector<pair<string, string>>& cand_pairs);
 
-    map<string, int64_t> evaluate_reuse(const Stage& s, const set<string>& prod);
-    map<string, int> get_pure_dim_estimates(const string& f);
+    map<string, int64_t> evaluate_reuse(const FStage& stg, const set<string>& prod);
+    map<string, int> get_stage_estimates(const FStage& stg);
     string generate_cpu_schedule(const Target& t);
     string generate_group_cpu_schedule(const Group& g, const Target& t);
 
-    DimBounds get_bounds(const Stage& s);
+    DimBounds get_bounds(const FStage& stg);
 
-    DimBounds get_bounds_from_tile_sizes(const Stage& s,
+    DimBounds get_bounds_from_tile_sizes(const FStage& stg,
                                          const map<string, int>& tile_sizes);
     /*
        Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
@@ -1251,12 +1266,12 @@ struct Partitioner {
        */
 };
 
-map<string, int64_t> Partitioner::evaluate_reuse(const Stage& s,
+map<string, int64_t> Partitioner::evaluate_reuse(const FStage& stg,
                                                  const set<string>& prod) {
     map<string, int64_t> reuse;
-    Function f = s.func;
+    Function f = stg.func;
 
-    Definition def = get_stage_definition(s.func, s.stage_num);
+    Definition def = get_stage_definition(stg.func, stg.stage_num);
 
     // TODO: Check if tile sizes of 1 in each dimension gives a reasonable
     // answer or reuse should be evaluated at a much larger granularity or
@@ -1271,10 +1286,10 @@ map<string, int64_t> Partitioner::evaluate_reuse(const Stage& s,
         tile_sizes[dims[d].var] = 1;
     }
 
-    DimBounds bounds = get_bounds_from_tile_sizes(s, tile_sizes);
+    DimBounds bounds = get_bounds_from_tile_sizes(stg, tile_sizes);
 
     vector< map<string, Box> > reuse_regions =
-                analy.overlap_regions(s.func, s.stage_num, bounds);
+                analy.overlap_regions(stg.func, stg.stage_num, bounds);
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         int64_t total_reuse = 0;
@@ -1310,9 +1325,9 @@ Partitioner::choose_candidate_fuse_inline(
         Function prod_f = analy.env.at(p.first);
         int final_stage = prod_f.updates().size();
 
-        Stage prod(prod_f.name(), final_stage);
+        FStage prod(prod_f.name(), final_stage);
 
-        for (const Stage& c: children[prod]) {
+        for (const FStage& c: children[prod]) {
             int64_t benefit = 0;
             FusionChoice cand_choice(prod_f.name(), c);
 
@@ -1358,7 +1373,7 @@ Partitioner::choose_candidate_fuse_fast_mem(
         const vector< pair<string, string> >& cand_pairs) {
 
     map<string, int> tile_sizes;
-    FusionChoice c("", Stage(Function(), 0), tile_sizes);
+    FusionChoice c("", FStage(Function(), 0), tile_sizes);
     return make_pair(c, 0);
 
     // The choose candidate operates by considering a wide variety of
@@ -1395,7 +1410,7 @@ void Partitioner::group(Partitioner::Level level) {
     while(!fixpoint) {
         fixpoint = true;
         vector< pair<string, string> > cand;
-        for (const pair<Stage, Group>& g: groups) {
+        for (const pair<FStage, Group>& g: groups) {
 
             bool is_output = false;
             for (const Function& f: outputs) {
@@ -1419,7 +1434,7 @@ void Partitioner::group(Partitioner::Level level) {
                 // All the stages beloning to a function are considered to be a
                 // single child.
                 set<string> child_funcs;
-                for (const Stage& s: children[g.first]) {
+                for (const FStage& s: children[g.first]) {
                     child_funcs.insert(s.func.name());
                 }
 
@@ -1467,7 +1482,7 @@ void Partitioner::group(Partitioner::Level level) {
     }
 }
 
-DimBounds Partitioner::get_bounds(const Stage& s) {
+DimBounds Partitioner::get_bounds(const FStage& s) {
 
     Definition def = get_stage_definition(s.func, s.stage_num);
     DimBounds bounds;
@@ -1487,7 +1502,7 @@ DimBounds Partitioner::get_bounds(const Stage& s) {
 }
 
 DimBounds
-Partitioner::get_bounds_from_tile_sizes(const Stage& s,
+Partitioner::get_bounds_from_tile_sizes(const FStage& s,
                                         const map<string, int>& tile_sizes) {
 
     Definition def = get_stage_definition(s.func, s.stage_num);
@@ -1662,7 +1677,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
 Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
                                             Group& cons_group) {
 
-    vector<Stage> fused_members;
+    vector<FStage> fused_members;
     for (auto& s: prod_group.members)
         fused_members.push_back(s);
     for (auto& s: cons_group.members)
@@ -1686,7 +1701,7 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
     int num_prod_stages = prod_f.updates().size() + 1;
     vector<Group> prod_groups;
     for (int s = 0 ; s < num_prod_stages; s++) {
-        Stage prod_s(prod_f, s);
+        FStage prod_s(prod_f, s);
         prod_groups.push_back(groups.at(prod_s));
     }
 
@@ -1712,7 +1727,7 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
     fused.tile_sizes = tile_sizes;
 
     for (auto &prod_g: prod_groups) {
-        for (const Stage& s: prod_g.members)
+        for (const FStage& s: prod_g.members)
             fused.inlined.insert(s.func.name());
     }
 
@@ -1766,7 +1781,7 @@ int64_t Partitioner::evaluate_fast_mem_choice(FusionChoice& choice) {
 
     // Create a group that reflects the fusion choice and evaluate
     // the cost of the group
-    Group prod_group = groups.at(Stage(choice.prod, 0));
+    Group prod_group = groups.at(FStage(choice.prod, 0));
     Group cons_group = groups.at(choice.cons);
 
     Group fused_group = fuse_groups(prod_group, cons_group);
@@ -1788,15 +1803,14 @@ int64_t Partitioner::evaluate_fast_mem_choice(FusionChoice& choice) {
     return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
 }
 
-map<string, int> Partitioner::get_pure_dim_estimates(const string& f) {
-    map<string, int> dim_estimates;
-    const vector<string>& args = analy.env.at(f).args();
-    const vector<Dim>& dims = analy.env.at(f).schedule().dims();
-    for (size_t i = 0; i < args.size(); i++) {
-        int estimate = get_extent(pipeline_bounds.at(f)[i]);
-        dim_estimates[dims[i].var] = estimate;
+map<string, int> Partitioner::get_stage_estimates(const FStage& stg) {
+    map<string, int> stg_estimates;
+    DimBounds stg_bounds = get_bounds(stg);
+    for (auto &bound: stg_bounds) {
+        int estimate = get_extent(bound.second);
+        stg_estimates[bound.first] = estimate;
     }
-    return dim_estimates;
+    return stg_estimates;
 }
 
 map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
@@ -1807,7 +1821,7 @@ map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
     map<string, Box> conc_reg =
             analy.regions_required(g.output.func,
                                    g.output.stage_num, bounds);
-    for (const Stage& s: g.members) {
+    for (const FStage& s: g.members) {
         if (conc_reg.find(s.func.name()) != conc_reg.end()) {
             mem_bounds[s.func.name()] = conc_reg[s.func.name()];
         }
@@ -1816,13 +1830,13 @@ map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
 }
 
 pair<VarOrRVar, VarOrRVar>
-split_dim(Func f_handle, VarOrRVar v, int factor,
+split_dim(Stage f_handle, string prefix, VarOrRVar v, int factor,
           string in_suffix, string out_suffix,
           map<string, int> &estimates, string &sched) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
-    string inner_name = f_handle.name() + "_" + arg_name + in_suffix;
-    string outer_name = f_handle.name() + "_" + arg_name + out_suffix;
+    string inner_name = prefix + "_" + arg_name + in_suffix;
+    string outer_name = prefix + "_" + arg_name + out_suffix;
     VarOrRVar inner(inner_name), outer(outer_name);
 
     sched += "Var " + inner_name + "(\"" + outer_name + "\")" + ";\n";
@@ -1830,8 +1844,8 @@ split_dim(Func f_handle, VarOrRVar v, int factor,
 
     f_handle.split(v, outer, inner, factor);
 
-    sched += f_handle.name() +
-            ".split(" + arg_name + ',' + outer_name + ',' + inner_name +
+    sched += f_handle.name() + ".split(" + arg_name + ',' +
+             outer_name + ',' + inner_name +
             ',' + std::to_string(factor) + ";\n";
 
     internal_assert(estimates.find(arg_name) != estimates.end());
@@ -1847,35 +1861,71 @@ split_dim(Func f_handle, VarOrRVar v, int factor,
 string Partitioner::generate_group_cpu_schedule(const Group& g,
                                                 const Target& t) {
     string sched = "";
-    string out_func_name = g.output.func.name();
-    Function g_out = analy.env.at(out_func_name);
+    string out_f_name = g.output.func.name();
+    Function g_out = g.output.func;
 
-    // Get estimates of pipeline bounds
-    map<string, int> pure_out_estimates =
-            get_pure_dim_estimates(out_func_name);
-    map<string, int> out_estimates = pure_out_estimates;
+    // Get the definition corresponding to the stage
+    Definition def = get_stage_definition(g_out,
+                                          g.output.stage_num);
 
-    map<string, Box> group_bounds = get_group_member_bounds(g);
-    Func f_handle(g_out);
-    f_handle.compute_root();
-    sched += f_handle.name() + ".compute_root()" + ";\n";
+    // Get the estimates for stage bounds
+    map<string, int> stg_estimates = get_stage_estimates(g.output);
+
+    Stage f_handle = Stage(Func(g_out));
+
+    // Get a function handle for scheduling the stage
+    if (g.output.stage_num > 0) {
+        int stage_num = g.output.stage_num;
+        f_handle = Func(g_out).update(stage_num - 1);
+    } else {
+        Func(g_out).compute_root();
+        sched += f_handle.name() + ".compute_root()" + ";\n";
+    }
+
+    string var_prefix = g_out.name() + "_" +
+                        std::to_string(g.output.stage_num);
 
     // Realize tiling and update the dimension estimates
     vector<VarOrRVar> outer_dims;
     vector<VarOrRVar> inner_dims;
 
-    for (auto &v: f_handle.args()) {
-        if (g.tile_sizes.find(v.name()) != g.tile_sizes.end()) {
-            string arg_name = v.name();
-            int tile_size = g.tile_sizes.at(arg_name);
+    const vector<Dim> &dims = def.schedule().dims();
+
+    // Keep track of the rvars
+    set<string> rvars;
+    for (int d = 0; d < (int) dims.size() - 1; d++) {
+        bool is_pure_var = false;
+        for (auto &arg: g_out.args()) {
+            if (arg == dims[d].var) {
+                is_pure_var = true;
+                break;
+            }
+        }
+        if (!is_pure_var) {
+            rvars.insert(dims[d].var);
+        }
+    }
+
+    for (int d = 0; d < (int) dims.size() - 1; d++) {
+        string var = dims[d].var;
+        bool is_rvar = (rvars.find(var) != rvars.end());
+        VarOrRVar v(var, is_rvar);
+
+        if (g.tile_sizes.find(var) != g.tile_sizes.end()) {
+            int tile_size = g.tile_sizes.at(var);
             if (tile_size > 1) {
                 pair<VarOrRVar, VarOrRVar> tile_vars =
-                        split_dim(f_handle, v, tile_size, "_i", "_o",
-                                  out_estimates, sched);
+                        split_dim(f_handle, var_prefix, v, tile_size,
+                                  "_i", "_o", stg_estimates, sched);
 
                 inner_dims.push_back(tile_vars.first);
                 outer_dims.push_back(tile_vars.second);
 
+                if (is_rvar) {
+                    rvars.erase(var);
+                    rvars.insert(tile_vars.first.name());
+                    rvars.insert(tile_vars.second.name());
+                }
             } else {
                 outer_dims.push_back(v);
             }
@@ -1902,183 +1952,86 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
         sched += f_handle.name() + ".reorder(" + var_order + ");\n";
     }
 
-    // Vectorize the innermost dimension
     // TODO: Explore scenarios where vectorizing an outer dimension makes more
     // sense. For example, when the inner most dimension does not have enough
     // iterations
-    Var vec_dim = f_handle.args()[0];
-    if (out_estimates.find(vec_dim.name()) != out_estimates.end()) {
+    //
+    // TODO: Vectorizing rvars
+    //
+    // Vectorize the innermost pure dimension
+    int vec_dim_index = -1;
+    for (int d = 0; d < (int) dims.size() - 1; d++) {
+        if (rvars.find(dims[d].var) == rvars.end()) {
+            vec_dim_index = d;
+            break;
+        }
+    }
+
+    if (vec_dim_index >=0 &&
+        stg_estimates.find(dims[vec_dim_index].var) != stg_estimates.end()) {
+
+        Var vec_dim(dims[vec_dim_index].var);
         // Set the vector length as the maximum of the values produced by a
         // function
         int vec_len = 0;
         for (auto& type: g_out.output_types()) {
             vec_len = std::max(vec_len, t.natural_vector_size(type));
         }
-        if (out_estimates[vec_dim.name()] >= vec_len) {
+
+        bool is_rvar = (rvars.find(vec_dim.name()) != rvars.end());
+        if (stg_estimates[vec_dim.name()] >= vec_len) {
             pair<VarOrRVar, VarOrRVar> vec_vars =
-                    split_dim(f_handle, vec_dim, vec_len, "_vi", "_vo",
-                              out_estimates, sched);
+                    split_dim(f_handle, var_prefix, vec_dim, vec_len,
+                              "_vi", "_vo", stg_estimates, sched);
+
             f_handle.vectorize(vec_vars.first);
             sched += f_handle.name() + ".vectorize(" +
                      vec_vars.first.name() + ");\n";
+
+            if (is_rvar) {
+                rvars.erase(vec_dim.name());
+                rvars.insert(vec_vars.first.name());
+                rvars.insert(vec_vars.second.name());
+            }
         }
     }
 
-    // Parallelize pure definition
-    uint32_t pure_def_par = 1;
+    // Parallelize definition
+    uint32_t def_par = 1;
     // TODO: Investigate if it is better to pull one large dimension and
-    // parallelize over it versus generating nested parallelism
+    // parallelize over it or generate nested parallelism
     //
     // Go from the outer to the inner most loop till sufficient parallelism
     // is achieved
-    vector<Dim>& dims = g_out.schedule().dims();
     for (int d = dims.size() - 2; d >= 0; d--) {
-        string var_name = dims[d].var;
-        if (pure_def_par > arch_params.parallelism) {
+        string var = dims[d].var;
+        bool is_rvar = (rvars.find(var) != rvars.end());
+        VarOrRVar v(var, is_rvar);
+
+        if (is_rvar && !can_parallelize_rvar(var, g_out.name(), def)) {
+            break;
+        }
+
+        if (def_par > arch_params.parallelism) {
             // Enough parallelism to saturate target machine
             break;
         }
-        if (out_estimates.find(var_name) != out_estimates.end()) {
-            f_handle.parallel(VarOrRVar(var_name, false));
-            sched += f_handle.name() + ".parallel(" + var_name + ");\n";
-            pure_def_par *= out_estimates[var_name];
+        if (stg_estimates.find(var) != stg_estimates.end()) {
+            f_handle.parallel(v);
+            sched += f_handle.name() + ".parallel(" + var + ");\n";
+            def_par *= stg_estimates[var];
         } else {
             break;
         }
     }
 
-    if (pure_def_par < arch_params.parallelism) {
+    if (def_par < arch_params.parallelism) {
         debug(0) << "Warning: insuffcient parallelism for " <<
                  f_handle.name() << '\n';
     }
 
-    /*
-
-    //std::cerr << "Finished pure dims "    <<  g_out.name() << std::endl;
-    if (!g_out.is_pure()) {
-
-    int num_updates = g_out.updates().size();
-    for (int i = 0; i < num_updates; i ++) {
-    // Start with fresh bounds estimates for each update
-    map<string, int> out_up_estimates = org_out_estimates;
-
-    Schedule &s = g_out.update_schedule(i);
-    vector<Dim> &dims = s.dims();
-
-    const UpdateDefinition &u = g_out.updates()[i];
-
-    // Tiling includes reduction dimensions
-    map<string, int> tile_sizes_update;
-    vector<string> update_vars;
-
-    uint32_t num_pure_dims = g_out.args().size();
-    uint32_t num_red_dims = (dims.size() - 1) - num_pure_dims;
-
-    map<string, float> var_reuse;
-    if (sched.locality) {
-    assert(part.analy.reductions.find(g_out.name()) !=
-    part.analy.reductions.end());
-    assert(sched.tile_sizes.size() ==
-    num_pure_dims + num_red_dims);
-    // The tile sizes for the reduction dimensions are at the end
-    for(uint32_t i = 0; i < num_red_dims; i++) {
-        var_reuse[dims[i].var] = sched.reuse[num_pure_dims + i];
-        if (sched.tile_sizes[num_pure_dims + i] != -1) {
-            update_vars.push_back(dims[i].var);
-            tile_sizes_update[dims[i].var] =
-                    sched.tile_sizes[num_pure_dims + i];
-            //std::cerr << dims[i].var << " "
-            //                  << sched.tile_sizes[num_pure_dims + i]
-            //                  << std::endl;
-        }
-    }
-}
-
-if (sched.fusion || sched.locality) {
-    if (sched.fusion)
-        assert(sched.tile_sizes.size() == num_pure_dims);
-    for(uint32_t i = 0; i < num_pure_dims; i++) {
-        var_reuse[dims[num_red_dims + i].var] =
-                sched.reuse[i];
-        if (sched.tile_sizes[i] != -1) {
-            update_vars.push_back(dims[num_red_dims + i].var);
-            tile_sizes_update[dims[num_red_dims + i].var]
-                    = sched.tile_sizes[i];
-            //std::cerr << dims[num_red_dims + i].var << " "
-            //                  << sched.tile_sizes[i] << std::endl;
-        }
-    }
-}
-
-// Determine which dimension if any can be moved inner most
-// while not disrupting spatial locality both on inputs and
-// outputs
-string inner_dim =
-get_spatially_coherent_innermost_dim(g_out, u);
-
-if (sched.locality) {
-    reorder_by_reuse(s, var_reuse, inner_dim,
-                     out_up_estimates, 16);
-    update_vars.clear();
-    for (int v = 0; v < (int)dims.size() - 1; v++) {
-        if (tile_sizes_update.find(dims[v].var) != tile_sizes_update.end())
-            update_vars.push_back(dims[v].var);
-    }
-}
-
-set<string> par_vars;
-for(auto &v: update_vars) {
-    int index = -1;
-    for (int i = 0; i < (int)dims.size() - 1; i++) {
-        if (dims[i].var == v) {
-            index = i;
-            break;
-        }
-    }
-    assert(index!=-1);
-    if (tile_sizes_update[v] > 1) {
-        split_dim(s, index, tile_sizes_update[v],
-                  out_up_estimates, "tile");
-        move_dim_to_outermost(s, index + 1);
-        if (can_parallelize_rvar(v, g_out.name(), u)) {
-            int o_dim = s.dims().size() - 2;
-            par_vars.insert(s.dims()[o_dim].var);
-            par_vars.insert(s.dims()[index].var);
-        }
-    } else if (tile_sizes_update[v] == 1) {
-        move_dim_to_outermost(s, index);
-    }
-}
-
-// Vectorization of update definitions
-if(auto_vec) {
-    vectorize_update(g_out, i, out_up_estimates, part.arch_params.vec_len,
-                     par_vars);
-}
-
-if(auto_par) {
-    int curr_par = 1;
-    // Exploiting nested parallelism
-    for (int i = (int)dims.size() - 2; i > 0 ; i--) {
-        bool dim_par = can_parallelize_rvar(dims[i].var,
-                                            g_out.name(), u);
-        dim_par = dim_par ||
-                (par_vars.find(dims[i].var) != par_vars.end());
-        if (dim_par) {
-            curr_par = curr_par * out_up_estimates[dims[i].var];
-            parallelize_dim(s, i);
-            move_dim_to_outermost(s, i);
-            int outer_dim = dims.size() - 2;
-            parallelize_dim(s, outer_dim);
-            if (curr_par > parallelism)
-                break;
-        }
-    }
-}
-}
-}
-
-// std::cerr << "Finished updates "  <<  g_out.name() << std::endl;
+    // map<string, Box> group_bounds = get_group_member_bounds(g);
+/*
 for (auto &m: part.groups[g_name]) {
     int outer_dim = dims.size() - 2;
     map<string, int> org_mem_estimates =
@@ -2116,14 +2069,13 @@ for (auto &m: part.groups[g_name]) {
 }
 // std::cerr << "Finished group members "  <<  g_out.name() << std::endl;
 */
-
-return "";
+    return sched;
 }
 
 string Partitioner::generate_cpu_schedule(const Target& t) {
     string sched = "";
 
-    for (const pair<Stage, Group>& g: groups) {
+    for (const pair<FStage, Group>& g: groups) {
         for (const string& inline_func: g.second.inlined) {
             Function f = analy.env.at(inline_func);
             Func f_handle(f);
@@ -2200,7 +2152,7 @@ void generate_schedules(const vector<Function>& outputs,
         f.second.accept(&find);
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
-            Stage curr_s(f.second, s);
+            FStage curr_s(f.second, s);
             map<string, int64_t> reuse =
                     part.evaluate_reuse(curr_s, find.calls);
             debug(0) << curr_s << '\n';
@@ -2231,7 +2183,8 @@ void generate_schedules(const vector<Function>& outputs,
 
     // Set the schedule defaults for each function in the environment
     //set_schedule_defaults(env);
-    part.generate_cpu_schedule(target);
+    string sched = part.generate_cpu_schedule(target);
+    debug(0) << sched << '\n';
 
     // GPU
     // ...
