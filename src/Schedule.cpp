@@ -1,7 +1,6 @@
 #include "IR.h"
 #include "IRMutator.h"
 #include "Schedule.h"
-#include "Reduction.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,6 +17,7 @@ struct ScheduleContents {
     mutable RefCount ref_count;
 
     LoopLevel store_level, compute_level;
+    std::vector<ReductionVariable> rvars;
     std::vector<Split> splits;
     std::vector<Dim> dims;
     std::vector<StorageDim> storage_dims;
@@ -25,7 +25,6 @@ struct ScheduleContents {
     std::vector<Bound> estimates;
 
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
-    ReductionDomain reduction_domain;
     bool memoized;
     bool touched;
     bool allow_race_conditions;
@@ -34,6 +33,14 @@ struct ScheduleContents {
 
     // Pass an IRMutator through to all Exprs referenced in the ScheduleContents
     void mutate(IRMutator *mutator) {
+        for (ReductionVariable &r : rvars) {
+            if (r.min.defined()) {
+                r.min = mutator->mutate(r.min);
+            }
+            if (r.extent.defined()) {
+                r.extent = mutator->mutate(r.extent);
+            }
+        }
         for (Split &s : splits) {
             if (s.factor.defined()) {
                 s.factor = mutator->mutate(s.factor);
@@ -47,6 +54,7 @@ struct ScheduleContents {
                 b.extent = mutator->mutate(b.extent);
             }
         }
+
         for (Bound &b : estimates) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
@@ -55,8 +63,6 @@ struct ScheduleContents {
                 b.extent = mutator->mutate(b.extent);
             }
         }
-
-        reduction_domain.mutate(mutator);
     }
 };
 
@@ -80,12 +86,12 @@ Schedule Schedule::deep_copy(
     Schedule copy;
     copy.contents->store_level = contents->store_level;
     copy.contents->compute_level = contents->compute_level;
+    copy.contents->rvars = contents->rvars;
     copy.contents->splits = contents->splits;
     copy.contents->dims = contents->dims;
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
-    copy.contents->reduction_domain = contents->reduction_domain.deep_copy();
     copy.contents->memoized = contents->memoized;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
@@ -162,6 +168,18 @@ const std::vector<Bound> &Schedule::estimates() const {
     return contents->estimates;
 }
 
+std::vector<ReductionVariable> &Schedule::rvars() {
+    return contents->rvars;
+}
+
+const std::vector<ReductionVariable> &Schedule::rvars() const {
+    return contents->rvars;
+}
+
+std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() {
+    return contents->wrappers;
+}
+
 const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() const {
     return contents->wrappers;
 }
@@ -195,14 +213,6 @@ const LoopLevel &Schedule::compute_level() const {
     return contents->compute_level;
 }
 
-const ReductionDomain &Schedule::reduction_domain() const {
-    return contents->reduction_domain;
-}
-
-void Schedule::set_reduction_domain(const ReductionDomain &d) {
-    contents->reduction_domain = d;
-}
-
 bool &Schedule::allow_race_conditions() {
     return contents->allow_race_conditions;
 }
@@ -212,6 +222,14 @@ bool Schedule::allow_race_conditions() const {
 }
 
 void Schedule::accept(IRVisitor *visitor) const {
+    for (const ReductionVariable &r : rvars()) {
+        if (r.min.defined()) {
+            r.min.accept(visitor);
+        }
+        if (r.extent.defined()) {
+            r.extent.accept(visitor);
+        }
+    }
     for (const Split &s : splits()) {
         if (s.factor.defined()) {
             s.factor.accept(visitor);

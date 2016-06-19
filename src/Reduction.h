@@ -14,6 +14,14 @@ namespace Internal {
 struct ReductionVariable {
     std::string var;
     Expr min, extent;
+
+    /** This lets you use a ReductionVariable as a key in a map of the form
+     * map<ReductionVariable, Foo, ReductionVariable::Compare> */
+    struct Compare {
+        bool operator()(const ReductionVariable &a, const ReductionVariable &b) const {
+            return a.var < b.var;
+        }
+    };
 };
 
 struct ReductionDomainContents;

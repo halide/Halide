@@ -351,11 +351,9 @@ struct CostModel {
             bounds[args[d]] = region[d];
         }
 
-        if (def.domain().defined()) {
-            for (auto &rvar: def.domain().domain()) {
-                bounds[rvar.var] = Interval(simplify(rvar.min),
-                                            simplify(rvar.min + rvar.extent - 1));
-            }
+        for (auto &rvar: def.schedule().rvars()) {
+            bounds[rvar.var] = Interval(simplify(rvar.min),
+                                        simplify(rvar.min + rvar.extent - 1));
         }
 
         Box stage_region;
@@ -679,12 +677,10 @@ DependenceAnalysis::get_stage_bounds(Function f, int stage_num,
         bounds[b.first] = b.second;
     }
 
-    if (def.domain().defined()) {
-        for (auto& rvar: def.domain().domain()) {
-            Interval simple_bounds = Interval(rvar.min,
-                                              simplify(rvar.min + rvar.extent - 1));
-            bounds[rvar.var] = simple_bounds;
-        }
+    for (auto& rvar: def.schedule().rvars()) {
+        Interval simple_bounds = Interval(rvar.min,
+                                          simplify(rvar.min + rvar.extent - 1));
+        bounds[rvar.var] = simple_bounds;
     }
 
     return bounds;
@@ -1581,11 +1577,9 @@ DimBounds Partitioner::get_bounds(const FStage& s) {
         bounds[args[d]] = pipeline_bounds.at(s.func.name())[d];
     }
 
-    if (def.domain().defined()) {
-        for (const ReductionVariable& rvar: def.domain().domain()) {
-            bounds[rvar.var] = Interval(simplify(rvar.min),
-                                        simplify(rvar.min + rvar.extent - 1));
-        }
+    for (const ReductionVariable& rvar: def.schedule().rvars()) {
+        bounds[rvar.var] = Interval(simplify(rvar.min),
+                                    simplify(rvar.min + rvar.extent - 1));
     }
     return bounds;
 }
