@@ -431,7 +431,7 @@ struct CostModel {
 
         vector< pair<int64_t, int64_t> > func_costs;
         int64_t total_ops = 0;
-        int64_t total_loads = 0;
+        int64_t total_loads = 1;
         // TODO: revist how boundary conditions are handled
         for (auto& e: f.values()) {
             Expr inlined_expr = perform_inline(e, inlines);
@@ -447,7 +447,7 @@ struct CostModel {
         if (!f.is_pure()) {
             for (const Definition& u: f.updates()) {
                 int64_t ops = 0;
-                int64_t loads = 0;
+                int64_t loads = 1;
                 for (auto& e: u.values()) {
                     Expr inlined_expr = perform_inline(e, inlines);
                     ExprCost cost_visitor;
@@ -1192,8 +1192,8 @@ struct Partitioner {
 
             // Update the children mapping
             children.erase(cand_group);
-            for (auto& f: children) {
-                set<FStage>& cons = f.second;
+            for (auto &f: children) {
+                set<FStage> &cons = f.second;
                 if (cons.find(cand_group) != cons.end()) {
                     cons.erase(cand_group);
                     cons.insert(cand_group_children.begin(),
@@ -1203,30 +1203,22 @@ struct Partitioner {
         }
     }
 
-    void disp_grouping() {
-        for (auto& g: groups) {
-            debug(0) << "Group " <<  g.first << " : [" ;
-            debug(0) << g.second;
-            debug(0) << "]" << '\n';
-        }
-    }
+    int64_t evaluate_inline_choice(FusionChoice &fuse);
 
-    int64_t evaluate_inline_choice(FusionChoice& fuse);
+    int64_t evaluate_fast_mem_choice(FusionChoice &fuse);
 
-    int64_t evaluate_fast_mem_choice(FusionChoice& fuse);
+    Group fuse_groups(Group &g1, Group &g2);
 
-    Group fuse_groups(Group& g1, Group& g2);
+    GroupAnalysis analyze_group(const Group &g);
 
-    GroupAnalysis analyze_group(const Group& g);
-
-    map<string, Box> get_group_member_bounds(const Group& g);
+    map<string, Box> get_group_member_bounds(const Group &g);
     void group(Partitioner::Level level);
 
     pair<vector<FusionChoice>, int64_t>
-    choose_candidate_fuse_inline(const vector<pair<string, string>>& cand_pairs);
+    choose_candidate_fuse_inline(const vector<pair<string, string>> &cand_pairs);
 
     pair<FusionChoice, int64_t>
-    choose_candidate_fuse_fast_mem(const vector<pair<string, string>>& cand_pairs);
+    choose_candidate_fuse_fast_mem(const vector<pair<string, string>> &cand_pairs);
 
     map<string, int64_t> evaluate_reuse(const FStage &stg,
                                         const set<string> &prod);
@@ -1250,7 +1242,8 @@ struct Partitioner {
 
     void disp_pipeline_costs();
     void disp_pipeline_bounds();
-    void disp_children();
+    void disp_pipeline_graph();
+    void disp_grouping();
     /*
        Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
        void clear_schedules_fast_mem();
@@ -1261,8 +1254,18 @@ struct Partitioner {
        */
 };
 
-void Partitioner::disp_children() {
-    debug(0) << "================" << '\n';
+void Partitioner::disp_grouping() {
+    debug(0) << "\n=========" << '\n';
+    debug(0) << "Grouping:" << '\n';
+    debug(0) << "=========" << '\n';
+    for (auto& g: groups) {
+        debug(0) << g.second;
+    }
+    debug(0) << "=========" << '\n';
+}
+
+void Partitioner::disp_pipeline_graph() {
+    debug(0) << "\n================" << '\n';
     debug(0) << "Pipeline graph:" << '\n';
     debug(0) << "================" << '\n';
     for (auto& f: children) {
@@ -1276,7 +1279,7 @@ void Partitioner::disp_children() {
 }
 
 void Partitioner::disp_pipeline_bounds() {
-    debug(0) << "================" << '\n';
+    debug(0) << "\n================" << '\n';
     debug(0) << "Pipeline bounds:" << '\n';
     debug(0) << "================" << '\n';
     disp_regions(pipeline_bounds);
@@ -1286,7 +1289,7 @@ void Partitioner::disp_pipeline_bounds() {
 void Partitioner::disp_pipeline_costs() {
     int64_t total_arith = 0;
     int64_t total_mem = 0;
-    debug(0) << "===============" << '\n';
+    debug(0) << "\n===============" << '\n';
     debug(0) << "Pipeline costs:" << '\n';
     debug(0) << "===============" << '\n';
     debug(0) << "Group:(name) [arith cost, mem cost, parallelism]" << '\n';
@@ -1443,12 +1446,14 @@ Partitioner::generate_tile_configs(const FStage &stg) {
         for (auto &dim_size: size_variants) {
             map<string, int> tiling;
             for (size_t j = 0; j < tile_vars.size(); j++) {
-                if (j < i) {
+                if (j == i) {
                     tiling[tile_vars[j]] = j == 0 ?
                                            std::max(dim_size, 64): dim_size;
-                } else {
+                } else if (j < i) {
                     tiling[tile_vars[j]] =
                             size_variants[size_variants.size() - 1];
+                } else {
+                    tiling[tile_vars[j]] = size_variants[0];
                 }
             }
             tile_configs.push_back(tiling);
@@ -1461,6 +1466,17 @@ Partitioner::generate_tile_configs(const FStage &stg) {
         for (size_t j = 0; j < tile_vars.size(); j++) {
             tiling[tile_vars[j]] = j == 0 ?
                                    std::max(dim_size, 64): dim_size;
+        }
+        tile_configs.push_back(tiling);
+    }
+
+    // Reorder tile configurations
+    for (int i = 1; i < (1 << (tile_vars.size() - 1)); i++) {
+        map<string, int> tiling;
+        for (size_t j = 1; j < tile_vars.size(); j++) {
+            if (((i >> (j-1)) & 1) == 1) {
+                tiling[tile_vars[j]] = 1;
+            }
         }
         tile_configs.push_back(tiling);
     }
@@ -1490,6 +1506,12 @@ Partitioner::find_best_tile_config(const Group &g) {
         new_group.tile_sizes = config;
 
         GroupAnalysis new_analy = analyze_group(new_group);
+
+        debug(0) << "\nBegin variant" << '\n';
+        debug(0) << new_group;
+        debug(0) << "arith_cost:" << new_analy.arith_cost << '\n';
+        debug(0) << "mem_cost:" << new_analy.mem_cost << '\n';
+        debug(0) << "End variant" << '\n';
 
         // TODO: Add parallelism constraints
         if ((new_analy.arith_cost >= 0) && (new_analy.mem_cost >= 0) &&
@@ -1754,23 +1776,41 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         }
     }
 
+    debug(0) << "\nProd reg:" << '\n';
+    disp_regions(prod_reg);
+    debug(0) << "Input reg:" << '\n';
+    disp_regions(input_reg);
+    debug(0) << "Group reg:" << '\n';
+    disp_regions(group_reg);
+
     // Compute the cost of the region and the size of the intermediates
-    pair<int64_t, int64_t> tile_cost = cost_model.region_cost(group_reg, g.inlined);
+    pair<int64_t, int64_t> tile_cost =
+            cost_model.region_cost(group_reg, g.inlined);
+
     int64_t tile_input_size = cost_model.region_size(prod_reg) +
                               cost_model.input_region_size(input_reg);
-    int64_t tile_intermediate_size = cost_model.region_size(group_reg, g.inlined);
 
-    Box out_box;
+    Box out_tile_extent;
 
     const vector<string> &args = g.output.func.args();
     for (size_t d = 0; d < args.size(); d++ ) {
-        out_box.push_back(stg_bounds[args[d]]);
+        out_tile_extent.push_back(tile_bounds[args[d]]);
     }
+
+    int64_t tile_output_size = cost_model.region_size(g.output.func.name(),
+                                                      out_tile_extent);
+
+    // Adding tile input and output sizeto tile_intermediate_size over
+    // estimates the working set size
+    int64_t tile_inter_size = cost_model.region_size(group_reg, g.inlined) +
+                              tile_input_size + tile_output_size;
 
     pair<int64_t, int64_t> out_cost =
             cost_model.stage_region_cost(g.output.func.name(),
                                          g.output.stage_num,
-                                         out_box, g.inlined);
+                                         out_tile_extent, g.inlined);
+    tile_cost.first += out_cost.first;
+    tile_cost.second += out_cost.second;
 
     GroupAnalysis g_analy;
     g_analy.arith_cost = -1;
@@ -1779,30 +1819,33 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
 
     // The group could not be analyzed
     if (tile_cost.first < 0 || tile_cost.second < 0 ||
-        tile_input_size < 0 || tile_intermediate_size < 0 ||
+        tile_input_size < 0 || tile_inter_size < 0 ||
         out_cost.first < 0 || out_cost.second < 0) {
         return g_analy;
     }
 
-    int64_t per_tile_mem_cost = tile_input_size;
+    int64_t per_tile_mem_cost;
     int64_t per_tile_arith_cost = tile_cost.first;
 
-    if (tile_intermediate_size > arch_params.fast_mem_size) {
-        per_tile_mem_cost += tile_cost.second;
+    if (tile_inter_size > arch_params.fast_mem_size) {
+        // Conservative estimate of accesses to memory
+        //per_tile_mem_cost = tile_inter_size;
+        // Aggressive estimate of accesses to memory
+        per_tile_mem_cost = tile_cost.second;
+    } else {
+        per_tile_mem_cost = tile_input_size + tile_output_size;
     }
 
-    g_analy.arith_cost = per_tile_arith_cost * estimate_tiles + out_cost.first;
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
+    g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
-    /*
-    debug(0) << "group:" << g.output << '\n';
+    debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "arith_cost:" << g_analy.arith_cost << '\n';
     debug(0) << "mem_cost:" << g_analy.mem_cost << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
     debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
     debug(0) << "estimate_tiles:" << estimate_tiles << '\n';
-    */
 
     return g_analy;
 }
@@ -2295,7 +2338,7 @@ void generate_schedules(const vector<Function>& outputs,
     }
 
     part.disp_pipeline_bounds();
-    part.disp_children();
+    part.disp_pipeline_graph();
 
     part.initialize_groups_inline();
     part.disp_pipeline_costs();
