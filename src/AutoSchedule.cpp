@@ -977,6 +977,7 @@ struct Partitioner {
         vector<FStage> members;
 
         // Reuse along dimensions of the group members
+        // TODO: Move this to be a part of group analysis
         map<string, map<string, int64_t> > reuse;
 
         // Schedule information
@@ -1024,6 +1025,7 @@ struct Partitioner {
     };
 
     map<FStage, Group> groups;
+    map<FStage, GroupAnalysis> group_costs;
 
     // Levels that are targetted by the grouping algorithm
     enum Level {INLINE, FAST_MEM};
@@ -1035,15 +1037,6 @@ struct Partitioner {
     const vector<Function>& outputs;
 
     map<FStage, set<FStage> > children;
-    void disp_children(map<FStage, set<FStage>>& children) {
-        for (auto& f: children) {
-            debug(0) << f.first << ": [";
-            for (auto& c: f.second) {
-                debug(0) << c << ",";
-            }
-            debug(0) << "]" << '\n';
-        }
-    }
 
     bool gpu_schedule;
 
@@ -1095,8 +1088,6 @@ struct Partitioner {
                     }
                 }
             }
-
-            disp_children(children);
 
             // TODO: Any preprocess inlining should go here and they should be added to
             // the corresponding group as inlined members
@@ -1221,6 +1212,7 @@ struct Partitioner {
     }
 
     int64_t evaluate_inline_choice(FusionChoice& fuse);
+
     int64_t evaluate_fast_mem_choice(FusionChoice& fuse);
 
     Group fuse_groups(Group& g1, Group& g2);
@@ -1238,8 +1230,11 @@ struct Partitioner {
 
     map<string, int64_t> evaluate_reuse(const FStage &stg,
                                         const set<string> &prod);
+
     map<string, int> get_stage_estimates(const FStage &stg);
+
     string generate_cpu_schedule(const Target &t);
+
     string generate_group_cpu_schedule(const Group &g, const Target &t);
 
     DimBounds get_bounds(const FStage &stg);
@@ -1249,19 +1244,74 @@ struct Partitioner {
 
     vector<map<string, int>> generate_tile_configs(const FStage &stg);
 
-    pair<map<string, int>, GroupAnalysis>
-    find_best_tile_config(const Group &g);
+    pair<map<string, int>, GroupAnalysis> find_best_tile_config(const Group &g);
 
+    void initialize_groups_inline();
+
+    void disp_pipeline_costs();
+    void disp_pipeline_bounds();
+    void disp_children();
     /*
        Option choose_candidate(const vector< pair<string, string > >& cand_pairs);
        void clear_schedules_fast_mem();
        void initialize_groups_fast_mem();
-       void initialize_groups_inline();
        void update_function_costs();
        void tile_for_input_locality(bool init_pipeline_reuse = false);
        vector<float> get_input_reuse(Function f, vector<string>& inputs);
        */
 };
+
+void Partitioner::disp_children() {
+    debug(0) << "================" << '\n';
+    debug(0) << "Pipeline graph:" << '\n';
+    debug(0) << "================" << '\n';
+    for (auto& f: children) {
+        debug(0) << f.first << ": [";
+        for (auto& c: f.second) {
+            debug(0) << c << ",";
+        }
+        debug(0) << "]" << '\n';
+    }
+    debug(0) << "================" << '\n';
+}
+
+void Partitioner::disp_pipeline_bounds() {
+    debug(0) << "================" << '\n';
+    debug(0) << "Pipeline bounds:" << '\n';
+    debug(0) << "================" << '\n';
+    disp_regions(pipeline_bounds);
+    debug(0) << "===============" << '\n';
+}
+
+void Partitioner::disp_pipeline_costs() {
+    int64_t total_arith = 0;
+    int64_t total_mem = 0;
+    debug(0) << "===============" << '\n';
+    debug(0) << "Pipeline costs:" << '\n';
+    debug(0) << "===============" << '\n';
+    debug(0) << "Group:(name) [arith cost, mem cost, parallelism]" << '\n';
+    for (const pair<FStage, Group> &g: groups) {
+        GroupAnalysis analy = group_costs.at(g.first);
+        total_mem += analy.mem_cost;
+        total_arith += analy.arith_cost;
+
+        debug(0) << "Group:" << g.first << "[";
+        debug(0) << analy.arith_cost << "," <<
+                 analy.mem_cost << "," << analy.parallelism << "]\n";
+    }
+    debug(0) << "Total arithmetic cost:" << total_arith << '\n';
+    debug(0) << "Total memory cost:" << total_mem << '\n';
+    debug(0) << "===============" << '\n';
+}
+
+void Partitioner::initialize_groups_inline() {
+    for (pair<const FStage, Group> &g: groups) {
+        pair<map<string, int>, GroupAnalysis> best =
+            find_best_tile_config(g.second);
+        g.second.tile_sizes = best.first;
+        group_costs[g.second.output] = best.second;
+    }
+}
 
 map<string, int64_t> Partitioner::evaluate_reuse(const FStage& stg,
                                                  const set<string>& prod) {
@@ -2211,9 +2261,6 @@ void generate_schedules(const vector<Function>& outputs,
     // Show bounds of all the functions in the pipeline given estimates
     // on outputs. Also report functions where the bounds could not be inferred.
     map<string, Box> pipeline_bounds = get_pipeline_bounds(analy, outputs);
-    debug(0) << "Pipeline Bounds:" << '\n';
-    disp_regions(pipeline_bounds);
-
 
 
     // TODO: Partitioner which is capable of auto scheduling hierarchically
@@ -2246,6 +2293,13 @@ void generate_schedules(const vector<Function>& outputs,
             debug(0) << '\n';
         }
     }
+
+    part.disp_pipeline_bounds();
+    part.disp_children();
+
+    part.initialize_groups_inline();
+    part.disp_pipeline_costs();
+    return;
 
     part.group(Partitioner::INLINE);
 
