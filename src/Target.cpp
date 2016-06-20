@@ -96,12 +96,12 @@ Target calculate_host_target() {
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41 = info[2] & (1 << 19);
-    bool have_sse2 = info[3] & (1 << 26);
-    bool have_avx = info[2] & (1 << 28);
-    bool have_f16c = info[2] & (1 << 29);
+    bool have_sse41  = info[2] & (1 << 19);
+    bool have_sse2   = info[3] & (1 << 26);
+    bool have_avx    = info[2] & (1 << 28);
+    bool have_f16c   = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
-    bool have_fma = info[2] & (1 << 12);
+    bool have_fma    = info[2] & (1 << 12);
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -123,9 +123,15 @@ Target calculate_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info2[1] & (1 << 5);
+        bool have_avx2   = info2[1] & (1 << 5);
+        // For us, avx512 means Cannonlake. Check for those features.
+        const int all_avx512_features = 0xf0230000;
+        bool have_avx512 = (info2[1] & all_avx512_features) == all_avx512_features;
         if (have_avx2) {
             initial_features.push_back(Target::AVX2);
+        }
+        if (have_avx512) {
+            initial_features.push_back(Target::AVX512);
         }
     }
 #ifdef _WIN32
@@ -220,6 +226,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sse41", Target::SSE41},
     {"avx", Target::AVX},
     {"avx2", Target::AVX2},
+    {"avx512", Target::AVX512},
     {"fma", Target::FMA},
     {"fma4", Target::FMA4},
     {"f16c", Target::F16C},
