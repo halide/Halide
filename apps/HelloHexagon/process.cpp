@@ -6,9 +6,9 @@
 
 #include "../support/benchmark.h"
 
+#include "pipeline_cpu.h"
 #include "pipeline_hvx64.h"
-#include "pipeline_hvx64.h"
-#include "pipeline_hvx64.h"
+#include "pipeline_hvx128.h"
 
 #include "HalideRuntimeHexagonHost.h"
 
@@ -41,13 +41,13 @@ int main(int argc, char **argv) {
 
     int (*pipeline)(buffer_t *, buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
-        pipeline = pipeline_hvx64;
+        pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
     } else if (strcmp(argv[1], "hvx64") == 0) {
         pipeline = pipeline_hvx64;
         printf("Using HVX 64 schedule\n");
     } else if (strcmp(argv[1], "hvx128") == 0) {
-        pipeline = pipeline_hvx64;
+        pipeline = pipeline_hvx128;
         printf("Using HVX 128 schedule\n");
     } else {
         printf("Unknown schedule, valid schedules are cpu, hvx64, or hvx128\n");
