@@ -15,16 +15,6 @@ using std::vector;
 using std::set;
 using std::pair;
 
-Stmt call_extern_and_assert(const string& name, const vector<Expr>& args) {
-    Expr call = Call::make(Int(32), name, args, Call::Extern);
-    string call_result_name = unique_name(name + "_result");
-    Expr call_result_var = Variable::make(Int(32), call_result_name);
-    return LetStmt::make(call_result_name, call,
-                         AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
-}
-
-namespace {
-
 DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
     if (device_api == DeviceAPI::Default_GPU) {
         if (target.has_feature(Target::Metal)) {
@@ -42,7 +32,7 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
     return device_api;
 }
 
-bool different_device_api(DeviceAPI device_api, DeviceAPI stmt_api, const Target &target) {
+static bool different_device_api(DeviceAPI device_api, DeviceAPI stmt_api, const Target &target) {
     device_api = fixup_device_api(device_api, target);
     stmt_api = fixup_device_api(stmt_api, target);
     return (stmt_api != DeviceAPI::None) && (device_api != stmt_api);
@@ -125,6 +115,8 @@ public:
     FindBuffersToTrack(const Target &t) : target(t), device_api(DeviceAPI::Host) {}
 };
 
+
+
 class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
@@ -197,11 +189,11 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
         Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
-        Stmt device_malloc = call_extern_and_assert("halide_device_malloc", {buf, device_interface});
-        Stmt destructor =
-            Evaluate::make(Call::make(Int(32), Call::register_destructor,
-                                      {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
-        return Block::make(device_malloc, destructor);
+        Expr call = Call::make(Int(32), "halide_device_malloc", {buf, device_interface}, Call::Extern);
+        string call_result_name = unique_name("device_malloc_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(call_result_var == 0, call_result_var));
     }
 
     enum CopyDirection {
@@ -220,7 +212,11 @@ class InjectBufferCopies : public IRMutator {
         }
 
         std::string suffix = (direction == ToDevice) ? "device" : "host";
-        return call_extern_and_assert("halide_copy_to_" + suffix, args);
+        Expr call = Call::make(Int(32), "halide_copy_to_" + suffix, args, Call::Extern);
+        string call_result_name = unique_name("copy_to_" + suffix + "_result");
+        Expr call_result_var = Variable::make(Int(32), call_result_name);
+        return LetStmt::make(call_result_name, call,
+                             AssertStmt::make(call_result_var == 0, call_result_var));
     }
 
     // Prepend code to the statement that copies everything marked as
@@ -534,16 +530,15 @@ class InjectBufferCopies : public IRMutator {
             if (!should_track(buf_name)) {
                 return;
             }
-
-            Expr value = op->value;
             if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
                 const Call *create_buffer_t = op->value.as<Call>();
                 internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
                 vector<Expr> args = create_buffer_t->args;
                 args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                value = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
-                stmt = LetStmt::make(op->name, value, op->body);
+                Expr val = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
+
+                stmt = LetStmt::make(op->name, val, op->body);
             }
         }
     }
@@ -649,8 +644,6 @@ public:
     InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(DeviceAPI::Host) {}
 
 };
-
-}  // namespace
 
 Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     FindBuffersToTrack f(t);
