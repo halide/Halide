@@ -1094,116 +1094,9 @@ struct Partitioner {
             // replaced by find_direct_calls
         }
 
-    void merge_groups(FusionChoice& choice) {
+    void merge_groups(FusionChoice &choice, Partitioner::Level level);
 
-        Function prod_f = analy.env.at(choice.prod);
-        size_t num_stages = prod_f.updates().size() + 1;
-
-        FStage child_group = choice.cons;
-        internal_assert(groups.find(child_group) != groups.end());
-        vector<FStage>& child_members = groups.at(child_group).members;
-
-        for (size_t s = 0; s < num_stages; s++) {
-            FStage cand_group(prod_f, s);
-
-            vector<FStage> cand_funcs = groups.at(cand_group).members;
-            groups.erase(cand_group);
-
-            child_members.insert(child_members.end(),
-                                 cand_funcs.begin(), cand_funcs.end());
-
-            // TODO: Look at all the members that need to be to be updated. Maybe merge
-            // should be a member of the group class so that it is more contained.
-            groups.at(child_group).inlined.insert(cand_group.func.name());
-
-            // Update the children mapping
-            children.erase(cand_group);
-            for (auto& f: children) {
-                set<FStage>& cons = f.second;
-                if (cons.find(cand_group) != cons.end()) {
-                    cons.erase(cand_group);
-                    cons.insert(child_group);
-                }
-            }
-        }
-
-        groups.at(child_group).tile_sizes = choice.tile_sizes;
-
-        // Invalidate entries of the fusion cache
-        vector<FusionChoice> invalid_keys;
-        for (auto& choice: fusion_cache) {
-            if (choice.first.prod == child_group.func.name()
-                || choice.first.cons == child_group)
-                invalid_keys.push_back(choice.first);
-        }
-
-        for (auto &key: invalid_keys) {
-            internal_assert(fusion_cache.find(key) !=
-                            fusion_cache.end());
-            fusion_cache.erase(key);
-        }
-    }
-
-    void merge_groups_inline(FusionChoice &choice) {
-
-        Function prod_f = analy.env.at(choice.prod);
-        size_t num_stages = prod_f.updates().size() + 1;
-
-        FStage final_stage(prod_f, num_stages - 1);
-        set<FStage> cand_group_children = children[final_stage];
-
-        // Invalidate entries of the fusion cache
-        vector<FusionChoice> invalid_keys;
-        for (auto &c: cand_group_children) {
-            for (auto &choice: fusion_cache) {
-                if (choice.first.prod == c.func.name() ||
-                    choice.first.cons == c)
-                invalid_keys.push_back(choice.first);
-            }
-        }
-
-        for (auto &key: invalid_keys) {
-            internal_assert(fusion_cache.find(key) !=
-                            fusion_cache.end());
-            fusion_cache.erase(key);
-        }
-
-        for (size_t s = 0; s < num_stages; s++) {
-            FStage cand_group(prod_f, s);
-
-            for (auto& cg: cand_group_children) {
-                internal_assert(groups.find(cg) != groups.end());
-                vector<FStage> cand_funcs = groups.at(cand_group).members;
-
-                vector<FStage>& cg_members = groups.at(cg).members;
-                cg_members.insert(cg_members.end(),
-                                  cand_funcs.begin(), cand_funcs.end());
-                // TODO: Look at all the members that need to be to be updated. Maybe
-                // merge should be a member of the group class so that it is more
-                // contained.
-                for (auto &stg: cand_funcs) {
-                    groups.at(cg).inlined.insert(stg.func.name());
-                }
-            }
-
-            groups.erase(cand_group);
-
-            // Update the children mapping
-            children.erase(cand_group);
-            for (auto &f: children) {
-                set<FStage> &cons = f.second;
-                if (cons.find(cand_group) != cons.end()) {
-                    cons.erase(cand_group);
-                    cons.insert(cand_group_children.begin(),
-                                cand_group_children.end());
-                }
-            }
-        }
-    }
-
-    int64_t evaluate_inline_choice(FusionChoice &fuse);
-
-    int64_t evaluate_fast_mem_choice(FusionChoice &fuse);
+    int64_t evaluate_choice(FusionChoice &fuse);
 
     Group fuse_groups(Group &g1, Group &g2);
 
@@ -1213,10 +1106,8 @@ struct Partitioner {
     void group(Partitioner::Level level);
 
     pair<vector<FusionChoice>, int64_t>
-    choose_candidate_fuse_inline(const vector<pair<string, string>> &cand_pairs);
-
-    pair<FusionChoice, int64_t>
-    choose_candidate_fuse_fast_mem(const vector<pair<string, string>> &cand_pairs);
+    choose_candidate_fuse(const vector<pair<string, string>> &cand_pairs,
+                          Partitioner::Level level);
 
     map<string, int64_t> evaluate_reuse(const FStage &stg,
                                         const set<string> &prod);
@@ -1251,6 +1142,44 @@ struct Partitioner {
        vector<float> get_input_reuse(Function f, vector<string>& inputs);
        */
 };
+
+void Partitioner::merge_groups(FusionChoice &choice, Partitioner::Level level) {
+
+    Function prod_f = analy.env.at(choice.prod);
+    size_t num_stages = prod_f.updates().size() + 1;
+
+    FStage child_group = choice.cons;
+
+    for (size_t s = 0; s < num_stages; s++) {
+        FStage cand_group(prod_f, s);
+
+        internal_assert(groups.find(child_group) != groups.end());
+        vector<FStage> cand_funcs = groups.at(cand_group).members;
+
+        vector<FStage>& child_group_members = groups.at(child_group).members;
+        child_group_members.insert(child_group_members.end(),
+                                   cand_funcs.begin(), cand_funcs.end());
+
+        // TODO: Look at all the members that need to be to be updated. Maybe
+        // merge should be a member of the group class so that it is more
+        // contained.
+        if (level == Partitioner::INLINE) {
+            internal_assert(choice.tile_sizes.size() == 0);
+            for (auto &stg: cand_funcs) {
+                groups.at(child_group).inlined.insert(stg.func.name());
+            }
+        }
+
+        // Update group costs
+        group_costs[child_group] = analyze_group(groups.at(child_group));
+    }
+
+    internal_assert(level == Partitioner::INLINE &&
+                    choice.tile_sizes.size() == 0);
+
+    groups.at(child_group).tile_sizes = choice.tile_sizes;
+    debug(0) << "child_group:" << child_group << '\n';
+}
 
 void Partitioner::disp_grouping() {
     debug(0) << "\n=========" << '\n';
@@ -1360,8 +1289,8 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage& stg,
 }
 
 pair<vector<Partitioner::FusionChoice>, int64_t>
-Partitioner::choose_candidate_fuse_inline(
-        const vector<pair<string, string>>& cands) {
+Partitioner::choose_candidate_fuse(const vector<pair<string, string>>& cands,
+                                   Partitioner::Level level) {
 
     pair<vector<Partitioner::FusionChoice>, int64_t> best;
     best.second = -1;
@@ -1385,7 +1314,7 @@ Partitioner::choose_candidate_fuse_inline(
                 benefit = fusion_cache.at(cand_choice);
 
             } else {
-                benefit = evaluate_inline_choice(cand_choice);
+                benefit = evaluate_choice(cand_choice);
                 // Cache the result of the evaluation for the pair
                 fusion_cache.insert(make_pair(cand_choice, benefit));
             }
@@ -1505,11 +1434,13 @@ Partitioner::find_best_tile_config(const Group &g) {
 
         GroupAnalysis new_analy = analyze_group(new_group);
 
+        /*
         debug(0) << "\nBegin variant" << '\n';
         debug(0) << new_group;
         debug(0) << "arith_cost:" << new_analy.arith_cost << '\n';
         debug(0) << "mem_cost:" << new_analy.mem_cost << '\n';
         debug(0) << "End variant" << '\n';
+        */
 
         // TODO: Add parallelism constraints
         if ((new_analy.arith_cost >= 0) && (new_analy.mem_cost >= 0) &&
@@ -1521,42 +1452,6 @@ Partitioner::find_best_tile_config(const Group &g) {
     }
 
     return make_pair(best_config, best_analy);
-}
-
-pair<Partitioner::FusionChoice, int64_t>
-Partitioner::choose_candidate_fuse_fast_mem(
-        const vector< pair<string, string> >& cand_pairs) {
-
-    map<string, int> tile_sizes;
-    FusionChoice c("", FStage(Function(), 0), tile_sizes);
-    return make_pair(c, 0);
-
-    // The choose candidate operates by considering a wide variety of
-    // posssible fusion structures between each pair of candidates. The fusion
-    // structure is restricted to computing all the functions in both the
-    // groups at some granularity of the output function in the child group.
-    //
-    // Among these options the only ones considered are the ones that satisfy
-    // the machine constraints. This means the following things:
-    //
-    // 1) Do all the intermediate buffers fit in the fast level of memory. One
-    // needs to account for early frees and the high watermark of intermediate
-    // storage.
-    //
-    // 2) Is the amount of redundant computation introduced in the process
-    // give the best redundant compute vs. locality trade-off.
-    //
-    // 3) Does the fused group have enough parallelism both for multiple cores.
-    // This can get tricky as it has load balancing aspect to it too. For
-    // example, if the group can be split into 10 tiles and there are 4 cores the
-    // latency of the entire pipeline is 3 tiles. So either the number of tiles
-    // have to a multiple of the cores or large in number to avoid the load
-    // imbalance.
-    //
-    // 4) Does the fusion limit vectorization. Reordering function dimensions
-    // and modifying data layout have significant interactions with
-    // vectorization. As a first pass the goal is to not miss any obvious
-    // vectorization.
 }
 
 void Partitioner::group(Partitioner::Level level) {
@@ -1595,7 +1490,7 @@ void Partitioner::group(Partitioner::Level level) {
 
                 int num_children = child_funcs.size();
                 // Only groups with a single child are considered for fusion
-                // when grouping for computing in tiles. This is becuase the
+                // when grouping for computing in tiles. This is because the
                 // scheduling model does not allow functions to be computed at
                 // different points.
                 if (num_children == 1 && level == Partitioner::FAST_MEM) {
@@ -1614,25 +1509,57 @@ void Partitioner::group(Partitioner::Level level) {
             debug(0) << "[" << p.first << "," << p.second << "]" << '\n';
         }
 
-        if (level == Partitioner::INLINE) {
-            pair<vector<FusionChoice>, int64_t> best;
-            best = choose_candidate_fuse_inline(cand);
-            if (best.second >= 0) {
-                string prod = best.first[0].prod;
+        pair<vector<FusionChoice>, int64_t> best;
+        best = choose_candidate_fuse(cand, level);
+        if (best.second >= 0) {
 
-                for (auto& inline_choice: best.first) {
-                    internal_assert(inline_choice.prod == prod);
-                    merge_groups_inline(inline_choice);
+            string prod = best.first[0].prod;
+
+            Function prod_f = analy.env.at(prod);
+            size_t num_stages = prod_f.updates().size() + 1;
+
+            FStage final_stage(prod_f, num_stages - 1);
+            set<FStage> cand_group_children = children[final_stage];
+
+            for (auto& choice: best.first) {
+                // Invalidate entries of the fusion cache
+                vector<FusionChoice> invalid_keys;
+                for (auto &c: cand_group_children) {
+                    for (auto &choice: fusion_cache) {
+                        if (choice.first.prod == c.func.name() ||
+                            choice.first.cons == c)
+                            invalid_keys.push_back(choice.first);
+                    }
                 }
-                fixpoint = false;
+
+                for (auto &key: invalid_keys) {
+                    internal_assert(fusion_cache.find(key) !=
+                                    fusion_cache.end());
+                    fusion_cache.erase(key);
+                }
+
+                internal_assert(choice.prod == prod);
+                merge_groups(choice, level);
             }
-        } else {
-            pair<FusionChoice, int64_t> best
-                    = choose_candidate_fuse_fast_mem(cand);
-            if (best.second >= 0) {
-                merge_groups(best.first);
-                fixpoint = false;
+
+            for (size_t s = 0; s < num_stages; s++) {
+                FStage cand_group(prod_f, s);
+                groups.erase(cand_group);
+                group_costs.erase(cand_group);
+
+                // Update the children mapping
+                children.erase(cand_group);
+                for (auto &f: children) {
+                    set<FStage> &cons = f.second;
+                    if (cons.find(cand_group) != cons.end()) {
+                        cons.erase(cand_group);
+                        cons.insert(cand_group_children.begin(),
+                                    cand_group_children.end());
+                    }
+                }
             }
+
+            fixpoint = false;
         }
     }
 }
@@ -1867,7 +1794,7 @@ Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
     return fused_group;
 }
 
-int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
+int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
 
     // Create a group that reflects the fusion choice and evaluate the cost
     // of the group.
@@ -1908,14 +1835,8 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
     for (const string& f: cons.inlined)
         fused.inlined.insert(f);
 
-    // Compare the cost with the costs of the groups without fusion
-    vector<GroupAnalysis> prod_analy;
-    for (auto &prod_g: prod_groups) {
-        GroupAnalysis analyg = analyze_group(prod_g);
-        prod_analy.push_back(analyg);
-    }
-
-    GroupAnalysis cons_analy = analyze_group(cons);
+    internal_assert(group_costs.find(cons.output) != group_costs.end());
+    GroupAnalysis cons_analy = group_costs.at(cons.output);
     GroupAnalysis fused_analy = analyze_group(fused);
 
     // Return the overall benefit of the choice
@@ -1923,7 +1844,9 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
     int64_t benefit;
     int64_t prod_arith_cost = 0;
 
-    for (auto &analyg: prod_analy) {
+    for (auto &prod_g: prod_groups) {
+        internal_assert(group_costs.find(prod_g.output) != group_costs.end());
+        GroupAnalysis analyg = group_costs.at(prod_g.output);
         if (analyg.arith_cost >= 0) {
             prod_arith_cost += analyg.arith_cost;
         } else {
@@ -1949,32 +1872,6 @@ int64_t Partitioner::evaluate_inline_choice(FusionChoice& choice) {
     debug(0) << "Benefit:" << benefit << "\n\n";
 
     return benefit;
-}
-
-int64_t Partitioner::evaluate_fast_mem_choice(FusionChoice& choice) {
-
-    // Create a group that reflects the fusion choice and evaluate
-    // the cost of the group
-    Group prod_group = groups.at(FStage(choice.prod, 0));
-    Group cons_group = groups.at(choice.cons);
-
-    Group fused_group = fuse_groups(prod_group, cons_group);
-
-    fused_group.tile_sizes = choice.tile_sizes;
-
-    for (auto& f: prod_group.inlined)
-        fused_group.inlined.insert(f);
-    for (auto& f: cons_group.inlined)
-        fused_group.inlined.insert(f);
-
-    // Compare the cost with the costs of the groups without fusion
-    GroupAnalysis prod_analy = analyze_group(prod_group);
-    GroupAnalysis cons_analy = analyze_group(cons_group);
-    GroupAnalysis fused_analy = analyze_group(fused_group);
-
-    // Return the overall benefit of the choice
-    // TODO: Use the arch params to compute total work
-    return prod_analy.arith_cost + cons_analy.arith_cost - fused_analy.arith_cost;
 }
 
 map<string, int> Partitioner::get_stage_estimates(const FStage& stg) {
@@ -2342,13 +2239,13 @@ void generate_schedules(const vector<Function>& outputs,
 
     part.disp_pipeline_bounds();
     part.disp_pipeline_graph();
-
     part.initialize_groups_inline();
     part.disp_pipeline_costs();
+
+    part.group(Partitioner::INLINE);
     string sched = part.generate_cpu_schedule(target);
     return;
 
-    part.group(Partitioner::INLINE);
 
     part.disp_grouping();
 
