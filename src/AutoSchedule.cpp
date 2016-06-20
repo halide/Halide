@@ -1096,13 +1096,14 @@ struct Partitioner {
 
     void merge_groups(FusionChoice &choice, Partitioner::Level level);
 
-    int64_t evaluate_choice(FusionChoice &fuse);
+    int64_t evaluate_choice(FusionChoice &fuse, Partitioner::Level level);
 
     Group fuse_groups(Group &g1, Group &g2);
 
     GroupAnalysis analyze_group(const Group &g);
 
-    map<string, Box> get_group_member_bounds(const Group &g);
+    map<FStage, map<FStage, DimBounds>> get_group_member_bounds();
+
     void group(Partitioner::Level level);
 
     pair<vector<FusionChoice>, int64_t>
@@ -1112,11 +1113,12 @@ struct Partitioner {
     map<string, int64_t> evaluate_reuse(const FStage &stg,
                                         const set<string> &prod);
 
-    map<string, int> get_stage_estimates(const FStage &stg);
+    map<string, int> bounds_to_estimates(const DimBounds &bounds);
 
     string generate_cpu_schedule(const Target &t);
 
-    string generate_group_cpu_schedule(const Group &g, const Target &t);
+    string generate_group_cpu_schedule(const Group &g, const Target &t,
+                                       const map<FStage, DimBounds> &group_bounds);
 
     DimBounds get_bounds(const FStage &stg);
 
@@ -1314,7 +1316,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>>& cands,
                 benefit = fusion_cache.at(cand_choice);
 
             } else {
-                benefit = evaluate_choice(cand_choice);
+                benefit = evaluate_choice(cand_choice, level);
                 // Cache the result of the evaluation for the pair
                 fusion_cache.insert(make_pair(cand_choice, benefit));
             }
@@ -1387,7 +1389,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
         }
     }
 
-    // Square tile configurations
+    // Almost square tile configurations
     for (auto &dim_size: size_variants) {
         map<string, int> tiling;
         for (size_t j = 0; j < tile_vars.size(); j++) {
@@ -1794,7 +1796,8 @@ Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
     return fused_group;
 }
 
-int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
+int64_t Partitioner::evaluate_choice(FusionChoice& choice,
+                                     Partitioner::Level level) {
 
     // Create a group that reflects the fusion choice and evaluate the cost
     // of the group.
@@ -1812,32 +1815,41 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
         fused = fuse_groups(prod_g, fused);
     }
 
-    // Set the tile sizes to one along all dimensions of the consumer
-    // group
-    map<string, int> tile_sizes;
+    GroupAnalysis fused_analy;
 
-    const Function &cons_f = cons.output.func;
-    Definition def = get_stage_definition(cons_f,
-                                          cons.output.stage_num);
+    if (level == Partitioner::INLINE) {
+        // Set the tile sizes to one along all dimensions of the consumer group
+        map<string, int> tile_sizes;
 
-    const vector<Dim> &dims = def.schedule().dims();
-    for (int d = 0; d < (int)dims.size() - 1; d++) {
-        tile_sizes[dims[d].var] = 1;
+        const Function &cons_f = cons.output.func;
+        Definition def = get_stage_definition(cons_f,
+                                              cons.output.stage_num);
+
+        const vector<Dim> &dims = def.schedule().dims();
+        for (int d = 0; d < (int)dims.size() - 1; d++) {
+            tile_sizes[dims[d].var] = 1;
+        }
+
+        fused.tile_sizes = tile_sizes;
+
+        for (auto &prod_g: prod_groups) {
+            for (const FStage& s: prod_g.members)
+                fused.inlined.insert(s.func.name());
+        }
+
+        for (const string& f: cons.inlined)
+            fused.inlined.insert(f);
+
+        fused_analy = analyze_group(fused);
+    } else {
+        pair<map<string, int>, GroupAnalysis> config =
+                                    find_best_tile_config(fused);
+        fused.tile_sizes = config.first;
+        fused_analy = config.second;
     }
-
-    fused.tile_sizes = tile_sizes;
-
-    for (auto &prod_g: prod_groups) {
-        for (const FStage& s: prod_g.members)
-            fused.inlined.insert(s.func.name());
-    }
-
-    for (const string& f: cons.inlined)
-        fused.inlined.insert(f);
 
     internal_assert(group_costs.find(cons.output) != group_costs.end());
     GroupAnalysis cons_analy = group_costs.at(cons.output);
-    GroupAnalysis fused_analy = analyze_group(fused);
 
     // Return the overall benefit of the choice
     // TODO: Use the arch params to compute total work
@@ -1874,30 +1886,42 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice) {
     return benefit;
 }
 
-map<string, int> Partitioner::get_stage_estimates(const FStage& stg) {
-    map<string, int> stg_estimates;
-    DimBounds stg_bounds = get_bounds(stg);
-    for (auto &bound: stg_bounds) {
+map<string, int> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
+    map<string, int> estimates;
+    for (auto &bound: bounds) {
         int estimate = get_extent(bound.second);
-        stg_estimates[bound.first] = estimate;
+        estimates[bound.first] = estimate;
     }
-    return stg_estimates;
+    return estimates;
 }
 
-map<string, Box> Partitioner::get_group_member_bounds(const Group& g) {
+map<FStage, map<FStage, DimBounds>> Partitioner::get_group_member_bounds() {
 
-    map<string, Box> mem_bounds;
+    map<FStage, map<FStage, DimBounds>> group_bounds;
+    for (const pair<const FStage, Group> &gpair: groups) {
+        Group g = gpair.second;
+        map<FStage, DimBounds> mem_bounds;
 
-    DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
-    map<string, Box> conc_reg =
-            analy.regions_required(g.output.func,
-                                   g.output.stage_num, bounds);
-    for (const FStage& s: g.members) {
-        if (conc_reg.find(s.func.name()) != conc_reg.end()) {
-            mem_bounds[s.func.name()] = conc_reg[s.func.name()];
+        DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
+        map<string, Box> conc_reg =
+                analy.regions_required(g.output.func,
+                                       g.output.stage_num, bounds);
+
+        for (const FStage &s: g.members) {
+            if (conc_reg.find(s.func.name()) != conc_reg.end()) {
+                map<string, int> tile_sizes;
+                const vector<string> &args = s.func.args();
+                for (size_t arg = 0; arg < args.size(); arg++) {
+                    tile_sizes[args[arg]] = get_extent(conc_reg[s.func.name()][arg]);
+                }
+                mem_bounds[s] = get_bounds_from_tile_sizes(s, tile_sizes);
+            }
         }
+
+        group_bounds[gpair.first] = mem_bounds;
     }
-    return mem_bounds;
+
+    return group_bounds;
 }
 
 pair<VarOrRVar, VarOrRVar>
@@ -1929,8 +1953,10 @@ split_dim(Stage f_handle, string prefix, VarOrRVar v, int factor,
     return make_pair(inner, outer);
 }
 
-string Partitioner::generate_group_cpu_schedule(const Group& g,
-                                                const Target& t) {
+string Partitioner::generate_group_cpu_schedule(
+                    const Group &g, const Target &t,
+                    const map<FStage, DimBounds> &group_bounds) {
+
     string sched = "";
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
@@ -1940,7 +1966,8 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
                                           g.output.stage_num);
 
     // Get the estimates for stage bounds
-    map<string, int> stg_estimates = get_stage_estimates(g.output);
+    DimBounds stg_bounds = get_bounds(g.output);
+    map<string, int> stg_estimates = bounds_to_estimates(stg_bounds);
 
     Stage f_handle = Stage(Func(g_out));
 
@@ -2106,50 +2133,50 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
                  f_handle.name() << '\n';
     }
 
-    // map<string, Box> group_bounds = get_group_member_bounds(g);
-/*
-for (auto &m: part.groups[g_name]) {
-    int outer_dim = dims.size() - 2;
-    map<string, int> org_mem_estimates =
-            get_dim_estimates(m.name(), group_bounds, env);
-    map<string, int> mem_estimates = org_mem_estimates;
-    if (m.name() != g_out.name() &&
-        inlines.find(m.name()) == inlines.end() && num_tile_dims > 0) {
-        //int compute_level = inner_tile_dim;
-        int compute_level = outer_dim - num_tile_dims +
-                num_fused_dims + 1;
-        m.schedule().store_level().func = g_out.name();
-        //m.schedule().store_level().var = dims[compute_level+1].var;
-        m.schedule().store_level().var = dims[compute_level].var;
-        m.schedule().compute_level().func = g_out.name();
-        m.schedule().compute_level().var = dims[compute_level].var;
-        if (auto_vec) {
-            if (check_dim_size(m.schedule(), 0, part.arch_params.vec_len, mem_estimates))
-                simple_vectorize(m, mem_estimates, 0, part.arch_params.vec_len);
-            else if (check_dim_size(m.schedule(), 0, 8, mem_estimates))
-                simple_vectorize(m, mem_estimates, 0, 8);
-            else if (check_dim_size(m.schedule(), 0, 4, mem_estimates))
-                simple_vectorize(m, mem_estimates, 0, 4);
-        }
-        if (!m.is_pure()) {
-            int num_updates = m.updates().size();
-            for (int i = 0; i < num_updates; i ++) {
-                // Start with fresh bounds estimates for each update
-                map<string, int> mem_up_estimates = org_mem_estimates;
-                set<string> par_vars;
-                vectorize_update(m, i, mem_up_estimates, part.arch_params.vec_len,
-                                 par_vars);
+    for (const FStage &mem: g.members) {
+        // Skip member stages that have been inlined
+        if (g.inlined.find(mem.func.name()) != g.inlined.end() ||
+            mem.func.name() == g_out.name())
+            continue;
+
+
+        // Get the definition corresponding to the stage
+        Definition def = get_stage_definition(mem.func, mem.stage_num);
+
+        // Get the estimates for the dimensions of the member stage
+        map<string, int> mem_estimates =
+                bounds_to_estimates(group_bounds.at(mem));
+
+        // The level at which group members will be computed
+        VarOrRVar tile_inner_var = inner_dims.back();
+
+        // Get a function handle for scheduling the stage
+        Stage mem_handle = Stage(Func(mem.func));
+        if (mem.stage_num > 0) {
+            mem_handle = Func(mem.func).update(mem.stage_num - 1);
+        } else {
+            if (tile_inner_var.is_rvar) {
+                Func(mem.func).compute_at(Func(g_out), tile_inner_var.rvar);
+            } else {
+                Func(mem.func).compute_at(Func(g_out), tile_inner_var.var);
             }
+            sched += mem_handle.name() + ".compute_at(" + g_out.name() +
+                     ',' + tile_inner_var.name() + ");\n";
         }
+
+        //TODO: vectorize
     }
-}
-// std::cerr << "Finished group members "  <<  g_out.name() << std::endl;
-*/
+
     return sched;
 }
 
 string Partitioner::generate_cpu_schedule(const Target& t) {
     string sched = "";
+
+    // Grab the bounds early as they rely on the dimensions of the group outputs
+    // which will be altered by modifying schedules
+    map<FStage, map<FStage, DimBounds>> group_bounds =
+                                        get_group_member_bounds();
 
     for (const pair<FStage, Group>& g: groups) {
         for (const string& inline_func: g.second.inlined) {
@@ -2167,12 +2194,12 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
     }
 
     for (auto& g: groups)
-        sched += generate_group_cpu_schedule(g.second, t);
+        sched += generate_group_cpu_schedule(g.second, t, group_bounds[g.first]);
     return sched;
 }
 
-void generate_schedules(const vector<Function>& outputs,
-                        const Target& target) {
+void generate_schedules(const vector<Function>& outputs, const Target& target) {
+
     // Compute an environment
     map<string, Function> env;
     for (Function f : outputs) {
@@ -2256,7 +2283,6 @@ void generate_schedules(const vector<Function>& outputs,
 
     // TODO: Better handling of boundary conditions
     // TODO: GPU scheduling
-
 
     // Set the schedule defaults for each function in the environment
     //set_schedule_defaults(env);
