@@ -2082,8 +2082,12 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
         }
     }
 
+    vector<string> dim_vars;
     for (int d = 0; d < (int) dims.size() - 1; d++) {
-        string var = dims[d].var;
+        dim_vars.push_back(dims[d].var);
+    }
+
+    for (auto &var: dim_vars) {
         bool is_rvar = (rvars.find(var) != rvars.end());
         VarOrRVar v(var, is_rvar);
 
@@ -2119,12 +2123,12 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
         for (auto& v: outer_dims)
             ordering.push_back(v);
 
-        f_handle.reorder(ordering);
-
         string var_order = ordering[0].name();
-        for (auto& v: ordering) {
-            var_order += ',' + v.name();
+        for (size_t o = 1; o < ordering.size(); o++) {
+            var_order += ',' + ordering[o].name();
         }
+
+        f_handle.reorder(ordering);
         sched += f_handle.name() + ".reorder(" + var_order + ");\n";
     }
 
@@ -2179,7 +2183,8 @@ string Partitioner::generate_group_cpu_schedule(const Group& g,
     //
     // Go from the outer to the inner most loop till sufficient parallelism
     // is achieved
-    for (int d = dims.size() - 2; d >= 0; d--) {
+    int dim_start = dims.size() - 2;
+    for (int d = dim_start; d >= 0; d--) {
         string var = dims[d].var;
         bool is_rvar = (rvars.find(var) != rvars.end());
         VarOrRVar v(var, is_rvar);
@@ -2310,7 +2315,7 @@ void generate_schedules(const vector<Function>& outputs,
     MachineParams arch_params;
     arch_params.parallelism = 16;
     arch_params.vec_len = 8;
-    arch_params.fast_mem_size = 1024;
+    arch_params.fast_mem_size = 1024 * 64;
     arch_params.balance = 10;
 
     // Initialize the cost model
@@ -2342,6 +2347,7 @@ void generate_schedules(const vector<Function>& outputs,
 
     part.initialize_groups_inline();
     part.disp_pipeline_costs();
+    string sched = part.generate_cpu_schedule(target);
     return;
 
     part.group(Partitioner::INLINE);
@@ -2359,7 +2365,6 @@ void generate_schedules(const vector<Function>& outputs,
 
     // Set the schedule defaults for each function in the environment
     //set_schedule_defaults(env);
-    string sched = part.generate_cpu_schedule(target);
     debug(0) << sched << '\n';
 
     // GPU
