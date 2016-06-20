@@ -23,8 +23,6 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
-  android_ion
-  android_mman
   android_opengl_context
   android_tempfile
   arm_cpu_features
@@ -34,7 +32,6 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
-  fake_ion
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -43,7 +40,6 @@ set(RUNTIME_CPP
   ios_io
   linux_clock
   linux_host_cpu_count
-  linux_mman
   linux_opengl_context
   matlab
   metadata
