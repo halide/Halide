@@ -585,6 +585,19 @@ Expr raise_to_integer_power(Expr e, int64_t p) {
     return result;
 }
 
+void split_into_ands(Expr cond, std::vector<Expr> &result) {
+    if (!cond.defined()) {
+        return;
+    }
+    internal_assert(cond.type().is_bool()) << "Should be a boolean condition\n";
+    if (const And *a = cond.as<And>()) {
+        split_into_ands(a->a, result);
+        split_into_ands(a->b, result);
+    } else if (!is_one(cond)) {
+        result.push_back(cond);
+    }
+}
+
 }
 
 Expr fast_log(Expr x) {
