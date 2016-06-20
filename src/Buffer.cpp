@@ -69,11 +69,11 @@ struct BufferContents {
 
         if (!data) {
             // There's no way for this to overflow without the buffer already being > 2^63-1
-            size += 32;
+            size += 64;
             allocation = (uint8_t *)calloc(1, (size_t)size);
             user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";
             buf.host = allocation;
-            while ((size_t)(buf.host) & 0x1f) buf.host++;
+            while ((size_t)(buf.host) & 0x3f) buf.host++;
         } else {
             buf.host = data;
         }
