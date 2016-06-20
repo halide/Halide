@@ -577,46 +577,51 @@ template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Bl
 template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
-template<> int ExprNode<IntImm>::static_type_info() {return __LINE__;}
-template<> int ExprNode<UIntImm>::static_type_info() {return __LINE__;}
-template<> int ExprNode<FloatImm>::static_type_info() {return __LINE__;}
-template<> int ExprNode<StringImm>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Cast>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Variable>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Add>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Sub>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Mul>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Div>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Mod>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Min>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Max>::static_type_info() {return __LINE__;}
-template<> int ExprNode<EQ>::static_type_info() {return __LINE__;}
-template<> int ExprNode<NE>::static_type_info() {return __LINE__;}
-template<> int ExprNode<LT>::static_type_info() {return __LINE__;}
-template<> int ExprNode<LE>::static_type_info() {return __LINE__;}
-template<> int ExprNode<GT>::static_type_info() {return __LINE__;}
-template<> int ExprNode<GE>::static_type_info() {return __LINE__;}
-template<> int ExprNode<And>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Or>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Not>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Select>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Load>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Ramp>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Broadcast>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Call>::static_type_info() {return __LINE__;}
-template<> int ExprNode<Let>::static_type_info() {return __LINE__;}
-template<> int StmtNode<LetStmt>::static_type_info() {return __LINE__;}
-template<> int StmtNode<AssertStmt>::static_type_info() {return __LINE__;}
-template<> int StmtNode<ProducerConsumer>::static_type_info() {return __LINE__;}
-template<> int StmtNode<For>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Store>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Provide>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Allocate>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Free>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Realize>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Block>::static_type_info() {return __LINE__;}
-template<> int StmtNode<IfThenElse>::static_type_info() {return __LINE__;}
-template<> int StmtNode<Evaluate>::static_type_info() {return __LINE__;}
+// Each IR node type must return a unique identifier for our
+// psuedo-RTTI. One could do something clever like use a pointer to a
+// class static member, but different compilers have different
+// opinions about the right way to do that, so we do something much
+// simpler and dumber: Manually number the IR nodes.
+template<> int ExprNode<IntImm>::static_type_info()           {return 0;}
+template<> int ExprNode<UIntImm>::static_type_info()          {return 1;}
+template<> int ExprNode<FloatImm>::static_type_info()         {return 2;}
+template<> int ExprNode<StringImm>::static_type_info()        {return 3;}
+template<> int ExprNode<Cast>::static_type_info()             {return 4;}
+template<> int ExprNode<Variable>::static_type_info()         {return 5;}
+template<> int ExprNode<Add>::static_type_info()              {return 6;}
+template<> int ExprNode<Sub>::static_type_info()              {return 7;}
+template<> int ExprNode<Mul>::static_type_info()              {return 8;}
+template<> int ExprNode<Div>::static_type_info()              {return 9;}
+template<> int ExprNode<Mod>::static_type_info()              {return 10;}
+template<> int ExprNode<Min>::static_type_info()              {return 11;}
+template<> int ExprNode<Max>::static_type_info()              {return 12;}
+template<> int ExprNode<EQ>::static_type_info()               {return 13;}
+template<> int ExprNode<NE>::static_type_info()               {return 14;}
+template<> int ExprNode<LT>::static_type_info()               {return 15;}
+template<> int ExprNode<LE>::static_type_info()               {return 16;}
+template<> int ExprNode<GT>::static_type_info()               {return 17;}
+template<> int ExprNode<GE>::static_type_info()               {return 18;}
+template<> int ExprNode<And>::static_type_info()              {return 19;}
+template<> int ExprNode<Or>::static_type_info()               {return 20;}
+template<> int ExprNode<Not>::static_type_info()              {return 21;}
+template<> int ExprNode<Select>::static_type_info()           {return 22;}
+template<> int ExprNode<Load>::static_type_info()             {return 23;}
+template<> int ExprNode<Ramp>::static_type_info()             {return 24;}
+template<> int ExprNode<Broadcast>::static_type_info()        {return 25;}
+template<> int ExprNode<Call>::static_type_info()             {return 26;}
+template<> int ExprNode<Let>::static_type_info()              {return 27;}
+template<> int StmtNode<LetStmt>::static_type_info()          {return 28;}
+template<> int StmtNode<AssertStmt>::static_type_info()       {return 29;}
+template<> int StmtNode<ProducerConsumer>::static_type_info() {return 30;}
+template<> int StmtNode<For>::static_type_info()              {return 31;}
+template<> int StmtNode<Store>::static_type_info()            {return 32;}
+template<> int StmtNode<Provide>::static_type_info()          {return 33;}
+template<> int StmtNode<Allocate>::static_type_info()         {return 34;}
+template<> int StmtNode<Free>::static_type_info()             {return 35;}
+template<> int StmtNode<Realize>::static_type_info()          {return 36;}
+template<> int StmtNode<Block>::static_type_info()            {return 37;}
+template<> int StmtNode<IfThenElse>::static_type_info()       {return 38;}
+template<> int StmtNode<Evaluate>::static_type_info()         {return 39;}
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::shuffle_vector = "shuffle_vector";
