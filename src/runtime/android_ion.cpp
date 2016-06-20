@@ -108,6 +108,7 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
     if (result != 0) return NULL;
 
     const size_t align = 4096;
+    const int flags = 1;  // cached
 
     // Align the allocation size.
     len = (len + align - 1) & ~(align - 1);
@@ -115,7 +116,7 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
     // Allocate enough space to hold information about the allocation prior to the pointer we return.
     len += align;
 
-    ion_user_handle_t ion_h = ion_alloc(dev_ion, len, align, 1 << heap_id, 0);
+    ion_user_handle_t ion_h = ion_alloc(dev_ion, len, align, 1 << heap_id, flags);
 
     int buf_fd = ion_map(dev_ion, ion_h);
 
