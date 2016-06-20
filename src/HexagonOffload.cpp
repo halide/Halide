@@ -269,7 +269,7 @@ public:
         std::unique_ptr<llvm::Module> llvm_module =
             compile_module_to_llvm_module(device_code, context);
 
-        #if LLVM_VERSION >= 39 && CAUGHTUP
+        #if LLVM_VERSION >= 39
         // Then mess with it, to fix up version differences between
         // our LLVM and hexagon-clang. Yuck.
         for (auto &gv : llvm_module->globals()) {

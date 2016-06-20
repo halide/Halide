@@ -151,7 +151,7 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
     auto result = llvm::writeArchive(dst_file, new_members,
                        write_symtab, kind,
                        deterministic);
-#elif LLVM_VERSION >= 38
+#elif LLVM_VERSION == 38
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
                        write_symtab, kind,
