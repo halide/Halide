@@ -99,11 +99,7 @@ void halide_free(void *user_context, void *ptr) {
 
 int halide_do_task(void *user_context, halide_task_t f, int idx,
                    uint8_t *closure) {
-    unsigned int tid = qurt_thread_get_id();
-    FARF(LOW, "%HVX_TP: %d: In halide_do_task, idx = %d\n", tid, idx);
-    int result =  f(user_context, idx, closure);
-    FARF(LOW, "%d: HVX_TP: halide_do_task, finished calling f, idx = %d, result = %d\n", tid, idx, result);
-    return result;
+    return f(user_context, idx, closure);
 }
 
 // This function does the real work of the thread pool.
@@ -125,13 +121,11 @@ void goto_work(work *owned_job) {
     unsigned int tid = qurt_thread_get_id();
 
     bool locked = owned_job != NULL;
-    // FARF(LOW, "HVX_TP: %d: goto_work: Trying to get a lock on the work queue\n", tid);
 
     // ***********************
     // *** Lock work queue ***
     // ***********************
     work_queue.lock();
-    // FARF(LOW, "HVX_TP: %d: goto_work: got a lock on the work queue\n", tid);
 
     // If I'm a job owner, then I was the thread that called
     // do_par_for, and I should only stay in this function while there
@@ -140,8 +134,6 @@ void goto_work(work *owned_job) {
     // thread, I should stay in this function as long as the work queue is running.
     while (owned_job != NULL ? (owned_job->running() || !owned_job->claimed())
            : work_queue.running()) {
-
-        // FARF(LOW, "HVX_TP: %d: goto_work: In the main goto_work loop \n", tid);
 
         work *job = NULL;
         if (!owned_job) {
@@ -154,41 +146,31 @@ void goto_work(work *owned_job) {
                 // ***************************
                 // *** Work queue unlocked ***
                 // ***************************
-                FARF(LOW, "HVX_TP: %d: goto_work: Couldn't find a job, going to sleep\n", tid);
                 work_queue.unlock();
                 qurt_sem_down(&wait_for_work);
-                FARF(LOW, "HVX_TP: %d: goto_work: Got woken up. Going to look for work. wait_for_work = %d\n", tid, qurt_sem_get_val(&wait_for_work));
                  // ***********************
                 // *** Lock work queue ***
                 // ***********************
                 work_queue.lock();
                 continue;
-            } else {
-                // FARF(LOW, "HVX_TP: %d: goto_work: Found a job working on x = %d\n", tid, job->next);
             }
         } else {
             // We are here only if this thread owns a job that is not done.
             // So do a part of it.
             if (owned_job->claimed()) {
                 // the owner goes to sleep till the workers wake it up.
-                FARF(LOW, "HVX_TP: %d: goto_work: Owner about to sleep\n", tid);
                 qurt_cond_wait(&owned_job->wakeup_owner, &work_queue.work_mutex);
-                FARF(LOW, "HVX_TP: %d: goto_work: Owner waking up.\n", tid);
                 // This thread should have the lock now after having been woken up.
                 break;
             } else {
                 job = owned_job;
-                // FARF(LOW, "HVX_TP: %d: goto_work: Owner about to work\n", tid);
             }
         }
         int myjob = job->next++;
         job->active_workers++;
-        // qurt_sem_down(&wait_for_work);
-        FARF(LOW, "HVX_TP: %d: goto_work: about to work, wait_for_work = %d\n", tid, qurt_sem_get_val(&wait_for_work));
         // If all tasks of the job have been claimed, then pop the job off the stack.
         if (job->claimed()) {
             work_queue.jobs = job->next_job;
-            FARF(LOW, "HVX_TP: %d: goto_work: All tasks in job claimed. Popping job from stack.\n", tid);
         }
         // ***************************
         // *** Work queue unlocked ***
@@ -209,11 +191,9 @@ void goto_work(work *owned_job) {
                                     myjob, job->closure);
         FARF(LOW, "HVX_TP: %d: goto_work: Finished do_task with status = %d\n", tid, result);
 
-        // FARF(LOW, "HVX_TP: %d: goto_work: Unlocking hvx\n", tid);
         qurt_hvx_unlock();
         locked = false;
 
-        FARF(LOW, "HVX_TP: %d: goto_work: Unlocked hvx\n", tid);
         // ***********************
         // *** Lock work queue ***
         // ***********************
@@ -225,15 +205,10 @@ void goto_work(work *owned_job) {
             FARF(LOW, "HVX_TP: %d: goto_work: halide_do_task returned nonzero result = %d\n", tid, result);
         }
         job->active_workers--;
-        FARF(LOW, "HVX_TP: %d: goto_work: reduced number of active workers to %d\n", tid, job->active_workers);
         if (job->done()) {
-            FARF(LOW, "HVX_TP: %d: goto_work: job done\n", tid);
             if (!owned_job) {
-                // FARF(LOW, "HVX_TP: %d: goto_work: Signalling to owner/master thread that job is done\n", tid);
                 qurt_cond_signal(&(job->wakeup_owner));
             }
-        } else {
-            // FARF(LOW, "HVX_TP: %d: goto_work: job not yet done. job->next = %d, job->end = %d\n", tid, job->next, job->end);
         }
     }
     // ***************************
@@ -242,16 +217,11 @@ void goto_work(work *owned_job) {
     work_queue.unlock();
 }
 void thread_server(void *arg) {
-    unsigned int tid = qurt_thread_get_id();
-    // FARF(LOW, "HVX_TP: %d: In thread_server\n", tid);
     goto_work(NULL);
-    // FARF(LOW, "HVX_TP: %d: thread_server: Exiting with QURT_EOK.\n", tid);
     qurt_thread_exit(QURT_EOK);
 }
 void create_threads(int num_threads) {
     // Acquire a lock on the work queue.
-    FARF(LOW, "HVX_TP: Master Thread: Creating Threads\n");
-
     qurt_thread_attr_t thread_attr;
     for (int i = 0; i < num_threads; ++i) {
         qurt_thread_attr_init(&thread_attr);
@@ -260,26 +230,16 @@ void create_threads(int num_threads) {
         qurt_thread_attr_set_priority(&thread_attr, 100);
         qurt_thread_create(&threads[i], &thread_attr, thread_server, (void *)i);
     }
-    // FARF(LOW, "HVX_TP: Master Thread: Created threads\n");
 }
 void qurt_thread_pool_init() {
-    // FARF(LOW, "HVX_TP: Master Thread: Initializing the thread pool\n");
     qurt_sem_init_val(&wait_for_work, 0);
-    //        qurt_cond_init(&job.wakeup_owner);
-
-    // FARF(LOW, "HVX_TP: Master Thread: Initializing work queue\n");
     work_queue.init();
-    // FARF(LOW, "HVX_TP: Master Thread: Work queue initialized\n");
-
     create_threads(NUM_WORKER_THREADS_TO_CREATE);
-
     thread_pool_initialized = true;
-    // FARF(LOW, "HVX_TP: Master Thread: Thread pool initialized\n");
 }
 
 int halide_do_par_for(void *user_context, halide_task_t f,
                       int min, int size, uint8_t *closure) {
-    FARF(LOW, "HVX_TP: Master Thread: halide_do_par_for\n");
 
     // 1. If the thread pool hasn't been initialized, initiliaze it.
     // This involves.
@@ -303,10 +263,6 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     work_queue.lock();
 
     // 3. Put work in the global work queue.
-
-    FARF(LOW, "HVX_TP: Master Thread: Putting job in the work queue at  min = %d, size = %d, user_context = 0x%x, f= 0x%x, \n",
-             min, size, user_context, f);
-
     work job;
     job.f = f;
     job.user_context = user_context;
@@ -318,7 +274,6 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     qurt_cond_init(&job.wakeup_owner);
     job.next_job = work_queue.jobs;
     job.curr_hvx_mode = (qurt_hvx_mode_t) qurt_hvx_get_mode();
-    FARF(LOW, "HVX_TP: Master Thread: curr_hvx_mode = %d\n", job.curr_hvx_mode);
     work_queue.jobs = &job;
 
     // 4. Unlock global work queue.
@@ -331,7 +286,6 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     goto_work(&job);
 
     qurt_hvx_lock(job.curr_hvx_mode);
-    FARF(LOW, "HVX_TP: Master Thread: Finished job\n");
     return job.exit_status;
 }
 
@@ -489,13 +443,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     dlclose(reinterpret_cast<void*>(module_ptr));
-    FARF(LOW, "HVX_TP: Master Thread: In halide_hexagon_remote_release_kernels\n");
     if (context_count-- == 0) {
         if (thread_pool_initialized) {
-
             work_queue.lock();
             work_queue.jobs = NULL;
-            FARF(LOW, "HVX_TP: Master Thread: Shutting down the work queue\n");
             work_queue.shutdown = true;
             qurt_sem_add(&wait_for_work, NUM_WORKER_THREADS_TO_CREATE);
             work_queue.unlock();
@@ -503,13 +454,7 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
             for (int i = 0; i < NUM_WORKER_THREADS_TO_CREATE; ++i) {
                 int status;
                 qurt_thread_join(threads[i], &status);
-                if ((status != QURT_EOK) && (status != QURT_ENOTHREAD)) {
-                    FARF(LOW, "HVX_TP: Master Thread: Thread pool did not shutdown cleanly\n");
-                }
             }
-            FARF(LOW, "HVX_TP: Master Thread: Thread pool has been shutdown\n");
-        } else {
-            FARF(LOW, "HVX_TP: Master Thread: Thread pool wasn't initialized\n");
         }
         HAP_power_request(0, 0, -1);
     }
