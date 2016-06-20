@@ -74,6 +74,8 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
+    void visit(const Free *);
+    void visit(const Call *);
     // @}
 
     std::string function_name;

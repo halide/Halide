@@ -541,6 +541,48 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
     return module_state;
 }
 
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
+    CodeGen_CPU::visit(op);
+    if (op->name == "halide_device_malloc" || op->name == "halide_copy_to_device") {
+        // Register a destructor for this buffer if this is the first
+        // device_malloc or copy_to_device for it.
+        internal_assert(op->args.size() == 2);
+        const Variable *buf_var = op->args[0].as<Variable>();
+        internal_assert(buf_var);
+        const string &buf_name = buf_var->name;
+        // Put the destructor in the symbol table as
+        // func_name.buffer_gpu_destructor.
+        internal_assert(ends_with(buf_name, ".buffer"));
+        string destructor_name = buf_name + "_gpu_destructor";
+
+        // We may already have a destructor for this allocation, if
+        // this is one of many copy_to_device calls.
+        if (!sym_exists(destructor_name)) {
+            llvm::Value *buf = sym_get(buf_name);
+            // Register a destructor that frees the device allocation.
+            llvm::Value *destructor =
+                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf, CodeGen_LLVM::OnError);
+            sym_push(destructor_name, destructor);
+        }
+    }
+}
+
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
+    CodeGen_CPU::visit(op);
+
+    // Also free gpu memory by triggering the destructor
+    string destructor_name = op->name + ".buffer_gpu_destructor";
+    if (sym_exists(destructor_name)) {
+        Value *d = sym_get(destructor_name);
+        CodeGen_LLVM::trigger_destructor(module->getFunction("halide_device_free_as_destructor"), d);
+        sym_pop(destructor_name);
+    }
+}
+
+
+
 // Force template instantiation.
 #ifdef WITH_X86
 template class CodeGen_GPU_Host<CodeGen_X86>;
