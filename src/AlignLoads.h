@@ -9,6 +9,10 @@
 namespace Halide {
 namespace Internal {
 
+/** Attempt to rewrite unaligned loads from buffers which are known to
+ * be aligned to instead load aligned vectors that cover the original
+ * load, and then slice the original load out of the aligned
+ * vectors. */
 Stmt align_loads(Stmt s, int alignment);
 
 }

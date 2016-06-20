@@ -449,40 +449,41 @@ std::string Target::to_string() const {
 /** Was libHalide compiled with support for this target? */
 bool Target::supported() const {
     bool bad = false;
-#if !(WITH_NATIVE_CLIENT)
+#if !defined(WITH_NATIVE_CLIENT)
     bad |= (arch == Target::PNaCl || os == Target::NaCl);
 #endif
-#if !(WITH_ARM)
+#if !defined(WITH_ARM)
     bad |= arch == Target::ARM && bits == 32;
 #endif
-#if !(WITH_AARCH64) || WITH_NATIVE_CLIENT // In pnacl llvm, the aarch64 backend is crashy.
+#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
+    // In pnacl llvm, the aarch64 backend is crashy.
     bad |= arch == Target::ARM && bits == 64;
 #endif
-#if !(WITH_X86)
+#if !defined(WITH_X86)
     bad |= arch == Target::X86;
 #endif
-#if !(WITH_MIPS)
+#if !defined(WITH_MIPS)
     bad |= arch == Target::MIPS;
 #endif
-#if !(WITH_POWERPC)
+#if !defined(WITH_POWERPC)
     bad |= arch == Target::POWERPC;
 #endif
-#if !(WITH_HEXAGON)
+#if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
 #endif
-#if !(WITH_PTX)
+#if !defined(WITH_PTX)
     bad |= has_feature(Target::CUDA);
 #endif
-#if !(WITH_OPENCL)
+#if !defined(WITH_OPENCL)
     bad |= has_feature(Target::OpenCL);
 #endif
-#if !(WITH_METAL)
+#if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !(WITH_RENDERSCRIPT)
+#if !defined(WITH_RENDERSCRIPT)
     bad |= has_feature(Target::Renderscript);
 #endif
-#if !(WITH_OPENGL)
+#if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
     return !bad;

@@ -1,14 +1,16 @@
 #include "Halide.h"
 
 using namespace Halide;
-using namespace Halide::Internal;
-IRPrinter irp(std::cerr);
-Expr u16(Expr x) { return cast<uint16_t>(x); }
-Expr u8(Expr x) { return cast<uint8_t>(x); }
 
 // Define a 1D Gaussian blur (a [1 4 6 4 1] filter) of 5 elements.
 Expr blur5(Expr x0, Expr x1, Expr x2, Expr x3, Expr x4) {
-    return u8((u16(x0) + 4*u16(x1) + 6*u16(x2) + 4*u16(x3) + u16(x4) + 8)/16);
+    // Widen to 16 bits, so we don't overflow while computing the stencil.
+    x0 = cast<uint16_t>(x0);
+    x1 = cast<uint16_t>(x1);
+    x2 = cast<uint16_t>(x2);
+    x3 = cast<uint16_t>(x3);
+    x4 = cast<uint16_t>(x4);
+    return cast<uint8_t>((x0 + 4*x1 + 6*x2 + 4*x3 + x4 + 8)/16);
 }
 
 int main(int argc, char **argv) {

@@ -108,6 +108,7 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
     if (result != 0) return NULL;
 
     const size_t align = 4096;
+    const int flags = 1;  // cached
 
     // Align the allocation size.
     len = (len + align - 1) & ~(align - 1);
@@ -115,12 +116,12 @@ WEAK void *ion_alloc(void *user_context, size_t len, int heap_id, int *out_fd) {
     // Allocate enough space to hold information about the allocation prior to the pointer we return.
     len += align;
 
-    ion_user_handle_t ion_h = ion_alloc(dev_ion, len, align, 1 << heap_id, 0);
+    ion_user_handle_t ion_h = ion_alloc(dev_ion, len, align, 1 << heap_id, flags);
 
     int buf_fd = ion_map(dev_ion, ion_h);
 
     debug(user_context) << "    mmap map_size=" << (uint64_t)len << " Read Write Shared fd=" << buf_fd << " -> ";
-    void *mem = mmap(NULL, len, MapProtocol::Read | MapProtocol::Write, MapFlags::Shared, buf_fd, 0);
+    void *mem = mmap(NULL, len, MapProtection::Read | MapProtection::Write, MapFlags::Shared, buf_fd, 0);
     if (mem == MAP_FAILED) {
         ion_free(dev_ion, ion_h);
         debug(user_context) << "        MAP_FAILED\n";

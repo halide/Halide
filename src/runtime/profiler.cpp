@@ -124,9 +124,9 @@ namespace {
 
 template <typename T>
 void sync_compare_max_and_swap(T *ptr, T val) {
-    int old_val = *ptr;
+    T old_val = *ptr;
     while (val > old_val) {
-        int temp = old_val;
+        T temp = old_val;
         old_val = __sync_val_compare_and_swap(ptr, old_val, val);
         if (temp == old_val) {
             return;
@@ -182,7 +182,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
-                                            int *f_values) {
+                                            uint64_t *f_values) {
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
     halide_assert(user_context, p_stats != NULL);
 
@@ -203,7 +203,7 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           void *pipeline_state,
                                           int func_id,
-                                          int incr) {
+                                          uint64_t incr) {
     // It's possible to have 'incr' equal to zero if the allocation is not
     // executed conditionally.
     if (incr == 0) {
@@ -226,20 +226,20 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     // Update per-pipeline memory stats
     __sync_add_and_fetch(&p_stats->num_allocs, 1);
     __sync_add_and_fetch(&p_stats->memory_total, incr);
-    int p_mem_current = __sync_add_and_fetch(&p_stats->memory_current, incr);
+    uint64_t p_mem_current = __sync_add_and_fetch(&p_stats->memory_current, incr);
     sync_compare_max_and_swap(&p_stats->memory_peak, p_mem_current);
 
     // Update per-func memory stats
     __sync_add_and_fetch(&f_stats->num_allocs, 1);
     __sync_add_and_fetch(&f_stats->memory_total, incr);
-    int f_mem_current = __sync_add_and_fetch(&f_stats->memory_current, incr);
+    uint64_t f_mem_current = __sync_add_and_fetch(&f_stats->memory_current, incr);
     sync_compare_max_and_swap(&f_stats->memory_peak, f_mem_current);
 }
 
 WEAK void halide_profiler_memory_free(void *user_context,
                                       void *pipeline_state,
                                       int func_id,
-                                      int decr) {
+                                      uint64_t decr) {
     // It's possible to have 'decr' equal to zero if the allocation is not
     // executed conditionally.
     if (decr == 0) {
@@ -318,7 +318,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 int percent = 0;
                 if (p->time != 0) {
-                    percent = fs->time / (p->time / 100);
+                    percent = (100*fs->time) / p->time;
                 }
                 sstr << "(" << percent << "%)";
                 while (sstr.size() < 50) sstr << " ";

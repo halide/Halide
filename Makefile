@@ -269,6 +269,7 @@ SOURCE_FILES = \
   AddParameterChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
+  Associativity.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
@@ -401,6 +402,7 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   Argument.h \
+  Associativity.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
@@ -422,6 +424,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_Renderscript_Dev.h \
   CodeGen_X86.h \
+  ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
   Debug.h \
@@ -635,10 +638,10 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
 ifneq (,$(WITH_HEXAGON))
+ifneq (,$(HL_HEXAGON_TOOLS))
 TEST_LD_FLAGS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
-#ifneq (,$(HL_HEXAGON_TOOLS))
 TEST_LD_FLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
-#endif
+endif
 endif
 endif
 
@@ -915,7 +918,7 @@ $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
 $(FILTERS_DIR)/multitarget.a: $(FILTERS_DIR)/multitarget.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f multitarget -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-debug-no_runtime,$(HL_TARGET)-no_runtime  -e assembly,bitcode,cpp,h,html,static_library,stmt
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f "HalideTest::multitarget" -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
 
 # user_context needs to be generated with user_context as the first argument to its calls
 $(FILTERS_DIR)/user_context.a: $(FILTERS_DIR)/user_context.generator
@@ -1130,8 +1133,7 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	        $(ROOT_DIR)/apps/images \
 	        $(ROOT_DIR)/apps/support \
                 apps; \
-	  mkdir -p tools; \
-	  cp $(ROOT_DIR)/tools/* tools/; \
+	  cp -r $(ROOT_DIR)/tools .; \
 	fi
 	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)

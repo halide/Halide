@@ -222,6 +222,7 @@ set(HEADER_FILES
   AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
+  Associativity.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -245,6 +246,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  ConciseCasts.h
   CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
@@ -379,7 +381,9 @@ ENDIF()
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
+  AlignLoads.cpp
   AllocationBoundsInference.cpp
+  Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
@@ -526,51 +530,51 @@ target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
 
 if (TARGET_NATIVE_CLIENT)
-  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT")
+  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT=1")
 endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
-  target_compile_definitions(Halide PRIVATE "-DWITH_X86")
+  target_compile_definitions(Halide PRIVATE "-DWITH_X86=1")
   list(APPEND LLVM_COMPONENTS x86)
 endif()
 
 if (TARGET_ARM)
-  target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
+  target_compile_definitions(Halide PRIVATE "-DWITH_ARM=1")
   list(APPEND LLVM_COMPONENTS arm)
 endif()
 
 if (TARGET_AARCH64)
-  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
+  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64=1")
   list(APPEND LLVM_COMPONENTS aarch64)
 endif()
 
 if (TARGET_HEXAGON)
-  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON")
+  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON=1")
   list(APPEND LLVM_COMPONENTS hexagon)
 endif()
 
 if (TARGET_PTX)
-  target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
+  target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
   list(APPEND LLVM_COMPONENTS nvptx)
 endif()
 
 if (TARGET_OPENCL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
 endif()
 
 if (TARGET_OPENGL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL=1")
 endif()
 
 if (TARGET_MIPS)
-  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
+  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS=1")
   list(APPEND LLVM_COMPONENTS mips)
 endif()
 
 if (TARGET_METAL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")

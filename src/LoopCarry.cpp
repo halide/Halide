@@ -131,59 +131,6 @@ Expr scratch_index(int i, Type t) {
     }
 }
 
-/** Substitute an expr for a var in a graph. */
-class GraphSubstitute : public IRGraphMutator {
-    string var;
-    Expr value;
-
-    using IRGraphMutator::visit;
-
-    void visit(const Variable *op) {
-        if (op->name == var) {
-            expr = value;
-        } else {
-            expr = op;
-        }
-    }
-
-public:
-
-    GraphSubstitute(const string &var, Expr value) : var(var), value(value) {}
-};
-
-/** Substitute an Expr for another Expr in a graph. Unlike substitute,
- * this only checks for shallow equality. */
-class GraphSubstituteExpr : public IRGraphMutator {
-    Expr find, replace;
-public:
-
-    using IRGraphMutator::mutate;
-
-    Expr mutate(Expr e) {
-        if (e.same_as(find)) return replace;
-        return IRGraphMutator::mutate(e);
-    }
-
-    GraphSubstituteExpr(Expr find, Expr replace) : find(find), replace(replace) {}
-};
-
-/** Substitute in all let Exprs in a piece of IR. Doesn't substitute
- * in let stmts, as this may change the meaning of the IR (e.g. by
- * moving a load after a store). Produces graphs of IR, so don't use
- * non-graph-aware visitors or mutators on it until you've CSE'd the
- * result. */
-class SubstituteInAllLets : public IRGraphMutator {
-
-    using IRGraphMutator::visit;
-
-    void visit(const Let *op) {
-        Expr value = mutate(op->value);
-        Expr body = mutate(op->body);
-        expr = GraphSubstitute(op->name, value).mutate(body);
-    }
-};
-
-
 /** Given a scope of things that move linearly over time, come up with
  * the next time step's version of some arbitrary Expr (which may be a
  * nasty graph). Variables that move non-linearly through time are
@@ -229,7 +176,7 @@ Expr step_forwards(Expr e, const Scope<Expr> &linear) {
         // but it's a full graph, so we'll need to CSE it first.
         e = common_subexpression_elimination(e);
         e = simplify(e);
-        e = SubstituteInAllLets().mutate(e);
+        e = substitute_in_all_lets(e);
         return e;
     }
 }
@@ -302,7 +249,7 @@ class LoopCarryOverLoop : public IRMutator {
         // The stmts, as graphs (lets subtituted in). We must only use
         // graph-aware methods to touch these, lest we incur
         // exponential runtime.
-        Stmt graph_stmt = SubstituteInAllLets().mutate(orig_stmt);
+        Stmt graph_stmt = substitute_in_all_lets(orig_stmt);
 
         // Find all the loads in these stmts.
         FindLoads find_loads;
@@ -439,7 +386,7 @@ class LoopCarryOverLoop : public IRMutator {
                 Expr scratch_idx = scratch_index(i, orig_load->type);
                 Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, Buffer(), Parameter());
                 for (const Load *l : loads[c[i]]) {
-                    core = GraphSubstituteExpr(l, load_from_scratch).mutate(core);
+                    core = graph_substitute(l, load_from_scratch, core);
                 }
 
                 if (i == c.size() - 1) {

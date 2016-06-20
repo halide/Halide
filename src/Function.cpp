@@ -9,6 +9,7 @@
 #include "CSE.h"
 #include "Random.h"
 #include "Introspection.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "ParallelRVar.h"
 #include "Var.h"
@@ -313,17 +314,13 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     // Copy the pure definition
     dst->init_def = src->init_def.deep_copy(copied_map);
     internal_assert(dst->init_def.is_init());
-    internal_assert(!dst->init_def.domain().defined() && !dst->init_def.schedule().reduction_domain().defined())
+    internal_assert(dst->init_def.schedule().rvars().empty())
         << "Init definition shouldn't have reduction domain\n";
 
     for (const Definition &def : src->updates) {
         internal_assert(!def.is_init());
         Definition def_copy = def.deep_copy(copied_map);
         internal_assert(!def_copy.is_init());
-        internal_assert(
-            (!def_copy.domain().defined() && !def_copy.schedule().reduction_domain().defined()) ||
-            (def_copy.domain().defined() && def_copy.domain().same_as(def_copy.schedule().reduction_domain())))
-            << "Update definition should point to the same reduction domain as its schedule\n";
         dst->updates.push_back(std::move(def_copy));
     }
 
@@ -442,7 +439,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, true};
+        Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {args[i]};
         contents->init_def.schedule().storage_dims().push_back(sd);
@@ -450,7 +447,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
     }
 
@@ -627,17 +624,19 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     internal_assert(!r.is_init()) << "Should have been an update definition\n";
 
     // First add any reduction domain
-    if (r.domain().defined()) {
-        for (size_t i = 0; i < r.domain().domain().size(); i++) {
+    if (check.reduction_domain.defined()) {
+        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
             // Is this RVar actually pure (safe to parallelize and
             // reorder)? It's pure if one value of the RVar can never
             // access from the same memory that another RVar is
             // writing to.
-            const string &v = r.domain().domain()[i].var;
+            const ReductionVariable &rvar = check.reduction_domain.domain()[i];
+            const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
-            Dim d = {v, ForType::Serial, DeviceAPI::None, pure};
+            Dim d = {v, ForType::Serial, DeviceAPI::None,
+                     pure ? Dim::Type::PureRVar : Dim::Type::ImpureRVar};
             r.schedule().dims().push_back(d);
         }
     }
@@ -645,21 +644,21 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, true};
+            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
             r.schedule().dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, true};
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         r.schedule().dims().push_back(d);
     }
 
     // If there's no recursive reference, no reduction domain, and all
     // the args are pure, then this definition completely hides
     // earlier ones!
-    if (!r.domain().defined() &&
+    if (!check.reduction_domain.defined() &&
         deleter.count == 0 &&
         pure) {
         user_warning
