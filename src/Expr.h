@@ -93,6 +93,21 @@ struct StmtNode : public BaseStmtNode {
     static EXPORT IRNodeType _type_info;
 };
 
+namespace detail {
+    
+    /// void_t polyfill
+    template <typename T>
+    using void_t = typename std::conditional<true, void, T>::type;
+    
+    /// SFINAE test for T::_type_info member
+    template <class, class = void>
+    struct has_typeinfo : std::false_type {};
+    template <class T>
+    struct has_typeinfo<T, void_t<typename T::_type_info>> : std::true_type {};
+    
+}
+
+
 /** IR nodes are passed around opaque handles to them. This is a
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
@@ -115,11 +130,17 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      *   // This is an add node
      * }
      */
-    template<typename T> const T *as() const {
-        if (ptr && ptr->type_info() == &T::_type_info) {
-            return (const T *)ptr;
-        }
-        return nullptr;
+    template <typename T,
+              typename std::enable_if<
+                       detail::has_typeinfo<T>::value,
+              int>::type = 0>
+    T const* as() const {
+        return ptr && ptr->type_info() == &T::_type_info ? (T const*)ptr : nullptr;
+    }
+    
+    template <typename T>
+    T const* as() const {
+        return nullptr; /// fallback
     }
 };
 
