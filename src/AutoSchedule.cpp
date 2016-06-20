@@ -800,8 +800,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             // TODO: Assumes estimates cannot be provided on input parameters
             // like images. Need to have a better way of doing this see if
             // input parameters can have estimates attached to them.
-            //
-            // Also make the simplification take them into account.
             bool in_env = (env.find(f_reg.first) != env.end());
 
             // Use the estimates if the lower and upper bounds cannot be determined
