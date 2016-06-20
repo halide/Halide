@@ -15,18 +15,19 @@ WEAK CpuFeatures halide_get_cpu_features() {
                            (1ULL << halide_target_feature_avx) |
                            (1ULL << halide_target_feature_f16c) |
                            (1ULL << halide_target_feature_fma) |
-                           (1ULL << halide_target_feature_avx2);
+                           (1ULL << halide_target_feature_avx2) |
+                           (1ULL << halide_target_feature_avx512);
 
     uint64_t available = 0;
 
     int32_t info[4];
     cpuid(1, info);
 
-    const bool have_sse41 = (info[2] & (1 << 19)) != 0;
-    const bool have_avx = (info[2] & (1 << 28)) != 0;
-    const bool have_f16c = (info[2] & (1 << 29)) != 0;
+    const bool have_sse41  = (info[2] & (1 << 19)) != 0;
+    const bool have_avx    = (info[2] & (1 << 28)) != 0;
+    const bool have_f16c   = (info[2] & (1 << 29)) != 0;
     const bool have_rdrand = (info[2] & (1 << 30)) != 0;
-    const bool have_fma = (info[2] & (1 << 12)) != 0;
+    const bool have_fma    = (info[2] & (1 << 12)) != 0;
     if (have_sse41) {
         available |= (1ULL << halide_target_feature_sse41);
     }
@@ -46,9 +47,15 @@ WEAK CpuFeatures halide_get_cpu_features() {
         // Call cpuid with eax=7
         int32_t info2[4];
         cpuid(7, info2);
-        const bool have_avx2 = (info2[1] & (1 << 5)) != 0;
+        const bool have_avx2   = (info2[1] & (1 << 5)) != 0;
+        // For us, avx512 means Cannonlake. Check for those features.
+        const int all_avx512_features = 0xf0230000;
+        bool have_avx512 = (info2[1] & all_avx512_features) == all_avx512_features;
         if (have_avx2) {
             available |= (1ULL << halide_target_feature_avx2);
+        }
+        if (have_avx512) {
+            available |= (1ULL << halide_target_feature_avx512);
         }
     }
     CpuFeatures features = {known, available};

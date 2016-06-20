@@ -395,6 +395,9 @@ void CodeGen_X86::visit(const Call *op) {
 }
 
 string CodeGen_X86::mcpu() const {
+    #if LLVM_VERSION >= 39
+    if (target.has_feature(Target::AVX512)) return "cannonlake";
+    #endif
     if (target.has_feature(Target::AVX2)) return "haswell";
     if (target.has_feature(Target::AVX)) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
@@ -421,6 +424,16 @@ string CodeGen_X86::mattrs() const {
         separator = ",";
     }
     #endif
+
+    #if LLVM_VERSION >= 39
+    if (target.has_feature(Target::AVX512)) {
+        // For now we assume AVX512 means skylake or cannonlake,
+        // rather than knights landing.
+        features +=
+            separator + "+avx512f,+avx512cd,+avx512bw,+avx512dq,+avx512vl,+avx512er,+avx512ifma,+avx512pf,+avx512vbmi";
+        separator = ",";
+    }
+    #endif
     return features;
 }
 
@@ -429,7 +442,9 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX)) {
+    if (target.has_feature(Target::AVX512)) {
+        return 512;
+    } else if (target.has_feature(Target::AVX)) {
         return 256;
     } else {
         return 128;

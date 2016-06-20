@@ -618,51 +618,52 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.
     halide_target_feature_avx2 = 6,  ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_fma = 7,  ///< Enable x86 FMA instruction
-    halide_target_feature_fma4 = 8,  ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c = 9,  ///< Enable x86 16-bit float support
+    halide_target_feature_avx512 = 7,  ///< Use AVX 512 instructions (the subset supported by Cannonlake). Only relevant on x86.
+    halide_target_feature_fma = 8,  ///< Enable x86 FMA instruction
+    halide_target_feature_fma4 = 9,  ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c = 10,  ///< Enable x86 16-bit float support
 
-    halide_target_feature_armv7s = 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-    halide_target_feature_no_neon = 11,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
+    halide_target_feature_armv7s = 11,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+    halide_target_feature_no_neon = 12,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
 
-    halide_target_feature_vsx = 12,  ///< Use VSX instructions. Only relevant on POWERPC.
-    halide_target_feature_power_arch_2_07 = 13,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
+    halide_target_feature_vsx = 13,  ///< Use VSX instructions. Only relevant on POWERPC.
+    halide_target_feature_power_arch_2_07 = 14,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
-    halide_target_feature_cuda = 14,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-    halide_target_feature_cuda_capability30 = 15,  ///< Enable CUDA compute capability 3.0 (Kepler)
-    halide_target_feature_cuda_capability32 = 16,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
-    halide_target_feature_cuda_capability35 = 17,  ///< Enable CUDA compute capability 3.5 (Kepler)
-    halide_target_feature_cuda_capability50 = 18,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda = 15,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30 = 16,  ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32 = 17,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35 = 18,  ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50 = 19,  ///< Enable CUDA compute capability 5.0 (Maxwell)
 
-    halide_target_feature_opencl = 19,  ///< Enable the OpenCL runtime.
-    halide_target_feature_cl_doubles = 20,  ///< Enable double support on OpenCL targets
+    halide_target_feature_opencl = 20,  ///< Enable the OpenCL runtime.
+    halide_target_feature_cl_doubles = 21,  ///< Enable double support on OpenCL targets
 
-    halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
-    halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
+    halide_target_feature_opengl = 22,  ///< Enable the OpenGL runtime.
+    halide_target_feature_openglcompute = 23, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_renderscript = 23, ///< Enable the Renderscript runtime.
+    halide_target_feature_renderscript = 24, ///< Enable the Renderscript runtime.
 
-    halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
+    halide_target_feature_user_context = 25,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_register_metadata = 25,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+    halide_target_feature_register_metadata = 26,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
 
-    halide_target_feature_matlab = 26,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+    halide_target_feature_matlab = 27,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-    halide_target_feature_profile = 27, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime = 28, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_profile = 28, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime = 29, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_metal = 29, ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw = 30, ///< For Windows compile to MinGW toolset rather then Visual Studio
+    halide_target_feature_metal = 30, ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw = 31, ///< For Windows compile to MinGW toolset rather then Visual Studio
 
-    halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_c_plus_plus_mangling = 32, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_large_buffers = 33, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
 
-    halide_target_feature_hvx_64 = 33, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128 = 34, ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62 = 35, ///< Enable Hexagon v62 architecture.
+    halide_target_feature_hvx_64 = 34, ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128 = 35, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62 = 36, ///< Enable Hexagon v62 architecture.
 
-    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_end = 37 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
