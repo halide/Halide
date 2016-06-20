@@ -125,26 +125,22 @@ public:
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<CondValue> exprs;
-        set<ReductionDomain, ReductionDomain::Compare> rdoms;
+        set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
         // (if it's an update def) or RHS per specialization. All specializations
         // of an init definition should have the same LHS.
-        // This also pushes all the reduction domains it encounters into the 'rdoms'
+        // This also pushes all the reduction domains it encounters into the 'rvars'
         // set for later use.
         vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
-            internal_assert((!is_update && !def.domain().defined()) || is_update)
-                << "Init definition shouldn't have a RDom\n";
-
             vector<vector<CondValue>> result(2); // <args, values>
 
             // Default case (no specialization)
-            vector<Expr> predicates;
-            if (def.domain().defined()) {
-                rdoms.insert(def.domain());
-                predicates = def.domain().split_predicate();
+            vector<Expr> predicates = def.split_predicate();
+            for (const ReductionVariable &rv : def.schedule().rvars()) {
+                rvars.insert(rv);
             }
 
             vector<vector<Expr>> vecs(2);
@@ -224,13 +220,13 @@ public:
         }
 
         // Computed expressions on the left and right-hand sides. This also
-        // pushes all reduction domains it encounters into the 'rdoms' set
+        // pushes all reduction domains it encounters into the 'rvars' set
         // for later use.
         void compute_exprs() {
-            // We need to clear 'exprs' and 'rdoms' first, in case compute_exprs()
+            // We need to clear 'exprs' and 'rvars' first, in case compute_exprs()
             // is called multiple times.
             exprs.clear();
-            rdoms.clear();
+            rvars.clear();
 
             bool is_update = (stage != 0);
             vector<vector<CondValue>> result;
@@ -448,14 +444,11 @@ public:
             }
 
             if (stage > 0) {
-                for (const ReductionDomain &dom : rdoms) {
-                    for (const ReductionVariable &rvar : dom.domain()) {
-                        string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
-                        s = LetStmt::make(arg + ".min", rvar.min, s);
-                        s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
-                    }
+                for (const ReductionVariable &rvar : rvars) {
+                    string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
+                    s = LetStmt::make(arg + ".min", rvar.min, s);
+                    s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
                 }
-
             }
 
             return s;
@@ -566,12 +559,10 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                for (const ReductionDomain &dom : rdoms) {
-                    for (const ReductionVariable &rvar : dom.domain()) {
-                        string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
-                        result.push(rvar.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                       Variable::make(Int(32), arg + ".max")));
-                    }
+                for (const ReductionVariable &rv : rvars) {
+                    string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
+                    result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
+                                                   Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -898,21 +889,19 @@ public:
             // And the current bounds on its reduction variables.
             if (producing >= 0 && stages[producing].stage > 0) {
                 const Stage &s = stages[producing];
-                for (const ReductionDomain &dom : s.rdoms) {
-                    for (const ReductionVariable &d : dom.domain()) {
-                        string var = s.stage_prefix + d.var;
-                        Interval in = bounds_of_inner_var(var, body);
-                        if (in.is_bounded()) {
-                            body = LetStmt::make(var + ".min", in.min, body);
-                            body = LetStmt::make(var + ".max", in.max, body);
-                        } else {
-                            // If it's not found, we're already in the
-                            // scope of the injected let. The let was
-                            // probably lifted to an outer level.
-                            Expr val = Variable::make(Int(32), var);
-                            body = LetStmt::make(var + ".min", val, body);
-                            body = LetStmt::make(var + ".max", val, body);
-                        }
+                for (const ReductionVariable &rv : s.rvars) {
+                    string var = s.stage_prefix + rv.var;
+                    Interval in = bounds_of_inner_var(var, body);
+                    if (in.is_bounded()) {
+                        body = LetStmt::make(var + ".min", in.min, body);
+                        body = LetStmt::make(var + ".max", in.max, body);
+                    } else {
+                        // If it's not found, we're already in the
+                        // scope of the injected let. The let was
+                        // probably lifted to an outer level.
+                        Expr val = Variable::make(Int(32), var);
+                        body = LetStmt::make(var + ".min", val, body);
+                        body = LetStmt::make(var + ".max", val, body);
                     }
                 }
             }
