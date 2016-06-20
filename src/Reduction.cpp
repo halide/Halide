@@ -12,19 +12,9 @@ namespace Internal {
 
 namespace {
 
-/* Split AND predicate into vector of ANDs. */
-void split_predicate_helper(Expr pred, std::vector<Expr> &result) {
-    if (const And *a = pred.as<And>()) {
-        split_predicate_helper(a->a, result);
-        split_predicate_helper(a->b, result);
-    } else if (!is_one(pred)) {
-        result.push_back(pred);
-    }
-}
-
 void check(Expr pred, std::vector<Expr> &expected) {
     std::vector<Expr> result;
-    split_predicate_helper(pred, result);
+    split_into_ands(pred, result);
     bool is_equal = true;
 
     if (result.size() != expected.size()) {
@@ -203,7 +193,7 @@ Expr ReductionDomain::predicate() const {
 
 std::vector<Expr> ReductionDomain::split_predicate() const {
     std::vector<Expr> predicates;
-    split_predicate_helper(contents->predicate, predicates);
+    split_into_ands(contents->predicate, predicates);
     return predicates;
 }
 

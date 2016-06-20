@@ -720,6 +720,7 @@ enum RuntimeKind {
     CUDA,
     OpenGL,
     OpenGLCompute,
+    Hexagon,
     MaxRuntimeKind
 };
 
@@ -748,6 +749,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
+        one_gpu.set_feature(Target::HVX_64, false);
+        one_gpu.set_feature(Target::HVX_128, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         string module_name;
@@ -774,6 +777,10 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "openglcompute";
             load_opengl();
+            break;
+        case Hexagon:
+            one_gpu.set_feature(Target::HVX_64);
+            module_name = "hexagon";
             break;
         default:
             module_name = "shared runtime";
@@ -890,6 +897,11 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
+        if (m.compiled())
+            result.push_back(m);
+    }
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        JITModule m = make_module(for_module, target, Hexagon, result, create);
         if (m.compiled())
             result.push_back(m);
     }

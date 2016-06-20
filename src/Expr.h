@@ -133,24 +133,16 @@ struct IntImm : public ExprNode<IntImm> {
         internal_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "IntImm must be 8, 16, 32, or 64-bit\n";
 
-        if (t.bits() == 32 && value >= -8 && value <= 8 &&
-            small_int_cache[(int)value + 8]) {
-            return small_int_cache[(int)value + 8];
-        }
-
-        IntImm *node = new IntImm;
-        node->type = t;
         // Normalize the value by dropping the high bits
         value <<= (64 - t.bits());
         // Then sign-extending to get them back
         value >>= (64 - t.bits());
+
+        IntImm *node = new IntImm;
+        node->type = t;
         node->value = value;
         return node;
     }
-
-private:
-    /** ints from -8 to 8 */
-    EXPORT static const IntImm *small_int_cache[17];
 };
 
 /** Unsigned integer constants */
@@ -162,11 +154,13 @@ struct UIntImm : public ExprNode<UIntImm> {
             << "UIntImm must be a scalar UInt\n";
         internal_assert(t.bits() == 1 || t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "UIntImm must be 1, 8, 16, 32, or 64-bit\n";
-        UIntImm *node = new UIntImm;
-        node->type = t;
+
         // Normalize the value by dropping the high bits
         value <<= (64 - t.bits());
         value >>= (64 - t.bits());
+
+        UIntImm *node = new UIntImm;
+        node->type = t;
         node->value = value;
         return node;
     }
@@ -267,7 +261,8 @@ enum class DeviceAPI {
     GLSL,
     Renderscript,
     OpenGLCompute,
-    Metal
+    Metal,
+    Hexagon
 };
 
 /** An array containing all the device apis. Useful for iterating

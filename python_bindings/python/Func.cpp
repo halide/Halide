@@ -543,8 +543,8 @@ void defineFunc()
                    "update definition. Returns a Tuple with one element for "
                    "functions that return a single value.");
 
-    func_class.def("reduction_domain", &Func::reduction_domain, (p::arg("self"), p::arg("idx") = 0),
-                   "Get the reduction domain for an update definition, if there is one.");
+    func_class.def("rvars", &Func::rvars, (p::arg("self"), p::arg("idx") = 0),
+                   "Get the reduction variables for an update definition, if there is one.");
 
     func_class
             .def("has_update_definition", &Func::has_update_definition, p::arg("self"),

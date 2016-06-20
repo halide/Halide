@@ -37,21 +37,48 @@ struct VarOrRVar {
         else return var.name();
     }
 
-    const Var var;
-    const RVar rvar;
-    const bool is_rvar;
+    Var var;
+    RVar rvar;
+    bool is_rvar;
 };
+
+namespace Internal {
+struct Split;
+struct StorageDim;
+}
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
     Internal::Definition definition;
+    std::string stage_name;
+    std::vector<Var> dim_vars; // Pure Vars of the Function (from the init definition)
+    std::vector<Internal::StorageDim> storage_dims;
+
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
-    void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact, TailStrategy tail);
-    std::string stage_name;
+    void split(const std::string &old, const std::string &outer, const std::string &inner,
+               Expr factor, bool exact, TailStrategy tail);
+    void remove(const std::string &var);
+    Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
+
 public:
-    Stage(Internal::Definition d, const std::string &n) : definition(d), stage_name(n) {
+    Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
+          const std::vector<Internal::StorageDim> &sdims)
+            : definition(d), stage_name(n), dim_vars(args), storage_dims(sdims) {
+        internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
+    }
+
+    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
+          const std::vector<Internal::StorageDim> &sdims)
+            : definition(d), stage_name(n), storage_dims(sdims) {
+        definition.schedule().touched() = true;
+
+        std::vector<Var> dim_vars(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            dim_vars[i] = Var(args[i]);
+        }
+        internal_assert(definition.args().size() == dim_vars.size());
     }
 
     /** Return the current Schedule associated with this Stage.  For
@@ -65,6 +92,78 @@ public:
 
     /** Return the name of this stage, e.g. "f.update(2)" */
     EXPORT const std::string &name() const;
+
+    /** Calling rfactor() on an associative update definition a Func will split
+     * the update into an intermediate which computes the partial results and
+     * replace the current update definition with a new definition which merges
+     * the partial results. If called on a init/pure definition, this will
+     * throw an error. rfactor() will automatically infer the associative reduction
+     * operator and identity of the operator. If it can't prove the operation
+     * is associative or if it cannot find an identity for that operator, this
+     * will throw an error.
+     *
+     * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
+     * The rvars not listed in 'preserved' are removed from the original Func and
+     * are lifted to the intermediate Func. The remaining rvars (the ones in
+     * 'preserved') are made pure in the intermediate Func. The intermediate Func's
+     * update definition inherits all scheduling directives (e.g. split,fuse, etc.)
+     * applied to the original Func's update definition. The loop order of the
+     * intermediate Func's update definition is the same as the original, albeit
+     * the lifted RVars are replaced by the new pure Vars. The loop order of the
+     * intermediate Func's init definition from innermost to outermost is the args'
+     * order of the original Func's init definition followed by the new pure Vars.
+     *
+     * The intermediate Func also inherits storage order from the original Func
+     * with the new pure Vars added to the outermost.
+     *
+     * For example, f.update(0).rfactor({{r.y, u}}) would rewrite a pipeline like this:
+     \code
+     f(x, y) = 0;
+     f(x, y) += g(r.x, r.y);
+     \endcode
+     * into a pipeline like this:
+     \code
+     f_intm(x, y, u) = 0;
+     f_intm(x, y, u) += g(r.x, u);
+
+     f(x, y) = 0;
+     f(x, y) = f_intm(x, y, r.y);
+     \endcode
+     *
+     * This has a variety of uses. You can use it to split computation of an associative reduction:
+     \code
+     f(x, y) = 10;
+     RDom r(0, 96);
+     f(x, y) = max(f(x, y), g(x, y, r.x));
+     f.update(0).split(r.x, rxo, rxi, 8).reorder(y, x).parallel(x);
+     f.update(0).rfactor({{rxo, u}}).compute_root().parallel(u).update(0).parallel(u);
+     \endcode
+     *
+     *, which is equivalent to:
+     \code
+     parallel for u = 0 to 11:
+       for y:
+         for x:
+           f_intm(x, y, u) = -inf
+     parallel for x:
+       for y:
+         parallel for u = 0 to 11:
+           for rxi = 0 to 7:
+             f_intm(x, y, u) = max(f_intm(x, y, u), g(8*u + rxi))
+     for y:
+       for x:
+         f(x, y) = 10
+     parallel for x:
+       for y:
+         for rxo = 0 to 11:
+           f(x, y) = max(f(x, y), f_intm(x, y, u))
+     \endcode
+     *
+     */
+    // @{
+    EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
+    EXPORT Func rfactor(RVar r, Var v);
+    // @}
 
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
@@ -132,6 +231,8 @@ public:
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &allow_race_conditions();
+
+    EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
     // @}
 };
 
@@ -525,7 +626,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
@@ -739,9 +840,9 @@ public:
      * functions that return a single value. */
     EXPORT Tuple update_values(int idx = 0) const;
 
-    /** Get the reduction domain for an update definition, if there is
+    /** Get the RVars of the reduction domain for an update definition, if there is
      * one. */
-    EXPORT RDom reduction_domain(int idx = 0) const;
+    EXPORT std::vector<RVar> rvars(int idx = 0) const;
 
     /** Does this function have at least one update definition? */
     EXPORT bool has_update_definition() const;
@@ -1315,6 +1416,10 @@ public:
     /** Schedule for execution as GLSL kernel. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
+    /** Schedule for execution on Hexagon. When a loop is marked with
+     * Hexagon, that loop is executed on a Hexagon DSP. */
+    EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
+
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
      * example, foo.reorder_storage(y, x) tells Halide to use
@@ -1785,6 +1890,9 @@ inline void schedule_scalar(Func f) {
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
         f.gpu_single_thread();
+    }
+    if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
+        f.hexagon();
     }
 }
 

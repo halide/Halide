@@ -191,8 +191,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
         Value *kernel_src_ptr =
-            CodeGen_CPU::create_constant_binary_blob(kernel_src,
-                                                     "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
+            CodeGen_CPU::create_binary_blob(kernel_src,
+                                            "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
         if (f.args[0].name == "__user_context") {
             // The user context is first argument of the function.
@@ -206,13 +206,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         if (debug::debug_level >= 2) {
             user_context->dump();
         }
-        Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
+        Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
         vector<Value *> init_kernels_args = {user_context, module_state, kernel_src_ptr, kernel_size};
         Value *result = builder->CreateCall(init, init_kernels_args);
-        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
         CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     }
 
@@ -253,7 +253,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32->getPointerTo());
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32_t->getPointerTo());
         Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
         Value *gpu_num_padded_attributes  = zero_int32;
@@ -279,7 +279,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // right type
             gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen_LLVM::f32->getPointerTo());
+                                                           CodeGen_LLVM::f32_t->getPointerTo());
         }
 
         // compute a closure over the state passed into the kernel
@@ -340,10 +340,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
-        llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
+        llvm::Type *target_size_t_type = (target.bits == 32) ? i32_t : i64_t;
 
         // build the kernel arguments array
-        llvm::PointerType *arg_t = i8->getPointerTo(); // void*
+        llvm::PointerType *arg_t = i8_t->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
         // nullptr-terminated list
@@ -363,7 +363,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 num_args+1, false,
                 kernel_name + "_arg_sizes");
 
-        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8, num_args+1);
+        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8_t, num_args+1);
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(
                 gpu_arg_is_buffer_arr_type,
@@ -424,7 +424,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            builder->CreateStore(ConstantInt::get(i8, closure_args[i].is_buffer),
+            builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
                                  builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
                                     gpu_arg_is_buffer_arr_type,
@@ -450,7 +450,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                 gpu_arg_sizes_arr,
                                 0,
                                 num_args));
-        builder->CreateStore(ConstantInt::get(i8, 0),
+        builder->CreateStore(ConstantInt::get(i8_t, 0),
                              builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
                                 gpu_arg_is_buffer_arr_type,
@@ -511,7 +511,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
-        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
 
         CodeGen_CPU::create_assertion(did_succeed,
                                       // Should have already called halide_error inside the gpu runtime
@@ -540,48 +540,6 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
 
     return module_state;
 }
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
-    CodeGen_CPU::visit(op);
-    if (op->name == "halide_device_malloc" || op->name == "halide_copy_to_device") {
-        // Register a destructor for this buffer if this is the first
-        // device_malloc or copy_to_device for it.
-        internal_assert(op->args.size() == 2);
-        const Variable *buf_var = op->args[0].as<Variable>();
-        internal_assert(buf_var);
-        const string &buf_name = buf_var->name;
-        // Put the destructor in the symbol table as
-        // func_name.buffer_gpu_destructor.
-        internal_assert(ends_with(buf_name, ".buffer"));
-        string destructor_name = buf_name + "_gpu_destructor";
-
-        // We may already have a destructor for this allocation, if
-        // this is one of many copy_to_device calls.
-        if (!sym_exists(destructor_name)) {
-            llvm::Value *buf = sym_get(buf_name);
-            // Register a destructor that frees the device allocation.
-            llvm::Value *destructor =
-                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf, CodeGen_LLVM::OnError);
-            sym_push(destructor_name, destructor);
-        }
-    }
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
-    CodeGen_CPU::visit(op);
-
-    // Also free gpu memory by triggering the destructor
-    string destructor_name = op->name + ".buffer_gpu_destructor";
-    if (sym_exists(destructor_name)) {
-        Value *d = sym_get(destructor_name);
-        CodeGen_LLVM::trigger_destructor(module->getFunction("halide_device_free_as_destructor"), d);
-        sym_pop(destructor_name);
-    }
-}
-
-
 
 // Force template instantiation.
 #ifdef WITH_X86

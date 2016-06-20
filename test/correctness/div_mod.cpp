@@ -301,6 +301,9 @@ bool div_mod(int vector_width) {
     }
     if (target.has_gpu_feature()) {
         f.compute_root().gpu_tile(x, y, 16, 16);
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // TODO: Null pointer dereference on simulator?
+        // f.compute_root().hexagon();
     }
     Realization R = f.realize(WIDTH, HEIGHT, target);
     Image<T> q(R[0]);

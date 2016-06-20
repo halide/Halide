@@ -151,6 +151,7 @@ protected:
     static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
+    static bool llvm_Hexagon_enabled;
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
@@ -202,7 +203,7 @@ protected:
 
     /** Some useful llvm types */
     // @{
-    llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
+    llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
     llvm::StructType *buffer_t_type, *metadata_t_type, *argument_t_type, *scalar_value_t_type;
     // @}
 
@@ -297,7 +298,7 @@ protected:
     llvm::Constant *create_string_constant(const std::string &str);
 
     /** Put a binary blob in the module as a global variable and return a pointer to it. */
-    llvm::Constant *create_constant_binary_blob(const std::vector<char> &data, const std::string &name);
+    llvm::Constant *create_binary_blob(const std::vector<char> &data, const std::string &name, bool constant = true);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
@@ -439,7 +440,7 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
+    virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -458,14 +459,14 @@ protected:
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
      * if you ask for more lanes than the vector has. */
-    llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
+    virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
-    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+    virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
     /** Create an LLVM shuffle vectors instruction. */
-    llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
-                                 const std::vector<int> &indices);
+    virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
+                                         const std::vector<int> &indices);
     /** Shorthand for shuffling a vector with an undef vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 

@@ -23,10 +23,10 @@ blur.h blur.a: halide_blur
 ycc.h ycc.a: halide_ycc
 	HL_TARGET=host-opengl-debug ./halide_ycc
 
-halide_blur: halide_blur.a $(HALIDE_LIB)
+halide_blur: halide_blur.cpp $(HALIDE_LIB)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
 
-halide_ycc: halide_ycc.a $(HALIDE_LIB)
+halide_ycc: halide_ycc.cpp $(HALIDE_LIB)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
 
 .PHONY: clean

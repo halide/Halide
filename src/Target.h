@@ -22,13 +22,13 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl} os;
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, QuRT, NoOS} os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, POWERPC} arch;
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon, POWERPC} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -71,13 +71,15 @@ struct Target {
         MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
+        HVX_64 = halide_target_feature_hvx_64,
+        HVX_128 = halide_target_feature_hvx_128,
+        HVX_v62 = halide_target_feature_hvx_v62,
         JavaScript = halide_target_feature_javascript,
         JavaScript_SIMD = halide_target_feature_javascript_simd,
         JavaScript_V8 = halide_target_feature_javascript_v8,
         JavaScript_SpiderMonkey = halide_target_feature_javascript_spidermonkey,
         FeatureEnd = halide_target_feature_end
     };
-
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
@@ -223,6 +225,20 @@ struct Target {
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
         const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
         const bool is_integer = t.is_int() || t.is_uint();
+        const int data_size = t.bytes();
+
+        if (arch == Target::Hexagon) {
+            if (is_integer) {
+                // HVX is either 64 or 128 byte vector size.
+                if (has_feature(Halide::Target::HVX_128)) {
+                    return 128 / data_size;
+                } else if (has_feature(Halide::Target::HVX_64)) {
+                    return 64 / data_size;
+                }
+            } else {
+                return 1;
+            }
+        }
 
         // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
         // However, AVX has a very limited complement of integer instructions;
@@ -230,7 +246,6 @@ struct Target {
         // better performance. (AVX2 does have good integer operations for 256-bit
         // registers.)
         const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        const int data_size = t.bytes();
         return vector_byte_size / data_size;
     }
 
