@@ -9,8 +9,6 @@
 
 #define INLINE inline __attribute__((always_inline))
 
-#define ALIGNMENT 4096
-
 #define O_TRUNC 00001000
 #define O_CREAT 00000100
 #define O_EXCL  00000200
@@ -354,6 +352,15 @@ WEAK int halide_hexagon_device_release(void *user_context) {
     return 0;
 }
 
+// When allocations for Hexagon are at least as large as this
+// threshold, use an ION allocation (to get zero copy). If the
+// allocation is smaller, use a standard allocation instead.  This is
+// done because allocating an entire page for a small allocation is
+// wasteful, and the copy is not significant.  Additionally, the
+// FastRPC interface can probably do a better job with many small
+// arguments than simply mapping the pages.
+static const int min_ion_allocation_size = 4096;
+
 WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
@@ -397,20 +404,32 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    debug(user_context) << "    ion_alloc len=" << (uint64_t)size << ", heap_id=" << heap_id << " -> ";
-    int ion_fd;
-    void *ion = ion_alloc(user_context, size, heap_id, &ion_fd);
-    debug(user_context) << "        " << ion << ", " << ion_fd << "\n";
-    if (!ion) {
-        error(user_context) << "ion_alloc failed\n";
-        return -1;
-    }
+    void *ion;
+    if (size >= min_ion_allocation_size) {
+        debug(user_context) << "    ion_alloc len=" << (uint64_t)size << ", heap_id=" << heap_id << " -> ";
+        int ion_fd;
+        ion = ion_alloc(user_context, size, heap_id, &ion_fd);
+        debug(user_context) << "        " << ion << " (fd=" << ion_fd << ")\n";
+        if (!ion) {
+            error(user_context) << "ion_alloc failed\n";
+            return -1;
+        }
 
-    if (remote_register_buf) {
-        // If we have this symbol, it means that we can register the
-        // buffer to get zero copy behavior with the DSP.
-        debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=" << ion_fd << "\n";
-        remote_register_buf(ion, size, ion_fd);
+        if (remote_register_buf) {
+            // If we have this symbol, it means that we can register the
+            // buffer to get zero copy behavior with the DSP.
+            debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (uint64_t)size
+                                << " fd=" << ion_fd << "\n";
+            remote_register_buf(ion, size, ion_fd);
+        }
+    } else {
+        debug(user_context) << "    halide_malloc size=" << (uint64_t)size << " -> ";
+        ion = halide_malloc(user_context, size);
+        debug(user_context) << "        " << ion << "\n";
+        if (!ion) {
+            error(user_context) << "halide_malloc failed\n";
+            return -1;
+        }
     }
 
     int err = halide_hexagon_wrap_device_handle(user_context, buf, ion, size);
@@ -443,16 +462,22 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    uint64_t size = halide_hexagon_get_device_size(user_context, buf);
     void *ion = halide_hexagon_detach_device_handle(user_context, buf);
-    debug(user_context) << "    ion_free ion=" << ion << "\n";
-    ion_free(user_context, ion);
+    if (size >= min_ion_allocation_size) {
+        debug(user_context) << "    ion_free ion=" << ion << "\n";
+        ion_free(user_context, ion);
 
-    if (remote_register_buf) {
-        // If we have this symbol, we registered the buffer, so now we
-        // unregister it (by setting fd = -1).
-        size_t size = buf_size(user_context, buf);
-        debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=-1\n";
-        remote_register_buf(ion, size, -1);
+        if (remote_register_buf) {
+            // If we have this symbol, we registered the buffer, so now we
+            // unregister it (by setting fd = -1).
+            size_t size = buf_size(user_context, buf);
+            debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=-1\n";
+            remote_register_buf(ion, size, -1);
+        }
+    } else {
+        debug(user_context) << "    halide_free ion=" << ion << "\n";
+        halide_free(user_context, ion);
     }
 
     if (buf->host == ion) {
