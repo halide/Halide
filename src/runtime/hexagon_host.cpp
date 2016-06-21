@@ -2,8 +2,6 @@
 #include "device_interface.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "printer.h"
-#include "mini_ion.h"
-#include "mini_mman.h"
 #include "cuda_opencl_shared.h"
 #include "scoped_mutex_lock.h"
 
@@ -37,13 +35,20 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
                              remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
-typedef void (*remote_register_buf_fn)(void *, int, int);
+
+typedef void (*host_malloc_init_fn)();
+typedef void* (*host_malloc_fn)(size_t);
+typedef void (*host_free_fn)(void *);
 
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
-WEAK remote_register_buf_fn remote_register_buf = NULL;
+
+WEAK host_malloc_init_fn host_malloc_init = NULL;
+WEAK host_malloc_init_fn host_malloc_deinit = NULL;
+WEAK host_malloc_fn host_malloc = NULL;
+WEAK host_free_fn host_free = NULL;
 
 template <typename T>
 void get_symbol(void *user_context, void *host_lib, const char* name, T &sym) {
@@ -85,17 +90,16 @@ WEAK int init_hexagon_runtime(void *user_context) {
     get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
     if (!remote_release_kernels) return -1;
 
-    // There's an optional symbol in libadsprpc.so that enables
-    // buffers to be zero copy that we *try* to load.
-    debug(user_context) << "    halide_load_library('libadsprpc.so') -> \n";
-    void *adsprpc_lib = halide_load_library("libadsprpc.so");
-    debug(user_context) << "        " << adsprpc_lib << "\n";
-    if (adsprpc_lib) {
-        debug(user_context) << "    halide_get_library_symbol('remote_register_buf') -> \n";
-        remote_register_buf = (remote_register_buf_fn)halide_get_library_symbol(adsprpc_lib, "remote_register_buf");
-        debug(user_context) << "        " << (void *)remote_register_buf << "\n";
-        // This symbol is optional, don't error if it isn't available.
-    }
+    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
+    if (!host_malloc_init) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
+    if (!host_malloc_deinit) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc", host_malloc);
+    if (!host_malloc) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_host_free", host_free);
+    if (!host_free) return -1;
+
+    host_malloc_init();
 
     return 0;
 }
@@ -114,7 +118,6 @@ WEAK module_state *state_list = NULL;
 }}}}  // namespace Halide::Runtime::Internal::Hexagon
 
 using namespace Halide::Runtime::Internal;
-using namespace Halide::Runtime::Internal::Ion;
 using namespace Halide::Runtime::Internal::Hexagon;
 
 extern "C" {
@@ -374,9 +377,6 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    // System heap... should we be using a different heap for Hexagon?
-    unsigned int heap_id = 25;
-
     size_t size = buf_size(user_context, buf);
 
     // Hexagon code generation generates clamped ramp loads in a way
@@ -406,21 +406,12 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
 
     void *ion;
     if (size >= min_ion_allocation_size) {
-        debug(user_context) << "    ion_alloc len=" << (uint64_t)size << ", heap_id=" << heap_id << " -> ";
-        int ion_fd;
-        ion = ion_alloc(user_context, size, heap_id, &ion_fd);
-        debug(user_context) << "        " << ion << " (fd=" << ion_fd << ")\n";
+        debug(user_context) << "    host_malloc len=" << (uint64_t)size << " -> ";
+        ion = host_malloc(size);
+        debug(user_context) << "        " << ion << "\n";
         if (!ion) {
-            error(user_context) << "ion_alloc failed\n";
+            error(user_context) << "host_malloc failed\n";
             return -1;
-        }
-
-        if (remote_register_buf) {
-            // If we have this symbol, it means that we can register the
-            // buffer to get zero copy behavior with the DSP.
-            debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (uint64_t)size
-                                << " fd=" << ion_fd << "\n";
-            remote_register_buf(ion, size, ion_fd);
         }
     } else {
         debug(user_context) << "    halide_malloc size=" << (uint64_t)size << " -> ";
@@ -434,7 +425,11 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
 
     int err = halide_hexagon_wrap_device_handle(user_context, buf, ion, size);
     if (err != 0) {
-        ion_free(user_context, ion);
+        if (size >= min_ion_allocation_size) {
+            host_free(ion);
+        } else {
+            halide_free(user_context, ion);
+        }
         return err;
     }
 
@@ -465,16 +460,8 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     uint64_t size = halide_hexagon_get_device_size(user_context, buf);
     void *ion = halide_hexagon_detach_device_handle(user_context, buf);
     if (size >= min_ion_allocation_size) {
-        debug(user_context) << "    ion_free ion=" << ion << "\n";
-        ion_free(user_context, ion);
-
-        if (remote_register_buf) {
-            // If we have this symbol, we registered the buffer, so now we
-            // unregister it (by setting fd = -1).
-            size_t size = buf_size(user_context, buf);
-            debug(user_context) << "    remote_register_buf buf=" << ion << " size=" << (int)size << " fd=-1\n";
-            remote_register_buf(ion, size, -1);
-        }
+        debug(user_context) << "    host_free ion=" << ion << "\n";
+        host_free(ion);
     } else {
         debug(user_context) << "    halide_free ion=" << ion << "\n";
         halide_free(user_context, ion);
