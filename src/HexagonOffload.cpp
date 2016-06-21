@@ -300,7 +300,7 @@ public:
 
         hex_command += " ";
         hex_command += tmp_bitcode.pathname();
-        hex_command += " -fPIC -O3 -Wno-override-module -shared ";
+        hex_command += " -fPIC -O3 -mllvm -lsr-complexity-limit=65535 -Wno-override-module -shared ";
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
