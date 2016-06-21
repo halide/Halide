@@ -535,8 +535,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
-  android_ion \
-  android_mman \
   android_opengl_context \
   android_tempfile \
   arm_cpu_features \
@@ -546,7 +544,6 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
-  fake_ion \
   fake_thread_pool \
   float16_t \
   gcd_thread_pool \
@@ -555,7 +552,6 @@ RUNTIME_CPP_COMPONENTS = \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
-  linux_mman \
   linux_opengl_context \
   matlab \
   metadata \
