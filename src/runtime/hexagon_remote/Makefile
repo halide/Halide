@@ -70,7 +70,7 @@ CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch
 CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
-CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES}
+CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
 	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc \
@@ -98,7 +98,7 @@ bin/%/halide_hexagon_remote_skel.o: bin/src/halide_hexagon_remote_skel.c
 
 bin/%/halide_remote.o: halide_remote.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -fno-exceptions -c halide_remote.cpp -o $@
 
 bin/%/halide_host.o: halide_host.cpp
 	mkdir -p $(@D)
