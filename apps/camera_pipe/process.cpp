@@ -5,12 +5,7 @@
 #include "curved.h"
 #include "halide_image.h"
 #include "halide_image_io.h"
-#include "halide_image_info.h"
 #include "halide_malloc_trace.h"
-
-#ifdef HL_HEXAGON_DEVICE
-#include "HalideRuntimeHexagonHost.h"
-#endif
 
 #include <cstdint>
 #include <cstdio>
@@ -19,18 +14,10 @@
 
 using namespace Halide::Tools;
 
-#ifdef HALIDE_NOPNG
-#define IMG_EIN ".pgm"
-#define IMG_EXT ".ppm"
-#else
-#define IMG_EIN ".png"
-#define IMG_EXT ".png"
-#endif
-
 int main(int argc, char **argv) {
     if (argc < 7) {
         printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
-               "e.g. ./process raw" IMG_EIN " 3200 2 50 5 output" IMG_EXT);
+               "e.g. ./process raw.png 3200 2 50 5 output.png");
         return 0;
     }
 
@@ -75,38 +62,12 @@ int main(int argc, char **argv) {
 
     double best;
 
-    input.set_host_dirty();
-    output.set_host_dirty();
-    matrix_3200.set_host_dirty();
-    matrix_7000.set_host_dirty();
-
-#ifdef HL_HEXAGON_DEVICE
-    auto t1_in = std::chrono::high_resolution_clock::now();
-    input.copy_to_device(halide_hexagon_device_interface());
-    output.copy_to_device(halide_hexagon_device_interface());
-    matrix_3200.copy_to_device(halide_hexagon_device_interface());
-    matrix_7000.copy_to_device(halide_hexagon_device_interface());
-    auto t2_in = std::chrono::high_resolution_clock::now();
-    double dt_in = std::chrono::duration_cast<std::chrono::microseconds>(t2_in - t1_in).count() / 1e6;
-    fprintf(stderr, "Copy to device %gus\n", dt_in * 1e6);
-#endif
-
-    fprintf(stderr, "Running benchmark\n");
     best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast, blackLevel, whiteLevel,
                input, matrix_3200, matrix_7000,
                output);
     });
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
-
-#ifdef HL_HEXAGON_DEVICE
-    auto t1_out = std::chrono::high_resolution_clock::now();
-    output.copy_to_host();
-    auto t2_out = std::chrono::high_resolution_clock::now();
-    double dt_out = std::chrono::duration_cast<std::chrono::microseconds>(t2_out - t1_out).count() / 1e6;
-    fprintf(stderr, "Copy to host %gus\n", dt_out * 1e6);
-#endif
-
     fprintf(stderr, "output: %s\n", argv[6]);
     save_image(output, argv[6]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
@@ -116,8 +77,8 @@ int main(int argc, char **argv) {
         FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
     });
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    fprintf(stderr, "output_c: fcam_c%s\n", IMG_EXT);
-    save_image(output_c, "fcam_c" IMG_EXT);
+    fprintf(stderr, "output_c: fcam_c.png\n");
+    save_image(output_c, "fcam_c.png");
     fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
 
     Image<uint8_t> output_asm(output.width(), output.height(), output.channels());
@@ -125,8 +86,8 @@ int main(int argc, char **argv) {
         FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
     });
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    fprintf(stderr, "output_asm: fcam_arm%s\n", IMG_EXT);
-    save_image(output_asm, "fcam_arm" IMG_EXT);
+    fprintf(stderr, "output_asm: fcam_arm.png\n");
+    save_image(output_asm, "fcam_arm.png");
     fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
