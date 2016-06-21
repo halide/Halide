@@ -38,12 +38,13 @@ class PipelineContext {
     int result;
 
     void thread_main() {
+        return;
         while (true) {
             qurt_cond_wait(&wakeup_thread, &mutex);
             if (!function) {
                 break;
             }
-            result = 10; //function(args);
+            result = function(args);
             qurt_mutex_unlock(&mutex);
             qurt_cond_signal(&wakeup_caller);
         }
@@ -71,7 +72,7 @@ public:
         qurt_thread_create(&thread_handle, &thread_attr, redirect_main, this);
     }
 
-    void release() {
+    void deinit() {
         // Running a null function kills the thread.
         run(NULL, NULL);
 
@@ -79,7 +80,6 @@ public:
         qurt_thread_join(thread_handle, &status);
 
         free(stack);
-        stack = NULL;
     }
 
     int run(pipeline_argv_t function, void **args) {
@@ -154,8 +154,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(void *, const char *));
 
 int context_count = 0;
-
-PipelineContext run_context;
+PipelineContext *run_context;
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
@@ -234,7 +233,8 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 
         const int stack_alignment = 128;
         const int stack_size = 1024 * 1024;
-        run_context.init(stack_alignment, stack_size);
+        run_context = (PipelineContext *)malloc(sizeof(PipelineContext));
+        run_context->init(stack_alignment, stack_size);
     }
 
     context_count++;
@@ -250,7 +250,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
                               buffer *output_buffersPtrs, int output_buffersLen,
                               const buffer *input_scalarsPtrs, int input_scalarsLen) {
-    return 13;
+    return 888;
 
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
@@ -285,14 +285,15 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     }
 
     // Call the pipeline and return the result.
-    return run_context.run(pipeline, args);
+    return run_context->run(pipeline, args);
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     dlclose(reinterpret_cast<void*>(module_ptr));
 
     if (context_count-- == 0) {
-        run_context.release();
+        run_context->deinit();
+        free(run_context);
 
         HAP_power_request(0, 0, -1);
     }
