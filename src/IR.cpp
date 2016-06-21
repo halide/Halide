@@ -5,37 +5,6 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
-
-const IntImm *make_immortal_int(int x) {
-    IntImm *i = new IntImm;
-    i->ref_count.increment();
-    i->type = Int(32);
-    i->value = x;
-    return i;
-}
-
-}
-
-const IntImm *IntImm::small_int_cache[] = {make_immortal_int(-8),
-                                           make_immortal_int(-7),
-                                           make_immortal_int(-6),
-                                           make_immortal_int(-5),
-                                           make_immortal_int(-4),
-                                           make_immortal_int(-3),
-                                           make_immortal_int(-2),
-                                           make_immortal_int(-1),
-                                           make_immortal_int(0),
-                                           make_immortal_int(1),
-                                           make_immortal_int(2),
-                                           make_immortal_int(3),
-                                           make_immortal_int(4),
-                                           make_immortal_int(5),
-                                           make_immortal_int(6),
-                                           make_immortal_int(7),
-                                           make_immortal_int(8)};
-
-
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
     internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
@@ -652,6 +621,7 @@ template<> IRNodeType StmtNode<Evaluate>::_type_info = {};
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::shuffle_vector = "shuffle_vector";
 Call::ConstString Call::interleave_vectors = "interleave_vectors";
+Call::ConstString Call::concat_vectors = "concat_vectors";
 Call::ConstString Call::reinterpret = "reinterpret";
 Call::ConstString Call::bitwise_and = "bitwise_and";
 Call::ConstString Call::bitwise_not = "bitwise_not";
@@ -695,6 +665,7 @@ Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
+Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
 

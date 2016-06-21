@@ -41,17 +41,18 @@ inline bool uses_extern_image(Stmt s) {
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e)
-        : outputs(outputs), env(e) {}
+    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e, const Target &t)
+        : outputs(outputs), env(e), target(t) {}
     Scope<int> scope;
 private:
     const vector<Function> &outputs;
     const map<string, Function> &env;
+    const Target &target;
     Scope<int> realizations;
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       bool internal) {
-        Expr idx = 0;
+        Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
@@ -75,7 +76,11 @@ private:
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
             for (size_t i = 0; i < args.size(); i++) {
-                idx += (args[i] - mins[i]) * strides[i];
+                if (target.has_feature(Target::LargeBuffers)) {
+                    idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
+                } else {
+                    idx += (args[i] - mins[i]) * strides[i];
+                }
             }
         } else {
             // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
@@ -83,10 +88,15 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = 0;
+            Expr base = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
             for (size_t i = 0; i < args.size(); i++) {
-                idx += args[i] * strides[i];
-                base += mins[i] * strides[i];
+                if (target.has_feature(Target::LargeBuffers)) {
+                    idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
+                    base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
+                } else {
+                    idx += args[i] * strides[i];
+                    base += mins[i] * strides[i];
+                }
             }
             idx -= base;
         }
@@ -387,8 +397,9 @@ private:
 
 Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
-                        const map<string, Function> &env) {
-    return FlattenDimensions(outputs, env).mutate(s);
+                        const map<string, Function> &env,
+                        const Target &target) {
+    return FlattenDimensions(outputs, env, target).mutate(s);
 }
 
 }

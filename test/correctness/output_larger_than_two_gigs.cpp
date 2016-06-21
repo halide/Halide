@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     identity_uint8(x, y, z) = cast<uint8_t>(42);
 
     uint8_t c[4096];
-    memset(c, 42, sizeof(c));
+    memset(c, 99, sizeof(c));
 
     halide_buffer_t buf = {0};
     halide_dimension_t shape[] = {{0, 4096, 1},
@@ -30,8 +30,23 @@ int main(int argc, char **argv) {
     identity_uint8.set_error_handler(&halide_error);
 
     Buffer output_buf(&buf);
-    identity_uint8.realize(output_buf);
+    Target t = get_jit_target_from_environment();
 
+    if (t.bits != 32) {
+        identity_uint8.compile_jit(t.with_feature(Target::LargeBuffers));
+        identity_uint8.realize(output_buf);
+        assert(!error_occurred);
+
+        Image<uint8_t> output = output_buf;
+        assert(output(0, 0, 0) == 42);
+        assert(output(output.dim(0).extent() - 1,
+                      output.dim(1).extent() - 1,
+                      output.dim(2).extent() - 1) == 42);
+    }
+
+    identity_uint8.compile_jit(t);
+    identity_uint8.realize(output_buf);
     assert(error_occurred);
+
     printf("Success!\n");
 }

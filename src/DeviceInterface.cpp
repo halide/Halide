@@ -104,8 +104,9 @@ int halide_device_malloc(void *user_context, struct halide_buffer_t *buf, const 
 int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
     user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_device_free\n";
     // Skip if there is no device buffer.
-    if (buf->device == 0)
+    if (buf->device == 0) {
         return 0;
+    }
     Target target(get_host_target());
     int (*fn)(void *user_context, struct halide_buffer_t *buf);
     if (lookup_runtime_routine("halide_device_free", target, fn)) {

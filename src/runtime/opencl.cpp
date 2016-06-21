@@ -491,8 +491,8 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
     buf->device_interface->release_module();
     buf->device_interface = NULL;
     if (result != CL_SUCCESS) {
-        error(user_context) << "CL: clReleaseMemObject failed: "
-                            << get_opencl_error_name(result);
+        // We may be called as a destructor, so don't raise an error
+        // here.
         return result;
     }
 

@@ -22,7 +22,6 @@ int main(int argc, char **argv) {
     halide_set_error_handler(&my_halide_error);
 
     halide_buffer_t in = {0}, out = {0};
-
     halide_dimension_t shape[] = {{0, 64, 1},
                                   {0, 64, 64}};
 
@@ -73,6 +72,12 @@ int main(int argc, char **argv) {
     correct = halide_error_code_buffer_allocation_too_large;
     check(result, correct);
     in.dim = shape;
+
+    // strides and extents are 32-bit signed integers. It's
+    // therefore impossible to make a buffer_t that can address
+    // more than 2^31 * 2^31 * dimensions elements, which is less
+    // than 2^63, so there's no way a Halide pipeline can return
+    // the above two error codes in 64-bit code.
 
     // stride[0] is constrained to be 1
     halide_dimension_t wrong_stride[] = {{0, 64, 2},

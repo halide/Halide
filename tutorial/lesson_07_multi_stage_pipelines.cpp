@@ -127,7 +127,8 @@ int main(int argc, char **argv) {
         //
         // These are important to use for other boundary conditions,
         // because they are expressed in the way that Halide can best
-        // understand and optimize.
+        // understand and optimize. When used correctly they are as
+        // cheap as having no boundary condition at all.
 
         // Upgrade it to 16-bit, so we can do math without it
         // overflowing. This time we'll refer to our new Func

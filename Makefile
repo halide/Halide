@@ -27,6 +27,7 @@ PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
+
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
@@ -45,6 +46,7 @@ BUILD_BIT_SIZE ?=
 GENGEN_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 # All WITH_* flags are either empty or not-empty. They do not behave
@@ -55,6 +57,11 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
+ifeq ($(LLVM_VERSION_TIMES_10),39)
+WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
+else
+WITH_HEXAGON ?=
+endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
@@ -109,6 +116,9 @@ AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
+HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
+HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
+
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 
@@ -116,6 +126,7 @@ CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
+CXX_FLAGS += $(HEXAGON_CXX_FLAGS)
 CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
@@ -140,7 +151,7 @@ print-%:
 	@echo '$*=$($*)'
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
 LLVM_SHARED_LIBS =
 else
 LLVM_STATIC_LIBS =
@@ -256,7 +267,9 @@ TMP_DIR     = $(BUILD_DIR)/tmp
 SOURCE_FILES = \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
+  AlignLoads.cpp \
   AllocationBoundsInference.cpp \
+  Associativity.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
@@ -266,6 +279,7 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_GPU_Dev.cpp \
   CodeGen_GPU_Host.cpp \
+  CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
@@ -298,6 +312,8 @@ SOURCE_FILES = \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
   Generator.cpp \
+  HexagonOffload.cpp \
+  HexagonOptimize.cpp \
   Image.cpp \
   ImageParam.cpp \
   Interval.cpp \
@@ -319,6 +335,7 @@ SOURCE_FILES = \
   Lerp.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
+  LoopCarry.cpp \
   Lower.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
@@ -382,8 +399,10 @@ BITWRITER_SOURCE_FILES = \
 HEADER_FILES = \
   AddImageChecks.h \
   AddParameterChecks.h \
+  AlignLoads.h \
   AllocationBoundsInference.h \
   Argument.h \
+  Associativity.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
@@ -405,6 +424,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_Renderscript_Dev.h \
   CodeGen_X86.h \
+  ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
   Debug.h \
@@ -427,6 +447,8 @@ HEADER_FILES = \
   Function.h \
   FuseGPUThreadLoops.h \
   Generator.h \
+  HexagonOffload.h \
+  HexagonOptimize.h \
   runtime/HalideRuntime.h \
   Image.h \
   ImageParam.h \
@@ -451,6 +473,7 @@ HEADER_FILES = \
   Lerp.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
+  LoopCarry.h \
   Lower.h \
   MainPage.h \
   MatlabWrapper.h \
@@ -510,6 +533,8 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
+  android_ion \
+  android_mman \
   android_opengl_context \
   android_tempfile \
   arm_cpu_features \
@@ -519,13 +544,16 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
+  fake_ion \
   fake_thread_pool \
   float16_t \
   gcd_thread_pool \
   gpu_device_selection \
+  hexagon_host \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
+  linux_mman \
   linux_opengl_context \
   matlab \
   metadata \
@@ -536,6 +564,7 @@ RUNTIME_CPP_COMPONENTS = \
   mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
+  noos \
   nacl_host_cpu_count \
   old_buffer_t \
   opencl \
@@ -556,6 +585,8 @@ RUNTIME_CPP_COMPONENTS = \
   powerpc_cpu_features \
   profiler \
   profiler_inlined \
+  qurt_allocator \
+  qurt_hvx \
   renderscript \
   runtime_api \
   ssp \
@@ -575,6 +606,8 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
+  hvx_64 \
+  hvx_128 \
   mips \
   pnacl_math \
   posix_math \
@@ -586,11 +619,14 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_sse41
 
-RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
+                            $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
+                            $(INCLUDE_DIR)/HalideRuntimeQurt.h \
                             $(INCLUDE_DIR)/HalideRuntimeRenderscript.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
@@ -600,6 +636,16 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(BUILD_DIR)/initmod.declarations.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+
+# Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
+ifeq ($(UNAME), Linux)
+ifneq (,$(WITH_HEXAGON))
+ifneq (,$(HL_HEXAGON_TOOLS))
+TEST_LD_FLAGS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
+TEST_LD_FLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
+endif
+endif
+endif
 
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
@@ -664,7 +710,6 @@ endif
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 
-# -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
@@ -837,53 +882,56 @@ NON_EMPTY_TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
-$(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
+$(FILTERS_DIR)/%.a: $(FILTERS_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
+$(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
+	@echo $@ produced implicitly by $^
+
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
-$(FILTERS_DIR)/cxx_mangling.a $(FILTERS_DIR)/cxx_mangling.h: $(FILTERS_DIR)/cxx_mangling.generator
+$(FILTERS_DIR)/cxx_mangling.a: $(FILTERS_DIR)/cxx_mangling.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling"
 
-$(FILTERS_DIR)/cxx_mangling_define_extern.a $(FILTERS_DIR)/cxx_mangling_define_extern.h: $(FILTERS_DIR)/cxx_mangling_define_extern.generator
+$(FILTERS_DIR)/cxx_mangling_define_extern.a: $(FILTERS_DIR)/cxx_mangling_define_extern.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling_define_extern"
 
-$(FILTERS_DIR)/tiled_blur_interleaved.a $(FILTERS_DIR)/tiled_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur.generator
+$(FILTERS_DIR)/tiled_blur_interleaved.a: $(FILTERS_DIR)/tiled_blur.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g tiled_blur -f tiled_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
 
-$(FILTERS_DIR)/tiled_blur_blur_interleaved.a $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur_blur.generator
+$(FILTERS_DIR)/tiled_blur_blur_interleaved.a: $(FILTERS_DIR)/tiled_blur_blur.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
 
 # metadata_tester is built with and without user-context
-$(FILTERS_DIR)/metadata_tester.a $(FILTERS_DIR)/metadata_tester.h: $(FILTERS_DIR)/metadata_tester.generator
+$(FILTERS_DIR)/metadata_tester.a: $(FILTERS_DIR)/metadata_tester.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-register_metadata-no_runtime
 
-$(FILTERS_DIR)/metadata_tester_ucon.a $(FILTERS_DIR)/metadata_tester_ucon.h: $(FILTERS_DIR)/metadata_tester.generator
+$(FILTERS_DIR)/metadata_tester_ucon.a: $(FILTERS_DIR)/metadata_tester.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata-no_runtime
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
-$(FILTERS_DIR)/multitarget.a $(FILTERS_DIR)/multitarget.h: $(FILTERS_DIR)/multitarget.generator
+$(FILTERS_DIR)/multitarget.a: $(FILTERS_DIR)/multitarget.generator
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f multitarget -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-debug-no_runtime,$(HL_TARGET)-no_runtime
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f "HalideTest::multitarget" -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
 
 # user_context needs to be generated with user_context as the first argument to its calls
-$(FILTERS_DIR)/user_context.a $(FILTERS_DIR)/user_context.h: $(FILTERS_DIR)/user_context.generator
+$(FILTERS_DIR)/user_context.a: $(FILTERS_DIR)/user_context.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
 # ditto for user_context_insanity
-$(FILTERS_DIR)/user_context_insanity.a $(FILTERS_DIR)/user_context_insanity.h: $(FILTERS_DIR)/user_context_insanity.generator
+$(FILTERS_DIR)/user_context_insanity.a: $(FILTERS_DIR)/user_context_insanity.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
@@ -906,7 +954,7 @@ $(BIN_DIR)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling
 # some special casing to get right.  First, make a special rule to
 # build each of the Generators in nested_externs_generator.cpp (which
 # all have the form nested_externs_*).
-$(FILTERS_DIR)/nested_externs_%.a $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
+$(FILTERS_DIR)/nested_externs_%.a: $(FILTERS_DIR)/nested_externs.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g nested_externs_$* -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
@@ -1090,8 +1138,7 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	        $(ROOT_DIR)/apps/images \
 	        $(ROOT_DIR)/apps/support \
                 apps; \
-	  mkdir -p tools; \
-	  cp $(ROOT_DIR)/tools/* tools/; \
+	  cp -r $(ROOT_DIR)/tools .; \
 	fi
 	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)

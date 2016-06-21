@@ -49,6 +49,9 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+#define O_RDONLY 0
+#define O_RDWR 2
+
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -74,6 +77,8 @@ void *memset(void *s, int val, size_t n);
 int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int remove(const char *pathname);
+int ioctl(int fd, unsigned long request, ...);
 void exit(int);
 void abort();
 char *strncpy(char *dst, const char *src, size_t n);
@@ -107,15 +112,15 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 // is defined inside HalideRuntime.h which includes this header file.
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
-                                            int *f_values);
+                                            uint64_t *f_values);
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           void *pipeline_state,
                                           int func_id,
-                                          int incr);
+                                          uint64_t incr);
 WEAK void halide_profiler_memory_free(void *user_context,
                                       void *pipeline_state,
                                       int func_id,
-                                      int incr);
+                                      uint64_t decr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
@@ -175,6 +180,18 @@ __attribute__((always_inline)) void swap(T &a, T &b) {
 template <typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
+}
+
+template <typename T>
+__attribute__((always_inline)) T min(const T &a, const T &b) {
+    return a < b ? a : b;
+}
+
+template <typename T, typename U>
+__attribute__((always_inline)) T reinterpret(const U &x) {
+    T ret;
+    memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
+    return ret;
 }
 
 }}}

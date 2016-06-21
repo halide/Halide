@@ -3,13 +3,35 @@
 #include "Error.h"
 #include "JITModule.h"
 #include "runtime/HalideRuntime.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
 namespace {
-void check_buffer_size(uint64_t bytes, const std::string &name) {
-    user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
+
+uint64_t multiply_buffer_size_check_overflow(uint64_t size, uint64_t factor, const std::string &name) {
+    // Ignore the dimensions for which the extent is zero.
+    if (!factor) return size;
+
+    // Multiply and check for 64-bit overflow
+    uint64_t result = size * factor;
+    bool overflow = (result / factor) != size;
+
+    // Check against the limits Halide internally assumes in its compiled code.
+    overflow |= (sizeof(size_t) == 4) && ((result >> 31) != 0);
+
+    // In 64-bit with LargeBuffers *not* set, the limit above is the
+    // correct one, however at Buffer creation time we don't know what
+    // pipelines it will be used in, so we must be conservative and
+    // defer the error until the user actually passes the buffer into
+    // a pipeline they shouldn't have.
+    overflow |= (sizeof(size_t) == 8) && ((result >> 63) != 0);
+
+    // Assert there was no overflow.
+    user_assert(!overflow)
+        << "Total size of buffer " << name << " exceeds 2^" << ((sizeof(size_t) * 8) - 1) << " - 1\n";
+    return result;
 }
 }
 
@@ -46,13 +68,11 @@ struct BufferContents {
 
         uint64_t size = t.bytes();
         for (int s : sizes) {
-            size *= s;
-            check_buffer_size(size, name);
+            size = multiply_buffer_size_check_overflow(size, s, name);
         }
 
         if (!data) {
             size += 32;
-            check_buffer_size(size, name);
             allocation = (uint8_t *)calloc(1, (size_t)size);
             user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";
             buf.host = (uint8_t *)(((intptr_t)allocation + 31) & (~31));
@@ -88,14 +108,14 @@ EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
-    int error = halide_device_free(nullptr, const_cast<halide_buffer_t *>(&p->buf));
-    user_assert(!error) << "Failed to free device buffer\n";
+    // Ignore errors. We may be cleaning up a buffer after an earlier
+    // error, and asserting would re-raise it.
+    halide_device_free(nullptr, const_cast<halide_buffer_t *>(&p->buf));
     free(p->allocation);
-
     delete p;
 }
 
-}
+} // Halide::Internal
 
 namespace {
 std::string make_buffer_name(const std::string &n, Buffer *b) {

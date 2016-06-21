@@ -13,7 +13,7 @@ using namespace Halide::Tools;
 using std::map;
 using std::string;
 
-const int num_launcher_tasks = 1000;
+const int num_launcher_tasks = 10000;
 
 const int width = 100;
 const int height = 30;
@@ -29,8 +29,8 @@ const int argmin_stack_peak = vectorize*sizeof(uint8_t) + vectorize*sizeof(int32
 const int y_niters = (height + tile_y - 1)/tile_y;
 const int x_niters = (width + tile_x - 1)/tile_x;
 const int mandelbrot_n_mallocs = 2 * y_niters * x_niters * num_launcher_tasks;
-const int mandelbrot_heap_per_iter = 2*tile_x*tile_y*4*(iters+1); // Heap per iter for one task
-const int mandelbrot_heap_total = mandelbrot_heap_per_iter * y_niters * x_niters * num_launcher_tasks;
+const uint64_t mandelbrot_heap_per_iter = 2*tile_x*tile_y*4*(iters+1); // Heap per iter for one task
+const uint64_t mandelbrot_heap_total = mandelbrot_heap_per_iter * y_niters * x_niters * num_launcher_tasks;
 
 int stack_size = vectorize*sizeof(uint8_t) + vectorize*sizeof(int32_t);
 
@@ -73,8 +73,10 @@ int main(int argc, char **argv) {
     // in parallel.
     printf("Running memory profiler comparison test\n");
     printf("mandelbrot expected value\n  nmalocs (all tasks): %d, heap/iter "
-           "(per task): %d, heap total (all tasks): %d\n",
-           mandelbrot_n_mallocs, mandelbrot_heap_per_iter, mandelbrot_heap_total);
+           "(per task): %d K, heap total (all tasks): %d K\n",
+           mandelbrot_n_mallocs,
+           (int)(mandelbrot_heap_per_iter/1024),
+           (int)(mandelbrot_heap_total/1024));
     printf("argmin expected value\n  stack peak: %d\n", argmin_stack_peak);
     printf("\n");
 

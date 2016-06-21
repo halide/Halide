@@ -385,6 +385,7 @@ struct Call : public ExprNode<Call> {
     EXPORT static ConstString debug_to_file,
         shuffle_vector,
         interleave_vectors,
+        concat_vectors,
         reinterpret,
         bitwise_and,
         bitwise_not,
@@ -428,6 +429,7 @@ struct Call : public ExprNode<Call> {
         register_destructor,
         div_round_to_zero,
         mod_round_to_zero,
+        slice_vector,
         call_cached_indirect_function,
         signed_integer_overflow;
 

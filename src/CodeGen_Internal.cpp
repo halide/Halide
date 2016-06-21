@@ -161,6 +161,12 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_run",
         "halide_renderscript_run",
         "halide_metal_run",
+        "halide_hexagon_initialize_kernels",
+        "halide_hexagon_run",
+        "halide_hexagon_device_release",
+        "halide_qurt_hvx_lock",
+        "halide_qurt_hvx_unlock",
+        "halide_qurt_hvx_unlock_as_destructor",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
@@ -323,6 +329,10 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+    #if LLVM_VERSION >= 39
+    // Not supported by older linkers
+    options.RelaxELFRelocations = false;
+    #endif
 }
 
 

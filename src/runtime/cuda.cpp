@@ -444,8 +444,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
     buf->device_interface = NULL;
     buf->device = 0;
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuMemFree failed: "
-                            << get_error_name(err);
+        // We may be called as a destructor, so don't raise an error here.
         return err;
     }
 

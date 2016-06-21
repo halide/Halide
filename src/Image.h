@@ -7,6 +7,7 @@
 
 #include "Var.h"
 #include "Tuple.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -155,7 +156,10 @@ public:
     /** Get the address of a particular pixel in up to four dimensions. */
     void *address_of(int x, int y = 0, int z = 0, int w = 0) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = x*stride[0] + y*stride[1] + z*stride[2] + w*stride[3];
+        ptrdiff_t offset = ((ptrdiff_t(x))*stride[0] +
+                            (ptrdiff_t(y))*stride[1] +
+                            (ptrdiff_t(z))*stride[2] +
+                            (ptrdiff_t(w))*stride[3]);
         return (void *)(ptr + offset * elem_size);
     }
 
@@ -164,12 +168,15 @@ public:
     typename std::enable_if<Internal::all_are_convertible<int, Args...>::value, void *>::type
     address_of(int x, int y, int z, int w, Args... args) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = x*stride[0] + y*stride[1] + z*stride[2] + w*stride[3];
+        ptrdiff_t offset = ((ptrdiff_t(x))*stride[0] +
+                            (ptrdiff_t(y))*stride[1] +
+                            (ptrdiff_t(z))*stride[2] +
+                            (ptrdiff_t(w))*stride[3]);
 
         // We can't rely on the cached strides for the extra dimensions.
         const int extra[] = {args...};
         for (size_t i = 0; i < sizeof...(Args); i++) {
-            offset += extra[i] * buffer.dim(i+4).stride();
+            offset += ptrdiff_t(extra[i]) * buffer.dim(i+4).stride();
         }
         return (void *)(ptr + offset * elem_size);
     }
@@ -177,9 +184,9 @@ public:
     /** Get the address of a pixel using a vector of integers. */
     void *address_of(const std::vector<int> &vec) const {
         uint8_t *ptr = (uint8_t *)origin;
-        size_t offset = 0;
+        ptrdiff_t offset = 0;
         for (size_t i = 0; i < vec.size(); i++) {
-            offset += vec[i] * buffer.dim(i).stride();
+            offset += ptrdiff_t(vec[i]) * buffer.dim(i).stride();
         }
         return (void *)(ptr + offset * elem_size);
     }

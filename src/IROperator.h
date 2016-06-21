@@ -160,6 +160,9 @@ EXPORT Expr halide_erf(Expr a);
  * it by itself. */
 EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
 
+/** Split a boolean condition into vector of ANDs. If 'cond' is undefined,
+ * return an empty vector. */
+EXPORT void split_into_ands(Expr cond, std::vector<Expr> &result);
 
 }
 
