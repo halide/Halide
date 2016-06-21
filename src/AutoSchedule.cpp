@@ -1177,6 +1177,14 @@ struct Partitioner {
     void disp_pipeline_bounds();
     void disp_pipeline_graph();
     void disp_grouping();
+
+    int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
+                             bool no_redundant_work, bool ensure_parallelism);
+
+    int64_t estimate_benefit(const vector<Group> &prod_groups,
+                             const Group &cons_group,
+                             const GroupAnalysis &fused_analy,
+                             bool no_redundant_work, bool ensure_parallelism);
 };
 
 void Partitioner::merge_groups(FusionChoice &choice, Partitioner::Level level) {
@@ -1216,8 +1224,10 @@ void Partitioner::merge_groups(FusionChoice &choice, Partitioner::Level level) {
     // Update group costs
     group_costs[child_group] = analyze_group(groups.at(child_group));
 
+    /*
     debug(0) << '\n' << groups.at(child_group);
     debug(0) << group_costs[child_group] << '\n';
+    */
 }
 
 void Partitioner::disp_grouping() {
@@ -1779,7 +1789,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     int64_t tile_output_size = cost_model.region_size(g.output.func.name(),
                                                       out_tile_extent);
 
-    // Adding tile input and output sizeto tile_intermediate_size over
+    // Adding tile input and output size to tile_intermediate_size over
     // estimates the working set size
     int64_t tile_inter_size = cost_model.region_size(group_reg, g.inlined) +
                               tile_input_size + tile_output_size;
@@ -1900,44 +1910,73 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice,
         fused_analy = config.second;
     }
 
-    internal_assert(group_costs.find(cons.output) != group_costs.end());
-    GroupAnalysis cons_analy = group_costs.at(cons.output);
+    return estimate_benefit(prod_groups, cons, fused_analy, true, false);
+}
 
-    // Return the overall benefit of the choice
-    // TODO: Use the arch params to compute total work
-    int64_t benefit;
+int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
+                                      const GroupAnalysis &fuse,
+                                      bool no_redundant_work,
+                                      bool ensure_parallelism) {
+    if (ensure_parallelism &&
+        fuse.parallelism < arch_params.parallelism) {
+        return -1;
+    }
+
+    int64_t arith_benefit = 0;
+    if (nofuse.arith_cost >= 0 && fuse.arith_cost >= 0) {
+        arith_benefit = nofuse.arith_cost - fuse.arith_cost;
+    } else {
+        return -1;
+    }
+
+    if (no_redundant_work && arith_benefit < 0)
+        return arith_benefit;
+
+    int64_t mem_benefit = 0;
+    if (nofuse.mem_cost >= 0 && fuse.mem_cost >= 0) {
+        mem_benefit = nofuse.mem_cost - fuse.mem_cost;
+    } else {
+        return -1;
+    }
+
+    return mem_benefit * arch_params.balance + arith_benefit;
+}
+
+int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
+                                      const Group &cons_group,
+                                      const GroupAnalysis &fused_analy,
+                                      bool no_redundant_work,
+                                      bool ensure_parallelism) {
+
+    internal_assert(group_costs.find(cons_group.output) != group_costs.end());
+    GroupAnalysis cons_analy = group_costs.at(cons_group.output);
+
     int64_t prod_arith_cost = 0;
+    int64_t prod_mem_cost = 0;
+    int64_t prod_par = std::numeric_limits<int64_t>::max();
 
     for (auto &prod_g: prod_groups) {
         internal_assert(group_costs.find(prod_g.output) != group_costs.end());
         GroupAnalysis analyg = group_costs.at(prod_g.output);
         if (analyg.arith_cost >= 0) {
             prod_arith_cost += analyg.arith_cost;
+            prod_mem_cost += analyg.mem_cost;
+            prod_par = std::min(prod_par, analyg.parallelism);
         } else {
             prod_arith_cost = -1;
+            prod_mem_cost = -1;
+            prod_par = -1;
             break;
         }
     }
 
-    if (prod_arith_cost >= 0 && cons_analy.arith_cost >= 0 &&
-        fused_analy.arith_cost >= 0) {
-        benefit = prod_arith_cost + cons_analy.arith_cost -
-                  fused_analy.arith_cost;
-    } else {
-        benefit = -1;
-    }
+    GroupAnalysis no_fuse_analy;
+    no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
+    no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
+    no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
 
-    /*
-    debug(0) << "\nProd Groups:\n";
-    for (auto &prod_g: prod_groups) {
-        debug(0) << prod_g << '\n';
-    }
-    debug(0) << "Cons Group:\n" << cons << '\n';
-    debug(0) << "Fused Group:\n" << fused << '\n';
-    debug(0) << "Benefit:" << benefit << "\n\n";
-    */
-
-    return benefit;
+    return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
+                            ensure_parallelism);
 }
 
 map<string, int> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
@@ -1985,13 +2024,12 @@ map<FStage, map<FStage, DimBounds>> Partitioner::get_group_member_bounds() {
 }
 
 pair<VarOrRVar, VarOrRVar>
-split_dim(Stage f_handle, string prefix, VarOrRVar v, int factor,
-          string in_suffix, string out_suffix,
-          map<string, int> &estimates, string &sched) {
+split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix, 
+          string out_suffix, map<string, int> &estimates, string &sched) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
-    string inner_name = prefix + "_" + arg_name + in_suffix;
-    string outer_name = prefix + "_" + arg_name + out_suffix;
+    string inner_name = arg_name + in_suffix;
+    string outer_name = arg_name + out_suffix;
     VarOrRVar inner(inner_name), outer(outer_name);
 
     sched += "Var " + inner_name + "(\"" + outer_name + "\")" + ";\n";
@@ -2011,6 +2049,14 @@ split_dim(Stage f_handle, string prefix, VarOrRVar v, int factor,
     estimates.erase(arg_name);
 
     return make_pair(inner, outer);
+}
+
+string get_base_name(string name) {
+    size_t dot_pos = name.rfind('.');
+    if (dot_pos != string::npos) {
+        return name.substr(dot_pos + 1);
+    }
+    return name;
 }
 
 string Partitioner::generate_group_cpu_schedule(
@@ -2054,31 +2100,32 @@ string Partitioner::generate_group_cpu_schedule(
     for (int d = 0; d < (int) dims.size() - 1; d++) {
         bool is_pure_var = false;
         for (auto &arg: g_out.args()) {
-            if (arg == dims[d].var) {
+            if (arg == get_base_name(dims[d].var)) {
                 is_pure_var = true;
                 break;
             }
         }
         if (!is_pure_var) {
-            rvars.insert(dims[d].var);
+            rvars.insert(get_base_name(dims[d].var));
         }
     }
 
     vector<string> dim_vars;
     for (int d = 0; d < (int) dims.size() - 1; d++) {
-        dim_vars.push_back(dims[d].var);
+        dim_vars.push_back(get_base_name(dims[d].var));
     }
 
     for (auto &var: dim_vars) {
         bool is_rvar = (rvars.find(var) != rvars.end());
         VarOrRVar v(var, is_rvar);
 
-        if (g.tile_sizes.find(var) != g.tile_sizes.end()) {
+        if (g.tile_sizes.find(var) != g.tile_sizes.end() &&
+            stg_estimates.at(var) > g.tile_sizes.at(var)) {
             int tile_size = g.tile_sizes.at(var);
             if (tile_size > 1) {
                 pair<VarOrRVar, VarOrRVar> tile_vars =
-                        split_dim(f_handle, var_prefix, v, tile_size,
-                                  "_i", "_o", stg_estimates, sched);
+                        split_dim(f_handle, v, tile_size, "_i", "_o",
+                                  stg_estimates, sched);
 
                 inner_dims.push_back(tile_vars.first);
                 outer_dims.push_back(tile_vars.second);
@@ -2129,16 +2176,17 @@ string Partitioner::generate_group_cpu_schedule(
     // Vectorize the innermost pure dimension
     int vec_dim_index = -1;
     for (int d = 0; d < (int) dims.size() - 1; d++) {
-        if (rvars.find(dims[d].var) == rvars.end()) {
+        if (rvars.find(get_base_name(dims[d].var)) == rvars.end()) {
             vec_dim_index = d;
             break;
         }
     }
 
+    string vec_dim_name = get_base_name(dims[vec_dim_index].var);
     if (vec_dim_index >=0 &&
-        stg_estimates.find(dims[vec_dim_index].var) != stg_estimates.end()) {
+        stg_estimates.find(vec_dim_name) != stg_estimates.end()) {
 
-        Var vec_dim(dims[vec_dim_index].var);
+        Var vec_var(vec_dim_name);
         // Set the vector length as the maximum of the values produced by a
         // function
         int vec_len = 0;
@@ -2146,24 +2194,25 @@ string Partitioner::generate_group_cpu_schedule(
             vec_len = std::max(vec_len, t.natural_vector_size(type));
         }
 
-        bool is_rvar = (rvars.find(vec_dim.name()) != rvars.end());
-        if (stg_estimates[vec_dim.name()] >= vec_len) {
-            pair<VarOrRVar, VarOrRVar> vec_vars =
-                    split_dim(f_handle, var_prefix, vec_dim, vec_len,
-                              "_vi", "_vo", stg_estimates, sched);
+        bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
+        if (stg_estimates[vec_dim_name] >= vec_len) {
 
-            f_handle.vectorize(vec_vars.first);
+            pair<VarOrRVar, VarOrRVar> split_vars =
+                    split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
+                              stg_estimates, sched);
+
+            f_handle.vectorize(split_vars.first);
             sched += f_handle.name() + ".vectorize(" +
-                     vec_vars.first.name() + ");\n";
+                     split_vars.first.name() + ");\n";
 
             if (is_rvar) {
-                rvars.erase(vec_dim.name());
-                rvars.insert(vec_vars.first.name());
-                rvars.insert(vec_vars.second.name());
+                rvars.erase(vec_dim_name);
+                rvars.insert(split_vars.first.name());
+                rvars.insert(split_vars.second.name());
             }
 
-            if (outer_dims.size() > 0 && tile_inner_var.name() == vec_dim.name()) {
-                tile_inner_var = vec_vars.second;
+            if (outer_dims.size() > 0 && tile_inner_var.name() == vec_dim_name) {
+                tile_inner_var = split_vars.second;
             }
         }
     }
@@ -2177,7 +2226,7 @@ string Partitioner::generate_group_cpu_schedule(
     // is achieved
     int dim_start = dims.size() - 2;
     for (int d = dim_start; d >= 0; d--) {
-        string var = dims[d].var;
+        string var = get_base_name(dims[d].var);
         bool is_rvar = (rvars.find(var) != rvars.end());
         VarOrRVar v(var, is_rvar);
 
@@ -2185,10 +2234,11 @@ string Partitioner::generate_group_cpu_schedule(
             break;
         }
 
-        if (def_par > arch_params.parallelism) {
+        if (def_par >= arch_params.parallelism) {
             // Enough parallelism to saturate target machine
             break;
         }
+
         if (stg_estimates.find(var) != stg_estimates.end()) {
             f_handle.parallel(v);
             sched += f_handle.name() + ".parallel(" + var + ");\n";
