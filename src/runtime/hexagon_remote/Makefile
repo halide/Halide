@@ -122,7 +122,7 @@ LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
 bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 	mkdir -p $(@D)
 	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o $(LIBDL) \
-	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
+	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) $(LIB_GCC) --no-whole-archive  --end-group $(FINI) \
 	    --dynamic-linker= -E --force-dynamic
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o

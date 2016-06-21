@@ -50,7 +50,7 @@ uint64_t ubits(int unique, int i, int j) {
     bits = (bits ^ (bits >> 32)) * mu;
     return bits;
 }
-
+Target target;
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
 template <typename T>
 bool less_than_zero(T val) {
@@ -294,15 +294,13 @@ bool div_mod(int vector_width) {
     Func f;
     Var x, y;
     f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
-    Target target = get_jit_target_from_environment();
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
     }
     if (target.has_gpu_feature()) {
         f.compute_root().gpu_tile(x, y, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        // TODO: Null pointer dereference on simulator?
-        // f.compute_root().hexagon();
+        f.compute_root().hexagon();
     }
     Realization R = f.realize(WIDTH, HEIGHT, target);
     Image<T> q(R[0]);
@@ -417,9 +415,16 @@ bool f_mod() {
 
 int main(int argc, char **argv) {
     bool success = true;
+    int max_vector_width = 16;
     success &= f_mod<float,double,32>();
 
-    for (int vector_width = 1; vector_width <= 16; vector_width *= 2) {
+    target = get_jit_target_from_environment();
+    // TODO: Fix all vector_widths for Hexagon.
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        max_vector_width = 1;
+    }
+
+    for (int vector_width = 1; vector_width <= max_vector_width; vector_width *= 2) {
         success &= div_mod<uint8_t,uint64_t,8>(vector_width);
         success &= div_mod<uint16_t,uint64_t,16>(vector_width);
         success &= div_mod<uint32_t,uint64_t,32>(vector_width);
