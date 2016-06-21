@@ -36,7 +36,7 @@ struct BufferContents {
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
                    uint8_t* data, const std::string &n) :
         type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
-        user_assert(t.width == 1) << "Can't create of a buffer of a vector type";
+        user_assert(t.lanes() == 1) << "Can't create of a buffer of a vector type";
         buf.elem_size = t.bytes();
         uint64_t size = 1;
         if (x_size) {
@@ -88,7 +88,7 @@ struct BufferContents {
     BufferContents(Type t, const buffer_t *b, const std::string &n) :
         type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
         buf = *b;
-        user_assert(t.width == 1) << "Can't create of a buffer of a vector type";
+        user_assert(t.lanes() == 1) << "Can't create of a buffer of a vector type";
     }
 };
 

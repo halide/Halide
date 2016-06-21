@@ -57,6 +57,10 @@ public:
         return _top;
     }
 
+    const T &top_ref() const {
+        return _top;
+    }
+
     bool empty() const {
         return _empty;
     }
@@ -178,7 +182,7 @@ public:
         }
 
         const T &value() {
-            return iter->second.top();
+            return iter->second.top_ref();
         }
     };
 

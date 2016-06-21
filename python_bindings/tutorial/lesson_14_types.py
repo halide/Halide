@@ -39,20 +39,20 @@ def main():
         UInt(8), UInt(16), UInt(32), UInt(64),
         Int(8), Int(16), Int(32), Int(64),
         Float(32), Float(64), Handle() ]
-    
+
 
     # Constructing and inspecting types.
     if True:
         # You can programmatically examine the properties of a Halide
         # type. This is useful when you write a C++ function that has
         # Expr arguments and you wish to check their types:
-        assert UInt(8).bits == 8
+        assert UInt(8).bits() == 8
         assert Int(8).is_int()
 
 
         # You can also programmatically construct Types as a function of other Types.
         t = UInt(8)
-        t.bits *= 2
+        t = t.with_bits(t.bits() * 2)
         assert t == UInt(16)
 
         # Or construct a Type from a C++ scalar type
@@ -89,7 +89,7 @@ def main():
         f2[x] = Tuple(x, sin(x))
         assert f2.output_types()[0] == Int(32) and \
                f2.output_types()[1] == Float(32)
-    
+
 
 
     # Type promotion rules.
@@ -122,7 +122,7 @@ def main():
                 continue
             e = cast(t, x)
             assert (e + e).type() == e.type()
-        
+
 
         # 3) If one type is a float but the other is not, then the
         # non-float argument is promoted to a float (possibly causing a
@@ -182,24 +182,24 @@ def main():
             # UInt(16) produces 65535, not 255.
             #uint16_t result16 = evaluate<uint16_t>(cast<uint16_t>(cast<int8_t>(-1)))
             assert result16 == 65535
-    
+
 
     # The type Handle().
     if True:
         # Handle is used to represent opaque pointers. Applying
         # type_of to any pointer type will return Handle()
-    
+
         #assert type_of<void *>() == Handle()
         #assert type_of<const char * const **>() == Handle()
         # (not clear what the proper python version would be)
-        
+
         # Handles are always stored as 64-bit, regardless of the compilation
         # target.
-        assert Handle().bits == 64
+        assert Handle().bits() == 64
 
         # The main use of an Expr of type Handle is to pass
         # it through Halide to other external code.
-    
+
 
     # Generic code.
     if True:
@@ -213,7 +213,7 @@ def main():
         assert average(cast(Float(32), x), 3.0).type() == Float(32)
         assert average(x, 3).type() == Int(32)
         assert average(cast(UInt(8), x), cast(UInt(8), 3)).type() == UInt(8)
-    
+
 
     print("Success!")
 
@@ -238,13 +238,12 @@ def average(a, b):
         # The '2' will be promoted to the floating point type due to
         # rule 3 above.
         return (a + b)/2
-    
+
 
     # For integer types, we must compute the intermediate value in a
     # wider type to avoid overflow.
     narrow = a.type()
-    wider = Type(narrow) # copy
-    wider.bits *= 2
+    wider = narrow.with_bits(narrow.bits() * 2)
     a = cast(wider, a)
     b = cast(wider, b)
     return cast(narrow, (a + b)/2)
@@ -253,4 +252,3 @@ def average(a, b):
 
 if __name__ == "__main__":
     main()
-

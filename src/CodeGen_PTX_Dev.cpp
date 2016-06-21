@@ -31,6 +31,12 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
 }
 
 CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
+    // This is required as destroying the context before the module
+    // results in a crash. Really, reponsbility for destruction
+    // should be entirely in the parent class.
+    // TODO: Figure out how to better manage the context -- e.g. allow using
+    // same one as the host.
+    module.reset();
     delete context;
 }
 
@@ -53,7 +59,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
+    function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -136,7 +142,6 @@ void CodeGen_PTX_Dev::init_module() {
     init_context();
 
     #ifdef WITH_PTX
-    delete module;
     module = get_initial_module_for_ptx_device(target, context);
     #endif
 }
@@ -359,14 +364,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (TD) {
         PM.add(new DataLayout(*TD));
     } else {
-        PM.add(new DataLayout(module));
+        PM.add(new DataLayout(module.get()));
     }
     #else
     if (TD) {
         module->setDataLayout(TD);
     }
     #if LLVM_VERSION == 35
-    PM.add(new DataLayoutPass(module));
+    PM.add(new DataLayoutPass(module.get()));
     #else // llvm >= 3.6
     PM.add(new DataLayoutPass);
     #endif

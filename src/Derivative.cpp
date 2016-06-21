@@ -128,7 +128,7 @@ class Monotonic : public IRVisitor {
             return;
         }
 
-        if (op->value.type().bits >= 32 && op->type.bits >= 32) {
+        if (op->value.type().bits() >= 32 && op->type.bits() >= 32) {
             // We assume 32-bit types don't overflow.
             return;
         }

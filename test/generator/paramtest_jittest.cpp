@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     {
         ParamTest gen;
         GeneratorParamValues v = gen.get_generator_param_values();
-        if (v.size() != 3) {
+        if (v.size() != 6) {
             fprintf(stderr, "Wrong number of GeneratorParamValues %d\n", (int) v.size());
             exit(-1);
         }

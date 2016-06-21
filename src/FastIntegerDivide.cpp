@@ -95,16 +95,15 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     Type t = numerator.type();
     user_assert(t.is_uint() || t.is_int())
         << "Fast integer divide requires an integer numerator\n";
-    user_assert(t.bits == 8 || t.bits == 16 || t.bits == 32)
+    user_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32)
         << "Fast integer divide requires a numerator with 8, 16, or 32 bits\n";
 
-    Type wide = t;
-    wide.bits *= 2;
+    Type wide = t.with_bits(t.bits() * 2);
 
     Expr result;
     if (t.is_uint()) {
         Expr mul, shift;
-        switch(t.bits) {
+        switch(t.bits()) {
         case 8:
         {
             Image<uint8_t> table = IntegerDivideTable::integer_divide_table_u8();
@@ -131,8 +130,8 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         // Multiply-keep-high-half
         result = (cast(wide, mul) * numerator);
 
-        if (t.bits < 32) result = result / (1 << t.bits);
-        else result = result >> t.bits;
+        if (t.bits() < 32) result = result / (1 << t.bits());
+        else result = result >> t.bits();
 
         result = cast(t, result);
 
@@ -146,7 +145,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     } else {
 
         Expr mul, shift;
-        switch(t.bits) {
+        switch(t.bits()) {
         case 8:
         {
             Image<uint8_t> table = IntegerDivideTable::integer_divide_table_s8();
@@ -171,7 +170,7 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         }
 
         // Extract sign bit
-        //Expr xsign = (t.bits < 32) ? (numerator / (1 << (t.bits-1))) : (numerator >> (t.bits-1));
+        //Expr xsign = (t.bits() < 32) ? (numerator / (1 << (t.bits()-1))) : (numerator >> (t.bits()-1));
         Expr xsign = select(numerator > 0, cast(t, 0), cast(t, -1));
 
         // If it's negative, flip the bits of the
@@ -181,8 +180,8 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 
         // Multiply-keep-high-half
         result = (cast(wide, mul) * numerator);
-        if (t.bits < 32) result = result / (1 << t.bits);
-        else result = result >> t.bits;
+        if (t.bits() < 32) result = result / (1 << t.bits());
+        else result = result >> t.bits();
         result = cast(t, result);
 
         // Do the final shift

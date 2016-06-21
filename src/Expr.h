@@ -129,10 +129,10 @@ struct IntImm : public ExprNode<IntImm> {
 
     static IntImm *make(Type t, int64_t value) {
         internal_assert(t.is_int() && t.is_scalar()) << "IntImm must be a scalar Int\n";
-        internal_assert(t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64)
+        internal_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "IntImm must be 8, 16, 32, or 64-bit\n";
 
-        if (t.bits == 32 && value >= -8 && value <= 8 &&
+        if (t.bits() == 32 && value >= -8 && value <= 8 &&
             !small_int_cache[(int)value + 8].ref_count.is_zero()) {
             return &small_int_cache[(int)value + 8];
         }
@@ -140,9 +140,9 @@ struct IntImm : public ExprNode<IntImm> {
         IntImm *node = new IntImm;
         node->type = t;
         // Normalize the value by dropping the high bits
-        value <<= (64 - t.bits);
+        value <<= (64 - t.bits());
         // Then sign-extending to get them back
-        value >>= (64 - t.bits);
+        value >>= (64 - t.bits());
         node->value = value;
         return node;
     }
@@ -159,13 +159,13 @@ struct UIntImm : public ExprNode<UIntImm> {
     static UIntImm *make(Type t, uint64_t value) {
         internal_assert(t.is_uint() && t.is_scalar())
             << "UIntImm must be a scalar UInt\n";
-        internal_assert(t.bits == 1 || t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64)
+        internal_assert(t.bits() == 1 || t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "UIntImm must be 1, 8, 16, 32, or 64-bit\n";
         UIntImm *node = new UIntImm;
         node->type = t;
         // Normalize the value by dropping the high bits
-        value <<= (64 - t.bits);
-        value >>= (64 - t.bits);
+        value <<= (64 - t.bits());
+        value >>= (64 - t.bits());
         node->value = value;
         return node;
     }
@@ -179,7 +179,7 @@ struct FloatImm : public ExprNode<FloatImm> {
         internal_assert(t.is_float() && t.is_scalar()) << "FloatImm must be a scalar Float\n";
         FloatImm *node = new FloatImm;
         node->type = t;
-        switch (t.bits) {
+        switch (t.bits()) {
         case 16:
             node->value = (double)((float16_t)value);
             break;

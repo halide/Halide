@@ -24,13 +24,13 @@ Expr random_var() {
 Type random_type(int width) {
     Type T = fuzz_types[rand()%fuzz_type_count];
     if (width > 1) {
-        T = T.vector_of(width);
+        T = T.with_lanes(width);
     }
     return T;
 }
 
 Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
-    if (T.is_int() && T.bits == 32) {
+    if (T.is_int() && T.bits() == 32) {
         overflow_undef = true;
     }
     if (T.is_scalar()) {
@@ -51,9 +51,9 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
         if (rand() % 2 == 0) {
             return Ramp::make(random_leaf(T.element_of(), overflow_undef),
                               random_leaf(T.element_of(), overflow_undef),
-                              T.width);
+                              T.lanes());
         } else {
-            return Broadcast::make(random_leaf(T.element_of(), overflow_undef), T.width);
+            return Broadcast::make(random_leaf(T.element_of(), overflow_undef), T.lanes());
         }
     }
 }
@@ -72,7 +72,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
     };
     const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
 
-    if (maybe_scalar && rand() % T.width == 0) {
+    if (maybe_scalar && rand() % T.lanes() == 0) {
         T = T.element_of();
     }
 
@@ -99,7 +99,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Or::make,
     };
 
-    if (T.is_int() && T.bits == 32) {
+    if (T.is_int() && T.bits() == 32) {
         overflow_undef = true;
     }
 
@@ -119,16 +119,16 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
                                 random_expr(T, depth, overflow_undef));
 
     case 2:
-        if (T.width != 1) {
+        if (T.lanes() != 1) {
             return Broadcast::make(random_expr(T.element_of(), depth, overflow_undef),
-                                   T.width);
+                                   T.lanes());
         }
         break;
     case 3:
-        if (T.width != 1) {
+        if (T.lanes() != 1) {
             return Ramp::make(random_expr(T.element_of(), depth, overflow_undef),
                               random_expr(T.element_of(), depth, overflow_undef),
-                              T.width);
+                              T.lanes());
         }
         break;
 
@@ -150,8 +150,8 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
         Type subT;
         do {
-            subT = random_type(T.width);
-        } while (subT == T || (subT.is_int() && subT.bits == 32));
+            subT = random_type(T.lanes());
+        } while (subT == T || (subT.is_int() && subT.bits() == 32));
         return Cast::make(T, random_expr(subT, depth, overflow_undef));
     }
 
@@ -171,10 +171,10 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
 }
 
 bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) {
-    for (int j = 0; j < T.width; j++) {
+    for (int j = 0; j < T.lanes(); j++) {
         Expr a_j = a;
         Expr b_j = b;
-        if (T.width != 1) {
+        if (T.lanes() != 1) {
             a_j = extract_lane(a, j);
             b_j = extract_lane(b, j);
         }
@@ -233,13 +233,13 @@ Expr uint32(Expr x) { return Cast::make(UInt(32), x); }
 Expr int8(Expr x) { return Cast::make(Int(8), x); }
 Expr int16(Expr x) { return Cast::make(Int(16), x); }
 Expr int32(Expr x) { return Cast::make(Int(32), x); }
-Expr uint1x2(Expr x) { return Cast::make(UInt(1).vector_of(2), x); }
-Expr uint8x2(Expr x) { return Cast::make(UInt(8).vector_of(2), x); }
-Expr uint16x2(Expr x) { return Cast::make(UInt(16).vector_of(2), x); }
-Expr uint32x2(Expr x) { return Cast::make(UInt(32).vector_of(2), x); }
-Expr int8x2(Expr x) { return Cast::make(Int(8).vector_of(2), x); }
-Expr int16x2(Expr x) { return Cast::make(Int(16).vector_of(2), x); }
-Expr int32x2(Expr x) { return Cast::make(Int(32).vector_of(2), x); }
+Expr uint1x2(Expr x) { return Cast::make(UInt(1).with_lanes(2), x); }
+Expr uint8x2(Expr x) { return Cast::make(UInt(8).with_lanes(2), x); }
+Expr uint16x2(Expr x) { return Cast::make(UInt(16).with_lanes(2), x); }
+Expr uint32x2(Expr x) { return Cast::make(UInt(32).with_lanes(2), x); }
+Expr int8x2(Expr x) { return Cast::make(Int(8).with_lanes(2), x); }
+Expr int16x2(Expr x) { return Cast::make(Int(16).with_lanes(2), x); }
+Expr int32x2(Expr x) { return Cast::make(Int(32).with_lanes(2), x); }
 
 Expr a(Variable::make(Int(0), fuzz_var(0)));
 Expr b(Variable::make(Int(0), fuzz_var(1)));
@@ -259,14 +259,14 @@ int main(int argc, char **argv) {
     // We also report the seed to enable reproducing failures.
     int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(NULL);
     srand(fuzz_seed);
-    std::cout << "Simplify fuzz test seed: " << fuzz_seed << '\n';
+    std::cout << "Simplify fuzz test seed: " << fuzz_seed << std::endl;
 
     int max_fuzz_vector_width = 4;
 
     for (int i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
-            Type VT = T.vector_of(w);
+            Type VT = T.with_lanes(w);
             for (int n = 0; n < count; n++) {
                 // Generate a random expr...
                 Expr test = random_expr(VT, depth);

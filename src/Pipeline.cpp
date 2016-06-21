@@ -157,27 +157,25 @@ void Pipeline::compile_to(const Outputs &output_files,
     Module m = compile_to_module(args, fn_name, target);
 
     llvm::LLVMContext context;
-    llvm::Module *llvm_module = compile_module_to_llvm_module(m, context);
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, context));
 
     if (!output_files.object_name.empty()) {
         if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.object_name);
+            compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.object_name);
         } else {
-            compile_llvm_module_to_object(llvm_module, output_files.object_name);
+            compile_llvm_module_to_object(*llvm_module, output_files.object_name);
         }
     }
     if (!output_files.assembly_name.empty()) {
         if (target.arch == Target::PNaCl) {
-            compile_llvm_module_to_llvm_assembly(llvm_module, output_files.assembly_name);
+            compile_llvm_module_to_llvm_assembly(*llvm_module, output_files.assembly_name);
         } else {
-            compile_llvm_module_to_assembly(llvm_module, output_files.assembly_name);
+            compile_llvm_module_to_assembly(*llvm_module, output_files.assembly_name);
         }
     }
     if (!output_files.bitcode_name.empty()) {
-        compile_llvm_module_to_llvm_bitcode(llvm_module, output_files.bitcode_name);
+        compile_llvm_module_to_llvm_bitcode(*llvm_module, output_files.bitcode_name);
     }
-
-    delete llvm_module;
 }
 
 

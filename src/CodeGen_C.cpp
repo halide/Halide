@@ -220,11 +220,11 @@ CodeGen_C::~CodeGen_C() {
 namespace {
 string type_to_c_type(Type type) {
     ostringstream oss;
-    user_assert(type.width == 1) << "Can't use vector types when compiling to C (yet)\n";
+    user_assert(type.lanes() == 1) << "Can't use vector types when compiling to C (yet)\n";
     if (type.is_float()) {
-        if (type.bits == 32) {
+        if (type.bits() == 32) {
             oss << "float";
-        } else if (type.bits == 64) {
+        } else if (type.bits() == 64) {
             oss << "double";
         } else {
             user_error << "Can't represent a float with this many bits in C: " << type << "\n";
@@ -233,13 +233,13 @@ string type_to_c_type(Type type) {
     } else if (type.is_handle()) {
         oss << "void *";
     } else {
-        switch (type.bits) {
+        switch (type.bits()) {
         case 1:
             oss << "bool";
             break;
         case 8: case 16: case 32: case 64:
             if (type.is_uint()) oss << 'u';
-            oss << "int" << type.bits << "_t";
+            oss << "int" << type.bits() << "_t";
             break;
         default:
             user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
@@ -633,9 +633,9 @@ void CodeGen_C::visit(const Div *op) {
         // r = a - q * b
         string r = print_assignment(op->type, a + " - " + q + " * " + b);
         // bs = b >> (8*sizeof(T) - 1)
-        string bs = print_assignment(op->type, b + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits - 1));
+        string bs = print_assignment(op->type, b + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
         // rs = r >> (8*sizeof(T) - 1)
-        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits - 1));
+        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
         // id = q - (rs & bs) + (rs & bs)
         print_assignment(op->type, q + " - (" + rs + " & " + bs + ") + (" + rs + " & ~" + bs + ")");
     } else {
@@ -655,7 +655,7 @@ void CodeGen_C::visit(const Mod *op) {
         // r = a % b
         string r = print_assignment(op->type, a + " % " + b);
         // rs = r >> (8*sizeof(T) - 1)
-        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits - 1));
+        string rs = print_assignment(op->type, r + " >> (" + print_type(op->type.element_of()) + ")" + std::to_string(op->type.bits() - 1));
         // abs_b = abs(b)
         string abs_b = print_expr(cast(op->type, abs(op->b)));
         // id = r + (abs_b & rs)
@@ -1014,7 +1014,7 @@ void CodeGen_C::visit(const Call *op) {
                     format_string += "%llu";
                     printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
                 } else if (t.is_float()) {
-                    if (t.bits == 32) {
+                    if (t.bits() == 32) {
                         format_string += "%f";
                     } else {
                         format_string += "%e";

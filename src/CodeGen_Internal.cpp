@@ -191,9 +191,9 @@ void Closure::unpack_struct(Scope<Value *> &dst,
 }
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-    if (t.width == 1) {
+    if (t.lanes() == 1) {
         if (t.is_float()) {
-            switch (t.bits) {
+            switch (t.bits()) {
             case 16:
                 return llvm::Type::getHalfTy(*c);
             case 32:
@@ -207,11 +207,11 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         } else if (t.is_handle()) {
             return llvm::Type::getInt8PtrTy(*c);
         } else {
-            return llvm::Type::getIntNTy(*c, t.bits);
+            return llvm::Type::getIntNTy(*c, t.bits());
         }
     } else {
         llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return VectorType::get(element_type, t.width);
+        return VectorType::get(element_type, t.lanes());
     }
 }
 

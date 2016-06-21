@@ -237,7 +237,7 @@ std::string image_repr(const h::Image<T> &image)
     boost::format f("<halide.Image%s%i; element_size %i bytes; "
                     "extent (%i %i %i %i); min (%i %i %i %i); stride (%i %i %i %i)>");
 
-    repr = boost::str(f % suffix % t.bits % b.raw_buffer()->elem_size
+    repr = boost::str(f % suffix % t.bits() % b.raw_buffer()->elem_size
                       % b.extent(0) % b.extent(1) % b.extent(2) % b.extent(3)
                       % b.min(0) % b.min(1) % b.min(2) % b.min(3)
                       % b.stride(0) % b.stride(1) % b.stride(2) % b.stride(3));
@@ -634,9 +634,9 @@ struct hash<h::Type>
     result_type operator()(argument_type const& t) const
     {
         size_t seed = 0;
-        boost::hash_combine(seed, static_cast<int>(t.code));
-        boost::hash_combine(seed, t.bits);
-        boost::hash_combine(seed, t.width);
+        boost::hash_combine(seed, static_cast<int>(t.code()));
+        boost::hash_combine(seed, t.bits());
+        boost::hash_combine(seed, t.lanes());
         return seed;
     }
 };
@@ -902,5 +902,3 @@ void defineImage()
 
     return;
 }
-
-

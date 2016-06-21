@@ -115,8 +115,7 @@ bool is_negative_one(unsigned char val) {
 
 template<typename T,typename BIG,int bits>
 BIG maximum() {
-    Type t = type_of<T>();
-    t.bits = bits;
+    Type t = type_of<T>().with_bits(bits);
 
     if (t.is_float()) {
         return (BIG) 1.0;
@@ -125,13 +124,13 @@ BIG maximum() {
         uint64_t max;
         max = 0;
         max = ~max;
-        if (t.bits < 64)
-            max = (((uint64_t) 1) << t.bits) - 1;
+        if (t.bits() < 64)
+            max = (((uint64_t) 1) << t.bits()) - 1;
         return (BIG) max;
     }
     if (t.is_int()) {
         uint64_t umax;
-        umax = (((uint64_t) 1) << (t.bits - 1)) - 1;
+        umax = (((uint64_t) 1) << (t.bits() - 1)) - 1;
         return (BIG) umax;
     }
     assert(0);
@@ -140,8 +139,7 @@ BIG maximum() {
 
 template<typename T,typename BIG,int bits>
 BIG minimum() {
-    Type t = type_of<T>();
-    t.bits = bits;
+    Type t = type_of<T>().with_bits(bits);
 
     if (t.is_float()) {
         return (BIG) 0.0;
@@ -152,7 +150,7 @@ BIG minimum() {
     if (t.is_int()) {
         uint64_t umax;
         BIG min;
-        umax = (((uint64_t) 1) << (t.bits - 1)) - 1;
+        umax = (((uint64_t) 1) << (t.bits() - 1)) - 1;
         min = umax;
         min = -min - 1;
         return min;
@@ -175,7 +173,7 @@ Image<T> init(Type t, int unique, int width, int height) {
 
     Image<T> result(width, height);
 
-    assert(t.bits == bits);
+    assert(t.bits() == bits);
 
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
@@ -267,13 +265,12 @@ Image<T> init(Type t, int unique, int width, int height) {
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
 bool div_mod(int vector_width) {
+    std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
+
     int i, j;
-    Type t = type_of<T>();
+    Type t = type_of<T>().with_bits(bits);
     BIG minval = minimum<T,BIG,bits>();
     bool success = true;
-
-    std::cout << "Test division of " << t << 'x' << vector_width << '\n';
-    t.bits = bits; // Override the bits
 
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
@@ -363,12 +360,11 @@ bool div_mod(int vector_width) {
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
 bool f_mod() {
-    int i, j;
-    Type t = type_of<T>();
-    bool success = true;
+    std::cout << "Test mod of " << type_of<T>() << '\n';
 
-    std::cout << "Test mod of " << t << '\n';
-    t.bits = bits; // Override the bits
+    int i, j;
+    Type t = type_of<T>().with_bits(bits);
+    bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);

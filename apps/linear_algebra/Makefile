@@ -65,7 +65,7 @@ BENCHMARKS = \
 	benchmarks/halide_benchmarks
 
 LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_STATIC_LIBS)) \
-	../../$(LIB_HALIDE)
+	$(LIB_HALIDE)
 
 .PHONY: clean run_benchmarks
 all: $(BENCHMARKS)
@@ -81,9 +81,8 @@ clean:
 	rm -f $(BENCHMARKS)
 
 KERNEL_HEADERS = $(KERNELS:%=$(KERNEL_DIR)/halide_%.h)
-KERNEL_OBJECTS = $(KERNELS:%=$(KERNEL_DIR)/halide_%.o) $(KERNEL_DIR)/halide_runtime.o 
+KERNEL_OBJECTS = $(KERNELS:%=$(KERNEL_DIR)/halide_%.o) $(KERNEL_DIR)/halide_runtime.o
 $(LIBHALIDE_BLAS): src/halide_blas.o $(KERNEL_OBJECTS)
-	$(MAKE) -C ../../ $(LIB_HALIDE)
 	$(LD) -r -o src/BLAS.o src/halide_blas.o $(KERNEL_OBJECTS) $(LIBS)
 	rm -f $(LIBHALIDE_BLAS)
 	ar q $(LIBHALIDE_BLAS) src/BLAS.o
@@ -95,7 +94,7 @@ src/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
 
 tests/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -Wno-unused-variable -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
-	$(CBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
+	$(CBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
 # Large powers of two are a pathological case for the cache, so avoid
 # them for the benchmarks.
@@ -185,23 +184,23 @@ benchmarks.csv: $(BENCHMARKS)
 
 benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(CBLAS_FLAGS) \
-	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
+	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
 benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(ATLAS_FLAGS) \
-	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(ATLAS_LIBS) $(LLVM_LDFLAGS)
+	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(ATLAS_LIBS) $(LLVM_LDFLAGS)
 
 benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(OPENBLAS_FLAGS) \
-	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(OPENBLAS_LIBS) $(LLVM_LDFLAGS)
+	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(OPENBLAS_LIBS) $(LLVM_LDFLAGS)
 
 benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(EIGEN_INCLUDES) \
-	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(LLVM_LDFLAGS)
+	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(LLVM_LDFLAGS)
 
 benchmarks/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
-	$(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(LLVM_LDFLAGS)
+	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(LLVM_LDFLAGS)
 
 $(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(KERNEL_DIR)
@@ -209,7 +208,7 @@ $(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
 
 # This can use any of the generators; pick an arbitrary one
 $(KERNEL_DIR)/halide_runtime.o: $(KERNEL_DIR)/blas_l1.generator
-	$< -g saxpy -o $(KERNEL_DIR) -r $(@F) target=$(HL_TARGET) 
+	$< -g saxpy -o $(KERNEL_DIR) -r $(@F) target=$(HL_TARGET)
 
 $(KERNEL_DIR)/halide_scopy_impl.o $(KERNEL_DIR)/halide_scopy_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g saxpy -f halide_scopy_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \

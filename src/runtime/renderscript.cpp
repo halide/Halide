@@ -1076,7 +1076,10 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
                         << blocksZ << ", "
                         << "threads: " << threadsX << "x" << threadsY << "x"
                         << threadsZ << ", "
-                        << "shmem: " << shared_mem_bytes << "\n";
+                        << "shmem: " << shared_mem_bytes << ", "
+                        << "num_attributes: " << num_attributes << ", "
+                        << "num_coords_dim0: " << num_coords_dim0 << ", "
+                        << "num_coords_dim1: " << num_coords_dim1 << "\n";
 
     Context ctx(user_context);
     if (ctx.error != RS_SUCCESS) {
@@ -1094,7 +1097,9 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
     debug(user_context) << "Got module " << module << "\n";
     halide_assert(user_context, module);
 
-    size_t num_args = 0;
+    int32_t slot_offset = *((int32_t*)args[0]);
+    debug(user_context) << "Slot offset=" << slot_offset << "\n";
+    size_t num_args = 1;
 
     uint64_t input_arg = 0;
     uint64_t output_arg = 0;
@@ -1105,12 +1110,12 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
                             << arg_is_buffer[num_args] << "\n";
         if (arg_is_buffer[num_args] == 0) {
             int32_t arg_value = *((int32_t *)args[num_args]);
-            Context::dispatch->ScriptSetVarV(ctx.mContext, module, num_args,
+            Context::dispatch->ScriptSetVarV(ctx.mContext, module, num_args + slot_offset,
                                              &arg_value, sizeof(arg_value));
         } else {
             uint64_t arg_value = *(uint64_t *)args[num_args];
             Context::dispatch->ScriptSetVarObj(
-                ctx.mContext, module, num_args,
+                ctx.mContext, module, num_args + slot_offset,
                 (void *)halide_get_device_handle(arg_value));
 
             if (input_arg == 0) {

@@ -26,72 +26,72 @@ using namespace llvm;
 namespace {
 // cast operators
 Expr _i64(Expr e) {
-    return cast(Int(64, e.type().width), e);
+    return cast(Int(64, e.type().lanes()), e);
 }
 
 Expr _u64(Expr e) {
-    return cast(UInt(64, e.type().width), e);
+    return cast(UInt(64, e.type().lanes()), e);
 }
 Expr _i32(Expr e) {
-    return cast(Int(32, e.type().width), e);
+    return cast(Int(32, e.type().lanes()), e);
 }
 
 Expr _u32(Expr e) {
-    return cast(UInt(32, e.type().width), e);
+    return cast(UInt(32, e.type().lanes()), e);
 }
 
 Expr _i16(Expr e) {
-    return cast(Int(16, e.type().width), e);
+    return cast(Int(16, e.type().lanes()), e);
 }
 
 Expr _u16(Expr e) {
-    return cast(UInt(16, e.type().width), e);
+    return cast(UInt(16, e.type().lanes()), e);
 }
 
 /*
 Expr _f32(Expr e) {
-    return cast(Float(32, e.type().width), e);
+    return cast(Float(32, e.type().lanes()), e);
 }
 
 Expr _f64(Expr e) {
-    return cast(Float(64, e.type().width), e);
+    return cast(Float(64, e.type().lanes()), e);
 }
 */
 
 // saturating cast operators
 Expr _i8q(Expr e) {
-    return cast(Int(8, e.type().width), clamp(e, -128, 127));
+    return cast(Int(8, e.type().lanes()), clamp(e, -128, 127));
 }
 
 Expr _u8q(Expr e) {
     if (e.type().is_uint()) {
-        return cast(UInt(8, e.type().width), min(e, 255));
+        return cast(UInt(8, e.type().lanes()), min(e, 255));
     } else {
-        return cast(UInt(8, e.type().width), clamp(e, 0, 255));
+        return cast(UInt(8, e.type().lanes()), clamp(e, 0, 255));
     }
 }
 
 Expr _i16q(Expr e) {
-    return cast(Int(16, e.type().width), clamp(e, -32768, 32767));
+    return cast(Int(16, e.type().lanes()), clamp(e, -32768, 32767));
 }
 
 Expr _u16q(Expr e) {
     if (e.type().is_uint()) {
-        return cast(UInt(16, e.type().width), min(e, 65535));
+        return cast(UInt(16, e.type().lanes()), min(e, 65535));
     } else {
-        return cast(UInt(16, e.type().width), clamp(e, 0, 65535));
+        return cast(UInt(16, e.type().lanes()), clamp(e, 0, 65535));
     }
 }
 
 Expr _i32q(Expr e) {
-    return cast(Int(32, e.type().width), clamp(e, Int(32).min(), Int(32).max()));
+    return cast(Int(32, e.type().lanes()), clamp(e, Int(32).min(), Int(32).max()));
 }
 
 Expr _u32q(Expr e) {
     if (e.type().is_uint()) {
-        return cast(UInt(32, e.type().width), min(e, UInt(32).max()));
+        return cast(UInt(32, e.type().lanes()), min(e, UInt(32).max()));
     } else {
-        return cast(UInt(32, e.type().width), clamp(e, 0, UInt(32).max()));
+        return cast(UInt(32, e.type().lanes()), clamp(e, 0, UInt(32).max()));
     }
 }
 }
@@ -122,20 +122,19 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     for (size_t i = 0; i < sizeof(types)/sizeof(types[0]); i++) {
         Type t = types[i];
 
-        int intrin_width = t.width;
+        int intrin_lanes = t.lanes();
         std::ostringstream oss;
-        oss << ".v" << intrin_width << "i" << t.bits;
+        oss << ".v" << intrin_lanes << "i" << t.bits();
         string t_str = oss.str();
 
         // For the 128-bit versions, we want to match any vector width.
-        if (t.bits * t.width == 128) {
-            t.width = -1;
+        if (t.bits() * t.lanes() == 128) {
+            t = t.with_lanes(0);
         }
 
         // Wider versions of the type
-        Type w = t;
-        w.bits *= 2;
-        Type ws = Int(t.bits*2, t.width);
+        Type w = t.with_bits(t.bits() * 2);
+        Type ws = Int(t.bits()*2, t.lanes());
 
         // Vector wildcard for this type
         Expr vector = Variable::make(t, "*");
@@ -148,7 +147,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         Expr tsmin = simplify(cast(ws, t.min()));
         Expr tsmax = simplify(cast(ws, t.max()));
 
-        Pattern p("", "", intrin_width, Expr(), Pattern::NarrowArgs);
+        Pattern p("", "", intrin_lanes, Expr(), Pattern::NarrowArgs);
 
         // Rounding-up averaging
         if (t.is_int()) {
@@ -295,17 +294,17 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
     if (target.bits == 32) {
-        return call_intrin(t, p.intrin_width, p.intrin32, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin32, args);
     } else {
-        return call_intrin(t, p.intrin_width, p.intrin64, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin64, args);
     }
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, llvm::Type *t, const vector<llvm::Value *> &args) {
     if (target.bits == 32) {
-        return call_intrin(t, p.intrin_width, p.intrin32, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin32, args);
     } else {
-        return call_intrin(t, p.intrin_width, p.intrin64, args);
+        return call_intrin(t, p.intrin_lanes, p.intrin64, args);
     }
 }
 
@@ -332,8 +331,8 @@ void CodeGen_ARM::visit(const Cast *op) {
                 // Try to narrow all of the args.
                 bool all_narrow = true;
                 for (size_t i = 0; i < matches.size(); i++) {
-                    internal_assert(matches[i].type().bits == t.bits * 2);
-                    internal_assert(matches[i].type().width == t.width);
+                    internal_assert(matches[i].type().bits() == t.bits() * 2);
+                    internal_assert(matches[i].type().lanes() == t.lanes());
                     // debug(4) << "Attemping to narrow " << matches[i] << " to " << t << "\n";
                     matches[i] = lossless_cast(t, matches[i]);
                     if (!matches[i].defined()) {
@@ -353,7 +352,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                 Expr constant = matches[1];
                 int shift_amount;
                 bool power_of_two = is_const_power_of_two_integer(constant, &shift_amount);
-                if (power_of_two && shift_amount < matches[0].type().bits) {
+                if (power_of_two && shift_amount < matches[0].type().bits()) {
                     if (target.bits == 32 && pattern.type == Pattern::RightShift) {
                         // The arm32 llvm backend wants right shifts to come in as negative values.
                         shift_amount = -shift_amount;
@@ -382,10 +381,10 @@ void CodeGen_ARM::visit(const Cast *op) {
     if (t.is_vector() &&
         (t.is_int() || t.is_uint()) &&
         op->value.type().is_int() &&
-        t.bits == op->value.type().bits / 2) {
+        t.bits() == op->value.type().bits() / 2) {
         const Div *d = op->value.as<Div>();
-        if (d && is_const(d->b, 1 << t.bits)) {
-            Type unsigned_type = UInt(t.bits * 2, t.width);
+        if (d && is_const(d->b, 1 << t.bits())) {
+            Type unsigned_type = UInt(t.bits() * 2, t.lanes());
             Expr replacement = cast(t,
                                     cast(unsigned_type, d->a) /
                                     cast(unsigned_type, d->b));
@@ -398,14 +397,14 @@ void CodeGen_ARM::visit(const Cast *op) {
     if (t.is_vector() &&
         (t.is_int() || t.is_uint()) &&
         (op->value.type().is_int() || op->value.type().is_uint()) &&
-        t.bits == op->value.type().bits * 2) {
+        t.bits() == op->value.type().bits() * 2) {
         Expr a, b;
         const Call *c = op->value.as<Call>();
         if (c && c->name == Call::absd && c->call_type == Call::Intrinsic) {
             ostringstream ss;
-            int intrin_width = 128 / t.bits;
-            ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits / 2 << 'x' << intrin_width;
-            value = call_intrin(t, intrin_width, ss.str(), c->args);
+            int intrin_lanes = 128 / t.bits();
+            ss << "vabdl_" << (c->args[0].type().is_int() ? 'i' : 'u') << t.bits() / 2 << 'x' << intrin_lanes;
+            value = call_intrin(t, intrin_lanes, ss.str(), c->args);
             return;
         }
     }
@@ -506,15 +505,15 @@ void CodeGen_ARM::visit(const Div *op) {
         value = builder->CreateLShr(numerator, shift);
     } else if (const_int_divisor &&
                op->type.is_int() &&
-               (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
+               (op->type.bits() == 32 || op->type.bits() == 16 || op->type.bits() == 8) &&
                *const_int_divisor > 1 &&
-               ((op->type.bits > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
         int64_t multiplier, shift;
-        if (op->type.bits == 32) {
+        if (op->type.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
             shift      = IntegerDivision::table_s32[*const_int_divisor][3];
-        } else if (op->type.bits == 16) {
+        } else if (op->type.bits() == 16) {
             multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
             shift      = IntegerDivision::table_s16[*const_int_divisor][3];
         } else {
@@ -526,20 +525,20 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *val = codegen(op->a);
 
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));
+        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits()-1)));
         // Flip the numerator bits if the mask is high
         Value *flipped = builder->CreateXor(sign, val);
         // Grab the multiplier
         Value *mult = codegen(make_const(op->type, (int)multiplier));
         // Widening multiply
         llvm::Type *narrower = llvm_type_of(op->type);
-        llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
+        llvm::Type *wider = llvm_type_of(Int(op->type.bits()*2, op->type.lanes()));
         // flipped's high bit is zero, so it's ok to zero-extend it
         Value *flipped_wide = builder->CreateIntCast(flipped, wider, false);
         Value *mult_wide = builder->CreateIntCast(mult, wider, false);
         Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
         // Do the shift (add 8 or 16 to narrow back down)
-        Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits));
+        Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits()));
         val = builder->CreateLShr(wide_val, shift_amount);
         val = builder->CreateIntCast(val, narrower, true);
         // Maybe flip the bits again
@@ -547,15 +546,15 @@ void CodeGen_ARM::visit(const Div *op) {
 
     } else if (const_uint_divisor &&
                op->type.is_uint() &&
-               (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
+               (op->type.bits() == 32 || op->type.bits() == 16 || op->type.bits() == 8) &&
                *const_uint_divisor > 1 && *const_uint_divisor < 256) {
 
         int64_t method, multiplier, shift;
-        if (op->type.bits == 32) {
+        if (op->type.bits() == 32) {
             method     = IntegerDivision::table_u32[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u32[*const_uint_divisor][2];
             shift      = IntegerDivision::table_u32[*const_uint_divisor][3];
-        } else if (op->type.bits == 16) {
+        } else if (op->type.bits() == 16) {
             method     = IntegerDivision::table_u16[*const_uint_divisor][1];
             multiplier = IntegerDivision::table_u16[*const_uint_divisor][2];
             shift      = IntegerDivision::table_u16[*const_uint_divisor][3];
@@ -572,7 +571,7 @@ void CodeGen_ARM::visit(const Div *op) {
 
         // Widen
         llvm::Type *narrower = llvm_type_of(op->type);
-        llvm::Type *wider = llvm_type_of(UInt(op->type.bits*2, op->type.width));
+        llvm::Type *wider = llvm_type_of(UInt(op->type.bits()*2, op->type.lanes()));
         Value *mult = ConstantInt::get(narrower, multiplier);
         mult = builder->CreateIntCast(mult, wider, false);
         Value *val = builder->CreateIntCast(num, wider, false);
@@ -581,7 +580,7 @@ void CodeGen_ARM::visit(const Div *op) {
         val = builder->CreateMul(val, mult);
 
         // Narrow
-        int shift_bits = op->type.bits;
+        int shift_bits = op->type.bits();
         // For method 1, we can do the final shift here too.
         if (method == 1) {
             shift_bits += (int)shift;
@@ -592,19 +591,19 @@ void CodeGen_ARM::visit(const Div *op) {
 
         // Average with original numerator
         if (method == 2) {
-            if (op->type.is_vector() && op->type.bits == 32) {
+            if (op->type.is_vector() && op->type.bits() == 32) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 2, "llvm.arm.neon.vhaddu.v2i32", {val, num});
                 } else {
                     val = call_intrin(narrower, 2, "llvm.aarch64.neon.uhadd.v2i32", {val, num});
                 }
-            } else if (op->type.is_vector() && op->type.bits == 16) {
+            } else if (op->type.is_vector() && op->type.bits() == 16) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 4, "llvm.arm.neon.vhaddu.v4i16", {val, num});
                 } else {
                     val = call_intrin(narrower, 4, "llvm.aarch64.neon.uhadd.v4i16", {val, num});
                 }
-            } else if (op->type.is_vector() && op->type.bits == 8) {
+            } else if (op->type.is_vector() && op->type.bits() == 8) {
                 if (target.bits == 32) {
                     val = call_intrin(narrower, 8, "llvm.arm.neon.vhaddu.v8i8", {val, num});
                 } else {
@@ -652,9 +651,9 @@ void CodeGen_ARM::visit(const Sub *op) {
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
     if (op->type.is_float() && is_zero(op->a)) {
         Constant *a;
-        if (op->type.bits == 32) {
+        if (op->type.bits() == 32) {
             a = ConstantFP::getNegativeZero(f32);
-        } else if (op->type.bits == 64) {
+        } else if (op->type.bits() == 64) {
             a = ConstantFP::getNegativeZero(f64);
         } else {
             a = NULL;
@@ -663,8 +662,8 @@ void CodeGen_ARM::visit(const Sub *op) {
 
         Value *b = codegen(op->b);
 
-        if (op->type.width > 1) {
-            a = ConstantVector::getSplat(op->type.width, a);
+        if (op->type.lanes() > 1) {
+            a = ConstantVector::getSplat(op->type.lanes(), a);
         }
         value = builder->CreateFSub(a, b);
         return;
@@ -733,7 +732,7 @@ void CodeGen_ARM::visit(const Min *op) {
         bool match = op->type == patterns[i].t;
 
         // The 128-bit versions are also used for other vector widths.
-        if (op->type.is_vector() && patterns[i].t.width * patterns[i].t.bits == 128) {
+        if (op->type.is_vector() && patterns[i].t.lanes() * patterns[i].t.bits() == 128) {
             match = match || (op->type.element_of() == patterns[i].t.element_of());
         }
 
@@ -752,7 +751,7 @@ void CodeGen_ARM::visit(const Min *op) {
                 }
                 intrin += patterns[i].op;
             }
-            value = call_intrin(op->type, patterns[i].t.width, intrin, {op->a, op->b});
+            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
             return;
         }
     }
@@ -806,7 +805,7 @@ void CodeGen_ARM::visit(const Max *op) {
         bool match = op->type == patterns[i].t;
 
         // The 128-bit versions are also used for other vector widths.
-        if (op->type.is_vector() && patterns[i].t.width * patterns[i].t.bits == 128) {
+        if (op->type.is_vector() && patterns[i].t.lanes() * patterns[i].t.bits() == 128) {
             match = match || (op->type.element_of() == patterns[i].t.element_of());
         }
 
@@ -825,7 +824,7 @@ void CodeGen_ARM::visit(const Max *op) {
                 }
                 intrin += patterns[i].op;
             }
-            value = call_intrin(op->type, patterns[i].t.width, intrin, {op->a, op->b});
+            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
             return;
         }
     }
@@ -864,16 +863,16 @@ void CodeGen_ARM::visit(const Store *op) {
         Type t = call->args[0].type();
         intrin_type = t;
         Type elt = t.element_of();
-        int vec_bits = t.bits * t.width;
+        int vec_bits = t.bits() * t.lanes();
         if (elt == Float(32) ||
             elt == Int(8) || elt == Int(16) || elt == Int(32) ||
             elt == UInt(8) || elt == UInt(16) || elt == UInt(32)) {
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                intrin_type.width = 128 / t.bits;
+                intrin_type = intrin_type.with_lanes(128 / t.bits());
             } else if (vec_bits % 64 == 0) {
                 type_ok_for_vst = true;
-                intrin_type.width = 64 / t.bits;
+                intrin_type = intrin_type.with_lanes(64 / t.bits());
             }
         }
     }
@@ -902,8 +901,9 @@ void CodeGen_ARM::visit(const Store *op) {
             args[i] = codegen(call->args[i]);
         }
 
-        // Grab the function
+        // Declare the function
         std::ostringstream instr;
+        vector<llvm::Type *> arg_types;
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
@@ -911,36 +911,42 @@ void CodeGen_ARM::visit(const Store *op) {
                    << ".p0i8"
 #endif
                   << ".v"
-                  << intrin_type.width
+                  << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
-                  << t.bits;
+                  << t.bits();
+            arg_types = vector<llvm::Type *>(num_vecs + 2, llvm_type_of(intrin_type));
+            arg_types.front() = i8->getPointerTo();
+            arg_types.back() = i32;
         } else {
             instr << "llvm.aarch64.neon.st"
                   << num_vecs
                   << ".v"
-                  << intrin_type.width
+                  << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
-                  << t.bits
+                  << t.bits()
                   << ".p0"
                   << (t.is_float() ? 'f' : 'i')
-                  << t.bits;
+                  << t.bits();
+            arg_types = vector<llvm::Type *>(num_vecs + 1, llvm_type_of(intrin_type));
+            arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
-        llvm::Function *fn = module->getFunction(instr.str());
+        llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
+        llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
         internal_assert(fn);
 
         // How many vst instructions do we need to generate?
-        int slices = t.width / intrin_type.width;
+        int slices = t.lanes() / intrin_type.lanes();
 
         internal_assert(slices >= 1);
-        for (int i = 0; i < t.width; i += intrin_type.width) {
+        for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.width * num_vecs);
+            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
             Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
 
             vector<Value *> slice_args = args;
             // Take a slice of each arg
             for (int j = 0; j < num_vecs ; j++) {
-                slice_args[j] = slice_vector(slice_args[j], i, intrin_type.width);
+                slice_args[j] = slice_vector(slice_args[j], i, intrin_type.lanes());
             }
 
             if (target.bits == 32) {
@@ -980,8 +986,8 @@ void CodeGen_ARM::visit(const Store *op) {
         ostringstream builtin;
         builtin << "strided_store_"
                 << (op->value.type().is_float() ? 'f' : 'i')
-                << op->value.type().bits
-                << 'x' << op->value.type().width;
+                << op->value.type().bits()
+                << 'x' << op->value.type().lanes();
 
         llvm::Function *fn = module->getFunction(builtin.str());
         if (fn) {
@@ -1061,48 +1067,67 @@ void CodeGen_ARM::visit(const Load *op) {
         // Decide what width to slice things into. If not a multiple
         // of 64 or 128 bits, then we can't safely slice it up into
         // some number of vlds, so we hand it over the base class.
-        int bit_width = op->type.bits * op->type.width;
-        int intrin_width = 0;
+        int bit_width = op->type.bits() * op->type.lanes();
+        int intrin_lanes = 0;
         if (bit_width % 128 == 0) {
-            intrin_width = 128 / op->type.bits;
+            intrin_lanes = 128 / op->type.bits();
         } else if (bit_width % 64 == 0) {
-            intrin_width = 64 / op->type.bits;
+            intrin_lanes = 64 / op->type.bits();
         } else {
             CodeGen_Posix::visit(op);
             return;
         }
 
+        // Declare the intrinsic
         ostringstream intrin;
+        llvm::FunctionType *fn_type;
+        llvm::Type *return_type;
+        {
+            llvm::Type *one_vec = llvm_type_of(op->type.with_lanes(intrin_lanes));
+            vector<llvm::Type *> elements(stride->value, one_vec);
+            return_type = StructType::get(*context, elements);
+        }
         if (target.bits == 32) {
             intrin << "llvm.arm.neon.vld"
                    << stride->value
-                   << ".v" << intrin_width
+                   << ".v" << intrin_lanes
                    << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits
+                   << op->type.bits()
 #if LLVM_VERSION > 37
                    << ".p0i8"
 #endif
                    ;
+            // The intrinsic takes an i8 pointer and an alignment, and
+            // returns a struct of stride->value vectors of width
+            // intrin_lanes.
+            llvm::Type *arg_types[] = {i8->getPointerTo(), i32};
+            fn_type = llvm::FunctionType::get(return_type, arg_types, false);
         } else {
             intrin << "llvm.aarch64.neon.ld"
                    << stride->value
-                   << ".v" << intrin_width
+                   << ".v" << intrin_lanes
                    << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits
+                   << op->type.bits()
                    << ".p0"
                    << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits;
+                   << op->type.bits();
+            // The intrinsic takes a pointer to the element type and
+            // returns a struct of stride->value vectors of width
+            // intrin_lanes.
+            llvm::Type *arg_type = llvm_type_of(op->type.element_of())->getPointerTo();
+            llvm::Type *arg_types[] = {arg_type};
+            fn_type = llvm::FunctionType::get(return_type, arg_types, false);
         }
 
         // Get the intrinsic
-        llvm::Function *fn = module->getFunction(intrin.str());
+        llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(intrin.str(), fn_type));
         internal_assert(fn);
 
         // Load each slice.
         vector<Value *> results;
-        for (int i = 0; i < op->type.width; i += intrin_width) {
+        for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
             Expr slice_base = simplify(base + i*ramp->stride);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_width);
+            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
             CallInst *call = NULL;
             if (target.bits == 32) {
@@ -1132,8 +1157,8 @@ void CodeGen_ARM::visit(const Load *op) {
         ostringstream builtin;
         builtin << "strided_load_"
                 << (op->type.is_float() ? 'f' : 'i')
-                << op->type.bits
-                << 'x' << op->type.width;
+                << op->type.bits()
+                << 'x' << op->type.lanes();
 
         llvm::Function *fn = module->getFunction(builtin.str());
         if (fn) {
@@ -1159,19 +1184,19 @@ void CodeGen_ARM::visit(const Call *op) {
             const Sub *sub = op->args[0].as<Sub>();
             if (sub) {
                 Expr a = sub->a, b = sub->b;
-                Type narrow = UInt(a.type().bits/2, a.type().width);
+                Type narrow = UInt(a.type().bits()/2, a.type().lanes());
                 Expr na = lossless_cast(narrow, a);
                 Expr nb = lossless_cast(narrow, b);
 
                 // Also try an unsigned narrowing
                 if (!na.defined() || !nb.defined()) {
-                    narrow = Int(narrow.bits, narrow.width);
+                    narrow = Int(narrow.bits(), narrow.lanes());
                     na = lossless_cast(narrow, a);
                     nb = lossless_cast(narrow, b);
                 }
 
                 if (na.defined() && nb.defined()) {
-                    Expr absd = Call::make(UInt(narrow.bits, narrow.width), Call::absd,
+                    Expr absd = Call::make(UInt(narrow.bits(), narrow.lanes()), Call::absd,
                                            {na, nb}, Call::Intrinsic);
 
                     absd = Cast::make(op->type, absd);

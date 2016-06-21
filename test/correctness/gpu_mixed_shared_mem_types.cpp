@@ -48,12 +48,12 @@ int main(int argc, char **argv) {
         if ((types[i].is_int() || types[i].is_uint())) {
             // Metal does not support 64-bit integers.
             if (t.has_feature(Target::Metal) &&
-                types[i].bits >= 64) {
+                types[i].bits() >= 64) {
                 continue;
             }
 
-            if (types[i].bits <= 64) {
-                off = (1 << (types[i].bits - 4)) + 17;
+            if (types[i].bits() <= 64) {
+                off = (1 << (types[i].bits() - 4)) + 17;
             }
         }
         offset += off;

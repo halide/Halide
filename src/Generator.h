@@ -85,6 +85,7 @@
  * Pipeline object.
  */
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -218,6 +219,7 @@ public:
     }
 
     operator T() const { return value; }
+    operator Expr() const { return Internal::make_const(type_of<T>(), value); }
 
 private:
     T value;
@@ -328,6 +330,174 @@ private:
     }
 };
 
+/** Addition between GeneratorParam<T> and any type that supports operator+ with T.
+ * Returns type of underlying operator+. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 + (T)0) operator+(Other a, const GeneratorParam<T> &b) { return a + (T)b; }
+template <typename Other, typename T>
+decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, Other b) { return (T)a + b; }
+// @}
+
+/** Subtraction between GeneratorParam<T> and any type that supports operator- with T.
+ * Returns type of underlying operator-. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 - (T)0) operator-(Other a, const GeneratorParam<T> &b) { return a - (T)b; }
+template <typename Other, typename T>
+decltype((T)0 - (Other)0)  operator-(const GeneratorParam<T> &a, Other b) { return (T)a - b; }
+// @}
+
+/** Multiplication between GeneratorParam<T> and any type that supports operator* with T.
+ * Returns type of underlying operator*. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 * (T)0) operator*(Other a, const GeneratorParam<T> &b) { return a * (T)b; }
+template <typename Other, typename T>
+decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, Other b) { return (T)a * b; }
+// @}
+
+/** Division between GeneratorParam<T> and any type that supports operator/ with T.
+ * Returns type of underlying operator/. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 / (T)1) operator/(Other a, const GeneratorParam<T> &b) { return a / (T)b; }
+template <typename Other, typename T>
+decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, Other b) { return (T)a / b; }
+// @}
+
+/** Modulo between GeneratorParam<T> and any type that supports operator% with T.
+ * Returns type of underlying operator%. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 % (T)1) operator%(Other a, const GeneratorParam<T> &b) { return a % (T)b; }
+template <typename Other, typename T>
+decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, Other b) { return (T)a % b; }
+// @}
+
+/** Greater than comparison between GeneratorParam<T> and any type that supports operator> with T.
+ * Returns type of underlying operator>. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 > (T)1) operator>(Other a, const GeneratorParam<T> &b) { return a > (T)b; }
+template <typename Other, typename T>
+decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, Other b) { return (T)a > b; }
+// @}
+
+/** Less than comparison between GeneratorParam<T> and any type that supports operator< with T.
+ * Returns type of underlying operator<. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 < (T)1) operator<(Other a, const GeneratorParam<T> &b) { return a < (T)b; }
+template <typename Other, typename T>
+decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, Other b) { return (T)a < b; }
+// @}
+
+/** Greater than or equal comparison between GeneratorParam<T> and any type that supports operator>= with T.
+ * Returns type of underlying operator>=. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 >= (T)1) operator>=(Other a, const GeneratorParam<T> &b) { return a >= (T)b; }
+template <typename Other, typename T>
+decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, Other b) { return (T)a >= b; }
+// @}
+
+/** Less than or equal comparison between GeneratorParam<T> and any type that supports operator<= with T.
+ * Returns type of underlying operator<=. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 <= (T)1) operator<=(Other a, const GeneratorParam<T> &b) { return a <= (T)b; }
+template <typename Other, typename T>
+decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, Other b) { return (T)a <= b; }
+// @}
+
+/** Equality comparison between GeneratorParam<T> and any type that supports operator== with T.
+ * Returns type of underlying operator==. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 == (T)1) operator==(Other a, const GeneratorParam<T> &b) { return a == (T)b; }
+template <typename Other, typename T>
+decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, Other b) { return (T)a == b; }
+// @}
+
+/** Inequality comparison between between GeneratorParam<T> and any type that supports operator!= with T.
+ * Returns type of underlying operator!=. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 != (T)1) operator!=(Other a, const GeneratorParam<T> &b) { return a != (T)b; }
+template <typename Other, typename T>
+decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, Other b) { return (T)a != b; }
+// @}
+
+/** Logical and between between GeneratorParam<T> and any type that supports operator&& with T.
+ * Returns type of underlying operator&&. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 && (T)1) operator&&(Other a, const GeneratorParam<T> &b) { return a && (T)b; }
+template <typename Other, typename T>
+decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, Other b) { return (T)a && b; }
+// @}
+
+/** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
+ * Returns type of underlying operator||. */
+// @{
+template <typename Other, typename T>
+decltype((Other)0 || (T)1) operator||(Other a, const GeneratorParam<T> &b) { return a || (T)b; }
+template <typename Other, typename T>
+decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, Other b) { return (T)a || b; }
+// @}
+
+/* min and max are tricky as the language support for these is in the std
+ * namespace. In order to make this work, forwarding functions are used that
+ * are declared in a namespace that has std::min and std::max in scope.
+ */
+namespace Internal { namespace GeneratorMinMax {
+
+using std::max;
+using std::min;
+
+template <typename Other, typename T>
+decltype(min((Other)0, (T)1)) min_forward(Other a, const GeneratorParam<T> &b) { return min(a, (T)b); }
+template <typename Other, typename T>
+decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, Other b) { return min((T)a, b); }
+
+template <typename Other, typename T>
+decltype(max((Other)0, (T)1)) max_forward(Other a, const GeneratorParam<T> &b) { return max(a, (T)b); }
+template <typename Other, typename T>
+decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, Other b) { return max((T)a, b); }
+
+}}
+
+/** Compute minimum between GeneratorParam<T> and any type that supports min with T.
+ * Will automatically import std::min. Returns type of underlying min call. */
+// @{
+template <typename Other, typename T>
+auto min(Other a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+    return Internal::GeneratorMinMax::min_forward(a, b);
+}
+template <typename Other, typename T>
+auto min(const GeneratorParam<T> &a, Other b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+    return Internal::GeneratorMinMax::min_forward(a, b);
+}
+// @}
+
+/** Compute the maximum value between GeneratorParam<T> and any type that supports max with T.
+ * Will automatically import std::max. Returns type of underlying max call. */
+// @{
+template <typename Other, typename T>
+auto max(Other a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+    return Internal::GeneratorMinMax::max_forward(a, b);
+}
+template <typename Other, typename T>
+auto max(const GeneratorParam<T> &a, Other b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+    return Internal::GeneratorMinMax::max_forward(a, b);
+}
+// @}
+
+/** Not operator for GeneratorParam */
+template <typename T>
+decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
+
 class NamesInterface {
     // Names in this class are only intended for use in derived classes.
 protected:
@@ -348,10 +518,10 @@ protected:
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using Image = Halide::Image<T>;
     template <typename T> using Param = Halide::Param<T>;
-    inline Type Bool(int width = 1) const { return Halide::Bool(width); }
-    inline Type Float(int bits, int width = 1) const { return Halide::Float(bits, width); }
-    inline Type Int(int bits, int width = 1) const { return Halide::Int(bits, width); }
-    inline Type UInt(int bits, int width = 1) const { return Halide::UInt(bits, width); }
+    inline Type Bool(int lanes = 1) const { return Halide::Bool(lanes); }
+    inline Type Float(int bits, int lanes = 1) const { return Halide::Float(bits, lanes); }
+    inline Type Int(int bits, int lanes = 1) const { return Halide::Int(bits, lanes); }
+    inline Type UInt(int bits, int lanes = 1) const { return Halide::UInt(bits, lanes); }
 };
 
 namespace Internal {

@@ -100,7 +100,7 @@ std::string buffer_repr(const h::Buffer &that)
         boost::format format("<halide.Buffer named '%s' of type %s(%i) containing %s>");
 
         repr = boost::str(format % that.name()
-                          % type_code_to_string(t) % t.bits
+                          % type_code_to_string(t) % t.bits()
                           % buffer_t_repr(*that.raw_buffer()));
     }
     else

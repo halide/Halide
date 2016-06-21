@@ -8,7 +8,7 @@ using std::vector;
 
 namespace {
 
-llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
+std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
 
     #if LLVM_VERSION >= 36
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
@@ -16,43 +16,41 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
 
-    #if LLVM_VERSION >= 37
-    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get().release();
-    #elif LLVM_VERSION >= 35
-    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
-    #else
-    llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);
-    #endif
+    auto ret_val = llvm::parseBitcodeFile(bitcode_buffer, *context);
+    if (!ret_val) {
+        internal_error << "Could not parse built-in bitcode file " << id
+                       << " llvm error is " << ret_val.getError() << "\n";
+    }
 
     #if LLVM_VERSION < 36
     delete bitcode_buffer;
     #endif
 
-    mod->setModuleIdentifier(id);
+    std::unique_ptr<llvm::Module> result(std::move(*ret_val));
+    result->setModuleIdentifier(id);
 
-    return mod;
+    return result;
 }
 
 }
 
-#define DECLARE_INITMOD(mod)                                            \
-    extern "C" unsigned char halide_internal_initmod_##mod[];           \
-    extern "C" int halide_internal_initmod_##mod##_length;              \
-    llvm::Module *get_initmod_##mod(llvm::LLVMContext *context) {      \
+#define DECLARE_INITMOD(mod)                                                              \
+    extern "C" unsigned char halide_internal_initmod_##mod[];                             \
+    extern "C" int halide_internal_initmod_##mod##_length;                                \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) {         \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
-                                             halide_internal_initmod_##mod##_length); \
-        llvm::Module *module = parse_bitcode_file(sb, context, #mod);   \
-        return module;                                                  \
+                                             halide_internal_initmod_##mod##_length);     \
+        return parse_bitcode_file(sb, context, #mod);                                    \
     }
 
-#define DECLARE_NO_INITMOD(mod)                                         \
-    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
-        user_error << "Halide was compiled without support for this target\n"; \
-        return NULL;                                                    \
-    }                                                                   \
-    llvm::Module *get_initmod_##mod##_ll(llvm::LLVMContext *) {         \
-        user_error << "Halide was compiled without support for this target\n"; \
-        return NULL;                                                    \
+#define DECLARE_NO_INITMOD(mod)                                                      \
+  std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
+        user_error << "Halide was compiled without support for this target\n";       \
+        return std::unique_ptr<llvm::Module>();                                      \
+    }                                                                                \
+  std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {        \
+        user_error << "Halide was compiled without support for this target\n";       \
+        return std::unique_ptr<llvm::Module>();                                      \
     }
 
 #define DECLARE_CPP_INITMOD(mod) \
@@ -60,7 +58,7 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     DECLARE_INITMOD(mod ## _64_debug) \
     DECLARE_INITMOD(mod ## _32) \
     DECLARE_INITMOD(mod ## _64) \
-    llvm::Module *get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                      \
             if (debug) return get_initmod_##mod##_64_debug(context);                        \
             else return get_initmod_##mod##_64(context);                                    \
@@ -356,7 +354,7 @@ llvm::Triple get_triple_for_target(Target target) {
 // Link all modules together and with the result in modules[0], all
 // other input modules are destroyed. Sets the datalayout and target
 // triple appropriately for the target.
-void link_modules(std::vector<llvm::Module *> &modules, Target t) {
+void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t) {
 
     llvm::DataLayout data_layout = get_data_layout_for_target(t);
     llvm::Triple triple = get_triple_for_target(t);
@@ -375,12 +373,18 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
         string err_msg;
-        #if LLVM_VERSION >= 36
-        bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
+        #if LLVM_VERSION >= 38
+        bool failed = llvm::Linker::linkModules(*modules[0],
+                                                std::move(modules[i]));
         #else
-        bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
-                                                llvm::Linker::DestroySource, &err_msg);
+            #if LLVM_VERSION >= 36
+            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release());
+            #else
+            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release(),
+                                                    llvm::Linker::DestroySource, &err_msg);
+            #endif
         #endif
+
         if (failed) {
             internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
@@ -400,50 +404,44 @@ void link_modules(std::vector<llvm::Module *> &modules, Target t) {
                        "__stack_chk_fail",
                        ""};
 
-    llvm::Module *module = modules[0];
-
     // Enumerate the global variables.
-    for (llvm::Module::global_iterator iter = module->global_begin(); iter != module->global_end(); iter++) {
-        if (llvm::GlobalValue *gv = llvm::dyn_cast<llvm::GlobalValue>(iter)) {
-            // No variables are part of the public interface (even the ones labelled halide_)
-            llvm::GlobalValue::LinkageTypes t = gv->getLinkage();
-            if (t == llvm::GlobalValue::WeakAnyLinkage) {
-                gv->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
-                gv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-            }
+    for (auto &gv : modules[0]->globals()) {
+        // No variables are part of the public interface (even the ones labelled halide_)
+        llvm::GlobalValue::LinkageTypes t = gv.getLinkage();
+        if (t == llvm::GlobalValue::WeakAnyLinkage) {
+            gv.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+        } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+            gv.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
         }
     }
 
     // Enumerate the functions.
-    for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
-        llvm::Function *f = (llvm::Function *)(iter);
-
+    for (auto &f : *modules[0]) {
         bool can_strip = true;
         for (size_t i = 0; !retain[i].empty(); i++) {
-            if (f->getName() == retain[i]) {
+            if (f.getName() == retain[i]) {
                 can_strip = false;
             }
         }
 
-        bool is_halide_extern_c_sym = Internal::starts_with(f->getName(), "halide_");
-        internal_assert(!is_halide_extern_c_sym || f->isWeakForLinker() || f->isDeclaration())
-            << " for function " << (std::string)f->getName() << "\n";
+        bool is_halide_extern_c_sym = Internal::starts_with(f.getName(), "halide_");
+        internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
+            << " for function " << (std::string)f.getName() << "\n";
         can_strip = can_strip && !is_halide_extern_c_sym;
 
         if (can_strip) {
-            llvm::GlobalValue::LinkageTypes t = f->getLinkage();
+            llvm::GlobalValue::LinkageTypes t = f.getLinkage();
             if (t == llvm::GlobalValue::WeakAnyLinkage) {
-                f->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+                f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
             } else if (t == llvm::GlobalValue::WeakODRLinkage) {
-                f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+                f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
     }
 
     // Now remove the force-usage global that prevented clang from
     // dropping functions from the initial module.
-    llvm::GlobalValue *llvm_used = module->getNamedGlobal("llvm.used");
+    llvm::GlobalValue *llvm_used = modules[0]->getNamedGlobal("llvm.used");
     if (llvm_used) {
         llvm_used->eraseFromParent();
     }
@@ -535,7 +533,7 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
 }
 
 /** Create an llvm module containing the support code for a given target. */
-llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
+std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
     enum InitialModuleType {
         ModuleAOT,
         ModuleAOTNoRuntime,
@@ -567,7 +565,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
     bool debug = t.has_feature(Target::Debug);
 
-    vector<llvm::Module *> modules;
+    vector<std::unique_ptr<llvm::Module>> modules;
 
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
@@ -748,22 +746,22 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     if (t.os == Target::Windows &&
         t.bits == 32 &&
         (t.has_feature(Target::JIT))) {
-        undo_win32_name_mangling(modules[0]);
+        undo_win32_name_mangling(modules[0].get());
     }
 
     if (t.os == Target::Windows) {
-        add_underscores_to_posix_calls_on_windows(modules[0]);
+        add_underscores_to_posix_calls_on_windows(modules[0].get());
     }
 
-    return modules[0];
+    return std::move(modules[0]);
 }
 
 #ifdef WITH_PTX
-llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
-    std::vector<llvm::Module *> modules;
+std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
+    std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    llvm::Module *module;
+    std::unique_ptr<llvm::Module> module;
 
     // This table is based on the guidance at:
     // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
@@ -778,7 +776,7 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     } else {
         module = get_initmod_ptx_compute_20_ll(c);
     }
-    modules.push_back(module);
+    modules.push_back(std::move(module));
 
     link_modules(modules, target);
 
@@ -820,15 +818,13 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     modules[0]->setDataLayout(&dl);
     #endif
 
-
-
-    return modules[0];
+    return std::move(modules[0]);
 }
 #endif
 
 #ifdef WITH_RENDERSCRIPT
-llvm::Module *get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
-    llvm::Module *m = get_initmod_renderscript_dev_ll(c);
+std::unique_ptr<llvm::Module> get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
+    std::unique_ptr<llvm::Module> m(get_initmod_renderscript_dev_ll(c));
 
     llvm::Triple triple("armv7-none-linux-gnueabi");
     m->setTargetTriple(triple.str());

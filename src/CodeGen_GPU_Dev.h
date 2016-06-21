@@ -42,7 +42,7 @@ struct GPU_Argument {
      * If this is a buffer parameter, this is used to determine elem_size
      * of the buffer_t.
      *
-     * Note that type.width should always be 1 here. */
+     * Note that type.lanes() should always be 1 here. */
     Type type;
 
     /** The static size of the argument if known, or zero otherwise. */

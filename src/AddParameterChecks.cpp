@@ -98,8 +98,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     for (size_t i = 0; i < asserts.size(); i++) {
         ParamAssert p = asserts[i];
         // Upgrade the types to 64-bit versions for the error call
-        Type wider = p.value.type();
-        wider.bits = 64;
+        Type wider = p.value.type().with_bits(64);
         p.limit_value = cast(wider, p.limit_value);
         p.value       = cast(wider, p.value);
 

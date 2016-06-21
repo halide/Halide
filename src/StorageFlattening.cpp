@@ -152,8 +152,7 @@ private:
             }
 
             // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx];
-            t.bits = t.bytes() * 8;
+            Type t = realize->types[idx].with_bits(realize->types[idx].bytes() * 8);
 
             // Create a buffer_t object for this allocation.
             vector<Expr> args(dims*3 + 2);
@@ -208,9 +207,8 @@ private:
             Expr value = mutate(provide->values[i]);
 
             // Promote the type to be a multiple of 8 bits
-            Type t = value.type();
-            t.bits = t.bytes() * 8;
-            if (t.bits != value.type().bits) {
+            Type t = value.type().with_bits(value.type().bytes() * 8);
+            if (t.bits() != value.type().bits()) {
                 value = Cast::make(t, value);
             }
 
@@ -343,13 +341,12 @@ private:
             bool is_input = env.find(call->name) == env.end();
 
             // Promote the type to be a multiple of 8 bits
-            Type t = call->type;
-            t.bits = t.bytes() * 8;
+            Type t = call->type.with_bits(call->type.bytes() * 8);
 
             Expr idx = mutate(flatten_args(name, call->args, !(is_output || is_input)));
             expr = Load::make(t, name, idx, call->image, call->param);
 
-            if (call->type.bits != t.bits) {
+            if (call->type.bits() != t.bits()) {
                 expr = Cast::make(call->type, expr);
             }
         }

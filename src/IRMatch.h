@@ -15,9 +15,9 @@ namespace Internal {
  * as wildcards, and their matching equivalent in the second
  * expression is placed in the vector give as the third argument.
  * Wildcards require the types to match. For the type bits and width,
- * a -1 indicates "match anything". So an Int(8, -1) will match 8-bit
- * integer vectors of any width (including scalars), and a UInt(-1,
- * -1) will match any unsigned integer type.
+ * a 0 indicates "match anything". So an Int(8, 0) will match 8-bit
+ * integer vectors of any width (including scalars), and a UInt(0, 0)
+ * will match any unsigned integer type.
  *
  * For example:
  \code

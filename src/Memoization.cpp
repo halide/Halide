@@ -90,9 +90,9 @@ public:
         } else if (info.type.is_handle()) {
             internal_error << "Handle parameter " << parameter.name() <<
                 " encountered in computed_cached computation.\n" <<
-                "Computations which depend on buffer parameters " <<
+                "Computations which depend on handle parameters " <<
                 "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for buffer.\n";
+                "Use memoize_tag to provide cache key information for handle.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);

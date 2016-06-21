@@ -166,7 +166,7 @@ void ComputeModulusRemainder::visit(const Variable *op) {
 int gcd(int a, int b) {
     if (a < b) std::swap(a, b);
     while (b != 0) {
-        int tmp = b;
+        int64_t tmp = b;
         b = a % b;
         a = tmp;
     }
@@ -246,14 +246,26 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
 
     // Reduce them to the same modulus and the same remainder
     int modulus = gcd(a.modulus, b.modulus);
-    int diff = a.remainder - b.remainder;
+    int64_t diff = (int64_t)a.remainder - (int64_t)b.remainder;
+    if (!Int(32).can_represent(diff)) {
+        // The difference overflows.
+        return ModulusRemainder(0, 1);
+    }
     if (diff < 0) diff = -diff;
-    modulus = gcd(diff, modulus);
+    modulus = gcd((int)diff, modulus);
 
     int ra = mod(a.remainder, modulus);
 
     internal_assert(ra == mod(b.remainder, modulus))
-        << "There's a bug inside ModulusRemainder in unify_alternatives\n";
+        << "There's a bug inside ModulusRemainder in unify_alternatives:\n"
+        << "a.modulus         = " << a.modulus << "\n"
+        << "a.remainder       = " << a.remainder << "\n"
+        << "b.modulus         = " << b.modulus << "\n"
+        << "b.remainder       = " << b.remainder << "\n"
+        << "diff              = " << diff << "\n"
+        << "unified modulus   = " << modulus << "\n"
+        << "unified remainder = " << ra << "\n";
+
 
     return ModulusRemainder(modulus, ra);
 }

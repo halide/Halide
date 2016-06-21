@@ -165,14 +165,15 @@ void GPU_Host_Closure::visit(const Call *op) {
         string bufname = string_imm->value;
         BufferRef &ref = buffers[bufname];
         ref.type = op->type;
-        // TODO: do we need to set ref.dimensions?
 
         if (op->name == Call::glsl_texture_load ||
             op->name == Call::image_load) {
             ref.read = true;
+            ref.dimensions = (op->args.size() - 2) / 2;
         } else if (op->name == Call::glsl_texture_store ||
                    op->name == Call::image_store) {
             ref.write = true;
+            ref.dimensions = op->args.size() - 3;
         }
 
         // The Func's name and the associated .buffer are mentioned in the
@@ -521,7 +522,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // store the size of the argument. Buffer arguments get
             // the dev field, which is 64-bits.
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits;
+            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37

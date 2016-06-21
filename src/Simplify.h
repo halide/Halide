@@ -64,8 +64,8 @@ inline T div_imp(T a, T b) {
     if (t.is_int()) {
         int64_t q = a / b;
         int64_t r = a - q * b;
-        int64_t bs = b >> (t.bits - 1);
-        int64_t rs = r >> (t.bits - 1);
+        int64_t bs = b >> (t.bits() - 1);
+        int64_t rs = r >> (t.bits() - 1);
         return q - (rs & bs) + (rs & ~bs);
     } else {
         return a / b;

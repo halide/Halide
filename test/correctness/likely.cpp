@@ -209,6 +209,23 @@ int main(int argc, char **argv) {
         count_partitions(g, 3);
     }
 
+    // Make sure partitions that occur outside of the actual bounds
+    // don't mess things up.
+    {
+        Func g;
+        Var x;
+        Param<int> limit;
+        g(x) = select(x > limit, likely(3), 2);
+
+        // If either of these realize calls iterates from 0 to limit,
+        // and then from limit to 10, we'll have a nice segfault.
+        limit.set(10000000);
+        Image<int> result = g.realize(10);
+
+        limit.set(-10000000);
+        result = g.realize(10);
+    }
+
     // The performance of this behavior is tested in
     // test/performance/boundary_conditions.cpp
 

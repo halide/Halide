@@ -335,7 +335,7 @@ Stmt add_image_checks(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         Expr buffer_name_expr = Variable::make(Handle(), name + ".buffer");
-        vector<Expr> args = {buffer_name_expr, Expr(type.bits/8)};
+        vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
             args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));

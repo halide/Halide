@@ -35,17 +35,17 @@ Type map_type(const Type &type) {
     Type result = type;
     if (type.is_scalar()) {
         if (type.is_float()) {
-            user_assert(type.bits <= 32)
-                << "GLSL: Can't represent a float with " << type.bits << " bits.\n";
+            user_assert(type.bits() <= 32)
+                << "GLSL: Can't represent a float with " << type.bits() << " bits.\n";
             result = Float(32);
-        } else if (type.bits == 1) {
+        } else if (type.bits() == 1) {
             result = Bool();
         } else if (type == Int(32)) {
             // Keep unchanged
         } else if (type == UInt(32)) {
             // GLSL doesn't have unsigned types, simply use int.
             result = Int(32);
-        } else if (type.bits <= 16) {
+        } else if (type.bits() <= 16) {
             // Embed all other ints in a GLSL float. Probably not actually
             // valid for uint16 on systems with low float precision.
             result = Float(32);
@@ -53,14 +53,12 @@ Type map_type(const Type &type) {
             user_error << "GLSL: Can't represent type '"<< type << "'.\n";
         }
     } else {
-        user_assert(type.width <= 4)
+        user_assert(type.lanes() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
             << "GLSL: Can't represent vector type '"<< type << "'.\n";
-        Type scalar_type = type;
-        scalar_type.width = 1;
-        result = map_type(scalar_type);
-        result.width = type.width;
+        Type scalar_type = type.element_of();
+        result = map_type(scalar_type).with_lanes(type.lanes());
     }
     return result;
 }
@@ -69,7 +67,7 @@ Type map_type(const Type &type) {
 // introduce type casts around the arguments and the entire function call.
 Expr call_builtin(const Type &result_type, const std::string &func,
                   const std::vector<Expr> &args) {
-    Type float_type = Float(32, result_type.width);
+    Type float_type = Float(32, result_type.lanes());
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (!args[i].type().is_float()) {
@@ -167,7 +165,7 @@ void CodeGen_GLSLBase::visit(const Div *op) {
         // Halide's integer division is defined to round down. Since the
         // rounding behavior of GLSL's integer division is undefined, emulate
         // the correct behavior using floating point arithmetic.
-        Type float_type = Float(32, op->type.width);
+        Type float_type = Float(32, op->type.lanes());
         Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
         print_expr(call_builtin(op->type, "floor_f32", {val}));
     } else {
@@ -217,7 +215,7 @@ string CodeGen_GLSLBase::print_type(Type type) {
         } else {
             internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
-        oss << "vec" << type.width;
+        oss << "vec" << type.lanes();
     }
     return oss.str();
 }
@@ -253,14 +251,14 @@ void CodeGen_GLSL::visit(const Cast *op) {
     // is necessary.
     if (map_type(op->type) == map_type(value_type)) {
         Expr value = op->value;
-        if (value_type.code == Type::Float) {
+        if (value_type.code() == Type::Float) {
             // float->int conversions may need explicit truncation if the
             // integer types is embedded into floats.  (Note: overflows are
             // considered undefined behavior, so we do nothing about values
             // that are out of range of the target type.)
-            if (op->type.code == Type::UInt) {
+            if (op->type.code() == Type::UInt) {
                 value = simplify(floor(value));
-            } else if (op->type.code == Type::Int) {
+            } else if (op->type.code() == Type::Int) {
                 value = simplify(trunc(value));
             }
         }
@@ -306,9 +304,9 @@ void CodeGen_GLSL::visit(const For *loop) {
 }
 
 std::vector<Expr> evaluate_vector_select(const Select *op) {
-    const int width = op->type.width;
-    std::vector<Expr> result(width);
-    for (int i = 0; i < width; i++) {
+    const int lanes = op->type.lanes();
+    std::vector<Expr> result(lanes);
+    for (int i = 0; i < lanes; i++) {
         Expr cond = extract_lane(op->condition, i);
         Expr true_value = extract_lane(op->true_value, i);
         Expr false_value = extract_lane(op->false_value, i);
@@ -353,19 +351,19 @@ void CodeGen_GLSL::visit(const Select *op) {
         // vector types. If the select condition can be evaluated at
         // compile-time (which is often the case), we can built the vector
         // directly without lowering to a sequence of "if" statements.
-        internal_assert(op->condition.type().width == op->type.width);
-        int width = op->type.width;
+        internal_assert(op->condition.type().lanes() == op->type.lanes());
+        int lanes = op->type.lanes();
         std::vector<Expr> result = evaluate_vector_select(op);
-        std::vector<std::string> ids(width);
-        for (int i = 0; i < width; i++) {
+        std::vector<std::string> ids(lanes);
+        for (int i = 0; i < lanes; i++) {
             ids[i] = print_expr(result[i]);
         }
         id_value = unique_name('_');
         do_indent();
         stream << print_type(op->type) << " " << id_value << " = "
                << print_type(op->type) << "(";
-        for (int i = 0; i < width; i++) {
-            stream << ids[i] << ((i < width - 1) ? ", " : ");\n");
+        for (int i = 0; i < lanes; i++) {
+            stream << ids[i] << ((i < lanes - 1) ? ", " : ");\n");
         }
     }
 
@@ -427,11 +425,11 @@ void CodeGen_GLSL::visit(const Call *op) {
         // Determine the halide buffer associated with this load
         string buffername = string_imm->value;
 
-        internal_assert((op->type.code == Type::UInt || op->type.code == Type::Float) &&
-                        (op->type.width >= 1 && op->type.width <= 4));
+        internal_assert((op->type.code() == Type::UInt || op->type.code() == Type::Float) &&
+                        (op->type.lanes() >= 1 && op->type.lanes() <= 4));
 
-        internal_assert(op->args[2].type().width == 1) << "glsl_texture_load argument 2 is not scalar";
-        internal_assert(op->args[3].type().width == 1) << "glsl_texture_load argument 3 is not scalar";
+        internal_assert(op->args[2].type().lanes() == 1) << "glsl_texture_load argument 2 is not scalar";
+        internal_assert(op->args[3].type().lanes() == 1) << "glsl_texture_load argument 3 is not scalar";
 
         rhs << "texture2D(" << print_name(buffername) << ", vec2("
             << print_expr(op->args[2]) << ", "
@@ -468,8 +466,8 @@ void CodeGen_GLSL::visit(const Call *op) {
         // shufflevector, however, for GLSL its use is limited to swizzling
         // up to a four channel vec type.
 
-        int shuffle_width = op->type.width;
-        internal_assert(shuffle_width <= 4);
+        int shuffle_lanes = op->type.lanes();
+        internal_assert(shuffle_lanes <= 4);
 
         string expr = print_expr(op->args[0]);
 
@@ -478,7 +476,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         // operator. This is a common case that occurs when a scalar
         // shuffle vector expression is vectorized.
         bool all_int = true;
-        for (int i = 0; i != shuffle_width && all_int; ++i) {
+        for (int i = 0; i != shuffle_lanes && all_int; ++i) {
             all_int = all_int && (op->args[1 + i].as<IntImm>() != NULL);
         }
 
@@ -489,7 +487,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             static const char* channels = "rgba";
             string swizzle;
 
-            for (int i = 0; i != shuffle_width && all_int; ++i) {
+            for (int i = 0; i != shuffle_lanes && all_int; ++i) {
                 int channel = op->args[1 + i].as<IntImm>()->value;
                 internal_assert(channel < 4) << "Shuffle of invalid channel";
                 swizzle += channels[channel];
@@ -504,7 +502,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             // Check to see if the result is a scalar, i.e. we are
             // extracting a single channel from a vector
             if (op->type.is_scalar()) {
-                internal_assert(shuffle_width == 1) << "Invalid shuffle width for scalar result";
+                internal_assert(shuffle_lanes == 1) << "Invalid shuffle lanes for scalar result";
 
                 // In this case, no vector suffix is necessary on the LHS
                 rhs << expr << get_vector_suffix(op->args[1]);
@@ -516,7 +514,7 @@ void CodeGen_GLSL::visit(const Call *op) {
                 stream << print_type(op->type) << " " << v << ";\n";
 
                 // Otherwise, output a vector suffix for the assignment.
-                for (int i = 0; i != shuffle_width; ++i) {
+                for (int i = 0; i != shuffle_lanes; ++i) {
                     do_indent();
                     stream << v << get_vector_suffix(i) << " = "
                            << expr << get_vector_suffix(op->args[1 + i])
@@ -537,17 +535,17 @@ void CodeGen_GLSL::visit(const Call *op) {
         internal_assert(weight.type().is_uint() || weight.type().is_float());
         if (weight.type().is_uint()) {
             // Normalize integer weights to [0.0f, 1.0f] range.
-            internal_assert(weight.type().bits < 32);
+            internal_assert(weight.type().bits() < 32);
             weight = Div::make(Cast::make(Float(32), weight),
                                Cast::make(Float(32), weight.type().max()));
         } else if (op->type.is_uint()) {
             // Round float weights down to next multiple of (1/op->type.imax())
             // to give same results as lerp based on integer arithmetic.
-            internal_assert(op->type.bits < 32);
+            internal_assert(op->type.bits() < 32);
             weight = floor(weight * op->type.max()) / op->type.max();
         }
 
-        Type result_type = Float(32, op->type.width);
+        Type result_type = Float(32, op->type.lanes());
         Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
 
         if (!op->type.is_float()) {
@@ -580,12 +578,12 @@ void CodeGen_GLSL::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
 
-    if (op->width > 4)
-        internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
+    if (op->lanes > 4)
+        internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
 
     rhs << print_expr(op->base);
 
-    for (int i = 1; i < op->width; ++i) {
+    for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
     }
 

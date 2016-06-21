@@ -149,7 +149,7 @@ protected:
 
         // We can only interpolate float values, disqualify the expression if
         // this is a cast to a different type
-        if (order && (op->type.code != Type::Float)) {
+        if (order && (!op->type.is_float())) {
             order = 2;
         }
 
@@ -302,7 +302,7 @@ protected:
             order = 2;
         }
 
-        expr = Broadcast::make(a, op->width);
+        expr = Broadcast::make(a, op->lanes);
     }
 
     virtual void visit(const Select *op) {
@@ -528,7 +528,7 @@ protected:
     }
 
     Type float_type(Expr e) {
-        return Float(e.type().bits, e.type().width);
+        return Float(e.type().bits(), e.type().lanes());
     }
 
     template<typename T>

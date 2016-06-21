@@ -7,6 +7,7 @@
  */
 
 #include <map>
+#include <memory>
 
 #include "IntrusivePtr.h"
 #include "Type.h"
@@ -122,7 +123,8 @@ struct JITModule {
 
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
-    EXPORT void compile_module(llvm::Module *mod, const std::string &function_name, const Target &target,
+    EXPORT void compile_module(std::unique_ptr<llvm::Module> mod,
+                               const std::string &function_name, const Target &target,
                                const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
                                const std::vector<std::string> &requested_exports = std::vector<std::string>());
 

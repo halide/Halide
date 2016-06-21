@@ -196,9 +196,9 @@ IRComparer::CmpResult IRComparer::compare_stmt(const Stmt &a, const Stmt &b) {
 IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     if (result != Equal) return result;
 
-    compare_scalar(a.code, b.code);
-    compare_scalar(a.bits, b.bits);
-    compare_scalar(a.width, b.width);
+    compare_scalar(a.code(), b.code());
+    compare_scalar(a.bits(), b.bits());
+    compare_scalar(a.lanes(), b.lanes());
 
     return result;
 }

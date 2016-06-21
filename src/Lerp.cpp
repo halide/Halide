@@ -21,7 +21,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
     Type computation_type = result_type;
 
     if (zero_val.type().is_int()) {
-        computation_type = UInt(zero_val.type().bits, zero_val.type().width);
+        computation_type = UInt(zero_val.type().bits(), zero_val.type().lanes());
         bias_value = result_type.min();
     }
 
@@ -52,11 +52,11 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 // TODO: Verify this reduces to efficient code or
                 // figure out a better way to express a multiply
                 // of unsigned 2^32-1 by a double promoted weight
-                if (computation_type.bits == 32) {
+                if (computation_type.bits() == 32) {
                     typed_weight =
                         Cast::make(computation_type,
                                    cast<double>(Expr(65535.0f)) * cast<double>(Expr(65537.0f)) *
-                                   Cast::make(Float(64, typed_weight.type().width), typed_weight));
+                                   Cast::make(Float(64, typed_weight.type().lanes()), typed_weight));
                 } else {
                     typed_weight =
                         Cast::make(computation_type,
@@ -69,7 +69,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
         } else {
             if (computation_type.is_float()) {
-                int weight_bits = weight.type().bits;
+                int weight_bits = weight.type().bits();
                 if (weight_bits == 32) {
                     // Should use ldexp, but can't make Expr from result
                     // that is double
@@ -94,14 +94,14 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 // The loop below computes a scaling constant and either multiples
                 // or divides by the constant and relies on lowering and llvm to
                 // generate efficient code for the operation.
-                int bit_size_difference = weight.type().bits - computation_type.bits;
+                int bit_size_difference = weight.type().bits() - computation_type.bits();
                 if (bit_size_difference == 0) {
                     typed_weight = weight;
                 } else {
                     typed_weight = Cast::make(computation_type, weight);
 
                     int bits_left = ::abs(bit_size_difference);
-                    int shift_amount = std::min(computation_type.bits, weight.type().bits);
+                    int shift_amount = std::min(computation_type.bits(), weight.type().bits());
                     uint64_t scaling_factor = 1;
                     while (bits_left != 0) {
                         internal_assert(bits_left > 0);
@@ -129,7 +129,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
             result = zero_val * inverse_typed_weight +
                 one_val * typed_weight;
         } else {
-            int32_t bits = computation_type.bits;
+            int32_t bits = computation_type.bits();
             switch (bits) {
             case 1:
                 result = select(typed_weight, one_val, zero_val);
@@ -137,9 +137,9 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
             case 8:
             case 16:
             case 32: {
-                Expr zero_expand = Cast::make(UInt(2 * bits, computation_type.width),
+                Expr zero_expand = Cast::make(UInt(2 * bits, computation_type.lanes()),
                                               zero_val);
-                Expr  one_expand = Cast::make(UInt(2 * bits, one_val.type().width),
+                Expr  one_expand = Cast::make(UInt(2 * bits, one_val.type().lanes()),
                                               one_val);
 
                 Expr rounding = Cast::make(UInt(2 * bits), 1) << Cast::make(UInt(2 * bits), (bits - 1));
@@ -149,7 +149,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                     one_expand * typed_weight + rounding;
                 Expr divided = ((prod_sum / divisor) + prod_sum) / divisor;
 
-                result = Cast::make(UInt(bits, computation_type.width), divided);
+                result = Cast::make(UInt(bits, computation_type.lanes()), divided);
                 break;
             }
             case 64:

@@ -265,13 +265,13 @@ private:
     }
     void visit(const Ramp *op) {
         stream << open_span("Ramp");
-        print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->width)}, ")");
+        print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->lanes)}, ")");
         stream << close_span();
     }
     void visit(const Broadcast *op) {
         stream << open_span("Broadcast");
         stream << open_span("Matched");
-        stream << symbol("x") << op->width << "(";
+        stream << symbol("x") << op->lanes << "(";
         stream << close_span();
         print(op->value);
         stream << matched(")");
