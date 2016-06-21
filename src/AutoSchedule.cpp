@@ -428,45 +428,49 @@ struct CostModel {
     }
 
     vector< pair<int64_t, int64_t> >
-    get_func_cost(const Function& f,
-                  const set<string>& inlines = set<string>()) {
+    get_func_cost(const Function &f,
+                  const set<string> &inlines = set<string>()) {
 
         vector< pair<int64_t, int64_t> > func_costs;
         int64_t total_ops = 0;
-        int64_t total_loads = 1;
+        int64_t total_bytes = 0;
         // TODO: revist how boundary conditions are handled
-        for (auto& e: f.values()) {
+        for (auto &e: f.values()) {
             Expr inlined_expr = perform_inline(e, inlines);
             ExprCost cost_visitor;
             inlined_expr.accept(&cost_visitor);
             total_ops += cost_visitor.ops;
-            total_loads += cost_visitor.byte_loads;
+            total_bytes += cost_visitor.byte_loads;
+
+            total_bytes += e.type().bytes();
         }
 
-        func_costs.push_back(make_pair(total_ops, total_loads));
+        func_costs.push_back(make_pair(total_ops, total_bytes));
 
         // Estimating cost when reductions are involved
         if (!f.is_pure()) {
-            for (const Definition& u: f.updates()) {
+            for (const Definition &u: f.updates()) {
                 int64_t ops = 0;
-                int64_t loads = 1;
-                for (auto& e: u.values()) {
+                int64_t bytes = 0;
+                for (auto &e: u.values()) {
                     Expr inlined_expr = perform_inline(e, inlines);
                     ExprCost cost_visitor;
                     inlined_expr.accept(&cost_visitor);
                     ops += cost_visitor.ops;
-                    loads += cost_visitor.byte_loads;
+                    bytes += cost_visitor.byte_loads;
+
+                    bytes += e.type().bytes();
                 }
 
-                for (auto& arg: u.args()) {
+                for (auto &arg: u.args()) {
                     Expr inlined_arg = perform_inline(arg, inlines);
                     ExprCost cost_visitor;
                     inlined_arg.accept(&cost_visitor);
                     ops += cost_visitor.ops;
-                    loads += cost_visitor.byte_loads;
+                    bytes += cost_visitor.byte_loads;
                 }
 
-                func_costs.push_back(make_pair(ops, loads));
+                func_costs.push_back(make_pair(ops, bytes));
             }
         }
         return func_costs;
@@ -576,13 +580,18 @@ struct CostModel {
     }
 
     void disp_costs() {
-        int stage = 0;
         debug(0) << "===========================" << '\n';
         debug(0) << "Pipeline per element costs:" << '\n';
         debug(0) << "===========================" << '\n';
-        for (auto& kv : env) {
-            for (auto& cost: func_cost[kv.first]) {
-                debug(0) << ",FStage:" << stage << "," << cost.first << '\n';
+        for (auto &kv : env) {
+            int stage = 0;
+            for (auto &cost: func_cost[kv.first]) {
+                Definition def = get_stage_definition(kv.second, stage);
+                for (auto &e: def.values()) {
+                    debug(0) << e << '\n';
+                }
+                debug(0) << "(" << kv.first << "," << stage << ")" <<
+                            "(" << cost.first << "," << cost.second << ")" << '\n';
                 stage++;
             }
         }
@@ -965,12 +974,8 @@ struct Partitioner {
         // the cons_group at the granularity of the tile given by tile_sizes
         string prod;
         FStage cons;
-        // Tile sizes along the output of the consumer group
-        map<string, int> tile_sizes;
 
-        FusionChoice(string _prod, FStage _cons,
-                     const map<string, int>& _tile_sizes = map<string, int>()) :
-                     prod(_prod), cons(_cons), tile_sizes(_tile_sizes) {}
+        FusionChoice(string _prod, FStage _cons) : prod(_prod), cons(_cons) {}
 
         bool operator==(const FusionChoice& other) const {
             return (prod == other.prod) &&
@@ -988,18 +993,18 @@ struct Partitioner {
             stream << "Choice:" << choice.prod << "->"
                    << choice.cons << '\n';
 
-            stream << "Tile sizes:" << "[";
-            for (auto& s: choice.tile_sizes) {
-                stream << "(" << s.first << "," <<  s.second << ")";
-            }
-            stream << "]" << '\n';
-
             return stream;
         }
-
     };
 
-    map<FusionChoice, int64_t> fusion_cache;
+    struct EvalConfig {
+        map<string, int> tile_sizes;
+        int64_t benefit;
+        EvalConfig(const map<string, int> &_tile_sizes, int64_t _benefit) :
+                   tile_sizes(_tile_sizes), benefit(_benefit) {}
+    };
+
+    map<FusionChoice, EvalConfig> fusion_cache;
 
     struct Group {
         // The output stage representing the group
@@ -1136,9 +1141,10 @@ struct Partitioner {
             // replaced by find_direct_calls
         }
 
-    void merge_groups(FusionChoice &choice, Partitioner::Level level);
+    void merge_groups(const FusionChoice &choice, const EvalConfig &eval,
+                      Partitioner::Level level);
 
-    int64_t evaluate_choice(FusionChoice &fuse, Partitioner::Level level);
+    EvalConfig evaluate_choice(const FusionChoice &fuse, Partitioner::Level level);
 
     Group fuse_groups(Group &g1, Group &g2);
 
@@ -1148,7 +1154,7 @@ struct Partitioner {
 
     void group(Partitioner::Level level);
 
-    pair<vector<FusionChoice>, int64_t>
+    vector<pair<FusionChoice, EvalConfig>>
     choose_candidate_fuse(const vector<pair<string, string>> &cand_pairs,
                           Partitioner::Level level);
 
@@ -1171,13 +1177,6 @@ struct Partitioner {
 
     pair<map<string, int>, GroupAnalysis> find_best_tile_config(const Group &g);
 
-    void initialize_groups_inline();
-
-    void disp_pipeline_costs();
-    void disp_pipeline_bounds();
-    void disp_pipeline_graph();
-    void disp_grouping();
-
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
                              bool no_redundant_work, bool ensure_parallelism);
 
@@ -1185,9 +1184,17 @@ struct Partitioner {
                              const Group &cons_group,
                              const GroupAnalysis &fused_analy,
                              bool no_redundant_work, bool ensure_parallelism);
+
+    void initialize_groups_inline();
+
+    void disp_pipeline_costs();
+    void disp_pipeline_bounds();
+    void disp_pipeline_graph();
+    void disp_grouping();
 };
 
-void Partitioner::merge_groups(FusionChoice &choice, Partitioner::Level level) {
+void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eval,
+                               Partitioner::Level level) {
 
     Function prod_f = analy.env.at(choice.prod);
     size_t num_stages = prod_f.updates().size() + 1;
@@ -1208,18 +1215,14 @@ void Partitioner::merge_groups(FusionChoice &choice, Partitioner::Level level) {
         // merge should be a member of the group class so that it is more
         // contained.
         if (level == Partitioner::INLINE) {
-            internal_assert(choice.tile_sizes.size() == 0);
+            internal_assert(eval.tile_sizes.size() == 0);
             for (auto &stg: cand_funcs) {
                 groups.at(child_group).inlined.insert(stg.func.name());
             }
         }
     }
 
-    internal_assert(level == Partitioner::FAST_MEM ||
-                    (level== Partitioner::INLINE &&
-                     choice.tile_sizes.size() == 0));
-
-    groups.at(child_group).tile_sizes = choice.tile_sizes;
+    groups.at(child_group).tile_sizes = eval.tile_sizes;
 
     // Update group costs
     group_costs[child_group] = analyze_group(groups.at(child_group));
@@ -1302,9 +1305,9 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
     // TODO: Check if tile sizes of 1 in each dimension gives a reasonable
     // answer or reuse should be evaluated at a much larger granularity or
     // symbolically.  Using a symbolic version might be better if the objective
-    // is to proce the dimension has no reuse. The only downside with the
+    // is to prove the dimension has no reuse. The only downside with the
     // symbolic method is it totally at the mercy of the simplifier.  Another
-    // option is sampling or using a larger granularity
+    // option is sampling or using a larger granularity.
     map<string, int> tile_sizes;
 
     const vector<Dim> &dims = def.schedule().dims();
@@ -1338,61 +1341,66 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
     return reuse;
 }
 
-pair<vector<Partitioner::FusionChoice>, int64_t>
-Partitioner::choose_candidate_fuse(const vector<pair<string, string>>& cands,
+vector<pair<Partitioner::FusionChoice, Partitioner::EvalConfig>>
+Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
                                    Partitioner::Level level) {
 
-    pair<vector<Partitioner::FusionChoice>, int64_t> best;
-    best.second = -1;
-    for (auto& p: cands) {
+    vector<pair<FusionChoice, EvalConfig>> best_choices;
+    int64_t best_benefit = -1;
+    for (auto &p: cands) {
         // Compute the aggregate benefit for inlining into all the children
         int64_t overall_benefit = 0;
-        vector<Partitioner::FusionChoice> choices;
+        vector<pair<FusionChoice, EvalConfig>> choices;
 
         Function prod_f = analy.env.at(p.first);
         int final_stage = prod_f.updates().size();
 
         FStage prod(prod_f.name(), final_stage);
 
-        for (const FStage& c: children[prod]) {
-            int64_t benefit = 0;
+        for (const FStage &c: children[prod]) {
+
+            EvalConfig best_config(map<string, int>(), 0);
             FusionChoice cand_choice(prod_f.name(), c);
 
             // Check if the pair has been evaluated for inline fusion before
             if (fusion_cache.find(cand_choice) != fusion_cache.end()) {
 
-                benefit = fusion_cache.at(cand_choice);
+                best_config = fusion_cache.at(cand_choice);
 
             } else {
-                benefit = evaluate_choice(cand_choice, level);
+                best_config = evaluate_choice(cand_choice, level);
                 // Cache the result of the evaluation for the pair
-                fusion_cache.insert(make_pair(cand_choice, benefit));
+                fusion_cache.insert(make_pair(cand_choice, best_config));
             }
 
             // Conservative strategy that only goes ahead with the fusion if all the
             // fusions into the consumers are beneficial
             // TODO: Create a test where this assumption breaks
-            if (benefit < 0) {
+            if (best_config.benefit < 0) {
                 overall_benefit = -1;
                 choices.clear();
                 break;
             } else {
-                choices.push_back(cand_choice);
-                overall_benefit += benefit;
+                choices.push_back(make_pair(cand_choice, best_config));
+                overall_benefit += best_config.benefit;
             }
         }
 
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
-        if (best.second < overall_benefit
+        if (best_benefit < overall_benefit
             /*||
               (best.second == overall_benefit &&
               best.first[0].prod_group > p.first)*/) {
-            best.first = choices;
-            best.second = overall_benefit;
+            for (auto &choice: choices) {
+                debug(0) << "Best choice:" << choice.first << '\n';
+            }
+            best_choices = choices;
+            best_benefit = overall_benefit;
         }
     }
-    return best;
+
+    return best_choices;
 }
 
 vector<map<string, int>>
@@ -1465,11 +1473,13 @@ pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g) {
 
     // TODO: Add sanity checks for the cost model
+    /*
     debug(0) << "\n============\n";
     debug(0) << "Search start\n";
     debug(0) << "============\n";
 
     debug(0) << g;
+    */
 
     // Initialize to no tiling
     map<string, int> no_tile_config;
@@ -1508,12 +1518,14 @@ Partitioner::find_best_tile_config(const Group &g) {
             best_analy = new_analy;
         }
     }
+    /*
     debug(0) << "\n===========\n";
     debug(0) << "Best config\n";
     for (auto &dim: best_config) {
         debug(0) << dim.first << ":" << dim.second << " ";
     }
     debug(0) << '\n' << best_analy;
+    */
 
     return make_pair(best_config, best_analy);
 }
@@ -1573,57 +1585,57 @@ void Partitioner::group(Partitioner::Level level) {
             debug(0) << "[" << p.first << "," << p.second << "]" << '\n';
         }
 
-        pair<vector<FusionChoice>, int64_t> best;
+        vector<pair<FusionChoice, EvalConfig>> best;
         best = choose_candidate_fuse(cand, level);
-        if (best.second >= 0) {
 
-            string prod = best.first[0].prod;
+        if (!(best.size() > 0)) {
+            fixpoint = true;
+            continue;
+        }
 
-            Function prod_f = analy.env.at(prod);
-            size_t num_stages = prod_f.updates().size() + 1;
+        // TODO: state assumptions behind the following code
+        string prod = best[0].first.prod;
 
-            FStage final_stage(prod_f, num_stages - 1);
-            set<FStage> cand_group_children = children[final_stage];
+        Function prod_f = analy.env.at(prod);
+        size_t num_stages = prod_f.updates().size() + 1;
 
-            for (auto& choice: best.first) {
-                // Invalidate entries of the fusion cache
-                vector<FusionChoice> invalid_keys;
-                for (auto &c: cand_group_children) {
-                    for (auto &choice: fusion_cache) {
-                        if (choice.first.prod == c.func.name() ||
-                            choice.first.cons == c)
-                            invalid_keys.push_back(choice.first);
-                    }
-                }
+        FStage final_stage(prod_f, num_stages - 1);
+        set<FStage> cand_group_children = children[final_stage];
 
-                for (auto &key: invalid_keys) {
-                    internal_assert(fusion_cache.find(key) !=
-                                    fusion_cache.end());
-                    fusion_cache.erase(key);
-                }
-
-                internal_assert(choice.prod == prod);
-                merge_groups(choice, level);
+        // Invalidate entries of the fusion cache
+        vector<FusionChoice> invalid_keys;
+        for (auto &c: cand_group_children) {
+            for (auto &entry: fusion_cache) {
+                if (entry.first.prod == c.func.name() || entry.first.cons == c)
+                    invalid_keys.push_back(entry.first);
             }
+        }
 
-            for (size_t s = 0; s < num_stages; s++) {
-                FStage cand_group(prod_f, s);
-                groups.erase(cand_group);
-                group_costs.erase(cand_group);
+        for (auto &key: invalid_keys) {
+            internal_assert(fusion_cache.find(key) != fusion_cache.end());
+            fusion_cache.erase(key);
+        }
 
-                // Update the children mapping
-                children.erase(cand_group);
-                for (auto &f: children) {
-                    set<FStage> &cons = f.second;
-                    if (cons.find(cand_group) != cons.end()) {
-                        cons.erase(cand_group);
-                        cons.insert(cand_group_children.begin(),
-                                    cand_group_children.end());
-                    }
+        for (auto &fuse: best) {
+            internal_assert(fuse.first.prod == prod);
+            merge_groups(fuse.first, fuse.second, level);
+        }
+
+        for (size_t s = 0; s < num_stages; s++) {
+            FStage cand_group(prod_f, s);
+            groups.erase(cand_group);
+            group_costs.erase(cand_group);
+
+            // Update the children mapping
+            children.erase(cand_group);
+            for (auto &f: children) {
+                set<FStage> &cons = f.second;
+                if (cons.find(cand_group) != cons.end()) {
+                    cons.erase(cand_group);
+                    cons.insert(cand_group_children.begin(),
+                                cand_group_children.end());
                 }
             }
-
-            fixpoint = false;
         }
     }
 }
@@ -1765,12 +1777,15 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         }
     }
 
+    /*
+    debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
     debug(0) << "Input reg:" << '\n';
     disp_regions(input_reg);
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
+    */
 
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost =
@@ -1829,12 +1844,14 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
+    /*
     debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
     debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
     debug(0) << "tile_cost.second:" << tile_cost.second << '\n';
 
     debug(0) << g_analy << '\n';
+    */
 
     return g_analy;
 }
@@ -1858,8 +1875,9 @@ Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
     return fused_group;
 }
 
-int64_t Partitioner::evaluate_choice(FusionChoice& choice,
-                                     Partitioner::Level level) {
+Partitioner::EvalConfig
+Partitioner::evaluate_choice(const FusionChoice& choice,
+                             Partitioner::Level level) {
 
     // Create a group that reflects the fusion choice and evaluate the cost
     // of the group.
@@ -1878,6 +1896,7 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice,
     }
 
     GroupAnalysis fused_analy;
+    map<string, int> best_tile_config;
 
     if (level == Partitioner::INLINE) {
         // Set the tile sizes to one along all dimensions of the consumer group
@@ -1903,14 +1922,22 @@ int64_t Partitioner::evaluate_choice(FusionChoice& choice,
             fused.inlined.insert(f);
 
         fused_analy = analyze_group(fused);
+
+        // TODO: should the tile sizes be set to 1
     } else {
         pair<map<string, int>, GroupAnalysis> config =
                                     find_best_tile_config(fused);
-        choice.tile_sizes = config.first;
+        best_tile_config = config.first;
         fused_analy = config.second;
     }
 
-    return estimate_benefit(prod_groups, cons, fused_analy, true, false);
+    int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
+                                       true, false);
+
+    internal_assert(benefit < 0 ||
+                     (benefit >= 0 && best_tile_config.size() > 0));
+
+    return EvalConfig(best_tile_config, benefit);
 }
 
 int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
@@ -2024,7 +2051,7 @@ map<FStage, map<FStage, DimBounds>> Partitioner::get_group_member_bounds() {
 }
 
 pair<VarOrRVar, VarOrRVar>
-split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix, 
+split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
           string out_suffix, map<string, int> &estimates, string &sched) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
@@ -2066,6 +2093,8 @@ string Partitioner::generate_group_cpu_schedule(
     string sched = "";
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
+
+    debug(0) << "Scheduling group:" << g;
 
     // Get the definition corresponding to the stage
     Definition def = get_stage_definition(g_out,
@@ -2389,6 +2418,7 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
         }
     }*/
 
+    cost_model.disp_costs();
     part.disp_pipeline_bounds();
     part.disp_pipeline_graph();
     part.initialize_groups_inline();
