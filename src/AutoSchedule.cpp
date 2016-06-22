@@ -712,7 +712,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         Definition def = get_stage_definition(s.func, s.stage_num);
         Scope<Interval> curr_scope;
 
-        const vector<Dim>& dims = def.schedule().dims();
+        const vector<Dim> &dims = def.schedule().dims();
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
@@ -728,7 +728,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             map<string, Box> curr_regions =
                     boxes_required(val, curr_scope, func_val_bounds);
 
-            for (const Expr& arg: def.args()) {
+            Box left_reg;
+            for (const Expr &arg: def.args()) {
                 map<string, Box> arg_regions =
                         boxes_required(arg, curr_scope, func_val_bounds);
 
@@ -740,9 +741,19 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     else
                         merge_boxes(curr_regions[reg.first], reg.second);
                 }
+
+                Interval arg_bounds =
+                        bounds_of_expr_in_scope(arg, curr_scope, func_val_bounds);
+                left_reg.push_back(arg_bounds);
             }
 
-            for (auto& reg: curr_regions) {
+            if (curr_regions.find(s.func.name()) == curr_regions.end()) {
+                curr_regions[s.func.name()] = left_reg;
+            } else {
+                merge_boxes(curr_regions[s.func.name()], left_reg);
+            }
+
+            for (auto &reg: curr_regions) {
                 // merge region with an existing region for the function in the
                 // global map
 
@@ -1364,10 +1375,11 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
 
             // Check if the pair has been evaluated for inline fusion before
             if (fusion_cache.find(cand_choice) != fusion_cache.end()) {
-
+                // debug(0) << "Cache Hit:" << cand_choice << '\n';
                 best_config = fusion_cache.at(cand_choice);
 
             } else {
+                // debug(0) << "Cache Miss:" << cand_choice << '\n';
                 best_config = evaluate_choice(cand_choice, level);
                 // Cache the result of the evaluation for the pair
                 fusion_cache.insert(make_pair(cand_choice, best_config));
@@ -1392,12 +1404,14 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             /*||
               (best.second == overall_benefit &&
               best.first[0].prod_group > p.first)*/) {
-            for (auto &choice: choices) {
-                debug(0) << "Best choice:" << choice.first << '\n';
-            }
+
             best_choices = choices;
             best_benefit = overall_benefit;
         }
+    }
+
+    for (auto &choice: best_choices) {
+        debug(0) << "Best choice:" << choice.first << '\n';
     }
 
     return best_choices;
@@ -1589,8 +1603,9 @@ void Partitioner::group(Partitioner::Level level) {
         best = choose_candidate_fuse(cand, level);
 
         if (!(best.size() > 0)) {
-            fixpoint = true;
             continue;
+        } else {
+            fixpoint = false;
         }
 
         // TODO: state assumptions behind the following code
@@ -1765,9 +1780,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
 
     map<string, Box> group_reg, prod_reg, input_reg;
 
-    // Filtering out regions that belong to the group and are input to the group
-    for (auto& reg: conc_reg) {
-        if (group_mem.find(reg.first) != group_mem.end()) {
+    // Separating into regions that belong to the group and are input to the group
+    for (auto &reg: conc_reg) {
+        if (group_mem.find(reg.first) != group_mem.end() &&
+            reg.first != g.output.func.name()) {
             group_reg[reg.first] = reg.second;
         } else if (group_inputs.find(reg.first) != group_inputs.end()) {
             if (analy.env.find(reg.first) != analy.env.end())
@@ -1777,7 +1793,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         }
     }
 
-    /*
     debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
@@ -1785,7 +1800,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     disp_regions(input_reg);
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
-    */
 
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost =
@@ -1795,14 +1809,23 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
                               cost_model.input_region_size(input_reg);
 
     Box out_tile_extent;
-
     const vector<string> &args = g.output.func.args();
     for (size_t d = 0; d < args.size(); d++ ) {
         out_tile_extent.push_back(tile_bounds[args[d]]);
     }
 
-    int64_t tile_output_size = cost_model.region_size(g.output.func.name(),
-                                                      out_tile_extent);
+    debug(0) << "out_tile_extent:" << out_tile_extent << '\n';
+
+    int64_t tile_output_size = 0;
+
+    // Compute the tile output size if the stage is not an update
+    // otherwise it is already accounted for in the group regions
+    if (g.output.stage_num == 0) {
+        tile_output_size = cost_model.region_size(g.output.func.name(),
+                                                  out_tile_extent);
+    } else {
+        tile_output_size = box_area(conc_reg.at(g.output.func.name()));
+    }
 
     // Adding tile input and output size to tile_intermediate_size over
     // estimates the working set size
@@ -1824,7 +1847,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     // The group could not be analyzed
     if (tile_cost.first < 0 || tile_cost.second < 0 ||
         tile_input_size < 0 || tile_inter_size < 0 ||
-        out_cost.first < 0 || out_cost.second < 0) {
+        out_cost.first < 0 || out_cost.second < 0 ||
+        tile_output_size < 0) {
         return g_analy;
     }
 
@@ -1844,14 +1868,16 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
-    /*
     debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
     debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
     debug(0) << "tile_cost.second:" << tile_cost.second << '\n';
+    debug(0) << "tile_input_size:" << tile_input_size << '\n';
+    debug(0) << "tile_output_size:" << tile_output_size << '\n';
+
+    internal_assert(per_tile_mem_cost > 0);
 
     debug(0) << g_analy << '\n';
-    */
 
     return g_analy;
 }
@@ -1934,8 +1960,10 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
     int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
                                        true, false);
 
+    /*
     internal_assert(benefit < 0 ||
                      (benefit >= 0 && best_tile_config.size() > 0));
+    */
 
     return EvalConfig(best_tile_config, benefit);
 }
