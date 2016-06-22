@@ -124,7 +124,7 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
-                          "target=target-string [generator_arg=value [...]]\n\n"
+                          "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
                           "[assembly, bitcode, cpp, h, html, o, static_library, stmt, javascript]. "
                           "If omitted, default value is [static_library, h].\n"
