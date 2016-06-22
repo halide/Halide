@@ -134,7 +134,7 @@ vector<RVar> Func::rvars(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    const std::vector<ReductionVariable> rvars = func.schedule().rvars();
+    const std::vector<ReductionVariable> rvars = func.update(idx).schedule().rvars();
     std::vector<RVar> rvs(rvars.size());
     for (size_t i = 0; i < rvars.size(); i++) {
         rvs[i] = RVar(rvars[i].var);

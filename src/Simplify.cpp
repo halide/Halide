@@ -163,7 +163,7 @@ private:
     // expression is at least as complex as the expression, so
     // recursively mutating the bounds causes havoc.
     bool const_int_bounds(Expr e, int64_t *min_val, int64_t *max_val) {
-        if (!no_overflow_scalar_int(e.type())) {
+        if (!no_overflow_scalar_int(e.type().element_of())) {
             return false;
         }
 
@@ -250,6 +250,18 @@ private:
                     t3 = div_imp(max_a, max_b);
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
+                return true;
+            }
+        } else if (const Broadcast *b = e.as<Broadcast>()) {
+            return const_int_bounds(b->value, min_val, max_val);
+        } else if (const Ramp *r = e.as<Ramp>()) {
+            int64_t min_base, max_base, min_stride, max_stride;
+            if (const_int_bounds(r->base, &min_base, &max_base) &&
+                const_int_bounds(r->stride, &min_stride, &max_stride)) {
+                int64_t min_last_lane = min_base + min_stride * (r->lanes - 1);
+                int64_t max_last_lane = max_base + max_stride * (r->lanes - 1);
+                *min_val = std::min(min_base, min_last_lane);
+                *max_val = std::max(max_base, max_last_lane);
                 return true;
             }
         }
@@ -1352,10 +1364,6 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
         } else if (no_overflow_scalar_int(op->type) &&
-                   is_one(a)) {
-            // 1/x -> 0
-            expr = make_zero(op->type);
-        } else if (no_overflow_scalar_int(op->type) &&
                    is_const(a, -1)) {
             // -1/x -> select(x < 0, 1, -1)
             expr = mutate(select(b < make_zero(op->type),
@@ -1762,6 +1770,8 @@ private:
         Expr a_round_up = is_round_up(a, &a_round_up_factor);
         Expr b_round_up = is_round_up(b, &b_round_up_factor);
 
+        int64_t ramp_min, ramp_max;
+
         if (equal(a, b)) {
             expr = a;
             return;
@@ -1813,17 +1823,14 @@ private:
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    broadcast_b &&
-                   const_int(ramp_a->base, &ia) &&
-                   const_int(ramp_a->stride, &ib) &&
+                   const_int_bounds(ramp_a, &ramp_min, &ramp_max) &&
                    const_int(broadcast_b->value, &ic)) {
             // min(ramp(a, b, n), broadcast(c, n))
-            int ramp_start = ia;
-            int ramp_end = ia + ib * (ramp_a->lanes - 1);
-            if (ramp_start <= ic && ramp_end <= ic) {
+            if (ramp_min <= ic && ramp_max <= ic) {
                 // ramp dominates
                 expr = a;
                 return;
-            } if (ramp_start >= ic && ramp_end >= ic) {
+            } if (ramp_min >= ic && ramp_max >= ic) {
                 // broadcast dominates
                 expr = b;
                 return;
@@ -2101,6 +2108,8 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
+        int64_t ramp_min, ramp_max;
+
         if (equal(a, b)) {
             expr = a;
             return;
@@ -2151,18 +2160,15 @@ private:
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    broadcast_b &&
-                   const_int(ramp_a->base, &ia) &&
-                   const_int(ramp_a->stride, &ib) &&
+                   const_int_bounds(ramp_a, &ramp_min, &ramp_max) &&
                    const_int(broadcast_b->value, &ic)) {
             // max(ramp(a, b, n), broadcast(c, n))
-            int ramp_start = ia;
-            int ramp_end = ia + ib * (ramp_a->lanes - 1);
-            if (ramp_start >= ic && ramp_end >= ic) {
+            if (ramp_min >= ic && ramp_max >= ic) {
                 // ramp dominates
                 expr = a;
                 return;
             }
-            if (ramp_start <= ic && ramp_end <= ic) {
+            if (ramp_min <= ic && ramp_max <= ic) {
                 // broadcast dominates
                 expr = b;
                 return;
@@ -2479,11 +2485,11 @@ private:
         if (const_int_bounds(a, &a_min, &a_max) &&
             const_int_bounds(b, &b_min, &b_max)) {
             if (a_max < b_min) {
-                expr = const_true();
+                expr = const_true(op->type.lanes());
                 return;
             }
             if (a_min >= b_max) {
-                expr = const_false();
+                expr = const_false(op->type.lanes());
                 return;
             }
         }
@@ -4252,7 +4258,6 @@ void check_algebra() {
     check(0/x, 0);
     check(x/1, x);
     check(x/x, 1);
-    check(1/x, 0);
     check((-1)/x, select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
@@ -4971,10 +4976,18 @@ void simplify_test() {
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
     bounds_info.push("x", Interval(0,4));
-    check_in_bounds(ramp(x, 1,4) < broadcast(0,4),  const_false(4), bounds_info);
-    check_in_bounds(ramp(x, 1,4) < broadcast(8,4),  const_true(4),  bounds_info);
-    check_in_bounds(ramp(x,-1,4) < broadcast(-4,4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x,-1,4) < broadcast(5,4),  const_true(4),  bounds_info);
+    check_in_bounds(ramp(x,  1, 4) < broadcast( 0, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x,  1, 4) < broadcast( 8, 4), const_true(4),  bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast(-4, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast( 5, 4), const_true(4),  bounds_info);
+    check_in_bounds(min(ramp(x,  1, 4), broadcast( 0, 4)), broadcast(0, 4),  bounds_info);
+    check_in_bounds(min(ramp(x,  1, 4), broadcast( 8, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast(-4, 4)), broadcast(-4, 4), bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast( 5, 4)), ramp(x, -1, 4),   bounds_info);
+    check_in_bounds(max(ramp(x,  1, 4), broadcast( 0, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(max(ramp(x,  1, 4), broadcast( 8, 4)), broadcast(8, 4),  bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4),   bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast( 5, 4)), broadcast(5, 4),  bounds_info);
 
     // Collapse some vector interleaves
     check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));

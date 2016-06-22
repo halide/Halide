@@ -577,15 +577,15 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
+    llvm::Type *v_ty = v[0]->getType();
+    llvm::Type *element_ty = v_ty->getVectorElementType();
+    int element_bits = element_ty->getScalarSizeInBits();
+    int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
+    int result_elements = v_ty->getVectorNumElements()*v.size();
     if (v.size() == 2) {
+        // Interleaving two vectors.
         Value *a = v[0];
         Value *b = v[1];
-        // Interleaving two vectors.
-        llvm::Type *v_ty = v[0]->getType();
-        llvm::Type *element_ty = v_ty->getVectorElementType();
-        int element_bits = element_ty->getScalarSizeInBits();
-        int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
-        int result_elements = v_ty->getVectorNumElements()*2;
 
         if (result_elements == native_elements && (element_bits == 8 || element_bits == 16)) {
             llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
@@ -614,6 +614,23 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
                 ret.push_back(ret_i);
             }
             return concat_vectors(ret);
+        }
+    } else if (v.size() == 3) {
+        // Interleaving 3 vectors - this generates awful code if we let LLVM do it,
+        // so we use vlut if we can. This is actually pretty general, it might be
+        // useful for other interleavings, though the LUT grows impractically
+        // large quite quickly.
+        if (element_bits == 8 || element_bits == 16) {
+            Value *lut = concat_vectors(v);
+
+            std::vector<int> indices;
+            for (unsigned i = 0; i < v_ty->getVectorNumElements(); i++) {
+                for (size_t j = 0; j < v.size(); j++) {
+                    indices.push_back(j * v_ty->getVectorNumElements() + i);
+                }
+            }
+
+            return vlut(lut, indices);
         }
     }
     return CodeGen_Posix::interleave_vectors(v);
@@ -976,7 +993,69 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
         llvm_indices.push_back(ConstantInt::get(i8_t, i));
     }
 
-    return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
+    if (max_index <= 255) {
+        // If we can do this with one vlut, do it now.
+        return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
+    }
+
+    llvm::Type *i8x_t = VectorType::get(i8_t, indices.size());
+    llvm::Type *i16x_t = VectorType::get(i16_t, indices.size());
+
+    // We use i16 indices because we can't support LUTs with more than
+    // 32k elements anyways without massive stack spilling (the LUT
+    // must fit in registers), and it costs some runtime performance
+    // due to the conversion to 8 bit. This is also crazy and should
+    // never happen.
+    internal_assert(max_index < std::numeric_limits<int16_t>::max())
+        << "vlut of more than 32k elements not supported \n";
+
+    // We need to break the index up into ranges of up to 256, and mux
+    // the ranges together after using vlut on each range. This vector
+    // contains the result of each range, and a condition vector
+    // indicating whether the result should be used.
+    vector<std::pair<Value *, Value *>> ranges;
+    for (int min_index_i = 0; min_index_i < max_index; min_index_i += 256) {
+        // Make a vector of the indices shifted such that the min of
+        // this range is at 0.
+        vector<Constant *> llvm_indices;
+        llvm_indices.reserve(indices.size());
+        for (int i : indices) {
+            llvm_indices.push_back(ConstantInt::get(i16_t, i - min_index_i));
+        }
+        Value *llvm_index = ConstantVector::get(llvm_indices);
+
+        // Create a condition value for which elements of the range are valid for this index.
+        // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend.
+        Value *minus_one = codegen(make_const(UInt(16, indices.size()), -1));
+        Value *use_index = call_intrin(i16x_t, "halide.hexagon.gt.vh.vh", {llvm_index, minus_one});
+
+        // After we've eliminated the invalid elements, we can
+        // truncate to 8 bits, as vlut requires.
+        llvm_index = call_intrin(i8x_t, "halide.hexagon.pack.vh", {llvm_index});
+        use_index = call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index});
+
+        int range_extent_i = std::min(max_index - min_index_i, 255);
+        Value *range_i = vlut(slice_vector(lut, min_index_i, range_extent_i), llvm_index, 0, range_extent_i);
+
+        ranges.push_back(std::make_pair(range_i, use_index));
+    }
+
+    // TODO: This could be reduced hierarchically instead of in
+    // order. However, this requires the condition for the mux to be
+    // quite tricky.
+    Value *result = ranges[0].first;
+    llvm::Type *element_ty = result->getType()->getVectorElementType();
+    string mux = "halide.hexagon.mux";
+    switch (element_ty->getScalarSizeInBits()) {
+    case 8: mux += ".vb.vb"; break;
+    case 16: mux += ".vh.vh"; break;
+    case 32: mux += ".vw.vw"; break;
+    default: internal_error << "Cannot constant select vector of " << element_ty->getScalarSizeInBits() << "\n";
+    }
+    for (size_t i = 1; i < ranges.size(); i++) {
+        result = call_intrin(result->getType(), mux, {ranges[i].second, ranges[i].first, result});
+    }
+    return result;
 }
 
 namespace {
