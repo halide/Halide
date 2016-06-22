@@ -31,21 +31,23 @@ class PipelineContext {
 
     qurt_cond_t wakeup_thread;
     qurt_cond_t wakeup_caller;
-    qurt_mutex_t mutex;
+    qurt_mutex_t work_mutex;
+    qurt_mutex_t wakeup_master_mutex;
 
     pipeline_argv_t function;
     void **args;
     int result;
 
     void thread_main() {
-        return;
         while (true) {
-            qurt_cond_wait(&wakeup_thread, &mutex);
+            // Lock and wait for work.
+            qurt_mutex_lock(&work_mutex);
+            qurt_cond_wait(&wakeup_thread, &work_mutex);
             if (!function) {
                 break;
             }
             result = function(args);
-            qurt_mutex_unlock(&mutex);
+            qurt_mutex_unlock(&work_mutex);
             qurt_cond_signal(&wakeup_caller);
         }
         qurt_cond_signal(&wakeup_caller);
@@ -60,7 +62,8 @@ public:
         // Allocate the stack for this thread.
         stack = memalign(stack_alignment, stack_size);
 
-        qurt_mutex_init(&mutex);
+        qurt_mutex_init(&work_mutex);
+        qurt_mutex_init(&wakeup_master_mutex);
         qurt_cond_init(&wakeup_thread);
         qurt_cond_init(&wakeup_caller);
 
@@ -70,6 +73,8 @@ public:
         qurt_thread_attr_set_stack_size(&thread_attr, stack_size);
         qurt_thread_attr_set_priority(&thread_attr, 100);
         qurt_thread_create(&thread_handle, &thread_attr, redirect_main, this);
+        function = NULL;
+        args = NULL;
     }
 
     void deinit() {
@@ -83,13 +88,19 @@ public:
     }
 
     int run(pipeline_argv_t function, void **args) {
-        qurt_mutex_lock(&mutex);
+        // get a lock and set up work for the worker.
+        qurt_mutex_lock(&work_mutex);
         this->function = function;
         this->args = args;
-        result = 80;
+        qurt_mutex_unlock(&work_mutex);
+        // send a signal to the worker.
         qurt_cond_signal(&wakeup_thread);
-        qurt_cond_wait(&wakeup_caller, &mutex);
-        return 20; //result;
+
+        // Wait for the worker's signal that it is done.
+        qurt_mutex_lock(&wakeup_master_mutex);
+        qurt_cond_wait(&wakeup_caller, &wakeup_master_mutex);
+        qurt_mutex_unlock(&wakeup_master_mutex);
+        return this->result; //result;
     }
 };
 
@@ -250,7 +261,6 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
                               buffer *output_buffersPtrs, int output_buffersLen,
                               const buffer *input_scalarsPtrs, int input_scalarsLen) {
-    return 888;
 
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
