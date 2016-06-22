@@ -1364,10 +1364,6 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
         } else if (no_overflow_scalar_int(op->type) &&
-                   is_one(a)) {
-            // 1/x -> 0
-            expr = make_zero(op->type);
-        } else if (no_overflow_scalar_int(op->type) &&
                    is_const(a, -1)) {
             // -1/x -> select(x < 0, 1, -1)
             expr = mutate(select(b < make_zero(op->type),
@@ -4262,7 +4258,6 @@ void check_algebra() {
     check(0/x, 0);
     check(x/1, x);
     check(x/x, 1);
-    check(1/x, 0);
     check((-1)/x, select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
