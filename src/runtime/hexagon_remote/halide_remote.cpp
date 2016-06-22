@@ -109,7 +109,6 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         return result;
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
-    halide_print(NULL, "HELLO  HVX, how are ya");
     if (context_count == 0) {
         halide_print(NULL, "Requesting power for HVX...");
 
