@@ -1001,6 +1001,14 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     llvm::Type *i8x_t = VectorType::get(i8_t, indices.size());
     llvm::Type *i16x_t = VectorType::get(i16_t, indices.size());
 
+    // We use i16 indices because we can't support LUTs with more than
+    // 32k elements anyways without massive stack spilling (the LUT
+    // must fit in registers), and it costs some runtime performance
+    // due to the conversion to 8 bit. This is also crazy and should
+    // never happen.
+    internal_assert(max_index < std::numeric_limits<int16_t>::max())
+        << "vlut of more than 32k elements not supported \n";
+
     // We need to break the index up into ranges of up to 256, and mux
     // the ranges together after using vlut on each range. This vector
     // contains the result of each range, and a condition vector
@@ -1018,7 +1026,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
 
         // Create a condition value for which elements of the range are valid for this index.
         // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend.
-        Value *minus_one = codegen(Broadcast::make(Expr((int16_t)-1), indices.size()));
+        Value *minus_one = codegen(make_const(UInt(16, indices.size()), -1));
         Value *use_index = call_intrin(i16x_t, "halide.hexagon.gt.vh.vh", {llvm_index, minus_one});
 
         // After we've eliminated the invalid elements, we can
