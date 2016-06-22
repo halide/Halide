@@ -1357,7 +1357,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
                                    Partitioner::Level level) {
 
     vector<pair<FusionChoice, EvalConfig>> best_choices;
-    int64_t best_benefit = -1;
+    int64_t best_benefit = 0;
     for (auto &p: cands) {
         // Compute the aggregate benefit for inlining into all the children
         int64_t overall_benefit = 0;
@@ -1404,7 +1404,6 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             /*||
               (best.second == overall_benefit &&
               best.first[0].prod_group > p.first)*/) {
-
             best_choices = choices;
             best_benefit = overall_benefit;
         }
@@ -1516,22 +1515,13 @@ Partitioner::find_best_tile_config(const Group &g) {
 
         GroupAnalysis new_analy = analyze_group(new_group);
 
-        /*
-        debug(0) << "\nBegin variant" << '\n';
-        debug(0) << new_group;
-        debug(0) << "arith_cost:" << new_analy.arith_cost << '\n';
-        debug(0) << "mem_cost:" << new_analy.mem_cost << '\n';
-        debug(0) << "End variant" << '\n';
-        */
-
-        // TODO: Add parallelism constraints
-        if ((new_analy.arith_cost >= 0) && (new_analy.mem_cost >= 0) &&
-            (new_analy.arith_cost <= best_analy.arith_cost) &&
-            (new_analy.mem_cost < best_analy.mem_cost)) {
+        int64_t benefit = estimate_benefit(best_analy, new_analy, true, false);
+        if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
         }
     }
+
     /*
     debug(0) << "\n===========\n";
     debug(0) << "Best config\n";
@@ -1673,18 +1663,18 @@ DimBounds Partitioner::get_bounds(const FStage& s) {
 }
 
 DimBounds
-Partitioner::get_bounds_from_tile_sizes(const FStage& s,
-                                        const map<string, int>& tile_sizes) {
+Partitioner::get_bounds_from_tile_sizes(const FStage &s,
+                                        const map<string, int> &tile_sizes) {
 
     Definition def = get_stage_definition(s.func, s.stage_num);
     map<string, Interval> bounds;
 
-    const map<string, Interval>& def_bounds = get_bounds(s);
-    const vector<Dim>& dims = def.schedule().dims();
+    const map<string, Interval> &def_bounds = get_bounds(s);
+    const vector<Dim> &dims = def.schedule().dims();
 
     for (int d = 0; d < (int) dims.size() - 1; d++) {
         string var = dims[d].var;
-        const Interval& bound = def_bounds.at(var);
+        const Interval &bound = def_bounds.at(var);
         if (tile_sizes.find(var) != tile_sizes.end()) {
             int size = tile_sizes.at(var);
             // Check if the bounds allow for tiling with the given tile size
@@ -1708,7 +1698,7 @@ Partitioner::get_bounds_from_tile_sizes(const FStage& s,
     return bounds;
 }
 
-Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
+Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     // Estimating the number of accesses to slow memory
 
     // 1) Assume all loads are a miss if the working set does not fit in cache.
@@ -1793,6 +1783,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
         }
     }
 
+    /*
     debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
@@ -1800,6 +1791,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     disp_regions(input_reg);
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
+    */
 
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost =
@@ -1811,10 +1803,12 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     Box out_tile_extent;
     const vector<string> &args = g.output.func.args();
     for (size_t d = 0; d < args.size(); d++ ) {
-        out_tile_extent.push_back(tile_bounds[args[d]]);
+        if (tile_bounds.find(args[d]) != tile_bounds.end()) {
+            out_tile_extent.push_back(tile_bounds[args[d]]);
+        } else {
+            out_tile_extent.push_back(Interval());
+        }
     }
-
-    debug(0) << "out_tile_extent:" << out_tile_extent << '\n';
 
     int64_t tile_output_size = 0;
 
@@ -1868,16 +1862,17 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group& g) {
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
+    /*
     debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
     debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
     debug(0) << "tile_cost.second:" << tile_cost.second << '\n';
     debug(0) << "tile_input_size:" << tile_input_size << '\n';
     debug(0) << "tile_output_size:" << tile_output_size << '\n';
+    debug(0) << g_analy << '\n';
+    */
 
     internal_assert(per_tile_mem_cost > 0);
-
-    debug(0) << g_analy << '\n';
 
     return g_analy;
 }
@@ -1961,8 +1956,11 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
                                        true, false);
 
     /*
-    internal_assert(benefit < 0 ||
-                     (benefit >= 0 && best_tile_config.size() > 0));
+    TODO: come up with a better assert. Currently this will hit when
+    the whole function fits in the tile and tiling is equivalent to
+    no tiling
+    internal_assert(benefit <= 0 ||
+                     (benefit > 0 && best_tile_config.size() > 0));
     */
 
     return EvalConfig(best_tile_config, benefit);
@@ -2122,7 +2120,7 @@ string Partitioner::generate_group_cpu_schedule(
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
 
-    debug(0) << "Scheduling group:" << g;
+    debug(0) << "\nScheduling group:" << g;
 
     // Get the definition corresponding to the stage
     Definition def = get_stage_definition(g_out,
