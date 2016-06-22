@@ -12,7 +12,7 @@
 #  HALIDE_LIB_PATH =
 #  HALIDE_INC_PATH = 
 #
-# These settings are for building with the Halide source tree:
+# These settings are for building within the Halide source tree:
 HALIDE_TOOLS_DIR = ../../tools
 HALIDE_LIB_PATH  = -L ../../bin
 HALIDE_INC_PATH  = -I ../../include
