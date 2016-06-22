@@ -9,7 +9,7 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <qurt.h>
+
 #define FARF_LOW 1
 #include "HAP_farf.h"
 #include "HAP_power.h"
@@ -109,6 +109,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
         return result;
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
+
     if (context_count == 0) {
         halide_print(NULL, "Requesting power for HVX...");
 
@@ -198,11 +199,13 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     dlclose(reinterpret_cast<void*>(module_ptr));
+
     if (context_count-- == 0) {
         halide_shutdown_thread_pool();
 
         HAP_power_request(0, 0, -1);
     }
+
     return 0;
 }
 
