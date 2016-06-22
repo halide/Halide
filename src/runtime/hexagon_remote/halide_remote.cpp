@@ -20,20 +20,23 @@ extern "C" {
 
 #include "../HalideRuntime.h"
 
+const int stack_alignment = 128;
+const int stack_size = 1024 * 1024;
+
 typedef int (*pipeline_argv_t)(void **);
 
 // We can't control the stack size on the thread which receives our
 // FastRPC calls. To work around this, we make our own thread, and
 // forward the calls to that thread.
 class PipelineContext {
-    qurt_thread_t thread_handle;
     void *stack;
-
+    qurt_thread_t thread;
     qurt_cond_t wakeup_thread;
     qurt_cond_t wakeup_caller;
     qurt_mutex_t work_mutex;
     qurt_mutex_t wakeup_master_mutex;
 
+    // Shared state
     pipeline_argv_t function;
     void **args;
     int result;
@@ -58,31 +61,30 @@ class PipelineContext {
     }
 
 public:
-    void init(int stack_alignment, int stack_size) {
-        // Allocate the stack for this thread.
-        stack = memalign(stack_alignment, stack_size);
-
+    PipelineContext(int stack_alignment, int stack_size)
+        : stack(NULL), function(NULL), args(NULL) {
         qurt_mutex_init(&work_mutex);
         qurt_mutex_init(&wakeup_master_mutex);
         qurt_cond_init(&wakeup_thread);
         qurt_cond_init(&wakeup_caller);
+
+        // Allocate the stack for this thread.
+        stack = memalign(stack_alignment, stack_size);
 
         qurt_thread_attr_t thread_attr;
         qurt_thread_attr_init(&thread_attr);
         qurt_thread_attr_set_stack_addr(&thread_attr, stack);
         qurt_thread_attr_set_stack_size(&thread_attr, stack_size);
         qurt_thread_attr_set_priority(&thread_attr, 100);
-        qurt_thread_create(&thread_handle, &thread_attr, redirect_main, this);
-        function = NULL;
-        args = NULL;
+        qurt_thread_create(&thread, &thread_attr, redirect_main, this);
     }
 
-    void deinit() {
+    ~PipelineContext() {
         // Running a null function kills the thread.
         run(NULL, NULL);
 
         int status;
-        qurt_thread_join(thread_handle, &status);
+        qurt_thread_join(thread, &status);
 
         free(stack);
     }
@@ -100,7 +102,7 @@ public:
         qurt_mutex_lock(&wakeup_master_mutex);
         qurt_cond_wait(&wakeup_caller, &wakeup_master_mutex);
         qurt_mutex_unlock(&wakeup_master_mutex);
-        return this->result; //result;
+        return result;
     }
 };
 
@@ -165,7 +167,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(void *, const char *));
 
 int context_count = 0;
-PipelineContext *run_context;
+PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
@@ -241,11 +243,6 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
             halide_print(NULL, "HAP_power_set(HAP_power_set_mips_bw) failed");
             return -1;
         }
-
-        const int stack_alignment = 128;
-        const int stack_size = 1024 * 1024;
-        run_context = (PipelineContext *)malloc(sizeof(PipelineContext));
-        run_context->init(stack_alignment, stack_size);
     }
 
     context_count++;
@@ -295,16 +292,13 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     }
 
     // Call the pipeline and return the result.
-    return run_context->run(pipeline, args);
+    return run_context.run(pipeline, args);
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     dlclose(reinterpret_cast<void*>(module_ptr));
 
     if (context_count-- == 0) {
-        run_context->deinit();
-        free(run_context);
-
         HAP_power_request(0, 0, -1);
     }
 
