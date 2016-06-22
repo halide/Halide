@@ -98,7 +98,7 @@ bin/%/halide_hexagon_remote_skel.o: bin/src/halide_hexagon_remote_skel.c
 
 bin/%/halide_remote.o: halide_remote.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -fno-exceptions -c halide_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
 
 bin/%/halide_host.o: halide_host.cpp
 	mkdir -p $(@D)
