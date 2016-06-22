@@ -1197,6 +1197,7 @@ struct Partitioner {
                              bool no_redundant_work, bool ensure_parallelism);
 
     void initialize_groups_inline();
+    void initialize_groups_fast_mem();
 
     void disp_pipeline_costs();
     void disp_pipeline_bounds();
@@ -1210,15 +1211,18 @@ void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eva
     Function prod_f = analy.env.at(choice.prod);
     size_t num_stages = prod_f.updates().size() + 1;
 
-    FStage child_group = choice.cons;
+    FStage child = choice.cons;
+    Group &child_group = groups.at(child);
 
     for (size_t s = 0; s < num_stages; s++) {
-        FStage cand_group(prod_f, s);
+        FStage cand(prod_f, s);
 
-        internal_assert(groups.find(child_group) != groups.end());
-        vector<FStage> cand_funcs = groups.at(cand_group).members;
+        internal_assert(groups.find(child) != groups.end());
+        Group &cand_group = groups.at(cand);
 
-        vector<FStage>& child_group_members = groups.at(child_group).members;
+        vector<FStage> cand_funcs = cand_group.members;
+
+        vector<FStage> &child_group_members = child_group.members;
         child_group_members.insert(child_group_members.end(),
                                    cand_funcs.begin(), cand_funcs.end());
 
@@ -1226,17 +1230,20 @@ void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eva
         // merge should be a member of the group class so that it is more
         // contained.
         if (level == Partitioner::INLINE) {
-            internal_assert(eval.tile_sizes.size() == 0);
             for (auto &stg: cand_funcs) {
-                groups.at(child_group).inlined.insert(stg.func.name());
+                child_group.inlined.insert(stg.func.name());
+            }
+        } else {
+            for (auto &in: cand_group.inlined) {
+                child_group.inlined.insert(in);
             }
         }
     }
 
-    groups.at(child_group).tile_sizes = eval.tile_sizes;
+    child_group.tile_sizes = eval.tile_sizes;
 
     // Update group costs
-    group_costs[child_group] = analyze_group(groups.at(child_group));
+    group_costs[child] = analyze_group(child_group);
 
     /*
     debug(0) << '\n' << groups.at(child_group);
@@ -1249,7 +1256,7 @@ void Partitioner::disp_grouping() {
     debug(0) << "Grouping:" << '\n';
     debug(0) << "=========" << '\n';
     for (auto& g: groups) {
-        debug(0) << g.second;
+        debug(0) << g.second << '\n';
     }
     debug(0) << "=========" << '\n';
 }
@@ -1277,6 +1284,10 @@ void Partitioner::disp_pipeline_bounds() {
 }
 
 void Partitioner::disp_pipeline_costs() {
+    if (group_costs.size() == 0) {
+        debug(0) << "Group costs have not been analzed yet." << '\n';
+        return;
+    }
     int64_t total_arith = 0;
     int64_t total_mem = 0;
     debug(0) << "\n===============" << '\n';
@@ -1299,11 +1310,31 @@ void Partitioner::disp_pipeline_costs() {
 
 void Partitioner::initialize_groups_inline() {
     for (pair<const FStage, Group> &g: groups) {
+
+        map<string, int> tile_sizes;
+        Definition def = get_stage_definition(g.first.func,
+                                              g.first.stage_num);
+
+        const vector<Dim> &dims = def.schedule().dims();
+        for (int d = 0; d < (int)dims.size() - 1; d++) {
+            tile_sizes[dims[d].var] = 1;
+        }
+
+        g.second.tile_sizes = tile_sizes;
+        GroupAnalysis inline_analy = analyze_group(g.second);
+        group_costs[g.second.output] = inline_analy;
+    }
+    fusion_cache.clear();
+}
+
+void Partitioner::initialize_groups_fast_mem() {
+    for (pair<const FStage, Group> &g: groups) {
         pair<map<string, int>, GroupAnalysis> best =
             find_best_tile_config(g.second);
         g.second.tile_sizes = best.first;
         group_costs[g.second.output] = best.second;
     }
+    fusion_cache.clear();
 }
 
 map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
@@ -1389,8 +1420,8 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             // fusions into the consumers are beneficial
             // TODO: Create a test where this assumption breaks
             if (best_config.benefit < 0) {
+                choices.push_back(make_pair(cand_choice, best_config));
                 overall_benefit = -1;
-                choices.clear();
                 break;
             } else {
                 choices.push_back(make_pair(cand_choice, best_config));
@@ -1398,6 +1429,10 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             }
         }
 
+        for (auto &choice: choices) {
+            debug(0) << "Cand choice:" << choice.first;
+        }
+        debug(0) << "Benefit:" << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (best_benefit < overall_benefit
@@ -1410,8 +1445,10 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
     }
 
     for (auto &choice: best_choices) {
-        debug(0) << "Best choice:" << choice.first << '\n';
+        debug(0) << "Best choice:" << choice.first;
     }
+    if (best_choices.size() > 0)
+        debug(0) << "Benefit:" << best_benefit << '\n';
 
     return best_choices;
 }
@@ -1539,11 +1576,11 @@ void Partitioner::group(Partitioner::Level level) {
     bool fixpoint = false;
     while(!fixpoint) {
         fixpoint = true;
-        vector< pair<string, string> > cand;
-        for (const pair<FStage, Group>& g: groups) {
+        vector<pair<string, string>> cand;
+        for (const pair<FStage, Group> &g: groups) {
 
             bool is_output = false;
-            for (const Function& f: outputs) {
+            for (const Function &f: outputs) {
                 if (g.first.func.name() == f.name()) {
                     is_output = true;
                     break;
@@ -1564,7 +1601,7 @@ void Partitioner::group(Partitioner::Level level) {
                 // All the stages beloning to a function are considered to be a
                 // single child.
                 set<string> child_funcs;
-                for (const FStage& s: children[g.first]) {
+                for (const FStage &s: children[g.first]) {
                     child_funcs.insert(s.func.name());
                 }
 
@@ -1608,16 +1645,15 @@ void Partitioner::group(Partitioner::Level level) {
         set<FStage> cand_group_children = children[final_stage];
 
         // Invalidate entries of the fusion cache
-        vector<FusionChoice> invalid_keys;
+        set<FusionChoice> invalid_keys;
         for (auto &c: cand_group_children) {
             for (auto &entry: fusion_cache) {
                 if (entry.first.prod == c.func.name() || entry.first.cons == c)
-                    invalid_keys.push_back(entry.first);
+                    invalid_keys.insert(entry.first);
             }
         }
 
         for (auto &key: invalid_keys) {
-            internal_assert(fusion_cache.find(key) != fusion_cache.end());
             fusion_cache.erase(key);
         }
 
@@ -1943,8 +1979,8 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
             fused.inlined.insert(f);
 
         fused_analy = analyze_group(fused);
+        best_tile_config = tile_sizes;
 
-        // TODO: should the tile sizes be set to 1
     } else {
         pair<map<string, int>, GroupAnalysis> config =
                                     find_best_tile_config(fused);
@@ -2008,6 +2044,7 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     int64_t prod_mem_cost = 0;
     int64_t prod_par = std::numeric_limits<int64_t>::max();
 
+    //debug(0) << "Prod groups:" << '\n';
     for (auto &prod_g: prod_groups) {
         internal_assert(group_costs.find(prod_g.output) != group_costs.end());
         GroupAnalysis analyg = group_costs.at(prod_g.output);
@@ -2021,12 +2058,18 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
             prod_par = -1;
             break;
         }
+        //debug(0) << prod_g;
     }
+
+    //debug(0) << "Cons group:" << cons_group << '\n';
 
     GroupAnalysis no_fuse_analy;
     no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
     no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
     no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
+
+    //debug(0) << "No fuse analysis:" << no_fuse_analy << '\n';
+    //debug(0) << "fuse analysis:" << fused_analy << '\n';
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
                             ensure_parallelism);
@@ -2237,37 +2280,37 @@ string Partitioner::generate_group_cpu_schedule(
         }
     }
 
-    string vec_dim_name = get_base_name(dims[vec_dim_index].var);
-    if (vec_dim_index >=0 &&
-        stg_estimates.find(vec_dim_name) != stg_estimates.end()) {
-
-        Var vec_var(vec_dim_name);
-        // Set the vector length as the maximum of the values produced by a
-        // function
-        int vec_len = 0;
-        for (auto& type: g_out.output_types()) {
-            vec_len = std::max(vec_len, t.natural_vector_size(type));
-        }
-
-        bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
-        if (stg_estimates[vec_dim_name] >= vec_len) {
-
-            pair<VarOrRVar, VarOrRVar> split_vars =
-                    split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
-                              stg_estimates, sched);
-
-            f_handle.vectorize(split_vars.first);
-            sched += f_handle.name() + ".vectorize(" +
-                     split_vars.first.name() + ");\n";
-
-            if (is_rvar) {
-                rvars.erase(vec_dim_name);
-                rvars.insert(split_vars.first.name());
-                rvars.insert(split_vars.second.name());
+    if (vec_dim_index >=0) {
+        string vec_dim_name = get_base_name(dims[vec_dim_index].var);
+        if (stg_estimates.find(vec_dim_name) != stg_estimates.end()) {
+            Var vec_var(vec_dim_name);
+            // Set the vector length as the maximum of the values produced by a
+            // function
+            int vec_len = 0;
+            for (auto& type: g_out.output_types()) {
+                vec_len = std::max(vec_len, t.natural_vector_size(type));
             }
 
-            if (outer_dims.size() > 0 && tile_inner_var.name() == vec_dim_name) {
-                tile_inner_var = split_vars.second;
+            bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
+            if (stg_estimates[vec_dim_name] >= vec_len) {
+
+                pair<VarOrRVar, VarOrRVar> split_vars =
+                        split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
+                                  stg_estimates, sched);
+
+                f_handle.vectorize(split_vars.first);
+                sched += f_handle.name() + ".vectorize(" +
+                        split_vars.first.name() + ");\n";
+
+                if (is_rvar) {
+                    rvars.erase(vec_dim_name);
+                    rvars.insert(split_vars.first.name());
+                    rvars.insert(split_vars.second.name());
+                }
+
+                if (outer_dims.size() > 0 && tile_inner_var.name() == vec_dim_name) {
+                    tile_inner_var = split_vars.second;
+                }
             }
         }
     }
@@ -2447,11 +2490,16 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     cost_model.disp_costs();
     part.disp_pipeline_bounds();
     part.disp_pipeline_graph();
+
     part.initialize_groups_inline();
     part.disp_pipeline_costs();
 
-    //part.group(Partitioner::INLINE);
+    part.group(Partitioner::INLINE);
+    part.disp_grouping();
+
+    part.initialize_groups_fast_mem();
     part.group(Partitioner::FAST_MEM);
+
     part.disp_pipeline_costs();
     string sched = part.generate_cpu_schedule(target);
     return;
