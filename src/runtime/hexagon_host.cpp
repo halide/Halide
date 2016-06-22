@@ -5,11 +5,7 @@
 #include "cuda_opencl_shared.h"
 #include "scoped_mutex_lock.h"
 
-#define INLINE inline __attribute__((always_inline))
-
 #define O_TRUNC 00001000
-#define O_CREAT 00000100
-#define O_EXCL  00000200
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
