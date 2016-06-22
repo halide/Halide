@@ -3,13 +3,32 @@
 # app will try to maximize clarity by making most rules explicit
 #
 
-# OS X settings, with Halide and other libraries installed by homebrew
-HALIDE_TOOLS_DIR = /usr/local/share/halide/tools
-MAIN_LIBS	 = -framework OpenGL -framework GLUT -lglfw3 -lpng -ldrawtext
-GENERATOR_LIBS	 = -lHalide -lz -lcurses
-DTX_FONT	 = /Library/Fonts/Arial.ttf
+# Where to find Halide.
+#
+# If you are building this demo using Halide installed systemwide (e.g. on
+# OS X installed via homebrew), you can set:
+#
+#  HALIDE_TOOLS_DIR = /usr/local/share/halide/tools
+#  HALIDE_LIB_PATH =
+#  HALIDE_INC_PATH = 
+#
+# These settings are for building with the Halide source tree:
+HALIDE_TOOLS_DIR = ../../tools
+HALIDE_LIB_PATH  = -L ../../bin
+HALIDE_INC_PATH  = -I ../../include
 
-CXXFLAGS = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\"
+# Platform-specific settings.
+#
+# These are for OS X:
+DTX_FONT    = /Library/Fonts/Arial.ttf
+OPENGL_LIBS = -framework OpenGL -framework GLUT
+
+#
+# General build settings.  Should be good cross-platform.
+#
+MAIN_LIBS      = -lglfw3 -lpng -ldrawtext $(OPENGL_LIBS)
+GENERATOR_LIBS = -lHalide -lz -lcurses
+CXXFLAGS       = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
 
 .PHONY: run clean
 
@@ -53,7 +72,7 @@ build/sample_filter_opengl.o build/sample_filter_opengl.h: build/generate_sample
 
 build/generate_sample_filter: sample_filter.cpp
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) -fno-rtti -o $@ $^ $(HALIDE_TOOLS_DIR)/GenGen.cpp $(GENERATOR_LIBS)
+	$(CXX) $(CXXFLAGS) -fno-rtti -o $@ $^ $(HALIDE_TOOLS_DIR)/GenGen.cpp $(HALIDE_LIB_PATH) $(GENERATOR_LIBS)
 
 #
 # Build in subdir using auto-dependency mechanism

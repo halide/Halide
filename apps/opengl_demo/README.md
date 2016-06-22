@@ -21,7 +21,7 @@ The sample filter inverts the RGB channels of the input image.
 
 Build and run the app by simply running `make`.  It should open a window showing the input and the three (identical) filtering results.  You can close the window and exit by pressing ESCAPE.
 
-The `Makefile` has variables to specify where to find Halide's compile-time tools and how to link OpenGL and the other required libraries.
+The `Makefile` has variables to specify where to find Halide, how to link OpenGL, and so forth.  You may need to tweak them for your platform.
 
 See the Makefile for details on how the filter gets AOT-compiled for CPU and OpenGL.  Note that the `Makefile` actually specifies `target=host-opengl-debug` when AOT-compiling the opengl filter; that enables tracing of Halide's management of its OpenGL pipeline.
 
