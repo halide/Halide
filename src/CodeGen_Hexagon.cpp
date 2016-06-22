@@ -1001,6 +1001,10 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     llvm::Type *i8x_t = VectorType::get(i8_t, indices.size());
     llvm::Type *i16x_t = VectorType::get(i16_t, indices.size());
 
+    // We need to break the index up into ranges of up to 256, and mux
+    // the ranges together after using vlut on each range. This vector
+    // contains the result of each range, and a condition vector
+    // indicating whether the result should be used.
     vector<std::pair<Value *, Value *>> ranges;
     for (int min_index_i = 0; min_index_i < max_index; min_index_i += 256) {
         // Make a vector of the indices shifted such that the min of
