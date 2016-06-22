@@ -10,6 +10,7 @@
 #include "Image.h"
 #include "LLVM_Output.h"
 #include "RemoveTrivialForLoops.h"
+#include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -95,14 +96,6 @@ class InjectHexagonRpc : public IRMutator {
 
         Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
         return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
-    }
-
-    Stmt call_extern_and_assert(const std::string& name, const std::vector<Expr>& args) {
-        Expr call = Call::make(Int(32), name, args, Call::Extern);
-        string call_result_name = unique_name(name + "_result");
-        Expr call_result_var = Variable::make(Int(32), call_result_name);
-        return LetStmt::make(call_result_name, call,
-                             AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
     }
 
     using IRMutator::visit;
@@ -307,7 +300,7 @@ public:
 
         hex_command += " ";
         hex_command += tmp_bitcode.pathname();
-        hex_command += " -fPIC -O3 -Wno-override-module -shared ";
+        hex_command += " -fPIC -O3 -mllvm -lsr-complexity-limit=65535 -Wno-override-module -shared ";
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
