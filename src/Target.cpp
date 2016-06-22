@@ -180,6 +180,8 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"android", Target::Android},
     {"ios", Target::IOS},
     {"nacl", Target::NaCl},
+    {"qurt", Target::QuRT},
+    {"noos", Target::NoOS},
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -198,6 +200,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
+    {"hexagon", Target::Hexagon},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -241,8 +244,11 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
     {"mingw", Target::MinGW},
-    {"large_buffers", Target::LargeBuffers},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
+    {"large_buffers", Target::LargeBuffers},
+    {"hvx_64", Target::HVX_64},
+    {"hvx_128", Target::HVX_128},
+    {"hvx_v62", Target::HVX_v62},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -443,37 +449,41 @@ std::string Target::to_string() const {
 /** Was libHalide compiled with support for this target? */
 bool Target::supported() const {
     bool bad = false;
-#if !(WITH_NATIVE_CLIENT)
+#if !defined(WITH_NATIVE_CLIENT)
     bad |= (arch == Target::PNaCl || os == Target::NaCl);
 #endif
-#if !(WITH_ARM)
+#if !defined(WITH_ARM)
     bad |= arch == Target::ARM && bits == 32;
 #endif
-#if !(WITH_AARCH64) || WITH_NATIVE_CLIENT // In pnacl llvm, the aarch64 backend is crashy.
+#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
+    // In pnacl llvm, the aarch64 backend is crashy.
     bad |= arch == Target::ARM && bits == 64;
 #endif
-#if !(WITH_X86)
+#if !defined(WITH_X86)
     bad |= arch == Target::X86;
 #endif
-#if !(WITH_MIPS)
+#if !defined(WITH_MIPS)
     bad |= arch == Target::MIPS;
 #endif
-#if !(WITH_POWERPC)
+#if !defined(WITH_POWERPC)
     bad |= arch == Target::POWERPC;
 #endif
-#if !(WITH_PTX)
+#if !defined(WITH_HEXAGON)
+    bad |= arch == Target::Hexagon;
+#endif
+#if !defined(WITH_PTX)
     bad |= has_feature(Target::CUDA);
 #endif
-#if !(WITH_OPENCL)
+#if !defined(WITH_OPENCL)
     bad |= has_feature(Target::OpenCL);
 #endif
-#if !(WITH_METAL)
+#if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !(WITH_RENDERSCRIPT)
+#if !defined(WITH_RENDERSCRIPT)
     bad |= has_feature(Target::Renderscript);
 #endif
-#if !(WITH_OPENGL)
+#if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
     return !bad;

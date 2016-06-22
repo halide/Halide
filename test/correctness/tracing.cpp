@@ -26,8 +26,10 @@ void print_event(event e) {
                                  "Produce",
                                  "Update",
                                  "Consume",
-                                 "End consume"};
-    assert(e.event_type >= 0 && e.event_type <= 8);
+                                 "End consume",
+                                 "Begin pipeline",
+                                 "End pipeline"};
+    assert(e.event_type >= 0 && e.event_type <= 10);
     printf("%s ", event_types[e.event_type]);
 
     printf("%c.%d[", e.func, e.value_index);
@@ -77,21 +79,21 @@ bool events_match(event a, event b) {
 
 int my_trace(void *user_context, const halide_trace_event *ev) {
 
-    assert(ev->dimensions <= 4 && ev->vector_width <= 4);
+    assert(ev->dimensions <= 4 && ev->type.lanes <= 4);
 
     // Record this event in the trace array
     event e = {0};
     e.func = ev->func[0];
     e.event_type = ev->event;
-    e.type_code = ev->type_code;
-    e.bits = ev->bits;
-    e.width = ev->vector_width;
+    e.type_code = ev->type.code;
+    e.bits = ev->type.bits;
+    e.width = ev->type.lanes;
     e.value_index = ev->value_index;
     e.num_int_args = ev->dimensions;
     for (int i = 0; i < ev->dimensions; i++) {
         e.int_args[i] = ev->coordinates[i];
     }
-    for (int i = 0; i < ev->vector_width; i++) {
+    for (int i = 0; i < ev->type.lanes; i++) {
         e.value[i] = ((const float *)(ev->value))[i];
     }
     trace[n_trace++] = e;
@@ -201,4 +203,3 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-

@@ -147,14 +147,30 @@ Func demosaic(Func deinterleaved) {
 
 
     /* THE SCHEDULE */
-    const int vec = target.natural_vector_size(UInt(16));
-    g_r.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
-    g_b.compute_at(processed, yi).store_at(processed, yo).vectorize(x, vec).fold_storage(y, 2);
+    int vec = target.natural_vector_size(UInt(16));
+    if (target.has_feature(Target::HVX_64)) {
+        vec = 32;
+    } else if (target.has_feature(Target::HVX_128)) {
+        vec = 64;
+    }
+    g_r.compute_at(processed, yi)
+        .store_at(processed, yo)
+        .vectorize(x, vec, TailStrategy::RoundUp)
+        .fold_storage(y, 2);
+    g_b.compute_at(processed, yi)
+        .store_at(processed, yo)
+        .vectorize(x, vec, TailStrategy::RoundUp)
+        .fold_storage(y, 2);
     output.compute_at(processed, x)
         .vectorize(x)
         .unroll(y)
         .reorder(c, x, y)
         .unroll(c);
+
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        g_r.align_storage(x, vec);
+        g_b.align_storage(x, vec);
+    }
 
     return output;
 }
@@ -183,18 +199,31 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     g = cast<int16_t>(g/256);
     b = cast<int16_t>(b/256);
     corrected(x, y, c) = select(c == 0, r,
-                                select(c == 1, g, b));
+                                c == 1, g,
+                                        b);
 
     return corrected;
 }
 
-
-Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
+Func apply_curve(Func input, Type result_type, Expr gamma, Expr contrast,
+                 Expr blackLevel, Expr whiteLevel) {
     // copied from FCam
     Func curve("curve");
 
     Expr minRaw = 0 + blackLevel;
     Expr maxRaw = whiteLevel;
+
+    // How much to upsample the LUT by when sampling it.
+    int lutResample = 1;
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // On HVX, LUT lookups are much faster if they are to LUTs not
+        // greater than 256 elements, so we reduce the tonemap to 256
+        // elements and use linear interpolation to upsample it.
+        lutResample = 4;
+    }
+
+    minRaw /= lutResample;
+    maxRaw /= lutResample;
 
     Expr invRange = 1.0f/(maxRaw - minRaw);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
@@ -217,8 +246,19 @@ Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> 
     curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
     Func curved;
-    // Use clamp to restrict size of LUT as allocated by compute_root
-    curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
+
+    if (lutResample == 1) {
+        // Use clamp to restrict size of LUT as allocated by compute_root
+        curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
+    } else {
+        // Use linear interpolation to sample the LUT.
+        Expr in = input(x, y, c);
+        Expr u0 = in/lutResample;
+        Expr u = in - u0*lutResample;
+        Expr y0 = curve(clamp(u0, 0, 255));
+        Expr y1 = curve(clamp(u0 + 1, 0, 255));
+        curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0)*lutResample + (y1 - y0)*u)/lutResample);
+    }
 
     return curved;
 }
@@ -241,14 +281,19 @@ Func process(Func raw, Type result_type,
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
 
-    const int strip_size = 32;
-    const int vec = target.natural_vector_size(UInt(16));
+    int strip_size = 32;
+    int vec = target.natural_vector_size(UInt(16));
+    if (target.has_feature(Target::HVX_64)) {
+        vec = 32;
+    } else if (target.has_feature(Target::HVX_128)) {
+        vec = 64;
+    }
     denoised.compute_at(processed, yi).store_at(processed, yo)
         .fold_storage(y, 8)
         .vectorize(x, vec);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
         .fold_storage(y, 4)
-        .vectorize(x, vec)
+        .vectorize(x, 2*vec, TailStrategy::RoundUp)
         .reorder(c, x, y)
         .unroll(c);
     corrected.compute_at(processed, x)
@@ -258,9 +303,17 @@ Func process(Func raw, Type result_type,
     processed.compute_root()
         .split(y, yo, yi, strip_size)
         .split(yi, yi, yii, 2)
-        .split(x, x, xi, 2*vec)
+        .split(x, x, xi, 2*vec, TailStrategy::RoundUp)
         .reorder(xi, c, yii, x, yi, yo)
+        .vectorize(xi, 2*vec)
         .parallel(yo);
+
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        processed.hexagon();
+        denoised.align_storage(x, vec);
+        deinterleaved.align_storage(x, vec);
+        corrected.align_storage(x, vec);
+    }
 
     // We can generate slightly better code if we know the splits divide the extent.
     processed

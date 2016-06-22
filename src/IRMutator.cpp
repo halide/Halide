@@ -319,5 +319,26 @@ void IRMutator::visit(const Evaluate *op) {
     }
 }
 
+
+Stmt IRGraphMutator::mutate(Stmt s) {
+    auto iter = stmt_replacements.find(s);
+    if (iter != stmt_replacements.end()) {
+        return iter->second;
+    }
+    Stmt new_s = IRMutator::mutate(s);
+    stmt_replacements[s] = new_s;
+    return new_s;
+}
+
+Expr IRGraphMutator::mutate(Expr e) {
+    auto iter = expr_replacements.find(e);
+    if (iter != expr_replacements.end()) {
+        return iter->second;
+    }
+    Expr new_e = IRMutator::mutate(e);
+    expr_replacements[e] = new_e;
+    return new_e;
+}
+
 }
 }
