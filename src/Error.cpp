@@ -4,7 +4,7 @@ namespace Halide {
 
 namespace {
 
-CompileTimeErrorReporter* custom_error_reporter = NULL;
+CompileTimeErrorReporter* custom_error_reporter = nullptr;
 
 }  // namespace
 
@@ -43,7 +43,7 @@ InternalError _internal_error("");
 }
 
 void ErrorReport::explode() {
-    if (custom_error_reporter != NULL) {
+    if (custom_error_reporter != nullptr) {
         if (warning) {
             custom_error_reporter->warning(msg->str().c_str());
             delete msg;

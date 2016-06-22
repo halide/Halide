@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 #include "objc_support.h"
 #include "metal_objc_platform_dependent.h"
 

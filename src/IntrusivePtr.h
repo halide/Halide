@@ -8,6 +8,7 @@
  */
 
 #include <stdlib.h>
+#include <atomic>
 
 #include "Util.h"
 
@@ -16,11 +17,11 @@ namespace Internal {
 
 /** A class representing a reference count to be used with IntrusivePtr */
 class RefCount {
-    int count;
+    std::atomic<int> count;
 public:
     RefCount() : count(0) {}
-    void increment() {count++;}
-    void decrement() {count--;}
+    int increment() {return ++count;} // Increment and return new value
+    int decrement() {return --count;} // Decrement and return new value
     bool is_zero() const {return count == 0;}
 };
 
@@ -70,21 +71,39 @@ private:
             // the counts due to the cycle. The next line then makes
             // the ref_count negative, which prevents actually
             // entering the destructor recursively.
-            ref_count(p).decrement();
-            if (ref_count(p).is_zero()) {
+            if (ref_count(p).decrement() == 0) {
                 destroy(p);
             }
         }
     }
 
-public:
+protected:
     T *ptr;
+
+public:
+    /** Access the raw pointer in a variety of ways.
+     * Note that a "const IntrusivePtr<T>" is not the same thing as an
+     * IntrusivePtr<const T>. So the methods that return the ptr are
+     * const, despite not adding an extra const to T. */
+    // @{
+    T *get() const {
+        return ptr;
+    }
+
+    T &operator*() const {
+        return *ptr;
+    }
+
+    T *operator->() const {
+        return ptr;
+    }
+    // @}
 
     ~IntrusivePtr() {
         decref(ptr);
     }
 
-    IntrusivePtr() : ptr(NULL) {
+    IntrusivePtr() : ptr(nullptr) {
     }
 
     IntrusivePtr(T *p) : ptr(p) {
@@ -95,7 +114,12 @@ public:
         incref(ptr);
     }
 
+    IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
+        other.ptr = nullptr;
+    }
+
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
+        if (other.ptr == ptr) return *this;
         // Other can be inside of something owned by this, so we
         // should be careful to incref other before we decref
         // ourselves.
@@ -106,15 +130,24 @@ public:
         return *this;
     }
 
+    IntrusivePtr<T> &operator=(IntrusivePtr<T> &&other) {
+        std::swap(ptr, other.ptr);
+        return *this;
+    }
+
     /* Handles can be null. This checks that. */
     bool defined() const {
-        return ptr != NULL;
+        return ptr != nullptr;
     }
 
     /* Check if two handles point to the same ptr. This is
      * equality of reference, not equality of value. */
     bool same_as(const IntrusivePtr &other) const {
         return ptr == other.ptr;
+    }
+
+    bool operator <(const IntrusivePtr<T> &other) const {
+        return ptr < other.ptr;
     }
 
 };

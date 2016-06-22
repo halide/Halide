@@ -16,7 +16,7 @@ template <typename fn_type>
 bool lookup_runtime_routine(const char *name, const Target &target,
                             fn_type &result) {
     std::vector<JITModule> runtime(
-        JITSharedRuntime::get(NULL, target.with_feature(Target::JIT)));
+        JITSharedRuntime::get(nullptr, target.with_feature(Target::JIT)));
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
@@ -37,7 +37,7 @@ extern "C" {
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
 void halide_device_release(void *user_context, const halide_device_interface *device_interface) {
-    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_release\n";
+    user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_device_release\n";
     Target target(get_host_target());
     void (*fn)(void *user_context, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_device_release", target, fn)) {
@@ -48,7 +48,7 @@ void halide_device_release(void *user_context, const halide_device_interface *de
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
 int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
-    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_host\n";
+    user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_copy_to_host\n";
     // Skip if there is no device buffer.
     if (buf->dev == 0)
         return 0;
@@ -62,13 +62,13 @@ int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
 
 /** Copy image data from host memory to device memory. This should not
  * be called directly; Halide handles copying to the device
- * automatically.  If interface is NULL and the bug has a non-zero dev
+ * automatically.  If interface is nullptr and the bug has a non-zero dev
  * field, the device associated with the dev handle will be
- * used. Otherwise if the dev field is 0 and interface is NULL, an
+ * used. Otherwise if the dev field is 0 and interface is nullptr, an
  * error is returned. */
 int halide_copy_to_device(void *user_context, struct buffer_t *buf,
                           const halide_device_interface *device_interface) {
-    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
+    user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_copy_to_device", target, fn)) {
@@ -80,7 +80,7 @@ int halide_copy_to_device(void *user_context, struct buffer_t *buf,
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 int halide_device_sync(void *user_context, struct buffer_t *buf) {
-    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_sync\n";
+    user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_device_sync\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
     if (lookup_runtime_routine("halide_device_sync", target, fn)) {
@@ -91,7 +91,7 @@ int halide_device_sync(void *user_context, struct buffer_t *buf) {
 
 /** Allocate device memory to back a buffer_t. */
 int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
-    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_malloc\n";
+    user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_device_malloc\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_device_malloc", target, fn)) {
@@ -101,10 +101,11 @@ int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_
 }
 
 int halide_device_free(void *user_context, struct buffer_t *buf) {
-    user_assert(user_context == NULL) << "Cannot provide user_context to libHalide.a halide_device_free\n";
+    user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_device_free\n";
     // Skip if there is no device buffer.
-    if (buf->dev == 0)
+    if (buf->dev == 0) {
         return 0;
+    }
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
     if (lookup_runtime_routine("halide_device_free", target, fn)) {
@@ -124,7 +125,7 @@ const struct halide_device_interface *halide_cuda_device_interface() {
     if (lookup_runtime_routine("halide_cuda_device_interface", target, fn)) {
         return (*fn)();
     }
-    return NULL;
+    return nullptr;
 }
 
 const struct halide_device_interface *halide_opencl_device_interface() {
@@ -134,7 +135,7 @@ const struct halide_device_interface *halide_opencl_device_interface() {
     if (lookup_runtime_routine("halide_opencl_device_interface", target, fn)) {
         return (*fn)();
     }
-    return NULL;
+    return nullptr;
 }
 
 const struct halide_device_interface *halide_opencl_textures_device_interface() {
@@ -157,7 +158,7 @@ const struct halide_device_interface *halide_opengl_device_interface() {
     if (lookup_runtime_routine("halide_opengl_device_interface", target, fn)) {
         return (*fn)();
     }
-    return NULL;
+    return nullptr;
 }
 
 const struct halide_device_interface *halide_openglcompute_device_interface() {
@@ -167,7 +168,7 @@ const struct halide_device_interface *halide_openglcompute_device_interface() {
     if (lookup_runtime_routine("halide_openglcompute_device_interface", target, fn)) {
         return (*fn)();
     }
-    return NULL;
+    return nullptr;
 }
 
 const struct halide_device_interface *halide_renderscript_device_interface() {
@@ -177,7 +178,7 @@ const struct halide_device_interface *halide_renderscript_device_interface() {
     if (lookup_runtime_routine("halide_renderscript_device_interface", target, fn)) {
         return (*fn)();
     }
-    return NULL;
+    return nullptr;
 }
 
 const struct halide_device_interface *halide_metal_device_interface() {
@@ -187,7 +188,7 @@ const struct halide_device_interface *halide_metal_device_interface() {
     if (lookup_runtime_routine("halide_metal_device_interface", target, fn)) {
         return (*fn)();
     }
-    return NULL;
+    return nullptr;
 }
 
 const struct halide_device_interface *halide_metal_textures_device_interface() {

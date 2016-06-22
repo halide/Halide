@@ -5,7 +5,7 @@ CXXFLAGS += -g -Wall
 .PHONY: clean
 
 interpolate: interpolate.cpp
-	$(CXX) $(CXXFLAGS) interpolate.cpp $(LIB_HALIDE) -o interpolate -lpthread -ldl -lz \
+	$(CXX) $(CXXFLAGS) interpolate.cpp $(LIB_HALIDE) -o interpolate \
 	$(PNGFLAGS) $(LDFLAGS) $(LLVM_SHARED_LIBS)
 
 out.png: interpolate

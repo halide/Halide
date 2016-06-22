@@ -162,31 +162,34 @@ public:
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
         padded.gpu_threads(x, y);
-
-        // JIT-compile the pipeline for the GPU. CUDA or OpenCL are
-        // not enabled by default. We have to construct a Target
-        // object, enable one of them, and then pass that target
-        // object to compile_jit. Otherwise your CPU will very slowly
-        // pretend it's a GPU, and use one thread per output pixel.
+        
+        // JIT-compile the pipeline for the GPU. CUDA, OpenCL, or
+        // Metal are not enabled by default. We have to construct a
+        // Target object, enable one of them, and then pass that
+        // target object to compile_jit. Otherwise your CPU will very
+        // slowly pretend it's a GPU, and use one thread per output
+        // pixel.
 
         // Start with a target suitable for the machine you're running
         // this on.
         Target target = get_host_target();
 
-        // Then enable OpenCL or CUDA.
+        // Then enable OpenCL or Metal, depending on which platform
+        // we're on. OS X doesn't update its OpenCL drivers, so they
+        // tend to be broken. CUDA would also be a fine choice on
+        // machines with NVidia GPUs.
+        if (target.os == Target::OSX) {
+            target.set_feature(Target::Metal);
+        } else {
+            target.set_feature(Target::OpenCL);
+        }
 
-        // We'll enable OpenCL here, because it tends to give better
-        // performance than CUDA, even with NVidia's drivers, because
-        // NVidia's open source LLVM backend doesn't seem to do all
-        // the same optimizations their proprietary compiler does.
-        target.set_feature(Target::OpenCL);
-
-        // Uncomment the next line and comment out the line above to
+        // Uncomment the next line and comment out the lines above to
         // try CUDA instead.
         // target.set_feature(Target::CUDA);
 
-        // If you want to see all of the OpenCL or CUDA API calls done
-        // by the pipeline, you can also enable the Debug
+        // If you want to see all of the OpenCL, Metal, or CUDA API
+        // calls done by the pipeline, you can also enable the Debug
         // flag. This is helpful for figuring out which stages are
         // slow, or when CPU -> GPU copies happen. It hurts
         // performance though, so we'll leave it commented out.
@@ -249,7 +252,7 @@ public:
                                output(x, y, c),
                                reference_output(x, y, c),
                                x, y, c);
-                        exit(0);
+                        exit(-1);
                     }
                 }
             }
@@ -258,7 +261,7 @@ public:
     }
 };
 
-bool have_opencl();
+bool have_opencl_or_metal();
 
 int main(int argc, char **argv) {
     // Load an input image.
@@ -273,7 +276,7 @@ int main(int argc, char **argv) {
     p1.test_performance();
     p1.curved.realize(reference_output);
 
-    if (have_opencl()) {
+    if (have_opencl_or_metal()) {
         printf("Testing performance on GPU:\n");
         MyPipeline p2(input);
         p2.schedule_for_gpu();
@@ -296,11 +299,11 @@ int main(int argc, char **argv) {
 #include <dlfcn.h>
 #endif
 
-bool have_opencl() {
+bool have_opencl_or_metal() {
 #ifdef _WIN32
     return LoadLibrary("OpenCL.dll") != NULL;
 #elif __APPLE__
-    return dlopen("/System/Library/Frameworks/OpenCL.framework/Versions/Current/OpenCL", RTLD_LAZY) != NULL;
+    return dlopen("/System/Library/Frameworks/Metal.framework/Versions/Current/Metal", RTLD_LAZY) != NULL;
 #else
     return dlopen("libOpenCL.so", RTLD_LAZY) != NULL;
 #endif

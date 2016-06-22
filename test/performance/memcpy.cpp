@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     printf("halide memcpy: %.3e byte/s\n", (buffer_size / halide) * 3 * 1000 * iterations);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
-    if (halide > system * 2) {
+    if (halide > system * 3) {
         printf("Halide memcpy is slower than it should be.\n");
         return -1;
     }

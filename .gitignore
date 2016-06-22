@@ -93,6 +93,7 @@
 /apps/HelloNaCl/lib64
 /apps/c_backend/f.tiff
 /apps/c_backend/run
+/apps/c_backend/pipeline_c.cpp
 /apps/modules/flip_impl.h
 /apps/modules/generate_pipeline
 /apps/modules/my_library/flip
@@ -118,6 +119,8 @@
 /apps/nacl_demos/reaction_diffusion_render.h
 /apps/nacl_demos/reaction_diffusion_update.h
 /apps/HelloNaCl/halide_game_of_life.h
+/apps/fft/bench_fft
+/apps/fft/*.html
 bin/*
 build-ios/*
 build-osx/*

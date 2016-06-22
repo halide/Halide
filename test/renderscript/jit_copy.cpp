@@ -35,7 +35,7 @@ protected:
     using IRMutator::visit;
 
     virtual void visit(const Call *call) {
-        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+        if (in_pipeline && call->is_intrinsic(Call::image_store)) {
             assert(for_nest_level == 4);
 
             std::map<std::string, Expr> matches;
@@ -78,7 +78,7 @@ protected:
                         Variable::make(Int(32), "result.s0.c"),
                         channels
                     },
-                    Call::CallType::Intrinsic),
+                    Call::CallType::PureIntrinsic),
                 call->args[5],
                 matches));
         }
@@ -91,8 +91,8 @@ protected:
             for_nest_level++;
             if (for_nest_level <= 3) {
                 assert(op->for_type == ForType::Parallel);
+                assert(op->device_api == DeviceAPI::Renderscript);
             }
-            assert(op->device_api == DeviceAPI::Renderscript);
         }
         IRMutator::visit(op);
     }
@@ -107,7 +107,7 @@ protected:
         assert(op->consume.defined());
 
         IRMutator::visit(op);
-        stmt = Stmt();
+        stmt = Evaluate::make(0);
     }
 
     int for_nest_level = -1;
@@ -123,7 +123,7 @@ class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline 
     using ValidateInterleavedPipeline::visit;
 
     virtual void visit(const Call *call) {
-        if (in_pipeline && call->call_type == Call::CallType::Intrinsic && call->name == Call::image_store) {
+        if (in_pipeline && call->is_intrinsic(Call::image_store)) {
             assert(for_nest_level == 3); // Should be three nested for-loops before we get to the first call.
 
             std::map<std::string, Expr> matches;
@@ -170,7 +170,7 @@ class ValidateInterleavedVectorizedPipeline: public ValidateInterleavedPipeline 
                         Ramp::make(0, 1, channels),
                         Broadcast::make(channels, channels)
                     },
-                    Call::CallType::Intrinsic),
+                    Call::CallType::PureIntrinsic),
                 call->args[5],
                 matches));
         }
@@ -200,9 +200,7 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         .set_stride(2, 1)
         .set_bounds(2, 0, channels);  // expecting interleaved image
     uint8_t *in_buf = new uint8_t[128 * 128 * channels];
-    uint8_t *out_buf = new uint8_t[128 * 128 * channels];
     Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, channels);
-    Image<uint8_t> out = make_interleaved_image(out_buf, 128, 128, channels);
     input8.set(in);
 
     Var x, y, c;
@@ -222,10 +220,10 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         vectorized?
             new ValidateInterleavedVectorizedPipeline(channels):
             new ValidateInterleavedPipeline(channels));
-    result.realize(out);
+
+    result.compile_jit();
 
     delete[] in_buf;
-    delete[] out_buf;
 }
 
 int main(int argc, char **argv) {

@@ -121,7 +121,14 @@ ValueEnumerator::ValueEnumerator(const llvm::Module &M,
         for (unsigned i = 0, e = MDs.size(); i != e; ++i)
           EnumerateMetadata(MDs[i].second);
 
-#if LLVM_VERSION >= 37
+#if WITH_NATIVE_CLIENT
+        if (I.getDebugLoc()) {
+          MDNode* Scope = I.getDebugLoc().getScope();
+          if (Scope) EnumerateMetadata(Scope);
+          MDLocation *IA = I.getDebugLoc().getInlinedAt();
+          if (IA) EnumerateMetadata(IA);
+        }
+#elif LLVM_VERSION >= 37
         if (I.getDebugLoc()) {
           MDNode* Scope = I.getDebugLoc().getScope();
           if (Scope) EnumerateMetadata(Scope);
@@ -299,7 +306,7 @@ void ValueEnumerator::EnumerateMetadata(const llvm::Metadata *MD) {
     EnumerateValue(C->getValue());
 
   HasMDString |= isa<MDString>(MD);
-  #if LLVM_VERSION >= 37
+  #if LLVM_VERSION >= 37 && !WITH_NATIVE_CLIENT
   HasDILocation |= isa<DILocation>(MD);
   #else
   HasDILocation |= isa<MDLocation>(MD);

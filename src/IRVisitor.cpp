@@ -129,12 +129,14 @@ void IRVisitor::visit(const Call *op) {
     }
 
     // Consider extern call args
-    Function f = op->func;
-    if (op->call_type == Call::Halide && f.has_extern_definition()) {
-        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-            ExternFuncArgument arg = f.extern_arguments()[i];
-            if (arg.is_expr()) {
-                arg.expr.accept(this);
+    if (op->func.defined()) {
+        Function f(op->func);
+        if (op->call_type == Call::Halide && f.has_extern_definition()) {
+            for (size_t i = 0; i < f.extern_arguments().size(); i++) {
+                ExternFuncArgument arg = f.extern_arguments()[i];
+                if (arg.is_expr()) {
+                    arg.expr.accept(this);
+                }
             }
         }
     }
@@ -224,20 +226,20 @@ void IRVisitor::visit(const Evaluate *op) {
 }
 
 void IRGraphVisitor::include(const Expr &e) {
-    if (visited.count(e.ptr)) {
+    if (visited.count(e.get())) {
         return;
     } else {
-        visited.insert(e.ptr);
+        visited.insert(e.get());
         e.accept(this);
         return;
     }
 }
 
 void IRGraphVisitor::include(const Stmt &s) {
-    if (visited.count(s.ptr)) {
+    if (visited.count(s.get())) {
         return;
     } else {
-        visited.insert(s.ptr);
+        visited.insert(s.get());
         s.accept(this);
         return;
     }

@@ -11,9 +11,17 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
+#if LLVM_VERSION >= 39
+class IRBuilderDefaultInserter;
+#else
 template<bool> class IRBuilderDefaultInserter;
+#endif
 class ConstantFolder;
+#if LLVM_VERSION >= 39
+template<typename, typename> class IRBuilder;
+#else
 template<bool, typename, typename> class IRBuilder;
+#endif
 class LLVMContext;
 class Type;
 class StructType;
@@ -72,8 +80,20 @@ protected:
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
-    virtual void compile_func(const LoweredFunc &func);
+    virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
     virtual void compile_buffer(const Buffer &buffer);
+    // @}
+
+    /** Helper functions for compiling Halide functions to llvm
+     * functions. begin_func performs all the work necessary to begin
+     * generating code for a function with a given argument list with
+     * the IRBuilder. A call to begin_func should be a followed by a
+     * call to end_func with the same arguments, to generate the
+     * appropriate cleanup code. */
+    // @{
+    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
+                            const std::string &extern_name, const std::vector<LoweredArgument> &args);
+    virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
 
     /** What should be passed as -mcpu, -mattrs, and related for
@@ -102,16 +122,23 @@ protected:
     static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
+    static bool llvm_Hexagon_enabled;
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
+    static bool llvm_PowerPC_enabled;
 
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
+#if LLVM_VERSION >= 39
+    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
+#else
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
+#endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
+    std::vector<LoweredArgument> current_function_args;
     //@}
 
     /** The target we're generating code for */
@@ -138,7 +165,7 @@ protected:
 
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
-     * returns NULL. */
+     * returns nullptr. */
     llvm::Value* sym_get(const std::string &name,
                          bool must_succeed = true) const;
 
@@ -147,7 +174,7 @@ protected:
 
     /** Some useful llvm types */
     // @{
-    llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
+    llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
     llvm::StructType *buffer_t_type, *metadata_t_type, *argument_t_type, *scalar_value_t_type;
     // @}
 
@@ -170,6 +197,7 @@ protected:
     Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
     Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
     Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
@@ -178,7 +206,6 @@ protected:
     Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
     Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
     Expr wild_f32x_, wild_f64x_;
-
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;
@@ -189,6 +216,7 @@ protected:
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
+
 
     /** Emit code that runs a statement. */
     void codegen(Stmt);
@@ -230,7 +258,7 @@ protected:
      * null), or evaluates and returns the message, which must be an
      * Int(32) expression. */
     // @{
-    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = NULL);
+    void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
 
     /** Return the the pipeline with the given error code. Will run
@@ -241,7 +269,7 @@ protected:
     llvm::Constant *create_string_constant(const std::string &str);
 
     /** Put a binary blob in the module as a global variable and return a pointer to it. */
-    llvm::Constant *create_constant_binary_blob(const std::vector<char> &data, const std::string &name);
+    llvm::Constant *create_binary_blob(const std::vector<char> &data, const std::string &name, bool constant = true);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
@@ -280,6 +308,22 @@ protected:
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
     void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
+
+    /** Get a unique name for the actual block of memory that an
+     * allocate node uses. Used so that alias analysis understands
+     * when multiple Allocate nodes shared the same memory. */
+    virtual std::string get_allocation_name(const std::string &n) {return n;}
+
+    /** Helpers for implementing fast integer division. */
+    // @{
+    // Compute high_half(a*b) >> shr. Note that this is a shift in
+    // addition to the implicit shift due to taking the upper half of
+    // the multiply result.
+    virtual Expr mulhi_shr(Expr a, Expr b, int shr);
+    // Compute (a+b)/2, assuming a < b.
+    virtual Expr sorted_avg(Expr a, Expr b);
+    // @}
+
 
     using IRVisitor::visit;
 
@@ -358,7 +402,7 @@ protected:
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
-    std::set<std::string> might_be_misaligned;
+    std::set<std::string> external_buffer;
 
     /** The user_context argument. May be a constant null if the
      * function is being compiled without a user context. */
@@ -367,7 +411,7 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+    virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -386,10 +430,16 @@ protected:
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
      * if you ask for more lanes than the vector has. */
-    llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
+    virtual llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
 
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
-    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+    virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+
+    /** Create an LLVM shuffle vectors instruction. */
+    virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
+                                         const std::vector<int> &indices);
+    /** Shorthand for shuffling a vector with an undef vector. */
+    llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:
@@ -405,9 +455,12 @@ protected:
      *
      * So for a 5-wide vector, it tries: 5, 8, 4, 2, 16.
      *
-     * If there's no match, returns (NULL, 0).
+     * If there's no match, returns (nullptr, 0).
      */
     std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
+
+    /** Get the result of modulus-remainder analysis for a given expr. */
+    ModulusRemainder get_alignment_info(Expr e);
 
 private:
 
@@ -429,15 +482,18 @@ private:
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
-     * as extern "C" linkage.
+     * as extern "C" linkage. Note that the return value is a function-returning-
+     * pointer-to-constant-data.
      */
-    llvm::Constant* embed_metadata(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<Argument> &args);
+    llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
+        const std::string &function_name, const std::vector<LoweredArgument> &args);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);
 
-    void register_metadata(const std::string &name, llvm::Constant *metadata, llvm::Function *argv_wrapper);
+    void register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper);
+
+    llvm::Function *add_argv_wrapper(const std::string &name);
 };
 
 }

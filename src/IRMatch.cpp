@@ -56,9 +56,9 @@ public:
     map<string, Expr> *var_matches;
     Expr expr;
 
-    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(NULL), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(nullptr), expr(e) {
     }
-    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(NULL), var_matches(&m), expr(e) {
+    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(nullptr), var_matches(&m), expr(e) {
     }
 
     using IRVisitor::visit;

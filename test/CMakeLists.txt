@@ -27,17 +27,6 @@ else()
   message(WARNING "Internal tests disabled")
 endif()
 
-# Generate the Halide runtime object file used by pure runtime tests
-set(HALIDE_RUNTIME_DIR "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build")
-set(HALIDE_RUNTIME_FILE_NAME "halide_runtime.debug${CMAKE_CXX_OUTPUT_EXTENSION}")
-set(HALIDE_RUNTIME_FILE_PATH "${HALIDE_RUNTIME_DIR}/${HALIDE_RUNTIME_FILE_NAME}")
-add_custom_command(OUTPUT "${HALIDE_RUNTIME_FILE_PATH}"
-                   COMMAND runtime.generator
-                           -r "${HALIDE_RUNTIME_FILE_NAME}"
-                           -o "${HALIDE_RUNTIME_DIR}"
-                           "target=host-debug"
-                  )
-
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
   if (WIN32)
@@ -45,19 +34,8 @@ function(tests folder)
   endif()
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
-    if (${name} MATCHES "^runtime_")
-      # By convention test names that start with the ``runtime_`` prefix
-      # are treated as pure runtime tests so the test will not be linked against
-      # libHalide and instead is linked against's Halide's generated runtime
-      add_executable("${folder}_${name}" "${folder}/${file}" "${HALIDE_RUNTIME_FILE_PATH}")
-      target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
-      if (NOT WIN32)
-        target_link_libraries("${folder}_${name}" dl pthread z)
-      endif()
-    else()
-      # Test links against libHalide
-      halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
-    endif()
+    # Test links against libHalide
+    halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
   endforeach()
 endfunction(tests)
 
@@ -189,6 +167,14 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATOR_ARGS "target=host-user_context")
+    elseif(TEST_SRC STREQUAL "multitarget_aottest.cpp")
+      # Needs custom target string
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "${GEN_NAME}"
+                               GENERATED_FUNCTION "${FUNC_NAME}"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-debug-c_plus_plus_name_mangling,host-c_plus_plus_name_mangling")
     # metadata_tester_aottest.cpp depends on two variants of metadata_generator
     elseif(TEST_SRC STREQUAL "metadata_tester_aottest.cpp")
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
@@ -201,6 +187,29 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}_ucon"
                                GENERATOR_ARGS "target=host-register_metadata-user_context")
+    elseif(TEST_SRC STREQUAL "cxx_mangling_aottest.cpp")
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "${GEN_NAME}"
+                               GENERATED_FUNCTION "${FUNC_NAME}"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling")
+    elseif(TEST_SRC STREQUAL "cxx_mangling_define_extern_aottest.cpp")
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "cxx_mangling${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "cxx_mangling"
+                               TARGET_SUFFIX "_2"
+                               GENERATED_FUNCTION "cxx_mangling"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling"
+                               OUTPUT_LIB_VAR LIB_cxx_mangling)
+      halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
+                               GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
+                               GENERATOR_NAME "${GEN_NAME}"
+                               GENERATED_FUNCTION "${FUNC_NAME}"
+                               GENERATED_FUNCTION_NAMESPACE "HalideTest::"
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling")
+      target_link_libraries("${TEST_RUNNER}" ${LIB_cxx_mangling})
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
@@ -221,8 +230,12 @@ if (WITH_TEST_GENERATORS)
     target_include_directories("${TEST_RUNNER}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
     set_target_properties("${TEST_RUNNER}" PROPERTIES FOLDER "generator")
     if (WIN32)
-      # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
-      set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
+      if (MSVC)
+        # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
+        set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
+      else()
+        set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "-Wl,--allow-multiple-definition")
+      endif()
     else()
       target_link_libraries("${TEST_RUNNER}" dl pthread z)
       set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "-L ${SCRATCH_DIR}")

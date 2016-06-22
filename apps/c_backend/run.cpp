@@ -13,7 +13,7 @@ extern "C" int an_extern_func(int x, int y) {
 }
 
 extern "C" int an_extern_stage(buffer_t *in, buffer_t *out) {
-    if (in->host == NULL) {
+    if (in->host == nullptr) {
         // We expect a 2D input.
         in->extent[0] = 10;
         in->extent[1] = 10;

@@ -1,7 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -15,16 +15,16 @@ extern "C" DLLEXPORT int flip_x(buffer_t *in1, buffer_t *in2, buffer_t *out) {
     int flipped_min = -max;
     int flipped_max = -min;
 
-    if (in1->host == NULL || in2->host == NULL) {
+    if (in1->host == nullptr || in2->host == nullptr) {
         // If any of the inputs have a null host pointer, we're in
         // bounds inference mode, and should mutate those input
         // buffers that have a null host pointer.
         printf("Doing flip_x bounds inference over [%d %d]\n", min, max);
-        if (in1->host == NULL) {
+        if (in1->host == nullptr) {
             in1->min[0] = flipped_min;
             in1->extent[0] = extent;
         }
-        if (in2->host == NULL) {
+        if (in2->host == nullptr) {
             in2->min[0] = flipped_min;
             in2->extent[0] = extent;
         }

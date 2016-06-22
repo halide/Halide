@@ -7,20 +7,26 @@
 #include "LLVM_Headers.h"
 #include "Util.h"
 
+#if defined(__powerpc__) && defined(__linux__)
+// This uses elf.h and must be included after "LLVM_Headers.h", which
+// uses llvm/support/Elf.h.
+#include <sys/auxv.h>
+#endif
+
 namespace Halide {
 
 using std::string;
 using std::vector;
 
 namespace {
-#ifndef __arm__
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
-
 #else
+
+#if defined(__x86_64__) || defined(__i386__)
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
@@ -44,32 +50,48 @@ static void cpuid(int info[4], int infoType, int extra) {
 #endif
 #endif
 #endif
-}
 
-Target get_host_target() {
+Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
-    #ifdef __linux__
+#ifdef __linux__
     os = Target::Linux;
-    #endif
-    #ifdef _MSC_VER
+#endif
+#ifdef _WIN32
     os = Target::Windows;
-    #endif
-    #ifdef __APPLE__
+#endif
+#ifdef __APPLE__
     os = Target::OSX;
-    #endif
+#endif
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
 
-    #if __mips__ || __mips || __MIPS__
+#if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
     return Target(os, arch, bits);
-    #else
-    #ifdef __arm__
+#else
+#if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits);
-    #else
+#else
+#if defined(__powerpc__) && defined(__linux__)
+    Target::Arch arch = Target::POWERPC;
 
+    unsigned long hwcap = getauxval(AT_HWCAP);
+    unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
+    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+
+    user_assert(have_altivec)
+        << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
+
+    std::vector<Target::Feature> initial_features;
+    if (have_vsx)     initial_features.push_back(Target::VSX);
+    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+
+    return Target(os, arch, bits, initial_features);
+#else
     Target::Arch arch = Target::X86;
 
     int info[4];
@@ -101,20 +123,37 @@ Target get_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info[1] & (1 << 5);
+        bool have_avx2 = info2[1] & (1 << 5);
         if (have_avx2) {
             initial_features.push_back(Target::AVX2);
         }
     }
+#ifdef _WIN32
+#ifndef _MSC_VER
+    initial_features.push_back(Target::MinGW);
+#endif
+#endif
 
     return Target(os, arch, bits, initial_features);
 #endif
 #endif
+#endif
+}
+
+}  // namespace
+
+Target get_host_target() {
+    // Calculating the host target isn't slow but it isn't free,
+    // and it's pointless to recalculate it every time we (e.g.) parse
+    // an arbitrary Target string. It won't ever change, so cache on first
+    // use.
+    static Target host_target = calculate_host_target();
+    return host_target;
 }
 
 namespace {
 string get_env(const char *name) {
-#ifdef _WIN32
+#ifdef _MSC_VER
     char buf[128];
     size_t read = 0;
     getenv_s(&read, buf, name);
@@ -141,6 +180,8 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"android", Target::Android},
     {"ios", Target::IOS},
     {"nacl", Target::NaCl},
+    {"qurt", Target::QuRT},
+    {"noos", Target::NoOS},
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -158,6 +199,8 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arm", Target::ARM},
     {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
+    {"powerpc", Target::POWERPC},
+    {"hexagon", Target::Hexagon},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -182,6 +225,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"f16c", Target::F16C},
     {"armv7s", Target::ARMv7s},
     {"no_neon", Target::NoNEON},
+    {"vsx", Target::VSX},
+    {"power_arch_2_07", Target::POWER_ARCH_2_07},
     {"cuda", Target::CUDA},
     {"cuda_capability_30", Target::CUDACapability30},
     {"cuda_capability_32", Target::CUDACapability32},
@@ -193,11 +238,17 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
+    {"hvx_64", Target::HVX_64},
+    {"hvx_128", Target::HVX_128},
+    {"hvx_v62", Target::HVX_v62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
+    {"mingw", Target::MinGW},
+    {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
+    {"large_buffers", Target::LargeBuffers},
     {"textures", Target::Textures},
 };
 
@@ -217,7 +268,7 @@ Target get_target_from_environment() {
     if (target.empty()) {
         return get_host_target();
     } else {
-        return parse_target_string(target);
+        return Target(target);
     }
 }
 
@@ -228,7 +279,7 @@ Target get_jit_target_from_environment() {
     if (target.empty()) {
         return host;
     } else {
-        Target t = parse_target_string(target);
+        Target t(target);
         t.set_feature(Target::JIT);
         user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
@@ -238,63 +289,8 @@ Target get_jit_target_from_environment() {
     }
 }
 
-Target parse_target_string(const std::string &target) {
-    Target host = get_host_target();
-
-    if (target.empty()) {
-        // If nothing is specified, use the host target.
-        return host;
-    }
-
-    // Default to the host OS and architecture.
-    Target t;
-    t.os = host.os;
-    t.arch = host.arch;
-    t.bits = host.bits;
-
-    if (!t.merge_string(target)) {
-        const char *separator = "";
-        std::string architectures;
-        for (auto const &arch_entry : arch_name_map) {
-            architectures += separator + arch_entry.first;
-            separator = ", ";
-        }
-        separator = "";
-        std::string oses;
-        for (auto os_entry : os_name_map) {
-            oses += separator + os_entry.first;
-            separator = ", ";
-        }
-        separator = "";
-        // Format the features to go one feature over 70 characters per line,
-        // assume the first line starts with "Features are ".
-        int line_char_start = -(int)sizeof("Features are");
-        std::string features;
-        for (auto feature_entry : feature_name_map) {
-            features += separator + feature_entry.first;
-            if (features.length() - line_char_start > 70) {
-                separator = "\n";
-                line_char_start = features.length();
-            } else {
-                separator = ", ";
-            }
-        }
-        user_error << "Did not understand HL_TARGET=" << target << "\n"
-                   << "Expected format is arch-os-feature1-feature2-...\n"
-                   << "Where arch is " << architectures << " .\n"
-                   << "Os is " << oses << " .\n"
-                   << "If arch or os are omitted, they default to the host.\n"
-                   << "Features are " << features << " .\n"
-                   << "HL_TARGET can also begin with \"host\", which sets the "
-                   << "host's architecture, os, and feature set, with the "
-                   << "exception of the GPU runtimes, which default to off.\n"
-                   << "On this platform, the host target is: " << host.to_string() << "\n";
-    }
-
-    return t;
-}
-
-bool Target::merge_string(const std::string &target) {
+namespace {
+bool merge_string(Target &t, const std::string &target) {
     string rest = target;
     vector<string> tokens;
     size_t first_dash;
@@ -316,25 +312,25 @@ bool Target::merge_string(const std::string &target) {
                 // "host" is now only allowed as the first token.
                 return false;
             }
-            *this = get_host_target();
+            t = get_host_target();
         } else if (tok == "32" || tok == "64") {
             if (bits_specified) {
                 return false;
             }
             bits_specified = true;
-            bits = std::stoi(tok);
-        } else if (lookup_arch(tok, arch)) {
+            t.bits = std::stoi(tok);
+        } else if (lookup_arch(tok, t.arch)) {
             if (arch_specified) {
                 return false;
             }
             arch_specified = true;
-        } else if (lookup_os(tok, os)) {
+        } else if (lookup_os(tok, t.os)) {
             if (os_specified) {
                 return false;
             }
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
-            set_feature(feature);
+            t.set_feature(feature);
         } else {
             return false;
         }
@@ -345,11 +341,11 @@ bool Target::merge_string(const std::string &target) {
     }
 
     // If arch is PNaCl, require explicit setting of os and bits as well.
-    if (arch_specified && arch == Target::PNaCl) {
-        if (!os_specified || os != Target::NaCl) {
+    if (arch_specified && t.arch == Target::PNaCl) {
+        if (!os_specified || t.os != Target::NaCl) {
             return false;
         }
-        if (!bits_specified || bits != 32) {
+        if (!bits_specified || t.bits != 32) {
             return false;
         }
     }
@@ -357,22 +353,93 @@ bool Target::merge_string(const std::string &target) {
     return true;
 }
 
+void bad_target_string(const std::string &target) {
+    const char *separator = "";
+    std::string architectures;
+    for (const auto &arch_entry : arch_name_map) {
+        architectures += separator + arch_entry.first;
+        separator = ", ";
+    }
+    separator = "";
+    std::string oses;
+    for (auto os_entry : os_name_map) {
+        oses += separator + os_entry.first;
+        separator = ", ";
+    }
+    separator = "";
+    // Format the features to go one feature over 70 characters per line,
+    // assume the first line starts with "Features are ".
+    int line_char_start = -(int)sizeof("Features are");
+    std::string features;
+    for (auto feature_entry : feature_name_map) {
+        features += separator + feature_entry.first;
+        if (features.length() - line_char_start > 70) {
+            separator = "\n";
+            line_char_start = features.length();
+        } else {
+            separator = ", ";
+        }
+    }
+    user_error << "Did not understand Halide target " << target << "\n"
+               << "Expected format is arch-os-feature1-feature2-...\n"
+               << "Where arch is " << architectures << " .\n"
+               << "Os is " << oses << " .\n"
+               << "If arch or os are omitted, they default to the host.\n"
+               << "Features are " << features << " .\n"
+               << "The target can also begin with \"host\", which sets the "
+               << "host's architecture, os, and feature set, with the "
+               << "exception of the GPU runtimes, which default to off.\n"
+               << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
+}
+
+}
+
+Target::Target(const std::string &target) {
+    Target host = get_host_target();
+
+    if (target.empty()) {
+        // If nothing is specified, use the full host target.
+        *this = host;
+    } else {
+
+        // Default to the host OS and architecture in case of partially
+        // specified targets (e.g. x86-64-cuda doesn't specify the OS, so
+        // use the host OS).
+        os = host.os;
+        arch = host.arch;
+        bits = host.bits;
+
+        if (!merge_string(*this, target)) {
+            bad_target_string(target);
+        }
+    }
+}
+
+Target::Target(const char *s) {
+    *this = Target(std::string(s));
+}
+
+bool Target::validate_target_string(const std::string &s) {
+    Target t;
+    return merge_string(t, s);
+}
+
 std::string Target::to_string() const {
     string result;
-    for (auto const &arch_entry : arch_name_map) {
+    for (const auto &arch_entry : arch_name_map) {
         if (arch_entry.second == arch) {
             result += arch_entry.first;
             break;
         }
     }
     result += "-" + std::to_string(bits);
-    for (auto const &os_entry : os_name_map) {
+    for (const auto &os_entry : os_name_map) {
         if (os_entry.second == os) {
             result += "-" + os_entry.first;
             break;
         }
     }
-    for (auto const &feature_entry : feature_name_map) {
+    for (const auto &feature_entry : feature_name_map) {
         if (has_feature(feature_entry.second)) {
             result += "-" + feature_entry.first;
         }
@@ -380,11 +447,75 @@ std::string Target::to_string() const {
     return result;
 }
 
-namespace Internal{ 
+/** Was libHalide compiled with support for this target? */
+bool Target::supported() const {
+    bool bad = false;
+#if !defined(WITH_NATIVE_CLIENT)
+    bad |= (arch == Target::PNaCl || os == Target::NaCl);
+#endif
+#if !defined(WITH_ARM)
+    bad |= arch == Target::ARM && bits == 32;
+#endif
+#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
+    // In pnacl llvm, the aarch64 backend is crashy.
+    bad |= arch == Target::ARM && bits == 64;
+#endif
+#if !defined(WITH_X86)
+    bad |= arch == Target::X86;
+#endif
+#if !defined(WITH_MIPS)
+    bad |= arch == Target::MIPS;
+#endif
+#if !defined(WITH_POWERPC)
+    bad |= arch == Target::POWERPC;
+#endif
+#if !defined(WITH_HEXAGON)
+    bad |= arch == Target::Hexagon;
+#endif
+#if !defined(WITH_PTX)
+    bad |= has_feature(Target::CUDA);
+#endif
+#if !defined(WITH_OPENCL)
+    bad |= has_feature(Target::OpenCL);
+#endif
+#if !defined(WITH_METAL)
+    bad |= has_feature(Target::Metal);
+#endif
+#if !defined(WITH_RENDERSCRIPT)
+    bad |= has_feature(Target::Renderscript);
+#endif
+#if !defined(WITH_OPENGL)
+    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#endif
+    return !bad;
+}
+
+bool Target::supports_device_api(DeviceAPI api) const {
+    switch (api) {
+    case DeviceAPI::None:        return true;
+    case DeviceAPI::Host:        return true;
+    case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
+    default:                     return has_feature(target_feature_for_device_api(api));
+    }
+}
+
+Target::Feature target_feature_for_device_api(DeviceAPI api) {
+    switch (api) {
+    case DeviceAPI::CUDA:          return Target::CUDA;
+    case DeviceAPI::OpenCL:        return Target::OpenCL;
+    case DeviceAPI::GLSL:          return Target::OpenGL;
+    case DeviceAPI::Renderscript:  return Target::Renderscript;
+    case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
+    case DeviceAPI::Metal:         return Target::Metal;
+    default:                       return Target::FeatureEnd;
+    }
+}
+
+namespace Internal {
 
 EXPORT void target_test() {
     Target t;
-    for (auto const &feature : feature_name_map) {
+    for (const auto &feature : feature_name_map) {
         t.set_feature(feature.second);
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {

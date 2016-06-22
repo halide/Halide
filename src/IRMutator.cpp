@@ -36,7 +36,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     } else {
         *expr = T::make(a, b);
     }
-    *stmt = NULL;
+    *stmt = nullptr;
 }
 }
 
@@ -201,7 +201,7 @@ void IRMutator::visit(const Store *op) {
     if (value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
     } else {
-        stmt = Store::make(op->name, value, index);
+        stmt = Store::make(op->name, value, index, op->param);
     }
 }
 
@@ -317,6 +317,27 @@ void IRMutator::visit(const Evaluate *op) {
     } else {
         stmt = Evaluate::make(v);
     }
+}
+
+
+Stmt IRGraphMutator::mutate(Stmt s) {
+    auto iter = stmt_replacements.find(s);
+    if (iter != stmt_replacements.end()) {
+        return iter->second;
+    }
+    Stmt new_s = IRMutator::mutate(s);
+    stmt_replacements[s] = new_s;
+    return new_s;
+}
+
+Expr IRGraphMutator::mutate(Expr e) {
+    auto iter = expr_replacements.find(e);
+    if (iter != expr_replacements.end()) {
+        return iter->second;
+    }
+    Expr new_e = IRMutator::mutate(e);
+    expr_replacements[e] = new_e;
+    return new_e;
 }
 
 }

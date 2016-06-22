@@ -108,6 +108,8 @@ int main(int argc, char **argv) {
         // Define an expression that clamps x to lie within the
         // range [0, input.width()-1].
         Expr clamped_x = clamp(x, 0, input.width()-1);
+        // clamp(x, a, b) is equivalent to max(min(x, b), a).
+
         // Similarly clamp y.
         Expr clamped_y = clamp(y, 0, input.height()-1);
         // Load from input at the clamped coordinates. This means that
@@ -125,7 +127,8 @@ int main(int argc, char **argv) {
         //
         // These are important to use for other boundary conditions,
         // because they are expressed in the way that Halide can best
-        // understand and optimize.
+        // understand and optimize. When used correctly they are as
+        // cheap as having no boundary condition at all.
 
         // Upgrade it to 16-bit, so we can do math without it
         // overflowing. This time we'll refer to our new Func

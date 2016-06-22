@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "runtime_internal.h"
 
 extern "C" {
 

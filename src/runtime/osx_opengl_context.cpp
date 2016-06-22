@@ -1,4 +1,3 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"

@@ -89,7 +89,7 @@ bool test(int w) {
 
 int main(int argc, char **argv) {
 
-    srand(time(NULL));
+    srand(time(nullptr));
 
     bool success = true;
     // Scalar

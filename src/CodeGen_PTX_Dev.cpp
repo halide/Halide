@@ -10,7 +10,11 @@
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
+#if LLVM_VERSION >= 39
+namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+#else
 namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+#endif
 #endif
 
 namespace Halide {
@@ -42,8 +46,8 @@ CodeGen_PTX_Dev::~CodeGen_PTX_Dev() {
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
-                                 const std::vector<GPU_Argument> &args) {
-    internal_assert(module != NULL);
+                                 const std::vector<DeviceArgument> &args) {
+    internal_assert(module != nullptr);
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 
@@ -116,7 +120,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     LLVMMDNodeArgumentType md_args[] = {
         value_as_metadata_type(function),
         MDString::get(*context, "kernel"),
-        value_as_metadata_type(ConstantInt::get(i32, 1))
+        value_as_metadata_type(ConstantInt::get(i32_t, 1))
     };
 
     MDNode *md_node = MDNode::get(*context, md_args);
@@ -186,7 +190,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
-        Value *shared_base = Constant::getNullValue(PointerType::get(i8, 3));
+        Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name + ".host", shared_base);
     } else {
 
@@ -199,9 +203,8 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = 0;
-        bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
-        user_assert(is_constant)
+        int32_t size = alloc->constant_allocation_size();
+        user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
@@ -209,7 +212,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
+        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
         builder->SetInsertPoint(here);
         sym_push(allocation_name, ptr);
     }
@@ -218,6 +221,12 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
     sym_pop(f->name + ".host");
+}
+
+void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
+    // Discard the error message for now.
+    Expr trap = Call::make(Int(32), "halide_ptx_trap", {}, Call::Extern);
+    codegen(IfThenElse::make(!op->condition, Evaluate::make(trap)));
 }
 
 string CodeGen_PTX_Dev::march() const {
@@ -271,9 +280,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    // Generic llvm optimizations on the module.
-    optimize_module();
-
     llvm::Triple triple(module->getTargetTriple());
 
     // Allocate target machine
@@ -321,7 +327,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     std::unique_ptr<TargetMachine>
         target(TheTarget->createTargetMachine(triple.str(),
                                               MCPU, FeaturesStr, Options,
-                                              llvm::Reloc::Default,
+                                              llvm::Reloc::PIC_,
                                               llvm::CodeModel::Default,
                                               OLvl));
     internal_assert(target.get()) << "Could not allocate target machine!";

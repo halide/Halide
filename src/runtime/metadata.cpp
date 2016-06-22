@@ -1,19 +1,6 @@
 #include "HalideRuntime.h"
 #include "scoped_mutex_lock.h"
 
-extern "C" {
-
-struct _halide_runtime_internal_registered_filter_t {
-    // This is a _halide_runtime_internal_registered_filter_t, but
-    // recursive types currently break our method that copies types from
-    // llvm module to llvm module
-    void *next;
-    const halide_filter_metadata_t* metadata;
-    int (*argv_func)(void **args);
-};
-
-};
-
 namespace Halide { namespace Runtime { namespace Internal {
 
 struct list_head_t {
@@ -43,7 +30,7 @@ WEAK int halide_enumerate_registered_filters(void *user_context, void* enumerate
     ScopedMutexLock lock(&list_head.mutex);
     for (_halide_runtime_internal_registered_filter_t* f = list_head.next; f != NULL;
          f = (_halide_runtime_internal_registered_filter_t *)(f->next)) {
-        int r = (*func)(enumerate_context, f->metadata, f->argv_func);
+        int r = (*func)(enumerate_context, f->metadata(), f->argv_func);
         if (r != 0) return r;
     }
     return 0;

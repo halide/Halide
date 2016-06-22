@@ -91,7 +91,7 @@ void defineExpr()
                            "An enum describing a type of device API. "
                            "Used by schedules, and in the For loop IR node.")
             /// Used to denote for loops that inherit their device from where they are used, generally the default
-            .value("Parent", h::DeviceAPI::Parent)
+            .value("None", h::DeviceAPI::None)
             .value("Host", h::DeviceAPI::Host)
             .value("Default_GPU", h::DeviceAPI::Default_GPU)
             .value("CUDA", h::DeviceAPI::CUDA)

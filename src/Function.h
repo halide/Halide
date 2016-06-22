@@ -10,6 +10,9 @@
 #include "Parameter.h"
 #include "Schedule.h"
 #include "Reduction.h"
+#include "Definition.h"
+
+#include <map>
 
 namespace Halide {
 
@@ -50,30 +53,50 @@ struct ExternFuncArgument {
 
 namespace Internal {
 
-struct UpdateDefinition {
-    std::vector<Expr> values, args;
-    Schedule schedule;
-    ReductionDomain domain;
-};
-
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
 class Function {
-private:
+
     IntrusivePtr<FunctionContents> contents;
+
 public:
+    /** This lets you use a Function as a key in a map of the form
+     * map<Function, Foo, Function::Compare> */
+    struct Compare {
+        bool operator()(const Function &a, const Function &b) const {
+            internal_assert(a.contents.defined() && b.contents.defined());
+            return a.contents < b.contents;
+        }
+    };
+
     /** Construct a new function with no definitions and no name. This
      * constructor only exists so that you can make vectors of
      * functions, etc.
      */
     EXPORT Function();
 
-    /** Reconstruct a Function from a FunctionContents pointer. */
-    EXPORT Function(const IntrusivePtr<FunctionContents> &c) : contents(c) {}
-
     /** Construct a new function with the given name */
     EXPORT Function(const std::string &n);
+
+    /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
+    EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);
+
+    /** Get a handle on the halide function contents that this Function
+     * represents. */
+    IntrusivePtr<FunctionContents> get_contents() const {
+        return contents;
+    }
+
+    /** Deep copy this Function into 'copy'. It recursively deep copies all called
+     * functions, schedules, update definitions, extern func arguments, specializations,
+     * and reduction domains. This method does not deep-copy the Parameter objects.
+     * This method also takes a map of <old Function, deep-copied version> as input
+     * and would use the deep-copied Function from the map if exists instead of
+     * creating a new deep-copy to avoid creating deep-copies of the same Function
+     * multiple times.
+     */
+    EXPORT void deep_copy(Function &copy, std::map<Function, Function, Compare> &copied_map) const;
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -98,13 +121,17 @@ public:
     /** Get the name of the function */
     EXPORT const std::string &name() const;
 
+    /** Get a mutable handle to the init definition. */
+    EXPORT Definition &definition();
+
+    /** Get the init definition */
+    EXPORT const Definition &definition() const;
+
     /** Get the pure arguments */
-    EXPORT const std::vector<std::string> &args() const;
+    EXPORT const std::vector<std::string> args() const;
 
     /** Get the dimensionality */
-    int dimensions() const {
-        return (int)args().size();
-    }
+    EXPORT int dimensions() const;
 
     /** Get the number of outputs */
     int outputs() const {
@@ -118,9 +145,7 @@ public:
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition */
-    bool has_pure_definition() const {
-        return !values().empty();
-    }
+    EXPORT bool has_pure_definition() const;
 
     /** Does this function *only* have a pure definition */
     bool is_pure() const {
@@ -128,6 +153,9 @@ public:
                 !has_update_definition() &&
                 !has_extern_definition());
     }
+
+    /** Is it legal to inline this function */
+    EXPORT bool can_be_inlined() const;
 
     /** Get a handle to the schedule for the purpose of modifying
      * it */
@@ -144,8 +172,16 @@ public:
      * stage */
     EXPORT Schedule &update_schedule(int idx = 0);
 
+    /** Get a mutable handle to this function's update definition at
+     * index 'idx'. */
+    EXPORT Definition &update(int idx = 0);
+
+    /** Get a const reference to this function's update definition at
+     * index 'idx'. */
+    EXPORT const Definition &update(int idx = 0) const;
+
     /** Get a const reference to this function's update definitions. */
-    EXPORT const std::vector<UpdateDefinition> &updates() const;
+    EXPORT const std::vector<Definition> &updates() const;
 
     /** Does this function have an update definition */
     EXPORT bool has_update_definition() const;
@@ -153,11 +189,15 @@ public:
     /** Check if the function has an extern definition */
     EXPORT bool has_extern_definition() const;
 
+    /** Check if the function has an extern definition */
+    EXPORT bool extern_definition_is_c_plus_plus() const;
+
     /** Add an external definition of this Func */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
-                              int dimensionality);
+                              int dimensionality,
+                              bool is_c_plus_plus);
 
     /** Retrive the arguments of the extern definition */
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
@@ -200,6 +240,25 @@ public:
     /** Check if a function has been frozen. If so, it is an error to
      * add new definitions. */
     EXPORT bool frozen() const;
+
+    /** Mark calls of this function by 'f' to be replaced with its wrapper
+     * during the lowering stage. If the string 'f' is empty, it means replace
+     * all calls to this function by all other functions (excluding itself) in
+     * the pipeline with the wrapper. This will also freeze 'wrapper' to prevent
+     * user from updating the values of the Function it wraps via the wrapper.
+     * See \ref Func::in for more details. */
+    // @{
+    EXPORT void add_wrapper(const std::string &f, Function &wrapper);
+    EXPORT const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
+    // @}
+
+    /** Replace every call to Functions in 'substitutions' keys by all Exprs
+     * referenced in this Function to call to their substitute Functions (i.e.
+     * the corresponding values in 'substitutions' map). */
+    // @{
+    EXPORT Function &substitute_calls(const std::map<Function, Function, Compare> &substitutions);
+    EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
+    // @}
 };
 
 }}

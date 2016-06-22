@@ -16,7 +16,7 @@ namespace Internal {
 /** Take a statement with for kernel for loops and turn loads and
  * stores inside the loops into image load and store
  * intrinsics. */
-Stmt inject_image_intrinsics(Stmt s, Target t);
+Stmt inject_image_intrinsics(Stmt s, const std::map<std::string, Function> &env, Target t);
 }
 }
 

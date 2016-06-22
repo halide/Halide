@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         printf("Func 'in' should only have been loaded from at points "
                "within the circle x*x + y*y < 10*10. It was loaded %d "
                "times, but there are %d points within that circle\n", count, c);
-        printf("Passing for now. TODO: re-enable this test once trim-no-ops is in.\n");
+        return -1;
     }
 
     printf("Success!\n");

@@ -20,9 +20,11 @@ int main(int argc, char **argv) {
     out.bound(c, 0, 3);
     out.glsl(x, y, c);
 
+    Target target = get_target_from_environment();
+    target.set_feature(Target::OpenGL);
+
     std::vector<Argument> args;
     args.push_back(input8);
-    out.compile_to_object("blur.o", args);
-    out.compile_to_header("blur.h", args);
+    out.compile_to_static_library("blur", args, target);
     return 0;
 }

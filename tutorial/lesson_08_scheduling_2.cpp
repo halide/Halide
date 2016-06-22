@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
         //                   sin((x + 1) * (y + 1)));
 
         // All calls to 'producer' have been replaced with the body of
-        // 'producer', with the arguments subtituted in for the
+        // 'producer', with the arguments substituted in for the
         // variables.
 
         // The equivalent C code is:

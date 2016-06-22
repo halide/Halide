@@ -39,19 +39,6 @@ class DebugToFile : public IRMutator {
             for (size_t i = 0; i < op->bounds.size(); i++) {
                 num_elements *= op->bounds[i].extent;
             }
-            args.push_back(Load::make(op->types[0], f.name(), 0, Buffer(), Parameter()));
-            args.push_back(Load::make(op->types[0], f.name(), num_elements-1, Buffer(), Parameter()));
-
-            // The header
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                if (i < 4) {
-                    args.push_back(op->bounds[i].extent);
-                } else {
-                    args.back() *= op->bounds[i].extent;
-                }
-            }
-            // Fill the remaining args with ones.
-            args.resize(7, 1);
 
             int type_code = 0;
             Type t = op->types[0];
@@ -79,7 +66,9 @@ class DebugToFile : public IRMutator {
                 user_error << "Type " << t << " not supported for debug_to_file\n";
             }
             args.push_back(type_code);
-            args.push_back(t.bytes());
+
+            Expr buf = Variable::make(Handle(), f.name() + ".buffer");
+            args.push_back(buf);
 
             Expr call = Call::make(Int(32), Call::debug_to_file, args, Call::Intrinsic);
             string call_result_name = unique_name("debug_to_file_result");

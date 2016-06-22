@@ -187,7 +187,7 @@ struct BLASTestBase {
                          Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
         bool equal = true;
         for (int i = 0; i < N*N; ++i) {
-            if (!compareScalars(A[i], A[i], epsilon)) {
+            if (!compareScalars(A[i], B[i], epsilon)) {
                 std::cerr << "Matrices differ at coords: (" << i%N << ", " << i/N << ")\n";
                 equal = false;
                 break;
@@ -304,7 +304,7 @@ int main(int argc, char *argv[]) {
             d.run_tests(size);
         }
     } else {
-        int size = 277;
+        int size = 64 * 7;
         std::cout << "Testing halide_blas with N = " << size << ":\n";
         s.run_tests(size);
         d.run_tests(size);

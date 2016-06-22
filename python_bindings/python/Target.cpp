@@ -77,6 +77,7 @@ void defineTarget()
             .value("ARM", Target::Arch::ARM)
             .value("PNaCl", Target::Arch::PNaCl)
             .value("MIPS", Target::Arch::MIPS)
+            .value("POWERPC", Target::Arch::POWERPC)
             .export_values()
             ;
 
@@ -97,6 +98,9 @@ void defineTarget()
 
             .value("ARMv7s", Target::Feature::ARMv7s)
             .value("NoNEON", Target::Feature::NoNEON)
+
+            .value("VSX", Target::Feature::VSX)
+            .value("POWER_ARCH_2_07", Target::Feature::POWER_ARCH_2_07)
 
             .value("CUDA", Target::Feature::CUDA)
             .value("CUDACapability30", Target::Feature::CUDACapability30)

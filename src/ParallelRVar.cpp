@@ -6,6 +6,7 @@
 #include "IROperator.h"
 #include "Substitute.h"
 #include "CSE.h"
+#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {
@@ -14,6 +15,7 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
 /** Find all calls arguments to the given function. Substitutes in
  * lets, so take care with the combinatorially large results. */
 class FindLoads : public IRVisitor {
@@ -85,21 +87,25 @@ class SubstituteInBooleanLets : public IRMutator {
         }
     }
 };
-
+}
 
 bool can_parallelize_rvar(const string &v,
                           const string &f,
-                          const UpdateDefinition &r) {
+                          const Definition &r) {
+    const vector<Expr> &values = r.values();
+    const vector<Expr> &args = r.args();
+    const vector<ReductionVariable> &rvars = r.schedule().rvars();
+
     FindLoads find(f);
-    for (size_t i = 0; i < r.values.size(); i++) {
-        r.values[i].accept(&find);
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&find);
     }
 
     // Make an expr representing the store done by a different thread.
     RenameFreeVars renamer;
-    vector<Expr> other_store(r.args.size());
-    for (size_t i = 0; i < r.args.size(); i++) {
-        other_store[i] = renamer.mutate(r.args[i]);
+    vector<Expr> other_store(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        other_store[i] = renamer.mutate(args[i]);
     }
 
     // Construct an expression which is true when the two threads are
@@ -111,8 +117,8 @@ bool can_parallelize_rvar(const string &v,
     // Construct an expression which is true if there's a collision
     // between this thread's store and the other thread's store.
     Expr hazard = const_true();
-    for (size_t i = 0; i < r.args.size(); i++) {
-        hazard = hazard && (distinct_v && (r.args[i] == other_store[i]));
+    for (size_t i = 0; i < args.size(); i++) {
+        hazard = hazard && (distinct_v && (args[i] == other_store[i]));
     }
 
     // Add expressions that are true if there's a collision between
@@ -128,13 +134,20 @@ bool can_parallelize_rvar(const string &v,
 
     // Make a scope representing the bounds of the reduction domain
     Scope<Interval> bounds;
-    if (r.domain.defined()) {
-        for (size_t i = 0; i < r.domain.domain().size(); i++) {
-            const ReductionVariable &rv = r.domain.domain()[i];
-            Interval in = Interval(rv.min, simplify(rv.min + rv.extent - 1));
-            bounds.push(rv.var, in);
-            bounds.push(renamer.get_new_name(rv.var), in);
-        }
+    for (const auto &rv : rvars) {
+        Interval in = Interval(rv.min, simplify(rv.min + rv.extent - 1));
+        bounds.push(rv.var, in);
+        bounds.push(renamer.get_new_name(rv.var), in);
+    }
+
+    // Add the definition's predicate if there is any
+    Expr pred = simplify(r.predicate());
+    if (pred.defined() || !equal(const_true(), pred)) {
+        Expr this_pred = pred;
+        Expr other_pred = renamer.mutate(pred);
+        debug(3) << "......this thread predicate: " << this_pred << "\n";
+        debug(3) << "......other thread predicate: " << other_pred << "\n";
+        hazard = hazard && this_pred && other_pred;
     }
 
     debug(3) << "Attempting to falsify: " << hazard << "\n";

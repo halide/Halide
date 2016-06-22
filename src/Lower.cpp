@@ -13,11 +13,13 @@
 #include "CSE.h"
 #include "Debug.h"
 #include "DebugToFile.h"
+#include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -25,6 +27,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "Profiling.h"
@@ -38,15 +41,18 @@
 #include "SkipStages.h"
 #include "SlidingWindow.h"
 #include "Simplify.h"
+#include "SimplifySpecializations.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "Substitute.h"
 #include "Tracing.h"
+#include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
+#include "WrapCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -56,10 +62,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 using std::map;
-using std::pair;
-using std::make_pair;
 
-Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
@@ -68,13 +72,23 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
+    // Create a deep-copy of the entire graph of Funcs.
+    std::tie(outputs, env) = deep_copy(outputs, env);
+
+    // Substitute in wrapper Funcs
+    env = wrap_func_calls(env);
+
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
+
+    // Try to simplify the RHS/LHS of a function definition by propagating its
+    // specializations' conditions
+    simplify_specializations(env);
 
     bool any_memoized = false;
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(outputs, order, env, any_memoized, !t.has_feature(Target::NoAsserts));
+    Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     if (any_memoized) {
@@ -88,12 +102,6 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
-
-    if (t.has_feature(Target::Profile)) {
-        debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
-    }
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);
@@ -137,7 +145,7 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
-    s = storage_folding(s);
+    s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
@@ -154,12 +162,12 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
 
     if (t.features_any_of({Target::OpenGL, Target::Renderscript, Target::Textures})) {
         debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s, t);
+        s = inject_image_intrinsics(s, env, t);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, outputs, env);
+    s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (any_memoized) {
@@ -173,7 +181,8 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::Renderscript)) {
+        t.has_feature(Target::Renderscript) ||
+        (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API:\n" << s << "\n\n";
@@ -223,9 +232,19 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
     s = simplify(s);
     debug(2) << "Lowering after partitioning loops:\n" << s << "\n\n";
 
+    debug(1) << "Trimming loops to the region over which they do something...\n";
+    s = trim_no_ops(s);
+    debug(2) << "Lowering after loop trimming:\n" << s << "\n\n";
+
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
+
+    if (t.has_feature(Target::Profile)) {
+        debug(1) << "Injecting profiling...\n";
+        s = inject_profiling(s, pipeline_name);
+        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+    }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
@@ -240,9 +259,14 @@ Stmt lower(const vector<Function> &outputs, const string &pipeline_name, const T
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
 
+    s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    debug(1) << "Splitting off Hexagon offload...\n";
+    s = inject_hexagon_rpc(s, t);
+    debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

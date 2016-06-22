@@ -23,7 +23,7 @@ public:
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     void init_module();
 
@@ -45,10 +45,10 @@ protected:
         void add_kernel(Stmt stmt,
                         Target target,
                         const std::string &name,
-                        const std::vector<GPU_Argument> &args);
+                        const std::vector<DeviceArgument> &args);
     protected:
 
-        std::string print_type(Type type);
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
         using CodeGen_C::visit;
         void visit(const For *);
@@ -63,6 +63,7 @@ protected:
         void visit(const Select *op);
         void visit(const Evaluate *op);
         void visit(const IntImm *op);
+        void visit(const UIntImm *op);
 
     public:
         int workgroup_size[3];

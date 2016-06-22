@@ -62,7 +62,7 @@ public:
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
-    ComputeModulusRemainder mr(NULL);
+    ComputeModulusRemainder mr(nullptr);
     return mr.analyze(e);
 }
 
@@ -82,6 +82,16 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
      * 6*k + 3, then expr mod 8 could be 1, 3, 5, or 7, so we just
      * return false.
      */
+
+    if (result.modulus % modulus == 0) {
+        *remainder = result.remainder % modulus;
+        return true;
+    } else {
+        return false;
+    }
+}
+bool reduce_expr_modulo(Expr expr, int modulus, int *remainder, const Scope<ModulusRemainder> &scope) {
+    ModulusRemainder result = modulus_remainder(expr, scope);
 
     if (result.modulus % modulus == 0) {
         *remainder = result.remainder % modulus;

@@ -108,7 +108,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     }
 
     /** Downcast this ir node to its actual type (e.g. Add, or
-     * Select). This returns NULL if the node is not of the requested
+     * Select). This returns nullptr if the node is not of the requested
      * type. Example usage:
      *
      * if (const Add *add = node->as<Add>()) {
@@ -116,10 +116,10 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr->type_info() == &T::_type_info) {
+        if (ptr && ptr->type_info() == &T::_type_info) {
             return (const T *)ptr;
         }
-        return NULL;
+        return nullptr;
     }
 };
 
@@ -127,45 +127,40 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
 struct IntImm : public ExprNode<IntImm> {
     int64_t value;
 
-    static IntImm *make(Type t, int64_t value) {
-        internal_assert(t.is_int() && t.is_scalar()) << "IntImm must be a scalar Int\n";
+    static const IntImm *make(Type t, int64_t value) {
+        internal_assert(t.is_int() && t.is_scalar())
+            << "IntImm must be a scalar Int\n";
         internal_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "IntImm must be 8, 16, 32, or 64-bit\n";
 
-        if (t.bits() == 32 && value >= -8 && value <= 8 &&
-            !small_int_cache[(int)value + 8].ref_count.is_zero()) {
-            return &small_int_cache[(int)value + 8];
-        }
-
-        IntImm *node = new IntImm;
-        node->type = t;
         // Normalize the value by dropping the high bits
         value <<= (64 - t.bits());
         // Then sign-extending to get them back
         value >>= (64 - t.bits());
+
+        IntImm *node = new IntImm;
+        node->type = t;
         node->value = value;
         return node;
     }
-
-private:
-    /** ints from -8 to 8 */
-    EXPORT static IntImm small_int_cache[17];
 };
 
 /** Unsigned integer constants */
 struct UIntImm : public ExprNode<UIntImm> {
     uint64_t value;
 
-    static UIntImm *make(Type t, uint64_t value) {
+    static const UIntImm *make(Type t, uint64_t value) {
         internal_assert(t.is_uint() && t.is_scalar())
             << "UIntImm must be a scalar UInt\n";
         internal_assert(t.bits() == 1 || t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "UIntImm must be 1, 8, 16, 32, or 64-bit\n";
-        UIntImm *node = new UIntImm;
-        node->type = t;
+
         // Normalize the value by dropping the high bits
         value <<= (64 - t.bits());
         value >>= (64 - t.bits());
+
+        UIntImm *node = new UIntImm;
+        node->type = t;
         node->value = value;
         return node;
     }
@@ -175,8 +170,9 @@ struct UIntImm : public ExprNode<UIntImm> {
 struct FloatImm : public ExprNode<FloatImm> {
     double value;
 
-    static FloatImm *make(Type t, double value) {
-        internal_assert(t.is_float() && t.is_scalar()) << "FloatImm must be a scalar Float\n";
+    static const FloatImm *make(Type t, double value) {
+        internal_assert(t.is_float() && t.is_scalar())
+            << "FloatImm must be a scalar Float\n";
         FloatImm *node = new FloatImm;
         node->type = t;
         switch (t.bits()) {
@@ -201,9 +197,9 @@ struct FloatImm : public ExprNode<FloatImm> {
 struct StringImm : public ExprNode<StringImm> {
     std::string value;
 
-    static StringImm *make(const std::string &val) {
+    static const StringImm *make(const std::string &val) {
         StringImm *node = new StringImm;
-        node->type = Handle();
+        node->type = type_of<const char *>();
         node->value = val;
         return node;
     }
@@ -250,14 +246,14 @@ struct Expr : public Internal::IRHandle {
  * map<Expr, Foo, ExprCompare> */
 struct ExprCompare {
     bool operator()(Expr a, Expr b) const {
-        return a.ptr < b.ptr;
+        return a.get() < b.get();
     }
 };
 
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
 enum class DeviceAPI {
-    Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+    None, /// Used to denote for loops that run on the same device as the containing code.
     Host,
     Default_GPU,
     CUDA,
@@ -267,8 +263,21 @@ enum class DeviceAPI {
     Renderscript,
     OpenGLCompute,
     Metal,
-    MetalTextures
+    MetalTextures,
+    Hexagon
 };
+
+/** An array containing all the device apis. Useful for iterating
+ * through them. */
+const DeviceAPI all_device_apis[] = {DeviceAPI::None,
+                                     DeviceAPI::Host,
+                                     DeviceAPI::Default_GPU,
+                                     DeviceAPI::CUDA,
+                                     DeviceAPI::OpenCL,
+                                     DeviceAPI::GLSL,
+                                     DeviceAPI::Renderscript,
+                                     DeviceAPI::OpenGLCompute,
+                                     DeviceAPI::Metal};
 
 namespace Internal {
 

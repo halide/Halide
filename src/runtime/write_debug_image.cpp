@@ -1,4 +1,3 @@
-#include "runtime_internal.h"
 #include "HalideRuntime.h"
 
 extern "C" void *fopen(const char *, const char *);
@@ -32,7 +31,7 @@ WEAK int16_t pixel_type_to_tiff_sample_type[] = {
 #pragma pack(2)
 
 struct tiff_tag {
-    int16_t tag_code;
+    uint16_t tag_code;
     int16_t type_code;
     int32_t count;
     union {
@@ -41,21 +40,21 @@ struct tiff_tag {
         int32_t i32;
     } value;
 
-    void assign16(int16_t tag_code, int32_t count, int16_t value) __attribute__((always_inline)) {
+    void assign16(uint16_t tag_code, int32_t count, int16_t value) __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = 3;
         this->count = count;
         this->value.i16 = value;
     }
 
-    void assign32(int16_t tag_code, int32_t count, int32_t value) __attribute__((always_inline)) {
+    void assign32(uint16_t tag_code, int32_t count, int32_t value) __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = 4;
         this->count = count;
         this->value.i32 = value;
     }
 
-    void assign32(int16_t tag_code, int16_t type_code, int32_t count, int32_t value)  __attribute__((always_inline)) {
+    void assign32(uint16_t tag_code, int16_t type_code, int32_t count, int32_t value)  __attribute__((always_inline)) {
         this->tag_code = tag_code;
         this->type_code = type_code;
         this->count = count;
@@ -102,13 +101,30 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
+// Get a pointer to the pixel data in a buffer, relative to the min
+// coordinate, not in absolute coordinates.
+WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
+                                  const struct buffer_t *buf) {
+    uint8_t *ptr = buf->host + buf->elem_size * (dim0 * buf->stride[0] +
+                                                 dim1 * buf->stride[1] +
+                                                 dim2 * buf->stride[2] +
+                                                 dim3 * buf->stride[3]);
+    return ptr;
+}
+
 }}} // namespace Halide::Runtime::Internal
 
-WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename, uint8_t *data,
-                                             int32_t s0, int32_t s1, int32_t s2, int32_t s3,
-                                             int32_t type_code, int32_t bytes_per_element) {
+WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
+                                             int32_t type_code, struct buffer_t *buf) {
+
+    halide_copy_to_host(user_context, buf);
+
     void *f = fopen(filename, "wb");
     if (!f) return -1;
+
+    int32_t s0 = max(1, buf->extent[0]), s1 = max(1, buf->extent[1]);
+    int32_t s2 = max(1, buf->extent[2]), s3 = max(1, buf->extent[3]);
+    int32_t bytes_per_element = buf->elem_size;
 
     size_t elts = s0;
     elts *= s1*s2*s3;
@@ -139,7 +155,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
         tiff_tag *tag = &header.entries[0];
-        tag++->assign32(256, 1, width);                             // Image width
+        tag++->assign32(256, 1, width);                          // Image width
         tag++->assign32(257, 1, height);                         // Image height
         tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // Bits per sample
         tag++->assign16(259, 1, 1);                              // Compression -- none
@@ -199,11 +215,39 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
 
-    if (fwrite((void *)data, bytes_per_element * elts, 1, f)) {
-        fclose(f);
-        return 0;
-    } else {
-        fclose(f);
-        return -1;
+    // Reorder the data according to the strides.
+    const int TEMP_SIZE = 4*1024;
+    uint8_t temp[TEMP_SIZE];
+    int max_elts = TEMP_SIZE/bytes_per_element;
+    int counter = 0;
+
+    for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
+        for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
+            for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
+                for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
+                    counter++;
+                    uint8_t *loc = get_pointer_to_data(dim0, dim1, dim2, dim3, buf);
+                    void *dst = temp + (counter-1)*bytes_per_element;
+                    memcpy(dst, loc, bytes_per_element);
+
+                    if (counter == max_elts) {
+                        counter = 0;
+                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
+                            fclose(f);
+                            return -1;
+                        }
+                    }
+                }
+            }
+        }
     }
+    if (counter > 0) {
+        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
+            fclose(f);
+            return -1;
+        }
+    }
+    fclose(f);
+
+    return 0;
 }

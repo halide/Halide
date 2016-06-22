@@ -1,7 +1,6 @@
-#include "runtime_internal.h"
+#include "HalideRuntimeOpenCL.h"
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
-#include "HalideRuntimeOpenCL.h"
 #include "printer.h"
 
 #include "mini_cl.h"
@@ -12,7 +11,9 @@
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 
-// Define the function pointers for the OpenCL API.
+// Define the function pointers for the OpenCL API. OpenCL 1.2
+// currently disabled so we can work on build bots without it.
+//#define HAVE_OPENCL_12 1
 #define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
 #include "cl_functions.h"
 
@@ -338,10 +339,29 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     // If the user indicated a specific device index to use, use
     // that. Note that this is an index within the set of devices
-    // specified by the device type. -1 means the last device.
+    // specified by the device type. -1 means select a device
+    // automatically based on core count.
     int device = halide_get_gpu_device(user_context);
-    if (device == -1) {
-        device = deviceCount - 1;
+    if (device == -1 && deviceCount == 1) {
+        device = 0;
+    } else if (device == -1) {
+        debug(user_context) << "    Multiple CL devices detected. Selecting the one with the most cores.\n";
+        cl_uint best_core_count = 0;
+        for (cl_uint i = 0; i < deviceCount; i++) {
+            cl_device_id dev = devices[i];
+            cl_uint core_count = 0;
+            err = clGetDeviceInfo(dev, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &core_count, NULL);
+            if (err != CL_SUCCESS) {
+                debug(user_context) << "      Failed to get info on device " << i << "\n";
+                continue;
+            }
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
+            if (core_count >= best_core_count) {
+                device = i;
+                best_core_count = core_count;
+            }
+        }
+        debug(user_context) << "    Selected device " << device << "\n";
     }
 
     if (device < 0 || device >= (int)deviceCount) {
@@ -467,8 +487,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     if (result != CL_SUCCESS) {
-        error(user_context) << "CL: clReleaseMemObject failed: "
-                            << get_opencl_error_name(result);
+        // We may be called as a destructor, so don't raise an error
+        // here.
         return result;
     }
 
@@ -743,6 +763,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_opencl_textures_device_malloc(void *user_context, buffer_t* buf) {
+#if HAVE_OPENCL_12
      debug(user_context)
          << "CL: halide_opencl_textures_device_malloc (user_context: " << user_context
          << ", buf: " << buf << ")\n";
@@ -751,7 +772,7 @@ WEAK int halide_opencl_textures_device_malloc(void *user_context, buffer_t* buf)
 
      size_t size = buf_size(user_context, buf);
      if (buf->dev) {
-         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+        halide_assert(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
     }
 
@@ -834,7 +855,10 @@ WEAK int halide_opencl_textures_device_malloc(void *user_context, buffer_t* buf)
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
-    return CL_SUCCESS;
+    return 0;
+#else
+    return -1;
+#endif
 }
 
 WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {

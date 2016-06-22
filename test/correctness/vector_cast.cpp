@@ -19,10 +19,40 @@ DECL_SOT(int32_t);
 DECL_SOT(float);
 DECL_SOT(double);
 
-template<typename A, typename B>
-bool test(int vec_width) {
+template <typename T>
+bool is_type_supported(int vec_width, const Target &target) {
+    return target.supports_type(type_of<T>().with_lanes(vec_width));
+}
 
-    int W = vec_width*4;
+template <>
+bool is_type_supported<float>(int vec_width, const Target &target) {
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        return vec_width == 1;
+    } else {
+        return true;
+    }
+}
+
+template <>
+bool is_type_supported<double>(int vec_width, const Target &target) {
+    if (target.has_feature(Target::OpenCL) &&
+        !target.has_feature(Target::CLDoubles)) {
+        return false;
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        return vec_width == 1;
+    } else {
+        return true;
+    }
+}
+
+template<typename A, typename B>
+bool test(int vec_width, const Target &target) {
+    if (!is_type_supported<A>(vec_width, target) || !is_type_supported<B>(vec_width, target)) {
+        // Type not supported, return pass.
+        return true;
+    }
+
+    int W = 1024;
     int H = 1;
 
     Image<A> input(W, H);
@@ -37,7 +67,17 @@ bool test(int vec_width) {
 
     f(x, y) = cast<B>(input(x, y));
 
-    f.vectorize(x, vec_width);
+    if (target.has_gpu_feature()) {
+        f.gpu_tile(x, 64);
+    } else {
+        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            // TODO: Non-native vector widths hang the compiler here.
+            //f.hexagon();
+        }
+        if (vec_width > 1) {
+            f.vectorize(x, vec_width);
+        }
+    }
 
     Image<B> output(W, H);
     f.realize(output);
@@ -72,16 +112,16 @@ bool test(int vec_width) {
 }
 
 template<typename A>
-bool test_all(int vec_width) {
+bool test_all(int vec_width, const Target &target) {
     bool ok = true;
-    ok = ok && test<A, float>(vec_width);
-    ok = ok && test<A, double>(vec_width);
-    ok = ok && test<A, uint8_t>(vec_width);
-    ok = ok && test<A, int8_t>(vec_width);
-    ok = ok && test<A, uint16_t>(vec_width);
-    ok = ok && test<A, int16_t>(vec_width);
-    ok = ok && test<A, uint32_t>(vec_width);
-    ok = ok && test<A, int32_t>(vec_width);
+    ok = ok && test<A, float>(vec_width, target);
+    ok = ok && test<A, double>(vec_width, target);
+    ok = ok && test<A, uint8_t>(vec_width, target);
+    ok = ok && test<A, int8_t>(vec_width, target);
+    ok = ok && test<A, uint16_t>(vec_width, target);
+    ok = ok && test<A, int16_t>(vec_width, target);
+    ok = ok && test<A, uint32_t>(vec_width, target);
+    ok = ok && test<A, int32_t>(vec_width, target);
     return ok;
 }
 
@@ -97,18 +137,21 @@ int main(int argc, char **argv) {
     return 0;
     #endif
 
+    Target target = get_jit_target_from_environment();
+
     bool ok = true;
 
-    // We only support power-of-two vector widths for now
-    for (int vec_width = 2; vec_width < 32; vec_width*=2) {
-        ok = ok && test_all<float>(vec_width);
-        ok = ok && test_all<double>(vec_width);
-        ok = ok && test_all<uint8_t>(vec_width);
-        ok = ok && test_all<int8_t>(vec_width);
-        ok = ok && test_all<uint16_t>(vec_width);
-        ok = ok && test_all<int16_t>(vec_width);
-        ok = ok && test_all<uint32_t>(vec_width);
-        ok = ok && test_all<int32_t>(vec_width);
+    // We only test power-of-two vector widths for now
+    for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
+        printf("Testing vector width %d\n", vec_width);
+        ok = ok && test_all<float>(vec_width, target);
+        ok = ok && test_all<double>(vec_width, target);
+        ok = ok && test_all<uint8_t>(vec_width, target);
+        ok = ok && test_all<int8_t>(vec_width, target);
+        ok = ok && test_all<uint16_t>(vec_width, target);
+        ok = ok && test_all<int16_t>(vec_width, target);
+        ok = ok && test_all<uint32_t>(vec_width, target);
+        ok = ok && test_all<int32_t>(vec_width, target);
     }
 
     if (!ok) return -1;

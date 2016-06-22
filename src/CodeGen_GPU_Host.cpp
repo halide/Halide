@@ -12,7 +12,7 @@
 #include "Debug.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
-#include "Bounds.h"
+#include "ExprUsesVar.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 
@@ -45,7 +45,6 @@ public:
 private:
 
     bool found_shared;
-    Scope<Interval> scope;
 
     using IRVisitor::visit;
 
@@ -72,15 +71,14 @@ private:
             num_blocks[3] = op->extent;
         }
 
-        if (!found_shared) {
-            Interval ie = bounds_of_expr_in_scope(op->extent, scope);
-            Interval im = bounds_of_expr_in_scope(op->min, scope);
-            scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
-            op->body.accept(this);
-            scope.pop(op->name);
-        } else {
-            op->body.accept(this);
+        op->body.accept(this);
+    }
+
+    void visit(const LetStmt *op) {
+        if (expr_uses_var(shared_mem_size, op->name)) {
+            shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
         }
+        op->body.accept(this);
     }
 
     void visit(const Allocate *allocate) {
@@ -89,117 +87,12 @@ private:
 
         if (allocate->name == "__shared") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
-            shared_mem_size = bounds_of_expr_in_scope(allocate->extents[0], scope).max;
+            shared_mem_size = allocate->extents[0];
             found_shared = true;
         }
         allocate->body.accept(this);
     }
-
-    void visit(const LetStmt *op) {
-        if (!found_shared) {
-            Interval i = bounds_of_expr_in_scope(op->value, scope);
-            scope.push(op->name, i);
-            op->body.accept(this);
-            scope.pop(op->name);
-        } else {
-            op->body.accept(this);
-        }
-    }
 };
-
-class GPU_Host_Closure : public Halide::Internal::Closure {
-public:
-    GPU_Host_Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : skip_gpu_loops(skip_gpu_loops) {
-        ignore.push(lv, 0);
-        s.accept(this);
-    }
-
-    vector<GPU_Argument> arguments();
-
-protected:
-    using Internal::Closure::visit;
-    void visit(const For *loop);
-    void visit(const Call *op);
-
-    bool skip_gpu_loops;
-};
-
-vector<GPU_Argument> GPU_Host_Closure::arguments() {
-    vector<GPU_Argument> res;
-    for (const pair<string, Type> &i : vars) {
-        debug(2) << "var: " << i.first << "\n";
-        res.push_back(GPU_Argument(i.first, false, i.second, 0));
-    }
-    for (const pair<string, BufferRef> &i : buffers) {
-        debug(2) << "buffer: " << i.first << " " << i.second.size;
-        if (i.second.read) debug(2) << " (read)";
-        if (i.second.write) debug(2) << " (write)";
-        debug(2) << "\n";
-
-        GPU_Argument arg(i.first, true, i.second.type, i.second.dimensions, i.second.size);
-        arg.read = i.second.read;
-        arg.write = i.second.write;
-        res.push_back(arg);
-    }
-    return res;
-}
-
-void GPU_Host_Closure::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic &&
-        (op->name == Call::glsl_texture_load ||
-         op->name == Call::image_load ||
-         op->name == Call::glsl_texture_store ||
-         op->name == Call::image_store)) {
-
-        // The argument to the call is either a StringImm or a broadcasted
-        // StringImm if this is part of a vectorized expression
-
-        const StringImm *string_imm = op->args[0].as<StringImm>();
-        if (!string_imm) {
-            internal_assert(op->args[0].as<Broadcast>());
-            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
-        }
-
-        internal_assert(string_imm);
-
-        string bufname = string_imm->value;
-        BufferRef &ref = buffers[bufname];
-        ref.type = op->type;
-
-        if (op->name == Call::glsl_texture_load ||
-            op->name == Call::image_load) {
-            ref.read = true;
-            ref.dimensions = (op->args.size() - 2) / 2;
-        } else if (op->name == Call::glsl_texture_store ||
-                   op->name == Call::image_store) {
-            ref.write = true;
-            ref.dimensions = op->args.size() - 3;
-        }
-
-        // The Func's name and the associated .buffer are mentioned in the
-        // argument lists, but don't treat them as free variables.
-        ignore.push(bufname, 0);
-        ignore.push(bufname + ".buffer", 0);
-        Internal::Closure::visit(op);
-        ignore.pop(bufname + ".buffer");
-        ignore.pop(bufname);
-    } else {
-        Internal::Closure::visit(op);
-    }
-}
-
-void GPU_Host_Closure::visit(const For *loop) {
-    if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-        if (skip_gpu_loops) return;
-        // The size of the threads and blocks is not part of the closure
-        ignore.push(loop->name, 0);
-        loop->body.accept(this);
-        ignore.pop(loop->name);
-    } else {
-        Internal::Closure::visit(loop);
-    }
-}
-
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
@@ -248,8 +141,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
-    function_name = f.name;
+void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
+                                                 const std::string &simple_name,
+                                                 const std::string &/* extern_name */) {
+    function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
     for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
@@ -257,7 +152,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
     }
 
     // Call the base implementation to create the function.
-    CodeGen_CPU::compile_func(f);
+    CodeGen_CPU::compile_func(f, f.name, f.name);
 
     // We need to insert code after the existing entry block, so that
     // the destructor stack slots exist before we do the assertions
@@ -299,8 +194,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
         Value *kernel_src_ptr =
-            CodeGen_CPU::create_constant_binary_blob(kernel_src,
-                                                     "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
+            CodeGen_CPU::create_binary_blob(kernel_src,
+                                            "halide_" + function_name + "_" + api_unique_name + "_kernel_src");
 
         if (f.args[0].name == "__user_context") {
             // The user context is first argument of the function.
@@ -314,13 +209,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f) {
         if (debug::debug_level >= 2) {
             user_context->dump();
         }
-        Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
+        Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
         vector<Value *> init_kernels_args = {user_context, module_state, kernel_src_ptr, kernel_size};
         Value *result = builder->CreateCall(init, init_kernels_args);
-        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
         CodeGen_CPU::create_assertion(did_succeed, Expr(), result);
     }
 
@@ -354,14 +249,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                  << bounds.num_blocks[3] << ") blocks\n";
 
         // compile the kernel
-        string kernel_name = unique_name("kernel_" + loop->name, false);
+        string kernel_name = unique_name("kernel_" + loop->name);
         for (size_t i = 0; i < kernel_name.size(); i++) {
             if (!isalnum(kernel_name[i])) {
                 kernel_name[i] = '_';
             }
         }
 
-        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32->getPointerTo());
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32_t->getPointerTo());
         Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
         Value *gpu_num_padded_attributes  = zero_int32;
@@ -387,17 +282,17 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // right type
             gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen_LLVM::f32->getPointerTo());
+                                                           CodeGen_LLVM::f32_t->getPointerTo());
         }
 
         // compute a closure over the state passed into the kernel
-        GPU_Host_Closure c(loop->body, loop->name);
+        HostClosure c(loop->body, loop->name);
 
         // Determine the arguments that must be passed into the halide function
-        vector<GPU_Argument> closure_args = c.arguments();
+        vector<DeviceArgument> closure_args = c.arguments();
 
         if (loop->device_api == DeviceAPI::Renderscript) {
-            closure_args.insert(closure_args.begin(), GPU_Argument(".rs_slot_offset", false, Int(32), 0));
+            closure_args.insert(closure_args.begin(), DeviceArgument(".rs_slot_offset", false, Int(32), 0));
         }
 
         // Halide allows passing of scalar float and integer arguments. For
@@ -438,7 +333,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             debug(4) << "Slots taken = " << slots_taken << "\n";
         }
 
-        user_assert(gpu_codegen != NULL)
+        user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
@@ -448,13 +343,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
-        llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
+        llvm::Type *target_size_t_type = (target.bits == 32) ? i32_t : i64_t;
 
         // build the kernel arguments array
-        llvm::PointerType *arg_t = i8->getPointerTo(); // void*
+        llvm::PointerType *arg_t = i8_t->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
-        // NULL-terminated list
+        // nullptr-terminated list
         llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
             create_alloca_at_entry(
@@ -462,7 +357,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 num_args+1, false,
                 kernel_name + "_args");
 
-        // NULL-terminated list of size_t's
+        // nullptr-terminated list of size_t's
         llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type,
                                                             num_args+1);
         Value *gpu_arg_sizes_arr =
@@ -471,7 +366,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 num_args+1, false,
                 kernel_name + "_arg_sizes");
 
-        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8, num_args+1);
+        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8_t, num_args+1);
         Value *gpu_arg_is_buffer_arr =
             create_alloca_at_entry(
                 gpu_arg_is_buffer_arr_type,
@@ -488,7 +383,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 val = buffer_dev(sym_get(name + ".buffer"));
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
-                // expression mesh. Pass a non-NULL value in the argument array
+                // expression mesh. Pass a non-nullptr value in the argument array
                 // to keep it in sync with the argument names encoded in the
                 // shader header
                 val = ConstantInt::get(target_size_t_type, 1);
@@ -532,7 +427,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            builder->CreateStore(ConstantInt::get(i8, closure_args[i].is_buffer),
+            builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
                                  builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
                                     gpu_arg_is_buffer_arr_type,
@@ -541,7 +436,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
         }
-        // NULL-terminate the lists
+        // nullptr-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
                              builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
@@ -558,7 +453,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                 gpu_arg_sizes_arr,
                                 0,
                                 num_args));
-        builder->CreateStore(ConstantInt::get(i8, 0),
+        builder->CreateStore(ConstantInt::get(i8_t, 0),
                              builder->CreateConstGEP2_32(
 #if LLVM_VERSION >= 37
                                 gpu_arg_is_buffer_arr_type,
@@ -573,6 +468,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
+        debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
+        debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
+        debug(3) << "bounds.num_blocks[2] = " << bounds.num_blocks[2] << "\n";
+        debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
+        debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
+        debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
@@ -613,7 +514,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
-        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
 
         CodeGen_CPU::create_assertion(did_succeed,
                                       // Should have already called halide_error inside the gpu runtime
@@ -643,48 +544,6 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
     return module_state;
 }
 
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *op) {
-    CodeGen_CPU::visit(op);
-    if (op->name == "halide_device_malloc" || op->name == "halide_copy_to_device") {
-        // Register a destructor for this buffer if this is the first
-        // device_malloc or copy_to_device for it.
-        internal_assert(op->args.size() == 2);
-        const Variable *buf_var = op->args[0].as<Variable>();
-        internal_assert(buf_var);
-        const string &buf_name = buf_var->name;
-        // Put the destructor in the symbol table as
-        // func_name.buffer_gpu_destructor.
-        internal_assert(ends_with(buf_name, ".buffer"));
-        string destructor_name = buf_name + "_gpu_destructor";
-
-        // We may already have a destructor for this allocation, if
-        // this is one of many copy_to_device calls.
-        if (!sym_exists(destructor_name)) {
-            llvm::Value *buf = sym_get(buf_name);
-            // Register a destructor that frees the device allocation.
-            llvm::Value *destructor =
-                register_destructor(module->getFunction("halide_device_free_as_destructor"), buf, CodeGen_LLVM::OnError);
-            sym_push(destructor_name, destructor);
-        }
-    }
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *op) {
-    CodeGen_CPU::visit(op);
-
-    // Also free gpu memory by triggering the destructor
-    string destructor_name = op->name + ".buffer_gpu_destructor";
-    if (sym_exists(destructor_name)) {
-        Value *d = sym_get(destructor_name);
-        CodeGen_LLVM::trigger_destructor(module->getFunction("halide_device_free_as_destructor"), d);
-        sym_pop(destructor_name);
-    }
-}
-
-
-
 // Force template instantiation.
 #ifdef WITH_X86
 template class CodeGen_GPU_Host<CodeGen_X86>;
@@ -696,6 +555,10 @@ template class CodeGen_GPU_Host<CodeGen_ARM>;
 
 #ifdef WITH_MIPS
 template class CodeGen_GPU_Host<CodeGen_MIPS>;
+#endif
+
+#ifdef WITH_POWERPC
+template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 #endif
 
 #ifdef WITH_NATIVE_CLIENT

@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeRenderscript.h"
+#include "device_interface.h"
 #include "printer.h"
 
 extern "C" void *dlopen(const char *, int);

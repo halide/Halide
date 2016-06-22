@@ -31,8 +31,8 @@ private:
         // Note this hash is symmetric in a and b, so that a
         // comparison in a and b hashes to the same bucket as
         // a comparison on b and a.
-        uint64_t pa = (uint64_t)(a.ptr);
-        uint64_t pb = (uint64_t)(b.ptr);
+        uint64_t pa = (uint64_t)(a.get());
+        uint64_t pb = (uint64_t)(b.get());
         uint64_t mix = (pa + pb) + (pa ^ pb);
         mix ^= (mix >> bits);
         mix ^= (mix >> (bits*2));
@@ -64,7 +64,7 @@ public:
     }
 
     IRCompareCache() {}
-    IRCompareCache(int b) : bits(b), entries(1 << bits) {}
+    IRCompareCache(int b) : bits(b), entries(static_cast<size_t>(1) << bits) {}
 };
 
 /** A wrapper about Exprs so that they can be deeply compared with a
@@ -94,7 +94,7 @@ struct ExprWithCompareCache {
     Expr expr;
     mutable IRCompareCache *cache;
 
-    ExprWithCompareCache() : cache(NULL) {}
+    ExprWithCompareCache() : cache(nullptr) {}
     ExprWithCompareCache(const Expr &e, IRCompareCache *c) : expr(e), cache(c) {}
 
     /** The comparison uses (and updates) the cache */
@@ -102,11 +102,17 @@ struct ExprWithCompareCache {
 };
 
 /** Compare IR nodes for equality of value. Traverses entire IR
- * tree. For equality of reference, use Expr::same_as */
+ * tree. For equality of reference, use Expr::same_as. If you're
+ * comparing non-CSE'd Exprs, use graph_equal, which is safe for nasty
+ * graphs of IR nodes. */
 // @{
 EXPORT bool equal(Expr a, Expr b);
 EXPORT bool equal(Stmt a, Stmt b);
+EXPORT bool graph_equal(Expr a, Expr b);
+EXPORT bool graph_equal(Stmt a, Stmt b);
 // @}
+
+
 
 EXPORT void ir_equality_test();
 

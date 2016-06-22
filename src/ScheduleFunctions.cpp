@@ -9,6 +9,7 @@
 #include "Target.h"
 #include "Inline.h"
 #include "CodeGen_GPU_Dev.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,30 +19,59 @@ using std::map;
 using std::vector;
 using std::pair;
 using std::make_pair;
+using std::set;
 
 namespace {
-// A structure representing a containing LetStmt or For loop. Used in
-// build_provide_loop_nest below.
+// A structure representing a containing LetStmt, IfThenElse, or For
+// loop. Used in build_provide_loop_nest below.
 struct Container {
-    int dim_idx; // index in the dims list. -1 for let statements.
+    enum Type {For, Let, If};
+    Type type;
+    // If it's a for loop, the index in the dims list.
+    int dim_idx;
     string name;
     Expr value;
 };
 }
 
+class ContainsImpureCall : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    bool result = false;
+    ContainsImpureCall() {}
+};
+
+bool contains_impure_call(const Expr &expr) {
+    ContainsImpureCall is_not_pure;
+    expr.accept(&is_not_pure);
+    return is_not_pure.result;
+}
+
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(Function f,
-                             string prefix,
-                             const vector<Expr> &site,
-                             const vector<Expr> &values,
-                             const Schedule &s,
-                             bool is_update) {
+Stmt build_provide_loop_nest_helper(string func_name,
+                                    string prefix,
+                                    const vector<string> &dims,
+                                    const vector<Expr> &site,
+                                    const vector<Expr> &values,
+                                    const vector<Expr> &predicates,
+                                    const Schedule &s,
+                                    bool is_update) {
+
 
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(f.name(), values, site);
+    Stmt stmt = Provide::make(func_name, values, site);
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -50,134 +80,108 @@ Stmt build_provide_loop_nest(Function f,
         known_size_dims[i.var] = i.extent;
     }
     // Then use any reduction domain.
-    const ReductionDomain &rdom = s.reduction_domain();
-    if (rdom.defined()) {
-        for (const ReductionVariable &i : rdom.domain()) {
-            known_size_dims[i.var] = i.extent;
-        }
+    for (const ReductionVariable &i : s.rvars()) {
+        known_size_dims[i.var] = i.extent;
     }
 
     vector<Split> splits = s.splits();
 
-    // Rebalance the split tree to make the outermost split first.
-    for (size_t i = 0; i < splits.size(); i++) {
-        for (size_t j = i+1; j < splits.size(); j++) {
-
-            Split &first = splits[i];
-            Split &second = splits[j];
-            if (first.outer == second.old_var) {
-                internal_assert(!second.is_rename())
-                    << "Rename of derived variable found in splits list. This should never happen.";
-
-                if (first.is_rename()) {
-                    // Given a rename:
-                    // X -> Y
-                    // And a split:
-                    // Y -> f * Z + W
-                    // Coalesce into:
-                    // X -> f * Z + W
-                    second.old_var = first.old_var;
-                    // Drop first entirely
-                    for (size_t k = i; k < splits.size()-1; k++) {
-                        splits[k] = splits[k+1];
-                    }
-                    splits.pop_back();
-                    // Start processing this split from scratch,
-                    // because we just clobbered it.
-                    j = i+1;
-                } else {
-                    // Given two splits:
-                    // X  ->  a * Xo  + Xi
-                    // (splits stuff other than Xo, including Xi)
-                    // Xo ->  b * Xoo + Xoi
-
-                    // Re-write to:
-                    // X  -> ab * Xoo + s0
-                    // s0 ->  a * Xoi + Xi
-                    // (splits on stuff other than Xo, including Xi)
-
-                    // The name Xo went away, because it was legal for it to
-                    // be X before, but not after.
-
-                    first.exact |= second.exact;
-                    second.exact = first.exact;
-                    second.old_var = unique_name('s');
-                    first.outer   = second.outer;
-                    second.outer  = second.inner;
-                    second.inner  = first.inner;
-                    first.inner   = second.old_var;
-                    Expr f = simplify(first.factor * second.factor);
-                    second.factor = first.factor;
-                    first.factor  = f;
-                    // Push the second split back to just after the first
-                    for (size_t k = j; k > i+1; k--) {
-                        std::swap(splits[k], splits[k-1]);
-                    }
-                }
-            }
-        }
-    }
-
-    Dim innermost_non_trivial_loop;
-    for (const Dim &d : s.dims()) {
-        if (d.for_type != ForType::Vectorized &&
-            d.for_type != ForType::Unrolled) {
-            innermost_non_trivial_loop = d;
-            break;
-        }
-    }
-
     // Define the function args in terms of the loop variables using the splits
-    map<string, pair<string, Expr>> base_values;
     for (const Split &split : splits) {
         Expr outer = Variable::make(Int(32), prefix + split.outer);
+        Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
         if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
+            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
 
             known_size_dims[split.inner] = split.factor;
 
             Expr base = outer * split.factor + old_min;
+            string base_name = prefix + split.inner + ".base";
+            Expr base_var = Variable::make(Int(32), base_name);
+            string old_var_name = prefix + split.old_var;
+            Expr old_var = Variable::make(Int(32), old_var_name);
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+
+            if (is_update) {
+                user_assert(split.tail != TailStrategy::ShiftInwards)
+                    << "When splitting Var " << split.old_var
+                    << " ShiftInwards is not a legal tail strategy for update definitions, as"
+                    << " it may change the meaning of the algorithm\n";
+            }
+
+            if (split.exact) {
+                user_assert(split.tail == TailStrategy::Auto ||
+                            split.tail == TailStrategy::GuardWithIf)
+                    << "When splitting Var " << split.old_var
+                    << " the tail strategy must be GuardWithIf or Auto. "
+                    << "Anything else may change the meaning of the algorithm\n";
+            }
+
+            TailStrategy tail = split.tail;
+            if (tail == TailStrategy::Auto) {
+                if (split.exact) {
+                    tail = TailStrategy::GuardWithIf;
+                } else if (is_update) {
+                    tail = TailStrategy::RoundUp;
+                } else {
+                    tail = TailStrategy::ShiftInwards;
+                }
+            }
+
             if ((iter != known_size_dims.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
-
                 // We have proved that the split factor divides the
-                // old extent. No need to adjust the base.
+                // old extent. No need to adjust the base or add an if
+                // statement.
                 known_size_dims[split.outer] = iter->second / split.factor;
-            } else if (split.exact) {
+            } else if (is_negative_const(split.factor) || is_zero(split.factor)) {
+                user_error << "Can't split " << split.old_var << " by " << split.factor
+                           << ". Split factors must be strictly positive\n";
+            } else if (is_one(split.factor)) {
+                // The split factor trivially divides the old extent,
+                // but we know nothing new about the outer dimension.
+            } else if (tail == TailStrategy::GuardWithIf) {
                 // It's an exact split but we failed to prove that the
-                // extent divides the factor. This is a problem.
-                user_error << "When splitting " << split.old_var << " into "
-                           << split.outer << " and " << split.inner << ", "
-                           << "could not prove the split factor (" << split.factor << ") "
-                           << "divides the extent of " << split.old_var
-                           << " (" << iter->second << "). This is required when "
-                           << "the split originates from an RVar.\n";
-            } else if (!is_update) {
+                // extent divides the factor. Use predication.
+
+                // Make a var representing the original var minus its
+                // min. It's important that this is a single Var so
+                // that bounds inference has a chance of understanding
+                // what it means for it to be limited by the if
+                // statement's condition.
+                Expr rebased = outer * split.factor + inner;
+                string rebased_var_name = prefix + split.old_var + ".rebased";
+                Expr rebased_var = Variable::make(Int(32), rebased_var_name);
+                stmt = substitute(prefix + split.old_var, rebased_var + old_min, stmt);
+
+                // Tell Halide to optimize for the case in which this
+                // condition is true by partitioning some outer loop.
+                Expr cond = likely(rebased_var < old_extent);
+                stmt = IfThenElse::make(cond, stmt, Stmt());
+                stmt = LetStmt::make(rebased_var_name, rebased, stmt);
+
+            } else if (tail == TailStrategy::ShiftInwards) {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
 
-                // Only mark the base as likely (triggering a loop
-                // partition) if the outer var is the innermost
-                // non-trivial loop and it's a serial loop. This
-                // usually is due to an unroll or vectorize call.
-                if (split.outer == innermost_non_trivial_loop.var &&
-                    innermost_non_trivial_loop.for_type == ForType::Serial) {
-                    base = likely(base);
-                }
+                // We'll only mark the base as likely (triggering a loop
+                // partition) if we're at or inside the innermost
+                // non-trivial loop.
+                base = likely_if_innermost(base);
 
                 base = Min::make(base, old_max + (1 - split.factor));
+            } else {
+                internal_assert(tail == TailStrategy::RoundUp);
             }
 
-            string base_name = prefix + split.inner + ".base";
-            Expr base_var = Variable::make(Int(32), base_name);
             // Substitute in the new expression for the split variable ...
-            stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+            stmt = substitute(old_var_name, base_var + inner, stmt);
             // ... but also define it as a let for the benefit of bounds inference.
-            stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+            stmt = LetStmt::make(old_var_name, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
@@ -209,8 +213,8 @@ Stmt build_provide_loop_nest(Function f,
                 outer_dim != known_size_dims.end()) {
                 known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
             }
-
         } else {
+            // rename or purify
             stmt = substitute(prefix + split.old_var, outer, stmt);
             stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
@@ -222,22 +226,54 @@ Stmt build_provide_loop_nest(Function f,
     // Put the desired loop nest into the containers vector.
     for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = s.dims()[i];
-        Container c = {i, prefix + dim.var, Expr()};
+        Container c = {Container::For, i, prefix + dim.var, Expr()};
         nest.push_back(c);
     }
 
     // Strip off the lets into the containers vector.
     while (const LetStmt *let = stmt.as<LetStmt>()) {
-        Container c = {-1, let->name, let->value};
+        Container c = {Container::Let, 0, let->name, let->value};
         nest.push_back(c);
         stmt = let->body;
     }
 
+    // Put all the reduction domain predicate into the containers vector.
+    // Put all the reduction domain predicate into the containers vector.
+    int n_predicates = predicates.size();
+    for (Expr pred : predicates) {
+        pred = qualify(prefix, pred);
+        Container c = {Container::If, 0, "", pred};
+        nest.push_back(c);
+    }
+
     // Resort the containers vector so that lets are as far outwards
     // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)s.dims().size(); i < (int)nest.size(); i++) {
+    for (int i = (int)s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
+        internal_assert(nest[i].type == Container::Let);
+
+        for (int j = i-1; j >= 0; j--) {
+            // Try to push it up by one.
+            internal_assert(nest[j+1].value.defined());
+            if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
+                std::swap(nest[j+1], nest[j]);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Sort the predicate guards so they are as far outwards as possible.
+    for (int i = (int)nest.size() - n_predicates; i < (int)nest.size(); i++) {
+        // Only push up LetStmts.
+        internal_assert(nest[i].value.defined());
+        internal_assert(nest[i].type == Container::If);
+
+        // Cannot lift out the predicate guard if it contains call to non-pure function
+        if (contains_impure_call(nest[i].value)) {
+            continue;
+        }
 
         for (int j = i-1; j >= 0; j--) {
             // Try to push it up by one.
@@ -252,9 +288,14 @@ Stmt build_provide_loop_nest(Function f,
 
     // Rewrap the statement in the containing lets and fors.
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
-        if (nest[i].value.defined()) {
+        if (nest[i].type == Container::Let) {
+            internal_assert(nest[i].value.defined());
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
+        } else if (nest[i].type == Container::If) {
+            internal_assert(nest[i].value.defined());
+            stmt = IfThenElse::make(likely(nest[i].value), stmt, Stmt());
         } else {
+            internal_assert(nest[i].type == Container::For);
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
@@ -263,7 +304,8 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the bounds on the split dimensions using the bounds
-    // on the function args
+    // on the function args. If it is a purify, we should use the bounds
+    // from the dims instead.
     for (size_t i = splits.size(); i > 0; i--) {
         const Split &split = splits[i-1];
         Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
@@ -286,24 +328,24 @@ Stmt build_provide_loop_nest(Function f,
             stmt = LetStmt::make(prefix + split.old_var + ".loop_min", 0, stmt);
             stmt = LetStmt::make(prefix + split.old_var + ".loop_max", fused_extent - 1, stmt);
             stmt = LetStmt::make(prefix + split.old_var + ".loop_extent", fused_extent, stmt);
-        } else {
-            // rename
+        } else if (split.is_rename()) {
             stmt = LetStmt::make(prefix + split.outer + ".loop_min", old_var_min, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_max", old_var_max, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_extent", old_var_extent, stmt);
         }
+        // Do nothing for purify
     }
 
     // Define the bounds on the outermost dummy dimension.
     {
         string o = prefix + Var::outermost().name();
         stmt = LetStmt::make(o + ".loop_min", 0, stmt);
-        stmt = LetStmt::make(o + ".loop_max", 1, stmt);
+        stmt = LetStmt::make(o + ".loop_max", 0, stmt);
         stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
     }
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
-    for (const std::string &i : f.args()) {
+    for (const std::string &i : dims) {
         string var = prefix + i;
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min"); // Inject instance name here? (compute instance names during lowering)
@@ -314,30 +356,61 @@ Stmt build_provide_loop_nest(Function f,
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
     }
 
+    // Define the loop mins and extents for the reduction domain (if there is any)
+    // in terms of the mins and maxs produced by bounds inference
+    for (const ReductionVariable &rv : s.rvars()) {
+        string p = prefix + rv.var;
+        Expr rmin = Variable::make(Int(32), p + ".min");
+        Expr rmax = Variable::make(Int(32), p + ".max");
+        stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
+        stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
+        stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
+    }
+
+    return stmt;
+}
+
+// Build a loop nest about a provide node using a schedule
+Stmt build_provide_loop_nest(string func_name,
+                             string prefix,
+                             const vector<string> &dims,
+                             const Definition &def,
+                             bool is_update) {
+
+    internal_assert(!is_update == def.is_init());
+
+    // Default stored values
+    vector<Expr> site(def.args().size());
+    vector<Expr> values(def.values().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        Expr v = def.values()[i];
+        v = qualify(prefix, v);
+        values[i] = v;
+        debug(3) << "Value " << i << " = " << v << "\n";
+    }
+
+    // Default stored locations
+    for (size_t i = 0; i < def.args().size(); i++) {
+        Expr s = def.args()[i];
+        s = qualify(prefix, s);
+        site[i] = s;
+        debug(3) << "Site " << i << " = " << s << "\n";
+    }
+
+    // Default schedule/values if there is no specialization
+    Stmt stmt = build_provide_loop_nest_helper(
+        func_name, prefix, dims, site, values, def.split_predicate(), def.schedule(), is_update);
+
     // Make any specialized copies
-    for (size_t i = s.specializations().size(); i > 0; i--) {
-        Expr c = s.specializations()[i-1].condition;
-        Schedule sched = s.specializations()[i-1].schedule;
-        const EQ *eq = c.as<EQ>();
-        const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
+    const vector<Specialization> &specializations = def.specializations();
+    for (size_t i = specializations.size(); i > 0; i--) {
+        Expr c = specializations[i-1].condition;
+        const Definition &s_def = specializations[i-1].definition;
 
         Stmt then_case =
-            build_provide_loop_nest(f, prefix, site, values, sched, is_update);
+            build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
 
-        if (var && eq) {
-            then_case = simplify_exprs(substitute(var->name, eq->b, then_case));
-            Stmt else_case = stmt;
-            if (eq->b.type().is_bool()) {
-                else_case = simplify_exprs(substitute(var->name, !eq->b, else_case));
-            }
-            stmt = IfThenElse::make(c, then_case, else_case);
-        } else if (var) {
-            then_case = simplify_exprs(substitute(var->name, const_true(), then_case));
-            Stmt else_case = simplify_exprs(substitute(var->name, const_false(), stmt));
-            stmt = IfThenElse::make(c, then_case, else_case);
-        } else {
-            stmt = IfThenElse::make(c, then_case, stmt);
-        }
+        stmt = IfThenElse::make(c, then_case, stmt);
     }
 
     return stmt;
@@ -376,18 +449,18 @@ Stmt build_produce(Function f) {
                         buf_name += "." + std::to_string(k);
                     }
                     buf_name += ".buffer";
-                    Expr buffer = Variable::make(Handle(), buf_name);
+                    Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
                 Buffer b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
@@ -406,7 +479,7 @@ Stmt build_produce(Function f) {
                     buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
-                Expr buffer = Variable::make(Handle(), buf_name);
+                Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
             }
         } else {
@@ -417,13 +490,14 @@ Stmt build_produce(Function f) {
                 stride_name += ".0";
             }
             string stage_name = f.name() + ".s0.";
+            const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
 
                 vector<Expr> buffer_args(2);
 
                 vector<Expr> top_left;
                 for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f.args()[k];
+                    string var = stage_name + f_args[k];
                     top_left.push_back(Variable::make(Int(32), var + ".min"));
                 }
                 Expr host_ptr = Call::make(f, top_left, j);
@@ -432,7 +506,7 @@ Stmt build_produce(Function f) {
                 buffer_args[0] = host_ptr;
                 buffer_args[1] = make_zero(f.output_types()[j]);
                 for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f.args()[k];
+                    string var = stage_name + f_args[k];
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
                     Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k));
@@ -441,18 +515,19 @@ Stmt build_produce(Function f) {
                     buffer_args.push_back(stride);
                 }
 
-                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                                   buffer_args, Call::Intrinsic);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(Handle(), buf_name));
+                extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
                 lets.push_back(make_pair(buf_name, output_buffer_t));
             }
         }
 
         // Make the extern call
-        Expr e = Call::make(Int(32), extern_name,
-                            extern_call_args, Call::Extern);
+        Expr e = Call::make(Int(32), extern_name, extern_call_args,
+                            f.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus
+                                                                 : Call::Extern);
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
@@ -469,20 +544,8 @@ Stmt build_produce(Function f) {
     } else {
 
         string prefix = f.name() + ".s0.";
-
-        // Compute the site to store to as the function args
-        vector<Expr> site;
-
-        vector<Expr> values(f.values().size());
-        for (size_t i = 0; i < values.size(); i++) {
-            values[i] = qualify(prefix, f.values()[i]);
-        }
-
-        for (size_t i = 0; i < f.args().size(); i++) {
-            site.push_back(Variable::make(Int(32), prefix + f.args()[i]));
-        }
-
-        return build_provide_loop_nest(f, prefix, site, values, f.schedule(), false);
+        vector<string> dims = f.args();
+        return build_provide_loop_nest(f.name(), prefix, dims, f.definition(), false);
     }
 }
 
@@ -492,40 +555,12 @@ vector<Stmt> build_update(Function f) {
     vector<Stmt> updates;
 
     for (size_t i = 0; i < f.updates().size(); i++) {
-        UpdateDefinition r = f.updates()[i];
+        const Definition &def = f.update(i);
 
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
-        vector<Expr> site(r.args.size());
-        vector<Expr> values(r.values.size());
-        for (size_t i = 0; i < values.size(); i++) {
-            Expr v = r.values[i];
-            v = qualify(prefix, v);
-            values[i] = v;
-        }
-
-        for (size_t i = 0; i < r.args.size(); i++) {
-            Expr s = r.args[i];
-            s = qualify(prefix, s);
-            site[i] = s;
-            debug(2) << "Update site " << i << " = " << s << "\n";
-        }
-
-        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
-
-        // Now define the bounds on the reduction domain
-        if (r.domain.defined()) {
-            const vector<ReductionVariable> &dom = r.domain.domain();
-            for (size_t i = 0; i < dom.size(); i++) {
-                string p = prefix + dom[i].var;
-                Expr rmin = Variable::make(Int(32), p + ".min");
-                Expr rmax = Variable::make(Int(32), p + ".max");
-                loop = LetStmt::make(p + ".loop_min", rmin, loop);
-                loop = LetStmt::make(p + ".loop_max", rmax, loop);
-                loop = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, loop);
-            }
-        }
-
+        vector<string> dims = f.args();
+        Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, def, true);
         updates.push_back(loop);
     }
 
@@ -536,11 +571,8 @@ pair<Stmt, Stmt> build_production(Function func) {
     Stmt produce = build_produce(func);
     vector<Stmt> updates = build_update(func);
 
-    // Build it from the last stage backwards.
-    Stmt merged_updates;
-    for (size_t s = updates.size(); s > 0; s--) {
-        merged_updates = Block::make(updates[s-1], merged_updates);
-    }
+    // Combine the update steps
+    Stmt merged_updates = Block::make(updates);
     return make_pair(produce, merged_updates);
 }
 
@@ -552,22 +584,22 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (size_t i = 0; i < s.bounds().size(); i++) {
             Bound b = s.bounds()[i];
-            Expr max_val = (b.extent + b.min) - 1;
-            Expr min_val = b.min;
             string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
             string min_name = prefix + ".min_unbounded";
             string max_name = prefix + ".max_unbounded";
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
+            if (!b.min.defined()) {
+                b.min = min_var;
+            }
+
+            Expr max_val = (b.extent + b.min) - 1;
+            Expr min_val = b.min;
+
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
                                         {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
-
-            // bounds inference has already respected these values for us
-            //body = LetStmt::make(prefix + ".min", min_val, body);
-            //body = LetStmt::make(prefix + ".max", max_val, body);
-
             body = Block::make(AssertStmt::make(check, error_msg), body);
         }
     }
@@ -587,7 +619,7 @@ class IsUsedInStmt : public IRVisitor {
 
     // A reference to the function's buffers counts as a use
     void visit(const Variable *op) {
-        if (op->type == Handle() &&
+        if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
             result = true;
@@ -612,12 +644,13 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 class InjectRealization : public IRMutator {
 public:
     const Function &func;
-    bool is_output, found_store_level, found_compute_level, inject_asserts;
+    bool is_output, found_store_level, found_compute_level;
+    const Target &target;
 
-    InjectRealization(const Function &f, bool o, bool asserts) :
+    InjectRealization(const Function &f, bool o, const Target &t) :
         func(f), is_output(o),
         found_store_level(false), found_compute_level(false),
-        inject_asserts(asserts) {}
+        target(t) {}
 
 private:
 
@@ -633,8 +666,9 @@ private:
         if (!is_output) {
             Region bounds;
             string name = func.name();
+            const vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                string arg = func.args()[i];
+                const string &arg = func_args[i];
                 Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
                 Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
                 bounds.push_back(Range(min, extent));
@@ -645,10 +679,10 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (inject_asserts) {
-            return inject_explicit_bounds(s, func);
-        } else {
+        if (target.has_feature(Target::NoAsserts)) {
             return s;
+        } else {
+            return inject_explicit_bounds(s, func);
         }
     }
 
@@ -820,7 +854,7 @@ private:
     }
 
     void visit(const Variable *v) {
-        if (v->type == Handle() &&
+        if (v->type.is_handle() &&
             starts_with(v->name, func.name() + ".") &&
             ends_with(v->name, ".buffer")) {
             register_use();
@@ -942,7 +976,7 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, bool is_output) {
+void validate_schedule(Function f, Stmt s, const Target &target, bool is_output) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -960,20 +994,46 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (const UpdateDefinition &r : f.updates()) {
-        any_scheduled = any_scheduled || r.schedule.touched();
+    for (const Definition &r : f.updates()) {
+        any_scheduled = any_scheduled || r.schedule().touched();
     }
     if (any_scheduled) {
         for (size_t i = 0; i < f.updates().size(); i++) {
-            const UpdateDefinition &r = f.updates()[i];
-            if (!r.schedule.touched()) {
-                std::cerr << "Warning: Update step " << i
-                          << " of function " << f.name()
-                          << " has not been scheduled, even though some other"
-                          << " steps have been. You may have forgotten to"
-                          << " schedule it. If this was intentional, call "
-                          << f.name() << ".update(" << i << ") to suppress"
-                          << " this warning.\n";
+            const Definition &r = f.update(i);
+            if (!r.schedule().touched()) {
+                user_warning << "Warning: Update step " << i
+                             << " of function " << f.name()
+                             << " has not been scheduled, even though some other"
+                             << " steps have been. You may have forgotten to"
+                             << " schedule it. If this was intentional, call "
+                             << f.name() << ".update(" << i << ") to suppress"
+                             << " this warning.\n";
+            }
+        }
+    }
+
+    // If the func is scheduled on the gpu, check that the relevant
+    // api is enabled in the target.
+    vector<Definition> definitions;
+    definitions.push_back(f.definition());
+    for (const Definition &def : f.updates()) {
+        definitions.push_back(def);
+    }
+
+    for (size_t i = 0; i < definitions.size(); i++) {
+        for (const Specialization &s : definitions[i].specializations()) {
+            definitions.push_back(s.definition);
+        }
+    }
+
+    for (const Definition &def : definitions) {
+        const Schedule &s = def.schedule();
+        for (const Dim &d : s.dims()) {
+            if (!target.supports_device_api(d.device_api)) {
+                user_error << "Schedule for Func " << f.name()
+                           << " requires " << d.device_api
+                           << " but no compatible target feature is enabled in target "
+                           << target.to_string() << "\n";
             }
         }
     }
@@ -992,8 +1052,12 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
     }
 
-    // Inlining is always allowed
+    // Inlining is allowed only if there is no specialization.
     if (store_at.is_inline() && compute_at.is_inline()) {
+        user_assert(f.definition().specializations().empty())
+            << "Func " << f.name() << " is scheduled inline, so it"
+            << " must not have any specializations. Specialize on the"
+            << " scheduled Func instead.\n";
         return;
     }
 
@@ -1049,22 +1113,12 @@ class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        if (ends_with(op->name, ".__outermost")) {
-            stmt = mutate(op->body);
+        if (ends_with(op->name, ".__outermost") &&
+            is_one(simplify(op->extent)) &&
+            op->device_api == DeviceAPI::None) {
+            stmt = mutate(substitute(op->name, op->min, op->body));
         } else {
             IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Variable *op) {
-        if (ends_with(op->name, ".__outermost.loop_extent")) {
-            expr = 1;
-        } else if (ends_with(op->name, ".__outermost.loop_min")) {
-            expr = 0;
-        } else if (ends_with(op->name, ".__outermost.loop_max")) {
-            expr = 1;
-        } else {
-            expr = op;
         }
     }
 
@@ -1072,49 +1126,18 @@ class RemoveLoopsOverOutermost : public IRMutator {
         if (ends_with(op->name, ".__outermost.loop_extent") ||
             ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {
-            stmt = mutate(op->body);
+            stmt = mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
             IRMutator::visit(op);
         }
     }
 };
 
-
-class PropagateLoopDeviceAPI : public IRMutator {
-    using IRMutator::visit;
-
-    DeviceAPI for_device;
-
-    void visit(const For *op) {
-        DeviceAPI save_device = for_device;
-        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
-
-        Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
-        Stmt body = mutate(op->body);
-
-        if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
-            body.same_as(op->body) &&
-            for_device == op->device_api) {
-            stmt = op;
-        } else {
-            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
-        }
-
-        for_device = save_device;
-    }
-
-public:
-    PropagateLoopDeviceAPI() : for_device(DeviceAPI::Host) {
-    }
-};
-
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
-                        bool &any_memoized,
-                        bool inject_asserts) {
+                        const Target &target,
+                        bool &any_memoized) {
 
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
@@ -1129,16 +1152,15 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, is_output);
+        validate_schedule(f, s, target, is_output);
 
-        if (f.has_pure_definition() &&
-            !f.has_update_definition() &&
+        if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f, is_output, inject_asserts);
+            InjectRealization injector(f, is_output, target);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
@@ -1153,9 +1175,6 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost().mutate(s);
-
-    // And finally we can propagate loop device types.
-    s = PropagateLoopDeviceAPI().mutate(s);
 
     return s;
 

@@ -6,8 +6,9 @@
 
 using namespace Halide;
 
-uint32_t local_popcount(uint32_t v) {
-    uint32_t count = 0;
+template <typename T>
+T local_popcount(T v) {
+    T count = 0;
     while (v) {
         if (v & 1) ++count;
         v >>= 1;
@@ -15,48 +16,68 @@ uint32_t local_popcount(uint32_t v) {
     return count;
 }
 
-uint32_t local_count_trailing_zeros(uint32_t v) {
-    for (uint32_t b = 0; b < 32; ++b) {
-        if (v & (1 << b))
+template <typename T>
+T local_count_trailing_zeros(T v) {
+    const int bits = sizeof(T)*8;
+    for (T b = 0; b < bits; ++b) {
+        if (v & (1 << b)) {
             // found a set bit
             return b;
+        }
     }
     return 0;
 }
 
-uint32_t local_count_leading_zeros(uint32_t v) {
-    for (uint32_t b = 0; b < 32; ++b) {
-        if (v & (1 << (31 - b)))
+template <typename T>
+T local_count_leading_zeros(T v) {
+    const int bits = sizeof(T)*8;
+    for (T b = 0; b < bits; ++b) {
+        if (v & (1 << (bits - 1 - b))) {
             // found a set bit
             return b;
+        }
     }
     return 0;
 }
 
-std::string as_bits(uint32_t v) {
+template <typename T>
+std::string as_bits(T v) {
+    const int bits = sizeof(T)*8;
     std::string ret;
-    for (int i = 31; i >= 0; --i)
+    for (int i = bits - 1; i >= 0; --i)
         ret += (v & (1 << i)) ? '1' : '0';
     return ret;
 }
 
-int main() {
-    Image<uint32_t> input(256);
-    for (int i = 0; i < 256; i++) {
-        if (i < 16)
-            input(i) = i;
-        else if (i < 32)
-            input(i) = 0xfffffffful - i;
-        else
-            input(i) = rand();
-    }
+Var x("x");
 
-    Var x;
+void schedule(Func f, const Target &t) {
+    // TODO: Add GPU schedule where supported.
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.hexagon().vectorize(x, 32);
+    } else {
+        f.vectorize(x, 16);
+    }
+}
+
+template <typename T>
+int test_bit_counting(const Target &target) {
+    Image<T> input(256);
+    for (int i = 0; i < 256; i++) {
+        if (i < 16) {
+            input(i) = i;
+        } else if (i < 32) {
+            input(i) = 0xffffffffUL - i;
+        } else {
+            input(i) = rand();
+        }
+    }
 
     Func popcount_test("popcount_test");
     popcount_test(x) = popcount(input(x));
+    schedule(popcount_test, target);
 
-    Image<uint32_t> popcount_result = popcount_test.realize(256);
+    Image<T> popcount_result = popcount_test.realize(256);
     for (int i = 0; i < 256; ++i) {
         if (popcount_result(i) != local_popcount(input(i))) {
             std::string bits_string = as_bits(input(i));
@@ -69,12 +90,14 @@ int main() {
 
     Func ctlz_test("ctlz_test");
     ctlz_test(x) = count_leading_zeros(input(x));
+    schedule(ctlz_test, target);
 
-    Image<uint32_t> ctlz_result = ctlz_test.realize(256);
+    Image<T> ctlz_result = ctlz_test.realize(256);
     for (int i = 0; i < 256; ++i) {
-        if (input(i) == 0)
+        if (input(i) == 0) {
             // results are undefined for zero input
             continue;
+        }
 
         if (ctlz_result(i) != local_count_leading_zeros(input(i))) {
             std::string bits_string = as_bits(input(i));
@@ -87,12 +110,14 @@ int main() {
 
     Func cttz_test("cttz_test");
     cttz_test(x) = count_trailing_zeros(input(x));
+    schedule(cttz_test, target);
 
-    Image<uint32_t> cttz_result = cttz_test.realize(256);
+    Image<T> cttz_result = cttz_test.realize(256);
     for (int i = 0; i < 256; ++i) {
-        if (input(i) == 0)
+        if (input(i) == 0) {
             // results are undefined for zero input
             continue;
+        }
 
         if (cttz_result(i) != local_count_trailing_zeros(input(i))) {
             std::string bits_string = as_bits(input(i));
@@ -102,6 +127,14 @@ int main() {
             return -1;
         }
     }
+    return 0;
+}
+
+int main() {
+    Target target = get_jit_target_from_environment();
+
+    if (test_bit_counting<uint16_t>(target) != 0) return -1;
+    if (test_bit_counting<uint32_t>(target) != 0) return -1;
 
     printf("Success!\n");
     return 0;

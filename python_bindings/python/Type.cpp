@@ -42,6 +42,10 @@ std::string type_code_to_string(const h::Type &t)
     return code_string;
 }
 
+Halide::Type make_handle(int lanes) {
+    return Halide::Handle(lanes, nullptr);
+}
+
 std::string type_repr(const h::Type &t)
 {
     auto message_format = boost::format("<halide.Type code '%s' with %i bits and %i lanes>");
@@ -67,15 +71,15 @@ void defineType()
             .def("bits", &Type::bits,
                  "The number of bits of precision of a single scalar value of this type.")
             .def("bytes", &Type::bytes,
-                 "The number of bytes required to store a single scalar value of this type. Ignores vector width.")
+                 "The number of bytes required to store a single scalar value of this type. Ignores vector lanes.")
             .def("lanes", &Type::lanes,
                  "How many elements (if a vector type). Should be 1 for scalar types.")
             .def("is_bool", &Type::is_bool, p::arg("self"),
                  "Is this type boolean (represented as UInt(1))?")
             .def("is_vector", &Type::is_vector, p::arg("self"),
-                 "Is this type a vector type? (width > 1)")
+                 "Is this type a vector type? (lanes > 1)")
             .def("is_scalar", &Type::is_scalar, p::arg("self"),
-                 "Is this type a scalar type? (width == 1)")
+                 "Is this type a scalar type? (lanes == 1)")
             .def("is_float", &Type::is_float, p::arg("self"),
                  "Is this type a floating point type (float or double).")
             .def("is_int", &Type::is_int, p::arg("self"),
@@ -103,23 +107,23 @@ void defineType()
             ;
 
     p::def("Int", h::Int,
-           (p::arg("bits"), p::arg("width")=1),
+           (p::arg("bits"), p::arg("lanes")=1),
            "Constructing an signed integer type");
 
     p::def("UInt", h::UInt,
-           (p::arg("bits"), p::arg("width")=1),
+           (p::arg("bits"), p::arg("lanes")=1),
            "Constructing an unsigned integer type");
 
     p::def("Float", h::Float,
-           (p::arg("bits"), p::arg("width")=1),
+           (p::arg("bits"), p::arg("lanes")=1),
            "Constructing a floating-point type");
 
     p::def("Bool", h::Bool,
-           (p::arg("width")=1),
+           (p::arg("lanes")=1),
            "Construct a boolean type");
 
-    p::def("Handle", h::Handle,
-           (p::arg("width")=1),
+    p::def("Handle", make_handle,
+           (p::arg("lanes")=1),
            "Construct a handle type");
 
     p::class_< std::vector<Type> >("TypesVector")

@@ -1,4 +1,4 @@
-#include "./runtime_internal.h"
+#include "HalideRuntime.h"
 
 /** \file JIT module reference counting support. */
 
@@ -42,4 +42,3 @@ WEAK void halide_release_jit_module() {
 }
 
 }}}
-

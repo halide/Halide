@@ -23,7 +23,7 @@ public:
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
@@ -35,7 +35,7 @@ public:
     std::string get_current_kernel_name();
 
     void dump();
-    
+
     virtual std::string print_gpu_name(const std::string &name);
 
     std::string api_unique_name() { return "metal"; }
@@ -47,11 +47,11 @@ protected:
         CodeGen_Metal_C(std::ostream &s) : CodeGen_C(s) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
-                        const std::vector<GPU_Argument> &args);
+                        const std::vector<DeviceArgument> &args);
 
     protected:
         using CodeGen_C::visit;
-        std::string print_type(Type type);
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
         // Vectors in Metal come in two varieties, regular and packed.
         // For storage allocations and pointers used in address arithmetic,
         // packed types must be used. For temporaries, constructors, etc.
@@ -60,6 +60,7 @@ protected:
         // often only supported for storage, not arithmetic,
         // hence the method name.
         std::string print_storage_type(Type type);
+        std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
         std::string print_reinterpret(Type type, Expr e);
 
         std::string get_memory_space(const std::string &);

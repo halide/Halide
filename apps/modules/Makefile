@@ -1,6 +1,7 @@
 include ../support/Makefile.inc
 
-HALIDE_LD_FLAGS=$(LIB_HALIDE) -lpthread -ldl -lz $(LDFLAGS)
+HALIDE_LD_FLAGS=$(LIB_HALIDE) $(LDFLAGS)
+HL_TARGET ?= host
 
 all: out.png
 
@@ -15,7 +16,7 @@ my_library.a: my_library/my_library.cpp
 
 # A generated library function
 vignette_impl.o: my_library/vignette
-	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ./my_library/vignette
+	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET)-no_runtime ./my_library/vignette
 
 # A library function generator
 my_library/vignette: my_library/vignette.cpp
@@ -23,7 +24,7 @@ my_library/vignette: my_library/vignette.cpp
 
 # A generated library function
 flip_impl.o: my_library/flip
-	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ./my_library/flip
+	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET)-no_runtime ./my_library/flip
 
 # A library function generator
 my_library/flip: my_library/flip.cpp
@@ -33,18 +34,18 @@ my_library/flip: my_library/flip.cpp
 generate_pipeline: generate_pipeline.cpp my_library.a
 	$(CXX) $(CXXFLAGS) generate_pipeline.cpp my_library.a -o generate_pipeline $(HALIDE_LD_FLAGS)
 
-# The output pipeline
+# The output pipeline. Includes the runtime.
 pipeline.o: generate_pipeline
-	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin ./generate_pipeline
+	DYLD_LIBRARY_PATH=$(HALIDE_PATH)/bin LD_LIBRARY_PATH=$(HALIDE_PATH)/bin HL_TARGET=$(HL_TARGET) ./generate_pipeline
 
 # A library containing the output pipeline and also the library implementation
-pipeline.a: pipeline.o my_library_impl.a
+pipeline_all.a: pipeline.o my_library_impl.a
 	$(LD) -r -o final.o pipeline.o my_library_impl.a
-	ar rvs pipeline.a final.o
+	ar rvs pipeline_all.a final.o
 
 # A binary that runs the output pipeline on an image
-run_pipeline: run_pipeline.cpp pipeline.a
-	$(CXX) $(CXXFLAGS) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpthread -ldl $(PNGFLAGS)
+run_pipeline: run_pipeline.cpp pipeline_all.a
+	$(CXX) $(CXXFLAGS) run_pipeline.cpp pipeline_all.a -o run_pipeline -I ../support $(LDFLAGS) $(PNGFLAGS)
 
 out.png: run_pipeline
 	./run_pipeline ../images/gray.png out.png

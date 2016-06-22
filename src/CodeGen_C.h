@@ -23,9 +23,17 @@ namespace Internal {
  */
 class CodeGen_C : public IRPrinter {
 public:
+    enum OutputKind {
+        CHeader,
+        CPlusPlusHeader,
+        CImplementation,
+        CPlusPlusImplementation,
+    };
+
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_C(std::ostream &dest, bool is_header = false, const std::string &include_guard = "");
+    CodeGen_C(std::ostream &dest, OutputKind output_kind = CImplementation,
+              const std::string &include_guard = "");
     ~CodeGen_C();
 
     /** Emit the declarations contained in the module as C code. */
@@ -44,8 +52,8 @@ protected:
     std::string id;
 
     /** Controls whether this instance is generating declarations or
-     * definitions. */
-    bool is_header;
+     * definitions and whether the interface us extern "C" or C++. */
+    OutputKind output_kind;
 
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
@@ -60,8 +68,17 @@ protected:
     /** Emit a statement */
     void print_stmt(Stmt);
 
-    /** Emit the C name for a halide type */
-    virtual std::string print_type(Type);
+    enum AppendSpaceIfNeeded {
+        DoNotAppendSpace,
+        AppendSpace,
+    };
+
+    /** Emit the C name for a halide type. If space_option is AppendSpace,
+     *  and there should be a space between the type and the next token,
+     *  one is appended. (This allows both "int foo" and "Foo *foo" to be
+     *  formatted correctly. Otherwise the latter is "Foo * foo".)
+     */
+    virtual std::string print_type(Type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
     /** Emit a statement to reinterpret an expression as another type */
     virtual std::string print_reinterpret(Type, Expr);
@@ -71,6 +88,18 @@ protected:
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
+
+    /** Return true if only generating an interface, which may be extern "C" or C++ */
+    bool is_header() {
+        return output_kind == CHeader ||
+               output_kind == CPlusPlusHeader;
+    }
+
+    /** Return true if generating C++ linkage. */
+    bool is_c_plus_plus_interface() {
+        return output_kind == CPlusPlusHeader ||
+               output_kind == CPlusPlusImplementation;
+    }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
     void open_scope();

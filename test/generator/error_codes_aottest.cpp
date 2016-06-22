@@ -5,7 +5,7 @@
 
 #include "error_codes.h"
 
-extern "C" void halide_error(void *user_context, const char *msg) {
+void my_halide_error(void *user_context, const char *msg) {
     // Silently drop the error
     //printf("%s\n", msg);
 }
@@ -18,6 +18,8 @@ void check(int result, int correct) {
 }
 
 int main(int argc, char **argv) {
+
+    halide_set_error_handler(&my_halide_error);
 
     buffer_t in = {0}, out = {0};
 
@@ -69,6 +71,12 @@ int main(int argc, char **argv) {
     check(result, correct);
     in.stride[1] = 64;
 
+    // strides and extents are 32-bit signed integers. It's
+    // therefore impossible to make a buffer_t that can address
+    // more than 2^31 * 2^31 * dimensions elements, which is less
+    // than 2^63, so there's no way a Halide pipeline can return
+    // the above two error codes in 64-bit code.
+
     // stride[0] is constrained to be 1
     in.stride[0] = 2;
     result = error_codes(&in, 64, &out);
@@ -89,8 +97,8 @@ int main(int argc, char **argv) {
     in.extent[0] = 64;
     out.extent[0] = 64;
 
-    // You can't pass NULL as a buffer_t argument.
-    result = error_codes(NULL, 64, &out);
+    // You can't pass nullptr as a buffer_t argument.
+    result = error_codes(nullptr, 64, &out);
     correct = halide_error_code_buffer_argument_is_null;
     check(result, correct);
 

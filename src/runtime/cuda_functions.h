@@ -21,6 +21,7 @@ CUDA_FN(CUresult, cuDeviceGetName, (char *, int len, CUdevice dev));
 CUDA_FN(CUresult, cuDeviceTotalMem, (size_t *, CUdevice dev));
 CUDA_FN_3020(CUresult, cuCtxCreate, cuCtxCreate_v2, (CUcontext *pctx, unsigned int flags, CUdevice dev));
 CUDA_FN_4000(CUresult, cuCtxDestroy, cuCtxDestroy_v2, (CUcontext pctx));
+CUDA_FN(CUresult, cuProfilerStop, ());
 CUDA_FN(CUresult, cuCtxGetApiVersion, (CUcontext ctx, unsigned int *version));
 CUDA_FN(CUresult, cuModuleLoadData, (CUmodule *module, const void *image));
 CUDA_FN(CUresult, cuModuleUnload, (CUmodule module));

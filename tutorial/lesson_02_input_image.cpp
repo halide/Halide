@@ -75,10 +75,11 @@ int main(int argc, char **argv) {
     // In the shorter version:
     // - I skipped the cast to float, because multiplying by 1.5f does
     //   that automatically.
-    // - I also used integer constants in clamp, because they get cast
-    //   to match the type of the first argument.
-    // - I left the Halide:: off clamp. It's unnecessary due to Koenig
-    //   lookup.
+    // - I also used an integer constant as the second argument in the
+    //   call to min, because it gets cast to float to be compatible
+    //   with the first argument.
+    // - I left the Halide:: off the call to min. It's unnecessary due
+    //   to Koenig lookup.
 
     // Remember, all we've done so far is build a representation of a
     // Halide program in memory. We haven't actually processed any

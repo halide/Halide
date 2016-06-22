@@ -20,7 +20,7 @@ public:
         f.trace_stores();
 
         // This test won't work in the profiler, because the profiler
-        // insists on calling malloc with NULL user context.
+        // insists on calling malloc with nullptr user context.
         target.set(get_target().without_feature(Target::Profile));
 
         return f;

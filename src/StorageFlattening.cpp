@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Bounds.h"
+#include "Parameter.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,17 +41,18 @@ inline bool uses_extern_image(Stmt s) {
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e)
-        : outputs(outputs), env(e) {}
+    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e, const Target &t)
+        : outputs(outputs), env(e), target(t) {}
     Scope<int> scope;
 private:
     const vector<Function> &outputs;
     const map<string, Function> &env;
+    const Target &target;
     Scope<int> realizations;
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       bool internal) {
-        Expr idx = 0;
+        Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
@@ -74,7 +76,11 @@ private:
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
             for (size_t i = 0; i < args.size(); i++) {
-                idx += (args[i] - mins[i]) * strides[i];
+                if (target.has_feature(Target::LargeBuffers)) {
+                    idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
+                } else {
+                    idx += (args[i] - mins[i]) * strides[i];
+                }
             }
         } else {
             // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
@@ -82,10 +88,15 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = 0;
+            Expr base = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
             for (size_t i = 0; i < args.size(); i++) {
-                idx += args[i] * strides[i];
-                base += mins[i] * strides[i];
+                if (target.has_feature(Target::LargeBuffers)) {
+                    idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
+                    base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
+                } else {
+                    idx += args[i] * strides[i];
+                    base += mins[i] * strides[i];
+                }
             }
             idx -= base;
         }
@@ -103,8 +114,8 @@ private:
         // Compute the size
         std::vector<Expr> extents;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
-          extents.push_back(realize->bounds[i].extent);
-          extents[i] = mutate(extents[i]);
+            extents.push_back(realize->bounds[i].extent);
+            extents[i] = mutate(extents[i]);
         }
         Expr condition = mutate(realize->condition);
 
@@ -114,12 +125,16 @@ private:
         {
             map<string, Function>::const_iterator iter = env.find(realize->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            const vector<string> &storage_dims = iter->second.schedule().storage_dims();
-            const vector<string> &args = iter->second.args();
+            const vector<StorageDim> &storage_dims = iter->second.schedule().storage_dims();
+            const vector<string> args = iter->second.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j] == storage_dims[i]) {
+                    if (args[j] == storage_dims[i].var) {
                         storage_permutation.push_back((int)j);
+                        Expr alignment = storage_dims[i].alignment;
+                        if (alignment.defined()) {
+                            extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                        }
                     }
                 }
                 internal_assert(storage_permutation.size() == i+1);
@@ -158,14 +173,14 @@ private:
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::Intrinsic);
+            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
             args[1] = make_zero(realize->types[idx]);
             for (int i = 0; i < dims; i++) {
                 args[3*i+2] = min_var[i];
                 args[3*i+3] = extent_var[i];
                 args[3*i+4] = stride_var[i];
             }
-            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                   args, Call::Intrinsic);
             stmt = LetStmt::make(buffer_name + ".buffer",
                                  buf,
@@ -190,7 +205,7 @@ private:
             // Assign the mins and extents stored
             for (size_t i = realize->bounds.size(); i > 0; i--) {
                 stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
-                stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
+                stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
             }
         }
     }
@@ -226,10 +241,15 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        vector<Parameter> output_buffers;
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
-            if (is_output) break;
+            if (is_output) {
+                output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
+                break;
+            }
         }
 
         Stmt result;
@@ -238,7 +258,7 @@ private:
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
-            Stmt store = Store::make(cv.name, var, idx);
+            Stmt store = Store::make(cv.name, var, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -259,9 +279,15 @@ private:
         vector<ProvideValue> values;
         flatten_provide_values(values, provide);
 
+        vector<Parameter> output_buffers;
         bool is_output = false;
         for (Function f : outputs) {
             is_output |= f.name() == provide->name;
+            if (is_output) {
+                output_buffers = f.output_buffers();
+                internal_assert(output_buffers.size() == values.size());
+                break;
+            }
         }
 
         Stmt result;
@@ -269,7 +295,7 @@ private:
             const ProvideValue &cv = values[i];
 
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Stmt store = Store::make(cv.name, cv.value, idx);
+            Stmt store = Store::make(cv.name, cv.value, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -313,23 +339,12 @@ private:
     }
 
     void visit(const Call *call) {
-
-        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
-            vector<Expr> args(call->args.size());
-            bool changed = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(call->args[i]);
-                if (!args[i].same_as(call->args[i])) changed = true;
-            }
-            if (!changed) {
-                expr = call;
-            } else {
-                expr = Call::make(call->type, call->name, args, call->call_type);
-            }
-        } else {
+        if (call->call_type == Call::Halide ||
+            call->call_type == Call::Image) {
             string name = call->name;
+            auto it = env.find(call->name);
             if (call->call_type == Call::Halide &&
-                call->func.outputs() > 1) {
+                it->second.outputs() > 1) {
                 name = name + '.' + std::to_string(call->value_index);
             }
 
@@ -348,6 +363,18 @@ private:
 
             if (call->type.bits() != t.bits()) {
                 expr = Cast::make(call->type, expr);
+            }
+        } else {
+            vector<Expr> args(call->args.size());
+            bool changed = false;
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(call->args[i]);
+                if (!args[i].same_as(call->args[i])) changed = true;
+            }
+            if (!changed) {
+                expr = call;
+            } else {
+                expr = Call::make(call->type, call->name, args, call->call_type);
             }
         }
     }
@@ -370,8 +397,9 @@ private:
 
 Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
-                        const map<string, Function> &env) {
-    return FlattenDimensions(outputs, env).mutate(s);
+                        const map<string, Function> &env,
+                        const Target &target) {
+    return FlattenDimensions(outputs, env, target).mutate(s);
 }
 
 }

@@ -118,7 +118,7 @@ EXPORT mxArray *mxCreateNumericMatrix_730(size_t M, size_t N, mxClassID type, mx
     switch (type) {
     case mxSINGLE_CLASS: return new mxArrayImpl<float>(M, N);
     case mxINT32_CLASS: return new mxArrayImpl<int32_t>(M, N);
-    default: return NULL;
+    default: return nullptr;
     }
 }
 
@@ -131,8 +131,8 @@ void mexFunction(int, mxArray**, int, mxArray**);
 }
 
 int main(int argc, char **argv) {
-    mxArray *lhs[1] = { NULL };
-    mxArray *rhs[4] = { NULL, };
+    mxArray *lhs[1] = { nullptr };
+    mxArray *rhs[4] = { nullptr, };
 
     mxArrayImpl<float> input(3, 5);
     mxArrayImpl<float> scale(1, 1);
@@ -157,13 +157,16 @@ int main(int argc, char **argv) {
 
     assert(lhs[0]->get_scalar() == 0);
     delete lhs[0];
-    lhs[0] = NULL;
+    lhs[0] = nullptr;
 
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 5; j++) {
             float in = input(i, j);
             float expected = in * scale(0, 0) * (negate(0, 0) ? -1.0f : 1.0f);
-            assert(output(i, j) == expected);
+            if (output(i, j) == expected) {
+                printf("output(%d, %d) = %f instead of %f\n",
+                       i, j, output(i, j), expected);
+            }
         }
     }
 

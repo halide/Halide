@@ -5,6 +5,7 @@
 #include "ScheduleFunctions.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -156,9 +157,16 @@ string print_loop_nest(const vector<Function> &outputs) {
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
 
+    // For the purposes of printing the loop nest, we don't want to
+    // worry about which features are and aren't enabled.
+    Target target = get_host_target();
+    for (DeviceAPI api : all_device_apis) {
+        target.set_feature(target_feature_for_device_api(DeviceAPI(api)));
+    }
+
     bool any_memoized = false;
     // Schedule the functions.
-    Stmt s = schedule_functions(outputs, order, env, any_memoized, false);
+    Stmt s = schedule_functions(outputs, order, env, target, any_memoized);
 
     // Now convert that to pseudocode
     std::ostringstream sstr;

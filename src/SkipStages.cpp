@@ -1,12 +1,14 @@
 #include "SkipStages.h"
+#include "CSE.h"
 #include "Debug.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,14 +20,18 @@ using std::map;
 namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
-   if (op->call_type == Call::Extern) {
-     for (size_t i = 0; i < op->args.size(); i++) {
+    if (op->call_type == Call::Extern ||
+        op->call_type == Call::ExternCPlusPlus) {
+        if (starts_with(op->name, "halide_memoization")) {
+            return false;
+        }
+        for (size_t i = 0; i < op->args.size(); i++) {
             const Variable *var = op->args[i].as<Variable>();
             if (var &&
                 starts_with(var->name, func + ".") &&
                 ends_with(var->name, ".buffer")) {
-               return true;
-           }
+                return true;
+            }
         }
     }
     return false;
@@ -70,8 +76,8 @@ private:
         if (should_pop) {
             varying.pop(op->name);
             //internal_assert(!expr_uses_var(predicate, op->name));
-        } else {
-            predicate = substitute(op->name, op->min, predicate);
+        } else if (expr_uses_var(predicate, op->name)) {
+            predicate = Let::make(op->name, op->min, predicate);
         }
     }
 
@@ -89,7 +95,9 @@ private:
         if (value_varies) {
             varying.pop(name);
         }
-        predicate = substitute(name, value, predicate);
+        if (expr_uses_var(predicate, name)) {
+            predicate = Let::make(name, value, predicate);
+        }
     }
 
     void visit(const LetStmt *op) {
@@ -112,6 +120,59 @@ private:
         in_pipeline.pop(op->name);
     }
 
+    // Logical operators with eager constant folding
+    Expr make_and(Expr a, Expr b) {
+        if (is_zero(a) || is_one(b)) {
+            return a;
+        } else if (is_zero(b) || is_one(a)) {
+            return b;
+        } else if (equal(a, b)) {
+            return a;
+        } else {
+            return a && b;
+        }
+    }
+
+    Expr make_or(Expr a, Expr b) {
+        if (is_zero(a) || is_one(b)) {
+            return b;
+        } else if (is_zero(b) || is_one(a)) {
+            return a;
+        } else if (equal(a, b)) {
+            return a;
+        } else {
+            return a || b;
+        }
+    }
+
+    Expr make_select(Expr a, Expr b, Expr c) {
+        if (is_one(a)) {
+            return b;
+        } else if (is_zero(a)) {
+            return c;
+        } else if (is_one(b)) {
+            return make_or(a, c);
+        } else if (is_zero(b)) {
+            return make_and(make_not(a), c);
+        } else if (is_one(c)) {
+            return make_or(make_not(a), b);
+        } else if (is_zero(c)) {
+            return make_and(a, b);
+        } else {
+            return select(a, b, c);
+        }
+    }
+
+    Expr make_not(Expr a) {
+        if (is_one(a)) {
+            return make_zero(a.type());
+        } else if (is_zero(a)) {
+            return make_one(a.type());
+        } else {
+            return !a;
+        }
+    }
+
     template<typename T>
     void visit_conditional(Expr condition, T true_case, T false_case) {
         Expr old_predicate = predicate;
@@ -129,19 +190,11 @@ private:
         varies = false;
         condition.accept(this);
 
-        if (is_one(predicate) || is_one(old_predicate)) {
-            predicate = const_true();
-        } else if (varies) {
-            if (is_one(true_predicate) || is_one(false_predicate)) {
-                predicate = const_true();
-            } else {
-                predicate = (old_predicate || predicate ||
-                             true_predicate || false_predicate);
-            }
+        predicate = make_or(predicate, old_predicate);
+        if (varies) {
+            predicate = make_or(predicate, make_or(true_predicate, false_predicate));
         } else {
-            predicate = (old_predicate || predicate ||
-                         (condition && true_predicate) ||
-                         ((!condition) && false_predicate));
+            predicate = make_or(predicate, make_select(condition, true_predicate, false_predicate));
         }
 
         varies = varies || old_varies;
@@ -162,7 +215,7 @@ private:
     void visit(const Call *op) {
         // Calls inside of an address_of aren't considered, because no
         // actuall call to the Func happens.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             // Visit the args of the inner call
             const Call *c = op->args[0].as<Call>();
             if (c) {
@@ -206,16 +259,62 @@ private:
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr p): buffer(b), predicate(p) {}
+    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
+        buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
 private:
     string buffer;
-    Expr predicate;
+    Expr compute_predicate;
+    Expr alloc_predicate;
 
     using IRMutator::visit;
 
+    bool memoize_call_uses_buffer(const Call *op) {
+        internal_assert(op->call_type == Call::Extern);
+        internal_assert(starts_with(op->name, "halide_memoization"));
+        for (size_t i = 0; i < op->args.size(); i++) {
+            const Variable *var = op->args[i].as<Variable>();
+            if (var &&
+                starts_with(var->name, buffer + ".") &&
+                ends_with(var->name, ".buffer")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void visit(const Call *op) {
+
+        if ((op->name == "halide_memoization_cache_lookup") &&
+             memoize_call_uses_buffer(op)) {
+            // We need to guard call to halide_memoization_cache_lookup to only
+            // be executed if the corresponding buffer is allocated. We ignore
+            // the compute_predicate since in the case that alloc_predicate is
+            // true but compute_predicate is false, the consumer would still load
+            // data from the buffer even if it won't actually use the result,
+            // hence, we need to allocate some scratch memory for the consumer
+            // to load from. For memoized func, the memory might already be in
+            // the cache, so we perform the lookup instead of allocating a new one.
+            expr = Call::make(op->type, Call::if_then_else,
+                              {alloc_predicate, op, 0}, Call::PureIntrinsic);
+        } else if ((op->name == "halide_memoization_cache_store") &&
+                    memoize_call_uses_buffer(op)) {
+            // We need to wrap the halide_memoization_cache_store with the
+            // compute_predicate, since the data to be written is only valid if
+            // the producer of the buffer is executed.
+            expr = Call::make(op->type, Call::if_then_else,
+                              {compute_predicate, op, 0}, Call::PureIntrinsic);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const ProducerConsumer *op) {
-        // If the predicate at this stage depends on something
+        // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
+        IRMutator::visit(op);
+
+        op = stmt.as<ProducerConsumer>();
+        internal_assert(op);
         if (op->name == buffer) {
             Stmt produce = op->produce, update = op->update;
             if (update.defined()) {
@@ -223,14 +322,12 @@ private:
                 Stmt produce = IfThenElse::make(predicate_var, op->produce);
                 Stmt update = IfThenElse::make(predicate_var, op->update);
                 stmt = ProducerConsumer::make(op->name, produce, update, op->consume);
-                stmt = LetStmt::make(buffer + ".needed", predicate, stmt);
+                stmt = LetStmt::make(buffer + ".needed", compute_predicate, stmt);
             } else {
-                Stmt produce = IfThenElse::make(predicate, op->produce);
+                Stmt produce = IfThenElse::make(compute_predicate, op->produce);
                 stmt = ProducerConsumer::make(op->name, produce, Stmt(), op->consume);
             }
 
-        } else {
-            IRMutator::visit(op);
         }
     }
 };
@@ -280,9 +377,14 @@ private:
 
     void visit(const Realize *op) {
         if (op->name == func) {
+            debug(3) << "Finding compute predicate for " << op->name << "\n";
             PredicateFinder find_compute(op->name, true);
             op->body.accept(&find_compute);
-            Expr compute_predicate = simplify(find_compute.predicate);
+
+            debug(3) << "Simplifying compute predicate for " << op->name << ": " << find_compute.predicate << "\n";
+            Expr compute_predicate = simplify(common_subexpression_elimination(find_compute.predicate));
+
+            debug(3) << "Compute predicate for " << op->name << " : " << compute_predicate << "\n";
 
             if (expr_uses_vars(compute_predicate, vector_vars)) {
                 // Don't try to skip stages if the predicate may vary
@@ -293,12 +395,19 @@ private:
             }
 
             if (!is_one(compute_predicate)) {
+
+                debug(3) << "Finding allocate predicate for " << op->name << "\n";
                 PredicateFinder find_alloc(op->name, false);
                 op->body.accept(&find_alloc);
-                Expr alloc_predicate = simplify(find_alloc.predicate);
+                debug(3) << "Simplifying allocate predicate for " << op->name << "\n";
+                Expr alloc_predicate = simplify(common_subexpression_elimination(find_alloc.predicate));
 
-                ProductionGuarder g(op->name, compute_predicate);
+                debug(3) << "Allocate predicate for " << op->name << " : " << alloc_predicate << "\n";
+
+                ProductionGuarder g(op->name, compute_predicate, alloc_predicate);
                 Stmt body = g.mutate(op->body);
+
+                debug(3) << "Done guarding computation for " << op->name << "\n";
 
                 stmt = Realize::make(op->name, op->types, op->bounds,
                                      alloc_predicate, body);
@@ -320,7 +429,7 @@ class MightBeSkippable : public IRVisitor {
     void visit(const Call *op) {
         // Calls inside of an address_of aren't considered, because no
         // actuall call to the Func happens.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             // Visit the args of the inner call
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();

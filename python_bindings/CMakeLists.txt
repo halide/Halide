@@ -11,19 +11,19 @@ if(USE_PYTHON EQUAL 2)
 	if (NOT USE_EXTERNAL_BOOST)
 		find_package(Boost COMPONENTS python REQUIRED)
 	endif()
+	find_package(Halide REQUIRED)
 else()
 	find_package(PythonInterp 3.4 REQUIRED)
 	find_package(PythonLibs 3.4 REQUIRED)
 	find_package(NumPy REQUIRED)
 	if (NOT USE_EXTERNAL_BOOST)
-		find_package(Boost COMPONENTS python-py34)
-		if(NOT Boost_FOUND)
-			find_package(Boost COMPONENTS python-py33)
-		endif()
+		string( REGEX REPLACE "([0-9]+).([0-9]+).[0-9.]+" "\\1\\2" PYTHON_CONCAT_VERSION_STRING ${PYTHON_VERSION_STRING} )
+		find_package(Boost COMPONENTS python-py${PYTHON_CONCAT_VERSION_STRING})
 		if(NOT Boost_FOUND)
 			find_package(Boost COMPONENTS python3 REQUIRED)
 		endif()
 	endif()
+	find_package(Halide REQUIRED)
 endif()
 
 option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" OFF)
@@ -54,7 +54,7 @@ endif()
 add_definitions("-std=c++11")
 
 include_directories(
-  ../build/include
+  ${HALIDE_INCLUDE_DIR}
   ${Boost_INCLUDE_DIRS}
   ${BoostNumpy_INCLUDE_DIRS}
   ${PYTHON_INCLUDE_DIRS}
@@ -63,7 +63,8 @@ include_directories(
 
 link_directories(
   ../build/lib
-  ${Boost_LIBRARY_DIR}
+  ${HALIDE_ROOT_DIR}/lib
+  ${Boost_LIBRARY_DIRS}
   ${BoostNumpy_LIBRARY_DIR}
   ${Numpy_LIBRARY_DIR}
 )
@@ -77,11 +78,12 @@ endif()
 
 file(GLOB SrcCpp
 python/*.cpp
-../src/Param.cpp)
+../src/OutputImageParam.cpp
+../src/ImageParam.cpp)
 
 add_library(halide SHARED ${SrcCpp})
 target_link_libraries(halide
-  Halide InitialModules
+  ${HALIDE_LIBRARIES}
   ${Boost_LIBRARIES}
   ${BoostNumpy_LIBRARIES}
   ${PYTHON_LIBRARIES}

@@ -40,6 +40,12 @@ FuncOrStage &func_parallel1(FuncOrStage &that, hh::VarOrRVar var, int factor)
     return that.parallel(var, factor);
 }
 
+template<typename FuncOrStage>
+FuncOrStage &func_split(FuncOrStage &that, hh::VarOrRVar var, hh::VarOrRVar outer, hh::VarOrRVar inner, int factor)
+{
+    return that.split(var, outer, inner, factor);
+}
+
 
 template<typename FuncOrStage>
 FuncOrStage &func_vectorize0(FuncOrStage &that, hh::VarOrRVar var)

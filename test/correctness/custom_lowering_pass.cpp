@@ -25,7 +25,7 @@ class CheckForFloatDivision : public IRMutator {
 
 // A mutator that injects code that counts floating point multiplies,
 // and an extern function that it calls out to for the accounting.
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT

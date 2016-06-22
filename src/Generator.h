@@ -233,7 +233,7 @@ private:
     template <typename T2 = T,
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
     T from_string_impl(const std::string &s) const {
-        return parse_target_string(s);
+        return Target(s);
     }
     template <typename T2 = T,
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
@@ -509,19 +509,20 @@ protected:
     using Pipeline = Halide::Pipeline;
     using ImageParam = Halide::ImageParam;
     using RDom = Halide::RDom;
+    using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
-    template <typename T> Expr cast(Expr e) const { return Halide::cast<T>(e); }
-    inline Expr cast(Halide::Type t, Expr e) const { return Halide::cast(t, e); }
+    template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
+    static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using Image = Halide::Image<T>;
     template <typename T> using Param = Halide::Param<T>;
-    inline Type Bool(int lanes = 1) const { return Halide::Bool(lanes); }
-    inline Type Float(int bits, int lanes = 1) const { return Halide::Float(bits, lanes); }
-    inline Type Int(int bits, int lanes = 1) const { return Halide::Int(bits, lanes); }
-    inline Type UInt(int bits, int lanes = 1) const { return Halide::UInt(bits, lanes); }
+    static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
+    static inline Type Float(int bits, int lanes = 1) { return Halide::Float(bits, lanes); }
+    static inline Type Int(int bits, int lanes = 1) { return Halide::Int(bits, lanes); }
+    static inline Type UInt(int bits, int lanes = 1) { return Halide::UInt(bits, lanes); }
 };
 
 namespace Internal {
@@ -536,10 +537,17 @@ public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
+        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library;
+        // This is an optional map used to replace the default extensions generated for
+        // a file: if an key matches an output extension, emit those files with the
+        // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
+        // empty by default; it's mainly useful in build environments where the default
+        // extensions are problematic, and avoids the need to rename output files
+        // after the fact.
+        std::map<std::string, std::string> extensions;
         EmitOptions()
-            : emit_o(true), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false) {}
+            : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
+              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true) {}
     };
 
     EXPORT virtual ~GeneratorBase();
@@ -595,6 +603,11 @@ public:
     EXPORT void emit_filter(const std::string &output_dir, const std::string &function_name = "",
                             const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
+    // Call build() and produce a Module for the result.
+    // If function_name is empty, generator_name() will be used for the function.
+    EXPORT Module build_module(const std::string &function_name = "",
+                               const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
+
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
@@ -613,6 +626,7 @@ private:
     virtual const std::string &generator_name() const = 0;
 
     EXPORT void build_params();
+    EXPORT void rebuild_params();
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods

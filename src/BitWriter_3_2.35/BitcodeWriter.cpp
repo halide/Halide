@@ -590,6 +590,12 @@ static void WriteMDNode(const MDNode *N,
   Record.clear();
 }
 
+#if LLVM_VERSION >= 39
+#define BITC_METADATA_STRING bitc::METADATA_STRING_OLD
+#else
+#define BITC_METADATA_STRING bitc::METADATA_STRING
+#endif
+
 static void WriteModuleMetadata(const Module *M,
                                 const llvm_3_2::ValueEnumerator &VE,
                                 BitstreamWriter &Stream) {
@@ -613,7 +619,7 @@ static void WriteModuleMetadata(const Module *M,
 
         // Abbrev for METADATA_STRING.
         BitCodeAbbrev *Abbv = new BitCodeAbbrev();
-        Abbv->Add(BitCodeAbbrevOp(bitc::METADATA_STRING));
+        Abbv->Add(BitCodeAbbrevOp(BITC_METADATA_STRING));
         Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
         Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
         MDSAbbrev = Stream.EmitAbbrev(Abbv);
@@ -624,7 +630,7 @@ static void WriteModuleMetadata(const Module *M,
       Record.append(MDS->begin(), MDS->end());
 
       // Emit the finished record.
-      Stream.EmitRecord(bitc::METADATA_STRING, Record, MDSAbbrev);
+      Stream.EmitRecord(BITC_METADATA_STRING, Record, MDSAbbrev);
       Record.clear();
     }
   }

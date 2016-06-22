@@ -3,9 +3,9 @@
 
 using namespace Halide;
 
-int schedule;
+Target target;
 
-Var x, y, tx("tx"), ty("ty"), c("c");
+Var x, y, yi("yi"), yo("yo"), c("c");
 Func processed("processed");
 
 // Average two positive values rounding up
@@ -15,13 +15,12 @@ Expr avg(Expr a, Expr b) {
 }
 
 Func hot_pixel_suppression(Func input) {
+
     Expr a = max(max(input(x-2, y), input(x+2, y)),
                  max(input(x, y-2), input(x, y+2)));
-    Expr b = min(min(input(x-2, y), input(x+2, y)),
-                 min(input(x, y-2), input(x, y+2)));
 
     Func denoised;
-    denoised(x, y) = clamp(input(x, y), b, a);
+    denoised(x, y) = clamp(input(x, y), 0, a);
 
     return denoised;
 }
@@ -43,9 +42,9 @@ Func deinterleave(Func raw) {
     Func deinterleaved;
 
     deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
-                                    select(c == 1, raw(2*x+1, 2*y),
-                                           select(c == 2, raw(2*x, 2*y+1),
-                                                  raw(2*x+1, 2*y+1))));
+                                    c == 1, raw(2*x+1, 2*y),
+                                    c == 2, raw(2*x, 2*y+1),
+                                            raw(2*x+1, 2*y+1));
     return deinterleaved;
 }
 
@@ -148,49 +147,31 @@ Func demosaic(Func deinterleaved) {
 
 
     /* THE SCHEDULE */
-    if (schedule == 0) {
-        // optimized for ARM
-        // Compute these in chunks over tiles, vectorized by 8
-        g_r.compute_at(processed, tx).vectorize(x, 8);
-        g_b.compute_at(processed, tx).vectorize(x, 8);
-        r_gr.compute_at(processed, tx).vectorize(x, 8);
-        b_gr.compute_at(processed, tx).vectorize(x, 8);
-        r_gb.compute_at(processed, tx).vectorize(x, 8);
-        b_gb.compute_at(processed, tx).vectorize(x, 8);
-        r_b.compute_at(processed, tx).vectorize(x, 8);
-        b_r.compute_at(processed, tx).vectorize(x, 8);
-        // These interleave in y, so unrolling them in y helps
-        output.compute_at(processed, tx)
-            .vectorize(x, 8)
-            .unroll(y, 2)
-            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
-    } else if (schedule == 1) {
-        // optimized for X86
-        // Don't vectorize, because sse is bad at 16-bit interleaving
-        g_r.compute_at(processed, tx);
-        g_b.compute_at(processed, tx);
-        r_gr.compute_at(processed, tx);
-        b_gr.compute_at(processed, tx);
-        r_gb.compute_at(processed, tx);
-        b_gb.compute_at(processed, tx);
-        r_b.compute_at(processed, tx);
-        b_r.compute_at(processed, tx);
-        // These interleave in x and y, so unrolling them helps
-        output.compute_at(processed, tx).unroll(x, 2).unroll(y, 2)
-            .reorder(c, x, y).bound(c, 0, 3).unroll(c);
-
-    } else {
-        // Basic naive schedule
-        g_r.compute_root();
-        g_b.compute_root();
-        r_gr.compute_root();
-        b_gr.compute_root();
-        r_gb.compute_root();
-        b_gb.compute_root();
-        r_b.compute_root();
-        b_r.compute_root();
-        output.compute_root();
+    int vec = target.natural_vector_size(UInt(16));
+    if (target.has_feature(Target::HVX_64)) {
+        vec = 32;
+    } else if (target.has_feature(Target::HVX_128)) {
+        vec = 64;
     }
+    g_r.compute_at(processed, yi)
+        .store_at(processed, yo)
+        .vectorize(x, vec, TailStrategy::RoundUp)
+        .fold_storage(y, 2);
+    g_b.compute_at(processed, yi)
+        .store_at(processed, yo)
+        .vectorize(x, vec, TailStrategy::RoundUp)
+        .fold_storage(y, 2);
+    output.compute_at(processed, x)
+        .vectorize(x)
+        .unroll(y)
+        .reorder(c, x, y)
+        .unroll(c);
+
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        g_r.align_storage(x, vec);
+        g_b.align_storage(x, vec);
+    }
+
     return output;
 }
 
@@ -202,7 +183,7 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     Func matrix;
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
-    matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
+    matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
     matrix.compute_root();
 
     Func corrected;
@@ -218,70 +199,127 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     g = cast<int16_t>(g/256);
     b = cast<int16_t>(b/256);
     corrected(x, y, c) = select(c == 0, r,
-                                select(c == 1, g, b));
+                                c == 1, g,
+                                        b);
 
     return corrected;
 }
 
-
-Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast) {
+Func apply_curve(Func input, Type result_type, Expr gamma, Expr contrast,
+                 Expr blackLevel, Expr whiteLevel) {
     // copied from FCam
     Func curve("curve");
 
-    Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
-    Expr g = pow(xf, 1.0f/gamma);
+    Expr minRaw = 0 + blackLevel;
+    Expr maxRaw = whiteLevel;
+
+    // How much to upsample the LUT by when sampling it.
+    int lutResample = 1;
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // On HVX, LUT lookups are much faster if they are to LUTs not
+        // greater than 256 elements, so we reduce the tonemap to 256
+        // elements and use linear interpolation to upsample it.
+        lutResample = 4;
+    }
+
+    minRaw /= lutResample;
+    maxRaw /= lutResample;
+
+    Expr invRange = 1.0f/(maxRaw - minRaw);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
     Expr a = 2.0f - 2.0f*b;
+
+    // Get a linear luminance in the range 0-1
+    Expr xf = clamp(cast<float>(x - minRaw)*invRange, 0.0f, 1.0f);
+    // Gamma correct it
+    Expr g = pow(xf, 1.0f/gamma);
+    // Apply a piecewise quadratic contrast curve
     Expr z = select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
 
-    Expr val = cast(result_type, clamp(z*256.0f, 0.0f, 255.0f));
-    curve(x) = val;
+    // Convert to 8 bit and save
+    Expr val = cast(result_type, clamp(z*255.0f+0.5f, 0.0f, 255.0f));
+    // makeLUT add guard band outside of (minRaw, maxRaw]:
+    curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
+
     curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
     Func curved;
-    curved(x, y, c) = curve(input(x, y, c));
+
+    if (lutResample == 1) {
+        // Use clamp to restrict size of LUT as allocated by compute_root
+        curved(x, y, c) = curve(clamp(input(x, y, c), 0, 1023));
+    } else {
+        // Use linear interpolation to sample the LUT.
+        Expr in = input(x, y, c);
+        Expr u0 = in/lutResample;
+        Expr u = in - u0*lutResample;
+        Expr y0 = curve(clamp(u0, 0, 255));
+        Expr y1 = curve(clamp(u0 + 1, 0, 255));
+        curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0)*lutResample + (y1 - y0)*u)/lutResample);
+    }
 
     return curved;
 }
 
 Func process(Func raw, Type result_type,
              ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
-             Param<float> gamma, Param<float> contrast) {
+             Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
 
-    Var xi, yi;
+    Var yii, xi;
 
     Func denoised = hot_pixel_suppression(raw);
     Func deinterleaved = deinterleave(denoised);
     Func demosaiced = demosaic(deinterleaved);
     Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
-    Func curved = apply_curve(corrected, result_type, gamma, contrast);
+    Func curved = apply_curve(corrected, result_type, gamma, contrast, blackLevel, whiteLevel);
 
-    processed(tx, ty, c) = curved(tx, ty, c);
+    processed(x, y, c) = curved(x, y, c);
 
     // Schedule
-    processed.bound(c, 0, 3); // bound color loop 0-3, properly
-    if (schedule == 0) {
-        // Compute in chunks over tiles, vectorized by 8
-        denoised.compute_at(processed, tx).vectorize(x, 8);
-        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
-        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
-        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
-        processed.parallel(ty);
-    } else if (schedule == 1) {
-        // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
-        denoised.compute_at(processed, tx);
-        deinterleaved.compute_at(processed, tx);
-        corrected.compute_at(processed, tx);
-        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
-        processed.parallel(ty);
-    } else {
-        denoised.compute_root();
-        deinterleaved.compute_root();
-        corrected.compute_root();
-        processed.compute_root();
+    Expr out_width = processed.output_buffer().width();
+    Expr out_height = processed.output_buffer().height();
+
+    int strip_size = 32;
+    int vec = target.natural_vector_size(UInt(16));
+    if (target.has_feature(Target::HVX_64)) {
+        vec = 32;
+    } else if (target.has_feature(Target::HVX_128)) {
+        vec = 64;
     }
+    denoised.compute_at(processed, yi).store_at(processed, yo)
+        .fold_storage(y, 8)
+        .vectorize(x, vec);
+    deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+        .fold_storage(y, 4)
+        .vectorize(x, 2*vec, TailStrategy::RoundUp)
+        .reorder(c, x, y)
+        .unroll(c);
+    corrected.compute_at(processed, x)
+        .vectorize(x, vec)
+        .reorder(c, x, y)
+        .unroll(c);
+    processed.compute_root()
+        .split(y, yo, yi, strip_size)
+        .split(yi, yi, yii, 2)
+        .split(x, x, xi, 2*vec, TailStrategy::RoundUp)
+        .reorder(xi, c, yii, x, yi, yo)
+        .vectorize(xi, 2*vec)
+        .parallel(yo);
+
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        processed.hexagon();
+        denoised.align_storage(x, vec);
+        deinterleaved.align_storage(x, vec);
+        corrected.align_storage(x, vec);
+    }
+
+    // We can generate slightly better code if we know the splits divide the extent.
+    processed
+        .bound(c, 0, 3)
+        .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
+        .bound(y, 0, (out_height/strip_size)*strip_size);
 
     return processed;
 }
@@ -294,38 +332,34 @@ int main(int argc, char **argv) {
     Param<float> color_temp("color_temp"); //, 3200.0f);
     Param<float> gamma("gamma"); //, 1.8f);
     Param<float> contrast("contrast"); //, 10.0f);
+    Param<int> blackLevel("blackLevel"); //, 25);
+    Param<int> whiteLevel("whiteLevel"); //, 1023);
 
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
     // to make a 2560x1920 output image, just like the FCam pipe, so
-    // shift by 16, 12
+    // shift by 16, 12. We also convert it to be signed, so we can deal
+    // with values that fall below 0 during processing.
     Func shifted;
-    shifted(x, y) = input(x+16, y+12);
+    shifted(x, y) = cast<int16_t>(input(x+16, y+12));
 
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
     int bit_width = atoi(argv[1]);
     Type result_type = UInt(bit_width);
 
-    // Pick a schedule
-    schedule = atoi(argv[2]);
+    // Pick a target
+    target = get_target_from_environment();
 
     // Build the pipeline
-    Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
+    Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
+                             color_temp, gamma, contrast, blackLevel, whiteLevel);
 
-    // We can generate slightly better code if we know the output is a whole number of tiles.
-    Expr out_width = processed.output_buffer().width();
-    Expr out_height = processed.output_buffer().height();
-    processed
-        .bound(tx, 0, (out_width/32)*32)
-        .bound(ty, 0, (out_height/32)*32);
-
-    //string s = processed.serialize();
-    //printf("%s\n", s.c_str());
-
-    std::vector<Argument> args = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
-    processed.compile_to_file("curved", args);
-    processed.compile_to_assembly("curved.s", args);
+    std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
+                                  input, matrix_3200, matrix_7000};
+    // TODO: it would be more efficient to call compile_to() a single time with the right arguments
+    processed.compile_to_static_library("curved", args, target);
+    processed.compile_to_assembly("curved.s", args, target);
 
     return 0;
 }

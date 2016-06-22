@@ -48,11 +48,11 @@ ostream &operator <<(ostream &stream, const Buffer &buffer) {
 
 ostream &operator<<(ostream &stream, const Module &m) {
     stream << "Target = " << m.target().to_string() << "\n";
-    for (size_t i = 0; i < m.buffers.size(); i++) {
-        stream << m.buffers[i] << "\n";
+    for (const auto &b : m.buffers()) {
+        stream << b << "\n";
     }
-    for (size_t i = 0; i < m.functions.size(); i++) {
-        stream << m.functions[i] << "\n";
+    for (const auto &f : m.functions()) {
+        stream << f << "\n";
     }
     return stream;
 }
@@ -60,9 +60,7 @@ ostream &operator<<(ostream &stream, const Module &m) {
 ostream &operator<<(ostream &out, const DeviceAPI &api) {
     switch (api) {
     case DeviceAPI::Host:
-        break;
-    case DeviceAPI::Parent:
-        out << "<Parent>";
+    case DeviceAPI::None:
         break;
     case DeviceAPI::Default_GPU:
         out << "<Default_GPU>";
@@ -91,6 +89,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::MetalTextures:
         out << "<MetalTextures>";
         break;
+    case DeviceAPI::Hexagon:
+        out << "<Hexagon>";
+	break;
     }
     return out;
 }
@@ -106,11 +107,11 @@ void IRPrinter::test() {
     expr_source << (x + 3) * (y / 2 + 17);
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter());
     Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x);
+    Stmt store2 = Store::make("out", call + 1, x, Parameter());
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
     Stmt pipeline = ProducerConsumer::make("buf", for_loop, Stmt(), for_loop2);
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
@@ -445,22 +446,21 @@ void IRPrinter::visit(const Broadcast *op) {
 
 void IRPrinter::visit(const Call *op) {
     // Special-case some intrinsics for readability
-    if (op->call_type == Call::Intrinsic) {
-        if (op->name == Call::extract_buffer_host) {
-            print(op->args[0]);
-            stream << ".host";
-            return;
-        } else if (op->name == Call::extract_buffer_min) {
-            print(op->args[0]);
-            stream << ".min[" << op->args[1] << "]";
-            return;
-        } else if (op->name == Call::extract_buffer_max) {
-            print(op->args[0]);
-            stream << ".max[" << op->args[1] << "]";
-            return;
-        }
+    if (op->is_intrinsic(Call::extract_buffer_host)) {
+        print(op->args[0]);
+        stream << ".host";
+        return;
+    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
+        print(op->args[0]);
+        stream << ".min[" << op->args[1] << "]";
+        return;
+    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
+        print(op->args[0]);
+        stream << ".max[" << op->args[1] << "]";
+        return;
     }
 
+    // TODO: Print indication of C vs C++?
     stream << op->name << "(";
     for (size_t i = 0; i < op->args.size(); i++) {
         print(op->args[i]);

@@ -19,31 +19,40 @@ else()
 endif()
 
 set(RUNTIME_CPP
+  aarch64_cpu_features
   android_clock
   android_host_cpu_count
   android_io
   android_opengl_context
+  android_tempfile
+  arm_cpu_features
   cache
+  can_use_target
   cuda
   destructors
   device_interface
+  errors
   fake_thread_pool
   float16_t
   gcd_thread_pool
   gpu_device_selection
+  hexagon_host
   ios_io
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
   matlab
   metadata
-  module_aot_ref_count
-  module_jit_ref_count
-  nacl_host_cpu_count
-  opencl
   metal
   metal_objc_arm
   metal_objc_x86
+  mingw_math
+  mips_cpu_features
+  module_aot_ref_count
+  module_jit_ref_count
+  nacl_host_cpu_count
+  noos
+  opencl
   opengl
   openglcompute
   osx_clock
@@ -56,9 +65,13 @@ set(RUNTIME_CPP
   posix_get_symbol
   posix_io
   posix_print
+  posix_tempfile
   posix_thread_pool
+  powerpc_cpu_features
   profiler
   profiler_inlined
+  qurt_allocator
+  qurt_hvx
   renderscript
   runtime_api
   ssp
@@ -69,14 +82,18 @@ set(RUNTIME_CPP
   windows_get_symbol
   windows_io
   windows_opencl
+  windows_tempfile
   windows_thread_pool
   write_debug_image
+  x86_cpu_features
 )
 
 set (RUNTIME_LL
   aarch64
   arm
   arm_no_neon
+  hvx_64
+  hvx_128
   mips
   pnacl_math
   posix_math
@@ -201,16 +218,18 @@ set(HEADER_FILES
   AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
-  BlockFlattening.h
+  Associativity.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
   Buffer.h
   CSE.h
+  Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Hexagon.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -218,16 +237,22 @@ set(HEADER_FILES
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_PNaCl.h
+  CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  ConciseCasts.h
+  CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
+  DeepCopy.h
+  Definition.h
   Deinterleave.h
-  Derivative.h
+  DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
+  EliminateBoolVectors.h
   Error.h
   Expr.h
   ExprUsesVar.h
@@ -238,6 +263,8 @@ set(HEADER_FILES
   Func.h
   Function.h
   Generator.h
+  HexagonOffload.h
+  HexagonOptimize.h
   IR.h
   IREquality.h
   IRMatch.h
@@ -246,6 +273,8 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   Image.h
+  ImageParam.h
+  Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
@@ -259,15 +288,17 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   Lambda.h
   Lerp.h
+  LoopCarry.h
   Lower.h
   MainPage.h
   MatlabWrapper.h
   Memoization.h
   Module.h
   ModulusRemainder.h
+  Monotonic.h
   ObjectInstanceRegistry.h
-  OneToOne.h
-  Output.h
+  OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
   Param.h
   Parameter.h
@@ -287,6 +318,7 @@ set(HEADER_FILES
   Scope.h
   SelectGPUAPI.h
   Simplify.h
+  SimplifySpecializations.h
   SkipStages.h
   SlidingWindow.h
   Solve.h
@@ -296,6 +328,7 @@ set(HEADER_FILES
   Substitute.h
   Target.h
   Tracing.h
+  TrimNoOps.h
   Tuple.h
   Type.h
   UnifyDuplicateLets.h
@@ -305,6 +338,7 @@ set(HEADER_FILES
   Var.h
   VaryingAttributes.h
   VectorizeLoops.h
+  WrapCalls.h
   runtime/HalideRuntime.h
 )
 
@@ -317,10 +351,12 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
 
 configure_file(runtime/HalideRuntime.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeCuda.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeHexagonHost.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenCL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeMetal.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
@@ -341,17 +377,19 @@ ENDIF()
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
+  AlignLoads.cpp
   AllocationBoundsInference.cpp
-  BlockFlattening.cpp
+  Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
   Buffer.cpp
-  CSE.cpp
+  Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
+  CodeGen_Hexagon.cpp
   CodeGen_Internal.cpp
   CodeGen_LLVM.cpp
   CodeGen_MIPS.cpp
@@ -360,17 +398,23 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PNaCl.cpp
+  CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
   CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
+  CPlusPlusMangle.cpp
+  CSE.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
+  DeepCopy.cpp
+  Definition.cpp
   Deinterleave.cpp
-  Derivative.cpp
+  DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
+  EliminateBoolVectors.cpp
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
@@ -379,6 +423,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Function.cpp
   FuseGPUThreadLoops.cpp
   Generator.cpp
+  HexagonOffload.cpp
+  HexagonOptimize.cpp
   IR.cpp
   IREquality.cpp
   IRMatch.cpp
@@ -387,6 +433,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   Image.cpp
+  ImageParam.cpp
+  Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
@@ -398,16 +446,16 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Output.cpp
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
+  LoopCarry.cpp
   Lower.cpp
   MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
   ModulusRemainder.cpp
+  Monotonic.cpp
   ObjectInstanceRegistry.cpp
-  OneToOne.cpp
-  Output.cpp
+  OutputImageParam.cpp
   ParallelRVar.cpp
-  Param.cpp
   Parameter.cpp
   PartitionLoops.cpp
   Pipeline.cpp
@@ -425,6 +473,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
@@ -434,6 +483,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Substitute.cpp
   Target.cpp
   Tracing.cpp
+  TrimNoOps.cpp
   Tuple.cpp
   Type.cpp
   UnifyDuplicateLets.cpp
@@ -443,11 +493,20 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Var.cpp
   VaryingAttributes.cpp
   VectorizeLoops.cpp
+  WrapCalls.cpp
   ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
+   if (WIN32)
+     if (MSVC)
+           # empty
+     else()
+       set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
+     endif()
+   endif()
 
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
@@ -467,46 +526,51 @@ target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
 
 if (TARGET_NATIVE_CLIENT)
-  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT")
+  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT=1")
 endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
-  target_compile_definitions(Halide PRIVATE "-DWITH_X86")
+  target_compile_definitions(Halide PRIVATE "-DWITH_X86=1")
   list(APPEND LLVM_COMPONENTS x86)
 endif()
 
 if (TARGET_ARM)
-  target_compile_definitions(Halide PRIVATE "-DWITH_ARM")
+  target_compile_definitions(Halide PRIVATE "-DWITH_ARM=1")
   list(APPEND LLVM_COMPONENTS arm)
 endif()
 
 if (TARGET_AARCH64)
-  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64")
+  target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64=1")
   list(APPEND LLVM_COMPONENTS aarch64)
 endif()
 
+if (TARGET_HEXAGON)
+  target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON=1")
+  list(APPEND LLVM_COMPONENTS hexagon)
+endif()
+
 if (TARGET_PTX)
-  target_compile_definitions(Halide PRIVATE "-DWITH_PTX")
+  target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
   list(APPEND LLVM_COMPONENTS nvptx)
 endif()
 
 if (TARGET_OPENCL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
 endif()
 
 if (TARGET_OPENGL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL=1")
 endif()
 
 if (TARGET_MIPS)
-  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS")
+  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS=1")
   list(APPEND LLVM_COMPONENTS mips)
 endif()
 
 if (TARGET_METAL)
-  target_compile_definitions(Halide PRIVATE "-DWITH_METAL")
+  target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
@@ -530,12 +594,14 @@ else()
   # FIXME: These defines should come from ``llvm-config --cppflags``
   target_compile_definitions(Halide PRIVATE "-D__STDC_LIMIT_MACROS" "-D__STDC_CONSTANT_MACROS" "-D__STDC_FORMAT_MACROS")
   target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
-  target_compile_options(Halide PUBLIC "-fno-rtti")
+  if(NOT HALIDE_ENABLE_RTTI)
+    target_compile_options(Halide PUBLIC "-fno-rtti")
+  endif()
 endif()
 
 # Get the LLVM libraries we need
 set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
-if(WIN32)
+if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
   execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
@@ -550,7 +616,7 @@ endif()
 # PRIVATE scope is the correct choice here.
 target_link_libraries(Halide PRIVATE ${LIBS})
 
-if (NOT WIN32)
+if (NOT MSVC)
   if (${LLVM_VERSION} GREATER 34)
     execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   else()

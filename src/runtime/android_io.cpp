@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 extern "C" {
 
@@ -15,4 +15,3 @@ WEAK void halide_print_impl(void *user_context, const char * str) {
 }
 
 }}}
-

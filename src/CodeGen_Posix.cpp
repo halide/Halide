@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -25,46 +26,74 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
 }
 
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
-    // Compute size from list of extents checking for 32-bit signed overflow.
-    // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
-    // does not work with NaCl at the moment.
+    // Compute size from list of extents checking for overflow.
 
-    Expr no_overflow = const_true(1);
-    Expr total_size = Expr((int64_t)(type.lanes() * type.bytes()));
-    Expr max_size = cast<int64_t>(0x7fffffff);
+    Expr overflow = make_zero(UInt(64));
+    Expr total_size = make_const(UInt(64), type.lanes() * type.bytes());
+
+    // We'll multiply all the extents into the 64-bit value
+    // total_size. We'll also track (total_size >> 32) as a 64-bit
+    // value to check for overflow as we go. The loop invariant will
+    // be that either the overflow Expr is non-zero, or total_size_hi
+    // only occupies the bottom 32-bits. Overflow could be more simply
+    // checked for using division, but that's slower at runtime. This
+    // method generates much better assembly.
+    Expr total_size_hi = make_zero(UInt(64));
+
+    Expr low_mask = make_const(UInt(64), (uint64_t)(0xffffffff));
     for (size_t i = 0; i < extents.size(); i++) {
-        total_size *= extents[i];
-        no_overflow = no_overflow && (total_size <= max_size);
+        Expr next_extent = cast(UInt(32), extents[i]);
+
+        // Update total_size >> 32. This math can't overflow due to
+        // the loop invariant:
+        total_size_hi *= next_extent;
+        // Deal with carry from the low bits. Still can't overflow.
+        total_size_hi += ((total_size & low_mask) * next_extent) >> 32;
+
+        // Update total_size. This may overflow.
+        total_size *= next_extent;
+
+        // We can check for overflow by asserting that total_size_hi
+        // is still a 32-bit number.
+        overflow = overflow | (total_size_hi >> 32);
     }
 
+    Expr max_size = make_const(UInt(64), target.maximum_buffer_size());
+    Expr size_check = (overflow == 0) && (total_size <= max_size);
+
     // For constant-sized allocations this check should simplify away.
-    no_overflow = simplify(no_overflow);
-    if (!is_one(no_overflow)) {
-        create_assertion(codegen(no_overflow),
+    size_check = common_subexpression_elimination(simplify(size_check));
+    if (!is_one(size_check)) {
+        create_assertion(codegen(size_check),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
     }
 
-    total_size = simplify(cast<int32_t>(total_size));
+    total_size = simplify(total_size);
     return codegen(total_size);
+}
+
+int CodeGen_Posix::allocation_padding(Type type) const {
+    // We potentially load one scalar value past the end of the
+    // buffer, so pad the allocation with an extra instance of the
+    // scalar type.
+    return type.bytes();
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
                                                            Expr new_expr, std::string free_function) {
-    Value *llvm_size = NULL;
+    Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
-    int32_t constant_bytes = 0;
-    if (constant_allocation_size(extents, name, constant_bytes)) {
+    int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
+    if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
 
-        if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-        } else if (stack_bytes <= 1024 * 16) {
-            // Round up to nearest multiple of 32.
-            stack_bytes = ((stack_bytes + 31)/32)*32;
-        } else {
+        if (stack_bytes > target.maximum_buffer_size()) {
+            const string str_max_size = target.has_feature(Target::LargeBuffers) ? "2^63 - 1" : "2^31 - 1";
+            user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
+        } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }
@@ -73,8 +102,15 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Only allocate memory if the condition is true, otherwise 0.
-    if (llvm_size != NULL) {
-        Value *llvm_condition = codegen(condition);
+    Value *llvm_condition = codegen(condition);
+    if (llvm_size != nullptr) {
+        // Add the requested padding to the allocation size. If the
+        // allocation is on the stack, we can just read past the top
+        // of the stack, so we only need this for heap allocations.
+        Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
+        llvm_size = builder->CreateAdd(llvm_size, padding);
+
+
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
                                           ConstantInt::get(llvm_size->getType(), 0));
@@ -83,19 +119,28 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     Allocation allocation;
     allocation.constant_bytes = constant_bytes;
     allocation.stack_bytes = new_expr.defined() ? 0 : stack_bytes;
-    allocation.ptr = NULL;
-    allocation.destructor = NULL;
-    allocation.destructor_function = NULL;
+    allocation.type = type;
+    allocation.ptr = nullptr;
+    allocation.destructor = nullptr;
+    allocation.destructor_function = nullptr;
+    allocation.name = name;
 
-    if (!new_expr.defined() && stack_bytes != 0) {
+    if (!new_expr.defined() && extents.empty()) {
+        // If it's a scalar allocation, don't try anything clever. We
+        // want llvm to be able to promote it to a register.
+        allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
+        allocation.stack_bytes = stack_bytes;
+    } else if (!new_expr.defined() && stack_bytes != 0) {
+
         // Try to find a free stack allocation we can use.
         vector<Allocation>::iterator free = free_stack_allocs.end();
         for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
             AllocaInst *alloca_inst = dyn_cast<AllocaInst>(free->ptr);
-            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : NULL;
+            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : nullptr;
             llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
             if (allocated_in == current_func &&
+                free->type == type &&
                 free->stack_bytes >= stack_bytes) {
                 break;
             }
@@ -107,6 +152,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // Use a free alloc we found.
             allocation.ptr = free->ptr;
             allocation.stack_bytes = free->stack_bytes;
+            allocation.name = free->name;
 
             // This allocation isn't free anymore.
             free_stack_allocs.erase(free);
@@ -115,7 +161,10 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
-            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, false, name);
+            int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
+            // Handles are stored as uint64s
+            llvm::Type *t = llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
+            allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
     } else {
@@ -145,9 +194,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Assert that the allocation worked.
         Value *check = builder->CreateIsNotNull(allocation.ptr);
-        if (!new_expr.defined()) { // Zero sized allocation if allowed for custom new...
+        if (llvm_size) {
             Value *zero_size = builder->CreateIsNull(llvm_size);
             check = builder->CreateOr(check, zero_size);
+        }
+        if (!is_one(condition)) {
+            // If the condition is false, it's OK for the new_expr to be null.
+            Value *condition_is_false = builder->CreateIsNull(llvm_condition);
+            check = builder->CreateOr(check, condition_is_false);
         }
 
         create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
@@ -171,6 +225,29 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
+void CodeGen_Posix::free_allocation(const std::string &name) {
+    Allocation alloc = allocations.get(name);
+
+    if (alloc.stack_bytes) {
+        // Remember this allocation so it can be re-used by a later allocation.
+        free_stack_allocs.push_back(alloc);
+    } else {
+        internal_assert(alloc.destructor);
+        trigger_destructor(alloc.destructor_function, alloc.destructor);
+    }
+
+    allocations.pop(name);
+    sym_pop(name + ".host");
+}
+
+string CodeGen_Posix::get_allocation_name(const std::string &n) {
+    if (allocations.contains(n)) {
+        return allocations.get(n).name;
+    } else {
+        return n;
+    }
+}
+
 void CodeGen_Posix::visit(const Allocate *alloc) {
     if (sym_exists(alloc->name + ".host")) {
         user_error << "Can't have two different buffers with the same name: "
@@ -184,24 +261,14 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 
     codegen(alloc->body);
 
-    // Should have been freed
-    internal_assert(!sym_exists(alloc->name + ".host"));
-    internal_assert(!allocations.contains(alloc->name));
+    // If there was no early free, free it now.
+    if (allocations.contains(alloc->name)) {
+        free_allocation(alloc->name);
+    }
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
-    Allocation alloc = allocations.get(stmt->name);
-
-    if (alloc.stack_bytes) {
-        // Remember this allocation so it can be re-used by a later allocation.
-        free_stack_allocs.push_back(alloc);
-    } else {
-        internal_assert(alloc.destructor);
-        trigger_destructor(alloc.destructor_function, alloc.destructor);
-    }
-
-    allocations.pop(stmt->name);
-    sym_pop(stmt->name + ".host");
+    free_allocation(stmt->name);
 }
 
 }}

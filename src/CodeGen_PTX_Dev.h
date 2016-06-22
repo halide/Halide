@@ -28,7 +28,7 @@ public:
 
     void add_kernel(Stmt stmt,
                     const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     static void test();
 
@@ -58,6 +58,7 @@ protected:
     void visit(const For *);
     void visit(const Allocate *);
     void visit(const Free *);
+    void visit(const AssertStmt *);
     // @}
 
     std::string march() const;

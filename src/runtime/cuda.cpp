@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeCuda.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
@@ -193,8 +192,29 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     }
 
     int device = halide_get_gpu_device(user_context);
-    if (device == -1) {
-        device = deviceCount - 1;
+    if (device == -1 && deviceCount == 1) {
+        device = 0;
+    } else if (device == -1) {
+        debug(user_context) << "CUDA: Multiple CUDA devices detected. Selecting the one with the most cores.\n";
+        int best_core_count = 0;
+        for (int i = 0; i < deviceCount; i++) {
+            CUdevice dev;
+            CUresult status = cuDeviceGet(&dev, i);
+            if (status != CUDA_SUCCESS) {
+                debug(user_context) << "      Failed to get device " << i << "\n";
+                continue;
+            }
+            int core_count = 0;
+            status = cuDeviceGetAttribute(&core_count, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev);
+            debug(user_context) << "      Device " << i << " has " << core_count << " cores\n";
+            if (status != CUDA_SUCCESS) {
+                continue;
+            }
+            if (core_count >= best_core_count) {
+                device = i;
+                best_core_count = core_count;
+            }
+        }
     }
 
     // Get device
@@ -423,8 +443,7 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuMemFree failed: "
-                            << get_error_name(err);
+        // We may be called as a destructor, so don't raise an error here.
         return err;
     }
 
@@ -479,6 +498,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // Only destroy the context if we own it
         if (ctx == context) {
             debug(user_context) << "    cuCtxDestroy " << context << "\n";
+            err = cuProfilerStop();
             err = cuCtxDestroy(context);
             halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
             context = NULL;
@@ -875,6 +895,9 @@ WEAK const char *get_error_name(CUresult error) {
     case CUDA_ERROR_LAUNCH_TIMEOUT: return "CUDA_ERROR_LAUNCH_TIMEOUT";
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING: return "CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING";
     case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
+    // A trap instruction produces the below error, which is how we codegen asserts on GPU
+    case CUDA_ERROR_ILLEGAL_INSTRUCTION:
+        return "Illegal instruction or Halide assertion failure inside kernel";
     default: return "<Unknown error>";
     }
 }

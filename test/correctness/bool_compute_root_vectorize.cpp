@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     selector.compute_root().vectorize(x, 8);
 
     RDom range(0, 100, 0, 100);
-    int32_t result = evaluate_may_gpu<int32_t>(lambda(sum(selector(range.x, range.y))));
+    int32_t result = evaluate_may_gpu<int32_t>(sum(selector(range.x, range.y)));
 
     assert(result == 4950);
 

@@ -7,6 +7,18 @@ using namespace Halide::BoundaryConditions;
 
 Var x("x"), y("y");
 
+void schedule_test(Func f, int vector_width, const Target &t) {
+    if (vector_width != 1) {
+        f.vectorize(x, vector_width);
+    }
+    if (t.has_gpu_feature() && vector_width <= 16) {
+        f.gpu_tile(x, y, 2, 2);
+    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // TODO: Non-native vector widths hang the compiler here.
+        //f.hexagon();
+    }
+}
+
 template <typename T>
 void check_constant_exterior(const Image<T> &input, T exterior, Func f,
                              int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
@@ -15,12 +27,7 @@ void check_constant_exterior(const Image<T> &input, T exterior, Func f,
     Image<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    if (vector_width != 1) {
-        f.vectorize(x, vector_width);
-    }
-    if (t.has_gpu_feature()) {
-        f.gpu_tile(x, y, 4, 4);
-    }
+    schedule_test(f, vector_width, t);
     f.realize(result, t);
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -42,12 +49,7 @@ void check_repeat_edge(const Image<T> &input, Func f,
     Image<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    if (vector_width != 1) {
-        f.vectorize(x, vector_width);
-    }
-    if (t.has_gpu_feature()) {
-        f.gpu_tile(x, y, 4, 4);
-    }
+    schedule_test(f, vector_width, t);
     f.realize(result, t);
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -67,12 +69,7 @@ void check_repeat_image(const Image<T> &input, Func f,
     Image<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    if (vector_width != 1) {
-        f.vectorize(x, vector_width);
-    }
-    if (t.has_gpu_feature()) {
-        f.gpu_tile(x, y, 4, 4);
-    }
+    schedule_test(f, vector_width, t);
     f.realize(result, t);
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -96,12 +93,7 @@ void check_mirror_image(const Image<T> &input, Func f,
     Image<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    if (vector_width != 1) {
-        f.vectorize(x, vector_width);
-    }
-    if (t.has_gpu_feature()) {
-        f.gpu_tile(x, y, 4, 4);
-    }
+    schedule_test(f, vector_width, t);
     f.realize(result, t);
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -129,12 +121,7 @@ void check_mirror_interior(const Image<T> &input, Func f,
     Image<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    if (vector_width != 1) {
-        f.vectorize(x, vector_width);
-    }
-    if (t.has_gpu_feature()) {
-        f.gpu_tile(x, y, 4, 4);
-    }
+    schedule_test(f, vector_width, t);
     f.realize(result, t);
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
@@ -155,8 +142,8 @@ void check_mirror_interior(const Image<T> &input, Func f,
 
 int main(int argc, char **argv) {
 
-    const int W = 16;
-    const int H = 16;
+    const int W = 32;
+    const int H = 32;
     Image<uint8_t> input(W, H);
 
     for (int32_t y = 0; y < H; y++) {
@@ -168,13 +155,13 @@ int main(int argc, char **argv) {
     Func input_f("input_f");
     input_f(x, y) = input(x, y);
 
-    for (int vector_width = 1; vector_width <= 4; vector_width *= 2) {
+    for (int vector_width = 1; vector_width <= 32; vector_width *= 2) {
         std::cout << "Vector width: " << vector_width << "\n";
         // repeat_edge:
         std::cout << "repeat_edge\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_repeat_edge(
@@ -211,7 +198,7 @@ int main(int argc, char **argv) {
         std::cout << "constant_exterior\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             const uint8_t exterior = 42;
 
@@ -250,7 +237,7 @@ int main(int argc, char **argv) {
         std::cout << "repeat_image\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_repeat_image(
@@ -287,7 +274,7 @@ int main(int argc, char **argv) {
         std::cout << "mirror_image\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_mirror_image(
@@ -324,7 +311,7 @@ int main(int argc, char **argv) {
         std::cout << "mirror_interior\n";
         {
             const int32_t test_min = -25;
-            const int32_t test_extent = 50 * vector_width;
+            const int32_t test_extent = 100;
 
             // Func input.
             check_mirror_interior(

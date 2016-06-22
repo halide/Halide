@@ -1,7 +1,7 @@
-#include "./runtime_internal.h"
+#include "HalideRuntime.h"
 
 /** \file Ahead of time compiled code reference counting support. */
- 
+
 /* The runtime makes calls to keep a reference count on the code
  * itself because some allocated data structures returned from the
  * runtime may contain function pointers back to the code. For ahead
@@ -21,4 +21,3 @@ WEAK void halide_release_jit_module() {
 }
 
 }}}
-

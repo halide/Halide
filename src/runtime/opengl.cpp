@@ -1,6 +1,5 @@
-#include "runtime_internal.h"
-#include "device_interface.h"
 #include "HalideRuntimeOpenGL.h"
+#include "device_interface.h"
 #include "printer.h"
 #include "mini_opengl.h"
 
@@ -29,6 +28,7 @@
     GLFUNC(PFNGLTEXIMAGE2DPROC, TexImage2D);                            \
     GLFUNC(PFNGLTEXSUBIMAGE2DPROC, TexSubImage2D);                      \
     GLFUNC(PFNGLDISABLEPROC, Disable);                                  \
+    GLFUNC(PFNGLDISABLEPROC, Enable);                                   \
     GLFUNC(PFNGLCREATESHADERPROC, CreateShader);                        \
     GLFUNC(PFNGLACTIVETEXTUREPROC, ActiveTexture);                      \
     GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource);                        \
@@ -62,7 +62,9 @@
     GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
     GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
     GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
-    GLFUNC(PFNGLGETINTEGERV, GetIntegerv);
+    GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                              \
+    GLFUNC(PFNGLGETBOOLEANV, GetBooleanv);                              \
+    GLFUNC(PFNGLFINISHPROC, Finish);
 
 // List of all OpenGL functions used by the runtime, which may not
 // exist due to an older or less capable version of GL. In using any
@@ -175,6 +177,16 @@ struct ModuleState {
     ModuleState *next;
 };
 
+// OpenGL state to save and restore before/after
+// running a filter.
+struct SavedGLState {
+    GLint active_texture;
+          GLint program;
+          GLint viewport[4];
+    GLboolean cull_face;
+    GLboolean depth_test;
+};
+
 // All persistent state maintained by the runtime.
 struct GlobalState {
     void init();
@@ -199,6 +211,11 @@ struct GlobalState {
     // A list of all textures that are still active
     TextureInfo *textures;
 
+    // Saved OpenGL state prior to running filter
+    struct SavedGLState saved_state;
+    void SaveGLState();
+    void RestoreGLState();
+
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
     USED_GL_FUNCTIONS;
@@ -214,6 +231,31 @@ WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *locat
         return true;
     }
     return false;
+}
+
+WEAK void GlobalState::SaveGLState() {
+    this->GetIntegerv(GL_ACTIVE_TEXTURE, &(saved_state.active_texture));
+    this->GetIntegerv(GL_CURRENT_PROGRAM, &(saved_state.program));
+    this->GetIntegerv(GL_VIEWPORT, saved_state.viewport);
+    this->GetBooleanv(GL_CULL_FACE, &(saved_state.cull_face));
+    this->GetBooleanv(GL_DEPTH_TEST, &(saved_state.depth_test));
+
+#ifdef DEBUG_RUNTIME
+    debug(NULL) << "Saved OpenGL state\n";
+#endif
+}
+
+WEAK void GlobalState::RestoreGLState() {
+#ifdef DEBUG_RUNTIME
+    debug(NULL) << "Restoring OpenGL state\n";
+#endif
+
+    this->ActiveTexture(saved_state.active_texture);
+    this->UseProgram(saved_state.program);
+    this->Viewport(saved_state.viewport[0], saved_state.viewport[1],
+         saved_state.viewport[2], saved_state.viewport[3]);
+    (saved_state.cull_face ? this->Enable : this->Disable)(GL_CULL_FACE);
+    (saved_state.depth_test ? this->Enable : this->Disable)(GL_DEPTH_TEST);
 }
 
 
@@ -565,6 +607,10 @@ WEAK int halide_opengl_init(void *user_context) {
     if (global_state.initialized) {
         return 0;
     }
+
+#ifdef DEBUG_RUNTIME
+    halide_start_clock(user_context);
+#endif
 
     global_state.init();
 
@@ -1096,11 +1142,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
     if (is_interleaved && is_packed) {
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host + buf->elem_size *
-            (buf->min[0] * buf->stride[0] +
-             buf->min[1] * buf->stride[1] +
-             buf->min[2] * buf->stride[2] +
-             buf->min[3] * buf->stride[3]);
+        uint8_t *host_ptr = buf->host;
         global_state.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, host_ptr);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(1)")) {
             return 1;
@@ -1225,11 +1267,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
     if (is_interleaved && is_packed && texture_channels == buffer_channels) {
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host + buf->elem_size *
-            (buf->min[0] * buf->stride[0] +
-             buf->min[1] * buf->stride[1] +
-             buf->min[2] * buf->stride[2] +
-             buf->min[3] * buf->stride[3]);
+        uint8_t *host_ptr = buf->host;
 #ifdef DEBUG_RUNTIME
         int64_t t1 = halide_current_time_ns(user_context);
 #endif
@@ -1316,6 +1354,9 @@ WEAK int halide_opengl_run(void *user_context,
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_run).";
         return 1;
     }
+
+    // save current OpenGL state
+    global_state.SaveGLState();
 
     ModuleState *mod = (ModuleState *)state_ptr;
     if (!mod) {
@@ -1794,6 +1835,9 @@ WEAK int halide_opengl_run(void *user_context,
     global_state.DeleteBuffers(1, &vertex_buffer_id);
     global_state.DeleteBuffers(1, &element_buffer_id);
 
+    // Restore OpenGL state
+    global_state.RestoreGLState();
+
     return 0;
 }
 
@@ -1802,7 +1846,14 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_device_sync).";
         return 1;
     }
-    // TODO: glFinish()
+#ifdef DEBUG_RUNTIME
+    int64_t t0 = halide_current_time_ns(user_context);
+#endif
+    global_state.Finish();
+#ifdef DEBUG_RUNTIME
+    int64_t t1 = halide_current_time_ns(user_context);
+    debug(user_context) << "halide_opengl_device_sync: took " << (t1 - t0) / 1e3 << "usec\n";
+#endif
     return 0;
 }
 
@@ -1955,6 +2006,13 @@ WEAK void halide_opengl_context_lost(void *user_context) {
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t texture_id) {
+  if (!global_state.initialized) {
+      // Must initialize here: if not, we risk having the TextureInfo
+      // blown away when global state really is inited.
+      if (int error = halide_opengl_init(user_context)) {
+          return error;
+      }
+    }
     if (texture_id == 0) {
         error(user_context) << "Texture " << texture_id << " is not a valid texture name.";
         return -3;
@@ -1963,6 +2021,11 @@ WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, ui
     if (buf->dev != 0) {
         return -2;
     }
+    if (find_texture_info(texture_id)) {
+        error(user_context) << "Internal error: texture " << texture_id << " is already wrapped.";
+        return -3;
+    }
+    (void) new_texture_info(texture_id, buf->min, buf->extent, /* halide_allocated */ false);
     buf->dev = halide_new_device_wrapper(texture_id, &opengl_device_interface);
     if (buf->dev == 0) {
         return -1;

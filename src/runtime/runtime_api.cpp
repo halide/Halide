@@ -5,7 +5,8 @@
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
-#include "runtime_internal.h"
+#include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeQurt.h"
 
 // This runtime module will contain extern declarations of the Halide
 // API and the types it uses. It's useful for compiling modules that
@@ -14,10 +15,11 @@
 // Can be generated via the following:
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
-namespace {
-__attribute__((used)) void *runtime_api_functions[] = {
+extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
+    (void *)&halide_can_use_target_features,
     (void *)&halide_copy_to_device,
     (void *)&halide_copy_to_host,
+    (void *)&halide_create_temp_file,
     (void *)&halide_cuda_detach_device_ptr,
     (void *)&halide_cuda_device_interface,
     (void *)&halide_cuda_get_device_ptr,
@@ -26,6 +28,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_cuda_wrap_device_ptr,
     (void *)&halide_current_time_ns,
     (void *)&halide_debug_to_file,
+    (void *)&halide_default_can_use_target_features,
     (void *)&halide_device_free,
     (void *)&halide_device_free_as_destructor,
     (void *)&halide_device_malloc,
@@ -44,6 +47,7 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_error_constraint_violated,
     (void *)&halide_error_constraints_make_required_region_smaller,
     (void *)&halide_error_debug_to_file_failed,
+    (void *)&halide_error_unaligned_host_ptr,
     (void *)&halide_error_explicit_bounds_too_small,
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_out_of_memory,
@@ -53,6 +57,8 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_error_param_too_small_f64,
     (void *)&halide_error_param_too_small_i64,
     (void *)&halide_error_param_too_small_u64,
+    (void *)&halide_error_bad_fold,
+    (void *)&halide_error_fold_factor_too_small,
     (void *)&halide_float16_bits_to_double,
     (void *)&halide_float16_bits_to_float,
     (void *)&halide_free,
@@ -60,9 +66,20 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_get_library_symbol,
     (void *)&halide_get_symbol,
     (void *)&halide_get_trace_file,
+    (void *)&halide_hexagon_detach_device_handle,
+    (void *)&halide_hexagon_device_interface,
+    (void *)&halide_hexagon_get_device_handle,
+    (void *)&halide_hexagon_wrap_device_handle,
+    (void *)&halide_hexagon_initialize_kernels,
+    (void *)&halide_hexagon_run,
+    (void *)&halide_hexagon_device_release,
+    (void *)&halide_qurt_hvx_lock,
+    (void *)&halide_qurt_hvx_unlock,
+    (void *)&halide_qurt_hvx_unlock_as_destructor,
     (void *)&halide_int64_to_string,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
+    (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_release,
@@ -105,13 +122,18 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
     (void *)&halide_profiler_get_state,
+    (void *)&halide_profiler_get_pipeline_state,
+    (void *)&halide_profiler_memory_allocate,
+    (void *)&halide_profiler_memory_free,
     (void *)&halide_profiler_pipeline_start,
     (void *)&halide_profiler_report,
     (void *)&halide_profiler_reset,
+    (void *)&halide_profiler_stack_peak_update,
     (void *)&halide_release_jit_module,
     (void *)&halide_renderscript_device_interface,
     (void *)&halide_renderscript_initialize_kernels,
     (void *)&halide_renderscript_run,
+    (void *)&halide_runtime_internal_register_metadata,
     (void *)&halide_set_gpu_device,
     (void *)&halide_set_num_threads,
     (void *)&halide_set_trace_file,
@@ -125,4 +147,3 @@ __attribute__((used)) void *runtime_api_functions[] = {
     (void *)&halide_uint64_to_string,
     (void *)&halide_use_jit_module,
 };
-}

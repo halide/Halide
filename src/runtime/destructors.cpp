@@ -1,4 +1,4 @@
-#include "runtime_internal.h"
+#include "HalideRuntime.h"
 
 #define INLINE inline __attribute__((weak)) __attribute__((always_inline)) __attribute__((used))
 

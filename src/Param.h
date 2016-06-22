@@ -1,14 +1,12 @@
 #ifndef HALIDE_PARAM_H
 #define HALIDE_PARAM_H
 
+#include "IR.h"
+
 /** \file
  *
- * Classes for declaring scalar and image parameters to halide pipelines
+ * Classes for declaring scalar parameters to halide pipelines
  */
-
-#include "IR.h"
-#include "Var.h"
-#include "Util.h"
 
 namespace Halide {
 
@@ -150,6 +148,10 @@ public:
     }
     // @}
 
+    void set_default_value(const T &value) {
+        param.set_default(value);
+    }
+
     /** You can use this parameter as an expression in a halide
      * function definition */
     operator Expr() const {
@@ -178,185 +180,6 @@ inline Expr user_context_value() {
     return Internal::Variable::make(Handle(), "__user_context",
         Internal::Parameter(Handle(), false, 0, "__user_context", true));
 }
-
-/** A handle on the output buffer of a pipeline. Used to make static
- * promises about the output size and stride. */
-class OutputImageParam {
-protected:
-    /** A reference-counted handle on the internal parameter object */
-    Internal::Parameter param;
-
-    /** Is this an input or an output? OutputImageParam is the base class for both. */
-    Argument::Kind kind;
-    
-    void add_implicit_args_if_placeholder(std::vector<Expr> &args,
-                                          Expr last_arg,
-                                          int total_args,
-                                          bool *placeholder_seen) const;
-public:
-
-    /** Construct a NULL image parameter handle. */
-    OutputImageParam() {}
-
-    /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    EXPORT OutputImageParam(const Internal::Parameter &p, Argument::Kind k);
-
-    /** Get the name of this Param */
-    EXPORT const std::string &name() const;
-
-    /** Get the type of the image data this Param refers to */
-    EXPORT Type type() const;
-
-    /** Is this parameter handle non-NULL */
-    EXPORT bool defined() const;
-
-    /** Get an expression representing the minimum coordinates of this image
-     * parameter in the given dimension. */
-    EXPORT Expr min(int x) const;
-
-    /** Get an expression representing the extent of this image
-     * parameter in the given dimension */
-    EXPORT Expr extent(int x) const;
-
-    /** Get an expression representing the stride of this image in the
-     * given dimension */
-    EXPORT Expr stride(int x) const;
-
-    /** Set the extent in a given dimension to equal the given
-     * expression. Images passed in that fail this check will generate
-     * a runtime error. Returns a reference to the ImageParam so that
-     * these calls may be chained.
-     *
-     * This may help the compiler generate better
-     * code. E.g:
-     \code
-     im.set_extent(0, 100);
-     \endcode
-     * tells the compiler that dimension zero must be of extent 100,
-     * which may result in simplification of boundary checks. The
-     * value can be an arbitrary expression:
-     \code
-     im.set_extent(0, im.extent(1));
-     \endcode
-     * declares that im is a square image (of unknown size), whereas:
-     \code
-     im.set_extent(0, (im.extent(0)/32)*32);
-     \endcode
-     * tells the compiler that the extent is a multiple of 32. */
-    EXPORT OutputImageParam &set_extent(int dim, Expr extent);
-
-    /** Set the min in a given dimension to equal the given
-     * expression. Setting the mins to zero may simplify some
-     * addressing math. */
-    EXPORT OutputImageParam &set_min(int dim, Expr min);
-
-    /** Set the stride in a given dimension to equal the given
-     * value. This is particularly helpful to set when
-     * vectorizing. Known strides for the vectorized dimension
-     * generate better code. */
-    EXPORT OutputImageParam &set_stride(int dim, Expr stride);
-
-    /** Set the min and extent in one call. */
-    EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
-
-    /** Get the dimensionality of this image parameter */
-    EXPORT int dimensions() const;
-
-    /** Get an expression giving the minimum coordinate in dimension 0, which
-     * by convention is the coordinate of the left edge of the image */
-    EXPORT Expr left() const;
-
-    /** Get an expression giving the maximum coordinate in dimension 0, which
-     * by convention is the coordinate of the right edge of the image */
-    EXPORT Expr right() const;
-
-    /** Get an expression giving the minimum coordinate in dimension 1, which
-     * by convention is the top of the image */
-    EXPORT Expr top() const;
-
-    /** Get an expression giving the maximum coordinate in dimension 1, which
-     * by convention is the bottom of the image */
-    EXPORT Expr bottom() const;
-
-    /** Get an expression giving the extent in dimension 0, which by
-     * convention is the width of the image */
-    EXPORT Expr width() const;
-
-    /** Get an expression giving the extent in dimension 1, which by
-     * convention is the height of the image */
-    EXPORT Expr height() const;
-
-    /** Get an expression giving the extent in dimension 2, which by
-     * convention is the channel-count of the image */
-    EXPORT Expr channels() const;
-
-    /** Get at the internal parameter object representing this ImageParam. */
-    EXPORT Internal::Parameter parameter() const;
-
-    /** Construct the appropriate argument matching this parameter,
-     * for the purpose of generating the right type signature when
-     * statically compiling halide pipelines. */
-    EXPORT operator Argument() const;
-
-    /** Using a param as the argument to an external stage treats it
-     * as an Expr */
-    EXPORT operator ExternFuncArgument() const;
-};
-
-/** An Image parameter to a halide pipeline. E.g., the input image. */
-class ImageParam : public OutputImageParam {
-
-public:
-
-    /** Construct a NULL image parameter handle. */
-    ImageParam() : OutputImageParam() {}
-
-    /** Construct an image parameter of the given type and
-     * dimensionality, with an auto-generated unique name. */
-    EXPORT ImageParam(Type t, int d);
-
-    /** Construct an image parameter of the given type and
-     * dimensionality, with the given name */
-    EXPORT ImageParam(Type t, int d, const std::string &n);
-
-    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
-    EXPORT void set(Buffer b);
-
-    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
-    EXPORT Buffer get() const;
-
-    /** Construct an expression which loads from this image
-     * parameter. The location is extended with enough implicit
-     * variables to match the dimensionality of the image
-     * (see \ref Var::implicit)
-     */
-    // @{
-    EXPORT Expr operator()() const;
-    EXPORT Expr operator()(Expr x) const;
-    EXPORT Expr operator()(Expr x, Expr y) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
-    EXPORT Expr operator()(std::vector<Expr>) const;
-    EXPORT Expr operator()(std::vector<Var>) const;
-    // @}
-
-    /** Treating the image parameter as an Expr is equivalent to call
-     * it with no arguments. For example, you can say:
-     *
-     \code
-     ImageParam im(UInt(8), 2);
-     Func f;
-     f = im*2;
-     \endcode
-     *
-     * This will define f as a two-dimensional function with value at
-     * position (x, y) equal to twice the value of the image parameter
-     * at the same location.
-     */
-    operator Expr() const {
-        return (*this)(_);
-    }
-};
 
 }
 

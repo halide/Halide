@@ -244,8 +244,10 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr value, index;
+    // If it's a store to an output buffer, then this parameter points to it.
+    Parameter param;
 
-    EXPORT static Stmt make(std::string name, Expr value, Expr index);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index, Parameter param);
 };
 
 /** This defines the value of a function at a multi-dimensional
@@ -273,7 +275,7 @@ struct Allocate : public StmtNode<Allocate> {
 
     // These override the code generator dependent malloc and free
     // equivalents if provided. If the new_expr succeeds, that is it
-    // returns non-NULL, the function named be free_function is
+    // returns non-nullptr, the function named be free_function is
     // guaranteed to be called. The free function signature must match
     // that of the code generator dependent free (typically
     // halide_free). If free_function is left empty, code generator
@@ -285,6 +287,14 @@ struct Allocate : public StmtNode<Allocate> {
     EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
                             Expr condition, Stmt body,
                             Expr new_expr = Expr(), std::string free_function = std::string());
+
+    /** A routine to check if the extents are all constants, and if so verify
+     * the total size is less than 2^31 - 1. If the result is constant, but
+     * overflows, this routine asserts. This returns 0 if the extents are
+     * not all constants; otherwise, it returns the total constant allocation
+     * size. */
+    EXPORT static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
+    EXPORT int32_t constant_allocation_size() const;
 };
 
 /** Free the resources associated with the given buffer. */
@@ -328,6 +338,7 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     EXPORT static Stmt make(Stmt first, Stmt rest);
+    EXPORT static Stmt make(const std::vector<Stmt> &stmts);
 };
 
 /** An if-then-else block. 'else' may be undefined. */
@@ -345,16 +356,23 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
-/** A function call. This can represent a call to some extern
- * function (like sin), but it's also our multi-dimensional
- * version of a Load, so it can be a load from an input image, or
- * a call to another halide function. The latter two types of call
- * nodes don't survive all the way down to code generation - the
- * lowering process converts them to Load nodes. */
+/** A function call. This can represent a call to some extern function
+ * (like sin), but it's also our multi-dimensional version of a Load,
+ * so it can be a load from an input image, or a call to another
+ * halide function. These two types of call nodes don't survive all
+ * the way down to code generation - the lowering process converts
+ * them to Load nodes. */
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide, Intrinsic} CallType;
+    typedef enum {Image,        //< A load from an input image
+                  Extern,       //< A call to an external C-ABI function, possibly with side-effects
+                  ExternCPlusPlus, //< A call to an external C-ABI function, possibly with side-effects
+                  PureExtern,   //< A call to a guaranteed-side-effect-free external function
+                  Halide,       //< A call to a Func
+                  Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                  PureIntrinsic //< A side-effect-free version of the above.
+    } CallType;
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
@@ -367,6 +385,7 @@ struct Call : public ExprNode<Call> {
     EXPORT static ConstString debug_to_file,
         shuffle_vector,
         interleave_vectors,
+        concat_vectors,
         reinterpret,
         bitwise_and,
         bitwise_not,
@@ -406,13 +425,19 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         copy_memory,
         likely,
-        make_int64,
-        make_float64,
-        register_destructor;
+        likely_if_innermost,
+        register_destructor,
+        div_round_to_zero,
+        mod_round_to_zero,
+        slice_vector,
+        call_cached_indirect_function,
+        signed_integer_overflow;
 
-    // If it's a call to another halide function, this call node
-    // holds onto a pointer to that function.
-    Function func;
+    // If it's a call to another halide function, this call node holds
+    // onto a pointer to that function for the purposes of reference
+    // counting only. Self-references in update definitions do not
+    // have this set, to avoid cycles.
+    IntrusivePtr<FunctionContents> func;
 
     // If that function has multiple values, which value does this
     // call node refer to?
@@ -427,7 +452,7 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
-                            Function func = Function(), int value_index = 0,
+                            IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
                             Buffer image = Buffer(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
@@ -437,19 +462,37 @@ struct Call : public ExprNode<Call> {
             << "Value index out of range in call to halide function\n";
         internal_assert(func.has_pure_definition() || func.has_extern_definition())
             << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func, idx, Buffer(), Parameter());
+        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(Buffer image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, Function(), 0, image, Parameter());
+        return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, Function(), 0, Buffer(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer(), param);
     }
 
+    /** Check if a call node is pure within a pipeline, meaning that
+     * the same args always give the same result, and the calls can be
+     * reordered, duplicated, unified, etc without changing the
+     * meaning of anything. Not transitive - doesn't guarantee the
+     * args themselves are pure. An example of a pure Call node is
+     * sqrt. If in doubt, don't mark a Call node as pure. */
+    bool is_pure() const {
+        return (call_type == PureExtern ||
+                call_type == Image ||
+                call_type == PureIntrinsic);
+    }
+
+    bool is_intrinsic(ConstString intrin_name) const {
+        return
+            ((call_type == Intrinsic ||
+              call_type == PureIntrinsic) &&
+             name == intrin_name);
+    }
 };
 
 /** A named variable. Might be a loop variable, function argument,

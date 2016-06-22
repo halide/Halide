@@ -15,7 +15,7 @@ using namespace Halide;
 // thread-safe.
 
 // Here we use an extern call to print an ascii-art Mandelbrot set.
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT

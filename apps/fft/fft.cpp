@@ -22,6 +22,9 @@ using namespace Halide::BoundaryConditions;
 
 namespace {
 
+#ifndef M_PI
+#define M_PI 3.14159265358979310000
+#endif
 const float kPi = static_cast<float>(M_PI);
 
 // This variable is used throughout the FFT code. It represents groups of

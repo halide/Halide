@@ -33,7 +33,7 @@ public:
      * subexpressions, it's worth passing in a cache to use.
      * Currently this is only done in common-subexpression
      * elimination. */
-    IRComparer(IRCompareCache *c = NULL) : result(Equal), cache(c) {}
+    IRComparer(IRCompareCache *c = nullptr) : result(Equal), cache(c) {}
 
 private:
     Expr expr;
@@ -134,7 +134,7 @@ IRComparer::CmpResult IRComparer::compare_expr(const Expr &a, const Expr &b) {
     //   return result;
     // }
 
-    if (compare_scalar(a.ptr->type_info(), b.ptr->type_info()) != Equal) {
+    if (compare_scalar(a->type_info(), b->type_info()) != Equal) {
         return result;
     }
 
@@ -183,7 +183,7 @@ IRComparer::CmpResult IRComparer::compare_stmt(const Stmt &a, const Stmt &b) {
         return result;
     }
 
-    if (compare_scalar(a.ptr->type_info(), b.ptr->type_info()) != Equal) {
+    if (compare_scalar(a->type_info(), b->type_info()) != Equal) {
         return result;
     }
 
@@ -444,8 +444,18 @@ bool equal(Expr a, Expr b) {
     return IRComparer().compare_expr(a, b) == IRComparer::Equal;
 }
 
+bool graph_equal(Expr a, Expr b) {
+    IRCompareCache cache(8);
+    return IRComparer(&cache).compare_expr(a, b) == IRComparer::Equal;
+}
+
 bool equal(Stmt a, Stmt b) {
     return IRComparer().compare_stmt(a, b) == IRComparer::Equal;
+}
+
+bool graph_equal(Stmt a, Stmt b) {
+    IRCompareCache cache(8);
+    return IRComparer(&cache).compare_stmt(a, b) == IRComparer::Equal;
 }
 
 bool IRDeepCompare::operator()(const Expr &a, const Expr &b) const {

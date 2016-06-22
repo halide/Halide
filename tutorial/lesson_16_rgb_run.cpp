@@ -85,6 +85,7 @@ double tick(const char *name) {
 }
 
 int main(int argc, char **argv) {
+
     // Let's make some images stored with interleaved and planar
     // memory, and buffer_ts that describe them.
     buffer_t planar_input = make_planar_rgb_image(1024, 768);
@@ -101,13 +102,13 @@ int main(int argc, char **argv) {
 
     // Run the planar version of the code on the planar images and the
     // interleaved version of the code on the interleaved
-    // images. We'll run each 100 times for benchmarking.
-    for (int i = 0; i < 100; i++) {
+    // images. We'll run each 1000 times for benchmarking.
+    for (int i = 0; i < 1000; i++) {
         brighten_planar(&planar_input, 1, &planar_output);
     }
     double planar_time = tick("brighten_planar");
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1000; i++) {
         brighten_interleaved(&interleaved_input, 1, &interleaved_output);
     }
     double interleaved_time = tick("brighten_interleaved");
@@ -128,13 +129,13 @@ int main(int argc, char **argv) {
 
     // Run the flexible version of the code and check performance. It
     // should work, but it'll be slower than the versions above.
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1000; i++) {
         brighten_either(&planar_input, 1, &planar_output);
     }
     double either_planar_time = tick("brighten_either on planar images");
     assert(planar_time < either_planar_time);
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1000; i++) {
         brighten_either(&interleaved_input, 1, &interleaved_output);
     }
     double either_interleaved_time = tick("brighten_either on interleaved images");
@@ -144,7 +145,7 @@ int main(int argc, char **argv) {
     // should match the performance of the code compiled specifically
     // for each case above by branching internally to equivalent
     // code.
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1000; i++) {
         brighten_specialized(&planar_input, 1, &planar_output);
     }
     double specialized_planar_time = tick("brighten_specialized on planar images");
@@ -154,7 +155,7 @@ int main(int argc, char **argv) {
     // measurement noise.
     assert(specialized_planar_time < 1.5 * planar_time);
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1000; i++) {
         brighten_specialized(&interleaved_input, 1, &interleaved_output);
     }
     double specialized_interleaved_time = tick("brighten_specialized on interleaved images");
@@ -165,5 +166,6 @@ int main(int argc, char **argv) {
     destroy_image(&planar_output);
     destroy_image(&interleaved_input);
     destroy_image(&interleaved_output);
+
     return 0;
 }

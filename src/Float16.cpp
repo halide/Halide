@@ -1,6 +1,8 @@
 #include "Float16.h"
 #include "Error.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace Halide;

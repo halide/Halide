@@ -68,7 +68,7 @@ class DebugSections {
         uint64_t def_loc, spec_loc;
         uint64_t addr;
         GlobalVariable() : name(""),
-                           type(NULL),
+                           type(nullptr),
                            type_def_loc(0),
                            def_loc(0),
                            spec_loc(0),
@@ -106,7 +106,7 @@ class DebugSections {
         // function.
         vector<LiveRange> live_ranges;
         LocalVariable() : name(""),
-                          type(NULL),
+                          type(nullptr),
                           stack_offset(0),
                           type_def_loc(0),
                           def_loc(0),
@@ -175,7 +175,7 @@ public:
         binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
         #endif
 
-        debug(2) << "Loading " << binary << "\n";
+        debug(5) << "Loading " << binary << "\n";
 
         load_and_parse_object_file(binary);
     }
@@ -227,15 +227,15 @@ public:
 
         if (!found) {
             if (!calibrated) {
-                debug(1) << "Failed to find HalideIntrospectionCanary::offset_marker\n";
+                debug(2) << "Failed to find HalideIntrospectionCanary::offset_marker\n";
             } else {
-                debug(1) << "Failed to find HalideIntrospectionCanary::offset_marker at the expected location\n";
+                debug(2) << "Failed to find HalideIntrospectionCanary::offset_marker at the expected location\n";
             }
             working = false;
             return;
         }
 
-        debug(4) << "Program counter adjustment between debug info and actual code: " << pc_adjust << "\n";
+        debug(5) << "Program counter adjustment between debug info and actual code: " << pc_adjust << "\n";
 
         for (size_t i = 0; i < functions.size(); i++) {
             FunctionInfo &f = functions[i];
@@ -278,12 +278,12 @@ public:
 
     int find_global_variable(const void *global_pointer) {
         if (global_variables.empty()) {
-            debug(4) << "Considering possible global at " << global_pointer << " but global_variables is empty\n";
+            debug(5) << "Considering possible global at " << global_pointer << " but global_variables is empty\n";
             return -1;
         }
-        debug(4) << "Considering possible global at " << global_pointer << "\n";
+        debug(5) << "Considering possible global at " << global_pointer << "\n";
 
-        debug(4) << "Known globals range from " << std::hex << global_variables.front().addr << " to " << global_variables.back().addr << std::dec << "\n";
+        debug(5) << "Known globals range from " << std::hex << global_variables.front().addr << " to " << global_variables.back().addr << std::dec << "\n";
         uint64_t address = (uint64_t)(global_pointer);
         size_t hi = global_variables.size();
         size_t lo = 0;
@@ -310,6 +310,9 @@ public:
         // Check the address is indeed inside the object found
         uint64_t end_ptr = global_variables[idx].addr;
         TypeInfo *t = global_variables[idx].type;
+        if (t == nullptr) {
+            return -1;
+        }
         uint64_t size = t->size;
         while (t->type == TypeInfo::Array) {
             t = t->members[0].type;
@@ -340,16 +343,16 @@ public:
         for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
             GlobalVariable &v = global_variables[idx];
-            TypeInfo *elem_type = NULL;
+            TypeInfo *elem_type = nullptr;
             if (v.type && v.type->type == TypeInfo::Array && v.type->size) {
                 elem_type = v.type->members[0].type;
             }
 
-            debug(4) << "Closest global is " << v.name << " at " << std::hex << v.addr << std::dec;
+            debug(5) << "Closest global is " << v.name << " at " << std::hex << v.addr << std::dec;
             if (v.type) {
-                debug(4) << " with type " << v.type->name << "\n";
+                debug(5) << " with type " << v.type->name << "\n";
             } else {
-                debug(4) << "\n";
+                debug(5) << "\n";
             }
 
             if (v.addr == address &&
@@ -366,7 +369,7 @@ public:
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
                     oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
-                    debug(4) << "Successful match to array element\n";
+                    debug(5) << "Successful match to array element\n";
                     return oss.str();
                 }
             }
@@ -380,15 +383,15 @@ public:
         // helper should be a pointer to a global
         int idx = find_global_variable(helper);
         if (idx == -1) {
-            debug(4) << "Could not find helper object: " << helper << "\n";
+            debug(5) << "Could not find helper object: " << helper << "\n";
             return;
         }
         const GlobalVariable &ptr = global_variables[idx];
-        debug(4) << "helper object is " << ptr.name << " at " << std::hex << ptr.addr << std::dec;
+        debug(5) << "helper object is " << ptr.name << " at " << std::hex << ptr.addr << std::dec;
         if (ptr.type) {
-            debug(4) << " with type " << ptr.type->name << "\n";
+            debug(5) << " with type " << ptr.type->name << "\n";
         } else {
-            debug(4) << " with unknown type!\n";
+            debug(5) << " with unknown type!\n";
             return;
         }
 
@@ -398,7 +401,7 @@ public:
         TypeInfo *object_type = ptr.type->members[0].type;
         internal_assert(object_type);
 
-        debug(4) << "The object has type: " << object_type->name << "\n";
+        debug(5) << "The object has type: " << object_type->name << "\n";
 
         internal_assert(size == object_type->size);
 
@@ -415,7 +418,7 @@ public:
             member.addr = heap_object.addr + member_spec.stack_offset;
             if (member.type) {
                 heap_object.members.push_back(member);
-                debug(4) << member.name << " - " << (int)(member.type->type) << "\n";
+                debug(5) << member.name << " - " << (int)(member.type->type) << "\n";
             }
         }
 
@@ -454,7 +457,7 @@ public:
                 child.addr = parent.addr + member_spec.stack_offset;
 
                 if (child.type) {
-                    debug(4) << child.name << " - " << (int)(child.type->type) << "\n";
+                    debug(5) << child.name << " - " << (int)(child.type->type) << "\n";
                     heap_object.members.push_back(child);
                 }
             }
@@ -463,10 +466,10 @@ public:
         // Sort by member address, but use stable stort so that parents stay before children.
         std::stable_sort(heap_object.members.begin(), heap_object.members.end());
 
-        debug(4) << "Children of heap object of type " << object_type->name << " at " << obj << ":\n";
+        debug(5) << "Children of heap object of type " << object_type->name << " at " << obj << ":\n";
         for (size_t i = 0; i < heap_object.members.size(); i++) {
             const HeapObject::Member &mem = heap_object.members[i];
-            debug(4) << std::hex << mem.addr << std::dec << ": " << mem.type->name << " " << mem.name << "\n";
+            debug(5) << std::hex << mem.addr << std::dec << ": " << mem.type->name << " " << mem.name << "\n";
         }
 
         heap_objects[heap_object.addr] = heap_object;
@@ -478,10 +481,10 @@ public:
 
     // Get the debug name of a member of a heap variable from a pointer to it
     std::string get_heap_member_name(const void *ptr, const std::string &type_name = "") {
-        debug(4) << "Getting heap member name of " << ptr << "\n";
+        debug(5) << "Getting heap member name of " << ptr << "\n";
 
         if (heap_objects.empty()) {
-            debug(4) << "No registered heap objects\n";
+            debug(5) << "No registered heap objects\n";
             return "";
         }
 
@@ -489,7 +492,7 @@ public:
         std::map<uint64_t, HeapObject>::iterator it = heap_objects.upper_bound(addr);
 
         if (it == heap_objects.begin()) {
-            debug(4) << "No heap objects less than this address\n";
+            debug(5) << "No heap objects less than this address\n";
             return "";
         }
 
@@ -501,7 +504,7 @@ public:
         uint64_t object_start = it->first;
         uint64_t object_end = object_start + obj.type->size;
         if (addr < object_start || addr >= object_end) {
-            debug(4) << "Not contained in any heap object\n";
+            debug(5) << "Not contained in any heap object\n";
             return "";
         }
 
@@ -514,7 +517,7 @@ public:
 
             if (!t) continue;
 
-            debug(4) << "Comparing to member " << obj.members[i].name
+            debug(5) << "Comparing to member " << obj.members[i].name
                      << " at address " << std::hex << obj.members[i].addr << std::dec
                      << " with type " << t->name
                      << " and type type " << (int)t->type << "\n";
@@ -531,14 +534,14 @@ public:
                 TypeInfo *elem_type = t->members[0].type;
                 uint64_t array_start_addr = obj.members[i].addr;
                 uint64_t array_end_addr = array_start_addr + t->size * elem_type->size;
-                debug(4) << "Array runs from " << std::hex << array_start_addr << " to " << array_end_addr << "\n";
+                debug(5) << "Array runs from " << std::hex << array_start_addr << " to " << array_end_addr << "\n";
                 if (elem_type && addr >= array_start_addr && addr < array_end_addr) {
                     // Adjust the query address backwards to lie
                     // within the first array element and remember the
                     // array index to correct the name later.
                     uint64_t containing_elem = (addr - array_start_addr) / elem_type->size;
                     addr -= containing_elem * elem_type->size;
-                    debug(4) << "Query belongs to this array. Adjusting query address backwards to "
+                    debug(5) << "Query belongs to this array. Adjusting query address backwards to "
                              << std::hex << addr << std::dec << "\n";
                     name << obj.members[i].name << '[' << containing_elem << ']';
                 }
@@ -548,14 +551,14 @@ public:
                 // If I'm not this member, but am contained within it, incorporate its name.
                 uint64_t struct_start_addr = obj.members[i].addr;
                 uint64_t struct_end_addr = struct_start_addr + t->size;
-                debug(4) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
+                debug(5) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
                 if (addr >= struct_start_addr && addr < struct_end_addr) {
                     name << obj.members[i].name << '.';
                 }
             }
         }
 
-        debug(4) << "Didn't seem to be any of the members of this heap object\n";
+        debug(5) << "Didn't seem to be any of the members of this heap object\n";
         return "";
     }
 
@@ -586,25 +589,25 @@ public:
         };
 
         frame_info *fp = (frame_info *)__builtin_frame_address(0);
-        frame_info *next_fp = NULL;
+        frame_info *next_fp = nullptr;
 
         // Walk up the stack until we pass the pointer.
-        debug(4) << "Walking up the stack\n";
+        debug(5) << "Walking up the stack\n";
         while (fp < stack_pointer) {
-            debug(4) << "frame pointer: " << (void *)(fp->frame_pointer)
+            debug(5) << "frame pointer: " << (void *)(fp->frame_pointer)
                      << " return address: " << fp->return_address << "\n";
             next_fp = fp;
             if (fp->frame_pointer < fp) {
                 // If we ever jump downwards, something is
                 // wrong. Maybe this was a heap pointer.
-                debug(4) << "Bailing out because fp decreased\n";
+                debug(5) << "Bailing out because fp decreased\n";
                 return "";
             }
             fp = fp->frame_pointer;
             if (fp < (void *)&marker) {
                 // If we're still below the marker after one hop,
                 // something is wrong. Maybe this was a heap pointer.
-                debug(4) << "Bailing out because we're below the marker\n";
+                debug(5) << "Bailing out because we're below the marker\n";
                 return "";
             }
         }
@@ -612,7 +615,7 @@ public:
         if (!next_fp) {
             // If we didn't manage to walk up one frame, something is
             // wrong. Maybe this was a heap pointer.
-            debug(4) << "Bailing out because we didn't even walk up one frame\n";
+            debug(5) << "Bailing out because we didn't even walk up one frame\n";
             return "";
         }
 
@@ -625,7 +628,7 @@ public:
         FunctionInfo *func = find_containing_function(next_fp->return_address);
 
         if (!func) {
-            debug(4) << "Bailing out because we couldn't find the containing function\n";
+            debug(5) << "Bailing out because we couldn't find the containing function\n";
             return "";
         }
 
@@ -644,15 +647,15 @@ public:
         } else if (func->frame_base == FunctionInfo::ClangNoFP) {
             offset = offset_below - 2*addr_size;
         } else {
-            debug(4) << "Bailing out because containing function used an unknown mechanism for specifying stack offsets\n";
+            debug(5) << "Bailing out because containing function used an unknown mechanism for specifying stack offsets\n";
             return "";
         }
 
-        debug(4) << "Searching for var at offset " << offset << "\n";
+        debug(5) << "Searching for var at offset " << offset << "\n";
 
         for (size_t j = 0; j < func->variables.size(); j++) {
             const LocalVariable &var = func->variables[j];
-            debug(4) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
+            debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
 
             // Reject it if we're not in its live ranges
             if (var.live_ranges.size()) {
@@ -665,25 +668,25 @@ public:
                     }
                 }
                 if (!in_live_range) {
-                    debug(4) << "Skipping var because we're not in any of its live ranges\n";
+                    debug(5) << "Skipping var because we're not in any of its live ranges\n";
                     continue;
                 }
             }
 
             TypeInfo *type = var.type;
-            TypeInfo *elem_type = NULL;
+            TypeInfo *elem_type = nullptr;
             if (type && type->type == TypeInfo::Array && type->size) {
                 elem_type = type->members[0].type;
             }
 
             if (offset == var.stack_offset && var.type) {
-                debug(4) << "Considering match: " << var.type->name << ", " << var.name << "\n";
+                debug(5) << "Considering match: " << var.type->name << ", " << var.name << "\n";
             }
 
             if (offset == var.stack_offset &&
                 (type_name.empty() ||
                  (type && type_name_match(type->name, type_name)))) {
-                debug(4) << "Successful match to scalar var\n";
+                debug(5) << "Successful match to scalar var\n";
                 return var.name;
             } else if (elem_type && // Check if it's an array element
                        (type_name.empty() ||
@@ -696,13 +699,13 @@ public:
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
                     oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
-                    debug(4) << "Successful match to array element\n";
+                    debug(5) << "Successful match to array element\n";
                     return oss.str();
                 }
             }
         }
 
-        debug(4) << "Failed to find variable at the matching offset with the given type\n";
+        debug(5) << "Failed to find variable at the matching offset with the given type\n";
         return "";
     }
 
@@ -710,10 +713,10 @@ public:
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
 
-        debug(4) << "Finding source location\n";
+        debug(5) << "Finding source location\n";
 
         if (!source_lines.size()) {
-            debug(4) << "Bailing out because we have no source lines\n";
+            debug(5) << "Bailing out because we have no source lines\n";
             return "";
         }
 
@@ -726,7 +729,7 @@ public:
         for (int frame = 2; frame < trace_size; frame++) {
             uint64_t address = (uint64_t)trace[frame];
 
-            debug(4) << "Considering address " << ((void *)address) << "\n";
+            debug(5) << "Considering address " << ((void *)address) << "\n";
 
             const uint8_t *inst_ptr = (const uint8_t *)address;
             if (inst_ptr[-5] == 0xe8) {
@@ -738,7 +741,7 @@ public:
                 // register address)
                 address -= 2;
             } else {
-                debug(4) << "Skipping function because there's no callq before " << (const void *)(inst_ptr) << "\n";
+                debug(5) << "Skipping function because there's no callq before " << (const void *)(inst_ptr) << "\n";
                 continue;
             }
 
@@ -748,16 +751,16 @@ public:
             // If no debug info for this function, we must still be
             // inside libHalide. Continue searching upwards.
             if (!f) {
-                debug(4) << "Skipping function because we have no debug info for it\n";
+                debug(5) << "Skipping function because we have no debug info for it\n";
                 continue;
             }
 
-            debug(4) << "Containing function is " << f->name << "\n";
+            debug(5) << "Containing function is " << f->name << "\n";
 
             // If we're still in the Halide namespace, continue searching
             if (f->name.size() > 8 &&
                 f->name.substr(0, 8) == "Halide::") {
-                debug(4) << "Skipping function because it's in the Halide namespace\n";
+                debug(5) << "Skipping function because it's in the Halide namespace\n";
                 continue;
             }
 
@@ -780,12 +783,12 @@ public:
             std::ostringstream oss;
             oss << file << ":" << line;
 
-            debug(4) << "Source location is " << oss.str() << "\n";
+            debug(5) << "Source location is " << oss.str() << "\n";
 
             return oss.str();
         }
 
-        debug(4) << "Bailing out because we reached the end of the backtrace\n";
+        debug(5) << "Bailing out because we reached the end of the backtrace\n";
         return "";
     }
 
@@ -865,10 +868,23 @@ public:
 private:
 
     void load_and_parse_object_file(const std::string &binary) {
-        llvm::object::ObjectFile *obj = NULL;
+        llvm::object::ObjectFile *obj = nullptr;
 
         // Open the object file in question. The API to do this keeps changing.
-        #if LLVM_VERSION >= 36
+        #if LLVM_VERSION >= 39
+
+        llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
+
+        if (!maybe_obj) {
+            consumeError(maybe_obj.takeError());
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
+        }
+
+        obj = maybe_obj.get().getBinary();
+
+        #elif LLVM_VERSION >= 36
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -1156,7 +1172,7 @@ private:
                     // A field can either be a constant value:
                     uint64_t val = 0;
                     // Or a variable length payload:
-                    const uint8_t *payload = NULL;
+                    const uint8_t *payload = nullptr;
                     // If payload is non-null, val indicates the
                     // payload size. If val is zero the payload is a
                     // null-terminated string.
@@ -1638,7 +1654,7 @@ private:
                             v.type = origin->type;
                             v.type_def_loc = origin->type_def_loc;
                         } else {
-                            debug(4) << "Variable with bad abstract origin: " << loc << "\n";
+                            debug(5) << "Variable with bad abstract origin: " << loc << "\n";
                         }
                     }
                 }
@@ -1650,7 +1666,7 @@ private:
             std::map<uint64_t, GlobalVariable *> var_map;
             for (size_t i = 0; i < global_variables.size(); i++) {
                 GlobalVariable &var = global_variables[i];
-                debug(4) << "var " << var.name << " is at " << var.def_loc << "\n";
+                debug(5) << "var " << var.name << " is at " << var.def_loc << "\n";
                 if (var.spec_loc || var.name.empty()) {
                     // Not a prototype
                     continue;
@@ -1667,7 +1683,7 @@ private:
                         var.type = spec->type;
                         var.type_def_loc = spec->type_def_loc;
                     } else {
-                        debug(4) << "Global variable with bad spec loc: " << var.spec_loc << "\n";
+                        debug(5) << "Global variable with bad spec loc: " << var.spec_loc << "\n";
                     }
                 }
             }
@@ -1779,10 +1795,10 @@ private:
             functions[i].variables.swap(new_vars);
 
             if (functions[i].variables.size()) {
-                debug(4) << "Function " << functions[i].name << ":\n";
+                debug(5) << "Function " << functions[i].name << ":\n";
                 for (size_t j = 0; j < functions[i].variables.size(); j++) {
                     if (functions[i].variables[j].type) {
-                        debug(4) << " " << functions[i].variables[j].type->name << " " << functions[i].variables[j].name << "\n";
+                        debug(5) << " " << functions[i].variables[j].type->name << " " << functions[i].variables[j].name << "\n";
                     }
                 }
             }
@@ -1796,7 +1812,7 @@ private:
                 (v.type->type == TypeInfo::Struct ||
                  v.type->type == TypeInfo::Class ||
                  v.type->type == TypeInfo::Typedef)) {
-                debug(4) << "Unpacking members of " << v.name << " at " << std::hex << v.addr << "\n";
+                debug(5) << "Unpacking members of " << v.name << " at " << std::hex << v.addr << "\n";
                 vector<LocalVariable> &members = v.type->members;
                 for (size_t j = 0; j < members.size(); j++) {
                     GlobalVariable mem;
@@ -1809,10 +1825,10 @@ private:
                     mem.type = members[j].type;
                     mem.type_def_loc = members[j].type_def_loc;
                     mem.addr = v.addr + members[j].stack_offset;
-                    debug(4) << " Member " << mem.name << " goes at " << mem.addr << "\n";
+                    debug(5) << " Member " << mem.name << " goes at " << mem.addr << "\n";
                     global_variables.push_back(mem);
                 }
-                debug(4) << std::dec;
+                debug(5) << std::dec;
             }
         }
 
@@ -1826,7 +1842,7 @@ private:
                 if (!f.pc_begin ||
                     !f.pc_end ||
                     f.name.empty()) {
-                    //debug(4) << "Dropping " << f.name << "\n";
+                    //debug(5) << "Dropping " << f.name << "\n";
                     continue;
                 }
 
@@ -1836,7 +1852,7 @@ private:
                     if (!v.name.empty() && v.type && v.stack_offset != no_location) {
                         vars.push_back(v);
                     } else {
-                        //debug(4) << "Dropping " << v.name << "\n";
+                        //debug(5) << "Dropping " << v.name << "\n";
                     }
                 }
                 f.variables.clear();
@@ -1881,7 +1897,7 @@ private:
 
             uint32_t unit_end = off + unit_length;
 
-            debug(4) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
+            debug(5) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
 
             uint16_t version = e.getU16(&off);
             assert(version >= 2);
@@ -2123,7 +2139,7 @@ private:
 
     FunctionInfo *find_containing_function(void *addr) {
         uint64_t address = (uint64_t)addr;
-        debug(4) << "Searching for function containing address " << addr << "\n";
+        debug(5) << "Searching for function containing address " << addr << "\n";
         size_t hi = functions.size();
         size_t lo = 0;
         while (hi > lo) {
@@ -2135,14 +2151,14 @@ private:
             } else if (address > pc_mid_end) {
                 lo = mid + 1;
             } else {
-                debug(4) << "At function " << functions[mid].name
+                debug(5) << "At function " << functions[mid].name
                          << " spanning: " << (void *)pc_mid_begin
                          << ", " << (void *)pc_mid_end << "\n";
                 return &functions[mid];
             }
         }
 
-        return NULL;
+        return nullptr;
     }
 
     int64_t get_sleb128(const uint8_t *ptr) {
@@ -2187,7 +2203,7 @@ private:
 };
 
 namespace {
-DebugSections *debug_sections = NULL;
+DebugSections *debug_sections = nullptr;
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
@@ -2232,7 +2248,9 @@ bool saves_frame_pointer(void *fn) {
 }
 
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
     #ifdef __ARM__
     return;
     #else
@@ -2242,7 +2260,7 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
         return;
     }
 
-    debug(4) << "Testing compilation unit with offset_marker at " << reinterpret_bits<void *>(calib) << "\n";
+    debug(5) << "Testing compilation unit with offset_marker at " << reinterpret_bits<void *>(calib) << "\n";
 
     if (!debug_sections) {
         char path[2048];
@@ -2254,21 +2272,21 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
         !saves_frame_pointer(reinterpret_bits<void *>(test))) {
         // Make sure libHalide and the test compilation unit both save the frame pointer
         debug_sections->working = false;
-        debug(4) << "Failed because frame pointer not saved\n";
+        debug(5) << "Failed because frame pointer not saved\n";
     } else if (debug_sections->working) {
         debug_sections->calibrate_pc_offset(calib);
         if (!debug_sections->working) {
-            debug(4) << "Failed because offset calibration failed\n";
+            debug(5) << "Failed because offset calibration failed\n";
             return;
         }
 
-        debug_sections->working = (*test)();
+        debug_sections->working = (*test)(test_a);
         if (!debug_sections->working) {
-            debug(4) << "Failed because test routine failed\n";
+            debug(5) << "Failed because test routine failed\n";
             return;
         }
 
-        debug(4) << "Test passed\n";
+        debug(5) << "Test passed\n";
     }
 
     //debug_sections->dump();
@@ -2300,7 +2318,9 @@ void register_heap_object(const void *obj, size_t size, const void *helper) {
 void deregister_heap_object(const void *obj, size_t size) {
 }
 
-void test_compilation_unit(bool (*test)(), void (*calib)()) {
+void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+                           bool (*test_a)(const void *, const std::string &),
+                           void (*calib)()) {
 }
 
 }

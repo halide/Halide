@@ -3,16 +3,38 @@
 #include "Error.h"
 #include "JITModule.h"
 #include "runtime/HalideRuntime.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
 namespace {
-void check_buffer_size(uint64_t bytes, const std::string &name) {
-    user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
-}
+
+uint64_t multiply_buffer_size_check_overflow(uint64_t size, uint64_t factor, const std::string &name) {
+    // Ignore the dimensions for which the extent is zero.
+    if (!factor) return size;
+
+    // Multiply and check for 64-bit overflow
+    uint64_t result = size * factor;
+    bool overflow = (result / factor) != size;
+
+    // Check against the limits Halide internally assumes in its compiled code.
+    overflow |= (sizeof(size_t) == 4) && ((result >> 31) != 0);
+
+    // In 64-bit with LargeBuffers *not* set, the limit above is the
+    // correct one, however at Buffer creation time we don't know what
+    // pipelines it will be used in, so we must be conservative and
+    // defer the error until the user actually passes the buffer into
+    // a pipeline they shouldn't have.
+    overflow |= (sizeof(size_t) == 8) && ((result >> 63) != 0);
+
+    // Assert there was no overflow.
+    user_assert(!overflow)
+        << "Total size of buffer " << name << " exceeds 2^" << ((sizeof(size_t) * 8) - 1) << " - 1\n";
+    return result;
 }
 
+}
 
 struct BufferContents {
     /** The buffer_t object we're wrapping. */
@@ -24,7 +46,7 @@ struct BufferContents {
     /** If we made the allocation ourselves via a Buffer constructor,
      * and hence should delete it when this buffer dies, then this
      * pointer is set to the memory we need to free. Otherwise it's
-     * NULL. */
+     * nullptr. */
     uint8_t *allocation;
 
     /** How many Buffer objects point to this BufferContents */
@@ -35,32 +57,19 @@ struct BufferContents {
 
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
                    uint8_t* data, const std::string &n) :
-        type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
+        type(t), allocation(nullptr), name(n.empty() ? unique_name('b') : n) {
         user_assert(t.lanes() == 1) << "Can't create of a buffer of a vector type";
         buf.elem_size = t.bytes();
         uint64_t size = 1;
-        if (x_size) {
-            size *= x_size;
-            check_buffer_size(size, name);
-        }
-        if (y_size) {
-            size *= y_size;
-            check_buffer_size(size, name);
-        }
-        if (z_size) {
-            size *= z_size;
-            check_buffer_size(size, name);
-        }
-        if (w_size) {
-            size *= w_size;
-            check_buffer_size(size, name);
-        }
-        size *= buf.elem_size;
-        check_buffer_size(size, name);
+        size = multiply_buffer_size_check_overflow(size, x_size, name);
+        size = multiply_buffer_size_check_overflow(size, y_size, name);
+        size = multiply_buffer_size_check_overflow(size, z_size, name);
+        size = multiply_buffer_size_check_overflow(size, w_size, name);
+        size = multiply_buffer_size_check_overflow(size, buf.elem_size, name);
 
         if (!data) {
-            size = size + 32;
-            check_buffer_size(size, name);
+            // There's no way for this to overflow without the buffer already being > 2^63-1
+            size += 32;
             allocation = (uint8_t *)calloc(1, (size_t)size);
             user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";
             buf.host = allocation;
@@ -86,7 +95,7 @@ struct BufferContents {
     }
 
     BufferContents(Type t, const buffer_t *b, const std::string &n) :
-        type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
+        type(t), allocation(nullptr), name(n.empty() ? unique_name('b') : n) {
         buf = *b;
         user_assert(t.lanes() == 1) << "Can't create of a buffer of a vector type";
     }
@@ -99,10 +108,10 @@ EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
-    int error = halide_device_free(NULL, const_cast<buffer_t *>(&p->buf));
-    user_assert(!error) << "Failed to free device buffer\n";
+    // Ignore errors. We may be cleaning up a buffer after an earlier
+    // error, and asserting would re-raise it.
+    halide_device_free(nullptr, const_cast<buffer_t *>(&p->buf));
     free(p->allocation);
-
     delete p;
 }
 
@@ -147,37 +156,37 @@ Buffer::Buffer(Type t, const buffer_t *buf, const std::string &name) :
 
 void *Buffer::host_ptr() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return (void *)contents.ptr->buf.host;
+    return (void *)contents->buf.host;
 }
 
 buffer_t *Buffer::raw_buffer() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return &(contents.ptr->buf);
+    return &(contents->buf);
 }
 
 uint64_t Buffer::device_handle() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.dev;
+    return contents->buf.dev;
 }
 
 bool Buffer::host_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.host_dirty;
+    return contents->buf.host_dirty;
 }
 
 void Buffer::set_host_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.host_dirty = dirty;
+    contents->buf.host_dirty = dirty;
 }
 
 bool Buffer::device_dirty() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->buf.dev_dirty;
+    return contents->buf.dev_dirty;
 }
 
 void Buffer::set_device_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.dev_dirty = dirty;
+    contents->buf.dev_dirty = dirty;
 }
 
 int Buffer::dimensions() const {
@@ -190,32 +199,32 @@ int Buffer::dimensions() const {
 int Buffer::extent(int dim) const {
     user_assert(defined()) << "Buffer is undefined\n";
     user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
-    return contents.ptr->buf.extent[dim];
+    return contents->buf.extent[dim];
 }
 
 int Buffer::stride(int dim) const {
     user_assert(defined());
     user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
-    return contents.ptr->buf.stride[dim];
+    return contents->buf.stride[dim];
 }
 
 int Buffer::min(int dim) const {
     user_assert(defined()) << "Buffer is undefined\n";
     user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
-    return contents.ptr->buf.min[dim];
+    return contents->buf.min[dim];
 }
 
 void Buffer::set_min(int m0, int m1, int m2, int m3) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.min[0] = m0;
-    contents.ptr->buf.min[1] = m1;
-    contents.ptr->buf.min[2] = m2;
-    contents.ptr->buf.min[3] = m3;
+    contents->buf.min[0] = m0;
+    contents->buf.min[1] = m1;
+    contents->buf.min[2] = m2;
+    contents->buf.min[3] = m3;
 }
 
 Type Buffer::type() const {
     user_assert(defined()) << "Buffer is undefined\n";
-    return contents.ptr->type;
+    return contents->type;
 }
 
 bool Buffer::same_as(const Buffer &other) const {
@@ -227,7 +236,7 @@ bool Buffer::defined() const {
 }
 
 const std::string &Buffer::name() const {
-    return contents.ptr->name;
+    return contents->name;
 }
 
 Buffer::operator Argument() const {
@@ -235,19 +244,19 @@ Buffer::operator Argument() const {
 }
 
 int Buffer::copy_to_host() {
-    return halide_copy_to_host(NULL, raw_buffer());
+    return halide_copy_to_host(nullptr, raw_buffer());
 }
 
 int Buffer::device_sync() {
-    return halide_device_sync(NULL, raw_buffer());
+    return halide_device_sync(nullptr, raw_buffer());
 }
 
 int Buffer::copy_to_device() {
-  return halide_copy_to_device(NULL, raw_buffer(), NULL);
+  return halide_copy_to_device(nullptr, raw_buffer(), nullptr);
 }
 
 int Buffer::free_dev_buffer() {
-    return halide_device_free(NULL, raw_buffer());
+    return halide_device_free(nullptr, raw_buffer());
 }
 
 

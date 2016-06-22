@@ -30,6 +30,12 @@ protected:
     void visit(const Free *);
     // @}
 
+    /** It can be convenient for backends to assume there is extra
+     * padding beyond the end of a buffer to enable faster
+     * loads/stores. This function gets the padding required by the
+     * implementing target. */
+    virtual int allocation_padding(Type type) const;
+
     /** A struct describing heap or stack allocations. */
     struct Allocation {
         /** The memory */
@@ -41,6 +47,9 @@ protected:
         /** Function to accomplish the destruction. */
         llvm::Function *destructor_function;
 
+        /** The (Halide) type of the allocation. */
+        Type type;
+
         /** How many bytes this allocation is, or 0 if not
          * constant. */
         int constant_bytes;
@@ -48,11 +57,18 @@ protected:
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
         int stack_bytes;
+
+        /** A unique name for this allocation. May not be equal to the
+         * Allocate node name in cases where we detect multiple
+         * Allocate nodes can share a single allocation. */
+        std::string name;
     };
 
     /** The allocations currently in scope. The stack gets pushed when
      * we enter a new function. */
     Scope<Allocation> allocations;
+
+    std::string get_allocation_name(const std::string &n);
 
 private:
 
@@ -83,6 +99,11 @@ private:
     Allocation create_allocation(const std::string &name, Type type,
                                  const std::vector<Expr> &extents,
                                  Expr condition, Expr new_expr, std::string free_function);
+
+    /** Free an allocation previously allocated with
+     * create_allocation */
+    void free_allocation(const std::string &name);
+
 };
 
 }}

@@ -24,7 +24,7 @@ public:
 
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt, const std::string &name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     void init_module();
 
@@ -55,6 +55,7 @@ public:
     CodeGen_GLSLBase(std::ostream &s);
 
     std::string print_name(const std::string &name);
+    std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
 protected:
     using CodeGen_C::visit;
@@ -64,7 +65,6 @@ protected:
     void visit(const Mod *op);
     void visit(const Call *op);
 
-    std::string print_type(Type type);
 private:
     std::map<std::string, std::string> builtin;
 };
@@ -77,7 +77,7 @@ public:
 
     void add_kernel(Stmt stmt,
                     std::string name,
-                    const std::vector<GPU_Argument> &args);
+                    const std::vector<DeviceArgument> &args);
 
     EXPORT static void test();
 
@@ -85,6 +85,8 @@ protected:
     using CodeGen_C::visit;
 
     void visit(const FloatImm *);
+    void visit(const UIntImm *);
+    void visit(const IntImm *);
 
     void visit(const Cast *);
     void visit(const Let *);

@@ -5,41 +5,58 @@
  *
  */
 
+#include <string>
+#include <vector>
+
 #include "Module.h"
+#include "Target.h"
+#include "Util.h"
 
 namespace llvm {
 class Module;
 class TargetOptions;
 class LLVMContext;
+class raw_fd_ostream;
+class raw_pwrite_stream;
+class raw_ostream;
 }
 
 namespace Halide {
 
-/** Get given an llvm Module, get the target options by extracting the Halide metadata. */
-EXPORT void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
-EXPORT void clone_target_options(const llvm::Module &from, llvm::Module &to);
+namespace Internal {
+#if LLVM_VERSION < 37
+typedef llvm::raw_ostream LLVMOStream;
+#else
+typedef llvm::raw_pwrite_stream LLVMOStream;
+#endif
+}
 
 /** Generate an LLVM module. */
 EXPORT std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context);
 
+/** Construct an llvm output stream for writing to files. */
+std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename);
+
 /** Compile an LLVM module to native targets (objects, native assembly). */
 // @{
-EXPORT void compile_llvm_module_to_object(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_assembly(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_native(llvm::Module &module,
-                                          const std::string &object_filename,
-                                          const std::string &assembly_filename);
+EXPORT void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream& out);
+EXPORT void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream& out);
 // @}
 
 /** Compile an LLVM module to LLVM targets (bitcode, LLVM assembly). */
 // @{
-EXPORT void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_llvm_assembly(llvm::Module &module, const std::string &filename);
-EXPORT void compile_llvm_module_to_llvm(llvm::Module &module,
-                                        const std::string &bitcode_filename,
-                                        const std::string &llvm_assembly_filename);
+EXPORT void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out);
+EXPORT void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out);
 // @}
 
+/**
+ * Concatenate the list of src_files into dst_file, using the appropriate
+ * static library format for the given target (e.g., .a or .lib).
+ * If deterministic is true, emit 0 for all GID/UID/timestamps, and 0644 for
+ * all modes (equivalent to the ar -D option).
+ */
+EXPORT void create_static_library(const std::vector<std::string> &src_files, const Target &target,
+                           const std::string &dst_file, bool deterministic = true);
 }
 
 #endif

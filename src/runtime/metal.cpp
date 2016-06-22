@@ -1,7 +1,6 @@
-#include "runtime_internal.h"
+#include "HalideRuntimeMetal.h"
 #include "scoped_spin_lock.h"
 #include "device_interface.h"
-#include "HalideRuntimeMetal.h"
 #include "printer.h"
 
 #include "cuda_opencl_shared.h"
@@ -38,7 +37,7 @@ WEAK mtl_buffer *new_buffer(mtl_device *device, size_t length) {
 WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
     return (mtl_command_queue *)objc_msgSend(device, sel_getUid("newCommandQueue"));
 }
-    
+
 WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue) {
     return (mtl_command_buffer *)objc_msgSend(queue, sel_getUid("commandBuffer"));
 }
@@ -217,11 +216,11 @@ extern "C" {
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
-// - halide_acquire_cl_context should always store a valid context/command
-//   queue in ctx/q, or return an error code.
-// - A call to halide_acquire_cl_context is followed by a matching call to
-//   halide_release_cl_context. halide_acquire_cl_context should block while a
-//   previous call (if any) has not yet been released via halide_release_cl_context.
+// - halide_acquire_metal_context should always store a valid device/command
+//   queue in device/q, or return an error code.
+// - A call to halide_acquire_metal_context is followed by a matching call to
+//   halide_release_metal_context. halide_acquire_metal_context should block while a
+//   previous call (if any) has not yet been released via halide_release_metal_context.
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
                                       mtl_command_queue *&queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
@@ -250,8 +249,9 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
         }
     }
 
-    // If the context has not been initialized, initialize it now.
-    halide_assert(user_context, queue != 0);
+    // If the device has already been initialized,
+    // ensure the queue has as well.
+    halide_assert(user_context, (device == 0) || (queue != 0));
 
     device_ret = device;
     queue_ret = queue;

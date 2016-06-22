@@ -82,7 +82,7 @@ FuncOrStage &func_gpu2(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar b
 template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile0(FuncOrStage &that, hh::VarOrRVar x, int x_size, hh::DeviceAPI device_api)
 {
-    return that.gpu_tile(x, x_size, device_api);
+    return that.gpu_tile(x, x_size, hh::TailStrategy::Auto, device_api);
 }
 
 template<typename FuncOrStage>
@@ -90,7 +90,7 @@ FuncOrStage &func_gpu_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             int x_size, int y_size,
                             hh::DeviceAPI device_api)
 {
-    return that.gpu_tile(x, y, x_size, y_size, device_api);
+    return that.gpu_tile(x, y, x_size, y_size, hh::TailStrategy::Auto, device_api);
 }
 
 template<typename FuncOrStage>
@@ -98,7 +98,7 @@ FuncOrStage &func_gpu_tile2(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             int x_size, int y_size, int z_size,
                             hh::DeviceAPI device_api)
 {
-    return that.gpu_tile(x, y, z, x_size, y_size, z_size, device_api);
+    return that.gpu_tile(x, y, z, x_size, y_size, z_size, hh::TailStrategy::Auto, device_api);
 }
 
 
@@ -107,9 +107,10 @@ template<typename FuncOrStage>
 void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class)
 {
     func_or_stage_class
-            .def("gpu_threads", &func_gpu_threads2<FuncOrStage>, (bp::arg("self"),
-                                                     bp::arg("thread_x"), bp::arg("thread_y"), bp::arg("thread_z"),
-                                                     bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_threads", &func_gpu_threads2<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("thread_x"), bp::arg("thread_y"), bp::arg("thread_z"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>(),
                  "Tell Halide that the following dimensions correspond to GPU "
                  "thread indices. This is useful if you compute a producer "
@@ -117,18 +118,21 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class)
                  "want to control how that function's dimensions map to GPU "
                  "threads. If the selected target is not an appropriate GPU, this "
                  "just marks those dimensions as parallel.")
-            .def("gpu_threads", &func_gpu_threads1<FuncOrStage>, (bp::arg("self"),
-                                                     bp::arg("thread_x"), bp::arg("thread_y"),
-                                                     bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_threads", &func_gpu_threads1<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("thread_x"), bp::arg("thread_y"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>())
-            .def("gpu_threads", &func_gpu_threads0<FuncOrStage>, (bp::arg("self"),
-                                                     bp::arg("thread_x"),
-                                                     bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_threads", &func_gpu_threads0<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("thread_x"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>());
 
     func_or_stage_class
-            .def("gpu_single_thread", &FuncOrStage::gpu_single_thread, (bp::arg("self"),
-                                                                 bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_single_thread", &FuncOrStage::gpu_single_thread,
+                 (bp::arg("self"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>(),
                  "Tell Halide to run this stage using a single gpu thread and "
                  "block. This is not an efficient use of your GPU, but it can be "
@@ -136,62 +140,71 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class)
                  "touch a very small part of your Func.");
 
     func_or_stage_class
-            .def("gpu_blocks", &func_gpu_blocks2<FuncOrStage>, (bp::arg("self"),
-                                                   bp::arg("block_x"), bp::arg("block_y"), bp::arg("block_z"),
-                                                   bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_blocks", &func_gpu_blocks2<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("block_x"), bp::arg("block_y"), bp::arg("block_z"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>(),
                  "Tell Halide that the following dimensions correspond to GPU "
                  "block indices. This is useful for scheduling stages that will "
                  "run serially within each GPU block. If the selected target is "
                  "not ptx, this just marks those dimensions as parallel.")
-            .def("gpu_blocks", &func_gpu_blocks1<FuncOrStage>, (bp::arg("self"),
-                                                   bp::arg("block_x"), bp::arg("block_y"),
-                                                   bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_blocks", &func_gpu_blocks1<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("block_x"), bp::arg("block_y"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>())
-            .def("gpu_blocks", &func_gpu_blocks0<FuncOrStage>, (bp::arg("self"),
-                                                   bp::arg("block_x"),
-                                                   bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_blocks", &func_gpu_blocks0<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("block_x"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>());
 
     func_or_stage_class
-            .def("gpu", &func_gpu2<FuncOrStage>, (bp::arg("self"),
-                                     bp::arg("block_x"), bp::arg("block_y"), bp::arg("block_z"),
-                                     bp::arg("thread_x"), bp::arg("thread_y"), bp::arg("thread_z"),
-                                     bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
-                 bp::return_internal_reference<1>(),
-                 "Tell Halide that the following dimensions correspond to GPU "
-                 "block indices and thread indices. If the selected target is not "
-                 "ptx, these just mark the given dimensions as parallel. The "
-                 "dimensions are consumed by this call, so do all other "
-                 "unrolling, reordering, etc first.")
-            .def("gpu", &func_gpu1<FuncOrStage>, (bp::arg("self"),
-                                     bp::arg("block_x"), bp::arg("block_y"),
-                                     bp::arg("thread_x"), bp::arg("thread_y"),
-                                     bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
-                 bp::return_internal_reference<1>())
-            .def("gpu", &func_gpu0<FuncOrStage>, (bp::arg("self"),
-                                     bp::arg("block_x"), bp::arg("thread_x"),
-                                     bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
-                 bp::return_internal_reference<1>());
+        .def("gpu", &func_gpu2<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("block_x"), bp::arg("block_y"), bp::arg("block_z"),
+              bp::arg("thread_x"), bp::arg("thread_y"), bp::arg("thread_z"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>(),
+             "Tell Halide that the following dimensions correspond to GPU "
+             "block indices and thread indices. If the selected target is not "
+             "ptx, these just mark the given dimensions as parallel. The "
+             "dimensions are consumed by this call, so do all other "
+             "unrolling, reordering, etc first.")
+        .def("gpu", &func_gpu1<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("block_x"), bp::arg("block_y"),
+              bp::arg("thread_x"), bp::arg("thread_y"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu", &func_gpu0<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("block_x"), bp::arg("thread_x"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>());
 
     func_or_stage_class
-            .def("gpu_tile", &func_gpu_tile2<FuncOrStage>, (bp::arg("self"),
-                                               bp::arg("x"), bp::arg("y"), bp::arg("z"),
-                                               bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
-                                               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_tile", &func_gpu_tile2<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("x"), bp::arg("y"), bp::arg("z"),
+                  bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>(),
                  "Short-hand for tiling a domain and mapping the tile indices "
                  "to GPU block indices and the coordinates within each tile to "
                  "GPU thread indices. Consumes the variables given, so do all "
                  "other scheduling first.")
-            .def("gpu_tile", &func_gpu_tile1<FuncOrStage>, (bp::arg("self"),
-                                               bp::arg("x"), bp::arg("y"),
-                                               bp::arg("x_size"), bp::arg("y_size"),
-                                               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_tile", &func_gpu_tile1<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("x"), bp::arg("y"),
+                  bp::arg("x_size"), bp::arg("y_size"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>())
-            .def("gpu_tile", &func_gpu_tile0<FuncOrStage>, (bp::arg("self"),
-                                               bp::arg("x"), bp::arg("x_size"),
-                                               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+            .def("gpu_tile", &func_gpu_tile0<FuncOrStage>,
+                 (bp::arg("self"),
+                  bp::arg("x"), bp::arg("x_size"),
+                  bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
                  bp::return_internal_reference<1>());
 
     return;

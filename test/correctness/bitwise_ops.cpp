@@ -33,6 +33,7 @@ int main(int argc, char **argv) {
         if (im2(x) != correct) {
             printf("%x ^ %x -> %x instead of %x\n",
                    input(x), input(x+1), im2(x), correct);
+            return -1;
         }
     }
 
@@ -45,6 +46,7 @@ int main(int argc, char **argv) {
         if (im3(x) != correct) {
             printf("%x & %x -> %x instead of %x\n",
                    input(x), input(x+1), im3(x), correct);
+            return -1;
         }
     }
 
@@ -57,6 +59,7 @@ int main(int argc, char **argv) {
         if (im4(x) != correct) {
             printf("%x | %x -> %x instead of %x\n",
                    input(x), input(x+1), im4(x), correct);
+            return -1;
         }
     }
 
@@ -69,6 +72,7 @@ int main(int argc, char **argv) {
         if (im5(x) != correct) {
             printf("~%x = %x instead of %x\n",
                    input(x), im5(x), correct);
+            return -1;
         }
     }
 
@@ -81,6 +85,7 @@ int main(int argc, char **argv) {
         if (im6(x) != correct) {
             printf("%x << (%x & 0xf) -> %x instead of %x\n",
                    input(x), input(x+1), im6(x), correct);
+            return -1;
         }
     }
 
@@ -93,6 +98,7 @@ int main(int argc, char **argv) {
         if (im7(x) != correct) {
             printf("%x >> (%x & 0xf) -> %x instead of %x\n",
                    input(x), input(x+1), im7(x), correct);
+            return -1;
         }
     }
 
@@ -107,6 +113,7 @@ int main(int argc, char **argv) {
         if (im8(x) != correct) {
             printf("%x >> (%x & 0xf) -> %x instead of %x\n",
                    input(x), input(x+1), im8(x), correct);
+            return -1;
         }
     }
 
@@ -114,14 +121,18 @@ int main(int argc, char **argv) {
     // bit shift on mixed types
     Func f9;
     Expr a32 = cast<int32_t>(input(x));
-    Expr b8  = cast<uint8_t>(input(x+1));
+    Expr b8  = min(31, cast<uint8_t>(input(x+1)));
     f9(x) = a32 >> b8;
     Image<int> im9 = f9.realize(128);
     for (int x = 0; x < 128; x++) {
-        int correct = ((int)(input(x))) >> ((uint8_t)(input(x+1)));
+        int lhs = (int)input(x);
+        int shift_amount = (uint8_t)(input(x+1));
+        shift_amount = std::min(31, shift_amount);
+        int correct = lhs >> shift_amount;
         if (im9(x) != correct) {
             printf("%x >> (uint8_t)%x -> %x instead of %x\n",
                    input(x), input(x+1), im9(x), correct);
+            return -1;
         }
     }
 
@@ -135,6 +146,7 @@ int main(int argc, char **argv) {
         if (im10(x) != correct) {
             printf("(int8_t)%x & 0xf0 -> %x instead of %x\n",
                    input(x), im10(x), correct);
+            return -1;
         }
     }
 

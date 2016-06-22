@@ -72,7 +72,7 @@ private:
         Kind kind;
         bool registered_for_introspection;
 
-        InstanceInfo() : subject_ptr(NULL), size(0), kind(Invalid), registered_for_introspection(false) {}
+        InstanceInfo() : subject_ptr(nullptr), size(0), kind(Invalid), registered_for_introspection(false) {}
         InstanceInfo(size_t size, Kind kind, void *subject_ptr, bool registered_for_introspection)
             : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {}
     };

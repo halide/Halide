@@ -49,6 +49,9 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+#define O_RDONLY 0
+#define O_RDWR 2
+
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -74,6 +77,8 @@ void *memset(void *s, int val, size_t n);
 int open(const char *filename, int opts, int mode);
 int close(int fd);
 ssize_t write(int fd, const void *buf, size_t bytes);
+int remove(const char *pathname);
+int ioctl(int fd, unsigned long request, ...);
 void exit(int);
 void abort();
 char *strncpy(char *dst, const char *src, size_t n);
@@ -103,11 +108,41 @@ WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 
+// The pipeline_state is declared as void* type since halide_profiler_pipeline_stats
+// is defined inside HalideRuntime.h which includes this header file.
+WEAK void halide_profiler_stack_peak_update(void *user_context,
+                                            void *pipeline_state,
+                                            uint64_t *f_values);
+WEAK void halide_profiler_memory_allocate(void *user_context,
+                                          void *pipeline_state,
+                                          int func_id,
+                                          uint64_t incr);
+WEAK void halide_profiler_memory_free(void *user_context,
+                                      void *pipeline_state,
+                                      int func_id,
+                                      uint64_t decr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
                                         const uint64_t *func_names);
-}
+
+struct halide_filter_metadata_t;
+struct _halide_runtime_internal_registered_filter_t {
+    // This is a _halide_runtime_internal_registered_filter_t, but
+    // recursive types currently break our method that copies types from
+    // llvm module to llvm module
+    void *next;
+    const halide_filter_metadata_t* (*metadata)();
+    int (*argv_func)(void **args);
+};
+WEAK void halide_runtime_internal_register_metadata(_halide_runtime_internal_registered_filter_t *info);
+
+struct mxArray;
+WEAK int halide_matlab_call_pipeline(void *user_context,
+                                     int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
+                                     int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
+
+}  // extern "C"
 
 /** A macro that calls halide_print if the supplied condition is
  * false, then aborts. Used for unrecoverable errors, or
@@ -127,6 +162,14 @@ namespace Halide { namespace Runtime { namespace Internal {
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
+// Return a mask with all CPU-specific features supported by the current CPU set.
+struct CpuFeatures {
+    uint64_t known;     // mask of the CPU features we know how to detect
+    uint64_t available; // mask of the CPU features that are available
+                              // (always a subset of 'known')
+};
+extern WEAK CpuFeatures halide_get_cpu_features();
+
 template <typename T>
 __attribute__((always_inline)) void swap(T &a, T &b) {
     T t = a;
@@ -137,6 +180,18 @@ __attribute__((always_inline)) void swap(T &a, T &b) {
 template <typename T>
 __attribute__((always_inline)) T max(const T &a, const T &b) {
     return a > b ? a : b;
+}
+
+template <typename T>
+__attribute__((always_inline)) T min(const T &a, const T &b) {
+    return a < b ? a : b;
+}
+
+template <typename T, typename U>
+__attribute__((always_inline)) T reinterpret(const U &x) {
+    T ret;
+    memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
+    return ret;
 }
 
 }}}

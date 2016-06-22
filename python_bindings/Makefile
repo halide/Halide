@@ -33,7 +33,7 @@ build/numpy_%.o: $(ROOT_DIR)/numpy/%.cpp
 
 build/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)
 	mkdir -p build
-	$(CXX) $(PY_OBJS) $(NUMPY_OBJS) $(LDFLAGS) ../bin/libHalide.a -shared -o $@
+	$(CXX) $(PY_OBJS) $(NUMPY_OBJS) $(LDFLAGS) ../lib/libHalide.a -shared -o $@
 
 clean:
 	rm -rf build

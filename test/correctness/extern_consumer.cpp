@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
@@ -14,7 +14,7 @@ int dump_to_file(buffer_t *input, const char *filename,
                  int desired_min, int desired_extent,
                  buffer_t *) {
     // Note the final output buffer argument is unused.
-    if (input->host == NULL) {
+    if (input->host == nullptr) {
         // Request some range of the input buffer
         input->min[0] = desired_min;
         input->extent[0] = desired_extent;

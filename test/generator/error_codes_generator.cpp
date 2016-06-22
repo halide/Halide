@@ -9,6 +9,7 @@ public:
 
 
     Func build() {
+        target.set(get_target().without_feature(Target::LargeBuffers));
         Func f;
         Var x, y;
 

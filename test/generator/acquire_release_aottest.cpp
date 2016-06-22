@@ -1,5 +1,14 @@
-#include <math.h>
 #include <stdio.h>
+
+#ifdef _WIN32
+// This test requires weak linkage
+int main(int argc, char **argv) {
+  printf("Skipping test on windows\n");
+  return 0;
+}
+#else
+
+#include <math.h>
 #include "HalideRuntime.h"
 #include <assert.h>
 #include <string.h>
@@ -21,8 +30,8 @@ const int W = 256, H = 256;
 #endif
 
 // Just use a global context and queue, created and destroyed by main.
-cl_context cl_ctx = NULL;
-cl_command_queue cl_q = NULL;
+cl_context cl_ctx = nullptr;
+cl_command_queue cl_q = nullptr;
 
 // Create the global context. This is just a helper function not called by Halide.
 int init_context() {
@@ -38,12 +47,12 @@ int init_context() {
         return err;
     }
 
-    cl_platform_id platform = NULL;
+    cl_platform_id platform = nullptr;
 
     if (platformCount > 0) {
         platform = platforms[0];
     }
-    if (platform == NULL) {
+    if (platform == nullptr) {
         printf("Failed to get platform\n");
         return CL_INVALID_PLATFORM;
     }
@@ -69,7 +78,7 @@ int init_context() {
     // Create context and command queue.
     cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
                                            0 };
-    cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
+    cl_ctx = clCreateContext(properties, 1, &dev, nullptr, nullptr, &err);
     if (err != CL_SUCCESS) {
         printf("clCreateContext failed (%d)\n", err);
         return err;
@@ -88,8 +97,8 @@ void destroy_context() {
     printf("Destroying CL context %p\n", cl_ctx);
     clReleaseCommandQueue(cl_q);
     clReleaseContext(cl_ctx);
-    cl_q = NULL;
-    cl_ctx = NULL;
+    cl_q = nullptr;
+    cl_ctx = nullptr;
 }
 
 // These functions replace the acquire/release implementation in src/runtime/opencl.cpp.
@@ -110,7 +119,7 @@ extern "C" int halide_release_cl_context(void *user_context) {
 // Implement CUDA custom context.
 #include <cuda.h>
 
-CUcontext cuda_ctx = NULL;
+CUcontext cuda_ctx = nullptr;
 
 int init_context() {
     // Initialize CUDA
@@ -162,7 +171,7 @@ int init_context() {
 void destroy_context() {
     printf("Destroying CUDA context %p\n", cuda_ctx);
     cuCtxDestroy(cuda_ctx);
-    cuda_ctx = NULL;
+    cuda_ctx = nullptr;
 }
 
 // These functions replace the acquire/release implementation in src/runtime/cuda.cpp.
@@ -232,3 +241,5 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
+
+#endif

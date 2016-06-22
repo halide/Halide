@@ -11,6 +11,7 @@
 #include "CodeGen_X86.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
+#include "CodeGen_PowerPC.h"
 
 #include "IR.h"
 
@@ -33,7 +34,7 @@ public:
     virtual ~CodeGen_GPU_Host();
 
 protected:
-    void compile_func(const LoweredFunc &func);
+    void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
 
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
@@ -63,9 +64,9 @@ protected:
     using CodeGen_CPU::buffer_dev_ptr;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::create_alloca_at_entry;
-    using CodeGen_CPU::i8;
-    using CodeGen_CPU::i32;
-    using CodeGen_CPU::i64;
+    using CodeGen_CPU::i8_t;
+    using CodeGen_CPU::i32_t;
+    using CodeGen_CPU::i64_t;
     using CodeGen_CPU::buffer_t_type;
     using CodeGen_CPU::allocations;
     using CodeGen_CPU::register_destructor;
@@ -73,8 +74,6 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
-    void visit(const Free *);
-    void visit(const Call *);
     // @}
 
     std::string function_name;

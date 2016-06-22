@@ -3,12 +3,210 @@
 
 #include <stdint.h>
 #include "runtime/HalideRuntime.h"
+#include "Error.h"
 #include "Util.h"
 #include "Float16.h"
 
 /** \file
  * Defines halide types
  */
+
+/** A set of types to represent a C++ function signature. This allows
+ * two things.  First, proper prototypes can be provided for Halide
+ * generated functions, giving better compile time type
+ * checking. Second, C++ name mangling can be done to provide link
+ * time type checking for both Halide generated functions and calls
+ * from Halide to external functions.
+ *
+ * These are intended to be constexpr producable, but we don't depend
+ * on C++11 yet. In C++14, it is possible these will be replaced with
+ * introspection/reflection facilities.
+ *
+ * halide_handle_traits has to go outside the Halide namespace due to template
+ * resolution rules. TODO(zalman): Do all types need to be in global namespace?
+ */
+ //@{
+
+/** A structure to represent the (unscoped) name of a C++ composite type for use
+ * as a single argument (or return value) in a function signature.
+ *
+ * Currently does not support the restrict qualifier, references, or
+ * r-value references.  These features cannot be used in extern
+ * function calls from Halide or in the generated function from
+ * Halide, but their applicability seems limited anyway.
+ */
+struct halide_cplusplus_type_name {
+    /// An enum to indicate whether a C++ type is non-composite, a struct, class, or union
+    enum CPPTypeType {
+        Simple, ///< "int"
+        Struct, ///< "struct Foo"
+        Class,  ///< "class Foo"
+        Union,  ///< "union Foo"
+        Enum,   ///< "enum Foo"
+    } cpp_type_type;  // Note: order is reflected in map_to_name table in CPlusPlusMangle.cpp
+
+    std::string name;
+
+    halide_cplusplus_type_name(CPPTypeType cpp_type_type, const std::string &name)
+        : cpp_type_type(cpp_type_type), name(name) {
+    }
+
+    bool operator==(const halide_cplusplus_type_name &rhs) const {
+         return cpp_type_type == rhs.cpp_type_type &&
+                name == rhs.name;
+    }
+
+    bool operator!=(const halide_cplusplus_type_name &rhs) const {
+        return !(*this == rhs);
+    }
+
+    bool operator<(const halide_cplusplus_type_name &rhs) const {
+         return cpp_type_type < rhs.cpp_type_type ||
+                (cpp_type_type == rhs.cpp_type_type &&
+                 name < rhs.name);
+    }
+};
+
+/** A structure to represent the fully scoped name of a C++ composite
+ * type for use in generating function signatures that use that type.
+ *
+ * This is intended to be a constexpr usable type, but we don't depend
+ * on C++11 yet. In C++14, it is possible this will be replaced with
+ * introspection/reflection facilities.
+ */
+struct halide_handle_cplusplus_type {
+    halide_cplusplus_type_name inner_name;
+    std::vector<std::string> namespaces;
+    std::vector<halide_cplusplus_type_name> enclosing_types;
+
+    /// One set of modifiers on a type.
+    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    enum Modifier : uint8_t {
+        Const = 1 << 0,    ///< Bitmask flag for "const"
+        Volatile = 1 << 1, ///< Bitmask flag for "volatile"
+        Restrict = 1 << 2, ///< Bitmask flag for "restrict"
+        Pointer = 1 << 3,  ///< Bitmask flag for a pointer "*"
+    };
+
+    /// Qualifiers and indirections on type. Allows up to 8 levels. 0 is innermost.
+    struct CPPTypeModifiers {
+        uint8_t data[8];
+      CPPTypeModifiers(const std::vector<uint8_t> &vals) {
+            user_assert(vals.size() <= sizeof(data)) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
+            std::copy(vals.begin(), vals.end(), &data[0]);
+            std::fill(&data[vals.size()], &data[sizeof(data)], 0);
+        }
+        const uint8_t &operator[](size_t index) const { return data[index]; }
+        bool operator==(const CPPTypeModifiers &rhs) const {
+            return std::equal(&data[0], &data[sizeof(data)], &rhs.data[0]);
+        }
+        const uint8_t *begin() const { return &data[0]; }
+        const uint8_t *end() const { return &data[sizeof(data)]; }
+    } cpp_type_modifiers;
+
+    /// References are separate because they only occur at the outermost level.
+    /// No modifiers are needed for references as they are not allowed to apply
+    /// to the reference itself. (This isn't true for restrict, but that is a C++
+    /// extension anyway.) If modifiers are needed, the last entry in the above
+    /// array would be the modifers for the reference.
+    enum ReferenceType : uint8_t {
+        NotReference = 0,
+        LValueReference = 1, // "&"
+        RValueReference = 2, // "&&"
+    };
+    ReferenceType reference_type;
+
+    halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
+                                 const std::vector<std::string> &namespaces = { },
+                                 const std::vector<halide_cplusplus_type_name> &enclosing_types = { },
+                                 const std::vector<uint8_t> &modifiers = { },
+                                 ReferenceType reference_type = NotReference)
+    : inner_name(inner_name), namespaces(namespaces), enclosing_types(enclosing_types), cpp_type_modifiers(modifiers), reference_type(reference_type) {
+    }
+};
+//@}
+
+template<typename T>
+struct halide_c_type_to_name {
+  static const bool known_type = false;
+};
+
+template<> struct halide_c_type_to_name<bool> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple, "bool"}; } };
+template<> struct halide_c_type_to_name<int8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int8_t"}; } };
+template<> struct halide_c_type_to_name<uint8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint8_t"}; } };
+template<> struct halide_c_type_to_name<int16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int16_t"}; } };
+template<> struct halide_c_type_to_name<uint16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint16_t"}; } };
+template<> struct halide_c_type_to_name<int32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int32_t"}; } };
+template<> struct halide_c_type_to_name<uint32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint32_t"}; } };
+template<> struct halide_c_type_to_name<float> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
+template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
+template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
+
+template<typename T, bool KnownType>
+struct halide_internal_handle_traits {
+    static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) { return nullptr; }
+};
+
+template<typename T>
+struct halide_internal_handle_traits<T, true> {
+    static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) {
+        static const halide_handle_cplusplus_type the_info{
+            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), {}, {},
+            { (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
+              (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+              (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))},
+            ref_type};
+        return &the_info;
+    }
+};
+
+/** A type traits template to provide a halide_handle_cplusplus_type
+ * value from a C++ type.
+ *
+ * Note the type represented is implicitly a pointer.
+ *
+ * A NULL pointer of type halide_handle_traits represents "void *".
+ * This is chosen for compactness or representation as Type is a very
+ * widely used data structure.
+ */
+template<typename T>
+struct halide_handle_traits {
+    // NULL here means "void *". This trait must return a pointer to a
+    // global structure. I.e. it should never be freed.
+    static const halide_handle_cplusplus_type *type_info() { return nullptr; }
+};
+
+template<typename T>
+struct halide_handle_traits<T *> {
+    static const halide_handle_cplusplus_type *type_info() {
+        return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(true, halide_handle_cplusplus_type::NotReference);
+     }
+};
+
+template<typename T>
+struct halide_handle_traits<T &> {
+    static const halide_handle_cplusplus_type *type_info() {
+        return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(false, halide_handle_cplusplus_type::LValueReference);
+    }
+};
+
+template<typename T>
+struct halide_handle_traits<T &&> {
+    static const halide_handle_cplusplus_type *type_info() {
+        return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(false, halide_handle_cplusplus_type::RValueReference);
+    }
+};
+
+template<>
+struct halide_handle_traits<const char *> {
+    static const halide_handle_cplusplus_type *type_info() {
+        static const halide_handle_cplusplus_type the_info{
+            halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "char"),
+              {}, {}, { halide_handle_cplusplus_type::Pointer |
+                        halide_handle_cplusplus_type::Const}};
+        return &the_info;
+    }
+};
 
 namespace Halide {
 
@@ -37,15 +235,15 @@ struct Type {
     int bytes() const {return (bits() + 7) / 8;}
 
     // Default ctor initializes everything to predictable-but-unlikely values
-    Type() : type(Handle, 0, 0) {}
+    Type() : type(Handle, 0, 0), handle_type(nullptr) {}
 
-    
+
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    Type(halide_type_code_t code, uint8_t bits, int lanes) 
-        : type(code, (uint8_t)bits, (uint16_t)lanes) {
+    Type(halide_type_code_t code, uint8_t bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
+        : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
     }
 
     /** Trivial copy constructor. */
@@ -54,7 +252,8 @@ struct Type {
     /** Type is a wrapper around halide_type_t with more methods for use
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
-    Type(const halide_type_t &that) : type(that) {}
+    Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
+         : type(that), handle_type(handle_type) {}
 
     /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
      * Representation is exactly equivalent. */
@@ -85,6 +284,9 @@ struct Type {
         return Type(code(), bits(), new_lanes);
     }
 
+    /** Type to be printed when declaring handles of this type. */
+    const halide_handle_cplusplus_type *handle_type;
+
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code() == UInt && bits() == 1;}
 
@@ -108,14 +310,19 @@ struct Type {
     /** Is this type an opaque handle type (void *) */
     bool is_handle() const {return code() == Handle;}
 
+    /** Check that the type name of two handles matches. */
+    EXPORT bool same_handle_type(const Type &other) const;
+
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code() == other.code() && bits() == other.bits() && lanes() == other.lanes();
+        return code() == other.code() && bits() == other.bits() && lanes() == other.lanes() &&
+            (code() != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code() != other.code() || bits() != other.bits() || lanes() != other.lanes();
+        return code() != other.code() || bits() != other.bits() || lanes() != other.lanes() ||
+            (code() == Handle && !same_handle_type(other));
     }
 
     /** Produce the scalar type (that of a single element) of this vector type */
@@ -170,13 +377,17 @@ inline Type Bool(int lanes = 1) {
 }
 
 /** Construct a handle type */
-inline Type Handle(int lanes = 1) {
-    return Type(Type::Handle, 64, lanes);
+inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_type = nullptr) {
+    return Type(Type::Handle, 64, lanes, handle_type);
 }
+
+namespace {
 
 /** Construct the halide equivalent of a C type */
 template<typename T> Type type_of() {
-    return Type(halide_type_of<T>());
+    return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
+}
+
 }
 
 }

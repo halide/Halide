@@ -30,8 +30,8 @@ public:
     void visit(const Call *call) {
         IRVisitor::visit(call);
 
-        if (call->call_type == Call::Halide) {
-            Function f = call->func;
+        if (call->call_type == Call::Halide && call->func.defined()) {
+            Function f(call->func);
             include_function(f);
         }
 

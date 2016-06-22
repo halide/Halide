@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     //int W = 64*3, H = 64*3;
-    const int W = 16, H = 16;
+    const int W = 64, H = 16;
 
     Image<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
@@ -42,6 +42,10 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         blur.gpu_tile(x, y, 16, 16);
+    } else if (target.has_feature(Target::HVX_64)) {
+        blur.hexagon().vectorize(x, 32);
+    } else if (target.has_feature(Target::HVX_128)) {
+        blur.hexagon().vectorize(x, 64);
     }
 
     Image<uint16_t> out = blur.realize(W, H, target);

@@ -15,14 +15,15 @@
 
 using namespace Halide::Tools;
 
-extern "C" void halide_print(void *user_context, const char *str) {
+void my_halide_print(void *user_context, const char *str) {
     printf("%s", str);
 
     record_gpu_debug(str);
 }
 
 int main(int argc, char **argv) {
-
+    halide_set_custom_print(&my_halide_print);
+  
     // Run the whole program several times.
     for (int i = 0; i < 2; i++) {
         Image<int> output(80);
@@ -40,9 +41,9 @@ int main(int argc, char **argv) {
         }
 
 #if COMPILING_FOR_CUDA
-        halide_device_release(NULL, halide_cuda_device_interface());
+        halide_device_release(nullptr, halide_cuda_device_interface());
 #elif COMPILING_FOR_OPENCL
-        halide_device_release(NULL, halide_opencl_device_interface());
+        halide_device_release(nullptr, halide_opencl_device_interface());
 #endif
     }
 

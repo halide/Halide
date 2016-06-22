@@ -8,15 +8,10 @@
 
 #include "IROperator.h"
 #include "Scope.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
-
-struct Interval {
-    Expr min, max;
-    Interval() {}
-    Interval(Expr min, Expr max) : min(min), max(max) {}
-};
 
 typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
 
@@ -35,6 +30,13 @@ typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
 Interval bounds_of_expr_in_scope(Expr expr,
                                  const Scope<Interval> &scope,
                                  const FuncValueBounds &func_bounds = FuncValueBounds());
+
+/* Given a varying expression, try to find a constant that is either:
+ * An upper bound (always greater than or equal to the expression), or
+ * A lower bound (always less than or equal to the expression)
+ * If it fails, returns an undefined Expr. */
+enum class Direction {Upper, Lower};
+Expr find_constant_bound(Expr e, Direction d);
 
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
@@ -60,10 +62,18 @@ struct Box {
     bool maybe_unused() const {return used.defined() && !is_one(used);}
 };
 
-// Expand box a to encompass box b
+/** Expand box a to encompass box b */
 void merge_boxes(Box &a, const Box &b);
-// Test if box a could possibly overlap box b.
+
+/** Test if box a could possibly overlap box b. */
 bool boxes_overlap(const Box &a, const Box &b);
+
+/** The union of two boxes */
+Box box_union(const Box &a, const Box &b);
+
+/** Test if box a provably contains box b */
+bool box_contains(const Box &a, const Box &b);
+
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement or

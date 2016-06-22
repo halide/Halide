@@ -74,7 +74,7 @@ struct ErrorReport {
     bool runtime;
 
     ErrorReport(const char *f, int l, const char *cs, bool c, bool u, bool w, bool r) :
-        msg(NULL), file(f), condition_string(cs), line(l), condition(c), user(u), warning(w), runtime(r) {
+        msg(nullptr), file(f), condition_string(cs), line(l), condition(c), user(u), warning(w), runtime(r) {
         if (condition) return;
         msg = new std::ostringstream;
         const std::string &source_loc = Introspection::get_source_location();
@@ -135,7 +135,6 @@ struct ErrorReport {
 #else
     ~ErrorReport() {
 #endif
-
         if (condition) return;
         explode();
     }
@@ -143,12 +142,12 @@ struct ErrorReport {
     EXPORT void explode();
 };
 
-#define internal_error            Halide::Internal::ErrorReport(__FILE__, __LINE__, NULL, false, false, false, false)
+#define internal_error            Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, false, false, false, false)
 #define internal_assert(c)        Halide::Internal::ErrorReport(__FILE__, __LINE__, #c,   c,     false, false, false)
-#define user_error                Halide::Internal::ErrorReport(__FILE__, __LINE__, NULL, false, true, false, false)
+#define user_error                Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, false, true, false, false)
 #define user_assert(c)            Halide::Internal::ErrorReport(__FILE__, __LINE__, #c,   c,     true, false, false)
-#define user_warning              Halide::Internal::ErrorReport(__FILE__, __LINE__, NULL, false, true, true, false)
-#define halide_runtime_error      Halide::Internal::ErrorReport(__FILE__, __LINE__, NULL, false, true, false, true)
+#define user_warning              Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, false, true, true, false)
+#define halide_runtime_error      Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, false, true, false, true)
 
 // The nicely named versions get cleaned up at the end of Halide.h,
 // but user code might want to do halide-style user_asserts (e.g. the

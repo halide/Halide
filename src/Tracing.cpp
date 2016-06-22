@@ -31,7 +31,7 @@ private:
 
         // Calls inside of an address_of don't count, but we want to
         // visit the args of the inner call.
-        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+        if (op->is_intrinsic(Call::address_of)) {
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
             const Load *l = op->args[0].as<Load>();
@@ -63,7 +63,7 @@ private:
                 } else {
                     Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
                 }
-                expr = Call::make(Handle(), Call::address_of, {inner}, Call::Intrinsic);
+                expr = Call::make(op->type, Call::address_of, {inner}, Call::Intrinsic);
                 return;
             }
         }
@@ -77,10 +77,10 @@ private:
         bool trace_it = false;
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
-            Function f = op->func;
-            bool inlined = f.schedule().compute_level().is_inline();
-            if (f.has_update_definition()) inlined = false;
-            trace_it = f.is_tracing_loads() || (global_level > 2 && !inlined);
+            Function f = env.find(op->name)->second;
+            internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
+
+            trace_it = f.is_tracing_loads() || (global_level > 2);
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
             trace_it = global_level > 2;
@@ -110,10 +110,9 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        bool inlined = f.schedule().compute_level().is_inline();
-        if (f.has_update_definition()) inlined = false;
+        internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
-        if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
+        if (f.is_tracing_stores() || (global_level > 1)) {
             // Wrap each expr in a tracing call
 
             const vector<Expr> &values = op->values;
@@ -194,10 +193,10 @@ private:
             args.push_back(0); // value
 
             // Use the size of the pure step
-
+            const vector<string> f_args = f.args();
             for (int i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), f.name() + ".s0." + f.args()[i] + ".min");
-                Expr max = Variable::make(Int(32), f.name() + ".s0." + f.args()[i] + ".max");
+                Expr min = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".min");
+                Expr max = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".max");
                 Expr extent = (max + 1) - min;
                 args.push_back(min);
                 args.push_back(extent);

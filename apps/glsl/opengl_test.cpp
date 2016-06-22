@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "HalideRuntime.h"
+#include "HalideRuntimeOpenGL.h"
 
 
 class Image {
@@ -48,7 +49,7 @@ void test_blur() {
     Image output(W, H, C, sizeof(uint8_t), Image::Planar);
 
     fprintf(stderr, "test_blur\n");
-    blur_filter(&input.buf, &output.buf);
+    blur(&input.buf, &output.buf);
     fprintf(stderr, "test_blur complete\n");
 }
 
@@ -58,11 +59,29 @@ void test_ycc() {
     Image output(W, H, C, sizeof(uint8_t), Image::Planar);
 
     fprintf(stderr, "test_ycc\n");
-    ycc_filter(&input.buf, &output.buf);
+    ycc(&input.buf, &output.buf);
     fprintf(stderr, "Ycc complete\n");
+}
+
+void test_device_sync() {
+    const int W = 12, H = 32, C = 3;
+    Image temp(W, H, C, sizeof(uint8_t), Image::Planar);
+
+    int result = halide_device_malloc(nullptr, &temp.buf, halide_opengl_device_interface());
+    if (result != 0) {
+        fprintf(stderr, "halide_device_malloc failed with return %d.\n", result);
+    } else {
+        result = halide_device_sync(nullptr, &temp.buf);
+        if (result != 0) {
+            fprintf(stderr, "halide_device_sync failed with return %d.\n", result);
+        } else {
+            fprintf(stderr, "Test device sync complete.\n");
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {
     test_blur();
     test_ycc();
+    test_device_sync();
 }

@@ -26,6 +26,9 @@
 #if LLVM_VERSION >= 37
 #include <llvm/IR/DebugInfoMetadata.h>
 #endif
+#if WITH_NATIVE_CLIENT
+#include <llvm/IR/DebugInfo.h>
+#endif
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -126,6 +129,20 @@ static unsigned GetEncodedRMWOperation(AtomicRMWInst::BinOp Op) {
   }
 }
 
+#if LLVM_VERSION >= 39
+static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
+  switch (Ordering) {
+  case AtomicOrdering::NotAtomic: return bitc::ORDERING_NOTATOMIC;
+  case AtomicOrdering::Unordered: return bitc::ORDERING_UNORDERED;
+  case AtomicOrdering::Monotonic: return bitc::ORDERING_MONOTONIC;
+  case AtomicOrdering::Acquire: return bitc::ORDERING_ACQUIRE;
+  case AtomicOrdering::Release: return bitc::ORDERING_RELEASE;
+  case AtomicOrdering::AcquireRelease: return bitc::ORDERING_ACQREL;
+  case AtomicOrdering::SequentiallyConsistent: return bitc::ORDERING_SEQCST;
+  }
+  llvm_unreachable("Invalid ordering");
+}
+#else
 static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
   switch (Ordering) {
   case NotAtomic: return bitc::ORDERING_NOTATOMIC;
@@ -138,6 +155,7 @@ static unsigned GetEncodedOrdering(AtomicOrdering Ordering) {
   }
   llvm_unreachable("Invalid ordering");
 }
+#endif
 
 static unsigned GetEncodedSynchScope(SynchronizationScope SynchScope) {
   switch (SynchScope) {
@@ -495,6 +513,18 @@ static void WriteModuleInfo(const Module *M,
     Vals.push_back(getEncodedLinkage(GV));
     Vals.push_back(Log2_32(GV.getAlignment())+1);
     Vals.push_back(GV.hasSection() ? SectionMap[GV.getSection()] : 0);
+#if LLVM_VERSION >= 39
+    if (GV.isThreadLocal() ||
+        GV.getVisibility() != GlobalValue::DefaultVisibility ||
+        GV.hasGlobalUnnamedAddr() || GV.isExternallyInitialized()) {
+      Vals.push_back(getEncodedVisibility(GV));
+      Vals.push_back(getEncodedThreadLocalMode(GV));
+      Vals.push_back(GV.hasGlobalUnnamedAddr()); // This may not be correct...
+      Vals.push_back(GV.isExternallyInitialized());
+    } else {
+      AbbrevToUse = SimpleGVarAbbrev;
+    }
+#else
     if (GV.isThreadLocal() ||
         GV.getVisibility() != GlobalValue::DefaultVisibility ||
         GV.hasUnnamedAddr() || GV.isExternallyInitialized()) {
@@ -505,7 +535,7 @@ static void WriteModuleInfo(const Module *M,
     } else {
       AbbrevToUse = SimpleGVarAbbrev;
     }
-
+#endif
     Stream.EmitRecord(bitc::MODULE_CODE_GLOBALVAR, Vals, AbbrevToUse);
     Vals.clear();
   }
@@ -523,7 +553,11 @@ static void WriteModuleInfo(const Module *M,
     Vals.push_back(F.hasSection() ? SectionMap[F.getSection()] : 0);
     Vals.push_back(getEncodedVisibility(F));
     Vals.push_back(F.hasGC() ? GCMap[F.getGC()] : 0);
+#if LLVM_VERSION >= 39
+    Vals.push_back(F.hasGlobalUnnamedAddr());
+#else
     Vals.push_back(F.hasUnnamedAddr());
+#endif
 
     unsigned AbbrevToUse = 0;
     Stream.EmitRecord(bitc::MODULE_CODE_FUNCTION, Vals, AbbrevToUse);
@@ -632,6 +666,12 @@ static void WriteGenericDebugNode(const GenericDebugNode *,
   llvm_unreachable("unimplemented");
 }*/
 
+#if LLVM_VERSION >= 39
+#define BITC_METADATA_STRING bitc::METADATA_STRING_OLD
+#else
+#define BITC_METADATA_STRING bitc::METADATA_STRING
+#endif
+
 static void WriteModuleMetadata(const Module *M,
                                 const llvm_3_2::ValueEnumerator &VE,
                                 BitstreamWriter &Stream) {
@@ -646,7 +686,7 @@ static void WriteModuleMetadata(const Module *M,
   if (VE.hasMDString()) {
     // Abbrev for METADATA_STRING.
     BitCodeAbbrev *Abbv = new BitCodeAbbrev();
-    Abbv->Add(BitCodeAbbrevOp(bitc::METADATA_STRING));
+    Abbv->Add(BitCodeAbbrevOp(BITC_METADATA_STRING));
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
     Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 8));
     MDSAbbrev = Stream.EmitAbbrev(Abbv);
@@ -713,7 +753,7 @@ static void WriteModuleMetadata(const Module *M,
     Record.append(MDS->bytes_begin(), MDS->bytes_end());
 
     // Emit the finished record.
-    Stream.EmitRecord(bitc::METADATA_STRING, Record, MDSAbbrev);
+    Stream.EmitRecord(BITC_METADATA_STRING, Record, MDSAbbrev);
     Record.clear();
   }
 
@@ -1307,7 +1347,7 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
     const LandingPadInst &LP = cast<LandingPadInst>(I);
     Code = bitc::FUNC_CODE_INST_LANDINGPAD;
     Vals.push_back(VE.getTypeID(LP.getType()));
-#if LLVM_VERSION < 37
+#if LLVM_VERSION < 37 || WITH_NATIVE_CLIENT
     PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
 #else
     PushValueAndType(LP.getParent()->getParent()->getPersonalityFn(), InstID,
@@ -1571,7 +1611,11 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
         Stream.EmitRecord(bitc::FUNC_CODE_DEBUG_LOC_AGAIN, Vals);
       } else {
 
-#if LLVM_VERSION >= 37
+#if WITH_NATIVE_CLIENT
+        MDNode* Scope = DL.getScope();
+        assert(Scope && "Expected valid scope");
+        MDLocation *IA = DL.getInlinedAt();
+#elif LLVM_VERSION >= 37
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
         DILocation *IA = DL.getInlinedAt();
