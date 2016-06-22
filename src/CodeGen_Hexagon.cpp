@@ -5,7 +5,6 @@
 #include "CodeGen_Hexagon.h"
 #include "IROperator.h"
 #include "IRMatch.h"
-#include "IRMutator.h"
 #include "IREquality.h"
 #include "Target.h"
 #include "Debug.h"
