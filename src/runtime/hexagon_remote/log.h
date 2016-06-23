@@ -9,10 +9,13 @@ extern "C" {
 
 #ifdef SIMULATOR
 
+// On the simulator, just use fprintf to implement log_printf.
 #define log_printf(...) fprintf(stderr, __VA_ARGS__)
 
 #else
 
+// On device, we make a circular buffer that log_printf writes to, and
+// we can read from in a remote RPC call.
 class Log {
     char *buffer;
     int size;
@@ -20,6 +23,7 @@ class Log {
     int write_cursor;
 
 public:
+    // The size must be a power of 2.
     Log(int size) : buffer(NULL), size(size), read_cursor(0), write_cursor(0) {
         buffer = (char *)malloc(size);
     }
