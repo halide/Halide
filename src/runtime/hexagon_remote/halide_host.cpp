@@ -20,4 +20,4 @@ void halide_hexagon_host_free(void *ptr) {
     rpcmem_free(ptr);
 }
 
-}
+}  // extern "C"
