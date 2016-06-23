@@ -53,6 +53,13 @@ extern int halide_hexagon_run(void *user_context,
                               void *args[],
                               int arg_flags[]);
 extern int halide_hexagon_device_release(void* user_context);
+
+/**
+ * This is essentially a wrapper for halide_load_library("libhalide_hexagon_host.so");
+ * it exists to allow clients to override the search path without having to doctor
+ * environment variables (e.g. LD_LIBRARY_PATH).
+ */
+extern void *halide_hexagon_load_host_lib(void *user_context);
 // @}
 
 #ifdef __cplusplus
