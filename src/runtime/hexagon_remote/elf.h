@@ -121,13 +121,25 @@ struct elf_t {
         *sec_text,     // The .text section where the functions live
         *sec_strtab;   // The string table, for looking up symbol names
 
-    // Point to an object file loaded into memory. Does not take
+    // The writeable portions of the object file in memory
+    char *writeable_buf;
+    size_t writeable_size;
+
+    // Load an object file in memory. Does not take
     // ownership of the memory. Memory should be page-aligned.
-    void parse_object_file(char *b, size_t s, bool d = false) {
+    void parse_object_file(const unsigned char *b, size_t s, bool d = false) {
         failed = 0;
-        buf = b;
-        size = s;
+        buf = NULL;
+        writeable_buf = NULL;
+        writeable_size = 0;
+        size = (s + 4095) & ~4095;
         debug = d;
+
+        // Make a mapping of the appropriate size and type
+        buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+
+        // Copy over the data
+        memcpy(buf, b, s);
 
         // Grab the header
         if (size < sizeof(elf_header_t)) {
@@ -164,30 +176,70 @@ struct elf_t {
         failed = line;
     }
 
-    char *writeable_buf;
-    size_t writeable_size;
-    void move_writeable_sections(char *w, size_t w_size) {
-        writeable_buf = w;
-        writeable_size = w_size;
+    void move_writeable_sections() {
+        // Move the writeable sections to their own mapping. First
+        // determine their span.
+        char *min_addr = NULL, *max_addr = NULL;
+        for (int i = 0; i < num_sections(); i++) {
+            section_header_t *sec = get_section(i);
+            if (is_section_writeable(sec)) {
+                char *start = get_section_start(sec);
+                char *end = start + get_section_size(sec);
+                if (min_addr == NULL || start < min_addr) {
+                    min_addr = start;
+                }
+                if (max_addr == NULL || end > max_addr) {
+                    max_addr = end;
+                }
+            }
+        }
+        size_t size_to_copy = (max_addr - min_addr);
 
-        // Just copy the whole object file over (TODO: only copy over the writeable sections)
-        if (w_size < size) {
-            log_printf("Writeable buffer size must match object buffer size\n");
+        if (size_to_copy == 0) {
+            if (debug) log_printf("No writeable sections\n");
+            return;
+        }
+
+        // Align up the size for the mapping
+        writeable_size = (size_to_copy + 4095) & ~4095;
+
+        // Make the mapping
+        writeable_buf = (char *)mmap(NULL, writeable_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+
+        if (!writeable_buf) {
             fail(__LINE__);
             return;
         }
-        memcpy(writeable_buf, buf, w_size);
 
-        for (int i = 0; i < header->e_shnum; i++) {
+        if (debug) {
+            log_printf("Copying %d bytes of writeable data from %p to %p to a separate mapping of size %d at %p\n",
+                       (int)size_to_copy, min_addr, max_addr, (int)writeable_size, writeable_buf);
+        }
+
+        // Copy over the sections
+        memcpy(writeable_buf, min_addr, size_to_copy);
+
+        // How far did the sections move?
+        int64_t delta = writeable_buf - min_addr;
+
+        // Adjust the section offsets in the section table so that
+        // whenever we go looking for one of these sections we find it
+        // in the writeable mapping.
+        for (int i = 0; i < num_sections(); i++) {
             section_header_t *sec = get_section(i);
             const char *sec_name = get_section_name(sec);
             if (failed) return;
-            if (sec->sh_flags & 1) {
+            if (is_section_writeable(sec)) {
                 if (debug) log_printf("Section %s is writeable. Moving it\n", sec_name);
                 // Make the section table point to the writeable copy instead
-                sec->sh_offset += writeable_buf - buf;
+                sec->sh_offset += delta;
             }
         }
+    }
+
+    void deinit() {
+        munmap(buf, size);
+        munmap(writeable_buf, writeable_size);
     }
 
     // Get the address given an offset into the buffer. Asserts that
@@ -236,6 +288,10 @@ struct elf_t {
     // Get the size of a section in bytes
     int get_section_size(section_header_t *sec) {
         return sec->sh_size;
+    }
+
+    bool is_section_writeable(section_header_t *sec) {
+        return (sec->sh_flags & 1);
     }
 
     // Get the name of a section
@@ -304,6 +360,8 @@ struct elf_t {
 
     // Look up a symbol by name
     symbol_t *find_symbol(const char *name) {
+        if (debug) log_printf("find_symbol(%s)\n", name);
+
         const size_t len = strlen(name);
 
         for (int i = 0; i < num_symbols(); i++) {
@@ -666,19 +724,12 @@ struct elf_t {
         }
     }
 
-    // Mark the pages of the object file executable
+    // Mark the executable pages of the object file executable
     void make_executable() {
-    log_printf("%s %d\n", __FILE__, __LINE__);
         int err = mprotect(buf, size, PROT_EXEC | PROT_READ);
         if (err) {
             log_printf("mprotect %d %p %d", err, buf, size);
             fail(__LINE__);
-            return;
-        }
-        err = mprotect(writeable_buf, writeable_size, PROT_READ | PROT_WRITE);
-        if (err) {
-            fail(__LINE__);
-            return;
         }
     }
 
@@ -720,62 +771,13 @@ struct elf_t {
     */
 };
 
-
-// Poor man's implementations of dlopen, dlsym, and dlclose using the
-// above elf parser. Note that it expects relocatable object files,
-// rather than shared objects. Compile them with -fno-pic.
-inline void *fake_dlopen(const char *filename, int) {
-    int fd = open(filename, O_RDONLY);
-
-    // TODO: We assume 32 pages is enough for now
-    const size_t max_size = 4096*32;
-
-    // Rather than move each section, we'll make two whole copies of
-    // the object in memory. Use the first half for the executable
-    // copy, and then second half for the writeable copy.
-    char *buf = (char *)memalign(4096, max_size);
-    size_t size = read(fd, buf, max_size);
-    close(fd);
-
-    if (size >= max_size/2) {
-        log_printf("Didn't allocate enough memory\n");
-        free(buf);
-        return NULL;
-    }
-
-    elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
-    elf->parse_object_file(buf, size, false);
-    elf->move_writeable_sections(buf + max_size/2, size);
-    elf->do_relocations();
-    //elf->dump_as_base64();
-    //elf->dump_to_file("/tmp/relocated.o");
-    //elf->make_executable();
-
-    // Should run .ctors?
-
-    return (void *)elf;
-}
-
 inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
-    int aligned_code_size = (code_size + 4095) & ~4095;
-
-    // Allocate enough space for two copies of the code. We'll execute
-    // the first and use the second for the writeable globals.
-    char *e_buf = (char *)mmap(NULL, aligned_code_size*2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (!e_buf) {
-        return NULL;
-    }
-    char *w_buf = e_buf + aligned_code_size;
-
     elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
     if (!elf) {
         return NULL;
     }
-
-    memcpy(e_buf, code, code_size);
-
-    elf->parse_object_file(e_buf, aligned_code_size, false);
-    elf->move_writeable_sections(w_buf, aligned_code_size);
+    elf->parse_object_file(code, code_size, false);
+    elf->move_writeable_sections();
     elf->do_relocations();
     //elf->dump_as_base64();
     //elf->dump_to_file("/tmp/relocated.o");
@@ -787,7 +789,6 @@ inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
 }
 
 inline void *fake_dlsym(void *handle, const char *name) {
-    log_printf("fake dlsym lookup of %s\n", name);
     elf_t *elf = (elf_t *)handle;
     if (!elf) return NULL;
     symbol_t *sym = elf->find_symbol(name);
@@ -799,7 +800,6 @@ inline void *fake_dlsym(void *handle, const char *name) {
 inline int fake_dlclose(void *handle) {
     // Should run .dtors?
     elf_t *elf = (elf_t *)handle;
-    munmap(elf->buf, elf->size * 2);
-    free(elf);
+    elf->deinit();
     return 0;
 }
