@@ -1,3 +1,6 @@
+#ifndef HALIDE_HEXAGON_REMOTE_LOG_H
+#define HALIDE_HEXAGON_REMOTE_LOG_H
+
 extern "C" {
 
 #include <stdio.h>
@@ -52,5 +55,7 @@ public:
 };
 
 void log_printf(const char *fmt, ...);
+
+#endif
 
 #endif
