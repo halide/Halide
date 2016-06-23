@@ -254,6 +254,7 @@ struct CostModel {
       void visit(const Call * call) {
           if (call->call_type == Call::Halide ||
               call->call_type == Call::Image) {
+              ops+=1;
               byte_loads += call->type.bytes();
           } else if (call->call_type == Call::Extern) {
               // There is no visibility into an extern stage so there is
@@ -1069,12 +1070,15 @@ struct Partitioner {
         int64_t mem_cost;
         // Estimate of the parallelism
         int64_t parallelism;
+        // Estimate of working set size
+        int64_t working_size_size;
 
         friend std::ostream& operator <<(std::ostream &stream,
                                          const GroupAnalysis &analy) {
             stream << "[arith cost:" << analy.arith_cost << ",";
             stream << "mem_cost:" << analy.mem_cost << ",";
-            stream << "parallelism:" << analy.parallelism << "]\n";
+            stream << "parallelism:" << analy.parallelism << ",";
+            stream << "working_size_size:" << analy.working_size_size << "]\n";
 
             return stream;
         }
@@ -1088,7 +1092,7 @@ struct Partitioner {
 
     map<string, Box>& pipeline_bounds;
     MachineParams& arch_params;
-    DependenceAnalysis& analy;
+    DependenceAnalysis& dep_analy;
     CostModel& cost_model;
     const vector<Function>& outputs;
 
@@ -1097,14 +1101,14 @@ struct Partitioner {
     bool gpu_schedule;
 
     Partitioner(map<string, Box>& _pipeline_bounds, MachineParams& _arch_params,
-                DependenceAnalysis& _analy, CostModel& _cost_model,
+                DependenceAnalysis& _dep_analy, CostModel& _cost_model,
                 const vector<Function>& _outputs, bool _gpu_schedule):
         pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-        analy(_analy), cost_model(_cost_model), outputs(_outputs),
+        dep_analy(_dep_analy), cost_model(_cost_model), outputs(_outputs),
         gpu_schedule(_gpu_schedule) {
 
             // Place each stage of a function in its own group
-            for (auto& f: analy.env) {
+            for (auto& f: dep_analy.env) {
                 int num_stages = f.second.updates().size() + 1;
                 for (int s = 0; s < num_stages; s++) {
                     FStage stg(f.second, s);
@@ -1114,7 +1118,7 @@ struct Partitioner {
             }
 
             // Find consumers of each function and relate groups with their children
-            for (auto& f: analy.env) {
+            for (auto& f: dep_analy.env) {
                 int num_stages = f.second.updates().size() + 1;
                 for (int s = 0; s < num_stages; s++) {
 
@@ -1123,9 +1127,9 @@ struct Partitioner {
                     def.accept(&find);
 
                     for (const string& c: find.calls) {
-                        if (c != f.first && analy.env.find(c) != analy.env.end()) {
+                        if (c != f.first && dep_analy.env.find(c) != dep_analy.env.end()) {
                             // Consumer depends on the last stage of the producer
-                            Function prod_func = analy.env.at(c);
+                            Function prod_func = dep_analy.env.at(c);
                             int final_stage = prod_func.updates().size();
 
                             FStage prod_stage(prod_func, final_stage);
@@ -1208,7 +1212,7 @@ struct Partitioner {
 void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eval,
                                Partitioner::Level level) {
 
-    Function prod_f = analy.env.at(choice.prod);
+    Function prod_f = dep_analy.env.at(choice.prod);
     size_t num_stages = prod_f.updates().size() + 1;
 
     FStage child = choice.cons;
@@ -1361,7 +1365,7 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
 
     set<string> prods;
     vector< map<string, Box> > reuse_regions =
-                analy.overlap_regions(stg.func, stg.stage_num, bounds, prods);
+                dep_analy.overlap_regions(stg.func, stg.stage_num, bounds, prods);
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         int64_t total_reuse = 0;
@@ -1394,7 +1398,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
         int64_t overall_benefit = 0;
         vector<pair<FusionChoice, EvalConfig>> choices;
 
-        Function prod_f = analy.env.at(p.first);
+        Function prod_f = dep_analy.env.at(p.first);
         int final_stage = prod_f.updates().size();
 
         FStage prod(prod_f.name(), final_stage);
@@ -1456,6 +1460,8 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
 vector<map<string, int>>
 Partitioner::generate_tile_configs(const FStage &stg) {
 
+    int min_vec_dim_size = 1;
+
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     const vector<Dim> &dims = def.schedule().dims();
 
@@ -1477,13 +1483,14 @@ Partitioner::generate_tile_configs(const FStage &stg) {
     vector<map<string, int>> tile_configs;
 
     // Skewed tile configurations
+    /*
     for (size_t i = 0; i < tile_vars.size(); i++) {
         for (auto &dim_size: size_variants) {
             map<string, int> tiling;
             for (size_t j = 0; j < tile_vars.size(); j++) {
                 if (j == i) {
                     tiling[tile_vars[j]] = j == 0 ?
-                                           std::max(dim_size, 64): dim_size;
+                                std::max(dim_size, min_vec_dim_size): dim_size;
                 } else if (j < i) {
                     tiling[tile_vars[j]] =
                             size_variants[size_variants.size() - 1];
@@ -1493,14 +1500,14 @@ Partitioner::generate_tile_configs(const FStage &stg) {
             }
             tile_configs.push_back(tiling);
         }
-    }
+    }*/
 
     // Almost square tile configurations
     for (auto &dim_size: size_variants) {
         map<string, int> tiling;
         for (size_t j = 0; j < tile_vars.size(); j++) {
             tiling[tile_vars[j]] = j == 0 ?
-                                   std::max(dim_size, 64): dim_size;
+                            std::max(dim_size, min_vec_dim_size): dim_size;
         }
         tile_configs.push_back(tiling);
     }
@@ -1523,13 +1530,10 @@ pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g) {
 
     // TODO: Add sanity checks for the cost model
-    /*
     debug(0) << "\n============\n";
     debug(0) << "Search start\n";
     debug(0) << "============\n";
 
-    debug(0) << g;
-    */
 
     // Initialize to no tiling
     map<string, int> no_tile_config;
@@ -1557,16 +1561,17 @@ Partitioner::find_best_tile_config(const Group &g) {
             best_config = config;
             best_analy = new_analy;
         }
+        debug(0) << "Relative to current best:" << '\n';
+        debug(0) << "arith cost:" << (float)new_analy.arith_cost/best_analy.arith_cost << " ";
+        debug(0) << "mem cost:" << (float)new_analy.mem_cost/best_analy.mem_cost << "\n\n";
     }
 
-    /*
     debug(0) << "\n===========\n";
     debug(0) << "Best config\n";
     for (auto &dim: best_config) {
         debug(0) << dim.first << ":" << dim.second << " ";
     }
     debug(0) << '\n' << best_analy;
-    */
 
     return make_pair(best_config, best_analy);
 }
@@ -1591,7 +1596,7 @@ void Partitioner::group(Partitioner::Level level) {
             // The last stage of the pipeline represents the candidate choice
             // of fusing the funtion into a consumer.
 
-            const Function &prod_f = analy.env.at(g.first.func.name());
+            const Function &prod_f = dep_analy.env.at(g.first.func.name());
             bool is_final_stage = (g.first.stage_num == prod_f.updates().size());
 
             if (is_output || !is_final_stage)
@@ -1638,7 +1643,7 @@ void Partitioner::group(Partitioner::Level level) {
         // TODO: state assumptions behind the following code
         string prod = best[0].first.prod;
 
-        Function prod_f = analy.env.at(prod);
+        Function prod_f = dep_analy.env.at(prod);
         size_t num_stages = prod_f.updates().size() + 1;
 
         FStage final_stage(prod_f, num_stages - 1);
@@ -1801,8 +1806,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     DimBounds tile_bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
 
     map<string, Box> conc_reg =
-            analy.regions_required(g.output.func, g.output.stage_num,
-                                   tile_bounds, group_mem);
+            dep_analy.regions_required(g.output.func, g.output.stage_num,
+                                       tile_bounds, group_mem);
 
     map<string, Box> group_reg, prod_reg, input_reg;
 
@@ -1812,14 +1817,13 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
             reg.first != g.output.func.name()) {
             group_reg[reg.first] = reg.second;
         } else if (group_inputs.find(reg.first) != group_inputs.end()) {
-            if (analy.env.find(reg.first) != analy.env.end())
+            if (dep_analy.env.find(reg.first) != dep_analy.env.end())
                 prod_reg[reg.first] = reg.second;
             else
                 input_reg[reg.first] = reg.second;
         }
     }
 
-    /*
     debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
@@ -1827,7 +1831,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     disp_regions(input_reg);
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
-    */
 
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost =
@@ -1854,7 +1857,9 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         tile_output_size = cost_model.region_size(g.output.func.name(),
                                                   out_tile_extent);
     } else {
-        tile_output_size = box_area(conc_reg.at(g.output.func.name()));
+        tile_output_size =
+                cost_model.region_size(g.output.func.name(),
+                                       conc_reg.at(g.output.func.name()));
     }
 
     // Adding tile input and output size to tile_intermediate_size over
@@ -1867,6 +1872,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
                                          g.output.stage_num,
                                          out_tile_extent, g.inlined);
     tile_cost.first += out_cost.first;
+    debug(0) << "out_cost.second:" << out_cost.second << '\n';
     tile_cost.second += out_cost.second;
 
     GroupAnalysis g_analy;
@@ -1891,14 +1897,19 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         // Aggressive estimate of accesses to memory
         per_tile_mem_cost = tile_cost.second;
     } else {
-        per_tile_mem_cost = tile_input_size + tile_output_size;
+        // The tile_input_size captures the region of the input
+        // required to compute the tile. However, all of it many not be
+        // accessed during the computation of the tile when the access
+        // is sparse. A better estimate is given by the smaller of
+        // number of memory accesses and the region size
+        per_tile_mem_cost = std::min(tile_input_size + tile_output_size,
+                                     tile_cost.second);
     }
 
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
-    /*
     debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
     debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
@@ -1906,7 +1917,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     debug(0) << "tile_input_size:" << tile_input_size << '\n';
     debug(0) << "tile_output_size:" << tile_output_size << '\n';
     debug(0) << g_analy << '\n';
-    */
 
     internal_assert(per_tile_mem_cost > 0);
 
@@ -1938,7 +1948,7 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
 
     // Create a group that reflects the fusion choice and evaluate the cost
     // of the group.
-    Function prod_f = analy.env.at(choice.prod);
+    Function prod_f = dep_analy.env.at(choice.prod);
     int num_prod_stages = prod_f.updates().size() + 1;
     vector<Group> prod_groups;
     for (int s = 0 ; s < num_prod_stages; s++) {
@@ -2099,8 +2109,8 @@ map<FStage, map<FStage, DimBounds>> Partitioner::get_group_member_bounds() {
         }
 
         map<string, Box> conc_reg =
-                analy.regions_required(g.output.func, g.output.stage_num,
-                                       bounds, prods);
+                dep_analy.regions_required(g.output.func, g.output.stage_num,
+                                           bounds, prods);
 
         for (const FStage &s: g.members) {
             if (conc_reg.find(s.func.name()) != conc_reg.end()) {
@@ -2421,7 +2431,7 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
 
     for (const pair<FStage, Group>& g: groups) {
         for (const string& inline_func: g.second.inlined) {
-            Function f = analy.env.at(inline_func);
+            Function f = dep_analy.env.at(inline_func);
             Func f_handle(f);
             // TODO: inling functions with update definitions has different
             // behavior than pure functions. They may need to be computed above
@@ -2467,11 +2477,11 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
 
     map<string, vector<string> > update_args;
     set<string> reductions;
-    DependenceAnalysis analy(env, func_val_bounds);
+    DependenceAnalysis dep_analy(env, func_val_bounds);
 
     // Show bounds of all the functions in the pipeline given estimates
     // on outputs. Also report functions where the bounds could not be inferred.
-    map<string, Box> pipeline_bounds = get_pipeline_bounds(analy, outputs);
+    map<string, Box> pipeline_bounds = get_pipeline_bounds(dep_analy, outputs);
 
 
     // TODO: Partitioner which is capable of auto scheduling hierarchically
@@ -2484,7 +2494,7 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     // Initialize the cost model
     CostModel cost_model(env);
 
-    Partitioner part(pipeline_bounds, arch_params, analy,
+    Partitioner part(pipeline_bounds, arch_params, dep_analy,
                      cost_model, outputs, false);
 
     // Compute reuse
@@ -2510,11 +2520,11 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     part.disp_pipeline_bounds();
     part.disp_pipeline_graph();
 
-    part.initialize_groups_inline();
-    part.disp_pipeline_costs();
+    //part.initialize_groups_inline();
+    //part.disp_pipeline_costs();
 
-    part.group(Partitioner::INLINE);
-    part.disp_grouping();
+    //part.group(Partitioner::INLINE);
+    //part.disp_grouping();
 
     part.initialize_groups_fast_mem();
     part.group(Partitioner::FAST_MEM);
