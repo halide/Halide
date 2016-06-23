@@ -10,6 +10,8 @@ extern "C" {
 #include <sys/mman.h>
 }
 
+#include "log.h"
+
 // ELF comes in 32 and 64-bit variants. Define ELF64 to use the 64-bit
 // variant.
 // #define ELF64
@@ -143,7 +145,7 @@ struct elf_t {
             section_header_t *sec = get_section(i);
             const char *sec_name = get_section_name(sec);
             if (failed) return;
-            if (debug) printf("\nSection %s at %p:\n",
+            if (debug) log_printf("\nSection %s at %p:\n",
                               sec_name,
                               get_addr(get_section_offset(sec)));
 
@@ -158,7 +160,7 @@ struct elf_t {
     }
 
     void fail(int line) {
-        printf("Failure at line %d\n", line);
+        log_printf("Failure at line %d\n", line);
         failed = line;
     }
 
@@ -170,7 +172,7 @@ struct elf_t {
 
         // Just copy the whole object file over (TODO: only copy over the writeable sections)
         if (w_size < size) {
-            printf("Writeable buffer size must match object buffer size\n");
+            log_printf("Writeable buffer size must match object buffer size\n");
             fail(__LINE__);
             return;
         }
@@ -181,7 +183,7 @@ struct elf_t {
             const char *sec_name = get_section_name(sec);
             if (failed) return;
             if (sec->sh_flags & 1) {
-                if (debug) printf("Section %s is writeable. Moving it\n", sec_name);
+                if (debug) log_printf("Section %s is writeable. Moving it\n", sec_name);
                 // Make the section table point to the writeable copy instead
                 sec->sh_offset += writeable_buf - buf;
             }
@@ -195,7 +197,7 @@ struct elf_t {
         char *addr = buf + o;
         if ((addr < buf || addr >= buf + size) &&
             (addr < writeable_buf || addr >= writeable_buf + writeable_size)) {
-            printf("Offset out of bounds: %p\n", addr);
+            log_printf("Offset out of bounds: %p\n", addr);
             fail(__LINE__);
             return NULL;
         }
@@ -337,10 +339,10 @@ struct elf_t {
     void do_reloc(char *addr, uint32_t mask, uintptr_t val) {
         uint32_t inst = *((uint32_t *)addr);
         if (debug) {
-            printf("Fixup inside instruction at %lx:\n  %08lx\n",
+            log_printf("Fixup inside instruction at %lx:\n  %08lx\n",
                    (uint32_t)(addr - get_addr(get_section_offset(sec_text))), inst);
-            printf("val: 0x%08lx\n", (unsigned long)val);
-            printf("mask: 0x%08lx\n", mask);
+            log_printf("val: 0x%08lx\n", (unsigned long)val);
+            log_printf("mask: 0x%08lx\n", mask);
         }
 
         if (!mask) {
@@ -349,31 +351,31 @@ struct elf_t {
             if (debug) {
                 // First print the bits so I can search for it in the
                 // instruction encodings.
-                printf("Instruction bits: ");
+                log_printf("Instruction bits: ");
                 for (int i = 31; i >=0; i--) {
-                    printf("%d", (int)((inst >> i) & 1));
+                    log_printf("%d", (int)((inst >> i) & 1));
                 }
-                printf("\n");
+                log_printf("\n");
             }
 
             if ((inst & (3 << 14)) == 0) {
                 // Some instructions are actually pairs of 16-bit
                 // subinstructions
-                if (debug) printf("Duplex!\n");
+                if (debug) log_printf("Duplex!\n");
 
                 int iclass = ((inst >> 29) << 1) | ((inst >> 13) & 1);
                 if (debug) {
-                    printf("Class: %x\n", iclass);
-                    printf("Hi: ");
+                    log_printf("Class: %x\n", iclass);
+                    log_printf("Hi: ");
                     for (int i = 28; i >= 16; i--) {
-                        printf("%d", (int)((inst >> i) & 1));
+                        log_printf("%d", (int)((inst >> i) & 1));
                     }
-                    printf("\n");
-                    printf("Lo: ");
+                    log_printf("\n");
+                    log_printf("Lo: ");
                     for (int i = 12; i >= 0; i--) {
-                        printf("%d", (int)((inst >> i) & 1));
+                        log_printf("%d", (int)((inst >> i) & 1));
                     }
-                    printf("\n");
+                    log_printf("\n");
                 }
 
                 // We only know how to do the ones where the high
@@ -402,18 +404,18 @@ struct elf_t {
             } else if (((inst >> 24) & 249) == 72) {
                 // Example instruction encoding that has this high byte (ignoring bits 1 and 2):
                 // 0100 1ii0  000i iiii  PPit tttt  iiii iiii
-                if (debug) printf("Instruction-specific case A\n");
+                if (debug) log_printf("Instruction-specific case A\n");
                 mask = 0x061f20ff;
             } else if (((inst >> 24) & 249) == 73) {
                 // 0100 1ii1  000i iiii  PPii iiii  iiid dddd
-                if (debug) printf("Instruction-specific case B\n");
+                if (debug) log_printf("Instruction-specific case B\n");
                 mask = 0x061f3fe0;
             } else if ((inst >> 24) == 120) {
                 // 0111 1000  ii-i iiii  PPii iiii  iiid dddd
-                if (debug) printf("Instruction-specific case C\n");
+                if (debug) log_printf("Instruction-specific case C\n");
                 mask = 0x00df3fe0;
             } else {
-                printf("Unhandled!\n");
+                log_printf("Unhandled!\n");
                 fail(__LINE__);
                 return;
             }
@@ -433,7 +435,7 @@ struct elf_t {
             }
         }
 
-        if (debug) printf("Relocated instruction:\n  %08lx\n", inst);
+        if (debug) log_printf("Relocated instruction:\n  %08lx\n", inst);
         *((uint32_t *)addr) = inst;
     }
 
@@ -470,17 +472,17 @@ struct elf_t {
                 fail(__LINE__);
                 return;
             }
-            if (debug) printf("\nRelocation %d:\n", i);
+            if (debug) log_printf("\nRelocation %d:\n", i);
 
             // The location to make a change
             char *fixup_addr = get_addr(get_section_offset(sec) + rela->r_offset);
-            if (debug) printf("Fixup address %p\n", fixup_addr);
+            if (debug) log_printf("Fixup address %p\n", fixup_addr);
 
             // We're fixing up a reference to the following symbol
             symbol_t *sym = get_symbol(rela->r_sym());
 
             const char *sym_name = get_symbol_name(sym);
-            if (debug) printf("Applies to symbol %s\n", sym_name);
+            if (debug) log_printf("Applies to symbol %s\n", sym_name);
 
             char *sym_addr = NULL;
             if (!symbol_is_defined(sym)) {
@@ -494,17 +496,17 @@ struct elf_t {
                     sym_addr = (char *)dlsym(NULL, sym_name);
                 }
                 if (!sym_addr) {
-                    printf("Failed to resolve external symbol: %s\n", sym_name);
+                    log_printf("Failed to resolve external symbol: %s\n", sym_name);
                     fail(__LINE__);
                     return;
                 }
             } else {
                 section_header_t *sym_sec = get_symbol_section(sym);
                 const char *sym_sec_name = get_section_name(sym_sec);
-                if (debug) printf("Symbol is in section: %s\n", sym_sec_name);
+                if (debug) log_printf("Symbol is in section: %s\n", sym_sec_name);
 
                 sym_addr = get_symbol_addr(sym);
-                if (debug) printf("Symbol is at address: %p\n", sym_addr);
+                if (debug) log_printf("Symbol is at address: %p\n", sym_addr);
             }
 
             // Define the variables from Table 11-5 in the Hexagon ABI spec
@@ -516,7 +518,7 @@ struct elf_t {
             char *GP;
             asm ("{%0 = gp}\n" : "=r"(GP) : : );
 
-            if (debug) printf("GP = %p\n", GP);
+            if (debug) log_printf("GP = %p\n", GP);
 
             // Define some constants from the Hexagon ABI spec
             const uint32_t Word32     = 0xffffffff;
@@ -638,7 +640,7 @@ struct elf_t {
                 // The remaining types are all for shared objects or
                 // thread locals. We can't handle them without also
                 // deducing some more base addresses (GOT, PLT, TLS, etc).
-                printf("Unhandled relocation type %lu.\n", rela->r_type());
+                log_printf("Unhandled relocation type %lu.\n", rela->r_type());
                 fail(__LINE__);
                 return;
             }
@@ -658,7 +660,7 @@ struct elf_t {
                     fail(__LINE__);
                     return;
                 }
-                if (debug) printf("Relocating: %s\n", sec_name);
+                if (debug) log_printf("Relocating: %s\n", sec_name);
                 do_relocations_for_section(sec_to_relocate, sec);
             }
         }
@@ -666,8 +668,10 @@ struct elf_t {
 
     // Mark the pages of the object file executable
     void make_executable() {
+    log_printf("%s %d\n", __FILE__, __LINE__);
         int err = mprotect(buf, size, PROT_EXEC | PROT_READ);
         if (err) {
+            log_printf("mprotect %d %p %d", err, buf, size);
             fail(__LINE__);
             return;
         }
@@ -690,25 +694,25 @@ struct elf_t {
                                               'w', 'x', 'y', 'z', '0', '1', '2', '3',
                                               '4', '5', '6', '7', '8', '9', '+', '/'};
         // Dump the object in base 64
-        printf("BEGIN BASE64\n");
+        log_printf("BEGIN BASE64\n");
         for (int i = 0; i < size; i += 3) {
             // every group of 3 bytes becomes 4 output bytes
             uint32_t a = buf[i];
             uint32_t b = buf[i+1];
             uint32_t c = buf[i+2];
             uint32_t triple = (a << 16) | (b << 8) | c;
-            printf("%c%c%c%c",
+            log_printf("%c%c%c%c",
                    encoding_table[(triple >> (3*6)) & 0x3f],
                    encoding_table[(triple >> (2*6)) & 0x3f],
                    encoding_table[(triple >> (1*6)) & 0x3f],
                    encoding_table[(triple >> (0*6)) & 0x3f]);
         }
-        printf("\nEND BASE64\n");
+        log_printf("\nEND BASE64\n");
     }
 
     /*
     void dump_to_file(const char *f) {
-        printf("Dumping to file!\n");
+        log_printf("Dumping to file!\n");
         int fd = open(f, O_CREAT | O_WRONLY);
         write(fd, buf, size);
         close(fd);
@@ -734,7 +738,7 @@ inline void *fake_dlopen(const char *filename, int) {
     close(fd);
 
     if (size >= max_size/2) {
-        printf("Didn't allocate enough memory\n");
+        log_printf("Didn't allocate enough memory\n");
         free(buf);
         return NULL;
     }
@@ -757,7 +761,7 @@ inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
 
     // Allocate enough space for two copies of the code. We'll execute
     // the first and use the second for the writeable globals.
-    char *e_buf = (char *)memalign(4096, aligned_code_size*2);
+    char *e_buf = (char *)mmap(NULL, aligned_code_size*2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (!e_buf) {
         return NULL;
     }
@@ -775,7 +779,7 @@ inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
     elf->do_relocations();
     //elf->dump_as_base64();
     //elf->dump_to_file("/tmp/relocated.o");
-    //elf->make_executable();
+    elf->make_executable();
 
     // Should run .ctors?
 
@@ -783,7 +787,7 @@ inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
 }
 
 inline void *fake_dlsym(void *handle, const char *name) {
-    printf("fake dlsym lookup of %s\n", name);
+    log_printf("fake dlsym lookup of %s\n", name);
     elf_t *elf = (elf_t *)handle;
     if (!elf) return NULL;
     symbol_t *sym = elf->find_symbol(name);
@@ -795,7 +799,7 @@ inline void *fake_dlsym(void *handle, const char *name) {
 inline int fake_dlclose(void *handle) {
     // Should run .dtors?
     elf_t *elf = (elf_t *)handle;
-    free(elf->buf);
+    munmap(elf->buf, elf->size * 2);
     free(elf);
     return 0;
 }

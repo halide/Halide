@@ -96,7 +96,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
                                              handle_t *module_ptr) {
     void *lib = fake_dlopen_mem(code, codeLen);
     if (!lib) {
-        log_printf("dlopen failed (%s)\n", dlerror());
+        log_printf("dlopen failed");
         return -1;
     }
 
