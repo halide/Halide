@@ -435,19 +435,50 @@ struct elf_t {
             if (debug) printf("GP = %p\n", GP);
 
             // Define some constants from the Hexagon ABI spec
-            const uint32_t Word32 = 0xffffffff;
+            const uint32_t Word32     = 0xffffffff;
+            const uint32_t Word16     = 0xffff;
+            const uint32_t Word8      = 0xff;
             const uint32_t Word32_B22 = 0x01ff3ffe;
-            const uint32_t Word32_GP = 0;
+            const uint32_t Word32_B15 = 0x00df20fe;
+            const uint32_t Word32_B13 = 0x00202ffe;
+            const uint32_t Word32_B9  = 0x003000fe;
+            const uint32_t Word32_B7  = 0x00001f18;
+            const uint32_t Word32_GP  = 0;
             const uint32_t Word32_X26 = 0x0fff3fff;
-            const uint32_t Word32_U6 = 0;
-            const uint32_t Word32_R6 = 0x000007e0;
+            const uint32_t Word32_U6  = 0;
+            const uint32_t Word32_R6  = 0x000007e0;
+            const uint32_t Word32_LO  = 0x00c03fff;
 
             switch (rela->r_type()) {
             case 1:
                 do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2);
                 break;
+            case 2:
+                // Untested
+                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2);
+                break;
+            case 3:
+                // Untested
+                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2);
+                break;
+            case 4:
+                // Untested
+                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A));
+                break;
+            case 5:
+                // Untested
+                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A) >> 16);
+                break;
             case 6:
                 do_reloc(fixup_addr, Word32, intptr_t(S + A) >> 2);
+                break;
+            case 7:
+                // Untested
+                do_reloc(fixup_addr, Word16, uintptr_t(S + A));
+                break;
+            case 8:
+                // Untested
+                do_reloc(fixup_addr, Word8, uintptr_t(S + A));
                 break;
             case 9:
                 do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP));
@@ -461,8 +492,45 @@ struct elf_t {
             case 12:
                 do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3);
                 break;
+            case 13:
+                // Untested
+                do_reloc(fixup_addr,   Word32_LO, uintptr_t(S + A) >> 16);
+                do_reloc(fixup_addr+4, Word32_LO, uintptr_t(S + A));
+                break;
+            case 14:
+                // Untested
+                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2);
+                break;
+            case 15:
+                // Untested
+                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2);
+                break;
+            case 16:
+                // Untested
+                do_reloc(fixup_addr, Word32_X26, intptr_t(S + A - P) >> 6);
+                break;
             case 17:
                 do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6);
+                break;
+            case 18:
+                // Untested
+                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f);
+                break;
+            case 19:
+                // Untested
+                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f);
+                break;
+            case 20:
+                // Untested
+                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f);
+                break;
+            case 21:
+                // Untested
+                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f);
+                break;
+            case 22:
+                // Untested
+                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f);
                 break;
             case 23:
                 do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A));
@@ -470,10 +538,22 @@ struct elf_t {
             case 24:
                 do_reloc(fixup_addr, Word32_R6, uintptr_t(S + A));
                 break;
+            case 25: // These ones all seem to mean the same thing. Only 30 is tested.
+            case 26:
+            case 27:
+            case 28:
+            case 29:
             case 30:
                 do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A));
                 break;
+            case 31:
+                // Untested
+                do_reloc(fixup_addr, Word32, intptr_t(S + A - P));
+                break;
             default:
+                // The remaining types are all for shared objects or
+                // thread locals. We can't handle them without also
+                // deducing some more base addresses (GOT, PLT, TLS, etc).
                 printf("Unhandled relocation type %lu.\n", rela->r_type());
                 abort();
             }
