@@ -47,9 +47,9 @@ WEAK host_malloc_fn host_malloc = NULL;
 WEAK host_free_fn host_free = NULL;
 
 template <typename T>
-void get_symbol(void *user_context, void *host_lib, const char* name, T &sym) {
+void get_symbol(void *user_context, const char* name, T &sym) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
-    sym = (T)halide_get_library_symbol(host_lib, name);
+    sym = (T)halide_hexagon_get_host_lib_symbol(user_context, name);
     debug(user_context) << "        " << (void *)sym << "\n";
     if (!sym) {
         error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
@@ -65,34 +65,23 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
-    // Load the library.
-    const char *host_lib_name = "libhalide_hexagon_host.so";
-    debug(user_context) << "    halide_load_library('" << host_lib_name << "') -> \n";
-    void *host_lib = halide_load_library(host_lib_name);
-    debug(user_context) << "        " << host_lib << "\n";
-    if (!host_lib) {
-        error(user_context) << host_lib_name << " not found.\n";
-        return -1;
-    }
-
     // Get the symbols we need from the library.
-
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
+    get_symbol(user_context, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
     if (!remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
+    get_symbol(user_context, "halide_hexagon_remote_get_symbol", remote_get_symbol);
     if (!remote_get_symbol) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
+    get_symbol(user_context, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
+    get_symbol(user_context, "halide_hexagon_remote_release_kernels", remote_release_kernels);
     if (!remote_release_kernels) return -1;
 
-    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
+    get_symbol(user_context, "halide_hexagon_host_malloc_init", host_malloc_init);
     if (!host_malloc_init) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
+    get_symbol(user_context, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
     if (!host_malloc_deinit) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc", host_malloc);
+    get_symbol(user_context, "halide_hexagon_host_malloc", host_malloc);
     if (!host_malloc) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_host_free", host_free);
+    get_symbol(user_context, "halide_hexagon_host_free", host_free);
     if (!host_free) return -1;
 
     host_malloc_init();
@@ -625,6 +614,22 @@ WEAK size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *
 
 WEAK const halide_device_interface *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
+}
+
+WEAK void* halide_hexagon_get_host_lib_symbol(void* user_context, const char *name) {
+    const char * const host_lib_name = "libhalide_hexagon_host.so";
+    static void *host_lib = halide_load_library(host_lib_name);
+    if (!host_lib) {
+        error(user_context) << host_lib_name << " not found.\n";
+        return NULL;
+    }
+    debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
+    void *sym = halide_get_library_symbol(host_lib, name);
+    debug(user_context) << "        " << (void *)sym << "\n";
+    if (!sym) {
+        error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
+    }
+    return sym;
 }
 
 namespace {
