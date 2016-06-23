@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <dlfcn.h>
 
+#include "elf.h"
 #include "hexagon_standalone.h"
 
 typedef struct _buffer__seq_octet _buffer__seq_octet;
@@ -98,7 +99,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
     const char *filename = (const char *)code;
-    void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
+    void *lib = fake_dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
     if (!lib) {
         halide_print(NULL, "dlopen failed\n");
         halide_print(NULL, dlerror());
@@ -109,9 +110,9 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+    set_runtime_t set_runtime = (set_runtime_t)fake_dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        dlclose(lib);
+        fake_dlclose(lib);
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -126,7 +127,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        dlclose(lib);
+        fake_dlclose(lib);
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
@@ -136,7 +137,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
 }
 
 handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
+    return reinterpret_cast<handle_t>(fake_dlsym(reinterpret_cast<void*>(module_ptr), name));
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -181,7 +182,7 @@ int run(handle_t module_ptr, handle_t function,
 }
 
 int release_kernels(handle_t module_ptr, int codeLen) {
-    dlclose(reinterpret_cast<void*>(module_ptr));
+    fake_dlclose(reinterpret_cast<void*>(module_ptr));
     return 0;
 }
 
