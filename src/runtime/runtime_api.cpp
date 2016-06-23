@@ -73,6 +73,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_hexagon_initialize_kernels,
     (void *)&halide_hexagon_run,
     (void *)&halide_hexagon_device_release,
+    (void *)&halide_hexagon_load_host_lib,
     (void *)&halide_qurt_hvx_lock,
     (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_qurt_hvx_unlock_as_destructor,
