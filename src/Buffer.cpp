@@ -108,10 +108,10 @@ EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
-    int error = halide_device_free(nullptr, const_cast<buffer_t *>(&p->buf));
-    user_assert(!error) << "Failed to free device buffer\n";
+    // Ignore errors. We may be cleaning up a buffer after an earlier
+    // error, and asserting would re-raise it.
+    halide_device_free(nullptr, const_cast<buffer_t *>(&p->buf));
     free(p->allocation);
-
     delete p;
 }
 
