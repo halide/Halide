@@ -182,24 +182,9 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
-        char filename[260];
-        result = write_shared_object(user_context, code, code_size, filename, sizeof(filename));
-        if (result != 0) {
-            return result;
-        }
-
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
-        result = remote_initialize_kernels((uint8_t*)filename, strlen(filename) + 1, &module);
-
-        // Unfortunately, dlopen on the Hexagon side doesn't keep the
-        // shared object alive in the file system. To work around
-        // this, we open the shared object, then remove the file. The
-        // file will still exist until our process exits, at which
-        // time the file handle will be closed, and then the file will
-        // be removed from the file system.
-        open(filename, O_RDONLY, 0);
-        remove(filename);
+        result = remote_initialize_kernels(code, code_size, &module);
 
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
