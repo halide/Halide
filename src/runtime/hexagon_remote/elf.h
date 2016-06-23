@@ -1,3 +1,4 @@
+extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -7,6 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+}
 
 // ELF comes in 32 and 64-bit variants. Define ELF64 to use the 64-bit
 // variant.
@@ -104,6 +106,9 @@ struct elf_t {
     // Set to true to spew debug info
     bool debug;
 
+    // If it fails, this records the line number
+    int failed;
+
     // Pointer to the header
     elf_header_t *header;
 
@@ -117,21 +122,27 @@ struct elf_t {
     // Point to an object file loaded into memory. Does not take
     // ownership of the memory. Memory should be page-aligned.
     void parse_object_file(char *b, size_t s, bool d = false) {
+        failed = 0;
         buf = b;
         size = s;
         debug = d;
 
         // Grab the header
-        if (size < sizeof(elf_header_t)) abort();
+        if (size < sizeof(elf_header_t)) {
+            fail(__LINE__);
+            return;
+        }
         header = (elf_header_t *)buf;
 
         // Get the section names section first
         sec_secnames = get_section(header->e_shstrndx);
+        if (failed) return;
 
         // Walk over the other sections
-        for (int i = 0; i < header->e_shnum; i++) {
+        for (int i = 0; i < num_sections(); i++) {
             section_header_t *sec = get_section(i);
             const char *sec_name = get_section_name(sec);
+            if (failed) return;
             if (debug) printf("\nSection %s at %p:\n",
                               sec_name,
                               get_addr(get_section_offset(sec)));
@@ -146,12 +157,50 @@ struct elf_t {
         }
     }
 
+    void fail(int line) {
+        failed = line;
+    }
+
+    char *writeable_buf;
+    size_t writeable_size;
+    void move_writeable_sections(char *w, size_t w_size) {
+        writeable_buf = w;
+        writeable_size = w_size;
+
+        // Just copy the whole object file over (TODO: only copy over the writeable sections)
+        if (w_size < size) {
+            printf("Writeable buffer size must match object buffer size\n");
+            fail(__LINE__);
+            return;
+        }
+        memcpy(writeable_buf, buf, w_size);
+
+        for (int i = 0; i < header->e_shnum; i++) {
+            section_header_t *sec = get_section(i);
+            const char *sec_name = get_section_name(sec);
+            if (failed) return;
+            if (sec->sh_flags & 1) {
+                if (debug) printf("Section %s is writeable. Moving it\n", sec_name);
+                // Nuke the original
+                memset(get_section_start(sec), 0, get_section_size(sec));
+                // Make the section table point to the writeable copy instead
+                sec->sh_offset += writeable_buf - buf;
+            }
+        }
+    }
+
     // Get the address given an offset into the buffer. Asserts that
     // it's in-range.
     char *get_addr(elfaddr_t off) {
-        // elfaddr_t is unsigned
-        if (off >= size) abort();
-        return buf + off;
+        int64_t o = (int64_t)off;
+        char *addr = buf + o;
+        if ((addr < buf || addr >= buf + size) &&
+            (addr < writeable_buf || addr >= writeable_buf + writeable_size)) {
+            printf("Offset out of bounds: %p\n", addr);
+            fail(__LINE__);
+            return NULL;
+        }
+        return addr;
     }
 
     // Get the number of sections
@@ -161,9 +210,15 @@ struct elf_t {
 
     // Get a section by index
     section_header_t *get_section(int i) {
-        if (!header) abort();
+        if (!header) {
+            fail(__LINE__);
+            return NULL;
+        }
         elfaddr_t off = header->e_shoff + i * header->e_shentsize;
-        if (off + sizeof(section_header_t) > size) abort();
+        if (off + sizeof(section_header_t) > size) {
+            fail(__LINE__);
+            return NULL;
+        }
         return (section_header_t *)get_addr(off);
     }
 
@@ -184,7 +239,10 @@ struct elf_t {
 
     // Get the name of a section
     const char *get_section_name(section_header_t *sec) {
-        if (!sec_secnames) abort();
+        if (!sec_secnames) {
+            fail(__LINE__);
+            return NULL;
+        }
         return get_addr(get_section_offset(sec_secnames) + sec->sh_name);
     }
 
@@ -202,19 +260,28 @@ struct elf_t {
 
     // The number of symbols in the symbol table
     int num_symbols() {
-        if (!sec_symtab) abort();
+        if (!sec_symtab) {
+            fail(__LINE__);
+            return 0;
+        }
         return get_section_size(sec_symtab) / sizeof(symbol_t);
     }
 
     // Get a symbol from the symbol table by index
     symbol_t *get_symbol(int i) {
-        if (!sec_symtab) abort();
+        if (!sec_symtab) {
+            fail(__LINE__);
+            return 0;
+        }
         return (symbol_t *)(get_addr(get_section_offset(sec_symtab) + i * sizeof(symbol_t)));
     }
 
     // Get the name of a symbol
     const char *get_symbol_name(symbol_t *sym) {
-        if (!sec_strtab) abort();
+        if (!sec_strtab) {
+            fail(__LINE__);
+            return NULL;
+        }
         return (const char *)(get_addr(get_section_offset(sec_strtab) + sym->st_name));
     }
 
@@ -251,13 +318,19 @@ struct elf_t {
 
     // Get the number of relocations in a relocation section
     int num_relas(section_header_t *sec_rela) {
-        if (!sec_rela) abort();
+        if (!sec_rela) {
+            fail(__LINE__);
+            return NULL;
+        }
         return get_section_size(sec_rela) / sizeof(rela_t);
     }
 
     // Get a relocation from a relocation section by index
     rela_t *get_rela(section_header_t *sec_rela, int i) {
-        if (!sec_rela) abort();
+        if (!sec_rela) {
+            fail(__LINE__);
+            return NULL;
+        }
         return (rela_t *)(get_addr(get_section_offset(sec_rela) + i * sizeof(rela_t)));
     }
 
@@ -309,7 +382,8 @@ struct elf_t {
                 // as A in table 9-4 in the programmer's reference
                 // manual).
                 if (iclass < 3 || iclass > 7) {
-                    abort();
+                    fail(__LINE__);
+                    return;
                 }
 
                 // Pull out the subinstructions. They're the low 13
@@ -319,7 +393,8 @@ struct elf_t {
 
                 // We only understand the ones where hi starts with 010
                 if ((hi >> 10) != 2) {
-                    abort();
+                    fail(__LINE__);
+                    return;
                 }
 
                 // Low 6 bits of val go in the following bits.
@@ -340,7 +415,8 @@ struct elf_t {
                 mask = 0x00df3fe0;
             } else {
                 printf("Unhandled!\n");
-                abort();
+                fail(__LINE__);
+                return;
             }
         }
 
@@ -348,7 +424,8 @@ struct elf_t {
             if (mask & (1 << i)) {
                 if (inst & (1 << i)) {
                     // This bit should be zero in the unrelocated instruction
-                    abort();
+                    fail(__LINE__);
+                    return;
                 }
                 // Consume a bit of val
                 int next_bit = val & 1;
@@ -364,7 +441,10 @@ struct elf_t {
     // Do all the relocations for sec (e.g. .text), using the list of
     // relocations in sec_rela (e.g. .rela.text)
     void do_relocations_for_section(section_header_t *sec, section_header_t *sec_rela) {
-        if (!sec_rela || !sec) abort();
+        if (!sec_rela || !sec) {
+            fail(__LINE__);
+            return;
+        }
 
         struct known_sym {
             const char *name;
@@ -412,7 +492,8 @@ struct elf_t {
                 }
                 if (!sym_addr) {
                     printf("Failed to resolve external symbol: %s\n", sym_name);
-                    abort();
+                    fail(__LINE__);
+                    return;
                 }
             } else {
                 section_header_t *sym_sec = get_symbol_section(sym);
@@ -555,7 +636,8 @@ struct elf_t {
                 // thread locals. We can't handle them without also
                 // deducing some more base addresses (GOT, PLT, TLS, etc).
                 printf("Unhandled relocation type %lu.\n", rela->r_type());
-                abort();
+                fail(__LINE__);
+                return;
             }
         }
 
@@ -569,7 +651,10 @@ struct elf_t {
             if (strncmp(sec_name, ".rela.", 6) == 0) {
                 // It's a relocations section for something
                 section_header_t *sec_to_relocate = find_section(sec_name + 5);
-                if (!sec_to_relocate) abort();
+                if (!sec_to_relocate) {
+                    fail(__LINE__);
+                    return;
+                }
                 if (debug) printf("Relocating: %s\n", sec_name);
                 do_relocations_for_section(sec_to_relocate, sec);
             }
@@ -578,9 +663,15 @@ struct elf_t {
 
     // Mark the pages of the object file executable
     void make_executable() {
-        int err = mprotect(buf, size, PROT_EXEC | PROT_READ | PROT_WRITE);
+        int err = mprotect(buf, size, PROT_EXEC | PROT_READ);
         if (err) {
-            abort();
+            fail(__LINE__);
+            return;
+        }
+        err = mprotect(writeable_buf, writeable_size, PROT_READ | PROT_WRITE);
+        if (err) {
+            fail(__LINE__);
+            return;
         }
     }
 
@@ -631,13 +722,23 @@ inline void *fake_dlopen(const char *filename, int) {
 
     // TODO: We assume 32 pages is enough for now
     const size_t max_size = 4096*32;
+
+    // Rather than move each section, we'll make two whole copies of
+    // the object in memory. Use the first half for the executable
+    // copy, and then second half for the writeable copy.
     char *buf = (char *)memalign(4096, max_size);
     size_t size = read(fd, buf, max_size);
-    if (size == max_size) abort();
     close(fd);
+
+    if (size >= max_size/2) {
+        printf("Didn't allocate enough memory\n");
+        free(buf);
+        return NULL;
+    }
 
     elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
     elf->parse_object_file(buf, size, false);
+    elf->move_writeable_sections(buf + max_size/2, size);
     elf->do_relocations();
     //elf->dump_as_base64();
     //elf->dump_to_file("/tmp/relocated.o");
@@ -651,7 +752,7 @@ inline void *fake_dlopen(const char *filename, int) {
 inline void *fake_dlsym(void *handle, const char *name) {
     printf("fake dlsym lookup of %s\n", name);
     elf_t *elf = (elf_t *)handle;
-    if (!elf) abort();
+    if (!elf) return NULL;
     symbol_t *sym = elf->find_symbol(name);
     if (!sym) return NULL;
     if (!elf->symbol_is_defined(sym)) return NULL;
