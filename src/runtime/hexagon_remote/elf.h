@@ -423,13 +423,18 @@ struct elf_t {
                 if (debug) printf("Symbol is at address: %p\n", sym_addr);
             }
 
-            // Define the variables from Table 11-5
+            // Define the variables from Table 11-5 in the Hexagon ABI spec
             char *S = sym_addr;
             char *P = fixup_addr;
-            // TODO: read from the GP register
-            char *GP = (char *)0x56000;// get_section_start(find_section(".sdata.4"));
             intptr_t A = rela->r_addend;
 
+            // Read from the GP register for GP-relative relocations
+            char *GP;
+            asm ("{%0 = gp}\n" : "=r"(GP) : : );
+
+            if (debug) printf("GP = %p\n", GP);
+
+            // Define some constants from the Hexagon ABI spec
             const uint32_t Word32 = 0xffffffff;
             const uint32_t Word32_B22 = 0x01ff3ffe;
             const uint32_t Word32_GP = 0;
@@ -448,15 +453,12 @@ struct elf_t {
                 do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP));
                 break;
             case 10:
-                printf("Warning: using bogus GP (%p)\n", GP);
                 do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1);
                 break;
             case 11:
-                printf("Warning: using bogus GP (%p)\n", GP);
                 do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2);
                 break;
             case 12:
-                printf("Warning: using bogus GP (%p)\n", GP);
                 do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3);
                 break;
             case 17:
@@ -555,11 +557,14 @@ inline void *fake_dlopen(const char *filename, int) {
     close(fd);
 
     elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
-    elf->parse_object_file(buf, size);
+    elf->parse_object_file(buf, size, false);
     elf->do_relocations();
     //elf->dump_as_base64();
     //elf->dump_to_file("/tmp/relocated.o");
     //elf->make_executable();
+
+    // Should run .ctors?
+
     return (void *)elf;
 }
 
@@ -574,6 +579,7 @@ inline void *fake_dlsym(void *handle, const char *name) {
 }
 
 inline int fake_dlclose(void *handle) {
+    // Should run .dtors?
     elf_t *elf = (elf_t *)handle;
     free(elf->buf);
     free(elf);
