@@ -866,25 +866,17 @@ class SolveForInterval : public IRVisitor {
             // Rewrite (max(a, b) <= c) <==> (a <= c && (b <= c || a >= b))
             // Also allow re-solving the new equations.
             Expr a = max_a->a, b = max_a->b, c = le->b;
-            Expr cond = simplify((a <= c) && (b <= c || a >= b));
-            if (equal(cond, le)) {
-                fail();
-            } else {
-                already_solved = false;
-                cond.accept(this);
-                already_solved = true;
-            }
+            Expr cond = (a <= c) && (b <= c || a >= b);
+            already_solved = false;
+            cond.accept(this);
+            already_solved = true;
         } else if (const Min *min_a = le->a.as<Min>()) {
             // Rewrite (min(a, b) <= c) <==> (a <= c || (b <= c && a >= b))
             Expr a = min_a->a, b = min_a->b, c = le->b;
-            Expr cond = simplify((a <= c) || (b <= c && a >= b));
-            if (equal(cond, le)) {
-                fail();
-            } else {
-                already_solved = false;
-                cond.accept(this);
-                already_solved = true;
-            }
+            Expr cond = (a <= c) || (b <= c && a >= b);
+            already_solved = false;
+            cond.accept(this);
+            already_solved = true;
         } else {
             fail();
         }
@@ -911,14 +903,14 @@ class SolveForInterval : public IRVisitor {
             // Rewrite (max(a, b) >= c) <==> (a >= c || (b >= c && a <= b))
             // Also allow re-solving the new equations.
             Expr a = max_a->a, b = max_a->b, c = ge->b;
-            Expr cond = simplify((a >= c) || (b >= c && a <= b));
+            Expr cond = (a >= c) || (b >= c && a <= b);
             already_solved = false;
             cond.accept(this);
             already_solved = true;
         } else if (const Min *min_a = ge->a.as<Min>()) {
             // Rewrite (min(a, b) >= c) <==> (a >= c && (b >= c || a <= b))
             Expr a = min_a->a, b = min_a->b, c = ge->b;
-            Expr cond = simplify((a >= c) && (b >= c || a <= b));
+            Expr cond = (a >= c) && (b >= c || a <= b);
             already_solved = false;
             cond.accept(this);
             already_solved = true;
@@ -1449,6 +1441,14 @@ void solve_test() {
         Expr cond = and_condition_over_domain(lhs < 0, s);
         internal_assert(!is_one(simplify(cond)));
     }
+
+    {
+        // This cause use to cause infinite recursion:
+        Expr t = Variable::make(Int(32), "t");
+        Expr test = (x <= min(max((y - min(((z*x) + t), t)), 1), 0));
+        Interval result = solve_for_outer_interval(test, "z");
+    }
+
 
     debug(0) << "Solve test passed\n";
 
