@@ -151,7 +151,8 @@ class IsNoOp : public IRVisitor {
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::rewrite_buffer ||
              op->name == Call::image_store ||
-             op->name == Call::copy_memory)) {
+             op->name == Call::copy_memory ||
+             op->name == Call::predicated_store)) {
             condition = const_false();
         } else {
             IRVisitor::visit(op);

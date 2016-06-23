@@ -6,12 +6,11 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Func f;
     Var x;
-    Image<float> data;
 
     // Don't bother with a pure definition. Because this will be the
     // output stage, that means leave whatever's already in the output
     // buffer untouched.
-    /*f(x) = undef<float>();
+    f(x) = undef<float>();
 
     // But do a sum-scan of it from 0 to 100
     RDom r(1, 99);
@@ -34,7 +33,7 @@ int main(int argc, char **argv) {
     if (err > 0.0001f) {
         printf("Failed\n");
         return -1;
-    }*/
+    }
 
 
     // Undef on one side of a select doesn't destroy the entire

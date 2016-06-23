@@ -1039,27 +1039,6 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
     return symbol_table.contains(name);
 }
 
-void CodeGen_LLVM::vector_predicate_push(Expr pred) {
-    Value *vpred = codegen(pred);
-    if (!vector_predicates_stack.empty()) {
-        Value *prev = vector_predicates_stack.top();
-        internal_assert(prev->getType() == vpred->getType());
-        vpred = builder->CreateAnd(prev, vpred);
-    }
-    vector_predicates_stack.push(vpred);
-}
-
-void CodeGen_LLVM::vector_predicate_pop() {
-    vector_predicates_stack.pop();
-}
-
-Value *CodeGen_LLVM::get_vector_predicate() const {
-    if (vector_predicates_stack.empty()) {
-        return nullptr;
-    }
-    return vector_predicates_stack.top();
-}
-
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
 void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
@@ -1768,13 +1747,12 @@ void CodeGen_LLVM::visit(const Load *op) {
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
     } else {
-        Value *vpred = get_vector_predicate();
-        debug(4) << "Codegen Load: " << Expr(op) << "  with predicate\n";
-
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-        int alignment = op->type.bytes(); // The size of a single element
+
         if (ramp && stride && stride->value == 1) {
+            int alignment = op->type.bytes(); // The size of a single element
+
             int native_bits = native_vector_bits();
             int native_bytes = native_bits / 8;
             // We assume halide_malloc for the platform returns
@@ -1814,14 +1792,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 llvm::Type *slice_type = VectorType::get(llvm_type_of(op->type.element_of()), slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
-
-                Instruction *load;
-                if (vpred != nullptr) {
-                    Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-                    load = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
-                }  else {
-                    load = builder->CreateAlignedLoad(vec_ptr, alignment);
-                }
+                LoadInst *load = builder->CreateAlignedLoad(vec_ptr, alignment);
                 add_tbaa_metadata(load, op->name, slice_index);
                 slices.push_back(load);
             }
@@ -1877,22 +1848,19 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             value = shuffle_vectors(vec_a, vec_b, indices);
         } else if (ramp && stride && stride->value == -1) {
-            // Flip the predicate
-            vector<int> indices(ramp->lanes);
-            for (int i = 0; i < ramp->lanes; i++) {
-                indices[i] = ramp->lanes - 1 - i;
-            }
-            vpred = shuffle_vectors(vpred, indices);
-
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
             Expr flipped_stride = make_one(flipped_base.type());
             Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
             Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param);
+
             Value *flipped = codegen(flipped_load);
 
-            // Flip back the result
-            vpred = shuffle_vectors(vpred, indices);
+            vector<int> indices(ramp->lanes);
+            for (int i = 0; i < ramp->lanes; i++) {
+                indices[i] = ramp->lanes - 1 - i;
+            }
+
             value = shuffle_vectors(flipped, indices);
         } else if (ramp) {
             // Gather without generating the indices as a vector
@@ -1901,13 +1869,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->lanes; i++) {
                 Value *lane = ConstantInt::get(i32_t, i);
-                Instruction *val;
-                if (vpred != nullptr) {
-                    Value *mask = builder->CreateExtractElement(vpred, ConstantInt::get(i32_t, i));
-                    val = builder->CreateMaskedLoad(ptr, alignment, mask);
-                }  else {
-                    val = builder->CreateLoad(ptr);
-                }
+                LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
@@ -1922,14 +1884,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < op->type.lanes(); i++) {
                 Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-
-                Instruction *val;
-                if (vpred != nullptr) {
-                    Value *mask = builder->CreateExtractElement(vpred, ConstantInt::get(i32_t, i));
-                    val = builder->CreateMaskedLoad(ptr, alignment, mask);
-                }  else {
-                    val = builder->CreateLoad(ptr);
-                }
+                LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -1941,21 +1896,13 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < op->type.lanes(); i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32_t, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-
-                Instruction *val;
-                if (vpred != nullptr) {
-                    Value *mask = builder->CreateExtractElement(vpred, ConstantInt::get(i32_t, i));
-                    val = builder->CreateMaskedLoad(ptr, alignment, mask);
-                }  else {
-                    val = builder->CreateLoad(ptr);
-                }
+                LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
             value = vec;
         }
     }
-
 }
 
 void CodeGen_LLVM::visit(const Ramp *op) {
@@ -2430,6 +2377,135 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
 
         value = codegen_buffer_pointer(load->name, load->type, load->index);
+
+    } else if (op->is_intrinsic(Call::predicated_store)) {
+        debug(4) << "VISIT predicated_store: " << Expr(op) << "\n";
+
+        internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {predicate, store addr, value}\n";
+        const Call *store_addr = op->args[0].as<Call>();
+        internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
+            << "The second argument to predicated_store must be call to address_of of the store's address\n";
+        const Load *load = store_addr->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+        const Ramp *ramp = load->index.as<Ramp>();
+        internal_assert(ramp && is_one(ramp->stride)) << "predicated_store should take a dense vector store\n"
+            << "Ramp: " << Expr(ramp) << "\n";
+        internal_assert(op->args[1].defined()) << "Predicate of predicated_store should not be undefined\n";
+        internal_assert(op->args[1].type().lanes() == load->type.lanes())
+            << "Predicate of predicated_store should have the same number of lanes as the store index\n";
+        internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
+            << "Predicate of predicated_store should have the same number of lanes as the store value\n";
+
+        Value *vpred = codegen(op->args[1]);
+        Halide::Type value_type = op->args[2].type();
+        Value *val = codegen(op->args[2]);
+        bool is_external = (external_buffer.find(load->name) != external_buffer.end());
+        int alignment = value_type.bytes();
+        int native_bits = native_vector_bits();
+        int native_bytes = native_bits / 8;
+
+        // Boost the alignment if possible, up to the native vector width.
+        ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+        while ((mod_rem.remainder & 1) == 0 &&
+               (mod_rem.modulus & 1) == 0 &&
+               alignment < native_bytes) {
+            mod_rem.modulus /= 2;
+            mod_rem.remainder /= 2;
+            alignment *= 2;
+        }
+
+        // If it is an external buffer, then we cannot assume that the host pointer
+        // is aligned to at least the native vector width. However, we may be able to do
+        // better than just assuming that it is unaligned.
+        if (is_external && load->param.defined()) {
+            int host_alignment = load->param.host_alignment();
+            alignment = gcd(alignment, host_alignment);
+        }
+
+        // For dense vector stores wider than the native vector
+        // width, bust them up into native vectors.
+        int store_lanes = value_type.lanes();
+        int native_lanes = native_bits / value_type.bits();
+
+        for (int i = 0; i < store_lanes; i += native_lanes) {
+            int slice_lanes = std::min(native_lanes, store_lanes - i);
+            Expr slice_base = simplify(ramp->base + i);
+            Expr slice_stride = make_one(slice_base.type());
+            Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
+            Value *slice_val = slice_vector(val, i, slice_lanes);
+            Value *elt_ptr = codegen_buffer_pointer(load->name, value_type.element_of(), slice_base);
+            Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
+
+            Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+            Instruction *store_inst = builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
+            add_tbaa_metadata(store_inst, load->name, slice_index);
+        }
+
+    } else if (op->is_intrinsic(Call::predicated_load)) {
+        debug(4) << "VISIT predicated_load: " << Expr(op) << "\n";
+
+        internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {predicate, load addr}\n";
+        const Call *load_addr = op->args[0].as<Call>();
+        internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
+            << "The second argument to predicated_load must be call to address_of of the load's address\n";
+        const Load *load = load_addr->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+        const Ramp *ramp = load->index.as<Ramp>();
+        internal_assert(ramp && is_one(ramp->stride)) << "predicated_load should take a dense vector load\n";
+        internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
+        internal_assert(op->args[1].type().lanes() == load->type.lanes())
+            << "Predicate of predicated_load should have the same number of lanes as the Load\n";
+
+        Value *vpred = codegen(op->args[1]);
+        bool is_external = (external_buffer.find(load->name) != external_buffer.end());
+        int alignment = load->type.bytes(); // The size of a single element
+
+        int native_bits = native_vector_bits();
+        int native_bytes = native_bits / 8;
+        // We assume halide_malloc for the platform returns
+        // buffers aligned to at least the native vector
+        // width. (i.e. 16-byte alignment on arm, and 32-byte
+        // alignment on x86), so this is the maximum alignment we
+        // can infer based on the index alone.
+
+        // Boost the alignment if possible, up to the native vector width.
+        ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+        while ((mod_rem.remainder & 1) == 0 &&
+               (mod_rem.modulus & 1) == 0 &&
+               alignment < native_bytes) {
+            mod_rem.modulus /= 2;
+            mod_rem.remainder /= 2;
+            alignment *= 2;
+        }
+
+        // If it is an external buffer, then we cannot assume that the host pointer
+        // is aligned to at least native vector width. However, we may be able to do
+        // better than just assuming that it is unaligned.
+        if (is_external && load->param.defined()) {
+            int host_alignment = load->param.host_alignment();
+            alignment = gcd(alignment, host_alignment);
+        }
+
+        // For dense vector loads wider than the native vector
+        // width, bust them up into native vectors
+        int load_lanes = load->type.lanes();
+        int native_lanes = native_bits / load->type.bits();
+        vector<Value *> slices;
+        for (int i = 0; i < load_lanes; i += native_lanes) {
+            int slice_lanes = std::min(native_lanes, load_lanes - i);
+            Expr slice_base = simplify(ramp->base + i);
+            Expr slice_stride = make_one(slice_base.type());
+            Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
+            llvm::Type *slice_type = VectorType::get(llvm_type_of(load->type.element_of()), slice_lanes);
+            Value *elt_ptr = codegen_buffer_pointer(load->name, load->type.element_of(), slice_base);
+            Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
+
+            Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+            Instruction *load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+            add_tbaa_metadata(load_inst, load->name, slice_index);
+            slices.push_back(load_inst);
+        }
+        value = concat_vectors(slices);
 
     } else if (op->is_intrinsic(Call::trace) ||
                op->is_intrinsic(Call::trace_expr)) {
@@ -3342,9 +3418,6 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
     } else {
-        debug(4) << "Codegen Store: " << Stmt(op) << "  with predicate\n";
-        Value *vpred = get_vector_predicate();
-
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
         if (ramp && is_one(ramp->stride)) {
@@ -3383,14 +3456,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
-
-                Instruction *store;
-                if (vpred != nullptr) {
-                    Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-                    store = builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
-                }  else {
-                    store = builder->CreateAlignedStore(slice_val, vec_ptr, alignment);
-                }
+                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, alignment);
                 add_tbaa_metadata(store, op->name, slice_index);
             }
         } else if (ramp) {
@@ -3411,23 +3477,11 @@ void CodeGen_LLVM::visit(const Store *op) {
 #endif
                             ptr,
                             const_stride->value * i);
-                    Instruction *store;
-                    if (vpred != nullptr) {
-                        Value *mask = builder->CreateExtractElement(vpred, lane);
-                        store = builder->CreateMaskedStore(v, p, alignment, mask);
-                    }  else {
-                        store = builder->CreateStore(v, p);
-                    }
+                    StoreInst *store = builder->CreateStore(v, p);
                     add_tbaa_metadata(store, op->name, op->index);
                 } else {
                     // Increment the pointer by the stride for each element
-                    Instruction *store;
-                    if (vpred != nullptr) {
-                        Value *mask = builder->CreateExtractElement(vpred, lane);
-                        store = builder->CreateMaskedStore(v, ptr, alignment, mask);
-                    }  else {
-                        store = builder->CreateStore(v, ptr);
-                    }
+                    StoreInst *store = builder->CreateStore(v, ptr);
                     add_tbaa_metadata(store, op->name, op->index);
                     ptr = builder->CreateInBoundsGEP(ptr, stride);
                 }
@@ -3440,19 +3494,11 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-
-                Instruction *store;
-                if (vpred != nullptr) {
-                    Value *mask = builder->CreateExtractElement(vpred, lane);
-                    store = builder->CreateMaskedStore(v, ptr, alignment, mask);
-                }  else {
-                    store = builder->CreateStore(v, ptr);
-                }
+                StoreInst *store = builder->CreateStore(v, ptr);
                 add_tbaa_metadata(store, op->name, op->index);
             }
         }
     }
-
 }
 
 
@@ -3470,40 +3516,22 @@ void CodeGen_LLVM::visit(const Provide *op) {
 }
 
 void CodeGen_LLVM::visit(const IfThenElse *op) {
-    // If the condition is vectorized, we need to mask any store/load/extern call
-    // within the branch with the corresponding predicate.
-    if (op->condition.type().lanes() > 1) {
-        debug(4) << "Encounter vectorized predicate in IfThenElse:\n" << Stmt(op) << "\n";
+    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+    builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
 
-        // Then case
-        vector_predicate_push(op->condition);
-        codegen(op->then_case);
-        vector_predicate_pop();
+    builder->SetInsertPoint(true_bb);
+    codegen(op->then_case);
+    builder->CreateBr(after_bb);
 
-        // Else case
-        if (op->else_case.defined()) {
-            vector_predicate_push(!op->condition);
-            codegen(op->else_case);
-            vector_predicate_pop();
-        }
-    } else {
-        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
-
-        builder->SetInsertPoint(true_bb);
-        codegen(op->then_case);
-        builder->CreateBr(after_bb);
-
-        builder->SetInsertPoint(false_bb);
-        if (op->else_case.defined()) {
-            codegen(op->else_case);
-        }
-        builder->CreateBr(after_bb);
-
-        builder->SetInsertPoint(after_bb);
+    builder->SetInsertPoint(false_bb);
+    if (op->else_case.defined()) {
+        codegen(op->else_case);
     }
+    builder->CreateBr(after_bb);
+
+    builder->SetInsertPoint(after_bb);
 }
 
 void CodeGen_LLVM::visit(const Evaluate *op) {

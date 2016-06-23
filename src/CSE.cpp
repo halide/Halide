@@ -58,8 +58,18 @@ bool should_extract(Expr e) {
         return !is_const(a->stride);
     }
 
-    return true;
+    if (e.as<IfThenElse>() != nullptr) {
+        return false;
+    }
 
+    if (const Call *a = e.as<Call>()) {
+        if (a->is_intrinsic(Call::address_of) ||
+            a->is_intrinsic(Call::predicated_load) ||
+            a->is_intrinsic(Call::predicated_store)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // A global-value-numbering of expressions. Returns canonical form of
@@ -224,9 +234,7 @@ public:
     }
 };
 
-} // namespace
-
-Expr common_subexpression_elimination(Expr e) {
+Expr common_subexpression_elimination_helper(Expr e) {
 
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
@@ -278,7 +286,54 @@ Expr common_subexpression_elimination(Expr e) {
     return e;
 }
 
-namespace {
+class CSEExpr : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+    Expr mutate(Expr e) {
+        const Call *call = e.as<Call>();
+        if (call) {
+            if (call->is_intrinsic(Call::address_of)) {
+                debug(4) << "Encounter call address_of: " << e << "\n";
+
+                const Load *load = call->args[0].as<Load>();
+                internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+
+                Expr index = common_subexpression_elimination_helper(load->index);
+                if (index.same_as(load->index)) {
+                    return e;
+                } else {
+                    Expr new_load = Load::make(load->type, load->name, index, load->image, load->param);
+                    return Call::make(call->type, call->name, {new_load}, call->call_type,
+                                      call->func, call->value_index, call->image, call->param);
+                }
+            } else if (call->is_intrinsic(Call::predicated_load) ||
+                       call->is_intrinsic(Call::predicated_store)) {
+                debug(4) << "Encounter call predicated store/load: " << e << "\n";
+
+                vector<Expr > new_args(call->args.size());
+                bool changed = false;
+
+                // Mutate the args
+                for (size_t i = 0; i < call->args.size(); i++) {
+                    Expr old_arg = call->args[i];
+                    Expr new_arg = common_subexpression_elimination_helper(old_arg);
+                    if (!new_arg.same_as(old_arg)) changed = true;
+                    new_args[i] = new_arg;
+                    debug(0) << "----new arg: " << new_arg << "\n";
+                }
+
+                if (!changed) {
+                    return e;
+                } else {
+                    return Call::make(call->type, call->name, new_args, call->call_type,
+                                      call->func, call->value_index, call->image, call->param);
+                }
+            }
+        }
+        return common_subexpression_elimination_helper(e);
+    }
+};
 
 class CSEEveryExprInStmt : public IRMutator {
 public:
@@ -287,9 +342,27 @@ public:
     Expr mutate(Expr e) {
         return common_subexpression_elimination(e);
     }
+
+    Stmt mutate(Stmt s) {
+        // If 's' is a IfThenElse, we need to do CSE on both branches and
+        // condition separately since we don't want to lift an expr out of
+        // the IfThenElse node
+        if (const IfThenElse *op = s.as<IfThenElse>()) {
+            Expr cond = common_subexpression_elimination(op->condition);
+            Stmt then_case = mutate(op->then_case);
+            Stmt else_case = mutate(op->else_case);
+            return IfThenElse::make(cond, then_case, else_case);
+        } else {
+            return IRMutator::mutate(s);
+        }
+    }
 };
 
 } // namespace
+
+Expr common_subexpression_elimination(Expr e) {
+    return CSEExpr().mutate(e);
+}
 
 Stmt common_subexpression_elimination(Stmt s) {
     return CSEEveryExprInStmt().mutate(s);
@@ -355,7 +428,9 @@ Expr ssa_block(vector<Expr> exprs) {
 
 void cse_test() {
     Expr x = Variable::make(Int(32), "x");
-    Expr t[32], tf[32];
+    Expr y = Variable::make(Int(32), "y");
+
+    /*Expr t[32], tf[32];
     for (int i = 0; i < 32; i++) {
         t[i] = Variable::make(Int(32), "t" + std::to_string(i));
         tf[i] = Variable::make(Float(32), "t" + std::to_string(i));
@@ -416,7 +491,14 @@ void cse_test() {
         e = e*e + e + i;
         e = e*e - e * i;
     }
-    Expr result = common_subexpression_elimination(e);
+    Expr result = common_subexpression_elimination(e);*/
+
+    Stmt test = IfThenElse::make(x*x + 2*x*x + x*y > 2,
+                                 Evaluate::make(select(x*x + y*y > 0, x*x + y*y, 2)),
+                                 Evaluate::make(select(x*x > 0, x*x + 3, 2)));
+    Stmt result = common_subexpression_elimination(test);
+    debug(0) << "Original: " << test << "\n"
+             << "Result: " << result << "\n";
 
     debug(0) << "common_subexpression_elimination test passed\n";
 }
