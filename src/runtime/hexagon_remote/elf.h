@@ -374,6 +374,7 @@ struct elf_t {
             {"close", (char *)(&close)},
             {"abort", (char *)(&abort)},
             {"memcpy", (char *)(&memcpy)},
+            {"memmove", (char *)(&memmove)},
             {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
             {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
             {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
@@ -410,6 +411,7 @@ struct elf_t {
                     sym_addr = (char *)dlsym(NULL, sym_name);
                 }
                 if (!sym_addr) {
+                    printf("Failed to resolve external symbol: %s\n", sym_name);
                     abort();
                 }
             } else {
