@@ -1,5 +1,6 @@
 #include "sim_protocol.h"
 #include "../HalideRuntime.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -42,7 +43,7 @@ int qurt_hvx_unlock() {
 }  // extern "C"
 
 void halide_print(void *user_context, const char *str) {
-    fprintf(stderr, "%s", str);
+    log_printf("%s", str);
 }
 
 // This is a basic implementation of the Halide runtime for Hexagon.
@@ -261,10 +262,10 @@ int main(int argc, const char **argv) {
         case Message::Break:
             return 0;
         default:
-            fprintf(stderr, "Unknown message: %d\n", rpc_call);
+            log_printf("Unknown message: %d\n", rpc_call);
             return -1;
         }
     }
-    fprintf(stderr, "Unreachable!\n");
+    log_printf("Unreachable!\n");
     return 0;
 }
