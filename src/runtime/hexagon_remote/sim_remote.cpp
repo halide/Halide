@@ -98,11 +98,9 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
-    const char *filename = (const char *)code;
-    void *lib = fake_dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
+    void *lib = fake_dlopen_mem(code, codeLen);
     if (!lib) {
-        halide_print(NULL, "dlopen failed\n");
-        halide_print(NULL, dlerror());
+        halide_print(NULL, "dlopen_mem failed\n");
         return -1;
     }
 

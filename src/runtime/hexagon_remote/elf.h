@@ -158,6 +158,7 @@ struct elf_t {
     }
 
     void fail(int line) {
+        printf("Failure at line %d\n", line);
         failed = line;
     }
 
@@ -181,8 +182,6 @@ struct elf_t {
             if (failed) return;
             if (sec->sh_flags & 1) {
                 if (debug) printf("Section %s is writeable. Moving it\n", sec_name);
-                // Nuke the original
-                memset(get_section_start(sec), 0, get_section_size(sec));
                 // Make the section table point to the writeable copy instead
                 sec->sh_offset += writeable_buf - buf;
             }
@@ -320,7 +319,7 @@ struct elf_t {
     int num_relas(section_header_t *sec_rela) {
         if (!sec_rela) {
             fail(__LINE__);
-            return NULL;
+            return 0;
         }
         return get_section_size(sec_rela) / sizeof(rela_t);
     }
@@ -467,11 +466,15 @@ struct elf_t {
 
         for (int i = 0; i < num_relas(sec_rela); i++) {
             rela_t *rela = get_rela(sec_rela, i);
+            if (!rela) {
+                fail(__LINE__);
+                return;
+            }
             if (debug) printf("\nRelocation %d:\n", i);
 
             // The location to make a change
             char *fixup_addr = get_addr(get_section_offset(sec) + rela->r_offset);
-            if (debug) printf("Fixed address %p\n", fixup_addr);
+            if (debug) printf("Fixup address %p\n", fixup_addr);
 
             // We're fixing up a reference to the following symbol
             symbol_t *sym = get_symbol(rela->r_sym());
@@ -739,6 +742,36 @@ inline void *fake_dlopen(const char *filename, int) {
     elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
     elf->parse_object_file(buf, size, false);
     elf->move_writeable_sections(buf + max_size/2, size);
+    elf->do_relocations();
+    //elf->dump_as_base64();
+    //elf->dump_to_file("/tmp/relocated.o");
+    //elf->make_executable();
+
+    // Should run .ctors?
+
+    return (void *)elf;
+}
+
+inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
+    int aligned_code_size = (code_size + 4095) & ~4095;
+
+    // Allocate enough space for two copies of the code. We'll execute
+    // the first and use the second for the writeable globals.
+    char *e_buf = (char *)memalign(4096, aligned_code_size*2);
+    if (!e_buf) {
+        return NULL;
+    }
+    char *w_buf = e_buf + aligned_code_size;
+
+    elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
+    if (!elf) {
+        return NULL;
+    }
+
+    memcpy(e_buf, code, code_size);
+
+    elf->parse_object_file(e_buf, aligned_code_size, false);
+    elf->move_writeable_sections(w_buf, aligned_code_size);
     elf->do_relocations();
     //elf->dump_as_base64();
     //elf->dump_to_file("/tmp/relocated.o");
