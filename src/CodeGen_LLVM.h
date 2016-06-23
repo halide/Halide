@@ -480,6 +480,8 @@ private:
      * to this block. */
     llvm::BasicBlock *destructor_block;
 
+    SmallStack<llvm::Value *> vector_predicates_stack;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage. Note that the return value is a function-returning-
@@ -494,6 +496,10 @@ private:
     void register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper);
 
     llvm::Function *add_argv_wrapper(const std::string &name);
+
+    void vector_predicate_push(Expr pred);
+    void vector_predicate_pop();
+    llvm::Value *get_vector_predicate() const;
 };
 
 }
