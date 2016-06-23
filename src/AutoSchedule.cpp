@@ -2119,6 +2119,14 @@ map<FStage, map<FStage, DimBounds>> Partitioner::get_group_member_bounds() {
     return group_bounds;
 }
 
+string get_base_name(string name) {
+    size_t dot_pos = name.rfind('.');
+    if (dot_pos != string::npos) {
+        return name.substr(dot_pos + 1);
+    }
+    return name;
+}
+
 pair<VarOrRVar, VarOrRVar>
 split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
           string out_suffix, map<string, int> &estimates, string &sched) {
@@ -2147,12 +2155,55 @@ split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
     return make_pair(inner, outer);
 }
 
-string get_base_name(string name) {
-    size_t dot_pos = name.rfind('.');
-    if (dot_pos != string::npos) {
-        return name.substr(dot_pos + 1);
+void vectorize_stage(Stage f_handle, Function func, const Target &t,
+                   set<string> &rvars, map<string, int> &estimates,
+                   string &sched) {
+    // TODO: Explore scenarios where vectorizing an outer dimension makes more
+    // sense. For example, when the inner most dimension does not have enough
+    // iterations
+    //
+    // TODO: Vectorizing rvars
+    //
+    // Vectorize the innermost pure dimension
+    const vector<Dim> &dims = f_handle.get_schedule().dims();
+    int vec_dim_index = -1;
+    for (int d = 0; d < (int) dims.size() - 1; d++) {
+        if (rvars.find(get_base_name(dims[d].var)) == rvars.end()) {
+            vec_dim_index = d;
+            break;
+        }
     }
-    return name;
+
+    if (vec_dim_index >=0) {
+        string vec_dim_name = get_base_name(dims[vec_dim_index].var);
+        if (estimates.find(vec_dim_name) != estimates.end()) {
+            Var vec_var(vec_dim_name);
+            // Set the vector length as the maximum of the values produced by a
+            // function
+            int vec_len = 0;
+            for (auto &type: func.output_types()) {
+                vec_len = std::max(vec_len, t.natural_vector_size(type));
+            }
+
+            bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
+            if (estimates[vec_dim_name] >= vec_len) {
+
+                pair<VarOrRVar, VarOrRVar> split_vars =
+                        split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
+                                  estimates, sched);
+
+                f_handle.vectorize(split_vars.first);
+                sched += f_handle.name() + ".vectorize(" +
+                         split_vars.first.name() + ");\n";
+
+                if (is_rvar) {
+                    rvars.erase(vec_dim_name);
+                    rvars.insert(split_vars.first.name());
+                    rvars.insert(split_vars.second.name());
+                }
+            }
+        }
+    }
 }
 
 string Partitioner::generate_group_cpu_schedule(
@@ -2191,7 +2242,7 @@ string Partitioner::generate_group_cpu_schedule(
     vector<VarOrRVar> outer_dims;
     vector<VarOrRVar> inner_dims;
 
-    const vector<Dim> &dims = def.schedule().dims();
+    vector<Dim> &dims = def.schedule().dims();
 
     // Keep track of the rvars
     set<string> rvars;
@@ -2259,61 +2310,7 @@ string Partitioner::generate_group_cpu_schedule(
         sched += f_handle.name() + ".reorder(" + var_order + ");\n";
     }
 
-    // The level at which group members will be computed
-    VarOrRVar tile_inner_var("", false);
-    if (outer_dims.size() > 0) {
-        tile_inner_var = outer_dims.front();
-    }
-
-    // TODO: Explore scenarios where vectorizing an outer dimension makes more
-    // sense. For example, when the inner most dimension does not have enough
-    // iterations
-    //
-    // TODO: Vectorizing rvars
-    //
-    // Vectorize the innermost pure dimension
-    int vec_dim_index = -1;
-    for (int d = 0; d < (int) dims.size() - 1; d++) {
-        if (rvars.find(get_base_name(dims[d].var)) == rvars.end()) {
-            vec_dim_index = d;
-            break;
-        }
-    }
-
-    if (vec_dim_index >=0) {
-        string vec_dim_name = get_base_name(dims[vec_dim_index].var);
-        if (stg_estimates.find(vec_dim_name) != stg_estimates.end()) {
-            Var vec_var(vec_dim_name);
-            // Set the vector length as the maximum of the values produced by a
-            // function
-            int vec_len = 0;
-            for (auto& type: g_out.output_types()) {
-                vec_len = std::max(vec_len, t.natural_vector_size(type));
-            }
-
-            bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
-            if (stg_estimates[vec_dim_name] >= vec_len) {
-
-                pair<VarOrRVar, VarOrRVar> split_vars =
-                        split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
-                                  stg_estimates, sched);
-
-                f_handle.vectorize(split_vars.first);
-                sched += f_handle.name() + ".vectorize(" +
-                        split_vars.first.name() + ");\n";
-
-                if (is_rvar) {
-                    rvars.erase(vec_dim_name);
-                    rvars.insert(split_vars.first.name());
-                    rvars.insert(split_vars.second.name());
-                }
-
-                if (outer_dims.size() > 0 && tile_inner_var.name() == vec_dim_name) {
-                    tile_inner_var = split_vars.second;
-                }
-            }
-        }
-    }
+    vectorize_stage(f_handle, g_out, t, rvars, stg_estimates, sched);
 
     // Parallelize definition
     uint32_t def_par = 1;
@@ -2351,12 +2348,20 @@ string Partitioner::generate_group_cpu_schedule(
                  f_handle.name() << '\n';
     }
 
+    // The level at which group members will be computed
+    int tile_inner_index = dims.size() - outer_dims.size() - 1;
+    VarOrRVar tile_inner_var("", false);
+    if (outer_dims.size() > 0) {
+        string var_name = get_base_name(dims[tile_inner_index].var);
+        bool is_rvar = (rvars.find(var_name) != rvars.end());
+        tile_inner_var = VarOrRVar(var_name, is_rvar);
+    }
+
     for (const FStage &mem: g.members) {
         // Skip member stages that have been inlined
         if (g.inlined.find(mem.func.name()) != g.inlined.end() ||
             mem.func.name() == g_out.name())
             continue;
-
 
         // Get the definition corresponding to the stage
         Definition def = get_stage_definition(mem.func, mem.stage_num);
@@ -2386,7 +2391,7 @@ string Partitioner::generate_group_cpu_schedule(
             }
         }
 
-        //TODO: vectorize
+        vectorize_stage(mem_handle, mem.func, t, rvars, mem_estimates, sched);
     }
 
     return sched;
@@ -2508,8 +2513,6 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     part.disp_grouping();
 
     // TODO: Auto scheduler modes
-    // O1 Does not introduce any redundant compute but performs basic fusion
-    // O2 No redundant compute basic fusion and reordering
     // O3 Trades-offs redundant work for enhancing locality and parallelism
 
     // TODO: Better handling of boundary conditions
@@ -2518,9 +2521,6 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     // Set the schedule defaults for each function in the environment
     //set_schedule_defaults(env);
     debug(0) << sched << '\n';
-
-    // GPU
-    // ...
 }
 
 }
