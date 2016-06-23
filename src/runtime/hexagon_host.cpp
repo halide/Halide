@@ -347,6 +347,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
         }
         state = state->next;
     }
+    state_list = NULL;
 
     return 0;
 }
