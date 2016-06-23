@@ -2155,52 +2155,50 @@ split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
     return make_pair(inner, outer);
 }
 
-void vectorize_stage(Stage f_handle, Function func, const Target &t,
-                   set<string> &rvars, map<string, int> &estimates,
-                   string &sched) {
-    // TODO: Explore scenarios where vectorizing an outer dimension makes more
-    // sense. For example, when the inner most dimension does not have enough
-    // iterations
-    //
-    // TODO: Vectorizing rvars
-    //
-    // Vectorize the innermost pure dimension
+void vectorize_stage(Stage f_handle, Definition def, Function func,
+                     const Target &t, set<string> &rvars,
+                     map<string, int> &estimates, string &sched) {
     const vector<Dim> &dims = f_handle.get_schedule().dims();
     int vec_dim_index = -1;
+
+    int vec_len = 0;
+    for (auto &type: func.output_types()) {
+        vec_len = std::max(vec_len, t.natural_vector_size(type));
+    }
+
     for (int d = 0; d < (int) dims.size() - 1; d++) {
-        if (rvars.find(get_base_name(dims[d].var)) == rvars.end()) {
+        string dim_name = get_base_name(dims[d].var);
+        bool can_vectorize = true;
+        if (rvars.find(dim_name) != rvars.end()) {
+            can_vectorize = can_parallelize_rvar(dim_name, func.name(), def);
+        }
+        if (can_vectorize && estimates[dim_name] >= vec_len) {
             vec_dim_index = d;
             break;
         }
     }
 
-    if (vec_dim_index >=0) {
+    if (vec_dim_index >= 0) {
         string vec_dim_name = get_base_name(dims[vec_dim_index].var);
         if (estimates.find(vec_dim_name) != estimates.end()) {
             Var vec_var(vec_dim_name);
             // Set the vector length as the maximum of the values produced by a
             // function
-            int vec_len = 0;
-            for (auto &type: func.output_types()) {
-                vec_len = std::max(vec_len, t.natural_vector_size(type));
-            }
 
             bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
-            if (estimates[vec_dim_name] >= vec_len) {
 
-                pair<VarOrRVar, VarOrRVar> split_vars =
-                        split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
-                                  estimates, sched);
+            pair<VarOrRVar, VarOrRVar> split_vars =
+                    split_dim(f_handle, vec_var, vec_len, "_vi", "_vo",
+                              estimates, sched);
 
-                f_handle.vectorize(split_vars.first);
-                sched += f_handle.name() + ".vectorize(" +
-                         split_vars.first.name() + ");\n";
+            f_handle.vectorize(split_vars.first);
+            sched += f_handle.name() + ".vectorize(" +
+                    split_vars.first.name() + ");\n";
 
-                if (is_rvar) {
-                    rvars.erase(vec_dim_name);
-                    rvars.insert(split_vars.first.name());
-                    rvars.insert(split_vars.second.name());
-                }
+            if (is_rvar) {
+                rvars.erase(vec_dim_name);
+                rvars.insert(split_vars.first.name());
+                rvars.insert(split_vars.second.name());
             }
         }
     }
@@ -2310,7 +2308,7 @@ string Partitioner::generate_group_cpu_schedule(
         sched += f_handle.name() + ".reorder(" + var_order + ");\n";
     }
 
-    vectorize_stage(f_handle, g_out, t, rvars, stg_estimates, sched);
+    vectorize_stage(f_handle, def, g_out, t, rvars, stg_estimates, sched);
 
     // Parallelize definition
     uint32_t def_par = 1;
@@ -2364,11 +2362,26 @@ string Partitioner::generate_group_cpu_schedule(
             continue;
 
         // Get the definition corresponding to the stage
-        Definition def = get_stage_definition(mem.func, mem.stage_num);
+        Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
 
         // Get the estimates for the dimensions of the member stage
         map<string, int> mem_estimates =
                 bounds_to_estimates(group_bounds.at(mem));
+
+        set<string> mem_rvars;
+        const vector<Dim> &mem_dims = mem_def.schedule().dims();
+        for (int d = 0; d < (int) mem_dims.size() - 1; d++) {
+            bool is_pure_var = false;
+            for (auto &arg: mem.func.args()) {
+                if (arg == get_base_name(mem_dims[d].var)) {
+                    is_pure_var = true;
+                    break;
+                }
+            }
+            if (!is_pure_var) {
+                mem_rvars.insert(get_base_name(mem_dims[d].var));
+            }
+        }
 
         // Get a function handle for scheduling the stage
         Stage mem_handle = Stage(Func(mem.func));
@@ -2391,7 +2404,8 @@ string Partitioner::generate_group_cpu_schedule(
             }
         }
 
-        vectorize_stage(mem_handle, mem.func, t, rvars, mem_estimates, sched);
+        vectorize_stage(mem_handle, mem_def, mem.func, t, mem_rvars,
+                        mem_estimates, sched);
     }
 
     return sched;
