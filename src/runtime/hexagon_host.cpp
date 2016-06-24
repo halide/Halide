@@ -25,33 +25,58 @@ struct _remote_buffer__seq_octet {
    unsigned char* data;
    int dataLen;
 };
+
 typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
                              remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
+typedef int (*remote_poll_log_fn)(char *, int, int *);
 
 typedef void (*host_malloc_init_fn)();
-typedef void* (*host_malloc_fn)(size_t);
+typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
 
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
+WEAK remote_poll_log_fn remote_poll_log = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
 WEAK host_malloc_fn host_malloc = NULL;
 WEAK host_free_fn host_free = NULL;
 
+// This checks if there are any log messages available on the remote
+// side. It should be called after every remote call.
+WEAK void poll_log(void *user_context) {
+    if (!remote_poll_log) return;
+
+    while (true) {
+        char message[1024];
+        int read = 0;
+        int result = remote_poll_log(&message[0], sizeof(message), &read);
+        if (result != 0) {
+            error(user_context) << "Hexagon: remote_poll_log failed " << result << "\n";
+            return;
+        }
+
+        if (read > 0) {
+            halide_print(user_context, message);
+        } else {
+            break;
+        }
+    }
+}
+
 template <typename T>
-void get_symbol(void *user_context, const char* name, T &sym) {
+void get_symbol(void *user_context, const char* name, T &sym, bool required = true) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
     sym = (T)halide_hexagon_get_support_lib_symbol(user_context, name);
     debug(user_context) << "        " << (void *)sym << "\n";
-    if (!sym) {
+    if (!sym && required) {
         error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
     }
 }
@@ -83,6 +108,9 @@ WEAK int init_hexagon_runtime(void *user_context) {
     if (!host_malloc) return -1;
     get_symbol(user_context, "halide_hexagon_host_free", host_free);
     if (!host_free) return -1;
+
+    // This symbol is optional.
+    get_symbol(user_context, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
 
     host_malloc_init();
 
@@ -139,7 +167,7 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
 }  // namespace
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, size_t code_size) {
+                                           const uint8_t *code, uint64_t code_size) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
 
@@ -180,7 +208,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
         result = remote_initialize_kernels((uint8_t*)filename, strlen(filename) + 1, &module);
-
+        poll_log(user_context);
         // Unfortunately, dlopen on the Hexagon side doesn't keep the
         // shared object alive in the file system. To work around
         // this, we open the shared object, then remove the file. The
@@ -211,11 +239,11 @@ namespace {
 // necessary. Only arguments with flags&flag_mask == flag_value are
 // added to the mapped_args array. Returns the number of arguments
 // mapped, or a negative number on error.
-WEAK int map_arguments(void *user_context, size_t arg_count,
-                       size_t arg_sizes[], void *args[], int arg_flags[], int flag_mask, int flag_value,
+WEAK int map_arguments(void *user_context, int arg_count,
+                       uint64_t arg_sizes[], void *args[], int arg_flags[], int flag_mask, int flag_value,
                        remote_buffer *mapped_args) {
     int mapped_count = 0;
-    for (size_t i = 0; i < arg_count; i++) {
+    for (int i = 0; i < arg_count; i++) {
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
@@ -242,7 +270,7 @@ WEAK int halide_hexagon_run(void *user_context,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
-                            size_t arg_sizes[],
+                            uint64_t arg_sizes[],
                             void *args[],
                             int arg_flags[]) {
     halide_assert(user_context, state_ptr != NULL);
@@ -261,6 +289,7 @@ WEAK int halide_hexagon_run(void *user_context,
     if (*function == 0) {
         debug(user_context) << "    halide_hexagon_remote_get_symbol " << name << " -> ";
         *function = remote_get_symbol(module, name, strlen(name) + 1);
+        poll_log(user_context);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {
             error(user_context) << "Failed to find function " << name << " in module.\n";
@@ -303,6 +332,7 @@ WEAK int halide_hexagon_run(void *user_context,
                         input_buffers, input_buffer_count,
                         output_buffers, output_buffer_count,
                         input_scalars, input_scalar_count);
+    poll_log(user_context);
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
         error(user_context) << "Hexagon pipeline failed.\n";
@@ -330,12 +360,14 @@ WEAK int halide_hexagon_device_release(void *user_context) {
             debug(user_context) << "    halide_remote_release_kernels " << state
                                 << " (" << state->module << ") -> ";
             int result = remote_release_kernels(state->module, state->size);
+            poll_log(user_context);
             debug(user_context) << "        " << result << "\n";
             state->module = 0;
             state->size = 0;
         }
         state = state->next;
     }
+    state_list = NULL;
 
     return 0;
 }
@@ -560,7 +592,7 @@ WEAK int halide_hexagon_device_sync(void *user_context, struct buffer_t *) {
 }
 
 WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *buf,
-                                           void *ion_buf, size_t size) {
+                                           void *ion_buf, uint64_t size) {
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
         return -2;
@@ -603,7 +635,7 @@ WEAK void *halide_hexagon_get_device_handle(void *user_context, struct buffer_t 
     return handle->buffer;
 }
 
-WEAK size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf) {
+WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf) {
     if (buf->dev == NULL) {
         return 0;
     }
