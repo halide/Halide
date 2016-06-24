@@ -405,7 +405,9 @@ struct elf_t {
 
         if (!mask) {
 
-            // The mask depends on the instruction.
+            // The mask depends on the instruction. To implement
+            // relocations for new instructions see
+            // instruction_encodings.txt
             if (debug) {
                 // First print the bits so I can search for it in the
                 // instruction encodings.
@@ -418,7 +420,8 @@ struct elf_t {
 
             if ((inst & (3 << 14)) == 0) {
                 // Some instructions are actually pairs of 16-bit
-                // subinstructions
+                // subinstructions. See section 3.7 in the
+                // programmer's reference.
                 if (debug) log_printf("Duplex!\n");
 
                 int iclass = ((inst >> 29) << 1) | ((inst >> 13) & 1);
@@ -567,7 +570,10 @@ struct elf_t {
                 if (debug) log_printf("Symbol is at address: %p\n", sym_addr);
             }
 
-            // Define the variables from Table 11-5 in the Hexagon ABI spec
+            // Hexagon relocations are specified in section 11.5 in
+            // the Hexagon Application Binary Interface spec.
+
+            // First we define the variables from Table 11-5.
             char *S = sym_addr;
             char *P = fixup_addr;
             intptr_t A = rela->r_addend;
@@ -578,7 +584,7 @@ struct elf_t {
 
             if (debug) log_printf("GP = %p\n", GP);
 
-            // Define some constants from the Hexagon ABI spec
+            // Define some constants from table 11-3
             const uint32_t Word32     = 0xffffffff;
             const uint32_t Word16     = 0xffff;
             const uint32_t Word8      = 0xff;
@@ -587,9 +593,9 @@ struct elf_t {
             const uint32_t Word32_B13 = 0x00202ffe;
             const uint32_t Word32_B9  = 0x003000fe;
             const uint32_t Word32_B7  = 0x00001f18;
-            const uint32_t Word32_GP  = 0;
+            const uint32_t Word32_GP  = 0; // The mask is instruction-specific
             const uint32_t Word32_X26 = 0x0fff3fff;
-            const uint32_t Word32_U6  = 0;
+            const uint32_t Word32_U6  = 0; // The mask is instruction-specific
             const uint32_t Word32_R6  = 0x000007e0;
             const uint32_t Word32_LO  = 0x00c03fff;
 
@@ -733,7 +739,9 @@ struct elf_t {
         }
     }
 
-    // Dump the object file to stdout base-64 encoded
+    // Dump the object file to stdout base-64 encoded. This is useful
+    // for getting the relocation object file back over channels where
+    // all you have is a logging mechanism.
     void dump_as_base64() {
         // For base-64 encoding
         static const char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
@@ -760,18 +768,11 @@ struct elf_t {
         }
         log_printf("\nEND BASE64\n");
     }
-
-    /*
-    void dump_to_file(const char *f) {
-        log_printf("Dumping to file!\n");
-        int fd = open(f, O_CREAT | O_WRONLY);
-        write(fd, buf, size);
-        close(fd);
-    }
-    */
 };
 
-inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
+// dlopen a relocatable (but not yet relocated) object file in
+// memory. The object should be compiled with -fno-pic.
+inline elf_t *obj_dlopen_mem(const unsigned char *code, int code_size) {
     elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
     if (!elf) {
         return NULL;
@@ -780,15 +781,14 @@ inline void *fake_dlopen_mem(const unsigned char *code, int code_size) {
     elf->move_writeable_sections();
     elf->do_relocations();
     //elf->dump_as_base64();
-    //elf->dump_to_file("/tmp/relocated.o");
     elf->make_executable();
 
-    // Should run .ctors?
-
-    return (void *)elf;
+    // TODO: Should we run .ctors?
+    return elf;
 }
 
-inline void *fake_dlsym(void *handle, const char *name) {
+// Find a symbol in a handle returned by obj_dlopen_mem
+inline void *obj_dlsym(elf_t *handle, const char *name) {
     elf_t *elf = (elf_t *)handle;
     if (!elf) return NULL;
     symbol_t *sym = elf->find_symbol(name);
@@ -797,8 +797,9 @@ inline void *fake_dlsym(void *handle, const char *name) {
     return (void *)elf->get_symbol_addr(sym);
 }
 
-inline int fake_dlclose(void *handle) {
-    // Should run .dtors?
+// Release an object opened by obj_dlopen_mem
+inline int obj_dlclose(elf_t *handle) {
+    // TODO: Should we run .dtors?
     elf_t *elf = (elf_t *)handle;
     elf->deinit();
     return 0;

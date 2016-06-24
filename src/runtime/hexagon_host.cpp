@@ -146,37 +146,6 @@ using namespace Halide::Runtime::Internal::Hexagon;
 
 extern "C" {
 
-namespace {
-
-// This function writes the given data to a shared object file, returning the filename.
-// TODO: Try writing this in a way that doesn't actually touch the file system (named pipe?)
-WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
-                             char *filename, size_t filename_size) {
-    int result = halide_create_temp_file(user_context, "halide_kernels_", ".so", filename, filename_size);
-    if (result != 0) {
-        error(user_context) << "Unable to create temporary shared object file\n";
-        return result;
-    }
-
-    int so_fd = open(filename, O_RDWR | O_TRUNC, 0755);
-    if (so_fd == -1) {
-        error(user_context) << "Failed to open shared object file " << filename << "\n";
-        return halide_error_code_internal_error;
-    }
-
-    ssize_t written = write(so_fd, data, size);
-    close(so_fd);
-    if (written < (ssize_t)size) {
-        error(user_context) << "Failed to write shared object file " << filename << "\n";
-        return halide_error_code_internal_error;
-    }
-
-    debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
-    return 0;
-}
-
-}  // namespace
-
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, uint64_t code_size) {
     int result = init_hexagon_runtime(user_context);
