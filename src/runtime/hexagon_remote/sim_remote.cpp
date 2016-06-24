@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <dlfcn.h>
 
+typedef int qurt_hvx_mode_t;
+
 #include "elf.h"
 #include "hexagon_standalone.h"
 

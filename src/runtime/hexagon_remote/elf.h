@@ -97,7 +97,7 @@ extern "C" int __hexagon_divdf3;
 extern "C" int __hexagon_adddf3;
 extern "C" int __hexagon_divsf3;
 extern "C" int __hexagon_udivdi3;
-extern "C" int qurt_hvx_lock(int);
+extern "C" int qurt_hvx_lock(qurt_hvx_mode_t);
 extern "C" int qurt_hvx_unlock();
 
 struct elf_t {
