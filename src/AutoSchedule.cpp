@@ -1071,14 +1071,14 @@ struct Partitioner {
         // Estimate of the parallelism
         int64_t parallelism;
         // Estimate of working set size
-        int64_t working_size_size;
+        int64_t foot_print;
 
         friend std::ostream& operator <<(std::ostream &stream,
                                          const GroupAnalysis &analy) {
             stream << "[arith cost:" << analy.arith_cost << ",";
             stream << "mem_cost:" << analy.mem_cost << ",";
             stream << "parallelism:" << analy.parallelism << ",";
-            stream << "working_size_size:" << analy.working_size_size << "]\n";
+            stream << "foot_print:" << analy.foot_print << "]\n";
 
             return stream;
         }
@@ -1193,12 +1193,14 @@ struct Partitioner {
     pair<map<string, int>, GroupAnalysis> find_best_tile_config(const Group &g);
 
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
-                             bool no_redundant_work, bool ensure_parallelism);
+                             bool no_redundant_work, bool ensure_parallelism,
+                             bool minimize_foot_print);
 
     int64_t estimate_benefit(const vector<Group> &prod_groups,
                              const Group &cons_group,
                              const GroupAnalysis &fused_analy,
-                             bool no_redundant_work, bool ensure_parallelism);
+                             bool no_redundant_work, bool ensure_parallelism,
+                             bool minimize_foot_print);
 
     void initialize_groups_inline();
     void initialize_groups_fast_mem();
@@ -1433,10 +1435,12 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             }
         }
 
+        /*
         for (auto &choice: choices) {
             debug(0) << "Cand choice:" << choice.first;
         }
-        debug(0) << "Benefit:" << overall_benefit << '\n';
+        debug(0) << "Cand benefit:" << overall_benefit << '\n';
+        */
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (best_benefit < overall_benefit
@@ -1460,7 +1464,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
 vector<map<string, int>>
 Partitioner::generate_tile_configs(const FStage &stg) {
 
-    int min_vec_dim_size = 1;
+    int min_vec_dim_size = 8;
 
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     const vector<Dim> &dims = def.schedule().dims();
@@ -1483,7 +1487,6 @@ Partitioner::generate_tile_configs(const FStage &stg) {
     vector<map<string, int>> tile_configs;
 
     // Skewed tile configurations
-    /*
     for (size_t i = 0; i < tile_vars.size(); i++) {
         for (auto &dim_size: size_variants) {
             map<string, int> tiling;
@@ -1500,7 +1503,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
             }
             tile_configs.push_back(tiling);
         }
-    }*/
+    }
 
     // Almost square tile configurations
     for (auto &dim_size: size_variants) {
@@ -1556,12 +1559,13 @@ Partitioner::find_best_tile_config(const Group &g) {
 
         GroupAnalysis new_analy = analyze_group(new_group);
 
-        int64_t benefit = estimate_benefit(best_analy, new_analy, true, false);
+        int64_t benefit = estimate_benefit(best_analy, new_analy, true, false, true);
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
         }
         debug(0) << "Relative to current best:" << '\n';
+        debug(0) << "Benefit:" << benefit << '\n';
         debug(0) << "arith cost:" << (float)new_analy.arith_cost/best_analy.arith_cost << " ";
         debug(0) << "mem cost:" << (float)new_analy.mem_cost/best_analy.mem_cost << "\n\n";
     }
@@ -1864,21 +1868,22 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     // Adding tile input and output size to tile_intermediate_size over
     // estimates the working set size
-    int64_t tile_inter_size = cost_model.region_size(group_reg, g.inlined) +
-                              tile_input_size + tile_output_size;
+    int64_t group_inter_size = cost_model.region_size(group_reg, g.inlined);
+    int64_t tile_inter_size = group_inter_size + tile_input_size +
+                              tile_output_size;
 
     pair<int64_t, int64_t> out_cost =
             cost_model.stage_region_cost(g.output.func.name(),
                                          g.output.stage_num,
                                          out_tile_extent, g.inlined);
     tile_cost.first += out_cost.first;
-    debug(0) << "out_cost.second:" << out_cost.second << '\n';
     tile_cost.second += out_cost.second;
 
     GroupAnalysis g_analy;
     g_analy.arith_cost = -1;
     g_analy.mem_cost = -1;
     g_analy.parallelism = -1;
+    g_analy.foot_print = -1;
 
     // The group could not be analyzed
     if (tile_cost.first < 0 || tile_cost.second < 0 ||
@@ -1909,6 +1914,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
+    g_analy.foot_print = group_inter_size + tile_output_size * estimate_tiles;
 
     debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
@@ -1999,7 +2005,7 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
     }
 
     int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
-                                       true, false);
+                                       true, false, true);
 
     /*
     TODO: come up with a better assert. Currently this will hit when
@@ -2015,7 +2021,8 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
 int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
                                       const GroupAnalysis &fuse,
                                       bool no_redundant_work,
-                                      bool ensure_parallelism) {
+                                      bool ensure_parallelism,
+                                      bool minimize_foot_print) {
     if (ensure_parallelism &&
         fuse.parallelism < arch_params.parallelism) {
         return -1;
@@ -2038,14 +2045,21 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
         return -1;
     }
 
-    return mem_benefit * arch_params.balance + arith_benefit;
+    int64_t foot_print_reduction = 0;
+    if (minimize_foot_print) {
+       foot_print_reduction = nofuse.foot_print - fuse.foot_print;
+    }
+
+    return mem_benefit * arch_params.balance + arith_benefit +
+           foot_print_reduction;
 }
 
 int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
                                       const Group &cons_group,
                                       const GroupAnalysis &fused_analy,
                                       bool no_redundant_work,
-                                      bool ensure_parallelism) {
+                                      bool ensure_parallelism,
+                                      bool minimize_foot_print) {
 
     internal_assert(group_costs.find(cons_group.output) != group_costs.end());
     GroupAnalysis cons_analy = group_costs.at(cons_group.output);
@@ -2053,6 +2067,7 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     int64_t prod_arith_cost = 0;
     int64_t prod_mem_cost = 0;
     int64_t prod_par = std::numeric_limits<int64_t>::max();
+    int64_t prod_foot_print = 0;
 
     //debug(0) << "Prod groups:" << '\n';
     for (auto &prod_g: prod_groups) {
@@ -2062,10 +2077,13 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
             prod_arith_cost += analyg.arith_cost;
             prod_mem_cost += analyg.mem_cost;
             prod_par = std::min(prod_par, analyg.parallelism);
+            prod_foot_print = std::max(prod_foot_print,
+                                        analyg.foot_print);
         } else {
             prod_arith_cost = -1;
             prod_mem_cost = -1;
             prod_par = -1;
+            prod_foot_print = -1;
             break;
         }
         //debug(0) << prod_g;
@@ -2077,12 +2095,13 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
     no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
     no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
+    no_fuse_analy.foot_print = std::max(prod_foot_print, cons_analy.foot_print);
 
     //debug(0) << "No fuse analysis:" << no_fuse_analy << '\n';
     //debug(0) << "fuse analysis:" << fused_analy << '\n';
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
-                            ensure_parallelism);
+                            ensure_parallelism, minimize_foot_print);
 }
 
 map<string, int> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
@@ -2182,19 +2201,21 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
         if (rvars.find(dim_name) != rvars.end()) {
             can_vectorize = can_parallelize_rvar(dim_name, func.name(), def);
         }
-        if (can_vectorize && estimates[dim_name] >= vec_len) {
-            vec_dim_index = d;
-            break;
+        if (estimates.find(dim_name) != estimates.end()) {
+            if (can_vectorize && estimates[dim_name] >= vec_len) {
+                vec_dim_index = d;
+                break;
+            }
         }
     }
 
     if (vec_dim_index >= 0) {
         string vec_dim_name = get_base_name(dims[vec_dim_index].var);
-        if (estimates.find(vec_dim_name) != estimates.end()) {
-            Var vec_var(vec_dim_name);
-            // Set the vector length as the maximum of the values produced by a
-            // function
+        Var vec_var(vec_dim_name);
+        // Set the vector length as the maximum of the values produced by a
+        // function
 
+        if (estimates[vec_dim_name] > 2*vec_len) {
             bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
 
             pair<VarOrRVar, VarOrRVar> split_vars =
@@ -2210,6 +2231,9 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
                 rvars.insert(split_vars.first.name());
                 rvars.insert(split_vars.second.name());
             }
+        } else {
+            f_handle.vectorize(vec_var);
+            sched += f_handle.name() + ".vectorize(" + vec_var.name() + ");\n";
         }
     }
 }
