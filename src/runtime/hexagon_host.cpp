@@ -649,7 +649,6 @@ WEAK const halide_device_interface *halide_hexagon_device_interface() {
 }
 
 WEAK void* halide_hexagon_host_get_symbol(void* user_context, const char *name) {
-    
     // The "support library" for Hexagon is essentially a way to delegate Hexagon
     // code execution based on the runtime; devices with Hexagon hardware will
     // simply provide conduits for execution on that hardware, while test/desktop/etc
@@ -661,19 +660,14 @@ WEAK void* halide_hexagon_host_get_symbol(void* user_context, const char *name) 
     // intent of the halide_hexagon_host_get_symbol() bottleneck is to allow
     // for runtimes that statically link the necessary support code if
     // desired, which can simplify build and link requirements in some environments.
-     const char * const host_lib_name = "libhalide_hexagon_host.so";
+    const char * const host_lib_name = "libhalide_hexagon_host.so";
     static void *host_lib = halide_load_library(host_lib_name);
     if (!host_lib) {
         error(user_context) << host_lib_name << " not found.\n";
         return NULL;
     }
-    debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
-    void *sym = halide_get_library_symbol(host_lib, name);
-    debug(user_context) << "        " << (void *)sym << "\n";
-    if (!sym) {
-        error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
-    }
-    return sym;
+    // If name isn't found, don't error: the name might not be required. Let the caller decide.
+    return halide_get_library_symbol(host_lib, name);
 }
 
 namespace {
