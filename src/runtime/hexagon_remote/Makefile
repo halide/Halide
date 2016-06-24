@@ -37,7 +37,7 @@ HEXAGON_SDK_INCLUDES ?= "${HEXAGON_SDK_ROOT}/incs"
 # Some SDK versions use "lib/", some use "libs/"
 HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
-COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef
+COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
@@ -70,7 +70,7 @@ CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch
 CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
-CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES}
+CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
 	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc \
@@ -120,7 +120,7 @@ bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/hali
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -c sim_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -DSIMULATOR -c sim_remote.cpp -o $@
 
 bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
