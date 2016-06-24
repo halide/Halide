@@ -37,7 +37,7 @@ HEXAGON_SDK_INCLUDES ?= "${HEXAGON_SDK_ROOT}/incs"
 # Some SDK versions use "lib/", some use "libs/"
 HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
-COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef
+COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
@@ -124,7 +124,7 @@ bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/hali
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -c sim_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -DSIMULATOR -c sim_remote.cpp -o $@
 
 bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
