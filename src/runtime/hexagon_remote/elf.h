@@ -1,3 +1,6 @@
+#ifndef HALIDE_HEXAGON_ELF_H
+#define HALIDE_HEXAGON_ELF_H
+
 extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -99,8 +102,6 @@ extern "C" int __hexagon_divdf3;
 extern "C" int __hexagon_adddf3;
 extern "C" int __hexagon_divsf3;
 extern "C" int __hexagon_udivdi3;
-extern "C" int qurt_hvx_lock(qurt_hvx_mode_t);
-extern "C" int qurt_hvx_unlock();
 
 struct elf_t {
     // The object file in memory
@@ -810,3 +811,5 @@ inline int fake_dlclose(void *handle) {
     elf->deinit();
     return 0;
 }
+
+#endif

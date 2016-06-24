@@ -1,7 +1,6 @@
 extern "C" {
 
 #include "bin/src/halide_hexagon_remote.h"
-#include <sys/mman.h>
 #include <memory.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,9 +15,12 @@ extern "C" {
 }
 
 #include <HalideRuntime.h>
+
+#include <qurt.h>
+
+#include "elf.h"
 #include "pipeline_context.h"
 #include "log.h"
-#include "elf.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
