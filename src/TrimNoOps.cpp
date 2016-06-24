@@ -151,12 +151,21 @@ class IsNoOp : public IRVisitor {
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::rewrite_buffer ||
              op->name == Call::image_store ||
-             op->name == Call::copy_memory ||
-             op->name == Call::predicated_store)) {
+             op->name == Call::copy_memory)) {
             condition = const_false();
-        } else {
-            IRVisitor::visit(op);
+            return;
+        } else if (((op->name == Call::predicated_load) ||
+                    (op->name == Call::predicated_store))) {
+            // If the predicate of a predicated load/store is always false,
+            // it's okay to trim it; otherwise, do nothing.
+            Expr pred = op->args[1];
+            internal_assert(pred.defined());
+            if (!is_zero(pred)) {
+                condition = const_false();
+                return;
+            }
         }
+        IRVisitor::visit(op);
     }
 
     template<typename LetOrLetStmt>

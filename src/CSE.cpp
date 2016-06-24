@@ -294,6 +294,7 @@ public:
         const Call *call = e.as<Call>();
         if (call) {
             if (call->is_intrinsic(Call::address_of)) {
+                //TODO(psuriana): fix this
                 /*debug(4) << "Encounter call address_of: " << e << "\n";
 
                 const Load *load = call->args[0].as<Load>();

@@ -250,25 +250,25 @@ class PredicateLoadStore : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Load *op) {
-        debug(0) << "VISIT LOAD: " << Expr(op) << "\n";
+        debug(4) << "VISIT LOAD: " << Expr(op) << "\n";
         internal_assert(op->index.type().lanes() == lanes);
         Expr src = Call::make(Handle(), Call::address_of, {Expr(op)}, Call::Intrinsic);
         expr = Call::make(op->type, Call::predicated_load, {src, predicate}, Call::Intrinsic);
-        debug(0) << "  mutated vector load: " << expr << "\n"
+        debug(4) << "  mutated vector load: " << expr << "\n"
                  << "  with predicate: " << predicate << "\n";
     }
 
     void visit(const Store *op) {
-        debug(0) << "VISIT STORE: " << Stmt(op) << "\n";
+        debug(4) << "VISIT STORE: " << Stmt(op) << "\n";
         internal_assert(op->index.type().lanes() == lanes);
         internal_assert(op->value.type().lanes() == lanes);
         Expr dest = Call::make(Handle(), Call::address_of,
                                {Load::make(op->value.type(), op->name, op->index, Buffer(), op->param)},
                                Call::Intrinsic);
         stmt = Evaluate::make(Call::make(Int(32), Call::predicated_store,
-                                         {dest, predicate, mutate(op->value)},
+                                         {dest, predicate, op->value},
                                          Call::Intrinsic));
-        debug(0) << "  mutated vector store: " << stmt << "\n"
+        debug(4) << "  mutated vector store: " << stmt << "\n"
                  << "  with predicate: " << predicate << "\n";
     }
 
@@ -670,7 +670,7 @@ class VectorSubs : public IRMutator {
     void visit(const IfThenElse *op) {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
-        debug(0) << "Vectorizing over " << var << "\n"
+        debug(4) << "Vectorizing over " << var << "\n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
         if (lanes > 1) {
@@ -680,6 +680,7 @@ class VectorSubs : public IRMutator {
 
             bool vectorize_predicate = should_vectorize_predicate(op);
             debug(4) << "...IfThenElse should vectorize: " << vectorize_predicate << "\n";
+            //vectorize_predicate = false;
 
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
