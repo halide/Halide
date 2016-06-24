@@ -49,7 +49,7 @@ WEAK host_free_fn host_free = NULL;
 template <typename T>
 void get_symbol(void *user_context, const char* name, T &sym) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
-    sym = (T)halide_hexagon_get_host_lib_symbol(user_context, name);
+    sym = (T)halide_hexagon_get_support_lib_symbol(user_context, name);
     debug(user_context) << "        " << (void *)sym << "\n";
     if (!sym) {
         error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
@@ -616,7 +616,20 @@ WEAK const halide_device_interface *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
 
-WEAK void* halide_hexagon_get_host_lib_symbol(void* user_context, const char *name) {
+WEAK void* halide_hexagon_get_support_lib_symbol(void* user_context, const char *name) {
+    /*
+        The "support library" for Hexagon is essentially a way to delegate Hexagon
+        code execution based on the runtime; devices with Hexagon hardware will
+        simply provide conduits for execution on that hardware, while test/desktop/etc
+        environments can instead connect a simulator via the API.
+
+        By default, we look for "libhalide_hexagon_host.so" for this library
+        (which is a bit of a confusing name: it's loaded and run on the host
+        but contains functions for both host and remote usage); however, the
+        intent of the halide_hexagon_get_support_lib_symbol() bottleneck is to allow
+        for runtimes that statically link the necessary support code if
+        desired, which can simplify build and link requirements in some environments.
+    */
     const char * const host_lib_name = "libhalide_hexagon_host.so";
     static void *host_lib = halide_load_library(host_lib_name);
     if (!host_lib) {
