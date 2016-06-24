@@ -1,15 +1,6 @@
 #ifndef HALIDE_HEXAGON_REMOTE_LOG_H
 #define HALIDE_HEXAGON_REMOTE_LOG_H
 
-extern "C" {
-
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdarg.h>
-
-}
-
 #ifdef SIMULATOR
 
 // On the simulator, just use fprintf to implement log_printf.
