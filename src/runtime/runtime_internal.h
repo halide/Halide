@@ -126,6 +126,10 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names);
 
+WEAK int halide_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf,
+						      const struct halide_device_interface *device_interface);
+WEAK int halide_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf);
+
 struct halide_filter_metadata_t;
 struct _halide_runtime_internal_registered_filter_t {
     // This is a _halide_runtime_internal_registered_filter_t, but

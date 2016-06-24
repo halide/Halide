@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "buf_size.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
@@ -56,23 +57,6 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     debug(user_context) << buf << "\n";
 }
 #endif
-
-WEAK size_t full_extent(const buffer_t &buf) {
-    size_t result = 1;
-    for (int i = 0; i < 4; i++) {
-        int32_t stride = buf.stride[i];
-        size_t positive_stride;
-        if (stride < 0) {
-            positive_stride = (size_t)-stride;
-        } else {
-            positive_stride = (size_t)stride;
-        }
-        if ((buf.extent[i] * positive_stride) > result) {
-            result = buf.extent[i] * positive_stride;
-        }
-    }
-    return result;
-}
 
 WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
@@ -280,7 +264,7 @@ WEAK void prune_cache() {
 
             // Decrease cache used amount.
             for (uint32_t i = 0; i < prune_candidate->tuple_count; i++) {
-                current_cache_size -= full_extent(prune_candidate->buffer(i));
+                current_cache_size -= buf_size(&prune_candidate->buffer(i));
             }
 
             // Deallocate the entry.
@@ -381,7 +365,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
     for (int32_t i = 0; i < tuple_count; i++) {
         buffer_t *buf = tuple_buffers[i];
-        size_t buffer_size = full_extent(*buf);
+        size_t buffer_size = buf_size(buf);
 
         // See documentation on extra_bytes_host_bytes
         buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size + extra_bytes_host_bytes));
@@ -464,7 +448,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
     {
         for (int32_t i = 0; i < tuple_count; i++) {
             buffer_t *buf = tuple_buffers[i];
-            added_size += full_extent(*buf);
+            added_size += buf_size(buf);
         }
     }
     current_cache_size += added_size;
