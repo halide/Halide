@@ -21,7 +21,8 @@ extern "C" {
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
-Log global_log(1024 * 1024);
+// Use a 64 KB circular buffer to store log messages.
+Log global_log(1024 * 64);
 
 void log_printf(const char *fmt, ...) {
     char message[1024] = { 0, };
