@@ -96,7 +96,7 @@ bin/%/halide_hexagon_remote_skel.o: bin/src/halide_hexagon_remote_skel.c
 	mkdir -p $(@D)
 	$(CC-$*) $(CCFLAGS-$*) -fPIC -c $^ -o $@
 
-bin/%/halide_remote.o: halide_remote.cpp log.h pipeline_context.h
+bin/%/halide_remote.o: halide_remote.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
 
