@@ -69,6 +69,10 @@ public:
         int status;
         qurt_thread_join(thread, &status);
 
+        qurt_cond_destroy(&wakeup_thread);
+        qurt_cond_destroy(&wakeup_caller);
+        qurt_mutex_destroy(&work_mutex);
+
         free(stack);
     }
 
