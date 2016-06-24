@@ -1,6 +1,8 @@
 #ifndef HALIDE_HEXAGON_REMOTE_PIPELINE_CONTEXT_H
 #define HALIDE_HEXAGON_REMOTE_PIPELINE_CONTEXT_H
 
+#include <HalideRuntime.h>
+
 #include <qurt.h>
 
 // We can't control the stack size on the thread which receives our
