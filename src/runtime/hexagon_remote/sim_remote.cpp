@@ -109,7 +109,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
-    void *lib = fake_dlopen_mem(code, codeLen);
+    elf_t *lib = obj_dlopen_mem(code, codeLen);
     if (!lib) {
         halide_print(NULL, "dlopen_mem failed\n");
         return -1;
@@ -119,9 +119,9 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)fake_dlsym(lib, "halide_noos_set_runtime");
+    set_runtime_t set_runtime = (set_runtime_t)obj_dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        fake_dlclose(lib);
+        obj_dlclose(lib);
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -136,7 +136,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        fake_dlclose(lib);
+        obj_dlclose(lib);
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
@@ -146,7 +146,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
 }
 
 handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(fake_dlsym(reinterpret_cast<void*>(module_ptr), name));
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -191,7 +191,7 @@ int run(handle_t module_ptr, handle_t function,
 }
 
 int release_kernels(handle_t module_ptr, int codeLen) {
-    fake_dlclose(reinterpret_cast<void*>(module_ptr));
+    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
     return 0;
 }
 
