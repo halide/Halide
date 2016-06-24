@@ -112,15 +112,15 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 // is defined inside HalideRuntime.h which includes this header file.
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
-                                            int *f_values);
+                                            uint64_t *f_values);
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           void *pipeline_state,
                                           int func_id,
-                                          int incr);
+                                          uint64_t incr);
 WEAK void halide_profiler_memory_free(void *user_context,
                                       void *pipeline_state,
                                       int func_id,
-                                      int incr);
+                                      uint64_t decr);
 WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
