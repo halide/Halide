@@ -294,7 +294,7 @@ public:
         const Call *call = e.as<Call>();
         if (call) {
             if (call->is_intrinsic(Call::address_of)) {
-                debug(4) << "Encounter call address_of: " << e << "\n";
+                /*debug(4) << "Encounter call address_of: " << e << "\n";
 
                 const Load *load = call->args[0].as<Load>();
                 internal_assert(load) << "The sole argument to address_of must be a Load node\n";
@@ -306,10 +306,11 @@ public:
                     Expr new_load = Load::make(load->type, load->name, index, load->image, load->param);
                     return Call::make(call->type, call->name, {new_load}, call->call_type,
                                       call->func, call->value_index, call->image, call->param);
-                }
+                }*/
+                return e;
             } else if (call->is_intrinsic(Call::predicated_load) ||
                        call->is_intrinsic(Call::predicated_store)) {
-                debug(4) << "Encounter call predicated store/load: " << e << "\n";
+                /*debug(4) << "Encounter call predicated store/load: " << e << "\n";
 
                 vector<Expr > new_args(call->args.size());
                 bool changed = false;
@@ -320,7 +321,7 @@ public:
                     Expr new_arg = common_subexpression_elimination_helper(old_arg);
                     if (!new_arg.same_as(old_arg)) changed = true;
                     new_args[i] = new_arg;
-                    debug(0) << "----new arg: " << new_arg << "\n";
+                    debug(0) << "----old arg: " << old_arg << "\n" << "    new arg: " << new_arg << "\n";
                 }
 
                 if (!changed) {
@@ -328,7 +329,8 @@ public:
                 } else {
                     return Call::make(call->type, call->name, new_args, call->call_type,
                                       call->func, call->value_index, call->image, call->param);
-                }
+                }*/
+                return e;
             }
         }
         return common_subexpression_elimination_helper(e);
