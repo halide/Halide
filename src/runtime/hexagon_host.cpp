@@ -373,7 +373,8 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf_size(buf);
+    halide_assert(user_context, size != 0);
 
     // Hexagon code generation generates clamped ramp loads in a way
     // that requires up to an extra vector beyond the end of the
@@ -623,6 +624,14 @@ WEAK size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *
     return handle->size;
 }
 
+WEAK int halide_hexagon_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_malloc_may_be_zero_copy(user_context, buf, &hexagon_device_interface);
+}
+
+WEAK int halide_hexagon_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_free_may_be_zero_copy(user_context, buf, &hexagon_device_interface);
+}
+
 WEAK const halide_device_interface *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
@@ -647,6 +656,8 @@ WEAK halide_device_interface hexagon_device_interface = {
     halide_hexagon_device_release,
     halide_hexagon_copy_to_host,
     halide_hexagon_copy_to_device,
+    halide_hexagon_device_malloc_may_be_zero_copy,
+    halide_hexagon_device_free_may_be_zero_copy,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Hexagon

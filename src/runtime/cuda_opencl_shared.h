@@ -2,23 +2,9 @@
 #define HALIDE_CUDA_OPENCL_SHARED_H
 
 #include "device_interface.h"
+#include "buf_size.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
-
-// Compute the total amount of memory we'd need to allocate on gpu to
-// represent a given buffer (using the same strides as the host
-// allocation).
-WEAK size_t buf_size(void *user_context, buffer_t *buf) {
-    size_t size = buf->elem_size;
-    for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
-        size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
-        if (total_dim_size > size) {
-            size = total_dim_size;
-        }
-    }
-    halide_assert(user_context, size);
-    return size;
-}
 
 // A host <-> dev copy should be done with the fewest possible number
 // of contiguous copies to minimize driver overhead. If our buffer_t
