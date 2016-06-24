@@ -62,6 +62,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
                                     const vector<string> &dims,
                                     const vector<Expr> &site,
                                     const vector<Expr> &values,
+                                    const vector<Expr> &predicates,
                                     const Schedule &s,
                                     bool is_update) {
 
@@ -79,13 +80,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
         known_size_dims[i.var] = i.extent;
     }
     // Then use any reduction domain.
-    const ReductionDomain &rdom = s.reduction_domain();
-    internal_assert(is_update || !rdom.defined())
-        << "Init definition shouldn't have a RDom\n";
-    if (rdom.defined()) {
-        for (const ReductionVariable &i : rdom.domain()) {
-            known_size_dims[i.var] = i.extent;
-        }
+    for (const ReductionVariable &i : s.rvars()) {
+        known_size_dims[i.var] = i.extent;
     }
 
     vector<Split> splits = s.splits();
@@ -217,8 +213,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
                 outer_dim != known_size_dims.end()) {
                 known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
             }
-
         } else {
+            // rename or purify
             stmt = substitute(prefix + split.old_var, outer, stmt);
             stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
@@ -242,15 +238,12 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
 
     // Put all the reduction domain predicate into the containers vector.
-    int n_predicates = 0;
-    if (rdom.defined()) {
-        vector<Expr> predicates = rdom.split_predicate();
-        n_predicates = predicates.size();
-        for (Expr pred : predicates) {
-            pred = qualify(prefix, pred);
-            Container c = {Container::If, 0, "", pred};
-            nest.push_back(c);
-        }
+    // Put all the reduction domain predicate into the containers vector.
+    int n_predicates = predicates.size();
+    for (Expr pred : predicates) {
+        pred = qualify(prefix, pred);
+        Container c = {Container::If, 0, "", pred};
+        nest.push_back(c);
     }
 
     // Resort the containers vector so that lets are as far outwards
@@ -311,7 +304,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
 
     // Define the bounds on the split dimensions using the bounds
-    // on the function args
+    // on the function args. If it is a purify, we should use the bounds
+    // from the dims instead.
     for (size_t i = splits.size(); i > 0; i--) {
         const Split &split = splits[i-1];
         Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
@@ -334,12 +328,12 @@ Stmt build_provide_loop_nest_helper(string func_name,
             stmt = LetStmt::make(prefix + split.old_var + ".loop_min", 0, stmt);
             stmt = LetStmt::make(prefix + split.old_var + ".loop_max", fused_extent - 1, stmt);
             stmt = LetStmt::make(prefix + split.old_var + ".loop_extent", fused_extent, stmt);
-        } else {
-            // rename
+        } else if (split.is_rename()) {
             stmt = LetStmt::make(prefix + split.outer + ".loop_min", old_var_min, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_max", old_var_max, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_extent", old_var_extent, stmt);
         }
+        // Do nothing for purify
     }
 
     // Define the bounds on the outermost dummy dimension.
@@ -364,15 +358,13 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
     // Define the loop mins and extents for the reduction domain (if there is any)
     // in terms of the mins and maxs produced by bounds inference
-    if (rdom.defined()) {
-        for (const ReductionVariable &rv : rdom.domain()) {
-            string p = prefix + rv.var;
-            Expr rmin = Variable::make(Int(32), p + ".min");
-            Expr rmax = Variable::make(Int(32), p + ".max");
-            stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
-            stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
-            stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
-        }
+    for (const ReductionVariable &rv : s.rvars()) {
+        string p = prefix + rv.var;
+        Expr rmin = Variable::make(Int(32), p + ".min");
+        Expr rmax = Variable::make(Int(32), p + ".max");
+        stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
+        stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
+        stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
     }
 
     return stmt;
@@ -407,7 +399,7 @@ Stmt build_provide_loop_nest(string func_name,
 
     // Default schedule/values if there is no specialization
     Stmt stmt = build_provide_loop_nest_helper(
-        func_name, prefix, dims, site, values, def.schedule(), is_update);
+        func_name, prefix, dims, site, values, def.split_predicate(), def.schedule(), is_update);
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();

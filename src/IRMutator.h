@@ -84,7 +84,6 @@ protected:
 };
 
 
-
 /** A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */

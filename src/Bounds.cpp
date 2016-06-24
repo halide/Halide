@@ -997,13 +997,17 @@ private:
 
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
-            Box b(op->args.size());
-            b.used = const_true();
-            for (size_t i = 0; i < op->args.size(); i++) {
-                op->args[i].accept(this);
-                b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+            for (Expr e : op->args) {
+                e.accept(this);
             }
-            merge_boxes(boxes[op->name], b);
+            if (op->name == func || func.empty()) {
+                Box b(op->args.size());
+                b.used = const_true();
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                }
+                merge_boxes(boxes[op->name], b);
+            }
         }
     }
 
@@ -1327,7 +1331,9 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
 
 Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                 string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    return boxes_touched(e, s, consider_calls, consider_provides, fn, scope, fb)[fn];
+    map<string, Box> boxes = boxes_touched(e, s, consider_calls, consider_provides, fn, scope, fb);
+    internal_assert(boxes.size() <= 1);
+    return boxes[fn];
 }
 
 map<string, Box> boxes_required(Expr e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
