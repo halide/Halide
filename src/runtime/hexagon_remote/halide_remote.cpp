@@ -15,14 +15,19 @@ extern "C" {
 
 }
 
-#include "elf.h"
-#include "../HalideRuntime.h"
+#include <HalideRuntime.h>
+#include "pipeline_context.h"
 #include "log.h"
+#include "elf.h"
+
+const int stack_alignment = 128;
+const int stack_size = 1024 * 1024;
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
-Log global_log(1024 * 1024);
+// Use a 64 KB circular buffer to store log messages.
+Log global_log(1024 * 64);
 
 void log_printf(const char *fmt, ...) {
     char message[1024] = { 0, };
@@ -91,6 +96,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(void *, const char *));
 
 int context_count = 0;
+PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
@@ -175,8 +181,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
                               buffer *output_buffersPtrs, int output_buffersLen,
                               const buffer *input_scalarsPtrs, int input_scalarsLen) {
+
     // Get a pointer to the argv version of the pipeline.
-    typedef int (*pipeline_argv_t)(void **);
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
     // Construct a list of arguments. This is only part of a
@@ -209,7 +215,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     }
 
     // Call the pipeline and return the result.
-    return pipeline(args);
+    return run_context.run(pipeline, args);
 }
 
 int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
