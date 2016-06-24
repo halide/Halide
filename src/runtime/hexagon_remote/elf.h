@@ -22,6 +22,8 @@ typedef uint64_t elfaddr_t;
 typedef uint32_t elfaddr_t;
 #endif
 
+static const int alignment = 4095;
+
 // The standard ELF header. See
 // http://man7.org/linux/man-pages/man5/elf.5.html for the meanings of
 // these fields.
@@ -132,11 +134,11 @@ struct elf_t {
         buf = NULL;
         writeable_buf = NULL;
         writeable_size = 0;
-        size = (s + 4095) & ~4095;
+        size = (s + alignment) & ~alignment;
         debug = d;
 
         // Make a mapping of the appropriate size and type
-        buf = (char *)mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        buf = (char *)mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
         // Copy over the data
         memcpy(buf, b, s);
@@ -201,10 +203,10 @@ struct elf_t {
         }
 
         // Align up the size for the mapping
-        writeable_size = (size_to_copy + 4095) & ~4095;
+        writeable_size = (size_to_copy + alignment) & ~alignment;
 
         // Make the mapping
-        writeable_buf = (char *)mmap(NULL, writeable_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        writeable_buf = buf + size;
 
         if (!writeable_buf) {
             fail(__LINE__);
@@ -238,8 +240,7 @@ struct elf_t {
     }
 
     void deinit() {
-        munmap(buf, size);
-        munmap(writeable_buf, writeable_size);
+        munmap(buf, size * 2);
     }
 
     // Get the address given an offset into the buffer. Asserts that
