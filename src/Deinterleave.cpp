@@ -280,6 +280,24 @@ private:
                 args.push_back(i*lane_stride + starting_lane);
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
+        } else if (op->is_intrinsic(Call::predicated_load) ||
+                   op->is_intrinsic(Call::predicated_store)) {
+
+            const Call *addr = op->args[0].as<Call>();
+            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
+                << "The second argument to predicated store/load must be call to address_of\n";
+            internal_assert(addr->args.size() == 1) << "address_of should only take 1 argument";
+
+            std::vector<Expr> args(op->args.size());
+            args[0] = Call::make(addr->type, addr->name, {mutate(addr->args[0])}, addr->call_type,
+                                 addr->func, addr->value_index, addr->image, addr->param);
+            for (size_t i = 1; i < args.size(); i++) {
+                args[i] = mutate(op->args[i]);
+            }
+
+            expr = Call::make(t, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -708,12 +726,26 @@ void deinterleave_vector_test() {
     Expr broadcast_a = Broadcast::make(x + 4, 8);
     Expr broadcast_b = broadcast_a;
 
-    check(ramp, ramp_a, ramp_b);
+    /*check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
     check(Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter()),
           Load::make(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));*/
+
+    Expr predicate = Ramp::make(x, 3, 8) > 5;
+    Expr load = Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter());
+    Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+    Expr test = Call::make(load.type(), Call::predicated_load, {src, predicate}, Call::Intrinsic);
+    debug(0) << "Expr: " << test << "\n";
+    for (int i = 0; i < 8; ++i) {
+        Expr res = extract_lane(test, i);
+        debug(0) << "Result " << i << ": " << res << "\n";
+    }
+    Expr even = extract_even_lanes(test);
+    debug(0) << "\nEven lane: " << even << "\n";
+    Expr odd = extract_odd_lanes(test);
+    debug(0) << "\nOdd lane: " << odd << "\n";
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

@@ -236,9 +236,12 @@ public:
 };
 
 bool should_vectorize_predicate(Stmt stmt) {
-    ShouldVectorizePredicate check;
-    stmt.accept(&check);
-    return check.result;
+    if (stmt.defined()) {
+        ShouldVectorizePredicate check;
+        stmt.accept(&check);
+        return check.result;
+    }
+    return true;
 }
 
 // Wrap a vectorized predicate around a Load/Store node.
@@ -250,25 +253,25 @@ class PredicateLoadStore : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Load *op) {
-        debug(4) << "VISIT LOAD: " << Expr(op) << "\n";
+        debug(0) << "VISIT LOAD: " << Expr(op) << "\n";
         internal_assert(op->index.type().lanes() == lanes);
         Expr src = Call::make(Handle(), Call::address_of, {Expr(op)}, Call::Intrinsic);
         expr = Call::make(op->type, Call::predicated_load, {src, predicate}, Call::Intrinsic);
-        debug(4) << "  mutated vector load: " << expr << "\n"
+        debug(0) << "  mutated vector load: " << expr << "\n"
                  << "  with predicate: " << predicate << "\n";
     }
 
     void visit(const Store *op) {
-        debug(4) << "VISIT STORE: " << Stmt(op) << "\n";
+        debug(0) << "VISIT STORE: " << Stmt(op) << "\n";
         internal_assert(op->index.type().lanes() == lanes);
         internal_assert(op->value.type().lanes() == lanes);
         Expr dest = Call::make(Handle(), Call::address_of,
                                {Load::make(op->value.type(), op->name, op->index, Buffer(), op->param)},
                                Call::Intrinsic);
         stmt = Evaluate::make(Call::make(Int(32), Call::predicated_store,
-                                         {dest, predicate, op->value},
+                                         {dest, predicate, mutate(op->value)},
                                          Call::Intrinsic));
-        debug(4) << "  mutated vector store: " << stmt << "\n"
+        debug(0) << "  mutated vector store: " << stmt << "\n"
                  << "  with predicate: " << predicate << "\n";
     }
 
@@ -670,17 +673,20 @@ class VectorSubs : public IRMutator {
     void visit(const IfThenElse *op) {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
-        debug(4) << "Vectorizing over " << var << "\n"
+        debug(0) << "Vectorizing over " << var << "\n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
+
+        Stmt then_case = mutate(op->then_case);
+        Stmt else_case = mutate(op->else_case);
         if (lanes > 1) {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = should_vectorize_predicate(op);
-            debug(4) << "...IfThenElse should vectorize: " << vectorize_predicate << "\n";
-            //vectorize_predicate = false;
+            bool vectorize_predicate = should_vectorize_predicate(then_case) &&
+                                       should_vectorize_predicate(else_case);
+            debug(0) << "...IfThenElse should vectorize: " << vectorize_predicate << "\n";
 
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
@@ -707,38 +713,36 @@ class VectorSubs : public IRMutator {
                                          op->then_case, op->else_case);
                     stmt =
                         IfThenElse::make(all_true,
-                                         mutate(op->then_case),
+                                         then_case,
                                          scalarize(without_likelies));
                 } else {
-                    Stmt other = PredicateLoadStore(var, cond, lanes).mutate(mutate(op->then_case));
+                    Stmt other = PredicateLoadStore(var, cond, lanes).mutate(then_case);
                     if (op->else_case.defined()) {
-                        Stmt else_case = PredicateLoadStore(var, !cond, lanes).mutate(mutate(op->else_case));
+                        Stmt else_case = PredicateLoadStore(var, !cond, lanes).mutate(else_case);
                         other = Block::make(other, else_case);
                     }
                     stmt =
                         IfThenElse::make(all_true,
-                                         mutate(op->then_case),
+                                         then_case,
                                          other);
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    debug(0) << "...Predicated IfThenElse: \n" << stmt << "\n";
                 }
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
                     stmt = scalarize(op);
                 } else {
-                    stmt = PredicateLoadStore(var, cond, lanes).mutate(mutate(op->then_case));
+                    stmt = PredicateLoadStore(var, cond, lanes).mutate(then_case);
                     if (op->else_case.defined()) {
-                        Stmt else_case = PredicateLoadStore(var, !cond, lanes).mutate(mutate(op->else_case));
+                        Stmt else_case = PredicateLoadStore(var, !cond, lanes).mutate(else_case);
                         stmt = Block::make(stmt, else_case);
                     }
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    debug(0) << "...Predicated IfThenElse: \n" << stmt << "\n";
                 }
             }
         } else {
             // It's an if statement on a scalar, we're ok to vectorize the innards.
             debug(3) << "Not scalarizing if then else\n";
-            Stmt then_case = mutate(op->then_case);
-            Stmt else_case = mutate(op->else_case);
             if (cond.same_as(op->condition) &&
                 then_case.same_as(op->then_case) &&
                 else_case.same_as(op->else_case)) {

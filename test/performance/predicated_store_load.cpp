@@ -5,7 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    const int size = 4000;
+    const int size = 50;
 
     Var x("x"), y("y");
     Func f ("f"), g("g");
@@ -17,16 +17,17 @@ int main(int argc, char **argv) {
     r.where(r.x + r.y < size);
 
     f(x, y) = 10;
-    // bugs here, need to remove the never executed store/load (conditional false)
     f(r.x, r.y) += g(r.x, r.y) * 2;
     f.update(0).vectorize(r.x, 8);
 
-    const int iterations = 50;
+    Image<int> im = f.realize(size, size);
+
+    /*const int iterations = 50;
     double t = benchmark(1, iterations, [&]() {
         f.realize(size, size);
     });
 
-    printf("Halide: %fms\n\n", t * 1e3);
+    printf("Halide: %fms\n\n", t * 1e3);*/
 
     printf("Success!\n");
     return 0;
