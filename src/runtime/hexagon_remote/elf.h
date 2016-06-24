@@ -499,9 +499,7 @@ struct elf_t {
             }
         }
         if (verify && val) {
-            fail(__LINE__);
-            log_printf("Relocation overflow inst=%08lx mask=%08lx val=%08lx\n", inst, mask, (unsigned long)old_val);
-            return;
+            log_printf("warning, relocation overflow inst=%08lx mask=%08lx val=%08lx\n", inst, mask, (unsigned long)old_val);
         }
 
         if (debug) log_printf("Relocated instruction:\n  %08lx\n", inst);
