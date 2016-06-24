@@ -63,7 +63,7 @@ extern int halide_hexagon_device_release(void* user_context);
  * most interestingly, it allows the function pointers returned to be statically
  * linked into the same executable (rather than requiring them to be in a dynamic library).
  */
-extern void* halide_hexagon_get_support_lib_symbol(void* user_context, const char *name);
+extern void* halide_hexagon_host_get_symbol(void* user_context, const char *name);
 // @}
 
 #ifdef __cplusplus
