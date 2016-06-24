@@ -395,7 +395,7 @@ struct elf_t {
     }
 
     // Perform a single relocation.
-    void do_reloc(char *addr, uint32_t mask, uintptr_t val) {
+    void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool verify = false) {
         uint32_t inst = *((uint32_t *)addr);
         if (debug) {
             log_printf("Fixup inside instruction at %lx:\n  %08lx\n",
@@ -480,6 +480,7 @@ struct elf_t {
             }
         }
 
+        uintptr_t old_val = val;
         for (int i = 0; i < 32; i++) {
             if (mask & (1 << i)) {
                 if (inst & (1 << i)) {
@@ -492,6 +493,11 @@ struct elf_t {
                 val >>= 1;
                 inst |= (next_bit << i);
             }
+        }
+        if (verify && val) {
+            fail(__LINE__);
+            log_printf("Relocation overflow inst=%08lx mask=%08lx val=%08lx\n", inst, mask, (unsigned long)old_val);
+            return;
         }
 
         if (debug) log_printf("Relocated instruction:\n  %08lx\n", inst);
@@ -596,15 +602,15 @@ struct elf_t {
 
             switch (rela->r_type()) {
             case 1:
-                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2);
+                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2, true);
                 break;
             case 2:
                 // Untested
-                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2);
+                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2, true);
                 break;
             case 3:
                 // Untested
-                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2);
+                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2, true);
                 break;
             case 4:
                 // Untested
@@ -626,16 +632,16 @@ struct elf_t {
                 do_reloc(fixup_addr, Word8, uintptr_t(S + A));
                 break;
             case 9:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP));
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP), true);
                 break;
             case 10:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1, true);
                 break;
             case 11:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2, true);
                 break;
             case 12:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3, true);
                 break;
             case 13:
                 // Untested
@@ -644,38 +650,38 @@ struct elf_t {
                 break;
             case 14:
                 // Untested
-                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2);
+                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2, true);
                 break;
             case 15:
                 // Untested
-                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2);
+                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2, true);
                 break;
             case 16:
                 // Untested
                 do_reloc(fixup_addr, Word32_X26, intptr_t(S + A - P) >> 6);
                 break;
             case 17:
-                do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6);
+                do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6, true);
                 break;
             case 18:
                 // Untested
-                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f);
+                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f, true);
                 break;
             case 19:
                 // Untested
-                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f);
+                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f, true);
                 break;
             case 20:
                 // Untested
-                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f);
+                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f, true);
                 break;
             case 21:
                 // Untested
-                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f);
+                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f, true);
                 break;
             case 22:
                 // Untested
-                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f);
+                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f, true);
                 break;
             case 23:
                 do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A));
@@ -693,7 +699,7 @@ struct elf_t {
                 break;
             case 31:
                 // Untested
-                do_reloc(fixup_addr, Word32, intptr_t(S + A - P));
+                do_reloc(fixup_addr, Word32, intptr_t(S + A - P), true);
                 break;
             default:
                 // The remaining types are all for shared objects or
