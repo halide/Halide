@@ -17,26 +17,24 @@ class PipelineContext {
     qurt_cond_t wakeup_thread;
     qurt_cond_t wakeup_caller;
     qurt_mutex_t work_mutex;
-    qurt_mutex_t wakeup_master_mutex;
 
     // Shared state
     pipeline_argv_t function;
     void **args;
     int result;
+    bool running;
 
     void thread_main() {
-        while (true) {
-            // Lock and wait for work.
-            qurt_mutex_lock(&work_mutex);
+        qurt_mutex_lock(&work_mutex);
+        while (running) {
             qurt_cond_wait(&wakeup_thread, &work_mutex);
-            if (!function) {
-                break;
+            if (function) {
+                result = function(args);
+                function = NULL;
+                qurt_cond_signal(&wakeup_caller);
             }
-            result = function(args);
-            qurt_mutex_unlock(&work_mutex);
-            qurt_cond_signal(&wakeup_caller);
         }
-        qurt_cond_signal(&wakeup_caller);
+        qurt_mutex_unlock(&work_mutex);
     }
 
     static void redirect_main(void *data) {
@@ -45,9 +43,8 @@ class PipelineContext {
 
 public:
     PipelineContext(int stack_alignment, int stack_size)
-        : stack(NULL), function(NULL), args(NULL) {
+        : stack(NULL), function(NULL), args(NULL), running(true) {
         qurt_mutex_init(&work_mutex);
-        qurt_mutex_init(&wakeup_master_mutex);
         qurt_cond_init(&wakeup_thread);
         qurt_cond_init(&wakeup_caller);
 
@@ -64,7 +61,10 @@ public:
 
     ~PipelineContext() {
         // Running a null function kills the thread.
-        run(NULL, NULL);
+        qurt_mutex_lock(&work_mutex);
+        running = false;
+        qurt_cond_signal(&wakeup_thread);
+        qurt_mutex_unlock(&work_mutex);
 
         int status;
         qurt_thread_join(thread, &status);
@@ -77,14 +77,15 @@ public:
         qurt_mutex_lock(&work_mutex);
         this->function = function;
         this->args = args;
-        qurt_mutex_unlock(&work_mutex);
         // send a signal to the worker.
         qurt_cond_signal(&wakeup_thread);
 
         // Wait for the worker's signal that it is done.
-        qurt_mutex_lock(&wakeup_master_mutex);
-        qurt_cond_wait(&wakeup_caller, &wakeup_master_mutex);
-        qurt_mutex_unlock(&wakeup_master_mutex);
+        while (this->function != NULL) {
+            qurt_cond_wait(&wakeup_caller, &work_mutex);
+        }
+        int result = this->result;
+        qurt_mutex_unlock(&work_mutex);
         return result;
     }
 };
