@@ -1,9 +1,6 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK int num_threads;
-WEAK bool thread_pool_initialized = false;
-
 struct work {
     work *next_job;
     int (*f)(void *, int, uint8_t *);
@@ -45,8 +42,15 @@ struct work_queue_t {
     // Keep track of threads so they can be joined at shutdown
     halide_thread *threads[MAX_THREADS];
 
-    // Global flag indicating
-    bool shutdown;
+    // The number threads created
+    int threads_created;
+
+    // The desired number threads doing work.
+    int desired_num_threads;
+
+    // Global flags indicating the threadpool should shut down, and
+    // whether the thread pool has been initialized.
+    bool shutdown, initialized;
 
     bool running() {
         return !shutdown;
@@ -138,39 +142,46 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     // field will be zero-initialized because it's a static global.
     halide_mutex_lock(&work_queue.mutex);
 
-    if (!thread_pool_initialized) {
+    if (!work_queue.initialized) {
         work_queue.shutdown = false;
         halide_cond_init(&work_queue.wakeup_owners);
         halide_cond_init(&work_queue.wakeup_a_team);
         halide_cond_init(&work_queue.wakeup_b_team);
         work_queue.jobs = NULL;
 
-        if (!num_threads) {
+        // Compute the desired number of threads to use. Other code
+        // can also mess with this value, but only when the work queue
+        // is locked.
+        if (!work_queue.desired_num_threads) {
             char *threads_str = getenv("HL_NUM_THREADS");
             if (!threads_str) {
                 // Legacy name for HL_NUM_THREADS
                 threads_str = getenv("HL_NUMTHREADS");
             }
             if (threads_str) {
-                num_threads = atoi(threads_str);
+                work_queue.desired_num_threads = atoi(threads_str);
             } else {
-                num_threads = halide_host_cpu_count();
-                // halide_printf(user_context, "HL_NUM_THREADS not defined. Defaulting to %d threads.\n", num_threads);
+                work_queue.desired_num_threads = halide_host_cpu_count();
             }
         }
-        if (num_threads > MAX_THREADS) {
-            num_threads = MAX_THREADS;
-        } else if (num_threads < 1) {
-            num_threads = 1;
+        if (work_queue.desired_num_threads > MAX_THREADS) {
+            work_queue.desired_num_threads = MAX_THREADS;
+        } else if (work_queue.desired_num_threads < 1) {
+            work_queue.desired_num_threads = 1;
         }
-        for (int i = 0; i < num_threads-1; i++) {
-            //fprintf(stderr, "Creating thread %d\n", i);
-            work_queue.threads[i] = halide_spawn_thread(worker_thread, NULL);
-        }
-        // Everyone starts on the a team.
-        work_queue.a_team_size = num_threads;
+        work_queue.threads_created = 0;
 
-        thread_pool_initialized = true;
+        // Everyone starts on the a team.
+        work_queue.a_team_size = work_queue.desired_num_threads;
+
+        work_queue.initialized = true;
+    }
+
+    while (work_queue.threads_created < work_queue.desired_num_threads - 1) {
+        // We might need to make some new threads, if work_queue.desired_num_threads has
+        // increased.
+        work_queue.threads[work_queue.threads_created++] =
+            halide_spawn_thread(worker_thread, NULL);
     }
 
     // Make the job.
@@ -183,19 +194,23 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     job.exit_status = 0;     // The job hasn't failed yet
     job.active_workers = 0;  // Nobody is working on this yet
 
-    if (!work_queue.jobs && size < num_threads) {
+    if (!work_queue.jobs && size < work_queue.desired_num_threads) {
         // If there's no nested parallelism happening and there are
         // fewer tasks to do than threads, then set the target A team
         // size so that some threads will put themselves to sleep
         // until a larger job arrives.
         work_queue.target_a_team_size = size;
     } else {
-        work_queue.target_a_team_size = num_threads;
+        // Otherwise the target A team size is
+        // desired_num_threads. This may still be less than
+        // threads_created if desired_num_threads has been reduced by
+        // other code.
+        work_queue.target_a_team_size = work_queue.desired_num_threads;
     }
 
-    // If there are more tasks than threads in the A team, we should
-    // wake up everyone.
-    bool wake_b_team = size > work_queue.a_team_size;
+    // If there are fewer threads than we would like on the a team,
+    // wake up the b team too.
+    bool wake_b_team = work_queue.target_a_team_size > work_queue.a_team_size;
 
     // Push the job onto the stack.
     job.next_job = work_queue.jobs;
@@ -229,7 +244,7 @@ using namespace Halide::Runtime::Internal;
 extern "C" {
 
 WEAK void halide_shutdown_thread_pool() {
-    if (!thread_pool_initialized) return;
+    if (!work_queue.initialized) return;
 
     // Wake everyone up and tell them the party's over and it's time
     // to go home
@@ -241,18 +256,16 @@ WEAK void halide_shutdown_thread_pool() {
     halide_mutex_unlock(&work_queue.mutex);
 
     // Wait until they leave
-    for (int i = 0; i < num_threads-1; i++) {
+    for (int i = 0; i < work_queue.threads_created; i++) {
         halide_join_thread(work_queue.threads[i]);
     }
-
-    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
 
     // Tidy up
     halide_mutex_destroy(&work_queue.mutex);
     halide_cond_destroy(&work_queue.wakeup_owners);
     halide_cond_destroy(&work_queue.wakeup_a_team);
     halide_cond_destroy(&work_queue.wakeup_b_team);
-    thread_pool_initialized = false;
+    work_queue.initialized = false;
 }
 
 }

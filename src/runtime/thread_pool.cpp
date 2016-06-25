@@ -11,15 +11,9 @@ WEAK void halide_thread_pool_cleanup() {
 }
 
 WEAK void halide_set_num_threads(int n) {
-    if (num_threads == n) {
-        return;
-    }
-
-    if (thread_pool_initialized) {
-        halide_shutdown_thread_pool();
-    }
-
-    num_threads = n;
+    halide_mutex_lock(&work_queue.mutex);
+    work_queue.desired_num_threads = n;
+    halide_mutex_unlock(&work_queue.mutex);
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
