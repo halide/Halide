@@ -298,7 +298,11 @@ public:
 
         hex_command += " -c ";
         hex_command += tmp_bitcode.pathname();
-        hex_command += " -fno-pic -G 0 -mlong-calls -O3 -Wno-override-module ";
+        if (0) { // This path should also work, if we want to use PIC code
+            hex_command += " -fpic -O3 -Wno-override-module ";
+        } else {
+            hex_command += " -fno-pic -G 0 -mlong-calls -O3 -Wno-override-module ";
+        }
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }

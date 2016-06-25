@@ -128,6 +128,11 @@ struct elf_t {
     char *writeable_buf;
     size_t writeable_size;
 
+    // The global offset table for PIC code
+    elfaddr_t *global_offset_table;
+    int global_offset_table_entries;
+    int max_global_offset_table_entries;
+
     // Load an object file in memory. Does not take
     // ownership of the memory. Memory should be page-aligned.
     void parse_object_file(const unsigned char *b, size_t s, bool d = false) {
@@ -138,13 +143,26 @@ struct elf_t {
         size = (s + alignment) & ~alignment;
         debug = d;
 
-        // Make a mapping of the appropriate size and type
-        buf = (char *)mmap(NULL, size * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        int global_offset_table_size = 4096;
+
+        // Make a mapping of the appropriate size and type. We
+        // allocate the size of the object file for the executable
+        // stuff, the same size again to make a writeable copy, and
+        // then an extra page for the global offset table for PIC
+        // code.
+        buf = (char *)mmap(NULL, size * 2 + global_offset_table_size,
+                           PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
         // Copy over the data
         memcpy(buf, b, s);
 
-        // Grab the header
+        // Set up the global offset table
+        global_offset_table = (elfaddr_t *)(buf + size*2);
+        global_offset_table_entries = 0;
+        max_global_offset_table_entries = global_offset_table_size / sizeof(elfaddr_t);
+        memset(global_offset_table, 0, global_offset_table_size);
+
+        // Grab the ELF header
         if (size < sizeof(elf_header_t)) {
             fail(__LINE__);
             return;
@@ -370,6 +388,7 @@ struct elf_t {
             symbol_t *sym = get_symbol(i);
             const char *sym_name = get_symbol_name(sym);
             if (strncmp(sym_name, name, len+1) == 0) {
+                if (debug) log_printf("-> %p\n", sym);
                 return sym;
             }
         }
@@ -395,8 +414,7 @@ struct elf_t {
         return (rela_t *)(get_addr(get_section_offset(sec_rela) + i * sizeof(rela_t)));
     }
 
-    // Perform a single relocation.
-    void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool verify = false) {
+    void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
         uint32_t inst = *((uint32_t *)addr);
         if (debug) {
             log_printf("Fixup inside instruction at %lx:\n  %08lx\n",
@@ -464,12 +482,12 @@ struct elf_t {
                 // Low 6 bits of val go in the following bits.
                 mask = 63 << 20;
 
-            } else if (((inst >> 24) & 249) == 72) {
+            } else if ((inst >> 24) == 72) {
                 // Example instruction encoding that has this high byte (ignoring bits 1 and 2):
                 // 0100 1ii0  000i iiii  PPit tttt  iiii iiii
                 if (debug) log_printf("Instruction-specific case A\n");
                 mask = 0x061f20ff;
-            } else if (((inst >> 24) & 249) == 73) {
+            } else if ((inst >> 24) == 73) {
                 // 0100 1ii1  000i iiii  PPii iiii  iiid dddd
                 if (debug) log_printf("Instruction-specific case B\n");
                 mask = 0x061f3fe0;
@@ -477,6 +495,14 @@ struct elf_t {
                 // 0111 1000  ii-i iiii  PPii iiii  iiid dddd
                 if (debug) log_printf("Instruction-specific case C\n");
                 mask = 0x00df3fe0;
+            } else if ((inst >> 16) == 27209) {
+                // 0110 1010  0100 1001  PP-i iiii  i--d dddd
+                mask = 0x00001f80;
+            } else if ((inst >> 25) == 72) {
+                // 1001 0ii0  101s ssss  PPii iiii  iiid dddd
+                // 1001 0ii1  000s ssss  PPii iiii  iiid dddd
+                mask = 0x06003fe0;
+
             } else {
                 log_printf("Unhandled!\n");
                 fail(__LINE__);
@@ -485,6 +511,7 @@ struct elf_t {
         }
 
         uintptr_t old_val = val;
+        bool consumed_every_bit = false;
         for (int i = 0; i < 32; i++) {
             if (mask & (1 << i)) {
                 if (inst & (1 << i)) {
@@ -494,11 +521,18 @@ struct elf_t {
                 }
                 // Consume a bit of val
                 int next_bit = val & 1;
-                val >>= 1;
+                if (is_signed) {
+                    consumed_every_bit |= ((intptr_t)val) == -1;
+                    val = ((intptr_t)val) >> 1;
+                } else {
+                    val = ((uintptr_t)val) >> 1;
+                }
+                consumed_every_bit |= (val == 0);
                 inst |= (next_bit << i);
             }
         }
-        if (verify && val) {
+
+        if (verify && !consumed_every_bit) {
             fail(__LINE__);
             log_printf("Relocation overflow inst=%08lx mask=%08lx val=%08lx\n", inst, mask, (unsigned long)old_val);
             return;
@@ -535,13 +569,18 @@ struct elf_t {
             {NULL, NULL}
         };
 
+        // Read from the GP register for GP-relative relocations
+        char *GP;
+        asm ("{%0 = gp}\n" : "=r"(GP) : : );
+        if (debug) log_printf("GP = %p\n", GP);
+
         for (int i = 0; i < num_relas(sec_rela); i++) {
             rela_t *rela = get_rela(sec_rela, i);
             if (!rela) {
                 fail(__LINE__);
                 return;
             }
-            if (debug) log_printf("\nRelocation %d:\n", i);
+            if (debug) log_printf("\nRelocation %d of type %lu:\n", i, rela->r_type());
 
             // The location to make a change
             char *fixup_addr = get_addr(get_section_offset(sec) + rela->r_offset);
@@ -555,9 +594,14 @@ struct elf_t {
 
             char *sym_addr = NULL;
             if (!symbol_is_defined(sym)) {
-                for (int i = 0; known_syms[i].name; i++) {
-                    if (strncmp(sym_name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
-                        sym_addr = known_syms[i].addr;
+                if (strncmp(sym_name, "_GLOBAL_OFFSET_TABLE_", 22) == 0) {
+                    sym_addr = (char *)global_offset_table;
+                }
+                if (!sym_addr) {
+                    for (int i = 0; known_syms[i].name; i++) {
+                        if (strncmp(sym_name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
+                            sym_addr = known_syms[i].addr;
+                        }
                     }
                 }
                 if (!sym_addr) {
@@ -581,16 +625,20 @@ struct elf_t {
             // Hexagon relocations are specified in section 11.5 in
             // the Hexagon Application Binary Interface spec.
 
-            // First we define the variables from Table 11-5.
+            // Find the symbol's index in the global_offset_table
+            int global_offset_table_idx = global_offset_table_entries;
+            for (int i = 0; i < global_offset_table_entries; i++) {
+                if ((elfaddr_t)sym_addr == global_offset_table[i]) {
+                    global_offset_table_idx = i;
+                    break;
+                }
+            }
+
+            // Now we can define the variables from Table 11-5.
             char *S = sym_addr;
             char *P = fixup_addr;
             intptr_t A = rela->r_addend;
-
-            // Read from the GP register for GP-relative relocations
-            char *GP;
-            asm ("{%0 = gp}\n" : "=r"(GP) : : );
-
-            if (debug) log_printf("GP = %p\n", GP);
+            elfaddr_t G = global_offset_table_idx * sizeof(elfaddr_t);
 
             // Define some constants from table 11-3
             const uint32_t Word32     = 0xffffffff;
@@ -606,95 +654,99 @@ struct elf_t {
             const uint32_t Word32_U6  = 0; // The mask is instruction-specific
             const uint32_t Word32_R6  = 0x000007e0;
             const uint32_t Word32_LO  = 0x00c03fff;
+            const bool truncate = false, verify = true;
+            const bool _unsigned = false, _signed = true;
+
+            bool needs_global_offset_table_entry = false;
 
             switch (rela->r_type()) {
             case 1:
-                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2, true);
+                // Address to fix up, mask, value, signed, verify
+                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2, _signed, verify);
                 break;
             case 2:
                 // Untested
-                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2, true);
+                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2, _signed, verify);
                 break;
             case 3:
                 // Untested
-                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2, true);
+                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2, _signed, verify);
                 break;
             case 4:
                 // Untested
-                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A));
+                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 5:
                 // Untested
-                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A) >> 16);
+                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
                 break;
             case 6:
-                do_reloc(fixup_addr, Word32, intptr_t(S + A) >> 2);
+                do_reloc(fixup_addr, Word32, intptr_t(S + A) >> 2, _signed, truncate);
                 break;
             case 7:
                 // Untested
-                do_reloc(fixup_addr, Word16, uintptr_t(S + A));
+                do_reloc(fixup_addr, Word16, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 8:
                 // Untested
-                do_reloc(fixup_addr, Word8, uintptr_t(S + A));
+                do_reloc(fixup_addr, Word8, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 9:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP), true);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP), _unsigned, verify);
                 break;
             case 10:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1, true);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1, _unsigned, verify);
                 break;
             case 11:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2, true);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2, _unsigned, verify);
                 break;
             case 12:
-                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3, true);
+                do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3, _unsigned, verify);
                 break;
             case 13:
                 // Untested
-                do_reloc(fixup_addr,   Word32_LO, uintptr_t(S + A) >> 16);
-                do_reloc(fixup_addr+4, Word32_LO, uintptr_t(S + A));
+                do_reloc(fixup_addr,   Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
+                do_reloc(fixup_addr+4, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 14:
                 // Untested
-                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2, true);
+                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2, _signed, verify);
                 break;
             case 15:
                 // Untested
-                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2, true);
+                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2, _signed, verify);
                 break;
             case 16:
-                // Untested
-                do_reloc(fixup_addr, Word32_X26, intptr_t(S + A - P) >> 6);
+                do_reloc(fixup_addr, Word32_X26, intptr_t(S + A - P) >> 6, _signed, truncate);
                 break;
             case 17:
-                do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6, true);
+                do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6, _unsigned, verify);
                 break;
             case 18:
                 // Untested
-                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f, true);
+                do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f, _signed, verify);
                 break;
             case 19:
                 // Untested
-                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f, true);
+                do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f, _signed, verify);
                 break;
             case 20:
                 // Untested
-                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f, true);
+                do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f, _signed, verify);
                 break;
             case 21:
                 // Untested
-                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f, true);
+                do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f, _signed, verify);
                 break;
             case 22:
                 // Untested
-                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f, true);
+                do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f, _signed, verify);
                 break;
             case 23:
-                do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A));
+                do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 24:
-                do_reloc(fixup_addr, Word32_R6, uintptr_t(S + A));
+                do_reloc(fixup_addr, Word32_R6, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 25: // These ones all seem to mean the same thing. Only 30 is tested.
             case 26:
@@ -702,19 +754,42 @@ struct elf_t {
             case 28:
             case 29:
             case 30:
-                do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A));
+                do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 31:
                 // Untested
-                do_reloc(fixup_addr, Word32, intptr_t(S + A - P), true);
+                do_reloc(fixup_addr, Word32, intptr_t(S + A - P), _signed, verify);
                 break;
+            case 65:
+                do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A - P), _unsigned, truncate);
+                break;
+            case 69:
+                do_reloc(fixup_addr, Word32_X26, intptr_t(G) >> 6, _signed, truncate);
+                needs_global_offset_table_entry = true;
+                break;
+            case 71:
+                do_reloc(fixup_addr, Word32_U6, uintptr_t(G), _unsigned, truncate);
+                needs_global_offset_table_entry = true;
+                break;
+
             default:
-                // The remaining types are all for shared objects or
-                // thread locals. We can't handle them without also
-                // deducing some more base addresses (GOT, PLT, TLS, etc).
+                // The remaining types are all for things like thread-locals.
                 log_printf("Unhandled relocation type %lu.\n", rela->r_type());
                 fail(__LINE__);
                 return;
+            }
+
+            if (needs_global_offset_table_entry &&
+                global_offset_table_idx == global_offset_table_entries) {
+                // This symbol needs a slot in the global offset table
+                if (global_offset_table_entries == max_global_offset_table_entries) {
+                    log_printf("Out of space in the global offset table\n");
+                    fail(__LINE__);
+                    return;
+                } else {
+                    global_offset_table[global_offset_table_idx] = (elfaddr_t)S;
+                    global_offset_table_entries++;
+                }
             }
         }
 
@@ -734,6 +809,16 @@ struct elf_t {
                 }
                 if (debug) log_printf("Relocating: %s\n", sec_name);
                 do_relocations_for_section(sec_to_relocate, sec);
+                if (failed) return;
+                if (debug) log_printf("Done relocating: %s\n", sec_name);
+            }
+        }
+
+        // Dump the global offset table
+        if (debug) {
+            log_printf("global offset table:");
+            for (int i = 0; i < global_offset_table_entries; i++) {
+                log_printf(" %08lx\n", global_offset_table[i]);
             }
         }
     }
