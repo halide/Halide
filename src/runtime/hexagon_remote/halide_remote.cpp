@@ -61,17 +61,6 @@ int halide_do_task(void *user_context, halide_task_t f, int idx,
     return f(user_context, idx, closure);
 }
 
-int halide_do_par_for(void *user_context, halide_task_t f,
-                      int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
-        if (result) {
-            return result;
-        }
-    }
-    return 0;
-}
-
 void *halide_get_symbol(const char *name) {
     return dlsym(RTLD_DEFAULT, name);
 }
@@ -232,6 +221,8 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     dlclose(reinterpret_cast<void*>(module_ptr));
 
     if (context_count-- == 0) {
+        halide_shutdown_thread_pool();
+
         HAP_power_request(0, 0, -1);
     }
 
