@@ -25,7 +25,7 @@ typedef uint64_t elfaddr_t;
 typedef uint32_t elfaddr_t;
 #endif
 
-static const int alignment = 4095;
+static const int alignment = 4096;
 
 // The standard ELF header. See
 // http://man7.org/linux/man-pages/man5/elf.5.html for the meanings of
@@ -140,7 +140,7 @@ struct elf_t {
         buf = NULL;
         writeable_buf = NULL;
         writeable_size = 0;
-        size = (s + alignment) & ~alignment;
+        size = (s + alignment - 1) & ~(alignment - 1);
         debug = d;
 
         int global_offset_table_size = 4096;
@@ -182,12 +182,14 @@ struct elf_t {
                               sec_name,
                               get_addr(get_section_offset(sec)));
 
-            if (sec->sh_type == 2) {
+            // The text, symbol table, and string table sections have
+            // types 1, 2, and 3 respectively in the ELF spec.
+            if (sec->sh_type == 1 && strncmp(sec_name, ".text", 5) == 0) {
+                sec_text = sec;
+            } else if (sec->sh_type == 2) {
                 sec_symtab = sec;
             } else if (sec->sh_type == 3) {
                 sec_strtab = sec;
-            } else if (sec->sh_type == 1 && strncmp(sec_name, ".text", 5) == 0) {
-                sec_text = sec;
             }
         }
     }
@@ -221,8 +223,15 @@ struct elf_t {
             return;
         }
 
+        // Copying over the span may also copy a bunch of intermediate
+        // junk, e.g. if the first and last sections of the object
+        // file are writeable, but in practice we've found that the
+        // writeable sections are in one tight cluster. We don't want
+        // to copy over the sections individually, because some of
+        // them alias.
+
         // Align up the size for the mapping
-        writeable_size = (size_to_copy + alignment) & ~alignment;
+        writeable_size = (size_to_copy + alignment - 1) & ~(alignment - 1);
 
         // Make the mapping
         writeable_buf = buf + size;
@@ -311,6 +320,8 @@ struct elf_t {
     }
 
     bool is_section_writeable(section_header_t *sec) {
+        // Writeable sections have the SHF_WRITE bit set, which is bit
+        // 1.
         return (sec->sh_flags & 1);
     }
 
@@ -554,6 +565,9 @@ struct elf_t {
             const char *name;
             char *addr;
         };
+        // dlsym can't necessarily find symbols in the calling process
+        // (e.g. this happens on linux if it is not compiled with
+        // -rdynamic), so define a table of some important symbols.
         static known_sym known_syms[] = {
             {"close", (char *)(&close)},
             {"abort", (char *)(&abort)},
@@ -566,11 +580,12 @@ struct elf_t {
             {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
             {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
             {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
-            {NULL, NULL}
+            {NULL, NULL} // Sentinel
         };
 
-        // Read from the GP register for GP-relative relocations
-        char *GP;
+        // Read from the GP register for GP-relative relocations. We
+        // need to do this with some inline assembly.
+        char *GP = NULL;
         asm ("{%0 = gp}\n" : "=r"(GP) : : );
         if (debug) log_printf("GP = %p\n", GP);
 
