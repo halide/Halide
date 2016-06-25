@@ -89,13 +89,25 @@ struct halide_mutex {
     uint64_t _private[8];
 };
 
-/** A basic set of mutex functions, which call platform specific code
- * for mutual exclusion.
+struct halide_cond {
+    uint64_t _private[8];
+};
+
+/** A basic set of mutex and condition variable functions, which call
+ * platform specific code for mutual exclusion. Equivalent to posix
+ * calls. Mutexes should initially be set to zero'd memory. Any
+ * resources required are created on first lock. Calling destroy
+ * re-zeros the memory.
  */
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
-extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
+extern void halide_mutex_destroy(struct halide_mutex *mutex);
+
+extern void halide_cond_init(struct halide_cond *cond);
+extern void halide_cond_destroy(struct halide_cond *cond);
+extern void halide_cond_broadcast(struct halide_cond *cond);
+extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -130,8 +142,13 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                           uint8_t *closure);
 //@}
 
-/** Spawn a thread, independent of halide's thread pool. */
-extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
+struct halide_thread;
+
+/** Spawn a thread. Returns a handle to the thread for the purposes of joining it. */
+extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure);
+
+/** Join a thread */
+extern void halide_join_thread(struct halide_thread *);
 
 /** Set the number of threads used by Halide's thread pool. No effect
  * on OS X or iOS. If changed after the first use of a parallel Halide
