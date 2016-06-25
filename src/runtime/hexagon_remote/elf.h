@@ -544,8 +544,9 @@ struct elf_t {
         }
 
         if (verify && !consumed_every_bit) {
+            log_printf("Relocation overflow inst=%08lx mask=%08lx val=%08lx\n",
+                       inst, mask, (unsigned long)old_val);
             fail(__LINE__);
-            log_printf("Relocation overflow inst=%08lx mask=%08lx val=%08lx\n", inst, mask, (unsigned long)old_val);
             return;
         }
 
