@@ -243,6 +243,17 @@ using namespace Halide::Runtime::Internal;
 
 extern "C" {
 
+WEAK int halide_set_num_threads(int n) {
+    // Don't make this an atomic swap - we don't want to be changing
+    // the desired number of threads while another thread is in the
+    // middle of a sequence of non-atomic operations.
+    halide_mutex_lock(&work_queue.mutex);
+    int old = work_queue.desired_num_threads;
+    work_queue.desired_num_threads = n;
+    halide_mutex_unlock(&work_queue.mutex);
+    return old;
+}
+
 WEAK void halide_shutdown_thread_pool() {
     if (!work_queue.initialized) return;
 
