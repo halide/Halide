@@ -574,6 +574,7 @@ struct elf_t {
             {"abort", (char *)(&abort)},
             {"memcpy", (char *)(&memcpy)},
             {"memmove", (char *)(&memmove)},
+            {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
             {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
             {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
             {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
