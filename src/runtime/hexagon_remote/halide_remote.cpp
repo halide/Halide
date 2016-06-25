@@ -56,6 +56,7 @@ void halide_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
+/*
 int halide_do_task(void *user_context, halide_task_t f, int idx,
                    uint8_t *closure) {
     return f(user_context, idx, closure);
@@ -71,6 +72,7 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     }
     return 0;
 }
+*/
 
 void *halide_get_symbol(const char *name) {
     return dlsym(RTLD_DEFAULT, name);

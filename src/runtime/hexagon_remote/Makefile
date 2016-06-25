@@ -96,6 +96,10 @@ bin/%/halide_hexagon_remote_skel.o: bin/src/halide_hexagon_remote_skel.c
 	mkdir -p $(@D)
 	$(CC-$*) $(CCFLAGS-$*) -fPIC -c $^ -o $@
 
+bin/%/thread_pool.o: thread_pool.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c thread_pool.cpp -o $@
+
 bin/%/halide_remote.o: halide_remote.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
@@ -105,13 +109,13 @@ bin/%/halide_host.o: halide_host.cpp
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_host.cpp -o $@
 
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -lc -o $@ \
 	    -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	    -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail \
 	    -Wl,-soname=libhalide_hexagon_remote_skel.so \
-	    -Wl,--start-group  bin/$*/halide_remote.o bin/$*/halide_hexagon_remote_skel.o -Wl,--end-group
+	    -Wl,--start-group  bin/$*/halide_remote.o bin/$*/thread_pool.o bin/$*/halide_hexagon_remote_skel.o -Wl,--end-group
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
 	mkdir -p $(@D)
@@ -139,7 +143,7 @@ LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
 bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 	mkdir -p $(@D)
 	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o $(LIBDL) \
-	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
+	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --whole-archive $(LIB_QURT) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	    --dynamic-linker= -E --force-dynamic
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
