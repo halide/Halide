@@ -255,7 +255,6 @@ struct CostModel {
       void visit(const Call * call) {
           if (call->call_type == Call::Halide ||
               call->call_type == Call::Image) {
-              ops+=1;
               byte_loads += call->type.bytes();
           } else if (call->call_type == Call::Extern) {
               // There is no visibility into an extern stage so there is
