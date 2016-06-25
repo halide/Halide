@@ -122,7 +122,7 @@ bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/hali
 	$(CC-$*) $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so $^ ${RPCMEM_C} -shared -o $@
 
 # Build rules for the simulator implementation.
-bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h
+bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h elf.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -DSIMULATOR -c sim_remote.cpp -o $@
 
