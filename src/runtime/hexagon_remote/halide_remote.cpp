@@ -1,7 +1,6 @@
 extern "C" {
 
 #include "bin/src/halide_hexagon_remote.h"
-#include <sys/mman.h>
 #include <memory.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,6 +15,10 @@ extern "C" {
 }
 
 #include <HalideRuntime.h>
+
+#include <qurt.h>
+
+#include "elf.h"
 #include "pipeline_context.h"
 #include "log.h"
 
@@ -99,13 +102,9 @@ PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
-    // Currently, the 'code' is actually just a path to a shared
-    // object. It would be nice to find a way to pass the code
-    // directly, without needing to go through the file system.
-    const char *filename = (const char *)code;
-    void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
+    elf_t *lib = obj_dlopen_mem(code, codeLen);
     if (!lib) {
-        log_printf("dlopen failed (%s)\n", dlerror());
+        log_printf("dlopen failed");
         return -1;
     }
 
@@ -113,9 +112,9 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+    set_runtime_t set_runtime = (set_runtime_t)obj_dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        dlclose(lib);
+        obj_dlclose(lib);
         log_printf("halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -130,7 +129,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        dlclose(lib);
+        obj_dlclose(lib);
         log_printf("set_runtime failed (%d)\n", result);
         return result;
     }
@@ -177,7 +176,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 }
 
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
@@ -229,7 +228,7 @@ int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
-    dlclose(reinterpret_cast<void*>(module_ptr));
+    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
 
     if (context_count-- == 0) {
         HAP_power_request(0, 0, -1);
