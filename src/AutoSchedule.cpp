@@ -340,6 +340,32 @@ struct CostModel {
         return make_pair(cost_visitor.ops, cost_visitor.byte_loads);
     }
 
+    pair<int64_t, int64_t> stage_region_cost(string func, int stage, DimBounds &bounds,
+                                             const set<string> &inlines = set<string>()) {
+        Function curr_f = env.at(func);
+        Definition def = get_stage_definition(curr_f, stage);
+
+        Box stage_region;
+
+        const vector<Dim> &dims = def.schedule().dims();
+        for (int d = 0; d < (int)dims.size() - 1; d++) {
+            stage_region.push_back(bounds.at(dims[d].var));
+        }
+
+        int64_t area = box_area(stage_region);
+        if (area < 0) {
+            // Area could not be determined therfore it is not possible to
+            // determine the cost as well
+            return make_pair(-1, -1);
+        }
+
+        vector< pair<int64_t, int64_t> > cost = inlines.empty() ? func_cost[func]:
+                                                get_func_cost(curr_f, inlines);
+
+        return make_pair(area * cost[stage].first, area * cost[stage].second);
+    }
+
+
     pair<int64_t, int64_t> stage_region_cost(string func, int stage, Box &region,
                                              const set<string> &inlines = set<string>()) {
         Function curr_f = env.at(func);
@@ -378,10 +404,9 @@ struct CostModel {
                                                 get_func_cost(curr_f, inlines);
 
         return make_pair(area * cost[stage].first, area * cost[stage].second);
-
     }
 
-    pair<int64_t, int64_t> region_cost(string func, Box& region,
+    pair<int64_t, int64_t> region_cost(string func, Box &region,
                                        const set<string> &inlines = set<string>()) {
 
         Function curr_f = env.at(func);
@@ -1532,11 +1557,9 @@ pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g) {
 
     // TODO: Add sanity checks for the cost model
-    /*
     debug(0) << "\n============\n";
     debug(0) << "Search start\n";
     debug(0) << "============\n";
-    */
 
 
     // Initialize to no tiling
@@ -1564,23 +1587,19 @@ Partitioner::find_best_tile_config(const Group &g) {
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
-            /*
             debug(0) << "Relative to current best:" << '\n';
             debug(0) << "Benefit:" << benefit << '\n';
             debug(0) << "arith cost:" << (float)new_analy.arith_cost/best_analy.arith_cost << " ";
             debug(0) << "mem cost:" << (float)new_analy.mem_cost/best_analy.mem_cost << "\n\n";
-            */
         }
     }
 
-    /*
     debug(0) << "\n===========\n";
     debug(0) << "Best config\n";
     for (auto &dim: best_config) {
         debug(0) << dim.first << ":" << dim.second << " ";
     }
     debug(0) << '\n' << best_analy;
-    */
 
     return make_pair(best_config, best_analy);
 }
@@ -1833,7 +1852,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         }
     }
 
-    /*
     debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
@@ -1841,12 +1859,13 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     disp_regions(input_reg);
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
-    */
 
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost =
             cost_model.region_cost(group_reg, g.inlined);
 
+    // TODO: This is inaccurate this can both over and under estimate the input
+    // foot print
     int64_t tile_input_size = cost_model.region_size(prod_reg) +
                               cost_model.input_region_size(input_reg);
 
@@ -1871,6 +1890,9 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         tile_output_size =
                 cost_model.region_size(g.output.func.name(),
                                        conc_reg.at(g.output.func.name()));
+        // For an update definition the region of output touched is the
+        // input from the previous stage
+        tile_input_size += tile_output_size;
     }
 
     // Adding tile input and output size to tile_intermediate_size over
@@ -1882,7 +1904,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     pair<int64_t, int64_t> out_cost =
             cost_model.stage_region_cost(g.output.func.name(),
                                          g.output.stage_num,
-                                         out_tile_extent, g.inlined);
+                                         tile_bounds, g.inlined);
+
     tile_cost.first += out_cost.first;
     debug(0) << "out_cost.second:" << out_cost.second << '\n';
     tile_cost.second += out_cost.second;
@@ -1948,30 +1971,28 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     float load_slope = (float)arch_params.balance/arch_params.last_level_size;
 
     int64_t output_footprint = tile_output_size * estimate_tiles;
+
+    // TODO: input_footprint is inaccurate it can both over and under estimate
+    // the input foot print the tile_cost.second it the cost of the whole group
+    // not just the number of bytes loaded from inputs.
     int64_t input_footprint = std::min(tile_input_size, tile_cost.second) * estimate_tiles;
 
     float input_load_cost =
-            std::min(input_footprint * load_slope, (float)arch_params.balance);
+            std::min(1 + input_footprint * load_slope, (float)arch_params.balance);
     float output_load_cost =
-            std::min(output_footprint * load_slope, (float)arch_params.balance);
+            std::min(1 + output_footprint * load_slope, (float)arch_params.balance);
     float inter_load_cost =
-            std::min(tile_inter_size * load_slope, (float)arch_params.balance);
+            std::min(1 + tile_inter_size * load_slope, (float)arch_params.balance);
 
     per_tile_mem_cost += std::min(tile_input_size, tile_cost.second) * input_load_cost;
     per_tile_mem_cost += tile_output_size * output_load_cost;
     per_tile_mem_cost += tile_cost.second * inter_load_cost;
-
-    //float load_cost = std::max(1 + (float)std::log(tile_inter_size) -
-    //                               (float)std::log(arch_params.l1_size), 0.0f);
-    //per_tile_mem_cost = std::max(tile_cost.second * load_cost,
-    //                             (float)tile_input_size + tile_output_size);
 
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
     g_analy.foot_print = group_inter_size + tile_output_size * estimate_tiles;
 
-    /*
     debug(0) << "input_load_cost:" << input_load_cost << '\n';
     debug(0) << "output_load_cost:" << output_load_cost << '\n';
     debug(0) << "inter_load_cost:" << inter_load_cost << '\n';
@@ -1982,7 +2003,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     debug(0) << "tile_input_size:" << tile_input_size << '\n';
     debug(0) << "tile_output_size:" << tile_output_size << '\n';
     debug(0) << g_analy << '\n';
-    */
 
     //internal_assert(per_tile_mem_cost > 0);
 
