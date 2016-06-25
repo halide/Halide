@@ -2586,8 +2586,11 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
 
     // Inform the user that estimates of output sizes were not available on
     // all the outputs of the pipeline.
-    user_assert(estimates_avail) << "Please provide estimates for each \
-                                 dimension of the pipeline output functions.";
+    if (!estimates_avail) {
+        user_warning << "Please provide estimates for each dimension" <<
+                        "of the pipeline output functions.\n";
+        return;
+    }
 
     map<string, vector<string> > update_args;
     set<string> reductions;
