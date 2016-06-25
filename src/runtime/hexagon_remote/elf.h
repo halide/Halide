@@ -896,8 +896,7 @@ inline elf_t *obj_dlopen_mem(const unsigned char *code, int code_size) {
 }
 
 // Find a symbol in a handle returned by obj_dlopen_mem
-inline void *obj_dlsym(elf_t *handle, const char *name) {
-    elf_t *elf = (elf_t *)handle;
+inline void *obj_dlsym(elf_t *elf, const char *name) {
     if (!elf) return NULL;
     symbol_t *sym = elf->find_symbol(name);
     if (!sym) return NULL;
@@ -906,9 +905,8 @@ inline void *obj_dlsym(elf_t *handle, const char *name) {
 }
 
 // Release an object opened by obj_dlopen_mem
-inline int obj_dlclose(elf_t *handle) {
+inline int obj_dlclose(elf_t *elf) {
     // TODO: Should we run .dtors?
-    elf_t *elf = (elf_t *)handle;
     elf->deinit();
     return 0;
 }
