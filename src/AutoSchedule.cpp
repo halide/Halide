@@ -93,7 +93,8 @@ typedef map<FStage, DimBounds> FStageBounds;
 struct MachineParams {
     uint32_t parallelism;
     uint32_t vec_len;
-    uint32_t fast_mem_size;
+    uint32_t register_file_size;
+    uint32_t last_level_size;
     uint32_t balance;
 };
 
@@ -1435,12 +1436,10 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             }
         }
 
-        /*
         for (auto &choice: choices) {
             debug(0) << "Cand choice:" << choice.first;
         }
         debug(0) << "Cand benefit:" << overall_benefit << '\n';
-        */
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (best_benefit < overall_benefit
@@ -1533,9 +1532,11 @@ pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g) {
 
     // TODO: Add sanity checks for the cost model
+    /*
     debug(0) << "\n============\n";
     debug(0) << "Search start\n";
     debug(0) << "============\n";
+    */
 
 
     // Initialize to no tiling
@@ -1559,23 +1560,27 @@ Partitioner::find_best_tile_config(const Group &g) {
 
         GroupAnalysis new_analy = analyze_group(new_group);
 
-        int64_t benefit = estimate_benefit(best_analy, new_analy, true, false, true);
+        int64_t benefit = estimate_benefit(best_analy, new_analy, true, true, false);
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
+            /*
+            debug(0) << "Relative to current best:" << '\n';
+            debug(0) << "Benefit:" << benefit << '\n';
+            debug(0) << "arith cost:" << (float)new_analy.arith_cost/best_analy.arith_cost << " ";
+            debug(0) << "mem cost:" << (float)new_analy.mem_cost/best_analy.mem_cost << "\n\n";
+            */
         }
-        debug(0) << "Relative to current best:" << '\n';
-        debug(0) << "Benefit:" << benefit << '\n';
-        debug(0) << "arith cost:" << (float)new_analy.arith_cost/best_analy.arith_cost << " ";
-        debug(0) << "mem cost:" << (float)new_analy.mem_cost/best_analy.mem_cost << "\n\n";
     }
 
+    /*
     debug(0) << "\n===========\n";
     debug(0) << "Best config\n";
     for (auto &dim: best_config) {
         debug(0) << dim.first << ":" << dim.second << " ";
     }
     debug(0) << '\n' << best_analy;
+    */
 
     return make_pair(best_config, best_analy);
 }
@@ -1828,6 +1833,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         }
     }
 
+    /*
     debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
@@ -1835,6 +1841,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     disp_regions(input_reg);
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
+    */
 
     // Compute the cost of the region and the size of the intermediates
     pair<int64_t, int64_t> tile_cost =
@@ -1877,6 +1884,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
                                          g.output.stage_num,
                                          out_tile_extent, g.inlined);
     tile_cost.first += out_cost.first;
+    debug(0) << "out_cost.second:" << out_cost.second << '\n';
     tile_cost.second += out_cost.second;
 
     GroupAnalysis g_analy;
@@ -1893,10 +1901,11 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         return g_analy;
     }
 
-    int64_t per_tile_mem_cost;
+    int64_t per_tile_mem_cost = 0;
     int64_t per_tile_arith_cost = tile_cost.first;
 
-    if (tile_inter_size > arch_params.fast_mem_size) {
+    /*
+    if (tile_inter_size > arch_params.l1_size) {
         // Conservative estimate of accesses to memory
         //per_tile_mem_cost = tile_inter_size;
         // Aggressive estimate of accesses to memory
@@ -1906,16 +1915,66 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         // required to compute the tile. However, all of it many not be
         // accessed during the computation of the tile when the access
         // is sparse. A better estimate is given by the smaller of
-        // number of memory accesses and the region size
+        // the number of memory accesses and the region size
         per_tile_mem_cost = std::min(tile_input_size + tile_output_size,
                                      tile_cost.second);
-    }
+    }*/
+
+    // Towards cache oblivious cost
+
+    // TODO: Use smooth step curve from Jon
+
+    /*
+    // Log dropoff
+    float max_load_cost = std::log2((float)arch_params.last_level_size/
+                                    arch_params.register_file_size);
+
+    int64_t output_footprint = tile_output_size * estimate_tiles;
+    int64_t input_footprint = std::min(tile_input_size, tile_cost.second) * estimate_tiles;
+
+    float output_rel_size = (float)output_footprint/arch_params.register_file_size;
+    float input_rel_size = (float)input_footprint/arch_params.register_file_size;;
+    float tile_rel_size = (float)tile_inter_size/arch_params.register_file_size;
+
+
+    float input_load_cost =
+            std::max(std::min((float)std::log2(input_rel_size), max_load_cost), 0.0f);
+    float output_load_cost =
+            std::max(std::min((float)std::log2(output_rel_size), max_load_cost), 0.0f);
+    float inter_load_cost =
+            std::max(std::min((float)std::log2(tile_rel_size), max_load_cost), 0.0f);*/
+
+    // Linear dropoff
+    float load_slope = (float)arch_params.balance/arch_params.last_level_size;
+
+    int64_t output_footprint = tile_output_size * estimate_tiles;
+    int64_t input_footprint = std::min(tile_input_size, tile_cost.second) * estimate_tiles;
+
+    float input_load_cost =
+            std::min(input_footprint * load_slope, (float)arch_params.balance);
+    float output_load_cost =
+            std::min(output_footprint * load_slope, (float)arch_params.balance);
+    float inter_load_cost =
+            std::min(tile_inter_size * load_slope, (float)arch_params.balance);
+
+    per_tile_mem_cost += std::min(tile_input_size, tile_cost.second) * input_load_cost;
+    per_tile_mem_cost += tile_output_size * output_load_cost;
+    per_tile_mem_cost += tile_cost.second * inter_load_cost;
+
+    //float load_cost = std::max(1 + (float)std::log(tile_inter_size) -
+    //                               (float)std::log(arch_params.l1_size), 0.0f);
+    //per_tile_mem_cost = std::max(tile_cost.second * load_cost,
+    //                             (float)tile_input_size + tile_output_size);
 
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
     g_analy.foot_print = group_inter_size + tile_output_size * estimate_tiles;
 
+    /*
+    debug(0) << "input_load_cost:" << input_load_cost << '\n';
+    debug(0) << "output_load_cost:" << output_load_cost << '\n';
+    debug(0) << "inter_load_cost:" << inter_load_cost << '\n';
     debug(0) << "intermediate size:" << tile_inter_size << '\n';
     debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
     debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
@@ -1923,8 +1982,9 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     debug(0) << "tile_input_size:" << tile_input_size << '\n';
     debug(0) << "tile_output_size:" << tile_output_size << '\n';
     debug(0) << g_analy << '\n';
+    */
 
-    internal_assert(per_tile_mem_cost > 0);
+    //internal_assert(per_tile_mem_cost > 0);
 
     return g_analy;
 }
@@ -2005,7 +2065,7 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
     }
 
     int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
-                                       true, false, true);
+                                       true, true, false);
 
     /*
     TODO: come up with a better assert. Currently this will hit when
@@ -2023,6 +2083,9 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
                                       bool no_redundant_work,
                                       bool ensure_parallelism,
                                       bool minimize_foot_print) {
+
+    debug(0) << "No fuse analysis:" << nofuse << '\n';
+    debug(0) << "fuse analysis:" << fuse << '\n';
     if (ensure_parallelism &&
         fuse.parallelism < arch_params.parallelism) {
         return -1;
@@ -2050,8 +2113,10 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
        foot_print_reduction = nofuse.foot_print - fuse.foot_print;
     }
 
-    return mem_benefit * arch_params.balance + arith_benefit +
-           foot_print_reduction;
+    mem_benefit += foot_print_reduction;
+
+    //return mem_benefit * arch_params.balance + arith_benefit;
+    return mem_benefit + arith_benefit;
 }
 
 int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
@@ -2077,8 +2142,9 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
             prod_arith_cost += analyg.arith_cost;
             prod_mem_cost += analyg.mem_cost;
             prod_par = std::min(prod_par, analyg.parallelism);
-            prod_foot_print = std::max(prod_foot_print,
-                                        analyg.foot_print);
+            //prod_foot_print = std::max(prod_foot_print,
+            //                            analyg.foot_print);
+            prod_foot_print += analyg.foot_print;
         } else {
             prod_arith_cost = -1;
             prod_mem_cost = -1;
@@ -2095,7 +2161,8 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
     no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
     no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
-    no_fuse_analy.foot_print = std::max(prod_foot_print, cons_analy.foot_print);
+    //no_fuse_analy.foot_print = std::max(prod_foot_print, cons_analy.foot_print);
+    no_fuse_analy.foot_print += cons_analy.foot_print;
 
     //debug(0) << "No fuse analysis:" << no_fuse_analy << '\n';
     //debug(0) << "fuse analysis:" << fused_analy << '\n';
@@ -2215,7 +2282,7 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
         // Set the vector length as the maximum of the values produced by a
         // function
 
-        if (estimates[vec_dim_name] > 2*vec_len) {
+        //if (estimates[vec_dim_name] > 2*vec_len) {
             bool is_rvar = (rvars.find(vec_dim_name) != rvars.end());
 
             pair<VarOrRVar, VarOrRVar> split_vars =
@@ -2224,17 +2291,21 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
 
             f_handle.vectorize(split_vars.first);
             sched += f_handle.name() + ".vectorize(" +
-                    split_vars.first.name() + ");\n";
+                     split_vars.first.name() + ");\n";
 
             if (is_rvar) {
                 rvars.erase(vec_dim_name);
                 rvars.insert(split_vars.first.name());
                 rvars.insert(split_vars.second.name());
             }
+        /*
         } else {
             f_handle.vectorize(vec_var);
             sched += f_handle.name() + ".vectorize(" + vec_var.name() + ");\n";
         }
+        debug(0) << "Got vectorized:" << f_handle.name() << "," <<
+                 vec_var.name() << "," << estimates[vec_dim_name] << '\n';
+        */
     }
 }
 
@@ -2512,8 +2583,9 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     MachineParams arch_params;
     arch_params.parallelism = 16;
     arch_params.vec_len = 8;
-    arch_params.fast_mem_size = 1024 * 64;
-    arch_params.balance = 10;
+    arch_params.register_file_size = 1024; // 1KB
+    arch_params.last_level_size = 8 * 1024 * 1024; // 8MB
+    arch_params.balance = 40;
 
     // Initialize the cost model
     CostModel cost_model(env);
@@ -2544,11 +2616,11 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     part.disp_pipeline_bounds();
     part.disp_pipeline_graph();
 
-    //part.initialize_groups_inline();
-    //part.disp_pipeline_costs();
+    part.initialize_groups_inline();
+    part.disp_pipeline_costs();
 
-    //part.group(Partitioner::INLINE);
-    //part.disp_grouping();
+    part.group(Partitioner::INLINE);
+    part.disp_grouping();
 
     part.initialize_groups_fast_mem();
     part.group(Partitioner::FAST_MEM);
