@@ -114,10 +114,8 @@ int halide_do_par_for(void *user_context,
 
     // Set the desired number of threads based on the current HVX
     // mode.
-    qurt_mutex_lock(mutex);
-    int old_desired_num_threads = work_queue.desired_num_threads;
-    work_queue.desired_num_threads = (c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4;
-    qurt_mutex_unlock(mutex);
+    int old_num_threads =
+        halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4);
 
     qurt_hvx_unlock();
     int ret = Halide::Runtime::Internal::default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
@@ -125,9 +123,7 @@ int halide_do_par_for(void *user_context,
 
     // Set the desired number of threads back to what it was, in case
     // we're a 128 job and we were sharing the machine with a 64 job.
-    qurt_mutex_lock(mutex);
-    work_queue.desired_num_threads = old_desired_num_threads;
-    qurt_mutex_unlock(mutex);
+    halide_set_num_threads(old_num_threads);
     return ret;
 }
 

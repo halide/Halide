@@ -147,13 +147,12 @@ struct halide_thread;
 /** Spawn a thread. Returns a handle to the thread for the purposes of joining it. */
 extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure);
 
-/** Join a thread */
+/** Join a thread. */
 extern void halide_join_thread(struct halide_thread *);
 
-/** Set the number of threads used by Halide's thread pool. No effect
- * on OS X or iOS. If changed after the first use of a parallel Halide
- * routine, shuts down and then reinitializes the thread pool. */
-extern void halide_set_num_threads(int n);
+/** Set the number of threads used by Halide's thread pool. Returns
+ * the old number. No effect on OS X or iOS. */
+extern int halide_set_num_threads(int n);
 
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and

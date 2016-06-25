@@ -48,7 +48,8 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 WEAK void halide_shutdown_thread_pool() {
 }
 
-WEAK void halide_set_num_threads(int) {
+WEAK int halide_set_num_threads(int) {
+    return 1;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
