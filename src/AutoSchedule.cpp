@@ -2565,27 +2565,20 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
 
 void generate_schedules(const vector<Function>& outputs, const Target& target) {
 
-    // Compute an environment
+    // Compute an environment map which is used throughout the auto scheduling
+    // process
     map<string, Function> env;
     for (Function f : outputs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
-    // Compute a realization order
     vector<string> order = realization_order(outputs, env);
-
-    // Compute the expression costs for each function in the pipeline
-
-    // Dependence analysis to compute all the regions of upstream functions
-    // required to compute a region of the function
 
     FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
 
     bool estimates_avail = check_estimates_on_outputs(outputs);
 
-    // Inform the user that estimates of output sizes were not available on
-    // all the outputs of the pipeline.
     if (!estimates_avail) {
         user_warning << "Please provide estimates for each dimension" <<
                         "of the pipeline output functions.\n";
@@ -2596,12 +2589,12 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     set<string> reductions;
     DependenceAnalysis dep_analy(env, func_val_bounds);
 
-    // Show bounds of all the functions in the pipeline given estimates
+    // Compute bounds of all the functions in the pipeline given estimates
     // on outputs. Also report functions where the bounds could not be inferred.
     map<string, Box> pipeline_bounds = get_pipeline_bounds(dep_analy, outputs);
 
-
-    // TODO: Partitioner which is capable of auto scheduling hierarchically
+    // Set machine parameters
+    // TODO: Expose machine parameters to the user
     MachineParams arch_params;
     arch_params.parallelism = 16;
     arch_params.vec_len = 8;
@@ -2610,12 +2603,14 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     arch_params.balance = 40;
 
     // Initialize the cost model
+    // Compute the expression costs for each function in the pipeline
     CostModel cost_model(env);
+    cost_model.disp_costs();
 
     Partitioner part(pipeline_bounds, arch_params, dep_analy,
                      cost_model, outputs, false);
 
-    // Compute reuse
+    // Compute and display reuse
     /*
     for (auto& f: env) {
         FindAllCalls find;
@@ -2634,9 +2629,10 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
         }
     }*/
 
-    cost_model.disp_costs();
-    part.disp_pipeline_bounds();
+    // Show the current pipeline graph
+    // TODO: Output the graph in dot format
     part.disp_pipeline_graph();
+    part.disp_pipeline_bounds();
 
     part.initialize_groups_inline();
     part.disp_pipeline_costs();
