@@ -11,40 +11,23 @@
 
 extern "C" {
 
-// On posix platforms, there's a 1-to-1 correspondence between halide_*
-// threading functions and the pthread_* functions.
+// On posix platforms, there's a 1-to-1 correspondence between
+// halide_* threading functions and the pthread_* functions. We take
+// some liberties with the types of the opaque pointer objects to
+// avoid a bunch of pointer casts.
 
-typedef struct {
-    uint32_t flags;
-    void * stack_base;
-    size_t stack_size;
-    size_t guard_size;
-    int32_t sched_policy;
-    int32_t sched_priority;
-} pthread_attr_t;
 typedef long pthread_t;
-typedef struct {
-    // 48 bytes is enough for a cond on 64-bit and 32-bit systems
-    uint64_t _private[6];
-} pthread_cond_t;
-typedef long pthread_condattr_t;
-typedef struct {
-    // 64 bytes is enough for a mutex on 64-bit and 32-bit systems
-    uint64_t _private[8];
-} pthread_mutex_t;
-typedef long pthread_mutexattr_t;
-
-extern int pthread_create(pthread_t *, pthread_attr_t const * attr,
+extern int pthread_create(pthread_t *, const void * attr,
                           void *(*start_routine)(void *), void * arg);
 extern int pthread_join(pthread_t thread, void **retval);
-extern int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr);
-extern int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
-extern int pthread_cond_broadcast(pthread_cond_t *cond);
-extern int pthread_cond_destroy(pthread_cond_t *cond);
-extern int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
-extern int pthread_mutex_lock(pthread_mutex_t *mutex);
-extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
-extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
+extern int pthread_cond_init(halide_cond *cond, const void *attr);
+extern int pthread_cond_wait(halide_cond *cond, halide_mutex *mutex);
+extern int pthread_cond_broadcast(halide_cond *cond);
+extern int pthread_cond_destroy(halide_cond *cond);
+extern int pthread_mutex_init(halide_mutex *mutex, const void *attr);
+extern int pthread_mutex_lock(halide_mutex *mutex);
+extern int pthread_mutex_unlock(halide_mutex *mutex);
+extern int pthread_mutex_destroy(halide_mutex *mutex);
 
 } // extern "C"
 
@@ -79,40 +62,32 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+WEAK void halide_mutex_lock(halide_mutex *mutex) {
     pthread_mutex_lock(mutex);
 }
 
-WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+WEAK void halide_mutex_unlock(halide_mutex *mutex) {
     pthread_mutex_unlock(mutex);
 }
 
-WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+WEAK void halide_mutex_destroy(halide_mutex *mutex) {
     pthread_mutex_destroy(mutex);
-    memset(mutex_arg, 0, sizeof(halide_mutex));
+    memset(mutex, 0, sizeof(halide_mutex));
 }
 
-WEAK void halide_cond_init(struct halide_cond *cond_arg) {
-    pthread_cond_t *cond = (pthread_cond_t *)cond_arg;
+WEAK void halide_cond_init(struct halide_cond *cond) {
     pthread_cond_init(cond, NULL);
 }
 
-WEAK void halide_cond_destroy(struct halide_cond *cond_arg) {
-    pthread_cond_t *cond = (pthread_cond_t *)cond_arg;
+WEAK void halide_cond_destroy(struct halide_cond *cond) {
     pthread_cond_destroy(cond);
 }
 
-WEAK void halide_cond_broadcast(struct halide_cond *cond_arg) {
-    pthread_cond_t *cond = (pthread_cond_t *)cond_arg;
+WEAK void halide_cond_broadcast(struct halide_cond *cond) {
     pthread_cond_broadcast(cond);
 }
 
-WEAK void halide_cond_wait(struct halide_cond *cond_arg, struct halide_mutex *mutex_arg) {
-    pthread_cond_t *cond = (pthread_cond_t *)cond_arg;
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
     pthread_cond_wait(cond, mutex);
 }
 
