@@ -375,6 +375,7 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
 
 
 WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
+    debug(user_context) << "halide_metal_device_free called on buf " << buf << " dev is " << buf->dev << "\n";
     if (buf->dev == 0) {
         return 0;
     }
@@ -547,6 +548,8 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
 
     halide_assert(user_context, buffer->host && buffer->dev);
 
+    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+
     device_copy c = make_host_to_device_copy(buffer);
     uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.dst);
 
@@ -569,6 +572,8 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
 		}
 	    }
 	}
+    } else {
+        debug(user_context) << "halide_metal_copy_to_device: skipping copy because pointers are the same.\n";
     }
 
     #ifdef DEBUG_RUNTIME
@@ -615,6 +620,8 @@ WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buffer) {
 		}
 	    }
 	}
+    } else {
+        debug(user_context) << "halide_metal_copy_to_host: skipping copy because pointers are the same.\n";
     }
 
     #ifdef DEBUG_RUNTIME
@@ -749,15 +756,18 @@ WEAK int halide_metal_run(void *user_context,
 }
 
 WEAK int halide_metal_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_malloc_may_be_zero_copy called.\n";
     int result = halide_metal_device_malloc(user_context, buffer);
     if (result == 0) {
         mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
         buffer->host = (uint8_t *)buffer_contents(metal_buffer);
+	debug(user_context) << "halide_metal_device_malloc_may_be_zero_copy dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
     }
     return result;
 }
 
 WEAK int halide_metal_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_free_may_be_zero_copy called.\n";
     halide_metal_device_free(user_context, buffer);
     buffer->host = NULL;
     return 0;

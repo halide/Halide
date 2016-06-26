@@ -349,4 +349,15 @@ WEAK int halide_default_device_free_may_be_zero_copy(void *user_context, struct 
     return result;
 }
 
+/** Free any host and device memory associated with a buffer_t and ignore any
+ * error. Used when freeing as a destructor on an error. */
+WEAK void halide_device_free_may_be_zero_copy_as_destructor(void *user_context, void *obj) {
+    struct buffer_t *buf = (struct buffer_t *)obj;
+    halide_device_free_may_be_zero_copy(user_context, buf);
+}
+
+/** TODO: Find a way to elide host free without this hack. */
+WEAK void halide_device_host_nop_free(void *user_context, void *obj) {
+}
+
 } // extern "C" linkage

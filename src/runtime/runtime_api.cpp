@@ -32,6 +32,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_free,
     (void *)&halide_device_free_as_destructor,
     (void *)&halide_device_free_may_be_zero_copy,
+    (void *)&halide_device_free_may_be_zero_copy_as_destructor,
+    (void *)&halide_device_host_nop_free,
     (void *)&halide_device_malloc,
     (void *)&halide_device_malloc_may_be_zero_copy,
     (void *)&halide_device_release,
