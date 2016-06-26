@@ -17,7 +17,6 @@ extern "C" {
 #define STACK_SIZE 256 * 1024
 
 static char stack [MAX_WORKER_THREADS][STACK_SIZE] __attribute__ ((__aligned__(128)));
-qurt_sem_t wait_for_work;
 
 //qurt_cond_t work_in_queue;
 struct work {
@@ -45,6 +44,8 @@ struct work_queue_t {
     // all fields are protected by this mutex.
     qurt_mutex_t work_mutex;
 
+    qurt_cond_t wakeup_workers;
+
     // Jobs that the thread pool needs to work on.
     work *jobs;
 
@@ -61,14 +62,17 @@ struct work_queue_t {
         qurt_mutex_unlock(&work_mutex);
     }
     void init() {
-        qurt_mutex_init(&work_mutex);
-        lock();
         shutdown = false;
         jobs = NULL;
-        unlock();
+        qurt_cond_init(&wakeup_workers);
+    }
+    work_queue_t() {
+        // Do not do anything more. We'll initialize the work
+        // queue on demand, i.e if the pipeline uses ".parallel"
+        qurt_mutex_init(&work_mutex);
     }
 };
-work_queue_t work_queue;
+static work_queue_t work_queue;
 qurt_thread_t threads[MAX_WORKER_THREADS];
 
 // This function does the real work of the thread pool.
@@ -111,16 +115,7 @@ void worker_thread(work *owned_job) {
             // to sleep.
             job = work_queue.jobs;
             if (!job) {
-                // release the lock and go to sleep.
-                // ***************************
-                // *** Work queue unlocked ***
-                // ***************************
-                work_queue.unlock();
-                qurt_sem_down(&wait_for_work);
-                 // ***********************
-                // *** Lock work queue ***
-                // ***********************
-                work_queue.lock();
+                qurt_cond_wait(&work_queue.wakeup_workers, &work_queue.work_mutex);
                 continue;
             }
         } else {
@@ -148,8 +143,20 @@ void worker_thread(work *owned_job) {
 
         if (!locked) {
             int lock_status = qurt_hvx_lock(job->curr_hvx_mode);
+            // This isn't exactly the best thing because we are skipping the entire
+            // job just because this thread couldn't acquire an HVX lock.
+            // On the other hand, it may not be that bad a thing to do because
+            // the failure to acquire an hvx lock might indicate something near
+            // fatal in the system.
             if (lock_status != QURT_EOK) {
-                halide_print(job->user_context, "QuRT: qurt_hvx_lock failed (thread pool)\n");
+                work_queue.lock();
+                job->exit_status = lock_status;
+                job->active_workers--;
+                if (!job->claimed()) {
+                    job->next = job->end;
+                    work_queue.jobs = job->next_job;
+                }
+                continue;
             }
         }
 
@@ -165,8 +172,12 @@ void worker_thread(work *owned_job) {
         work_queue.lock();
         if (result) {
             job->exit_status = result;
-            job->next = job->end;
-            work_queue.jobs = job->next_job;
+            // If the job has been claimed already work_queue.jobs
+            // should have been updated above. Don't do it again.
+            if (!job->claimed()) {
+                job->next = job->end;
+                work_queue.jobs = job->next_job;
+            }
         }
         job->active_workers--;
         if (job->done()) {
@@ -194,7 +205,6 @@ void create_threads(int num_threads) {
 }
 
 void qurt_thread_pool_init() {
-    qurt_sem_init_val(&wait_for_work, 0);
     work_queue.init();
     create_threads(NUM_WORKER_THREADS_TO_CREATE);
     thread_pool_initialized = true;
@@ -205,7 +215,13 @@ extern "C" {
 int halide_do_par_for(void *user_context, halide_task_t f,
                       int min, int size, uint8_t *closure) {
 
-    // 1. If the thread pool hasn't been initialized, initiliaze it.
+    // 1. Lock the work queue.
+    // We lock the work queue before we initialize the thread pool,
+    // thereby ensuring that the thread pool is initialized by only one
+    // thread.
+    work_queue.lock();
+
+    // 2. If the thread pool hasn't been initialized, initiliaze it.
     // This involves.
     //    a) Creating the threads.
     //    b) Acquiring a lock on the work queue and clearing the jobs therein
@@ -213,7 +229,6 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     //       by this thread i.e. the master thread.
     if (!thread_pool_initialized) {
         // Initialize the work queue mutex.
-        // Initialize the wait_for_work semaphore.
         // lock work queue
         //    wq.shutdown = false;
         //    wq.jobs = NULL;
@@ -223,8 +238,6 @@ int halide_do_par_for(void *user_context, halide_task_t f,
         qurt_thread_pool_init();
     }
 
-    // 2. Lock the work queue again.
-    work_queue.lock();
 
     // 3. Put work in the global work queue.
     work job;
@@ -240,16 +253,19 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     job.curr_hvx_mode = (qurt_hvx_mode_t) qurt_hvx_get_mode();
     work_queue.jobs = &job;
 
-    // 4. Unlock global work queue.
-    work_queue.unlock();
+    // 4. Wake up the other threads in the pool.
+    qurt_cond_signal(&work_queue.wakeup_workers);
 
-    // 5. Wake up the other threads in the pool.
-    qurt_sem_add(&wait_for_work, size);
+    // 5. Unlock global work queue.
+    work_queue.unlock();
 
     // 6. Do some work in the master queue.
     worker_thread(&job);
 
+    qurt_cond_destroy(&job.wakeup_owner);
+
     qurt_hvx_lock(job.curr_hvx_mode);
+
     return job.exit_status;
 }
 
@@ -259,13 +275,15 @@ void halide_shutdown_thread_pool() {
     work_queue.lock();
     work_queue.jobs = NULL;
     work_queue.shutdown = true;
-    qurt_sem_add(&wait_for_work, NUM_WORKER_THREADS_TO_CREATE);
+    qurt_cond_signal(&work_queue.wakeup_workers);
     work_queue.unlock();
     thread_pool_initialized = false;
     for (int i = 0; i < NUM_WORKER_THREADS_TO_CREATE; ++i) {
         int status;
         qurt_thread_join(threads[i], &status);
     }
+    qurt_mutex_destroy(&work_queue.work_mutex);
+    qurt_cond_destroy(&work_queue.wakeup_workers);
 }
 
 }  // extern "C"
