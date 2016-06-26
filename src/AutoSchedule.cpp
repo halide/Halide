@@ -255,6 +255,7 @@ struct CostModel {
       void visit(const Call * call) {
           if (call->call_type == Call::Halide ||
               call->call_type == Call::Image) {
+              ops+=1;
               byte_loads += call->type.bytes();
           } else if (call->call_type == Call::Extern) {
               // There is no visibility into an extern stage so there is
@@ -1100,7 +1101,7 @@ struct Partitioner {
                                          const GroupAnalysis &analy) {
             stream << "[arith cost:" << analy.arith_cost << ",";
             stream << "mem_cost:" << analy.mem_cost << ",";
-            stream << "parallelism:" << analy.parallelism << ",";
+            stream << "parallelism:" << analy.parallelism << "]\n";
 
             return stream;
         }
