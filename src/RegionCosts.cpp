@@ -13,8 +13,9 @@ using std::deque;
 
 class ExprCost : public IRVisitor {
  public:
-  int ops;
-  int byte_loads;
+  int64_t ops;
+  int64_t byte_loads;
+  map<string, int64_t> detailed_byte_loads;
 
   ExprCost() {
       ops = 0; byte_loads = 0;
@@ -33,11 +34,11 @@ class ExprCost : public IRVisitor {
   void visit(const Variable *) {}
 
   template<typename T>
-          void visit_binary_operator(const T *op, int cost) {
-              op->a.accept(this);
-              op->b.accept(this);
-              ops += cost;
-          }
+  void visit_binary_operator(const T *op, int cost) {
+      op->a.accept(this);
+      op->b.accept(this);
+      ops += cost;
+  }
 
   // TODO: Figure out the right costs
   void visit(const Add *op) {visit_binary_operator(op, 1);}
@@ -73,6 +74,12 @@ class ExprCost : public IRVisitor {
           call->call_type == Call::Image) {
           ops+=1;
           byte_loads += call->type.bytes();
+          if (detailed_byte_loads.find(call->name) ==
+              detailed_byte_loads.end()) {
+              detailed_byte_loads[call->name] = call->type.bytes();
+          } else {
+              detailed_byte_loads[call->name] += call->type.bytes();
+          }
       } else if (call->call_type == Call::Extern) {
           // There is no visibility into an extern stage so there is
           // no way to know the cost of the call statically. This may
@@ -214,7 +221,7 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
        ExprCost cost_inlined;
        inlined_expr.accept(&cost_inlined);
        debug(0) << "Inlined:" << inlined_expr << "," << cost_inlined.ops << '\n';
-       */
+    */
 
     return inlined_expr;
 }
@@ -316,8 +323,8 @@ RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines) 
 
     pair<int64_t, int64_t> total_cost(0, 0);
     for (auto &f: regions) {
-        // The cost for inlined functions will be accounted in the consumer
-        // of the inlined function
+        // The cost for pure inlined functions will be accounted in the
+        // consumer of the inlined function
         if (inlines.find(f.first) != inlines.end() &&
             env.at(f.first).is_pure())
             continue;
@@ -336,13 +343,102 @@ RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines) 
     return total_cost;
 }
 
-vector< pair<int64_t, int64_t> >
+void combine_load_costs(map<string, int64_t> &result,
+                        const map<string, int64_t> &partial) {
+    for (auto &kv: partial) {
+        if (result.find(kv.first) == result.end()) {
+            result[kv.first] = kv.second;
+        } else {
+            if (kv.second >= 0) {
+                result[kv.first] += kv.second;
+            } else {
+                result[kv.first] = -1;
+            }
+        }
+    }
+}
+
+map<string, int64_t>
+RegionCosts::stage_detailed_load_costs(string func, int stage,
+                                       const set<string> &inlines) {
+    map<string, int64_t> load_costs;
+    Function curr_f = env.at(func);
+    Definition def = get_stage_definition(curr_f, stage);
+
+    for (auto &e: def.values()) {
+        Expr inlined_expr = perform_inline(e, inlines);
+        ExprCost cost_visitor;
+        inlined_expr.accept(&cost_visitor);
+        const map<string, int64_t> &expr_load_costs =
+                        cost_visitor.detailed_byte_loads;
+
+        combine_load_costs(load_costs, expr_load_costs);
+
+        if (load_costs.find(func) ==
+            load_costs.end()) {
+            load_costs[func] = e.type().bytes();
+        } else {
+            load_costs[func] += e.type().bytes();
+        }
+    }
+
+    return load_costs;
+}
+
+map<string, int64_t>
+RegionCosts::detailed_load_costs(string func, const Box &region,
+                                 const set<string> &inlines) {
+
+    Function curr_f = env.at(func);
+    map<string, int64_t> load_costs;
+
+    int num_stages = curr_f.updates().size() + 1;
+    for (int s = 0; s < num_stages; s++) {
+
+        map<string, int64_t> stage_load_costs =
+                        stage_detailed_load_costs(func, s, inlines);
+
+        combine_load_costs(load_costs, stage_load_costs);
+    }
+
+    int64_t area = box_area(region);
+    for (auto &kv: load_costs) {
+        if (area >= 0) {
+            load_costs[kv.first] *= area;
+        } else {
+            load_costs[kv.first] = -1;
+        }
+    }
+
+    return load_costs;
+}
+
+map<string, int64_t>
+RegionCosts::detailed_load_costs(const map<string, Box> &regions,
+                                 const set<string> &inlines) {
+    map<string, int64_t> load_costs;
+    for (auto &r: regions) {
+        // The cost for pure inlined functions will be accounted in the
+        // consumer of the inlined function
+        if (inlines.find(r.first) != inlines.end() &&
+            env.at(r.first).is_pure())
+            continue;
+
+        map<string, int64_t> partial_load_costs =
+                detailed_load_costs(r.first, r.second, inlines);
+
+        combine_load_costs(load_costs, partial_load_costs);
+    }
+
+    return load_costs;
+}
+
+vector<pair<int64_t, int64_t>>
 RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
 
-    vector< pair<int64_t, int64_t> > func_costs;
+    vector<pair<int64_t, int64_t>> func_costs;
     int64_t total_ops = 0;
     int64_t total_bytes = 0;
-    // TODO: revist how boundary conditions are handled
     for (auto &e: f.values()) {
         Expr inlined_expr = perform_inline(e, inlines);
         ExprCost cost_visitor;

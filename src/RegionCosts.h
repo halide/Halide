@@ -85,6 +85,15 @@ class RegionCosts {
     vector<pair<int64_t, int64_t>>
             get_func_cost(const Function &f,
                           const set<string> &inlines = set<string>());
+    map<string, int64_t>
+            stage_detailed_load_costs(string func, int stage,
+                                      const set<string> &inlines = set<string>());
+    map<string, int64_t>
+            detailed_load_costs(string func, const Box &region,
+                                const set<string> &inlines = set<string>());
+    map<string, int64_t>
+            detailed_load_costs(const map<string, Box> &regions,
+                                const set<string> &inlines = set<string>());
 
     int64_t region_size(string func, const Box &region);
 
