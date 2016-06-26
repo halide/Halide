@@ -107,6 +107,8 @@ WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
+WEAK void halide_device_free_may_be_zero_copy_as_destructor(void *user_context, void *obj);
+WEAK void halide_device_host_nop_free(void *user_context, void *obj);
 
 // The pipeline_state is declared as void* type since halide_profiler_pipeline_stats
 // is defined inside HalideRuntime.h which includes this header file.
