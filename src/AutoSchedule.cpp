@@ -1095,15 +1095,12 @@ struct Partitioner {
         int64_t mem_cost;
         // Estimate of the parallelism
         int64_t parallelism;
-        // Estimate of working set size
-        int64_t foot_print;
 
         friend std::ostream& operator <<(std::ostream &stream,
                                          const GroupAnalysis &analy) {
             stream << "[arith cost:" << analy.arith_cost << ",";
             stream << "mem_cost:" << analy.mem_cost << ",";
             stream << "parallelism:" << analy.parallelism << ",";
-            stream << "foot_print:" << analy.foot_print << "]\n";
 
             return stream;
         }
@@ -1218,14 +1215,12 @@ struct Partitioner {
     pair<map<string, int>, GroupAnalysis> find_best_tile_config(const Group &g);
 
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
-                             bool no_redundant_work, bool ensure_parallelism,
-                             bool minimize_foot_print);
+                             bool no_redundant_work, bool ensure_parallelism);
 
     int64_t estimate_benefit(const vector<Group> &prod_groups,
                              const Group &cons_group,
                              const GroupAnalysis &fused_analy,
-                             bool no_redundant_work, bool ensure_parallelism,
-                             bool minimize_foot_print);
+                             bool no_redundant_work, bool ensure_parallelism);
 
     void initialize_groups_inline();
     void initialize_groups_fast_mem();
@@ -1582,7 +1577,7 @@ Partitioner::find_best_tile_config(const Group &g) {
 
         GroupAnalysis new_analy = analyze_group(new_group);
 
-        int64_t benefit = estimate_benefit(best_analy, new_analy, true, true, false);
+        int64_t benefit = estimate_benefit(best_analy, new_analy, false, true);
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
@@ -1913,7 +1908,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     g_analy.arith_cost = -1;
     g_analy.mem_cost = -1;
     g_analy.parallelism = -1;
-    g_analy.foot_print = -1;
 
     // The group could not be analyzed
     if (tile_cost.first < 0 || tile_cost.second < 0 ||
@@ -1990,7 +1984,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
-    g_analy.foot_print = group_inter_size + tile_output_size * estimate_tiles;
 
     debug(0) << "input_load_cost:" << input_load_cost << '\n';
     debug(0) << "output_load_cost:" << output_load_cost << '\n';
@@ -2084,7 +2077,7 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
     }
 
     int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
-                                       true, true, false);
+                                       false, true);
 
     /*
     TODO: come up with a better assert. Currently this will hit when
@@ -2100,8 +2093,7 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
 int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
                                       const GroupAnalysis &fuse,
                                       bool no_redundant_work,
-                                      bool ensure_parallelism,
-                                      bool minimize_foot_print) {
+                                      bool ensure_parallelism) {
 
     debug(0) << "No fuse analysis:" << nofuse << '\n';
     debug(0) << "fuse analysis:" << fuse << '\n';
@@ -2127,14 +2119,6 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
         return -1;
     }
 
-    int64_t foot_print_reduction = 0;
-    if (minimize_foot_print) {
-       foot_print_reduction = nofuse.foot_print - fuse.foot_print;
-    }
-
-    mem_benefit += foot_print_reduction;
-
-    //return mem_benefit * arch_params.balance + arith_benefit;
     return mem_benefit + arith_benefit;
 }
 
@@ -2142,8 +2126,7 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
                                       const Group &cons_group,
                                       const GroupAnalysis &fused_analy,
                                       bool no_redundant_work,
-                                      bool ensure_parallelism,
-                                      bool minimize_foot_print) {
+                                      bool ensure_parallelism) {
 
     internal_assert(group_costs.find(cons_group.output) != group_costs.end());
     GroupAnalysis cons_analy = group_costs.at(cons_group.output);
@@ -2151,7 +2134,6 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     int64_t prod_arith_cost = 0;
     int64_t prod_mem_cost = 0;
     int64_t prod_par = std::numeric_limits<int64_t>::max();
-    int64_t prod_foot_print = 0;
 
     //debug(0) << "Prod groups:" << '\n';
     for (auto &prod_g: prod_groups) {
@@ -2161,14 +2143,10 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
             prod_arith_cost += analyg.arith_cost;
             prod_mem_cost += analyg.mem_cost;
             prod_par = std::min(prod_par, analyg.parallelism);
-            //prod_foot_print = std::max(prod_foot_print,
-            //                            analyg.foot_print);
-            prod_foot_print += analyg.foot_print;
         } else {
             prod_arith_cost = -1;
             prod_mem_cost = -1;
             prod_par = -1;
-            prod_foot_print = -1;
             break;
         }
         //debug(0) << prod_g;
@@ -2180,14 +2158,12 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
     no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
     no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
-    //no_fuse_analy.foot_print = std::max(prod_foot_print, cons_analy.foot_print);
-    no_fuse_analy.foot_print += cons_analy.foot_print;
 
     //debug(0) << "No fuse analysis:" << no_fuse_analy << '\n';
     //debug(0) << "fuse analysis:" << fused_analy << '\n';
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
-                            ensure_parallelism, minimize_foot_print);
+                            ensure_parallelism);
 }
 
 map<string, int> Partitioner::bounds_to_estimates(const DimBounds &bounds) {

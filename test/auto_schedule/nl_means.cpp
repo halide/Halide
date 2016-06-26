@@ -10,8 +10,8 @@ double run_test(bool auto_schedule) {
     int patch_size = 7;
     int search_area = 7;
 
-    int H = 640;
-    int W = 384;
+    int H = 1024;
+    int W = 500;
     Image<float> input(H, W, 3);
 
     for (int y = 0; y < input.height(); y++) {
@@ -73,7 +73,7 @@ double run_test(bool auto_schedule) {
     // Require 3 channels for output.
     non_local_means.output_buffer().set_min(2, 0).set_extent(2, 3);
 
-    non_local_means.estimate(x, 0, W).estimate(y, 0, H).estimate(c, 0, 3);
+    non_local_means.estimate(x, 0, input.width()).estimate(y, 0, input.height()).estimate(c, 0, 3);
 
     Var tx("tx"), ty("ty"), xi, yi;
 
@@ -115,7 +115,7 @@ double run_test(bool auto_schedule) {
             blur_d_y.compute_at(non_local_means, tx)
                     .reorder(y, x)
                     .vectorize(x, 8);
-            d.compute_at(blur_d_y, x)
+            d.compute_at(non_local_means, tx)
                     .vectorize(x, 8);
             non_local_means_sum.compute_at(non_local_means, x)
                     .reorder(c, x, y)
