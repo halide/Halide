@@ -6,17 +6,22 @@
  * Defines the function that does automatic scheduling for a pipeline
 */
 
-#include <map>
-
 #include "IR.h"
+#include "RealizationOrder.h"
+#include "FindCalls.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "Target.h"
+#include "Function.h"
+#include "Bounds.h"
+#include "Var.h"
+#include "IRPrinter.h"
+#include "Func.h"
+#include "ParallelRVar.h"
+#include "RegionCosts.h"
 
 namespace Halide {
-
-struct Target;
-
 namespace Internal {
-
-class Function;
 
 /* Determine a schedule for functions in the pipeline */
 void generate_schedules(const std::vector<Function> &outputs,

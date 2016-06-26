@@ -383,7 +383,8 @@ SOURCE_FILES = \
   VaryingAttributes.cpp \
   VectorizeLoops.cpp \
   WrapCalls.cpp \
-  AutoSchedule.cpp
+  AutoSchedule.cpp \
+  RegionCosts.cpp
 
 ifeq ($(LLVM_VERSION_TIMES_10),35)
 BITWRITER_VERSION=.35
@@ -524,7 +525,8 @@ HEADER_FILES = \
   Var.h \
   VectorizeLoops.h \
   WrapCalls.h \
-  AutoSchedule.h
+  AutoSchedule.h \
+  RegionCosts.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
