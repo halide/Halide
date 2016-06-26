@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
             .split(x, xo, xi, vector_size*2, TailStrategy::RoundUp)
             .vectorize(xi, vector_size)
             .parallel(y, 16);
-        blur_y.compute_at(blur, xo)
+        blur_y.compute_at(blur, y)
             .vectorize(x, vector_size, TailStrategy::RoundUp);
 
         // Require scanlines of the input and output to be aligned.
