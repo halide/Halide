@@ -116,13 +116,6 @@ struct DependenceAnalysis {
     vector<map<string, Box>>
     overlap_regions(Function f, int stage_num, const DimBounds &bounds,
                     const set<string> &prods);
-
-
-    DimBounds get_stage_bounds(Function f, int stage_num,
-                               const DimBounds &pure_bounds);
-
-    vector<DimBounds> get_stage_bounds(Function f,
-                                       const DimBounds &pure_bounds);
 };
 
 vector<map<string, Box>>
@@ -371,38 +364,6 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
         simplify_box(f.second);
 
     return overalps;
-}
-
-DimBounds
-DependenceAnalysis::get_stage_bounds(Function f, int stage_num,
-                                     const DimBounds& pure_bounds) {
-    DimBounds bounds;
-    Definition def = get_stage_definition(f, stage_num);
-
-    // Assumes that the domain of the pure vars across all the update
-    // definitions is the same which may not be true. This can overestimate
-    // the extent of the domain.
-    for (auto& b: pure_bounds) {
-        bounds[b.first] = b.second;
-    }
-
-    for (auto& rvar: def.schedule().rvars()) {
-        Interval simple_bounds = Interval(rvar.min,
-                                          simplify(rvar.min + rvar.extent - 1));
-        bounds[rvar.var] = simple_bounds;
-    }
-
-    return bounds;
-}
-
-vector<DimBounds>
-DependenceAnalysis::get_stage_bounds(Function f, const DimBounds& pure_bounds) {
-    vector<DimBounds> stage_bounds;
-    size_t num_stages = f.updates().size() + 1;
-    for (size_t s = 0; s < num_stages; s++) {
-        stage_bounds.push_back(get_stage_bounds(f, s, pure_bounds));
-    }
-    return stage_bounds;
 }
 
 map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
@@ -918,7 +879,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
     }
 
     for (auto &choice: best_choices) {
-        debug(0) << "Best choice:" << choice.first;
+        debug(0) << "\nBest choice:" << choice.first;
     }
     if (best_choices.size() > 0)
         debug(0) << "Benefit:" << best_benefit << '\n';
@@ -1028,10 +989,6 @@ Partitioner::find_best_tile_config(const Group &g) {
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
-            debug(0) << "Relative to current best:" << '\n';
-            debug(0) << "Benefit:" << benefit << '\n';
-            debug(0) << "arith cost:" << (float)new_analy.arith_cost/best_analy.arith_cost << " ";
-            debug(0) << "mem cost:" << (float)new_analy.mem_cost/best_analy.mem_cost << "\n\n";
         }
     }
 
@@ -1407,6 +1364,9 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         per_tile_mem_cost += cost_factor * f_load.second;
     }
 
+    debug(0) << "\nPer tile mem cost:" << per_tile_mem_cost << '\n';
+    debug(0) << "Per tile arith cost:" << per_tile_arith_cost << '\n';
+
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
@@ -1510,8 +1470,6 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
                                       bool no_redundant_work,
                                       bool ensure_parallelism) {
 
-    debug(0) << "No fuse analysis:" << nofuse << '\n';
-    debug(0) << "fuse analysis:" << fuse << '\n';
     if (ensure_parallelism &&
         fuse.parallelism < arch_params.parallelism) {
         return -1;
@@ -1550,7 +1508,6 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
     int64_t prod_mem_cost = 0;
     int64_t prod_par = std::numeric_limits<int64_t>::max();
 
-    //debug(0) << "Prod groups:" << '\n';
     for (auto &prod_g: prod_groups) {
         internal_assert(group_costs.find(prod_g.output) != group_costs.end());
         GroupAnalysis analyg = group_costs.at(prod_g.output);
@@ -1567,15 +1524,16 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
         //debug(0) << prod_g;
     }
 
-    //debug(0) << "Cons group:" << cons_group << '\n';
+    debug(0) << "Prod groups:" << '\n';
+    debug(0) << "Cons group:" << cons_group << '\n';
 
     GroupAnalysis no_fuse_analy;
     no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
     no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
     no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
 
-    //debug(0) << "No fuse analysis:" << no_fuse_analy << '\n';
-    //debug(0) << "fuse analysis:" << fused_analy << '\n';
+    debug(0) << "\nNo fuse analysis:" << no_fuse_analy << '\n';
+    debug(0) << "fuse analysis:" << fused_analy << '\n';
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
                             ensure_parallelism);

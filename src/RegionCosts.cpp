@@ -163,11 +163,18 @@ int64_t box_area(const Box &b) {
     return box_area;
 }
 
-void disp_regions(map<string, Box> &regions) {
-    for (auto &reg: regions) {
-        debug(0) << reg.first;
-        debug(0) << reg.second;
-        debug(0) << "\n";
+void combine_load_costs(map<string, int64_t> &result,
+                        const map<string, int64_t> &partial) {
+    for (auto &kv: partial) {
+        if (result.find(kv.first) == result.end()) {
+            result[kv.first] = kv.second;
+        } else {
+            if (kv.second >= 0) {
+                result[kv.first] += kv.second;
+            } else {
+                result[kv.first] = -1;
+            }
+        }
     }
 }
 
@@ -177,6 +184,44 @@ Definition get_stage_definition(const Function &f, int stage_num) {
     }
     internal_assert((int)f.updates().size() >= stage_num);
     return f.updates()[stage_num - 1];
+}
+
+DimBounds get_stage_bounds(Function f, int stage_num,
+                           const DimBounds &pure_bounds) {
+    DimBounds bounds;
+    Definition def = get_stage_definition(f, stage_num);
+
+    // Assumes that the domain of the pure vars across all the update
+    // definitions is the same which may not be true. This can overestimate
+    // the extent of the domain.
+    for (auto &b: pure_bounds) {
+        bounds[b.first] = b.second;
+    }
+
+    for (auto &rvar: def.schedule().rvars()) {
+        Interval simple_bounds = Interval(rvar.min,
+                                          simplify(rvar.min + rvar.extent - 1));
+        bounds[rvar.var] = simple_bounds;
+    }
+
+    return bounds;
+}
+
+vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
+    vector<DimBounds> stage_bounds;
+    size_t num_stages = f.updates().size() + 1;
+    for (size_t s = 0; s < num_stages; s++) {
+        stage_bounds.push_back(get_stage_bounds(f, s, pure_bounds));
+    }
+    return stage_bounds;
+}
+
+void disp_regions(map<string, Box> &regions) {
+    for (auto &reg: regions) {
+        debug(0) << reg.first;
+        debug(0) << reg.second;
+        debug(0) << "\n";
+    }
 }
 
 RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
@@ -259,26 +304,19 @@ RegionCosts::stage_region_cost(string func, int stage, Box &region,
     Function curr_f = env.at(func);
     Definition def = get_stage_definition(curr_f, stage);
 
-    // This method of costing update definitions assumes that the domain
-    // of the pure vars across all the update definitions is the same
-    // which may not be true. This will be prone to overestimating the
-    // cost.
-    DimBounds bounds;
+    DimBounds pure_bounds;
     const vector<string> &args = curr_f.args();
     for (size_t d = 0; d < args.size(); d++) {
-        bounds[args[d]] = region[d];
+        pure_bounds[args[d]] = region[d];
     }
 
-    for (auto &rvar: def.schedule().rvars()) {
-        bounds[rvar.var] = Interval(simplify(rvar.min),
-                                    simplify(rvar.min + rvar.extent - 1));
-    }
+    DimBounds stage_bounds = get_stage_bounds(curr_f, stage, pure_bounds);
 
     Box stage_region;
 
     const vector<Dim> &dims = def.schedule().dims();
     for (int d = 0; d < (int)dims.size() - 1; d++) {
-        stage_region.push_back(bounds.at(dims[d].var));
+        stage_region.push_back(stage_bounds.at(dims[d].var));
     }
 
     int64_t area = box_area(stage_region);
@@ -288,18 +326,17 @@ RegionCosts::stage_region_cost(string func, int stage, Box &region,
         return make_pair(-1, -1);
     }
 
-    vector< pair<int64_t, int64_t> > cost = inlines.empty() ? func_cost[func]:
-            get_func_cost(curr_f, inlines);
+    vector< pair<int64_t, int64_t> > cost = inlines.empty() ? func_cost.at(func):
+                                            get_func_cost(curr_f, inlines);
 
-    return make_pair(area * cost[stage].first, area * cost[stage].second);
+    return make_pair(area * cost.at(stage).first, area * cost.at(stage).second);
 }
-
 
 pair<int64_t, int64_t>
 RegionCosts::region_cost(string func, Box &region, const set<string> &inlines) {
 
     Function curr_f = env.at(func);
-    pair<int64_t, int64_t> region_cost;
+    pair<int64_t, int64_t> region_cost(0, 0);
 
     int num_stages = curr_f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
@@ -319,7 +356,7 @@ RegionCosts::region_cost(string func, Box &region, const set<string> &inlines) {
 }
 
 pair<int64_t, int64_t>
-RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines) {
+RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines){
 
     pair<int64_t, int64_t> total_cost(0, 0);
     for (auto &f: regions) {
@@ -341,21 +378,6 @@ RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines) 
 
     internal_assert(total_cost.first >= 0 && total_cost.second >=0);
     return total_cost;
-}
-
-void combine_load_costs(map<string, int64_t> &result,
-                        const map<string, int64_t> &partial) {
-    for (auto &kv: partial) {
-        if (result.find(kv.first) == result.end()) {
-            result[kv.first] = kv.second;
-        } else {
-            if (kv.second >= 0) {
-                result[kv.first] += kv.second;
-            } else {
-                result[kv.first] = -1;
-            }
-        }
-    }
 }
 
 map<string, int64_t>
@@ -422,21 +444,39 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
     map<string, int64_t> load_costs;
 
     int num_stages = curr_f.updates().size() + 1;
-    for (int s = 0; s < num_stages; s++) {
 
+    DimBounds pure_bounds;
+    const vector<string> &args = curr_f.args();
+    for (size_t d = 0; d < args.size(); d++) {
+        pure_bounds[args[d]] = region[d];
+    }
+
+    vector<DimBounds> stage_bounds = get_stage_bounds(curr_f, pure_bounds);
+
+    for (int s = 0; s < num_stages; s++) {
         map<string, int64_t> stage_load_costs =
                         stage_detailed_load_costs(func, s, inlines);
 
-        combine_load_costs(load_costs, stage_load_costs);
-    }
+        Definition def = get_stage_definition(curr_f, s);
 
-    int64_t area = box_area(region);
-    for (auto &kv: load_costs) {
-        if (area >= 0) {
-            load_costs[kv.first] *= area;
-        } else {
-            load_costs[kv.first] = -1;
+        Box stage_region;
+
+        const vector<Dim> &dims = def.schedule().dims();
+        for (int d = 0; d < (int)dims.size() - 1; d++) {
+            stage_region.push_back(stage_bounds[s].at(dims[d].var));
         }
+
+        int64_t area = box_area(stage_region);
+
+        for (auto &kv: stage_load_costs) {
+            if (area >= 0) {
+                stage_load_costs[kv.first] *= area;
+            } else {
+                stage_load_costs[kv.first] = -1;
+            }
+        }
+
+        combine_load_costs(load_costs, stage_load_costs);
     }
 
     return load_costs;
@@ -475,7 +515,9 @@ RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
         total_ops += cost_visitor.ops;
         total_bytes += cost_visitor.byte_loads;
 
+        // Accounting for the store
         total_bytes += e.type().bytes();
+        total_ops += 1;
     }
 
     func_costs.push_back(make_pair(total_ops, total_bytes));
@@ -492,7 +534,9 @@ RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
                 ops += cost_visitor.ops;
                 bytes += cost_visitor.byte_loads;
 
+                // Accounting for the store
                 bytes += e.type().bytes();
+                ops += 1;
             }
 
             for (auto &arg: u.args()) {

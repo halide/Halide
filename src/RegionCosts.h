@@ -120,6 +120,9 @@ void disp_regions(map<string, Box> &regions);
 Definition get_stage_definition(const Function &f, int stage_num);
 void combine_load_costs(map<string, int64_t> &result,
                         const map<string, int64_t> &partial);
+DimBounds get_stage_bounds(Function f, int stage_num,
+                           const DimBounds &pure_bounds);
+vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
 
 }
 }
