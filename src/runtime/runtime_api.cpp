@@ -17,6 +17,10 @@
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_can_use_target_features,
+    (void *)&halide_cond_broadcast,
+    (void *)&halide_cond_destroy,
+    (void *)&halide_cond_init,
+    (void *)&halide_cond_wait,
     (void *)&halide_copy_to_device,
     (void *)&halide_copy_to_host,
     (void *)&halide_create_temp_file,
@@ -86,6 +90,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_qurt_hvx_unlock_as_destructor,
     (void *)&halide_int64_to_string,
+    (void *)&halide_join_thread,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
     (void *)&halide_matlab_call_pipeline,
@@ -102,7 +107,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_metal_release_context,
     (void *)&halide_metal_run,
     (void *)&halide_metal_wrap_buffer,
-    (void *)&halide_mutex_cleanup,
+    (void *)&halide_mutex_destroy,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
     (void *)&halide_opencl_detach_cl_mem,
