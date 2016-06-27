@@ -10,6 +10,8 @@
 #include "Image.h"
 #include "LLVM_Output.h"
 #include "RemoveTrivialForLoops.h"
+#include "InjectHostDevBufferCopies.h"
+#include "LLVM_Headers.h"
 
 namespace Halide {
 namespace Internal {
@@ -94,14 +96,6 @@ class InjectHexagonRpc : public IRMutator {
 
         Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
         return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
-    }
-
-    Stmt call_extern_and_assert(const std::string& name, const std::vector<Expr>& args) {
-        Expr call = Call::make(Int(32), name, args, Call::Extern);
-        string call_result_name = unique_name(name + "_result");
-        Expr call_result_var = Variable::make(Int(32), call_result_name);
-        return LetStmt::make(call_result_name, call,
-                             AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
     }
 
     using IRMutator::visit;
@@ -193,8 +187,6 @@ class InjectHexagonRpc : public IRMutator {
             for (const auto& i : c.vars) {
                 Expr arg = Variable::make(i.second, i.first);
                 Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
-
-                // sizeof(scalar-type) will always fit into int32
                 arg_sizes.push_back(Expr((uint64_t) i.second.bytes()));
                 arg_ptrs.push_back(arg_ptr);
                 arg_flags.push_back(0x0);
@@ -261,11 +253,35 @@ public:
         // LLVM Hexagon target is fully open sourced, we can instead
         // just compile the module to an object, and find a way to
         // link it to a shared object.
-        TemporaryFile tmp_bitcode("hex", ".bc");
-        TemporaryFile tmp_shared_object("hex", ".so");
         debug(1) << "Hexagon device code module: " << device_code << "\n";
-        device_code.compile(Outputs().bitcode(tmp_bitcode.pathname()));
 
+        // First compile the module to an llvm module
+        llvm::LLVMContext context;
+        std::unique_ptr<llvm::Module> llvm_module =
+            compile_module_to_llvm_module(device_code, context);
+
+        #if LLVM_VERSION >= 39
+        // Then mess with it, to fix up version differences between
+        // our LLVM and hexagon-clang. Yuck.
+        for (auto &gv : llvm_module->globals()) {
+            // hexagon-clang doesn't understand the local_unnamed_addr
+            // attribute, so we must strip it.
+            gv.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+        }
+        for (auto &fn : llvm_module->functions()) {
+            fn.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+        }
+        #endif
+
+        // Dump the llvm module to a temp file as .ll
+        TemporaryFile tmp_bitcode("hex", ".ll");
+        TemporaryFile tmp_shared_object("hex", ".o");
+        std::unique_ptr<llvm::raw_fd_ostream> ostream =
+            make_raw_fd_ostream(tmp_bitcode.pathname());
+        compile_llvm_module_to_llvm_assembly(*llvm_module, *ostream);
+        ostream->flush();
+
+        // Shell out to hexagon clang to compile it.
         string hex_command;
 
         const char *path = getenv("HL_HEXAGON_CLANG");
@@ -280,9 +296,13 @@ public:
             }
         }
 
-        hex_command += " ";
+        hex_command += " -c ";
         hex_command += tmp_bitcode.pathname();
-        hex_command += " -fPIC -O3 -Wno-override-module -shared ";
+        if (0) { // This path should also work, if we want to use PIC code
+            hex_command += " -fpic -O3 -Wno-override-module ";
+        } else {
+            hex_command += " -fno-pic -G 0 -mlong-calls -O3 -Wno-override-module ";
+        }
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
@@ -293,13 +313,13 @@ public:
         int result = system(hex_command.c_str());
         internal_assert(result == 0) << "hexagon-clang failed\n";
 
+        // Read the compiled object back in and put it in a buffer in the module
         std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
         internal_assert(so.good()) << "failed to open temporary shared object.";
         std::vector<uint8_t> object(so.tellg());
         so.seekg(0, std::ios::beg);
         so.read(reinterpret_cast<char*>(&object[0]), object.size());
 
-        // Put the compiled object into a buffer.
         size_t code_size = object.size();
         Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
 
@@ -320,8 +340,11 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
 
     // These feature flags are propagated from the host target to the
     // device module.
+    //
+    // TODO: We'd like Target::Debug to be in this list too, but trunk
+    // llvm currently disagrees with hexagon clang as to what
+    // constitutes valid debug info.
     static const Target::Feature shared_features[] = {
-        Target::Debug,
         Target::NoAsserts,
         Target::HVX_64,
         Target::HVX_128,

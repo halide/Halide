@@ -164,6 +164,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
+        "halide_hexagon_host_get_symbol",
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
@@ -329,6 +330,10 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+    #if LLVM_VERSION >= 39
+    // Not supported by older linkers
+    options.RelaxELFRelocations = false;
+    #endif
 }
 
 
