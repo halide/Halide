@@ -128,6 +128,8 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names);
 
+WEAK int halide_host_cpu_count();
+
 WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
                                        const struct halide_device_interface *device_interface);
 WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf);
