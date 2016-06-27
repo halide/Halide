@@ -183,7 +183,7 @@ struct IntImm : public ExprNode<IntImm> {
         return node;
     }
 
-    static constexpr IRNodeType _type_info = IRNodeType::IntImm;
+    static const IRNodeType _type_info = IRNodeType::IntImm;
 };
 
 /** Unsigned integer constants */
@@ -206,7 +206,7 @@ struct UIntImm : public ExprNode<UIntImm> {
         return node;
     }
 
-    static constexpr IRNodeType _type_info = IRNodeType::UIntImm;
+    static const IRNodeType _type_info = IRNodeType::UIntImm;
 };
 
 /** Floating point constants */
@@ -235,7 +235,7 @@ struct FloatImm : public ExprNode<FloatImm> {
         return node;
     }
 
-    static constexpr IRNodeType _type_info = IRNodeType::FloatImm;
+    static const IRNodeType _type_info = IRNodeType::FloatImm;
 };
 
 /** String constants */
@@ -249,7 +249,7 @@ struct StringImm : public ExprNode<StringImm> {
         return node;
     }
 
-    static constexpr IRNodeType _type_info = IRNodeType::StringImm;
+    static const IRNodeType _type_info = IRNodeType::StringImm;
 };
 
 }  // namespace Internal
