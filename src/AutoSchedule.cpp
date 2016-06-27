@@ -1189,14 +1189,14 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     set<string> group_inputs;
     set<string> group_mem;
 
-    for (auto& stg: g.members) {
+    for (auto &stg: g.members) {
         group_mem.insert(stg.func.name());
 
         FindAllCalls find;
         Definition stg_def = get_stage_definition(stg.func, stg.stage_num);
 
         stg_def.accept(&find);
-        for (auto& c: find.calls) {
+        for (auto &c: find.calls) {
             bool is_member = false;
             for (auto& m: g.members) {
                 if (m.func.name() == c) {
@@ -1212,9 +1212,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     // Count the number of tiles
     uint64_t estimate_tiles = 1;
+    uint64_t parallelism = 1;
     uint64_t num_ele_per_tile = 1;
 
-    const vector<Dim>& dims = def.schedule().dims();
+    const vector<Dim> &dims = def.schedule().dims();
 
     DimBounds stg_bounds = get_bounds(g.output);
 
@@ -1225,6 +1226,9 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
             int extent = get_extent(stg_bounds.at(var));
             estimate_tiles *= std::ceil((float)extent/size);
             num_ele_per_tile *= size;
+            if (can_parallelize_rvar(var, g.output.func.name(), def)) {
+                parallelism *= std::ceil((float)extent/size);
+            }
         }
     }
 
@@ -1369,7 +1373,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
-    g_analy.parallelism = estimate_tiles;
+    g_analy.parallelism = parallelism;
 
     internal_assert(per_tile_mem_cost > 0);
 
