@@ -236,13 +236,28 @@ bool uses_gpu_vars(Expr s) {
 class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
+    bool in_hexagon;
+    const Target &target;
     int lanes;
     bool valid;
     bool vectorized;
 
     using IRMutator::visit;
 
+    bool should_predicate_store_load(int bit_size) {
+        if (in_hexagon) {
+            internal_assert(target.features_any_of({Target::HVX_64, Target::HVX_128}))
+                << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
+            return true;
+        } else if (target.arch == Target::X86) {
+            return (bit_size == 32) && (lanes >= 4);
+        }
+        // For other architecture, do not predicate vector load/store
+        return false;
+    }
+
     void visit(const Load *op) {
+        valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
             expr = op;
             return;
@@ -264,6 +279,7 @@ class PredicateLoadStore : public IRMutator {
     }
 
     void visit(const Store *op) {
+        valid = valid && should_predicate_store_load(op->value.type().bits());
         if (!valid) {
             stmt = op;
             return;
@@ -325,11 +341,14 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, Expr vpred) :
-            var(v), vector_predicate(vpred), lanes(vpred.type().lanes()),
-            valid(true), vectorized(false) {
+    // Should only attempt to predicate store/load if the lane size is
+    // no less than 4
+    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t) :
+            var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
+            lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
+
     bool is_vectorized() const  {
         return valid && vectorized;
     }
@@ -343,6 +362,10 @@ class VectorSubs : public IRMutator {
 
     // What we're replacing it with. Usually a ramp.
     Expr replacement;
+
+    const Target &target;
+
+    bool in_hexagon; // Are we inside the hexagon loop?
 
     // A suffix to attach to widened variables.
     string widening_suffix;
@@ -741,17 +764,17 @@ class VectorSubs : public IRMutator {
             bool vectorize_predicate = !uses_gpu_vars(cond);
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(var, cond);
+                PredicateLoadStore p(var, cond, in_hexagon, target);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(var, !cond);
+                PredicateLoadStore p(var, !cond, in_hexagon, target);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
 
-            debug(4) << "IfThenElse should vectorize predicate? " << vectorize_predicate << "\n";
+            debug(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
             debug(4) << "Predicated stmt:\n" << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
@@ -888,10 +911,17 @@ class VectorSubs : public IRMutator {
         Stmt body = op->body;
 
         // Rewrite loads and stores to this allocation like so:
-        // foo[x] -> foo[x*lanes + var]
-        body = RewriteAccessToVectorAlloc(var, op->name, lanes).mutate(body);
+        // foo[x] -> foo[x*lanes + v]
+        string v = unique_name('v');
+        body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
 
+        scope.push(v, Ramp::make(0, 1, lanes));
         body = mutate(body);
+        scope.pop(v);
+
+        // Replace the widened 'v' with the actual ramp
+        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
+        body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
 
         stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
@@ -944,16 +974,25 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(string v, Expr r) : var(v), replacement(r) {
+    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t) :
+            var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
 };
 
 // Vectorize all loops marked as such in a Stmt
 class VectorizeLoops : public IRMutator {
+    const Target &target;
+    bool in_hexagon;
+
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
+        bool old_in_hexagon = in_hexagon;
+        if (for_loop->device_api == DeviceAPI::Hexagon) {
+            in_hexagon = true;
+        }
+
         if (for_loop->for_type == ForType::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
@@ -963,28 +1002,27 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            Expr for_var = Variable::make(Int(32), for_loop->name);
-
-            Stmt body = for_loop->body;
-            if (!is_zero(for_loop->min)) {
-                Expr adjusted = for_var + for_loop->min;
-                body = substitute(for_loop->name, adjusted, for_loop->body);
-            }
-
             // Replace the var with a ramp within the body
-            Expr replacement = Ramp::make(0, 1, extent->value);
-            stmt = VectorSubs(for_loop->name, replacement).mutate(body);
+            Expr for_var = Variable::make(Int(32), for_loop->name);
+            Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
+            stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
         } else {
             IRMutator::visit(for_loop);
         }
+
+        if (for_loop->device_api == DeviceAPI::Hexagon) {
+            in_hexagon = old_in_hexagon;
+        }
     }
 
+public:
+    VectorizeLoops(const Target &t) : target(t), in_hexagon(false) {}
 };
 
 } // Anonymous namespace
 
-Stmt vectorize_loops(Stmt s) {
-    return VectorizeLoops().mutate(s);
+Stmt vectorize_loops(Stmt s, const Target &t) {
+    return VectorizeLoops(t).mutate(s);
 }
 
 }
