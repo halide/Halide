@@ -1,8 +1,10 @@
 #include <map>
 
 #include "EarlyFree.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IREquality.h"
+#include "ExprUsesVar.h"
+#include "InjectHostDevBufferCopies.h"
 
 namespace Halide {
 namespace Internal {
@@ -15,8 +17,9 @@ class FindLastUse : public IRVisitor {
 public:
     string func;
     Stmt last_use;
+    bool found_device_malloc;
 
-    FindLastUse(string s) : func(s), in_loop(false) {}
+    FindLastUse(string s) : func(s), found_device_malloc(false), in_loop(false) {}
 
 private:
     bool in_loop;
@@ -43,6 +46,9 @@ private:
     void visit(const Call *call) {
         if (call->name == func) {
             last_use = containing_stmt;
+        }
+        if (call->name == "halide_device_malloc" && expr_uses_var(call, func + ".buffer")) {
+            found_device_malloc = true;
         }
         IRVisitor::visit(call);
     }
@@ -108,16 +114,25 @@ private:
             containing_stmt = old_containing_stmt;
         }
     }
-
-
 };
+
+Stmt make_free(string func, bool device) {
+    Stmt free = Free::make(func);
+    if (device) {
+        Expr buf = Variable::make(Handle(), func + ".buffer");
+        Stmt device_free = call_extern_and_assert("halide_device_free", {buf});
+        free = Block::make({device_free, free});
+    }
+    return free;
+}
 
 class InjectMarker : public IRMutator {
 public:
     string func;
     Stmt last_use;
+    bool inject_device_free;
 
-    InjectMarker() : injected(false) {}
+    InjectMarker() : inject_device_free(false), injected(false) {}
 private:
 
     bool injected;
@@ -128,7 +143,7 @@ private:
         if (injected) return s;
         if (s.same_as(last_use)) {
             injected = true;
-            return Block::make(s, Free::make(func));
+            return Block::make(s, make_free(func, inject_device_free));
         } else {
             return mutate(s);
         }
@@ -163,7 +178,6 @@ private:
             stmt = Block::make(new_first, new_rest);
         }
     }
-
 };
 
 class InjectEarlyFrees : public IRMutator {
@@ -181,10 +195,12 @@ class InjectEarlyFrees : public IRMutator {
             InjectMarker inject_marker;
             inject_marker.func = alloc->name;
             inject_marker.last_use = last_use.last_use;
+            inject_marker.inject_device_free = last_use.found_device_malloc;
             stmt = inject_marker.mutate(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-                                  Block::make(alloc->body, Free::make(alloc->name)), alloc->new_expr);
+                                  Block::make(alloc->body, make_free(alloc->name, last_use.found_device_malloc)),
+                                  alloc->new_expr);
         }
 
     }

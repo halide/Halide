@@ -189,5 +189,24 @@ Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt) {
     return GraphSubstituteExpr(find, replacement).mutate(stmt);
 }
 
+class SubstituteInAllLets : public IRGraphMutator {
+
+    using IRGraphMutator::visit;
+
+    void visit(const Let *op) {
+        Expr value = mutate(op->value);
+        Expr body = mutate(op->body);
+        expr = graph_substitute(op->name, value, body);
+    }
+};
+
+Expr substitute_in_all_lets(Expr expr) {
+    return SubstituteInAllLets().mutate(expr);
+}
+
+Stmt substitute_in_all_lets(Stmt stmt) {
+    return SubstituteInAllLets().mutate(stmt);
+}
+
 }
 }

@@ -367,4 +367,28 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), codeLen});
 }
 
+void halide_hexagon_host_malloc_init() {
+}
+
+void halide_hexagon_host_malloc_deinit() {
+}
+
+void *halide_hexagon_host_malloc(size_t x) {
+    // Allocate enough space for aligning the pointer we return.
+    const size_t alignment = 4096;
+    void *orig = malloc(x + alignment);
+    if (orig == NULL) {
+        return NULL;
+    }
+
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+
+void halide_hexagon_host_free(void *ptr) {
+    free(((void**)ptr)[-1]);
+}
+
 }  // extern "C"

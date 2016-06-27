@@ -11,12 +11,13 @@
 namespace Halide {
 namespace Internal {
 
+/** A helper function to call an extern function, and assert that it
+ * returns 0. */
+EXPORT Stmt call_extern_and_assert(const std::string& name, const std::vector<Expr>& args);
+
 /** Inject calls to halide_device_malloc, halide_copy_to_device, and
  * halide_copy_to_host as needed. */
-Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t);
-
-/** Inject calls to halide_dev_free as needed. */
-Stmt inject_dev_frees(Stmt s);
+EXPORT Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t);
 
 }
 }

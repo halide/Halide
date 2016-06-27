@@ -23,8 +23,6 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
-  android_ion
-  android_mman
   android_opengl_context
   android_tempfile
   arm_cpu_features
@@ -34,7 +32,6 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
-  fake_ion
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -43,7 +40,6 @@ set(RUNTIME_CPP
   ios_io
   linux_clock
   linux_host_cpu_count
-  linux_mman
   linux_opengl_context
   matlab
   metadata
@@ -222,6 +218,7 @@ set(HEADER_FILES
   AddParameterChecks.h
   AllocationBoundsInference.h
   Argument.h
+  Associativity.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -245,6 +242,7 @@ set(HEADER_FILES
   CodeGen_Posix.h
   CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
+  ConciseCasts.h
   CPlusPlusMangle.h
   Debug.h
   DebugToFile.h
@@ -381,6 +379,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
+  Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp

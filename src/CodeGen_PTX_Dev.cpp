@@ -120,7 +120,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     LLVMMDNodeArgumentType md_args[] = {
         value_as_metadata_type(function),
         MDString::get(*context, "kernel"),
-        value_as_metadata_type(ConstantInt::get(i32, 1))
+        value_as_metadata_type(ConstantInt::get(i32_t, 1))
     };
 
     MDNode *md_node = MDNode::get(*context, md_args);
@@ -190,7 +190,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
-        Value *shared_base = Constant::getNullValue(PointerType::get(i8, 3));
+        Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
         sym_push(alloc->name + ".host", shared_base);
     } else {
 
@@ -212,7 +212,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
+        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32_t, size));
         builder->SetInsertPoint(here);
         sym_push(allocation_name, ptr);
     }
