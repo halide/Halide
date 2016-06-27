@@ -154,7 +154,7 @@ class InjectBufferCopies : public IRMutator {
                        dev_current(false),
                        internal(false),
                        dev_allocated(true),  // This is true unless we know for sure it is not allocated (this BufferInfo is from an Allocate node).
-                       on_single_device(true),
+                       on_single_device(false),
                        device_first_touched(DeviceAPI::None), // Meaningless initial value
                        current_device(DeviceAPI::Host) {}
     };
@@ -197,15 +197,15 @@ class InjectBufferCopies : public IRMutator {
         return Call::make(type_of<const char *>(), interface_name, no_args, Call::Extern);
     }
 
-    Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api, bool is_zero_copy) {
+    Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api, bool is_device_and_host) {
         Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
-        Stmt device_malloc = call_extern_and_assert(is_zero_copy ? "halide_device_malloc_may_be_zero_copy"
-                                                                 : "halide_device_malloc",
+        Stmt device_malloc = call_extern_and_assert(is_device_and_host ? "halide_device_and_host_malloc"
+                                                                       : "halide_device_malloc",
                                                     {buf, device_interface});
         Stmt destructor =
             Evaluate::make(Call::make(Int(32), Call::register_destructor,
-                                      {Expr(is_zero_copy ? "halide_device_free_may_be_zero_copy_as_destructor"
+                                      {Expr(is_device_and_host ? "halide_device_and_host_free_as_destructor"
                                                          : "halide_device_free_as_destructor"), buf}, Call::Intrinsic));
         return Block::make(device_malloc, destructor);
     }
@@ -352,11 +352,10 @@ class InjectBufferCopies : public IRMutator {
                 s = Block::make(make_buffer_copy(direction, i.first, touching_device), s);
             }
 
-            buf.on_single_device = (non_host_devices_reading_count <= 1) && (non_host_devices_writing_count <= 1);
-            // Inject a dev_malloc if needed. This is not done if the allocation is on a single device as it will be handled
-            // with a combined "zero copy" allocation.
-            if (!buf.on_single_device &&
-                !buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::None) {
+            buf.on_single_device = (non_host_devices_reading_count <= 1) && (non_host_devices_writing_count <= 1) && buf.device_first_touched != DeviceAPI::None;
+
+            // Inject a dev_malloc if needed.
+            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::None) {
                 debug(4) << "Injecting device malloc for " << i.first << " on " <<
                     static_cast<int>(buf.device_first_touched) << "\n";
                 Stmt dev_malloc = make_dev_malloc(i.first, buf.device_first_touched, false);
@@ -531,7 +530,7 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "Making combined host/device alloc for " << op->name << "\n";
             Stmt inner_body = op->body;
             std::vector<const LetStmt *> body_lets;
-            // Find LetStmt seting up buffer Variable for op->name as it will
+            // Find LetStmt setting up buffer Variable for op->name as it will
             // now go outside.
             const LetStmt *buffer_create_let = nullptr;
             while (const LetStmt *inner_let = inner_body.as<LetStmt>()) {
@@ -541,11 +540,6 @@ class InjectBufferCopies : public IRMutator {
                     break;
                 }
                 body_lets.push_back(inner_let);
-            }
-
-            // Rebuild any wrapped lets without the one for the create_buffer_t.
-            for (size_t i = body_lets.size(); i > 0; i--) {
-                inner_body = LetStmt::make(body_lets[i - 1]->name, body_lets[i - 1]->value, inner_body);
             }
 
             Stmt combined_malloc = make_dev_malloc(op->name, buf_info.device_first_touched, true);
@@ -581,6 +575,11 @@ class InjectBufferCopies : public IRMutator {
             internal_assert(!create_buffer_args.empty());
 
             stmt = LetStmt::make(op->name + ".buffer", Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, create_buffer_args, Call::Intrinsic), inner_body);
+
+            // Rebuild any wrapped lets outside the one for the create_buffer_t.
+            for (size_t i = body_lets.size(); i > 0; i--) {
+                stmt = LetStmt::make(body_lets[i - 1]->name, body_lets[i - 1]->value, stmt);
+            }
         }
 
         state.erase(buf_name);
@@ -651,6 +650,14 @@ class InjectBufferCopies : public IRMutator {
             merged_state.host_current = then_state.host_current && else_state.host_current;
             merged_state.dev_current  = then_state.dev_current && else_state.dev_current &&
                                         then_state.current_device == else_state.current_device;
+
+            if (then_state.device_first_touched == else_state.device_first_touched) {
+                merged_state.on_single_device = then_state.on_single_device && else_state.on_single_device;
+                merged_state.device_first_touched = then_state.device_first_touched;
+            } else {
+                merged_state.on_single_device = false;
+                merged_state.device_first_touched = DeviceAPI::None;
+            }
 
             // Merge the device read/write set of then and else case
             merged_state.devices_reading = then_state.devices_reading;

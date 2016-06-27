@@ -555,23 +555,23 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
 
     // If this is a zero copy buffer, these pointers will be the same.
     if ((const uint8_t *)c.src != device_ptr) {
-	// TODO: Is this 32-bit or 64-bit? Leaving signed for now
-	// in case negative strides.
-	for (int w = 0; w < (int)c.extent[3]; w++) {
-	    for (int z = 0; z < (int)c.extent[2]; z++) {
-		for (int y = 0; y < (int)c.extent[1]; y++) {
-		    for (int x = 0; x < (int)c.extent[0]; x++) {
-			uint64_t off = (x * c.stride_bytes[0] +
-					y * c.stride_bytes[1] +
-					z * c.stride_bytes[2] +
-					w * c.stride_bytes[3]);
-			void *src = (void *)(c.src + off);
-			void *dst = device_ptr + off;
-			memcpy(dst, src, c.chunk_size);
-		    }
-		}
-	    }
-	}
+        // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+        // in case negative strides.
+        for (int w = 0; w < (int)c.extent[3]; w++) {
+            for (int z = 0; z < (int)c.extent[2]; z++) {
+                for (int y = 0; y < (int)c.extent[1]; y++) {
+                    for (int x = 0; x < (int)c.extent[0]; x++) {
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
+                        void *src = (void *)(c.src + off);
+                        void *dst = device_ptr + off;
+                        memcpy(dst, src, c.chunk_size);
+                    }
+                }
+            }
+        }
     } else {
         debug(user_context) << "halide_metal_copy_to_device: skipping copy because pointers are the same.\n";
     }
@@ -603,23 +603,23 @@ WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buffer) {
 
     // If this is a zero copy buffer, these pointers will be the same.
     if ((uint8_t *)c.dst != device_ptr) {
-	// TODO: Is this 32-bit or 64-bit? Leaving signed for now
-	// in case negative strides.
-	for (int w = 0; w < (int)c.extent[3]; w++) {
-	    for (int z = 0; z < (int)c.extent[2]; z++) {
-		for (int y = 0; y < (int)c.extent[1]; y++) {
-		    for (int x = 0; x < (int)c.extent[0]; x++) {
-			uint64_t off = (x * c.stride_bytes[0] +
-					y * c.stride_bytes[1] +
-					z * c.stride_bytes[2] +
-					w * c.stride_bytes[3]);
-			void *src = device_ptr + off;
-			void *dst = (void *)(c.dst + off);
-			memcpy(dst, src, c.chunk_size);
-		    }
-		}
-	    }
-	}
+        // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+        // in case negative strides.
+        for (int w = 0; w < (int)c.extent[3]; w++) {
+            for (int z = 0; z < (int)c.extent[2]; z++) {
+                for (int y = 0; y < (int)c.extent[1]; y++) {
+                    for (int x = 0; x < (int)c.extent[0]; x++) {
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
+                        void *src = device_ptr + off;
+                        void *dst = (void *)(c.dst + off);
+                        memcpy(dst, src, c.chunk_size);
+                    }
+                }
+            }
+        }
     } else {
         debug(user_context) << "halide_metal_copy_to_host: skipping copy because pointers are the same.\n";
     }
@@ -755,19 +755,19 @@ WEAK int halide_metal_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_metal_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buffer) {
-    debug(user_context) << "halide_metal_device_malloc_may_be_zero_copy called.\n";
+WEAK int halide_metal_device_and_host_malloc(void *user_context, struct buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_and_host_malloc called.\n";
     int result = halide_metal_device_malloc(user_context, buffer);
     if (result == 0) {
         mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
         buffer->host = (uint8_t *)buffer_contents(metal_buffer);
-	debug(user_context) << "halide_metal_device_malloc_may_be_zero_copy dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+        debug(user_context) << "halide_metal_device_and_host_malloc dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
     }
     return result;
 }
 
-WEAK int halide_metal_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buffer) {
-    debug(user_context) << "halide_metal_device_free_may_be_zero_copy called.\n";
+WEAK int halide_metal_device_and_host_free(void *user_context, struct buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_and_host_free called.\n";
     halide_metal_device_free(user_context, buffer);
     buffer->host = NULL;
     return 0;
@@ -828,8 +828,8 @@ WEAK halide_device_interface metal_device_interface = {
     halide_metal_device_release,
     halide_metal_copy_to_host,
     halide_metal_copy_to_device,
-    halide_metal_device_malloc_may_be_zero_copy,
-    halide_metal_device_free_may_be_zero_copy,
+    halide_metal_device_and_host_malloc,
+    halide_metal_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal

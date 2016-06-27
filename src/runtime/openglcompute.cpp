@@ -650,12 +650,12 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
    return 0;
 }
 
-WEAK int halide_openglcompute_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
-    return halide_default_device_malloc_may_be_zero_copy(user_context, buf, &openglcompute_device_interface);
+WEAK int halide_openglcompute_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &openglcompute_device_interface);
 }
 
-WEAK int halide_openglcompute_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
-    return halide_default_device_free_may_be_zero_copy(user_context, buf, &openglcompute_device_interface);
+WEAK int halide_openglcompute_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &openglcompute_device_interface);
 }
 
 WEAK const struct halide_device_interface *halide_openglcompute_device_interface() {
@@ -678,8 +678,8 @@ WEAK halide_device_interface openglcompute_device_interface = {
     halide_openglcompute_device_release,
     halide_openglcompute_copy_to_host,
     halide_openglcompute_copy_to_device,
-    halide_openglcompute_device_malloc_may_be_zero_copy,
-    halide_openglcompute_device_free_may_be_zero_copy,
+    halide_openglcompute_device_and_host_malloc,
+    halide_openglcompute_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenGLCompute

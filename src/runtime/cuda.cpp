@@ -814,12 +814,12 @@ WEAK int halide_cuda_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_cuda_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
-    return halide_default_device_malloc_may_be_zero_copy(user_context, buf, &cuda_device_interface);
+WEAK int halide_cuda_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &cuda_device_interface);
 }
 
-WEAK int halide_cuda_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
-    return halide_default_device_free_may_be_zero_copy(user_context, buf, &cuda_device_interface);
+WEAK int halide_cuda_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &cuda_device_interface);
 }
 
 WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, uintptr_t device_ptr) {
@@ -920,8 +920,8 @@ WEAK halide_device_interface cuda_device_interface = {
     halide_cuda_device_release,
     halide_cuda_copy_to_host,
     halide_cuda_copy_to_device,
-    halide_cuda_device_malloc_may_be_zero_copy,
-    halide_cuda_device_free_may_be_zero_copy,
+    halide_cuda_device_and_host_malloc,
+    halide_cuda_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Cuda

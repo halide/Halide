@@ -1072,12 +1072,12 @@ WEAK int halide_opencl_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_opencl_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
-    return halide_default_device_malloc_may_be_zero_copy(user_context, buf, &opencl_device_interface);
+WEAK int halide_opencl_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &opencl_device_interface);
 }
 
-WEAK int halide_opencl_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
-    return halide_default_device_free_may_be_zero_copy(user_context, buf, &opencl_device_interface);
+WEAK int halide_opencl_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &opencl_device_interface);
 }
 
 WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, uintptr_t mem) {
@@ -1195,8 +1195,8 @@ WEAK halide_device_interface opencl_device_interface = {
     halide_opencl_device_release,
     halide_opencl_copy_to_host,
     halide_opencl_copy_to_device,
-    halide_opencl_device_malloc_may_be_zero_copy,
-    halide_opencl_device_free_may_be_zero_copy,
+    halide_opencl_device_and_host_malloc,
+    halide_opencl_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL
