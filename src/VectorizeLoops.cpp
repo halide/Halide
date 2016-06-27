@@ -713,7 +713,6 @@ class VectorSubs : public IRMutator {
 
             bool vectorize_predicate = !uses_gpu_vars(cond);
             Stmt predicated_stmt;
-            vectorize_predicate = false;
             if (vectorize_predicate) {
                 PredicateLoadStore p(var, cond, lanes);
                 predicated_stmt = p.mutate(then_case);
