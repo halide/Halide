@@ -20,10 +20,6 @@ namespace Internal {
 
 class IRVisitor;
 
-/** A class representing a type of IR node (e.g. Add, or Mul, or
- * For). We use it for rtti (without having to compile with rtti). */
-struct IRNodeType {};
-
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
 
@@ -41,13 +37,13 @@ struct IRNode {
        references to IR nodes. */
     mutable RefCount ref_count;
 
-    /** Each IR node subclass should return some unique pointer. We
-     * can compare these pointers to do runtime type
+    /** Each IR node subclass should return some unique int. We
+     * can compare these values to do runtime type
      * identification. We don't compile with rtti because that
      * injects run-time type identification stuff everywhere (and
      * often breaks when linking external libraries compiled
      * without it), and we only want it for IR nodes. */
-    virtual const IRNodeType *type_info() const = 0;
+    virtual int type_info() const = 0;
 };
 
 template<>
@@ -79,18 +75,17 @@ struct BaseExprNode : public IRNode {
    inheritance hierarchy. It provides an implementation of the
    accept function necessary for the visitor pattern to work, and
    a concrete instantiation of a unique IRNodeType per class. */
-template<typename T>
-struct ExprNode : public BaseExprNode {
+template<typename T> struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType *type_info() const {return &_type_info;}
-    static EXPORT IRNodeType _type_info;
+    virtual int type_info() const {return static_type_info();}
+    static EXPORT int static_type_info();
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType *type_info() const {return &_type_info;}
-    static EXPORT IRNodeType _type_info;
+    virtual int type_info() const {return static_type_info();}
+    static EXPORT int static_type_info();
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -111,12 +106,12 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * Select). This returns nullptr if the node is not of the requested
      * type. Example usage:
      *
-     * if (const Add *add = node->as<Add>()) {
+     * if (const Add *add = expr.as<Add>()) {
      *   // This is an add node
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr && ptr->type_info() == &T::_type_info) {
+        if (ptr && ptr->type_info() == T::static_type_info()) {
             return (const T *)ptr;
         }
         return nullptr;
