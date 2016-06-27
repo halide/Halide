@@ -64,12 +64,7 @@ WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
     return f(user_context, idx, closure);
 }
 
-WEAK void worker_thread(void *void_arg) {
-    work *owned_job = (work *)void_arg;
-
-    // Grab the lock
-    halide_mutex_lock(&work_queue.mutex);
-
+WEAK void worker_thread_already_locked(work *owned_job) {
     // If I'm a job owner, then I was the thread that called
     // do_par_for, and I should only stay in this function until my
     // job is complete. If I'm a lowly worker thread, I should stay in
@@ -133,6 +128,12 @@ WEAK void worker_thread(void *void_arg) {
             }
         }
     }
+}
+
+
+WEAK void worker_thread(void *) {
+    halide_mutex_lock(&work_queue.mutex);
+    worker_thread_already_locked(NULL);
     halide_mutex_unlock(&work_queue.mutex);
 }
 
@@ -208,26 +209,23 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
         work_queue.target_a_team_size = work_queue.desired_num_threads;
     }
 
-    // If there are fewer threads than we would like on the a team,
-    // wake up the b team too.
-    bool wake_b_team = work_queue.target_a_team_size > work_queue.a_team_size;
-
     // Push the job onto the stack.
     job.next_job = work_queue.jobs;
     work_queue.jobs = &job;
 
-    halide_mutex_unlock(&work_queue.mutex);
-
     // Wake up our A team.
     halide_cond_broadcast(&work_queue.wakeup_a_team);
 
-    if (wake_b_team) {
-        // We need the B team too.
+    // If there are fewer threads than we would like on the a team,
+    // wake up the b team too.
+    if (work_queue.target_a_team_size > work_queue.a_team_size) {
         halide_cond_broadcast(&work_queue.wakeup_b_team);
     }
 
     // Do some work myself.
-    worker_thread((void *)(&job));
+    worker_thread_already_locked(&job);
+
+    halide_mutex_unlock(&work_queue.mutex);
 
     // Return zero if the job succeeded, otherwise return the exit
     // status of one of the failing jobs (whichever one failed last).
