@@ -1,10 +1,22 @@
 #include "sim_protocol.h"
 #include "../HalideRuntime.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
 
+extern "C" {
+
+// elf.h expects these to be declared.
+typedef int qurt_hvx_mode_t;
+int qurt_hvx_lock(qurt_hvx_mode_t mode);
+int qurt_hvx_unlock();
+
+}  // extern "C"
+
+
+#include "elf.h"
 #include "hexagon_standalone.h"
 
 typedef struct _buffer__seq_octet _buffer__seq_octet;
@@ -41,7 +53,7 @@ int qurt_hvx_unlock() {
 }  // extern "C"
 
 void halide_print(void *user_context, const char *str) {
-    fprintf(stderr, "%s", str);
+    log_printf("%s", str);
 }
 
 // This is a basic implementation of the Halide runtime for Hexagon.
@@ -97,11 +109,9 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
-    const char *filename = (const char *)code;
-    void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
+    elf_t *lib = obj_dlopen_mem(code, codeLen);
     if (!lib) {
-        halide_print(NULL, "dlopen failed\n");
-        halide_print(NULL, dlerror());
+        halide_print(NULL, "dlopen_mem failed\n");
         return -1;
     }
 
@@ -109,9 +119,9 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+    set_runtime_t set_runtime = (set_runtime_t)obj_dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        dlclose(lib);
+        obj_dlclose(lib);
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -126,7 +136,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        dlclose(lib);
+        obj_dlclose(lib);
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
@@ -136,7 +146,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
 }
 
 handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -181,7 +191,7 @@ int run(handle_t module_ptr, handle_t function,
 }
 
 int release_kernels(handle_t module_ptr, int codeLen) {
-    dlclose(reinterpret_cast<void*>(module_ptr));
+    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
     return 0;
 }
 
@@ -262,10 +272,10 @@ int main(int argc, const char **argv) {
         case Message::Break:
             return 0;
         default:
-            fprintf(stderr, "Unknown message: %d\n", rpc_call);
+            log_printf("Unknown message: %d\n", rpc_call);
             return -1;
         }
     }
-    fprintf(stderr, "Unreachable!\n");
+    log_printf("Unreachable!\n");
     return 0;
 }
