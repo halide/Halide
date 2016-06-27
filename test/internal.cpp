@@ -21,7 +21,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
-    /*IRPrinter::test();
+    IRPrinter::test();
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();
@@ -36,9 +36,7 @@ int main(int argc, const char **argv) {
     is_monotonic_test();
     split_predicate_test();
     interval_test();
-    associativity_test();*/
-
-    cse_test();
+    associativity_test();
 
     return 0;
 }
