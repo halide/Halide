@@ -247,7 +247,7 @@ RegionCosts::stage_region_cost(string func, int stage,
     }
 
     vector< pair<int64_t, int64_t> > cost = inlines.empty() ? func_cost[func]:
-            get_func_cost(curr_f, inlines);
+                                            get_func_cost(curr_f, inlines);
 
     return make_pair(area * cost[stage].first, area * cost[stage].second);
 }
@@ -379,6 +379,35 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
             load_costs[func] = e.type().bytes();
         } else {
             load_costs[func] += e.type().bytes();
+        }
+    }
+
+    return load_costs;
+}
+
+map<string, int64_t>
+RegionCosts::stage_detailed_load_costs(string func, int stage,
+                                       DimBounds &bounds,
+                                       const set<string> &inlines) {
+    Function curr_f = env.at(func);
+    Definition def = get_stage_definition(curr_f, stage);
+
+    Box stage_region;
+
+    const vector<Dim> &dims = def.schedule().dims();
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
+        stage_region.push_back(bounds.at(dims[d].var));
+    }
+
+    map<string, int64_t> load_costs =
+            stage_detailed_load_costs(func, stage, inlines);
+
+    int64_t area = box_area(stage_region);
+    for (auto &kv: load_costs) {
+        if (area >= 0) {
+            load_costs[kv.first] *= area;
+        } else {
+            load_costs[kv.first] = -1;
         }
     }
 

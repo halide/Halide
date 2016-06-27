@@ -1280,7 +1280,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     map<string, Box> group_reg, prod_reg, input_reg;
 
-    // Separating into regions that belong to the group and are input to the group
+    // Separating into regions that belong to the group and regions that are
+    // input to the group
     for (auto &reg: conc_reg) {
         if (group_mem.find(reg.first) != group_mem.end() &&
             reg.first != g.output.func.name()) {
@@ -1293,6 +1294,14 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
         }
     }
 
+    GroupAnalysis g_analy;
+    g_analy.arith_cost = -1;
+    g_analy.mem_cost = -1;
+    g_analy.parallelism = -1;
+
+    debug(0) << "==============\n";
+    debug(0) << "Group Analysis\n";
+    debug(0) << "==============\n";
     debug(0) << g;
     debug(0) << "\nProd reg:" << '\n';
     disp_regions(prod_reg);
@@ -1301,9 +1310,41 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     debug(0) << "Group reg:" << '\n';
     disp_regions(group_reg);
 
-    // Compute the cost of the region and the size of the intermediates
+    // Aggregate costs for intermediate functions in a tile and the
+    // tile output
     pair<int64_t, int64_t> tile_cost =
             cost_model.region_cost(group_reg, g.inlined);
+
+    pair<int64_t, int64_t> out_cost =
+            cost_model.stage_region_cost(g.output.func.name(),
+                                         g.output.stage_num,
+                                         tile_bounds, g.inlined);
+
+    if (tile_cost.first < 0 || tile_cost.second < 0 ||
+        out_cost.first < 0 || out_cost.second < 0) {
+        return g_analy;
+    }
+
+    pair<int64_t, int64_t> group_cost(tile_cost.first + out_cost.first,
+                                      tile_cost.second + out_cost.second);
+
+    // Detailed load costs for all the group intermediates
+    map<string, int64_t> group_load_costs =
+            cost_model.detailed_load_costs(group_reg, g.inlined);
+
+    map<string, int64_t> out_load_costs =
+            cost_model.stage_detailed_load_costs(g.output.func.name(),
+                                                 g.output.stage_num,
+                                                 tile_bounds, g.inlined);
+
+    combine_load_costs(group_load_costs, out_load_costs);
+
+
+    debug(0) << "\nDetailed loads:\n";
+    for (auto &f_load: group_load_costs) {
+        debug(0) << "(" << f_load.first << "," << f_load.second << ")";
+    }
+    debug(0) << '\n';
 
     // TODO: This is inaccurate this can both over and under estimate the input
     // foot print
@@ -1342,19 +1383,9 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     int64_t tile_inter_size = group_inter_size + tile_input_size +
                               tile_output_size;
 
-    pair<int64_t, int64_t> out_cost =
-            cost_model.stage_region_cost(g.output.func.name(),
-                                         g.output.stage_num,
-                                         tile_bounds, g.inlined);
-
     tile_cost.first += out_cost.first;
     debug(0) << "out_cost.second:" << out_cost.second << '\n';
     tile_cost.second += out_cost.second;
-
-    GroupAnalysis g_analy;
-    g_analy.arith_cost = -1;
-    g_analy.mem_cost = -1;
-    g_analy.parallelism = -1;
 
     // The group could not be analyzed
     if (tile_cost.first < 0 || tile_cost.second < 0 ||
@@ -1432,15 +1463,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
-    debug(0) << "input_load_cost:" << input_load_cost << '\n';
-    debug(0) << "output_load_cost:" << output_load_cost << '\n';
-    debug(0) << "inter_load_cost:" << inter_load_cost << '\n';
-    debug(0) << "intermediate size:" << tile_inter_size << '\n';
-    debug(0) << "per_tile_arith_cost:" << per_tile_arith_cost << '\n';
-    debug(0) << "per_tile_mem_cost:" << per_tile_mem_cost << '\n';
-    debug(0) << "tile_cost.second:" << tile_cost.second << '\n';
-    debug(0) << "tile_input_size:" << tile_input_size << '\n';
-    debug(0) << "tile_output_size:" << tile_output_size << '\n';
     debug(0) << g_analy << '\n';
 
     //internal_assert(per_tile_mem_cost > 0);

@@ -87,6 +87,10 @@ class RegionCosts {
                           const set<string> &inlines = set<string>());
     map<string, int64_t>
             stage_detailed_load_costs(string func, int stage,
+                                      DimBounds &bounds,
+                                      const set<string> &inlines = set<string>());
+    map<string, int64_t>
+            stage_detailed_load_costs(string func, int stage,
                                       const set<string> &inlines = set<string>());
     map<string, int64_t>
             detailed_load_costs(string func, const Box &region,
@@ -114,6 +118,8 @@ int get_extent(const Interval &i);
 int64_t box_area(const Box &b);
 void disp_regions(map<string, Box> &regions);
 Definition get_stage_definition(const Function &f, int stage_num);
+void combine_load_costs(map<string, int64_t> &result,
+                        const map<string, int64_t> &partial);
 
 }
 }
