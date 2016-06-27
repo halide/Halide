@@ -95,6 +95,12 @@ struct wrapped_closure {
 };
 
 extern "C" {
+
+// There are two locks at play: the thread pool lock and the hvx
+// context lock. To ensure there's no way anything could ever
+// deadlock, we never attempt to acquire one while holding the
+// other.
+
 int halide_do_par_for(void *user_context,
                       halide_task_t task,
                       int min, int size, uint8_t *closure) {
@@ -117,6 +123,9 @@ int halide_do_par_for(void *user_context,
     int old_num_threads =
         halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4);
 
+    // We're about to acquire the thread-pool lock, so we must drop
+    // the hvx context lock, even though we'll likely reacquire it
+    // immediately to do some work on this thread.
     qurt_hvx_unlock();
     int ret = Halide::Runtime::Internal::default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
     qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
@@ -131,6 +140,8 @@ int halide_do_task(void *user_context, halide_task_t f,
                    int idx, uint8_t *closure) {
     // Dig the appropriate hvx mode out of the wrapped closure and lock it.
     wrapped_closure *c = (wrapped_closure *)closure;
+    // We don't own the thread-pool lock here, so we can safely
+    // acquire the hvx context lock to run some code.
     qurt_hvx_lock((qurt_hvx_mode_t)c->hvx_mode);
     int ret = f(user_context, idx, c->closure);
     qurt_hvx_unlock();
