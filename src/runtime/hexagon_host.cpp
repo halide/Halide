@@ -1,8 +1,8 @@
 #include "runtime_internal.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "printer.h"
-#include "cuda_opencl_shared.h"
 #include "scoped_mutex_lock.h"
 
 #define O_TRUNC 00001000
@@ -453,39 +453,6 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-namespace {
-
-// Implement a device copy using memcpy.
-WEAK void device_memcpy(void *user_context, device_copy c) {
-    if (c.src == c.dst) {
-        // This is a zero copy buffer, copy is a no-op.
-        return;
-    }
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = (void *)(c.src + off);
-                    void *dst = (void *)(c.dst + off);
-                    uint64_t size = c.chunk_size;
-                    debug(user_context) << "    memcpy "
-                                        << "(" << x << ", " << y << ", " << z << ", " << w << "), "
-                                        << src << " -> " << (void *)dst << ", " << size << " bytes\n";
-                    memcpy(dst, src, size);
-                }
-            }
-        }
-    }
-}
-
-}  // namespace
-
 WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
     int err = halide_hexagon_device_malloc(user_context, buf);
     if (err) {
@@ -505,7 +472,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
 
     // Get the descriptor associated with the ion buffer.
     c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
-    device_memcpy(user_context, c);
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -529,7 +496,7 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, buffer_t* buf) {
 
     // Get the descriptor associated with the ion buffer.
     c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
-    device_memcpy(user_context, c);
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

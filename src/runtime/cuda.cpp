@@ -1,8 +1,8 @@
 #include "HalideRuntimeCuda.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 #include "mini_cuda.h"
-#include "cuda_opencl_shared.h"
 
 #define INLINE inline __attribute__((always_inline))
 

@@ -1,5 +1,5 @@
 #include "HalideRuntimeOpenGLCompute.h"
-#include "buf_size.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 #include "mini_opengl.h"
