@@ -268,9 +268,9 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj) {
  * will be a zero copy setup, but the default implementation may
  * separately allocate the host memory using halide_malloc and the
  * device memory using halide_device_malloc. */
-WEAK int halide_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
+WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
     const halide_device_interface *current_interface = halide_get_device_interface(buf->dev);
-    debug(user_context) << "halide_device_malloc_may_be_zero_copy: " << buf
+    debug(user_context) << "halide_device_and_host_malloc: " << buf
                         << " interface " << device_interface
                         << " host: " << buf->host
                         << ", dev: " << buf->dev
@@ -280,14 +280,14 @@ WEAK int halide_device_malloc_may_be_zero_copy(void *user_context, struct buffer
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
-        debug(user_context) << "halide_device_malloc_may_be_zero_copy doesn't support switching interfaces\n";
+        debug(user_context) << "halide_device_and_host_malloc doesn't support switching interfaces\n";
         return halide_error_code_device_malloc_failed;
     }
 
     // Ensure code is not freed prematurely.
     // TODO: Exception safety...
     device_interface->use_module();
-    int result = device_interface->device_malloc_may_be_zero_copy(user_context, buf);
+    int result = device_interface->device_and_host_malloc(user_context, buf);
     device_interface->release_module();
 
     if (result) {
@@ -298,12 +298,12 @@ WEAK int halide_device_malloc_may_be_zero_copy(void *user_context, struct buffer
 }
 
 /** Free host and device memory associated with a buffer_t. */
-WEAK int halide_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf) {
+WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf) {
     uint64_t dev_field = 0;
     if (buf) {
         dev_field = buf->dev;
     }
-    debug(user_context) << "halide_device_free_may_be_zero_copy: " << buf
+    debug(user_context) << "halide_device_and_host_free: " << buf
                         << " buf dev " << buf->dev
                         << " interface " << halide_get_device_interface(dev_field) << "\n";
     if (buf != NULL) {
@@ -312,7 +312,7 @@ WEAK int halide_device_free_may_be_zero_copy(void *user_context, struct buffer_t
             // Ensure interface is not freed prematurely.
             // TODO: Exception safety...
             device_interface->use_module();
-            int result = device_interface->device_free_may_be_zero_copy(user_context, buf);
+            int result = device_interface->device_and_host_free(user_context, buf);
             device_interface->release_module();
             halide_assert(user_context, buf->dev == 0);
             if (result) {
@@ -326,7 +326,7 @@ WEAK int halide_device_free_may_be_zero_copy(void *user_context, struct buffer_t
     return 0;
 }
 
-WEAK int halide_default_device_malloc_may_be_zero_copy(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
+WEAK int halide_default_device_and_host_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
     size_t size = buf_size(buf);
     buf->host = (uint8_t *)halide_malloc(user_context, size);
     if (buf->host == NULL) {
@@ -340,7 +340,7 @@ WEAK int halide_default_device_malloc_may_be_zero_copy(void *user_context, struc
     return result;
 }
 
-WEAK int halide_default_device_free_may_be_zero_copy(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
+WEAK int halide_default_device_and_host_free(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
     int result = halide_device_free(user_context, buf);
     halide_free(user_context, buf->host);
     buf->host = NULL;
@@ -351,9 +351,9 @@ WEAK int halide_default_device_free_may_be_zero_copy(void *user_context, struct 
 
 /** Free any host and device memory associated with a buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
-WEAK void halide_device_free_may_be_zero_copy_as_destructor(void *user_context, void *obj) {
+WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj) {
     struct buffer_t *buf = (struct buffer_t *)obj;
-    halide_device_free_may_be_zero_copy(user_context, buf);
+    halide_device_and_host_free(user_context, buf);
 }
 
 /** TODO: Find a way to elide host free without this hack. */
