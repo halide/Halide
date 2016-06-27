@@ -577,47 +577,6 @@ template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Bl
 template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
-template<> IRNodeType ExprNode<IntImm>::_type_info = {};
-template<> IRNodeType ExprNode<UIntImm>::_type_info = {};
-template<> IRNodeType ExprNode<FloatImm>::_type_info = {};
-template<> IRNodeType ExprNode<StringImm>::_type_info = {};
-template<> IRNodeType ExprNode<Cast>::_type_info = {};
-template<> IRNodeType ExprNode<Variable>::_type_info = {};
-template<> IRNodeType ExprNode<Add>::_type_info = {};
-template<> IRNodeType ExprNode<Sub>::_type_info = {};
-template<> IRNodeType ExprNode<Mul>::_type_info = {};
-template<> IRNodeType ExprNode<Div>::_type_info = {};
-template<> IRNodeType ExprNode<Mod>::_type_info = {};
-template<> IRNodeType ExprNode<Min>::_type_info = {};
-template<> IRNodeType ExprNode<Max>::_type_info = {};
-template<> IRNodeType ExprNode<EQ>::_type_info = {};
-template<> IRNodeType ExprNode<NE>::_type_info = {};
-template<> IRNodeType ExprNode<LT>::_type_info = {};
-template<> IRNodeType ExprNode<LE>::_type_info = {};
-template<> IRNodeType ExprNode<GT>::_type_info = {};
-template<> IRNodeType ExprNode<GE>::_type_info = {};
-template<> IRNodeType ExprNode<And>::_type_info = {};
-template<> IRNodeType ExprNode<Or>::_type_info = {};
-template<> IRNodeType ExprNode<Not>::_type_info = {};
-template<> IRNodeType ExprNode<Select>::_type_info = {};
-template<> IRNodeType ExprNode<Load>::_type_info = {};
-template<> IRNodeType ExprNode<Ramp>::_type_info = {};
-template<> IRNodeType ExprNode<Broadcast>::_type_info = {};
-template<> IRNodeType ExprNode<Call>::_type_info = {};
-template<> IRNodeType ExprNode<Let>::_type_info = {};
-template<> IRNodeType StmtNode<LetStmt>::_type_info = {};
-template<> IRNodeType StmtNode<AssertStmt>::_type_info = {};
-template<> IRNodeType StmtNode<ProducerConsumer>::_type_info = {};
-template<> IRNodeType StmtNode<For>::_type_info = {};
-template<> IRNodeType StmtNode<Store>::_type_info = {};
-template<> IRNodeType StmtNode<Provide>::_type_info = {};
-template<> IRNodeType StmtNode<Allocate>::_type_info = {};
-template<> IRNodeType StmtNode<Free>::_type_info = {};
-template<> IRNodeType StmtNode<Realize>::_type_info = {};
-template<> IRNodeType StmtNode<Block>::_type_info = {};
-template<> IRNodeType StmtNode<IfThenElse>::_type_info = {};
-template<> IRNodeType StmtNode<Evaluate>::_type_info = {};
-
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::shuffle_vector = "shuffle_vector";
 Call::ConstString Call::interleave_vectors = "interleave_vectors";
