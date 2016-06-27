@@ -1,9 +1,9 @@
 #include "HalideRuntimeMetal.h"
 #include "scoped_spin_lock.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
-#include "cuda_opencl_shared.h"
 #include "objc_support.h"
 
 #include "metal_objc_platform_dependent.h"
@@ -551,30 +551,9 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
     debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
 
     device_copy c = make_host_to_device_copy(buffer);
-    uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.dst);
+    c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
 
-    // If this is a zero copy buffer, these pointers will be the same.
-    if ((const uint8_t *)c.src != device_ptr) {
-        // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-        // in case negative strides.
-        for (int w = 0; w < (int)c.extent[3]; w++) {
-            for (int z = 0; z < (int)c.extent[2]; z++) {
-                for (int y = 0; y < (int)c.extent[1]; y++) {
-                    for (int x = 0; x < (int)c.extent[0]; x++) {
-                        uint64_t off = (x * c.stride_bytes[0] +
-                                        y * c.stride_bytes[1] +
-                                        z * c.stride_bytes[2] +
-                                        w * c.stride_bytes[3]);
-                        void *src = (void *)(c.src + off);
-                        void *dst = device_ptr + off;
-                        memcpy(dst, src, c.chunk_size);
-                    }
-                }
-            }
-        }
-    } else {
-        debug(user_context) << "halide_metal_copy_to_device: skipping copy because pointers are the same.\n";
-    }
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -599,30 +578,9 @@ WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buffer) {
     halide_assert(user_context, buffer->host && buffer->dev);
 
     device_copy c = make_device_to_host_copy(buffer);
-    uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.src);
+    c.src = (uint64_t)buffer_contents((mtl_buffer *)c.src);
 
-    // If this is a zero copy buffer, these pointers will be the same.
-    if ((uint8_t *)c.dst != device_ptr) {
-        // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-        // in case negative strides.
-        for (int w = 0; w < (int)c.extent[3]; w++) {
-            for (int z = 0; z < (int)c.extent[2]; z++) {
-                for (int y = 0; y < (int)c.extent[1]; y++) {
-                    for (int x = 0; x < (int)c.extent[0]; x++) {
-                        uint64_t off = (x * c.stride_bytes[0] +
-                                        y * c.stride_bytes[1] +
-                                        z * c.stride_bytes[2] +
-                                        w * c.stride_bytes[3]);
-                        void *src = device_ptr + off;
-                        void *dst = (void *)(c.dst + off);
-                        memcpy(dst, src, c.chunk_size);
-                    }
-                }
-            }
-        }
-    } else {
-        debug(user_context) << "halide_metal_copy_to_host: skipping copy because pointers are the same.\n";
-    }
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

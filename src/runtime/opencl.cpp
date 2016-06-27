@@ -1,11 +1,10 @@
 #include "HalideRuntimeOpenCL.h"
 #include "scoped_spin_lock.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
 #include "mini_cl.h"
-
-#include "cuda_opencl_shared.h"
 
 #define INLINE inline __attribute__((always_inline))
 
