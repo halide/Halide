@@ -50,7 +50,6 @@ uint64_t ubits(int unique, int i, int j) {
     bits = (bits ^ (bits >> 32)) * mu;
     return bits;
 }
-Target target;
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
 template <typename T>
 bool less_than_zero(T val) {
@@ -264,7 +263,7 @@ Image<T> init(Type t, int unique, int width, int height) {
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
-bool div_mod(int vector_width) {
+bool div_mod(int vector_width, Target &target) {
     std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
 
     int i, j;
@@ -418,19 +417,19 @@ int main(int argc, char **argv) {
     int max_vector_width = 16;
     success &= f_mod<float,double,32>();
 
-    target = get_jit_target_from_environment();
+    Target target = get_jit_target_from_environment();
     // TODO: Fix all vector_widths for Hexagon.
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         max_vector_width = 1;
     }
 
     for (int vector_width = 1; vector_width <= max_vector_width; vector_width *= 2) {
-        success &= div_mod<uint8_t,uint64_t,8>(vector_width);
-        success &= div_mod<uint16_t,uint64_t,16>(vector_width);
-        success &= div_mod<uint32_t,uint64_t,32>(vector_width);
-        success &= div_mod<int8_t,int64_t,8>(vector_width);
-        success &= div_mod<int16_t,int64_t,16>(vector_width);
-        success &= div_mod<int32_t,int64_t,32>(vector_width);
+        success &= div_mod<uint8_t,uint64_t,8>(vector_width, target);
+        success &= div_mod<uint16_t,uint64_t,16>(vector_width, target);
+        success &= div_mod<uint32_t,uint64_t,32>(vector_width, target);
+        success &= div_mod<int8_t,int64_t,8>(vector_width, target);
+        success &= div_mod<int16_t,int64_t,16>(vector_width, target);
+        success &= div_mod<int32_t,int64_t,32>(vector_width, target);
     }
 
     if (! success) {
