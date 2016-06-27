@@ -111,8 +111,8 @@ extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
 //@{
 typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
 extern int halide_do_par_for(void *user_context,
-			     halide_task_t task,
-			     int min, int size, uint8_t *closure);
+                             halide_task_t task,
+                             int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
 //@}
 
@@ -222,6 +222,10 @@ struct halide_type_t {
     halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
+
+    /** Default constructor is required e.g. to declare halide_trace_event
+     * instances. */
+    halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     size_t bytes() { return (bits + 7) / 8; }
