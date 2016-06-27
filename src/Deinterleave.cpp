@@ -726,12 +726,12 @@ void deinterleave_vector_test() {
     Expr broadcast_a = Broadcast::make(x + 4, 8);
     Expr broadcast_b = broadcast_a;
 
-    /*check(ramp, ramp_a, ramp_b);
+    check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
     check(Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter()),
           Load::make(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));*/
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));
 
     Expr predicate = Ramp::make(x, 3, 8) > 5;
     Expr load = Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter());

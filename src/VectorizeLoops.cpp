@@ -212,73 +212,80 @@ public:
         var(Variable::make(Int(32), v)), alloc(a), lanes(l) {}
 };
 
-// Does the Expr/Stmt have either Store/Load nodes and no Call nodes?
-class ShouldVectorizePredicate : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Load *op) {
-        result = true;
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Store *op) {
-        result = true;
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Call *op) {
-        result = false;
-    }
-
-public:
-    bool result;
-    ShouldVectorizePredicate() : result(false) {}
-};
-
-bool should_vectorize_predicate(Stmt stmt) {
-    if (stmt.defined()) {
-        ShouldVectorizePredicate check;
-        stmt.accept(&check);
-        return check.result;
-    }
-    return true;
-}
-
 // Wrap a vectorized predicate around a Load/Store node.
 class PredicateLoadStore : public IRMutator {
     string var;
     Expr predicate;
     int lanes;
+    bool valid;
+    bool vectorized;
 
     using IRMutator::visit;
 
     void visit(const Load *op) {
-        debug(0) << "VISIT LOAD: " << Expr(op) << "\n";
+        if (!valid) {
+            IRMutator::visit(op);
+            return;
+        }
         internal_assert(op->index.type().lanes() == lanes);
         Expr src = Call::make(Handle(), Call::address_of, {Expr(op)}, Call::Intrinsic);
         expr = Call::make(op->type, Call::predicated_load, {src, predicate}, Call::Intrinsic);
-        debug(0) << "  mutated vector load: " << expr << "\n"
-                 << "  with predicate: " << predicate << "\n";
+        vectorized = true;
     }
 
     void visit(const Store *op) {
-        debug(0) << "VISIT STORE: " << Stmt(op) << "\n";
+        if (!valid) {
+            IRMutator::visit(op);
+            return;
+        }
         internal_assert(op->index.type().lanes() == lanes);
         internal_assert(op->value.type().lanes() == lanes);
         Expr dest = Call::make(Handle(), Call::address_of,
                                {Load::make(op->value.type(), op->name, op->index, Buffer(), op->param)},
                                Call::Intrinsic);
-        stmt = Evaluate::make(Call::make(Int(32), Call::predicated_store,
+        stmt = Evaluate::make(Call::make(op->value.type(), Call::predicated_store,
                                          {dest, predicate, mutate(op->value)},
                                          Call::Intrinsic));
-        debug(0) << "  mutated vector store: " << stmt << "\n"
-                 << "  with predicate: " << predicate << "\n";
+        vectorized = true;
+    }
+
+    Expr merge_predicate(Expr pred, Expr new_pred) {
+        if (pred.type().lanes() == new_pred.type().lanes()) {
+            Expr res = simplify(pred && new_pred);
+            return res;
+        }
+        valid = false;
+        return pred;
+    }
+
+    void visit(const Call *op) {
+        if (!valid) {
+            IRMutator::visit(op);
+            return;
+        }
+        if (op->is_intrinsic(Call::predicated_store) || op->is_intrinsic(Call::predicated_load)) {
+            vector<Expr> new_args(op->args);
+            new_args[1] = merge_predicate(op->args[1], predicate);
+            if (!valid) {
+                IRMutator::visit(op);
+                return;
+            }
+            expr = Call::make(op->type, op->name, new_args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+            vectorized = true;
+        } else {
+            valid = false;
+            IRMutator::visit(op);
+        }
     }
 
 public:
     PredicateLoadStore(string v, Expr pred, int l) :
-            var(v), predicate(pred), lanes(l) {
+            var(v), predicate(pred), lanes(l), valid(true), vectorized(false) {
         internal_assert(pred.type().lanes() == lanes);
+    }
+    bool is_vectorized() const  {
+        return valid && vectorized;
     }
 };
 
@@ -673,38 +680,51 @@ class VectorSubs : public IRMutator {
     void visit(const IfThenElse *op) {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
-        debug(0) << "Vectorizing over " << var << "\n"
+        debug(3) << "Vectorizing over " << var << "\n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
 
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
+        //debug(0) << "then_case: \n" << then_case << "\n";
+        //debug(0) << "\nelse_case: \n" << else_case << "\n";
         if (lanes > 1) {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = should_vectorize_predicate(then_case) &&
-                                       should_vectorize_predicate(else_case);
-            debug(0) << "...IfThenElse should vectorize: " << vectorize_predicate << "\n";
+            bool vectorize_predicate = false;
+            Stmt predicated_stmt;
+            {
+                PredicateLoadStore p(var, cond, lanes);
+                predicated_stmt = p.mutate(then_case);
+                vectorize_predicate = p.is_vectorized();
+            }
+            if (vectorize_predicate && else_case.defined()) {
+                PredicateLoadStore p(var, !cond, lanes);
+                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
+                vectorize_predicate = p.is_vectorized();
+            }
+
+            debug(4) << "IfThenElse should vectorize? " << vectorize_predicate << "\n";
+            debug(4) << "Predicated stmt: \n" << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
             if (c && (c->is_intrinsic(Call::likely) ||
                       c->is_intrinsic(Call::likely_if_innermost))) {
-
-                // The meaning of the likely intrinsic is that
-                // Halide should optimize for the case in which
-                // *every* likely value is true. We can do that by
-                // generating a scalar condition that checks if
-                // the least-true lane is true.
-                Expr all_true = bounds_of_lanes(c->args[0]).min;
-
-                // Wrap it in the same flavor of likely
-                all_true = Call::make(Bool(), c->name,
-                                      {all_true}, Call::PureIntrinsic);
-
                 if (!vectorize_predicate) {
+                    // The meaning of the likely intrinsic is that
+                    // Halide should optimize for the case in which
+                    // *every* likely value is true. We can do that by
+                    // generating a scalar condition that checks if
+                    // the least-true lane is true.
+                    Expr all_true = bounds_of_lanes(c->args[0]).min;
+
+                    // Wrap it in the same flavor of likely
+                    all_true = Call::make(Bool(), c->name,
+                                          {all_true}, Call::PureIntrinsic);
+
                     // We should strip the likelies from the case
                     // that's going to scalarize, because it's no
                     // longer likely.
@@ -715,29 +735,19 @@ class VectorSubs : public IRMutator {
                         IfThenElse::make(all_true,
                                          then_case,
                                          scalarize(without_likelies));
+                    debug(4) << "...With all_true likely: \n" << stmt << "\n";
                 } else {
-                    Stmt other = PredicateLoadStore(var, cond, lanes).mutate(then_case);
-                    if (op->else_case.defined()) {
-                        Stmt else_case = PredicateLoadStore(var, !cond, lanes).mutate(else_case);
-                        other = Block::make(other, else_case);
-                    }
-                    stmt =
-                        IfThenElse::make(all_true,
-                                         then_case,
-                                         other);
-                    debug(0) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    stmt = predicated_stmt;
+                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
                 }
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
+                    debug(4) << "...Scalarizing vector predicate: \n" << stmt << "\n";
                     stmt = scalarize(op);
                 } else {
-                    stmt = PredicateLoadStore(var, cond, lanes).mutate(then_case);
-                    if (op->else_case.defined()) {
-                        Stmt else_case = PredicateLoadStore(var, !cond, lanes).mutate(else_case);
-                        stmt = Block::make(stmt, else_case);
-                    }
-                    debug(0) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    stmt = predicated_stmt;
+                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
                 }
             }
         } else {

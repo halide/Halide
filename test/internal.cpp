@@ -38,7 +38,7 @@ int main(int argc, const char **argv) {
     interval_test();
     associativity_test();*/
 
-    deinterleave_vector_test();
+    cse_test();
 
     return 0;
 }

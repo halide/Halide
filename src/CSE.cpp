@@ -294,9 +294,6 @@ public:
         const Call *call = e.as<Call>();
         if (call) {
             if (call->is_intrinsic(Call::address_of)) {
-                //TODO(psuriana): fix this
-                /*debug(4) << "Encounter call address_of: " << e << "\n";
-
                 const Load *load = call->args[0].as<Load>();
                 internal_assert(load) << "The sole argument to address_of must be a Load node\n";
 
@@ -307,12 +304,9 @@ public:
                     Expr new_load = Load::make(load->type, load->name, index, load->image, load->param);
                     return Call::make(call->type, call->name, {new_load}, call->call_type,
                                       call->func, call->value_index, call->image, call->param);
-                }*/
-                return e;
+                }
             } else if (call->is_intrinsic(Call::predicated_load) ||
                        call->is_intrinsic(Call::predicated_store)) {
-                /*debug(4) << "Encounter call predicated store/load: " << e << "\n";
-
                 vector<Expr > new_args(call->args.size());
                 bool changed = false;
 
@@ -322,15 +316,13 @@ public:
                     Expr new_arg = common_subexpression_elimination_helper(old_arg);
                     if (!new_arg.same_as(old_arg)) changed = true;
                     new_args[i] = new_arg;
-                    debug(0) << "----old arg: " << old_arg << "\n" << "    new arg: " << new_arg << "\n";
                 }
-
                 if (!changed) {
                     return e;
                 } else {
                     return Call::make(call->type, call->name, new_args, call->call_type,
                                       call->func, call->value_index, call->image, call->param);
-                }*/
+                }
                 return e;
             }
         }
@@ -433,7 +425,7 @@ void cse_test() {
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
 
-    /*Expr t[32], tf[32];
+    Expr t[32], tf[32];
     for (int i = 0; i < 32; i++) {
         t[i] = Variable::make(Int(32), "t" + std::to_string(i));
         tf[i] = Variable::make(Float(32), "t" + std::to_string(i));
@@ -494,14 +486,16 @@ void cse_test() {
         e = e*e + e + i;
         e = e*e - e * i;
     }
-    Expr result = common_subexpression_elimination(e);*/
+    Expr result = common_subexpression_elimination(e);
 
-    Stmt test = IfThenElse::make(x*x + 2*x*x + x*y > 2,
-                                 Evaluate::make(select(x*x + y*y > 0, x*x + y*y, 2)),
-                                 Evaluate::make(select(x*x > 0, x*x + 3, 2)));
-    Stmt result = common_subexpression_elimination(test);
-    debug(0) << "Original: " << test << "\n"
-             << "Result: " << result << "\n";
+    {
+        Stmt test = IfThenElse::make(x*x + 2*x*x + x*y > 2,
+                                     Evaluate::make(select(x*x + y*y > 0, x*x + y*y, 2)),
+                                     Evaluate::make(select(x*x > 0, x*x + 3, 2)));
+        Stmt result = common_subexpression_elimination(test);
+        debug(0) << "Original:\n" << test << "\n"
+                 << "Result:\n" << result << "\n";
+    }
 
     debug(0) << "common_subexpression_elimination test passed\n";
 }

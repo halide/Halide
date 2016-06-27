@@ -2043,6 +2043,64 @@ void CodeGen_LLVM::scalarize(Expr e) {
     value = result;
 }
 
+Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
+    debug(0) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
+
+    const Ramp *ramp = load->index.as<Ramp>();
+    internal_assert(ramp && is_one(ramp->stride)) << "Should be dense vector load\n";
+
+    bool is_external = (external_buffer.find(load->name) != external_buffer.end());
+    int alignment = load->type.bytes(); // The size of a single element
+
+    int native_bits = native_vector_bits();
+    int native_bytes = native_bits / 8;
+    // We assume halide_malloc for the platform returns
+    // buffers aligned to at least the native vector
+    // width. (i.e. 16-byte alignment on arm, and 32-byte
+    // alignment on x86), so this is the maximum alignment we
+    // can infer based on the index alone.
+
+    // Boost the alignment if possible, up to the native vector width.
+    ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+    while ((mod_rem.remainder & 1) == 0 &&
+           (mod_rem.modulus & 1) == 0 &&
+           alignment < native_bytes) {
+        mod_rem.modulus /= 2;
+        mod_rem.remainder /= 2;
+        alignment *= 2;
+    }
+
+    // If it is an external buffer, then we cannot assume that the host pointer
+    // is aligned to at least native vector width. However, we may be able to do
+    // better than just assuming that it is unaligned.
+    if (is_external && load->param.defined()) {
+        int host_alignment = load->param.host_alignment();
+        alignment = gcd(alignment, host_alignment);
+    }
+
+    // For dense vector loads wider than the native vector
+    // width, bust them up into native vectors
+    int load_lanes = load->type.lanes();
+    int native_lanes = native_bits / load->type.bits();
+    vector<Value *> slices;
+    for (int i = 0; i < load_lanes; i += native_lanes) {
+        int slice_lanes = std::min(native_lanes, load_lanes - i);
+        Expr slice_base = simplify(ramp->base + i);
+        Expr slice_stride = make_one(slice_base.type());
+        Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
+        llvm::Type *slice_type = VectorType::get(llvm_type_of(load->type.element_of()), slice_lanes);
+        Value *elt_ptr = codegen_buffer_pointer(load->name, load->type.element_of(), slice_base);
+        Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
+
+        Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+        Instruction *load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+        add_tbaa_metadata(load_inst, load->name, slice_index);
+        slices.push_back(load_inst);
+    }
+    value = concat_vectors(slices);
+    return value;
+}
+
 void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->call_type == Call::Extern ||
                     op->call_type == Call::ExternCPlusPlus ||
@@ -2380,8 +2438,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen_buffer_pointer(load->name, load->type, load->index);
 
     } else if (op->is_intrinsic(Call::predicated_store)) {
-        debug(4) << "VISIT predicated_store: " << Expr(op) << "\n";
-
         internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {predicate, store addr, value}\n";
         const Call *store_addr = op->args[0].as<Call>();
         internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
@@ -2394,10 +2450,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
             << "Predicate of predicated_store should have the same number of lanes as the store value\n";
 
+        // Even on 32-bit systems, Handles are treated as 64-bit in
+        // memory, so convert stores of handles to stores of uint64_ts.
+        if (op->args[2].type().is_handle()) {
+            Expr v = reinterpret(UInt(64, op->args[2].type().lanes()), op->args[2]);
+            Expr dest = Call::make(Handle(), Call::address_of,
+                                   {Load::make(v.type(), load->name, load->index, load->image, load->param)},
+                                   Call::Intrinsic);
+            Expr expr = Call::make(v.type(), Call::predicated_store,
+                                   {dest, op->args[1], v},
+                                   Call::Intrinsic);
+            codegen(expr);
+            return;
+        }
+
         const Ramp *ramp = load->index.as<Ramp>();
         internal_assert(ramp) << "Predicated store should take vectorized store as argument\n";
+
         if (is_one(ramp->stride)) { // Dense vector store
-            debug(0) << "VECTORIZE predicated dense vector STORE: " << Expr(op) << "\n";
+            debug(0) << "Predicated dense vector store\n\t" << Expr(op) << "\n";
             Value *vpred = codegen(op->args[1]);
             Halide::Type value_type = op->args[2].type();
             Value *val = codegen(op->args[2]);
@@ -2443,12 +2514,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                 add_tbaa_metadata(store_inst, load->name, slice_index);
             }
         } else { // It's not dense vector store, we need to scalarize it
-            debug(0) << "\nScalarize predicated vector store: " << Expr(op) << "\n";
+            debug(0) << "Scalarize predicated vector store\n\t" << Expr(op) << "\n";
             Value *vpred = codegen(op->args[1]);
             Value *vval = codegen(op->args[2]);
             Value *vindex = codegen(load->index);
             for (int i = 0; i < ramp->lanes; i++) {
-                debug(4) << "\ncodegen predicated store for lane: " << i << "\n";
                 Constant *lane = ConstantInt::get(i32_t, i);
                 Value *p = builder->CreateExtractElement(vpred, lane);
                 Value *v = builder->CreateExtractElement(vval, lane);
@@ -2477,8 +2547,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
     } else if (op->is_intrinsic(Call::predicated_load)) {
-        debug(0) << "VISIT predicated_load: " << Expr(op) << "\n";
-
         internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {predicate, load addr}\n";
         const Call *load_addr = op->args[0].as<Call>();
         internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
@@ -2487,67 +2555,44 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(load) << "The sole argument to address_of must be a Load node\n";
         internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
         internal_assert(op->args[1].type().lanes() == load->type.lanes())
-            << "Predicate of predicated_load should have the same number of lanes as the Load\n"
-            << "predicate lane: " << op->args[1].type().lanes() << "\n"
-            << "load lane: " << load->type.lanes() << "\n";
+            << "Predicate of predicated_load should have the same number of lanes as the Load\n";
+
+        // If it's a Handle, load it as a uint64_t and then cast
+        if (load->type.is_handle()) {
+            Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
+            Expr src = Call::make(Handle(), Call::address_of, {uint64_load}, Call::Intrinsic);
+            Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, op->args[1]}, Call::Intrinsic);
+            codegen(reinterpret(load->type, expr));
+            return;
+        }
 
         const Ramp *ramp = load->index.as<Ramp>();
         internal_assert(ramp) << "Predicated load should take vectorized load as argument\n";
-        //TODO(psuriana): implement handler for flipped ramp
+        const IntImm *stride = ramp->stride.as<IntImm>();
+
         if (ramp && is_one(ramp->stride)) { // Dense vector store
-            debug(0) << "VECTORIZE predicated dense vector LOAD: " << Expr(op) << "\n";
+            value = codegen_dense_vector_load(load, codegen(op->args[1]));
+        } else if (ramp && stride && stride->value == -1) {
+            debug(0) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
+            vector<int> indices(ramp->lanes);
+            for (int i = 0; i < ramp->lanes; i++) {
+                indices[i] = ramp->lanes - 1 - i;
+            }
+
+            // Flip the predicate
             Value *vpred = codegen(op->args[1]);
-            bool is_external = (external_buffer.find(load->name) != external_buffer.end());
-            int alignment = load->type.bytes(); // The size of a single element
+            vpred = shuffle_vectors(vpred, indices);
 
-            int native_bits = native_vector_bits();
-            int native_bytes = native_bits / 8;
-            // We assume halide_malloc for the platform returns
-            // buffers aligned to at least the native vector
-            // width. (i.e. 16-byte alignment on arm, and 32-byte
-            // alignment on x86), so this is the maximum alignment we
-            // can infer based on the index alone.
+            // Load the vector and then flip it in-place
+            Expr flipped_base = ramp->base - ramp->lanes + 1;
+            Expr flipped_stride = make_one(flipped_base.type());
+            Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
+            Expr flipped_load = Load::make(load->type, load->name, flipped_index, load->image, load->param);
 
-            // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            while ((mod_rem.remainder & 1) == 0 &&
-                   (mod_rem.modulus & 1) == 0 &&
-                   alignment < native_bytes) {
-                mod_rem.modulus /= 2;
-                mod_rem.remainder /= 2;
-                alignment *= 2;
-            }
-
-            // If it is an external buffer, then we cannot assume that the host pointer
-            // is aligned to at least native vector width. However, we may be able to do
-            // better than just assuming that it is unaligned.
-            if (is_external && load->param.defined()) {
-                int host_alignment = load->param.host_alignment();
-                alignment = gcd(alignment, host_alignment);
-            }
-
-            // For dense vector loads wider than the native vector
-            // width, bust them up into native vectors
-            int load_lanes = load->type.lanes();
-            int native_lanes = native_bits / load->type.bits();
-            vector<Value *> slices;
-            for (int i = 0; i < load_lanes; i += native_lanes) {
-                int slice_lanes = std::min(native_lanes, load_lanes - i);
-                Expr slice_base = simplify(ramp->base + i);
-                Expr slice_stride = make_one(slice_base.type());
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
-                llvm::Type *slice_type = VectorType::get(llvm_type_of(load->type.element_of()), slice_lanes);
-                Value *elt_ptr = codegen_buffer_pointer(load->name, load->type.element_of(), slice_base);
-                Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
-
-                Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-                Instruction *load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
-                add_tbaa_metadata(load_inst, load->name, slice_index);
-                slices.push_back(load_inst);
-            }
-            value = concat_vectors(slices);
+            Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
+            value = shuffle_vectors(flipped, indices);
         } else { // It's not dense vector load, we need to scalarize it
-            debug(0) << "Scalarize predicated vector load: " << Expr(op) << "\n";
+            debug(0) << "Scalarize predicated vector load\n\t" << Expr(op) << "\n";
             Expr load_expr = Expr(load);
             Expr pred_load = Call::make(load_expr.type(),
                                         Call::if_then_else,
