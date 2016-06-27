@@ -1339,65 +1339,31 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     combine_load_costs(group_load_costs, out_load_costs);
 
-
+    // Intermediates of inlined pure fuctions should not show up in
+    // the group_load_costs.
+    // TODO: add an assert that checks for that
     debug(0) << "\nDetailed loads:\n";
     for (auto &f_load: group_load_costs) {
         debug(0) << "(" << f_load.first << "," << f_load.second << ")";
     }
     debug(0) << '\n';
 
-    // TODO: This is inaccurate this can both over and under estimate the input
-    // foot print
-    int64_t tile_input_size = cost_model.region_footprint(prod_reg) +
-                              cost_model.input_region_size(input_reg);
-
-    Box out_tile_extent;
-    const vector<string> &args = g.output.func.args();
-    for (size_t d = 0; d < args.size(); d++ ) {
-        if (tile_bounds.find(args[d]) != tile_bounds.end()) {
-            out_tile_extent.push_back(tile_bounds[args[d]]);
+    // Get the sizes of the buffers from which loads occur
+    debug(0) << "\nLoad buffer sizes:\n";
+    for (auto &f_load: group_load_costs) {
+        if (group_mem.find(f_load.first) != group_mem.end() &&
+            f_load.first != g.output.func.name()) {
+            debug(0) << "(" << f_load.first << "," << conc_reg[f_load.first] << ")";
         } else {
-            out_tile_extent.push_back(Interval());
+            debug(0) << "(" << f_load.first << "," << pipeline_bounds[f_load.first] << ")";
         }
     }
+    debug(0) << '\n';
 
-    int64_t tile_output_size = 0;
-
-    // Compute the tile output size if the stage is not an update
-    // otherwise it is already accounted for in the group regions
-    if (g.output.stage_num == 0) {
-        tile_output_size = cost_model.region_size(g.output.func.name(),
-                                                  out_tile_extent);
-    } else {
-        tile_output_size =
-                cost_model.region_size(g.output.func.name(),
-                                       conc_reg.at(g.output.func.name()));
-        // For an update definition the region of output touched is the
-        // input from the previous stage
-        tile_input_size += tile_output_size;
-    }
-
-    // Adding tile input and output size to tile_intermediate_size over
-    // estimates the working set size
-    int64_t group_inter_size = cost_model.region_footprint(group_reg, g.inlined);
-    int64_t tile_inter_size = group_inter_size + tile_input_size +
-                              tile_output_size;
-
-    tile_cost.first += out_cost.first;
-    debug(0) << "out_cost.second:" << out_cost.second << '\n';
-    tile_cost.second += out_cost.second;
-
-    // The group could not be analyzed
-    if (tile_cost.first < 0 || tile_cost.second < 0 ||
-        tile_input_size < 0 || tile_inter_size < 0 ||
-        out_cost.first < 0 || out_cost.second < 0 ||
-        tile_output_size < 0) {
-        return g_analy;
-    }
-
+    int64_t per_tile_arith_cost = group_cost.first;
     int64_t per_tile_mem_cost = 0;
-    int64_t per_tile_arith_cost = tile_cost.first;
 
+    // Old cost model left here for reference
     /*
     if (tile_inter_size > arch_params.l1_size) {
         // Conservative estimate of accesses to memory
@@ -1418,54 +1384,34 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     // TODO: Use smooth step curve from Jon
 
-    /*
-    // Log dropoff
-    float max_load_cost = std::log2((float)arch_params.last_level_size/
-                                    arch_params.register_file_size);
-
-    int64_t output_footprint = tile_output_size * estimate_tiles;
-    int64_t input_footprint = std::min(tile_input_size, tile_cost.second) * estimate_tiles;
-
-    float output_rel_size = (float)output_footprint/arch_params.register_file_size;
-    float input_rel_size = (float)input_footprint/arch_params.register_file_size;;
-    float tile_rel_size = (float)tile_inter_size/arch_params.register_file_size;
-
-
-    float input_load_cost =
-            std::max(std::min((float)std::log2(input_rel_size), max_load_cost), 0.0f);
-    float output_load_cost =
-            std::max(std::min((float)std::log2(output_rel_size), max_load_cost), 0.0f);
-    float inter_load_cost =
-            std::max(std::min((float)std::log2(tile_rel_size), max_load_cost), 0.0f);*/
-
     // Linear dropoff
     float load_slope = (float)arch_params.balance/arch_params.last_level_size;
+    for (auto &f_load: group_load_costs) {
+        int64_t footprint = 0;
+        if (group_mem.find(f_load.first) != group_mem.end() &&
+            f_load.first != g.output.func.name()) {
+            footprint = cost_model.region_size(f_load.first,
+                                               conc_reg[f_load.first]);
+        } else {
+            if (dep_analy.env.find(f_load.first) != dep_analy.env.end()) {
+                footprint = cost_model.region_size(f_load.first,
+                                                   pipeline_bounds[f_load.first]);
+            } else {
+                footprint = cost_model.input_region_size(f_load.first,
+                                                         pipeline_bounds[f_load.first]);
+            }
+        }
 
-    int64_t output_footprint = tile_output_size * estimate_tiles;
-
-    // TODO: input_footprint is inaccurate it can both over and under estimate
-    // the input foot print the tile_cost.second it the cost of the whole group
-    // not just the number of bytes loaded from inputs.
-    int64_t input_footprint = std::min(tile_input_size, tile_cost.second) * estimate_tiles;
-
-    float input_load_cost =
-            std::min(1 + input_footprint * load_slope, (float)arch_params.balance);
-    float output_load_cost =
-            std::min(1 + output_footprint * load_slope, (float)arch_params.balance);
-    float inter_load_cost =
-            std::min(1 + tile_inter_size * load_slope, (float)arch_params.balance);
-
-    per_tile_mem_cost += std::min(tile_input_size, tile_cost.second) * input_load_cost;
-    per_tile_mem_cost += tile_output_size * output_load_cost;
-    per_tile_mem_cost += tile_cost.second * inter_load_cost;
+        float cost_factor =
+                std::min(1 + footprint * load_slope, (float)arch_params.balance);
+        per_tile_mem_cost += cost_factor * f_load.second;
+    }
 
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
     g_analy.parallelism = estimate_tiles;
 
-    debug(0) << g_analy << '\n';
-
-    //internal_assert(per_tile_mem_cost > 0);
+    internal_assert(per_tile_mem_cost > 0);
 
     return g_analy;
 }
