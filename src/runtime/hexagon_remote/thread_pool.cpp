@@ -18,6 +18,7 @@ int halide_host_cpu_count() {
     return 4;
 }
 
+namespace {
 struct spawned_thread {
     void (*f)(void *);
     void *closure;
@@ -27,6 +28,7 @@ struct spawned_thread {
 void spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
+}
 }
 
 #define STACK_SIZE 256*1024
@@ -87,12 +89,14 @@ void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
 #define WEAK
 #include "../thread_pool_common.h"
 
+namespace {
 // We wrap the closure passed to jobs with extra info we
 // need. Currently just the hvx mode to use.
 struct wrapped_closure {
     uint8_t *closure;
     int hvx_mode;
 };
+}
 
 extern "C" {
 

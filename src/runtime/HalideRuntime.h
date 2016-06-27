@@ -144,7 +144,9 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
 
 struct halide_thread;
 
-/** Spawn a thread. Returns a handle to the thread for the purposes of joining it. */
+/** Spawn a thread. Returns a handle to the thread for the purposes of
+ * joining it. The thread must be joined in order to clean up any
+ * resources associated with it. */
 extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure);
 
 /** Join a thread. */
