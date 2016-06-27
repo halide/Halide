@@ -494,6 +494,8 @@ private:
     void register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper);
 
     llvm::Function *add_argv_wrapper(const std::string &name);
+
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred);
 };
 
 }
