@@ -11,6 +11,14 @@ using std::vector;
 using std::make_pair;
 using std::deque;
 
+
+bool has_suffix(const std::string &str, const std::string &suffix)
+{
+    return str.size() >= suffix.size() &&
+            str.compare(str.size() - suffix.size(),
+                        suffix.size(), suffix) == 0;
+}
+
 class ExprCost : public IRVisitor {
  public:
   int64_t ops;
@@ -80,19 +88,51 @@ class ExprCost : public IRVisitor {
           } else {
               detailed_byte_loads[call->name] += call->type.bytes();
           }
-      } else if (call->call_type == Call::Extern) {
-          // There is no visibility into an extern stage so there is
-          // no way to know the cost of the call statically. This may
-          // require profiling or user annotation
-          //
-          // For now making this a large constant so that functions with
-          // extern stages are forced to be compute_root
-          ops+=999;
-      } else if (call->call_type == Call::Intrinsic) {
-          // TODO: Figure out the right costs based on intrinsic type
-          ops+=1;
-          // TODO: There is a PureIntrinsic too figure out what it is
-          // and how to cost it
+      } else if (call->call_type == Call::Extern ||
+                 call->call_type == Call::PureExtern) {
+          // TODO: Suffix based matching is kind of sketchy but going ahead
+          // with it for now. Also not all the PureExtern's are accounted
+          // for yet.
+          if (has_suffix(call->name, "_f64")) {
+              ops+=20;
+          } else if(has_suffix(call->name, "_f32")) {
+              ops+=10;
+          } else if(has_suffix(call->name, "_f16")) {
+              ops+=5;
+          } else {
+              // There is no visibility into an extern stage so there is
+              // no way to know the cost of the call statically. This may
+              // require profiling or user annotation
+              //
+              // For now making this a large constant so that functions with
+              // unknown extern calls are forced to be compute_root
+              user_warning << "Unknown extern call " << call->name << '\n';
+              ops+=999;
+          }
+      } else if (call->call_type == Call::Intrinsic ||
+                 call->call_type == Call::PureIntrinsic) {
+          if (call->name == "shuffle_vector" || call->name == "interleave_vectors" ||
+              call->name == "concat_vectors" || call->name == "reinterpret" ||
+              call->name == "bitwise_and" || call->name == "bitwise_not" ||
+              call->name == "bitwise_xor" || call->name == "bitwise_or" ||
+              call->name == "shift_left" || call->name == "shift_right" ||
+              call->name == "shift_left" || call->name == "shift_right" ||
+              call->name == "div_round_to_zero" || call->name == "mod_round_to_zero") {
+              ops+=1;
+          } else if (call->name == "abs" || call->name == "absd" ||
+                     call->name == "lerp" || call->name == "random" ||
+                     call->name == "count_leading_zeros" ||
+                     call->name == "count_trailing_zeros") {
+
+              ops+=5;
+          } else if (call->name == "likely") {
+              // TODO: only account for the cost of the likely portion of the
+              // expression
+              ops+=1;
+          } else {
+              user_warning << "Unknown intrinsic call " << call->name << '\n';
+              ops+=1;
+          }
       }
 
       for (size_t i = 0; (i < call->args.size()); i++)
