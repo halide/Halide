@@ -12,7 +12,7 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-#define CACHE_DEBUGGING 1
+#define CACHE_DEBUGGING 0
 
 #if CACHE_DEBUGGING
 WEAK void debug_print_buffer(void *user_context, const char *buf_name, const buffer_t &buf) {
