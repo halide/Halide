@@ -107,6 +107,7 @@ double run_test(bool auto_schedule) {
         p.auto_schedule(target);
     }
 
+    p.compile_to_lowered_stmt("histogram.html", {in}, HTML, target);
     color.print_loop_nest();
 
     Image<uint8_t> out(in.width(), in.height(), in.channels());

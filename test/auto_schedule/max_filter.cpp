@@ -108,6 +108,7 @@ double run_test(bool auto_schedule) {
         p.auto_schedule(target);
     }
 
+    p.compile_to_lowered_stmt("max_filter.html", {in}, HTML, target);
     // Inspect the schedule
     final.print_loop_nest();
 

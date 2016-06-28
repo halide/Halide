@@ -195,6 +195,7 @@ double run_test(bool auto_schedule) {
         p.auto_schedule(target);
     }
 
+    p.compile_to_lowered_stmt("laplacian.html", {input}, HTML, target);
     // Inspect the schedule
     output.print_loop_nest();
 
