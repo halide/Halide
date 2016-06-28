@@ -144,8 +144,8 @@ class ExprCost : public IRVisitor {
       let->body.accept(this);
   }
 
-  // Should not hit any of these IR nodes when used at the level at
-  // which the auto scheduler operates
+  // Should not hit any of these IR nodes when traversing IR at the level the
+  // auto scheduler operates
   void visit(const Load *) { internal_assert(0); }
   void visit(const Ramp *) { internal_assert(0); }
   void visit(const Broadcast *) { internal_assert(0); }

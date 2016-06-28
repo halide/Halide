@@ -593,7 +593,7 @@ struct Partitioner {
 
     Group fuse_groups(Group &g1, Group &g2);
 
-    GroupAnalysis analyze_group(const Group &g);
+    GroupAnalysis analyze_group(const Group &g, bool show_analysis);
 
     map<FStage, map<FStage, DimBounds>> get_group_member_bounds();
 
@@ -620,7 +620,8 @@ struct Partitioner {
 
     vector<map<string, int>> generate_tile_configs(const FStage &stg);
 
-    pair<map<string, int>, GroupAnalysis> find_best_tile_config(const Group &g);
+    pair<map<string, int>, GroupAnalysis>
+            find_best_tile_config(const Group &g, Partitioner::Level level);
 
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
                              bool no_redundant_work, bool ensure_parallelism);
@@ -632,6 +633,8 @@ struct Partitioner {
 
     void initialize_groups_inline();
     void initialize_groups_fast_mem();
+
+    pair<int64_t, int64_t> get_pipeline_cost();
 
     void disp_pipeline_costs();
     void disp_pipeline_bounds();
@@ -676,9 +679,9 @@ void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eva
 
     child_group.tile_sizes = eval.tile_sizes;
 
+    debug(0) << "Merged group:" << child_group << '\n';
     // Update group costs
-    group_costs[child] = analyze_group(child_group);
-
+    group_costs[child] = analyze_group(child_group, false);
     /*
     debug(0) << '\n' << groups.at(child_group);
     debug(0) << group_costs[child_group] << '\n';
@@ -715,6 +718,21 @@ void Partitioner::disp_pipeline_bounds() {
     debug(0) << "================" << '\n';
     disp_regions(pipeline_bounds);
     debug(0) << "===============" << '\n';
+}
+
+pair<int64_t, int64_t> Partitioner::get_pipeline_cost() {
+    if (group_costs.size() == 0) {
+        debug(0) << "Group costs have not been analzed yet." << '\n';
+        return make_pair(-1, -1);
+    }
+    int64_t total_arith = 0;
+    int64_t total_mem = 0;
+    for (const pair<FStage, Group> &g: groups) {
+        GroupAnalysis analy = group_costs.at(g.first);
+        total_mem += analy.mem_cost;
+        total_arith += analy.arith_cost;
+    }
+    return make_pair(total_arith, total_mem);
 }
 
 void Partitioner::disp_pipeline_costs() {
@@ -755,7 +773,7 @@ void Partitioner::initialize_groups_inline() {
         }
 
         g.second.tile_sizes = tile_sizes;
-        GroupAnalysis inline_analy = analyze_group(g.second);
+        GroupAnalysis inline_analy = analyze_group(g.second, false);
         group_costs[g.second.output] = inline_analy;
     }
     fusion_cache.clear();
@@ -764,7 +782,7 @@ void Partitioner::initialize_groups_inline() {
 void Partitioner::initialize_groups_fast_mem() {
     for (pair<const FStage, Group> &g: groups) {
         pair<map<string, int>, GroupAnalysis> best =
-            find_best_tile_config(g.second);
+            find_best_tile_config(g.second, Partitioner::FAST_MEM);
         g.second.tile_sizes = best.first;
         group_costs[g.second.output] = best.second;
     }
@@ -866,7 +884,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
         for (auto &choice: choices) {
             debug(0) << "Cand choice:" << choice.first;
         }
-        debug(0) << "Cand benefit:" << overall_benefit << '\n';
+        debug(0) << "Cand Benefit:" << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (best_benefit < overall_benefit
@@ -881,8 +899,9 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
     for (auto &choice: best_choices) {
         debug(0) << "\nBest choice:" << choice.first;
     }
-    if (best_choices.size() > 0)
-        debug(0) << "Benefit:" << best_benefit << '\n';
+    if (best_choices.size() > 0) {
+        debug(0) << "Best Benefit:" << best_benefit << '\n';
+    }
 
     return best_choices;
 }
@@ -956,20 +975,16 @@ Partitioner::generate_tile_configs(const FStage &stg) {
 }
 
 pair<map<string, int>, Partitioner::GroupAnalysis>
-Partitioner::find_best_tile_config(const Group &g) {
+Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
 
     // TODO: Add sanity checks for the cost model
-    debug(0) << "\n============\n";
-    debug(0) << "Search start\n";
-    debug(0) << "============\n";
-
 
     // Initialize to no tiling
     map<string, int> no_tile_config;
     Group no_tile = g;
     no_tile.tile_sizes = no_tile_config;
 
-    GroupAnalysis best_analy = analyze_group(no_tile);
+    GroupAnalysis best_analy = analyze_group(no_tile, false);
     map<string, int> best_config = no_tile_config;
 
     if (best_analy.arith_cost < 0) {
@@ -979,25 +994,24 @@ Partitioner::find_best_tile_config(const Group &g) {
     // Generate tiling configurations
     vector<map<string, int>> configs = generate_tile_configs(g.output);
 
+    Group best_group = g;
     for (auto &config: configs) {
         Group new_group = g;
         new_group.tile_sizes = config;
 
-        GroupAnalysis new_analy = analyze_group(new_group);
+        GroupAnalysis new_analy = analyze_group(new_group, false);
 
-        int64_t benefit = estimate_benefit(best_analy, new_analy, false, true);
+        bool no_redundant_work = false;
+        int64_t benefit = estimate_benefit(best_analy, new_analy,
+                                           no_redundant_work, true);
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
+            best_group = new_group;
         }
     }
 
-    debug(0) << "\n===========\n";
-    debug(0) << "Best config\n";
-    for (auto &dim: best_config) {
-        debug(0) << dim.first << ":" << dim.second << " ";
-    }
-    debug(0) << '\n' << best_analy;
+    debug(0) << "Best grouping:" << best_group << '\n';
 
     return make_pair(best_config, best_analy);
 }
@@ -1006,6 +1020,12 @@ void Partitioner::group(Partitioner::Level level) {
     // Partition the pipeline by iteratively merging groups until a fixpoint
     bool fixpoint = false;
     while(!fixpoint) {
+        int64_t pre_merge_arith_cost = 0;
+        int64_t pre_merge_mem_cost = 0;
+
+        std::tie(pre_merge_arith_cost,
+                 pre_merge_mem_cost) = get_pipeline_cost();
+
         fixpoint = true;
         vector<pair<string, string>> cand;
         for (const pair<FStage, Group> &g: groups) {
@@ -1053,7 +1073,9 @@ void Partitioner::group(Partitioner::Level level) {
             }
         }
 
-        debug(0) << "\nCurrent grouping candidates:" << '\n';
+        debug(0) << "\n============================" << '\n';
+        debug(0) << "Current grouping candidates:" << '\n';
+        debug(0) << "============================" << '\n';
         for (auto& p: cand) {
             debug(0) << "[" << p.first << "," << p.second << "]" << '\n';
         }
@@ -1110,6 +1132,16 @@ void Partitioner::group(Partitioner::Level level) {
                 }
             }
         }
+
+        int64_t post_merge_arith_cost = 0;
+        int64_t post_merge_mem_cost = 0;
+
+        std::tie(post_merge_arith_cost,
+                 post_merge_mem_cost) = get_pipeline_cost();
+
+        disp_pipeline_costs();
+        internal_assert((pre_merge_arith_cost + pre_merge_mem_cost) >=
+                        (post_merge_mem_cost + post_merge_arith_cost));
     }
 }
 
@@ -1166,7 +1198,7 @@ Partitioner::get_bounds_from_tile_sizes(const FStage &s,
     return bounds;
 }
 
-Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
+Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_analysis) {
     // Estimating the number of accesses to slow memory
 
     // 1) Assume all loads are a miss if the working set does not fit in cache.
@@ -1261,16 +1293,18 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     g_analy.mem_cost = -1;
     g_analy.parallelism = -1;
 
-    debug(0) << "==============\n";
-    debug(0) << "Group Analysis\n";
-    debug(0) << "==============\n";
-    debug(0) << g;
-    debug(0) << "\nProd reg:" << '\n';
-    disp_regions(prod_reg);
-    debug(0) << "Input reg:" << '\n';
-    disp_regions(input_reg);
-    debug(0) << "Group reg:" << '\n';
-    disp_regions(group_reg);
+    if (show_analysis) {
+        debug(0) << "==============\n";
+        debug(0) << "Group Analysis\n";
+        debug(0) << "==============\n";
+        debug(0) << g;
+        debug(0) << "\nProd reg:" << '\n';
+        disp_regions(prod_reg);
+        debug(0) << "Input reg:" << '\n';
+        disp_regions(input_reg);
+        debug(0) << "Group reg:" << '\n';
+        disp_regions(group_reg);
+    }
 
     // Aggregate costs for intermediate functions in a tile and the
     // tile output
@@ -1301,27 +1335,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
     combine_load_costs(group_load_costs, out_load_costs);
 
-    // Intermediates of inlined pure fuctions should not show up in
-    // the group_load_costs.
-    // TODO: add an assert that checks for that
-    debug(0) << "\nDetailed loads:\n";
-    for (auto &f_load: group_load_costs) {
-        debug(0) << "(" << f_load.first << "," << f_load.second << ")";
-    }
-    debug(0) << '\n';
-
-    // Get the sizes of the buffers from which loads occur
-    debug(0) << "\nLoad buffer sizes:\n";
-    for (auto &f_load: group_load_costs) {
-        if (group_mem.find(f_load.first) != group_mem.end() &&
-            f_load.first != g.output.func.name()) {
-            debug(0) << "(" << f_load.first << "," << conc_reg[f_load.first] << ")";
-        } else {
-            debug(0) << "(" << f_load.first << "," << pipeline_bounds[f_load.first] << ")";
-        }
-    }
-    debug(0) << '\n';
-
     int64_t per_tile_arith_cost = group_cost.first;
     int64_t per_tile_mem_cost = 0;
 
@@ -1347,7 +1360,11 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     // TODO: Use smooth step curve from Jon
 
     // Linear dropoff
-    debug(0) << "\nCost factor:\n";
+
+    // Intermediates of inlined pure fuctions should not show up in
+    // the group_load_costs.
+    // TODO: add an assert that checks for that
+
     float load_slope = (float)arch_params.balance/arch_params.last_level_size;
     for (auto &f_load: group_load_costs) {
         int64_t footprint = 0;
@@ -1367,13 +1384,46 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
         float cost_factor =
                 std::min(1 + footprint * load_slope, (float)arch_params.balance);
-        debug(0) << "(" << f_load.first << "," << cost_factor << ")";
         per_tile_mem_cost += cost_factor * f_load.second;
     }
-    debug(0) << '\n';
 
-    debug(0) << "\nPer tile mem cost:" << per_tile_mem_cost << '\n';
-    debug(0) << "Per tile arith cost:" << per_tile_arith_cost << '\n';
+    if (show_analysis) {
+        debug(0) << "\nDetailed loads:\n";
+        for (auto &f_load: group_load_costs) {
+            debug(0) << "(" << f_load.first << "," << f_load.second << ")";
+        }
+        debug(0) << '\n';
+
+        // Get the sizes of the buffers from which loads occur
+        debug(0) << "\nLoad buffer sizes:\n";
+        for (auto &f_load: group_load_costs) {
+            Box buffer;
+            int64_t footprint = 0;
+            if (group_mem.find(f_load.first) != group_mem.end() &&
+                f_load.first != g.output.func.name()) {
+                footprint = cost_model.region_size(f_load.first,
+                                                   conc_reg[f_load.first]);
+                buffer = conc_reg[f_load.first];
+            } else {
+                if (dep_analy.env.find(f_load.first) != dep_analy.env.end()) {
+                    footprint = cost_model.region_size(f_load.first,
+                                                       pipeline_bounds[f_load.first]);
+                } else {
+                    footprint = cost_model.input_region_size(f_load.first,
+                                                             pipeline_bounds[f_load.first]);
+                }
+                buffer = pipeline_bounds[f_load.first];
+            }
+            float cost_factor =
+                    std::min(1 + footprint * load_slope, (float)arch_params.balance);
+            debug(0) << "(" << f_load.first << "," << buffer << ","  << cost_factor << ")";
+        }
+        debug(0) << '\n';
+
+
+        debug(0) << "\nPer tile mem cost:" << per_tile_mem_cost << '\n';
+        debug(0) << "Per tile arith cost:" << per_tile_arith_cost << '\n';
+    }
 
     g_analy.mem_cost = per_tile_mem_cost * estimate_tiles;
     g_analy.arith_cost = per_tile_arith_cost * estimate_tiles;
@@ -1404,7 +1454,7 @@ Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
 }
 
 Partitioner::EvalConfig
-Partitioner::evaluate_choice(const FusionChoice& choice,
+Partitioner::evaluate_choice(const FusionChoice &choice,
                              Partitioner::Level level) {
 
     // Create a group that reflects the fusion choice and evaluate the cost
@@ -1449,18 +1499,19 @@ Partitioner::evaluate_choice(const FusionChoice& choice,
         for (const string& f: cons.inlined)
             fused.inlined.insert(f);
 
-        fused_analy = analyze_group(fused);
+        fused_analy = analyze_group(fused, false);
         best_tile_config = tile_sizes;
 
     } else {
         pair<map<string, int>, GroupAnalysis> config =
-                                    find_best_tile_config(fused);
+                                    find_best_tile_config(fused, level);
         best_tile_config = config.first;
         fused_analy = config.second;
     }
 
+    bool no_redundant_work = false;
     int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
-                                       false, true);
+                                       no_redundant_work, true);
 
     /*
     TODO: come up with a better assert. Currently this will hit when
@@ -1529,19 +1580,15 @@ int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
             prod_par = -1;
             break;
         }
-        //debug(0) << prod_g;
     }
-
-    debug(0) << "Prod groups:" << '\n';
-    debug(0) << "Cons group:" << cons_group << '\n';
 
     GroupAnalysis no_fuse_analy;
     no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
     no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
     no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
 
-    debug(0) << "\nNo fuse analysis:" << no_fuse_analy << '\n';
-    debug(0) << "fuse analysis:" << fused_analy << '\n';
+    debug(0) <<  "\nNo fuse analysis" << no_fuse_analy;
+    debug(0) <<  "fuse analysis" << fused_analy;
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
                             ensure_parallelism);
