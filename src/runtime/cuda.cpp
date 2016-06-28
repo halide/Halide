@@ -3,6 +3,7 @@
 #include "printer.h"
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
+#include "scoped_mutex_lock.h"
 
 #define INLINE inline __attribute__((always_inline))
 
@@ -73,8 +74,8 @@ WEAK const char *get_error_name(CUresult error);
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
 
 // A cuda context defined in this module with weak linkage
-CUcontext WEAK context = 0;
-volatile int WEAK thread_lock = 0;
+WEAK CUcontext context = 0;
+WEAK halide_mutex context_lock = { { 0 } };
 
 }}}} // namespace Halide::Runtime::Internal::Cuda
 
@@ -97,15 +98,14 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
 
-    halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+    halide_mutex_lock(&context_lock);
 
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
     if (context == NULL && create) {
         CUresult error = create_cuda_context(user_context, &context);
         if (error != CUDA_SUCCESS) {
-            __sync_lock_release(&thread_lock);
+            halide_mutex_unlock(&context_lock);
             return error;
         }
     }
@@ -115,7 +115,7 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 }
 
 WEAK int halide_cuda_release_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    halide_mutex_unlock(&context_lock);
     return 0;
 }
 

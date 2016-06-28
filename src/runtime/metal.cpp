@@ -1,5 +1,4 @@
 #include "HalideRuntimeMetal.h"
-#include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "printer.h"
 
@@ -181,7 +180,7 @@ WEAK void *buffer_contents(mtl_buffer *buffer) {
 
 extern WEAK halide_device_interface metal_device_interface;
 
-volatile int WEAK thread_lock = 0;
+WEAK halide_mutex context_lock = { { 0 } };
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
 
@@ -213,8 +212,7 @@ extern "C" {
 //   previous call (if any) has not yet been released via halide_release_metal_context.
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
                                       mtl_command_queue *&queue_ret, bool create) {
-    halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+    halide_mutex_lock(&context_lock);
 
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
@@ -225,7 +223,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
         device = (mtl_device *)MTLCreateSystemDefaultDevice();
         if (device == 0) {
             error(user_context) << "Metal: cannot allocate system default device.\n";
-            __sync_lock_release(&thread_lock);
+            halide_mutex_unlock(&context_lock);
             return -1;
         }
         debug(user_context) <<  "Metal - Allocating: new_command_queue\n";
@@ -234,7 +232,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
             error(user_context) << "Metal: cannot allocate command queue.\n";
             release_ns_object(device);
             device = 0;
-            __sync_lock_release(&thread_lock);
+            halide_mutex_unlock(&context_lock);
             return -1;
         }
     }
@@ -249,7 +247,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
 }
 
 WEAK int halide_metal_release_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    halide_mutex_unlock(&context_lock);
     return 0;
 }
 

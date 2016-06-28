@@ -15,10 +15,7 @@ extern "C" char* *dlerror();
 
 #include "mini_renderscript.h"
 
-namespace Halide {
-namespace Runtime {
-namespace Internal {
-namespace Renderscript {
+namespace Halide { namespace Runtime { namespace Internal { namespace Renderscript {
 
 extern WEAK halide_device_interface renderscript_device_interface;
 
@@ -27,13 +24,11 @@ WEAK int create_renderscript_context(void *user_context, RsDevice *dev, RsContex
 
 // An Renderscript context/device/synchronization lock defined in
 // this module with weak linkage
-RsContext WEAK context = 0;
-RsDevice WEAK device = 0;
-volatile int WEAK thread_lock = 0;
-}
-}
-}
-}  // namespace Halide::Runtime::Internal:Renderscript:
+WEAK RsContext context = 0;
+WEAK RsDevice device = 0;
+WEAK halide_mutex context_lock = { { 0 } };
+
+}}}}  // namespace Halide::Runtime::Internal:Renderscript:
 
 using namespace Halide::Runtime::Internal::Renderscript;
 
@@ -57,16 +52,15 @@ WEAK int halide_renderscript_acquire_context(void *user_context, RsDevice *dev,
                                    RsContext *ctx, bool create = true) {
     halide_assert(user_context, dev != NULL);
     halide_assert(user_context, ctx != NULL);
-    halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) {
-    }
+
+    halide_mutex_lock(&context_lock);
 
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
     if (context == NULL && create) {
         int error = create_renderscript_context(user_context, &device, &context);
         if (error != RS_SUCCESS) {
-            __sync_lock_release(&thread_lock);
+            halide_mutex_unlock(&context_lock);
             return error;
         }
     }
@@ -77,7 +71,7 @@ WEAK int halide_renderscript_acquire_context(void *user_context, RsDevice *dev,
 }
 
 WEAK int halide_renderscript_release_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    halide_mutex_unlock(&context_lock);
     return 0;
 }
 

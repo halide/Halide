@@ -1,11 +1,9 @@
 #include "HalideRuntimeOpenCL.h"
-#include "scoped_spin_lock.h"
 #include "device_interface.h"
 #include "printer.h"
-
-#include "mini_cl.h"
-
+#include "scoped_mutex_lock.h"
 #include "cuda_opencl_shared.h"
+#include "mini_cl.h"
 
 #define INLINE inline __attribute__((always_inline))
 
@@ -73,16 +71,16 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
 // An OpenCL context/queue/synchronization lock defined in
 // this module with weak linkage
-cl_context WEAK context = 0;
-cl_command_queue WEAK command_queue = 0;
-volatile int WEAK thread_lock = 0;
+WEAK cl_context context = 0;
+WEAK cl_command_queue command_queue = 0;
+WEAK halide_mutex context_lock = { { 0 } };
 
 WEAK char platform_name[256];
-WEAK int platform_name_lock = 0;
+WEAK halide_mutex platform_name_lock = { { 0 } };
 WEAK bool platform_name_initialized = false;
 
 WEAK char device_type[256];
-WEAK int device_type_lock = 0;
+WEAK halide_mutex device_type_lock = { { 0 } };
 WEAK bool device_type_initialized = false;
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL
@@ -104,7 +102,7 @@ WEAK void halide_opencl_set_platform_name(const char *n) {
 }
 
 WEAK const char *halide_opencl_get_platform_name(void *user_context) {
-    ScopedSpinLock lock(&platform_name_lock);
+    ScopedMutexLock lock(&platform_name_lock);
     if (!platform_name_initialized) {
         const char *name = getenv("HL_OCL_PLATFORM_NAME");
         halide_opencl_set_platform_name(name);
@@ -123,7 +121,7 @@ WEAK void halide_opencl_set_device_type(const char *n) {
 }
 
 WEAK const char *halide_opencl_get_device_type(void *user_context) {
-    ScopedSpinLock lock(&device_type_lock);
+    ScopedMutexLock lock(&device_type_lock);
     if (!device_type_initialized) {
         const char *name = getenv("HL_OCL_DEVICE_TYPE");
         halide_opencl_set_device_type(name);
@@ -146,8 +144,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     halide_assert(user_context, ctx != NULL);
     halide_assert(user_context, q != NULL);
 
-    halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
+    halide_mutex_lock(&context_lock);
 
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
@@ -155,7 +152,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     if (!context && create) {
         cl_int error = create_opencl_context(user_context, &context, &command_queue);
         if (error != CL_SUCCESS) {
-            __sync_lock_release(&thread_lock);
+            halide_mutex_unlock(&context_lock);
             return error;
         }
     }
@@ -166,7 +163,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
 }
 
 WEAK int halide_release_cl_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
+    halide_mutex_unlock(&context_lock);
     return 0;
 }
 
