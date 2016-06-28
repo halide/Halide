@@ -308,6 +308,8 @@ public:
         }
         if (device_code.target().has_feature(Target::HVX_128)) {
             hex_command += " -mhvx-double";
+        } else {
+            hex_command += " -mhvx";
         }
         hex_command += " -o " + tmp_shared_object.pathname();
         int result = system(hex_command.c_str());
