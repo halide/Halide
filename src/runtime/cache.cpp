@@ -365,10 +365,9 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
     for (int32_t i = 0; i < tuple_count; i++) {
         buffer_t *buf = tuple_buffers[i];
-        size_t buffer_size = buf_size(buf);
 
         // See documentation on extra_bytes_host_bytes
-        buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size + extra_bytes_host_bytes));
+        buf->host = ((uint8_t *)halide_malloc(user_context, buf_size(buf) + extra_bytes_host_bytes));
         if (buf->host == NULL) {
             for (int32_t j = i; j > 0; j--) {
                 halide_free(user_context, get_pointer_to_header(tuple_buffers[j - 1]->host));
