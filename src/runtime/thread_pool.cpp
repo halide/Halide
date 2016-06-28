@@ -10,6 +10,11 @@ WEAK void halide_thread_pool_cleanup() {
 }
 }
 
+namespace Halide { namespace Runtime { namespace Internal {
+WEAK halide_do_task_t custom_do_task = default_do_task;
+WEAK halide_do_par_for_t custom_do_par_for = default_do_par_for;
+}}}
+
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
     halide_do_task_t result = custom_do_task;
     custom_do_task = f;
