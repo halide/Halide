@@ -92,7 +92,7 @@ WEAK halide_do_par_for_t custom_do_par_for = default_do_par_for;
 
 extern "C" {
 
-WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
     if (mutex->once != 0) {
         dispatch_release(mutex->semaphore);
