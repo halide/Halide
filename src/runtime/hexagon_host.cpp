@@ -135,6 +135,11 @@ using namespace Halide::Runtime::Internal::Hexagon;
 
 extern "C" {
 
+WEAK bool halide_is_hexagon_available(void *user_context) {
+    int result = init_hexagon_runtime(user_context);
+    return result == 0;
+}
+
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, uint64_t code_size) {
     int result = init_hexagon_runtime(user_context);

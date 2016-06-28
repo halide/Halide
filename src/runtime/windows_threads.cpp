@@ -50,7 +50,6 @@ struct spawned_thread {
 WEAK void *spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
-    free(t);
     return NULL;
 }
 
@@ -111,6 +110,16 @@ WEAK void halide_cond_wait(struct halide_cond *cond_arg, struct halide_mutex *mu
     ConditionVariable *cond = (ConditionVariable *)cond_arg;
     windows_mutex *mutex = (windows_mutex *)mutex_arg;
     SleepConditionVariableCS(cond, &mutex->critical_section, -1);
+}
+
+WEAK int halide_host_cpu_count() {
+    // Apparently a standard windows environment variable
+    char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+    if (num_cores) {
+        return atoi(num_cores);
+    } else {
+        return 8;
+    }
 }
 
 } // extern "C"

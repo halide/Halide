@@ -36,7 +36,7 @@ WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     return NULL;
 }
 
-WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
 }
 
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
