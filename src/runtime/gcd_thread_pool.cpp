@@ -30,9 +30,14 @@ WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
 
 }
 
-WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
+WEAK halide_thread *halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
     dispatch_async_f(dispatch_get_global_queue(0, 0), closure, f);
+    return NULL;
 }
+
+// Join thread and condition variables intentionally unimplemented for
+// now on OS X. Use of them will result in linker errors. Currently
+// only the common thread pool uses them.
 
 namespace Halide { namespace Runtime { namespace Internal {
 
@@ -109,7 +114,8 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
 WEAK void halide_shutdown_thread_pool() {
 }
 
-WEAK void halide_set_num_threads(int) {
+WEAK int halide_set_num_threads(int) {
+    return 1;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
