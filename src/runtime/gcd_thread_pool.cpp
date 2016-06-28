@@ -30,9 +30,33 @@ WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
 
 }
 
+namespace Halide { namespace Runtime { namespace Internal {
+struct spawned_thread {
+    void (*f)(void *);
+    void *closure;
+    dispatch_semaphore_t join_semaphore;
+};
+WEAK void spawn_thread_helper(void *arg) {
+    spawned_thread *t = (spawned_thread *)arg;
+    t->f(t->closure);
+    dispatch_semaphore_signal(t->join_semaphore);
+}
+}}} // namespace Halide::Runtime::Internal
+
+
 WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
-    dispatch_async_f(dispatch_get_global_queue(0, 0), closure, f);
+    spawned_thread *thread = (spawned_thread *)malloc(sizeof(spawned_thread));
+    thread->f = f;
+    thread->closure = closure;
+    thread->join_semaphore = dispatch_semaphore_create(0);
+    dispatch_async_f(dispatch_get_global_queue(0, 0), thread, spawn_thread_helper);
     return NULL;
+}
+
+WEAK void halide_join_thread(halide_thread *thread_arg) {
+    spawned_thread *thread = (spawned_thread *)thread_arg;
+    dispatch_semaphore_wait(thread->join_semaphore, DISPATCH_TIME_FOREVER);
+    free(thread);
 }
 
 // Join thread and condition variables intentionally unimplemented for
