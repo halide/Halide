@@ -232,9 +232,6 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     return job.exit_status;
 }
 
-WEAK halide_do_task_t custom_do_task = default_do_task;
-WEAK halide_do_par_for_t custom_do_par_for = default_do_par_for;
-
 }}} // namespace Halide::Runtime::Internal
 
 using namespace Halide::Runtime::Internal;
