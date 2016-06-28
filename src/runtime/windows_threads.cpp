@@ -113,4 +113,14 @@ WEAK void halide_cond_wait(struct halide_cond *cond_arg, struct halide_mutex *mu
     SleepConditionVariableCS(cond, &mutex->critical_section, -1);
 }
 
+WEAK int halide_host_cpu_count() {
+    // Apparently a standard windows environment variable
+    char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+    if (num_cores) {
+        return atoi(num_cores);
+    } else {
+        return 8;
+    }
+}
+
 } // extern "C"
