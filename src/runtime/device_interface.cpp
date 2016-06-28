@@ -211,7 +211,7 @@ WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const ha
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
-        debug(user_context) << "halide_device_malloc doesn't support switching interfaces\n";
+        error(user_context) << "halide_device_malloc doesn't support switching interfaces\n";
         return halide_error_code_device_malloc_failed;
     }
 
@@ -280,7 +280,7 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
-        debug(user_context) << "halide_device_and_host_malloc doesn't support switching interfaces\n";
+        error(user_context) << "halide_device_and_host_malloc doesn't support switching interfaces\n";
         return halide_error_code_device_malloc_failed;
     }
 
