@@ -442,15 +442,6 @@ struct Partitioner {
         }
     };
 
-    struct EvalConfig {
-        map<string, int> tile_sizes;
-        int64_t benefit;
-        EvalConfig(const map<string, int> &_tile_sizes, int64_t _benefit) :
-                   tile_sizes(_tile_sizes), benefit(_benefit) {}
-    };
-
-    map<FusionChoice, EvalConfig> fusion_cache;
-
     struct Group {
         // The output stage representing the group
         FStage output;
@@ -513,6 +504,16 @@ struct Partitioner {
             return stream;
         }
     };
+
+    struct EvalConfig {
+        map<string, int> tile_sizes;
+        GroupAnalysis analy;
+        EvalConfig(const map<string, int> &_tile_sizes,
+                   const GroupAnalysis &_analy) :
+                   tile_sizes(_tile_sizes), analy(_analy) {}
+    };
+
+    map<FusionChoice, EvalConfig> fusion_cache;
 
     map<FStage, Group> groups;
     map<FStage, GroupAnalysis> group_costs;
@@ -591,7 +592,7 @@ struct Partitioner {
 
     EvalConfig evaluate_choice(const FusionChoice &fuse, Partitioner::Level level);
 
-    Group fuse_groups(Group &g1, Group &g2);
+    Group fuse_groups(const Group &g1, const Group &g2);
 
     GroupAnalysis analyze_group(const Group &g, bool show_analysis);
 
@@ -626,9 +627,7 @@ struct Partitioner {
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
                              bool no_redundant_work, bool ensure_parallelism);
 
-    int64_t estimate_benefit(const vector<Group> &prod_groups,
-                             const Group &cons_group,
-                             const GroupAnalysis &fused_analy,
+    int64_t estimate_benefit(const vector<pair<FusionChoice, EvalConfig>> &choices,
                              bool no_redundant_work, bool ensure_parallelism);
 
     void initialize_groups_inline();
@@ -843,7 +842,6 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
     int64_t best_benefit = 0;
     for (auto &p: cands) {
         // Compute the aggregate benefit for inlining into all the children
-        int64_t overall_benefit = 0;
         vector<pair<FusionChoice, EvalConfig>> choices;
 
         Function prod_f = dep_analy.env.at(p.first);
@@ -853,7 +851,8 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
 
         for (const FStage &c: children[prod]) {
 
-            EvalConfig best_config(map<string, int>(), 0);
+            GroupAnalysis tmp;
+            EvalConfig best_config(map<string, int>(), tmp);
             FusionChoice cand_choice(prod_f.name(), c);
 
             // Check if the pair has been evaluated for inline fusion before
@@ -868,18 +867,10 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
                 fusion_cache.insert(make_pair(cand_choice, best_config));
             }
 
-            // Conservative strategy that only goes ahead with the fusion if all the
-            // fusions into the consumers are beneficial
-            // TODO: Create a test where this assumption breaks
-            if (best_config.benefit < 0) {
-                choices.push_back(make_pair(cand_choice, best_config));
-                overall_benefit = -1;
-                break;
-            } else {
-                choices.push_back(make_pair(cand_choice, best_config));
-                overall_benefit += best_config.benefit;
-            }
+            choices.push_back(make_pair(cand_choice, best_config));
         }
+
+        int64_t overall_benefit = estimate_benefit(choices, false, true);
 
         for (auto &choice: choices) {
             debug(0) << "Cand choice:" << choice.first;
@@ -1434,21 +1425,21 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     return g_analy;
 }
 
-Partitioner::Group Partitioner::fuse_groups(Group& prod_group,
-                                            Group& cons_group) {
+Partitioner::Group Partitioner::fuse_groups(const Group &prod_group,
+                                            const Group &cons_group) {
 
     vector<FStage> fused_members;
-    for (auto& s: prod_group.members)
+    for (auto &s: prod_group.members)
         fused_members.push_back(s);
-    for (auto& s: cons_group.members)
+    for (auto &s: cons_group.members)
         fused_members.push_back(s);
 
     Group fused_group(cons_group.output, fused_members);
 
-    for (auto& f: prod_group.inlined)
+    for (auto &f: prod_group.inlined)
         fused_group.inlined.insert(f);
-    for (auto& f: cons_group.inlined)
-        cons_group.inlined.insert(f);
+    for (auto &f: cons_group.inlined)
+        fused_group.inlined.insert(f);
 
     return fused_group;
 }
@@ -1462,7 +1453,8 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
     Function prod_f = dep_analy.env.at(choice.prod);
     int num_prod_stages = prod_f.updates().size() + 1;
     vector<Group> prod_groups;
-    for (int s = 0 ; s < num_prod_stages; s++) {
+
+    for (int s = 0; s < num_prod_stages; s++) {
         FStage prod_s(prod_f, s);
         prod_groups.push_back(groups.at(prod_s));
     }
@@ -1492,14 +1484,19 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
         fused.tile_sizes = tile_sizes;
 
         for (auto &prod_g: prod_groups) {
-            for (const FStage& s: prod_g.members)
+            for (const FStage &s: prod_g.members)
                 fused.inlined.insert(s.func.name());
         }
 
-        for (const string& f: cons.inlined)
+        for (const string &f: cons.inlined) {
             fused.inlined.insert(f);
+        }
+
+        debug(0) << "Inlined fused group:" << fused;
 
         fused_analy = analyze_group(fused, false);
+        debug(0) << "\nInlined analysis:" << fused_analy;
+
         best_tile_config = tile_sizes;
 
     } else {
@@ -1509,9 +1506,11 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
         fused_analy = config.second;
     }
 
-    bool no_redundant_work = false;
+    /*
+    debug(0) << "Cons group:" << cons;
     int64_t benefit = estimate_benefit(prod_groups, cons, fused_analy,
                                        no_redundant_work, true);
+    */
 
     /*
     TODO: come up with a better assert. Currently this will hit when
@@ -1521,7 +1520,7 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
                      (benefit > 0 && best_tile_config.size() > 0));
     */
 
-    return EvalConfig(best_tile_config, benefit);
+    return EvalConfig(best_tile_config, fused_analy);
 }
 
 int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
@@ -1554,41 +1553,64 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
     return mem_benefit + arith_benefit;
 }
 
-int64_t Partitioner::estimate_benefit(const vector<Group> &prod_groups,
-                                      const Group &cons_group,
-                                      const GroupAnalysis &fused_analy,
-                                      bool no_redundant_work,
-                                      bool ensure_parallelism) {
+int64_t Partitioner::estimate_benefit(
+        const vector<pair<FusionChoice, EvalConfig>> &choices,
+        bool no_redundant_work, bool ensure_parallelism) {
 
-    internal_assert(group_costs.find(cons_group.output) != group_costs.end());
-    GroupAnalysis cons_analy = group_costs.at(cons_group.output);
+    GroupAnalysis fused_analy;
+    fused_analy.arith_cost = 0;
+    fused_analy.mem_cost = 0;
+    fused_analy.parallelism = std::numeric_limits<int64_t>::max();
 
-    int64_t prod_arith_cost = 0;
-    int64_t prod_mem_cost = 0;
-    int64_t prod_par = std::numeric_limits<int64_t>::max();
+    set<FStage> no_fuse_groups;
 
-    for (auto &prod_g: prod_groups) {
-        internal_assert(group_costs.find(prod_g.output) != group_costs.end());
-        GroupAnalysis analyg = group_costs.at(prod_g.output);
+    for (auto &choice: choices) {
+
+        Function prod_f = dep_analy.env.at(choice.first.prod);
+        int num_prod_stages = prod_f.updates().size() + 1;
+        for (int s = 0; s < num_prod_stages; s++) {
+            FStage prod_s(prod_f, s);
+            no_fuse_groups.insert(prod_s);
+        }
+        no_fuse_groups.insert(choice.first.cons);
+
+        GroupAnalysis analyg = choice.second.analy;
         if (analyg.arith_cost >= 0) {
-            prod_arith_cost += analyg.arith_cost;
-            prod_mem_cost += analyg.mem_cost;
-            prod_par = std::min(prod_par, analyg.parallelism);
+            fused_analy.arith_cost += analyg.arith_cost;
+            fused_analy.mem_cost += analyg.mem_cost;
+            fused_analy.parallelism = std::min(fused_analy.parallelism,
+                                              analyg.parallelism);
         } else {
-            prod_arith_cost = -1;
-            prod_mem_cost = -1;
-            prod_par = -1;
+            fused_analy.arith_cost = -1;
+            fused_analy.mem_cost= -1;
+            fused_analy.parallelism = -1;
             break;
         }
     }
 
     GroupAnalysis no_fuse_analy;
-    no_fuse_analy.arith_cost = prod_arith_cost + cons_analy.arith_cost;
-    no_fuse_analy.mem_cost = prod_mem_cost + cons_analy.mem_cost;
-    no_fuse_analy.parallelism = std::min(prod_par, cons_analy.parallelism);
+    no_fuse_analy.arith_cost = 0;
+    no_fuse_analy.mem_cost = 0;
+    no_fuse_analy.parallelism = std::numeric_limits<int64_t>::max();
 
-    debug(0) <<  "\nNo fuse analysis" << no_fuse_analy;
-    debug(0) <<  "fuse analysis" << fused_analy;
+    for (auto &g: no_fuse_groups) {
+        internal_assert(group_costs.find(g) != group_costs.end());
+        GroupAnalysis analyg = group_costs.at(g);
+        if (analyg.arith_cost >= 0) {
+            no_fuse_analy.arith_cost += analyg.arith_cost;
+            no_fuse_analy.mem_cost += analyg.mem_cost;
+            no_fuse_analy.parallelism = std::min(no_fuse_analy.parallelism,
+                                                 analyg.parallelism);
+        } else {
+            no_fuse_analy.arith_cost = -1;
+            no_fuse_analy.mem_cost = -1;
+            no_fuse_analy.parallelism = -1;
+            break;
+        }
+    }
+
+    debug(0) << "\nNo fuse analy:" << no_fuse_analy;
+    debug(0) << "fuse analy:" << fused_analy;
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
                             ensure_parallelism);
