@@ -50,7 +50,6 @@ struct spawned_thread {
 WEAK void *spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
-    free(t);
     return NULL;
 }
 
