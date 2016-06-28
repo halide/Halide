@@ -85,6 +85,8 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void halide_mutex_destroy(halide_mutex *) {}
+
 void *halide_get_symbol(const char *name) {
     return dlsym(RTLD_DEFAULT, name);
 }

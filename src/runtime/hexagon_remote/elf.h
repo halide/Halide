@@ -102,6 +102,10 @@ extern "C" int __hexagon_divdf3;
 extern "C" int __hexagon_adddf3;
 extern "C" int __hexagon_divsf3;
 extern "C" int __hexagon_udivdi3;
+extern "C" int __hexagon_udivsi3;
+extern "C" int __hexagon_umodsi3;
+extern "C" int __hexagon_divsi3;
+extern "C" int __hexagon_modsi3;
 
 struct elf_t {
     // The object file in memory
@@ -574,6 +578,7 @@ struct elf_t {
             {"abort", (char *)(&abort)},
             {"memcpy", (char *)(&memcpy)},
             {"memmove", (char *)(&memmove)},
+            {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
             {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
             {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
             {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
@@ -581,6 +586,10 @@ struct elf_t {
             {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
             {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
             {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
+            {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
+            {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
+            {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
+            {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
             {NULL, NULL} // Sentinel
         };
 

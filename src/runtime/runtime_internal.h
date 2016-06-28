@@ -126,6 +126,8 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names);
 
+WEAK int halide_host_cpu_count();
+
 struct halide_filter_metadata_t;
 struct _halide_runtime_internal_registered_filter_t {
     // This is a _halide_runtime_internal_registered_filter_t, but

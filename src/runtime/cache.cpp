@@ -555,7 +555,7 @@ WEAK void halide_memoization_cache_cleanup() {
         }
     }
     current_cache_size = 0;
-    halide_mutex_cleanup(&memoization_lock);
+    halide_mutex_destroy(&memoization_lock);
 }
 
 namespace {
