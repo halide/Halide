@@ -50,7 +50,7 @@ WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     thread->closure = closure;
     thread->join_semaphore = dispatch_semaphore_create(0);
     dispatch_async_f(dispatch_get_global_queue(0, 0), thread, spawn_thread_helper);
-    return NULL;
+    return (halide_thread *)thread;
 }
 
 WEAK void halide_join_thread(halide_thread *thread_arg) {
