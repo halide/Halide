@@ -15,6 +15,10 @@ typedef int halide_hexagon_handle_t;
 
 extern const struct halide_device_interface *halide_hexagon_device_interface();
 
+/** Check if the Hexagon runtime (libhalide_hexagon_host.so) is
+ * available. If it is not, pipelines using Hexagon will fail. */
+extern bool halide_is_hexagon_available(void *user_context);
+
 /** The device handle for Hexagon is simply a pointer and size, stored
  * in the dev field of the buffer_t. If the buffer is allocated in a
  * particular way (ion_alloc), the buffer will be shared with Hexagon
@@ -55,7 +59,7 @@ extern int halide_hexagon_run(void *user_context,
 extern int halide_hexagon_device_release(void* user_context);
 
 /**
- * This is essentially a wrapper for 
+ * This is essentially a wrapper for
  *
  *    halide_get_library_symbol(halide_load_library("libhalide_hexagon_host.so"), name)
  *
