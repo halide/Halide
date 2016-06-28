@@ -1045,7 +1045,8 @@ void Partitioner::group(Partitioner::Level level) {
                     string prod_name = prod_f.name();
                     string cons_name = (*child_funcs.begin());
                     cand.push_back(make_pair(prod_name, cons_name));
-                } else if(num_children > 0  && level == Partitioner::INLINE) {
+                } else if(num_children > 0  && level == Partitioner::INLINE &&
+                          prod_f.is_pure()) {
                     string prod_name = prod_f.name();
                     cand.push_back(make_pair(prod_name, ""));
                 }
@@ -1346,6 +1347,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
     // TODO: Use smooth step curve from Jon
 
     // Linear dropoff
+    debug(0) << "\nCost factor:\n";
     float load_slope = (float)arch_params.balance/arch_params.last_level_size;
     for (auto &f_load: group_load_costs) {
         int64_t footprint = 0;
@@ -1365,8 +1367,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g) {
 
         float cost_factor =
                 std::min(1 + footprint * load_slope, (float)arch_params.balance);
+        debug(0) << "(" << f_load.first << "," << cost_factor << ")";
         per_tile_mem_cost += cost_factor * f_load.second;
     }
+    debug(0) << '\n';
 
     debug(0) << "\nPer tile mem cost:" << per_tile_mem_cost << '\n';
     debug(0) << "Per tile arith cost:" << per_tile_arith_cost << '\n';

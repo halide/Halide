@@ -362,9 +362,10 @@ RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines){
     for (auto &f: regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function
-        if (inlines.find(f.first) != inlines.end() &&
-            env.at(f.first).is_pure())
+        if (inlines.find(f.first) != inlines.end()) {
+            internal_assert(env.at(f.first).is_pure());
             continue;
+        }
 
         pair<int64_t, int64_t> cost = region_cost(f.first, f.second, inlines);
         if (cost.first < 0) {
@@ -489,9 +490,10 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
     for (auto &r: regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function
-        if (inlines.find(r.first) != inlines.end() &&
-            env.at(r.first).is_pure())
+        if (inlines.find(r.first) != inlines.end()) {
+            internal_assert(env.at(r.first).is_pure());
             continue;
+        }
 
         map<string, int64_t> partial_load_costs =
                 detailed_load_costs(r.first, r.second, inlines);
