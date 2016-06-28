@@ -12,7 +12,7 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-#define CACHE_DEBUGGING 0
+#define CACHE_DEBUGGING 1
 
 #if CACHE_DEBUGGING
 WEAK void debug_print_buffer(void *user_context, const char *buf_name, const buffer_t &buf) {
@@ -35,7 +35,7 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     debug(user_context) << "Key for " << msg << "\n";
     char buf[1024];
     bool append_ellipses = false;
-    if (key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
+    if ((size_t)key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
         append_ellipses = true;
         key_size = (sizeof(buf) / 2) - 4; // room for NUL and "..."
     }
@@ -180,7 +180,7 @@ WEAK void validate_cache() {
                 << "current size " << current_cache_size
                 << " of maximum " << max_cache_size << "\n";
     int entries_in_hash_table = 0;
-    for (int i = 0; i < kHashTableSize; i++) {
+    for (size_t i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         while (entry != NULL) {
             entries_in_hash_table++;
