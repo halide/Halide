@@ -322,7 +322,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::Renderscript,
                                      DeviceAPI::OpenGLCompute,
-                                     DeviceAPI::Metal};
+                                     DeviceAPI::Metal,
+                                     DeviceAPI::Hexagon};
 
 namespace Internal {
 

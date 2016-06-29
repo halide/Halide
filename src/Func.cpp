@@ -1427,6 +1427,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 }
 
 Stage &Stage::hexagon(VarOrRVar x) {
+    invalidate_cache();
     set_dim_device_api(x, DeviceAPI::Hexagon);
     return *this;
 }
