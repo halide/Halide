@@ -678,7 +678,6 @@ void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eva
 
     child_group.tile_sizes = eval.tile_sizes;
 
-    debug(0) << "Merged group:" << child_group << '\n';
     // Update group costs
     group_costs[child] = analyze_group(child_group, false);
     /*
@@ -975,7 +974,10 @@ Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
     Group no_tile = g;
     no_tile.tile_sizes = no_tile_config;
 
+    bool show_analysis = true;
     GroupAnalysis best_analy = analyze_group(no_tile, false);
+
+    GroupAnalysis no_tile_analy = analyze_group(no_tile, show_analysis);
     map<string, int> best_config = no_tile_config;
 
     if (best_analy.arith_cost < 0) {
@@ -990,7 +992,7 @@ Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
         Group new_group = g;
         new_group.tile_sizes = config;
 
-        GroupAnalysis new_analy = analyze_group(new_group, false);
+        GroupAnalysis new_analy = analyze_group(new_group, show_analysis);
 
         bool no_redundant_work = false;
         int64_t benefit = estimate_benefit(best_analy, new_analy,
@@ -999,10 +1001,19 @@ Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
             best_config = config;
             best_analy = new_analy;
             best_group = new_group;
+            if (show_analysis) {
+                debug(0) << "Benefit relative to not tiling:" << benefit << '\n';
+                debug(0) << "Best analy:" << best_analy;
+                debug(0) << "No tile analy:" << no_tile_analy;
+                debug(0) << "arith cost:" <<
+                         (float)best_analy.arith_cost/no_tile_analy.arith_cost << "," <<
+                         "mem cost:" <<
+                         (float)best_analy.mem_cost/no_tile_analy.mem_cost << '\n';
+            }
         }
     }
 
-    debug(0) << "Best grouping:" << best_group << '\n';
+    debug(0) << "\nBest grouping:\n" << best_group << '\n';
 
     return make_pair(best_config, best_analy);
 }
@@ -1329,7 +1340,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     int64_t per_tile_arith_cost = group_cost.first;
     int64_t per_tile_mem_cost = 0;
 
-    // Old cost model left here for reference
+    // Old cost model keeping it here for reference
     /*
     if (tile_inter_size > arch_params.l1_size) {
         // Conservative estimate of accesses to memory
@@ -1373,8 +1384,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
             }
         }
 
-        float cost_factor =
-                std::min(1 + footprint * load_slope, (float)arch_params.balance);
+        int cost_factor = std::trunc(std::min(1 + footprint * load_slope,
+                                     (float)arch_params.balance));
         per_tile_mem_cost += cost_factor * f_load.second;
     }
 
@@ -1492,10 +1503,7 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
             fused.inlined.insert(f);
         }
 
-        debug(0) << "Inlined fused group:" << fused;
-
         fused_analy = analyze_group(fused, false);
-        debug(0) << "\nInlined analysis:" << fused_analy;
 
         best_tile_config = tile_sizes;
 
@@ -1609,8 +1617,10 @@ int64_t Partitioner::estimate_benefit(
         }
     }
 
+    /*
     debug(0) << "\nNo fuse analy:" << no_fuse_analy;
     debug(0) << "fuse analy:" << fused_analy;
+    */
 
     return estimate_benefit(no_fuse_analy, fused_analy, no_redundant_work,
                             ensure_parallelism);
@@ -1762,7 +1772,9 @@ string Partitioner::generate_group_cpu_schedule(
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
 
-    debug(0) << "\nScheduling group:" << g;
+    debug(0) << "\n================\n";
+    debug(0) << "Scheduling group:\n" << g;
+    debug(0) << "=================\n";
 
     // Get the definition corresponding to the stage
     Definition def = get_stage_definition(g_out,
