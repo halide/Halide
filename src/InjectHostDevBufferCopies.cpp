@@ -512,14 +512,18 @@ class InjectBufferCopies : public IRMutator {
         }
 
         string buf_name = op->name;
-        BufferInfo &buf_info(state[buf_name]);
+        {
+          BufferInfo &buf_init(state[buf_name]);
 
-        buf_info.internal = true;
-        buf_info.dev_allocated = false;
+          buf_init.internal = true;
+          buf_init.dev_allocated = false;
+        }
 
         IRMutator::visit(op);
         op = stmt.as<Allocate>();
         internal_assert(op);
+
+        BufferInfo &buf_info(state[buf_name]);
 
         // If this buffer is only ever touched on gpu, nuke the host-side allocation.
         if (!buf_info.host_touched) {
