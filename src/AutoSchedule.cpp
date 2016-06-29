@@ -879,7 +879,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
         for (auto &choice: choices) {
             debug(0) << "Cand choice:" << choice.first;
         }
-        debug(0) << "Cand Benefit:" << overall_benefit << '\n';
+        debug(0) << "Cand benefit:" << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (best_benefit < overall_benefit
@@ -895,7 +895,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
         debug(0) << "\nBest choice:" << choice.first;
     }
     if (best_choices.size() > 0) {
-        debug(0) << "Best Benefit:" << best_benefit << '\n';
+        debug(0) << "Best benefit:" << best_benefit << '\n';
     }
 
     return best_choices;
@@ -956,11 +956,15 @@ Partitioner::generate_tile_configs(const FStage &stg) {
     }
 
     // Reorder tile configurations
-    for (int i = 1; i < (1 << (tile_vars.size() - 1)); i++) {
+    for (int i = 0; i < (1 << (tile_vars.size())); i++) {
         map<string, int> tiling;
-        for (size_t j = 1; j < tile_vars.size(); j++) {
-            if (((i >> (j-1)) & 1) == 1) {
-                tiling[tile_vars[j]] = 1;
+        for (size_t j = 0; j < tile_vars.size(); j++) {
+            if (((i >> (j)) & 1) == 1) {
+                if (j == 0) {
+                    tiling[tile_vars[j]] = min_vec_dim_size;
+                } else {
+                    tiling[tile_vars[j]] = 1;
+                }
             }
         }
         tile_configs.push_back(tiling);
@@ -1002,19 +1006,21 @@ Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
         bool no_redundant_work = false;
         int64_t benefit = estimate_benefit(best_analy, new_analy,
                                            no_redundant_work, true);
+
+        if (show_analysis) {
+            debug(0) << "Benefit relative to not tiling:" << benefit << '\n';
+            debug(0) << "Best analy:" << new_analy;
+            debug(0) << "No tile analy:" << no_tile_analy;
+            debug(0) << "arith cost:" <<
+                     (float)new_analy.arith_cost/no_tile_analy.arith_cost << "," <<
+                     "mem cost:" <<
+                     (float)new_analy.mem_cost/no_tile_analy.mem_cost << '\n';
+        }
+
         if (benefit > 0) {
             best_config = config;
             best_analy = new_analy;
             best_group = new_group;
-            if (show_analysis) {
-                debug(0) << "Benefit relative to not tiling:" << benefit << '\n';
-                debug(0) << "Best analy:" << best_analy;
-                debug(0) << "No tile analy:" << no_tile_analy;
-                debug(0) << "arith cost:" <<
-                         (float)best_analy.arith_cost/no_tile_analy.arith_cost << "," <<
-                         "mem cost:" <<
-                         (float)best_analy.mem_cost/no_tile_analy.mem_cost << '\n';
-            }
         }
     }
 
@@ -1275,15 +1281,19 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // Get the regions of the pipeline required to compute a tile of the group
     DimBounds tile_bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
 
-    map<string, Box> conc_reg =
+    map<string, Box> alloc_reg =
             dep_analy.regions_required(g.output.func, g.output.stage_num,
                                        tile_bounds, group_mem, false);
+
+    map<string, Box> compute_reg =
+            dep_analy.regions_required(g.output.func, g.output.stage_num,
+                                       tile_bounds, group_mem, true);
 
     map<string, Box> group_reg, prod_reg, input_reg;
 
     // Separating into regions that belong to the group and regions that are
     // input to the group
-    for (auto &reg: conc_reg) {
+    for (auto &reg: compute_reg) {
         if (group_mem.find(reg.first) != group_mem.end() &&
             reg.first != g.output.func.name()) {
             group_reg[reg.first] = reg.second;
@@ -1385,7 +1395,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // the group_load_costs.
     // TODO: add an assert that checks for that
 
-    bool model_reuse = false;
+    bool model_reuse = true;
 
     float load_slope = (float)arch_params.balance/arch_params.last_level_size;
     for (auto &f_load: group_load_costs) {
@@ -1393,7 +1403,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         if (group_mem.find(f_load.first) != group_mem.end() &&
             f_load.first != g.output.func.name()) {
             footprint = cost_model.region_size(f_load.first,
-                                               conc_reg[f_load.first]);
+                                               alloc_reg[f_load.first]);
         } else {
             int64_t initial_footprint = 0;
             if (dep_analy.env.find(f_load.first) != dep_analy.env.end()) {
@@ -1403,7 +1413,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
                                                pipeline_bounds.at(f_load.first));
                 // Subsequent loads
                 footprint = cost_model.region_size(f_load.first,
-                                                   conc_reg.at(f_load.first));
+                                                   alloc_reg.at(f_load.first));
             } else {
                 // Initial loads
                 initial_footprint =
@@ -1415,7 +1425,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
                                                              out_tile_extent);
                 } else {
                     footprint = cost_model.input_region_size(f_load.first,
-                                                             conc_reg.at(f_load.first));
+                                                             alloc_reg.at(f_load.first));
                 }
             }
 
@@ -1441,33 +1451,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
             debug(0) << "(" << f_load.first << "," << f_load.second << ")";
         }
         debug(0) << '\n';
-
-        // Get the sizes of the buffers from which loads occur
-        debug(0) << "\nLoad buffer sizes:\n";
-        for (auto &f_load: group_load_costs) {
-            Box buffer;
-            int64_t footprint = 0;
-            if (group_mem.find(f_load.first) != group_mem.end() &&
-                f_load.first != g.output.func.name()) {
-                footprint = cost_model.region_size(f_load.first,
-                                                   conc_reg[f_load.first]);
-                buffer = conc_reg[f_load.first];
-            } else {
-                if (dep_analy.env.find(f_load.first) != dep_analy.env.end()) {
-                    footprint = cost_model.region_size(f_load.first,
-                                                       pipeline_bounds[f_load.first]);
-                } else {
-                    footprint = cost_model.input_region_size(f_load.first,
-                                                             pipeline_bounds[f_load.first]);
-                }
-                buffer = pipeline_bounds[f_load.first];
-            }
-            float cost_factor =
-                    std::min(1 + footprint * load_slope, (float)arch_params.balance);
-            debug(0) << "(" << f_load.first << "," << buffer << ","  << cost_factor << ")";
-        }
-        debug(0) << '\n';
-
 
         debug(0) << "\nPer tile mem cost:" << per_tile_mem_cost << '\n';
         debug(0) << "Per tile arith cost:" << per_tile_arith_cost << '\n';
@@ -2085,7 +2068,8 @@ void generate_schedules(const vector<Function>& outputs, const Target& target) {
     arch_params.parallelism = 16;
     arch_params.vec_len = 8;
     arch_params.register_file_size = 1024; // 1KB
-    arch_params.last_level_size = 8 * 1024 * 1024; // 8MB
+    int scale = 4;
+    arch_params.last_level_size = 2 * scale * 1024 * 1024; // 64 MB
     arch_params.balance = 40;
 
     // Initialize the cost model
