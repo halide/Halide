@@ -61,7 +61,8 @@ namespace {
 // the size of each buffer. The pre-allocated buffers are shared among threads
 // and we use __sync_val_compare_and_swap primitive to synchronize the buffer
 // allocation.
-const int num_buffers = 8;
+// TODO(psuriana): make num_buffers configurable by user
+const int num_buffers = 10;
 const int buffer_size = 1024 * 64;
 int buf_is_used[num_buffers];
 char mem_buf[num_buffers][buffer_size]
