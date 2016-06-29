@@ -116,7 +116,7 @@ class RegionCosts {
 // Utility functions
 int get_extent(const Interval &i);
 int64_t box_area(const Box &b);
-void disp_regions(map<string, Box> &regions);
+void disp_regions(const map<string, Box> &regions);
 Definition get_stage_definition(const Function &f, int stage_num);
 void combine_load_costs(map<string, int64_t> &result,
                         const map<string, int64_t> &partial);

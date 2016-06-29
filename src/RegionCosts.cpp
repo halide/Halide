@@ -256,7 +256,7 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
     return stage_bounds;
 }
 
-void disp_regions(map<string, Box> &regions) {
+void disp_regions(const map<string, Box> &regions) {
     for (auto &reg: regions) {
         debug(3) << reg.first;
         debug(3) << reg.second;

@@ -13,13 +13,20 @@ using std::deque;
 using std::pair;
 using std::make_pair;
 
+void simplify_box(Box &b) {
+    for (size_t i = 0; i < b.size(); i++) {
+        b[i].min = simplify(b[i].min);
+        b[i].max = simplify(b[i].max);
+    }
+}
+
 struct FStage {
     Function func;
     uint32_t stage_num;
     FStage(Function _func, uint32_t _stage_num) :
-          func(_func), stage_num(_stage_num) { }
+          func(_func), stage_num(_stage_num) {}
 
-    bool operator==(const FStage& other_stage) const {
+    bool operator==(const FStage &other_stage) const {
         return (func.name() == other_stage.func.name()) &&
                (stage_num == other_stage.stage_num);
     }
@@ -30,7 +37,7 @@ struct FStage {
                  stage_num < other_stage.stage_num) ;
     }
 
-    friend std::ostream& operator<<(std::ostream& stream, const FStage& s) {
+    friend std::ostream& operator<<(std::ostream &stream, const FStage &s) {
         stream << "(" << s.func.name() << "," << s.stage_num << ")";
         return stream;
     }
@@ -44,9 +51,9 @@ struct MachineParams {
     uint32_t balance;
 };
 
-void set_schedule_defaults(map<string, Function>& env) {
+void set_schedule_defaults(map<string, Function> &env) {
     // Changing the default to compute root.
-    for (auto& kv : env) {
+    for (auto &kv : env) {
         kv.second.schedule().store_level() = LoopLevel::root();
         kv.second.schedule().compute_level() = LoopLevel::root();
 
@@ -58,10 +65,10 @@ void set_schedule_defaults(map<string, Function>& env) {
     }
 }
 
-bool check_estimates_on_outputs(const vector<Function>& outputs) {
+bool check_estimates_on_outputs(const vector<Function> &outputs) {
     bool estimates_avail = true;
-    for (auto& out : outputs) {
-        const vector<Bound>& estimates = out.schedule().estimates();
+    for (auto &out: outputs) {
+        const vector<Bound> &estimates = out.schedule().estimates();
         if (estimates.size() != out.args().size()) {
             estimates_avail = false;
             break;
@@ -69,9 +76,10 @@ bool check_estimates_on_outputs(const vector<Function>& outputs) {
         vector<string> vars = out.args();
 
         for (uint32_t i = 0; i < estimates.size(); i++) {
-            if (std::find(vars.begin(), vars.end(), estimates[i].var) == vars.end()
-                || !((estimates[i].min.as<IntImm>()) &&
-                     (estimates[i].extent.as<IntImm>())))  {
+            if (std::find(vars.begin(), vars.end(),
+                          estimates[i].var) == vars.end() ||
+                !((estimates[i].min.as<IntImm>()) &&
+                  (estimates[i].extent.as<IntImm>()))) {
                 estimates_avail = false;
                 break;
             }
@@ -82,21 +90,14 @@ bool check_estimates_on_outputs(const vector<Function>& outputs) {
 
 struct DependenceAnalysis {
 
-    const map<string, Function>& env;
-    const FuncValueBounds& func_val_bounds;
+    const map<string, Function> &env;
+    const FuncValueBounds &func_val_bounds;
 
     // TODO: Build a cache for bounds queries
 
-    DependenceAnalysis(map<string, Function>& _env,
-                       const FuncValueBounds& _func_val_bounds):
-        env(_env), func_val_bounds(_func_val_bounds) {}
-
-    void simplify_box(Box& b) {
-        for (size_t i = 0; i < b.size(); i++) {
-            b[i].min = simplify(b[i].min);
-            b[i].max = simplify(b[i].max);
-        }
-    }
+    DependenceAnalysis(map<string, Function> &_env,
+                       const FuncValueBounds &_func_val_bounds):
+                       env(_env), func_val_bounds(_func_val_bounds) {}
 
     map<string, Box> regions_required(Function f, int stage_num,
                                       const DimBounds &bounds,
@@ -126,7 +127,7 @@ DependenceAnalysis::overlap_regions(Function f, int stage_num,
     vector< map<string, Box> > conc_overlaps;
 
     Definition def = get_stage_definition(f, stage_num);
-    const vector<Dim>& dims = def.schedule().dims();
+    const vector<Dim> &dims = def.schedule().dims();
 
     for (int d = 0; d < (int)dims.size(); d++) {
         map<string, Box> conc_reg =
@@ -168,8 +169,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                                      bool values_computed) {
 
     map<string, Box> regions;
-    // Add the function and its region to the queue
-    deque< pair<FStage, DimBounds> > f_queue;
+    // Add the query function and its region to the queue
+    deque<pair<FStage, DimBounds>> f_queue;
     FStage start(f, stage_num);
     f_queue.push_back(make_pair(start, bounds));
 
@@ -437,18 +438,18 @@ struct Partitioner {
 
         FusionChoice(string _prod, FStage _cons) : prod(_prod), cons(_cons) {}
 
-        bool operator==(const FusionChoice& other) const {
+        bool operator==(const FusionChoice &other) const {
             return (prod == other.prod) &&
                     (cons == other.cons);
         }
 
-        bool operator<(const FusionChoice& other) const {
+        bool operator<(const FusionChoice &other) const {
             return prod < other.prod || (prod == other.prod &&
                                          cons < other.cons) ;
         }
 
-        friend std::ostream& operator<<(std::ostream& stream,
-                                        const FusionChoice& choice) {
+        friend std::ostream& operator<<(std::ostream &stream,
+                                        const FusionChoice &choice) {
             stream << "Choice:" << choice.prod << "->" << choice.cons << '\n';
             return stream;
         }
@@ -469,23 +470,23 @@ struct Partitioner {
         Group(FStage _output, vector<FStage> _members):
               output(_output), members(_members) { }
 
-        friend std::ostream& operator <<(std::ostream& stream, const Group &g) {
+        friend std::ostream& operator <<(std::ostream &stream, const Group &g) {
 
             stream << "Output FStage:" << g.output << '\n';
             stream << "Members:" << '[';
-            for (auto& m: g.members) {
+            for (auto &m: g.members) {
                 stream << m << ",";
             }
             stream << "]" << '\n';
 
             stream << "Inlined:" << '[';
-            for (auto& in: g.inlined) {
+            for (auto &in: g.inlined) {
                 stream << in << ",";
             }
             stream << "]" << '\n';
 
             stream << "Tile sizes:" << "[";
-            for (auto& s: g.tile_sizes) {
+            for (auto &s: g.tile_sizes) {
                 stream << "(" << s.first << "," <<  s.second << ")";
             }
             stream << "]" << '\n';
@@ -528,65 +529,19 @@ struct Partitioner {
     // Levels that are targetted by the grouping algorithm
     enum Level {INLINE, FAST_MEM};
 
-    map<string, Box>& pipeline_bounds;
-    MachineParams& arch_params;
-    DependenceAnalysis& dep_analy;
-    RegionCosts& cost_model;
-    const vector<Function>& outputs;
+    const map<string, Box> &pipeline_bounds;
+    const MachineParams &arch_params;
+    DependenceAnalysis &dep_analy;
+    RegionCosts &cost_model;
+    const vector<Function> &outputs;
 
     map<FStage, set<FStage> > children;
 
     bool gpu_schedule;
 
-    Partitioner(map<string, Box>& _pipeline_bounds, MachineParams& _arch_params,
-                DependenceAnalysis& _dep_analy, RegionCosts& _cost_model,
-                const vector<Function>& _outputs, bool _gpu_schedule):
-        pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-        dep_analy(_dep_analy), cost_model(_cost_model), outputs(_outputs),
-        gpu_schedule(_gpu_schedule) {
-
-            // Place each stage of a function in its own group
-            for (auto& f: dep_analy.env) {
-                int num_stages = f.second.updates().size() + 1;
-                for (int s = 0; s < num_stages; s++) {
-                    FStage stg(f.second, s);
-                    Group g(stg, {stg});
-                    groups.insert(make_pair(stg, g));
-                }
-            }
-
-            // Find consumers of each function and relate groups with their children
-            for (auto& f: dep_analy.env) {
-                int num_stages = f.second.updates().size() + 1;
-                for (int s = 0; s < num_stages; s++) {
-
-                    FindAllCalls find;
-                    Definition def = get_stage_definition(f.second, s);
-                    def.accept(&find);
-
-                    for (const string& c: find.calls) {
-                        if (c != f.first && dep_analy.env.find(c) != dep_analy.env.end()) {
-                            // Consumer depends on the last stage of the producer
-                            Function prod_func = dep_analy.env.at(c);
-                            int final_stage = prod_func.updates().size();
-
-                            FStage prod_stage(prod_func, final_stage);
-                            FStage cons_stage(f.second, s);
-
-                            children[prod_stage].insert(cons_stage);
-                        }
-                    }
-
-                    if (s > 0) {
-                        // Add dependencies between all the stages in a function
-                        FStage prod_stage(f.second, s-1);
-                        FStage cons_stage(f.second, s);
-
-                        children[prod_stage].insert(cons_stage);
-                    }
-                }
-            }
-        }
+    Partitioner(map<string, Box> &_pipeline_bounds, MachineParams &_arch_params,
+                DependenceAnalysis &_dep_analy, RegionCosts &_cost_model,
+                const vector<Function> &_outputs, bool _gpu_schedule);
 
     void merge_groups(const FusionChoice &choice, const EvalConfig &eval,
                       Partitioner::Level level);
@@ -641,6 +596,59 @@ struct Partitioner {
     void disp_pipeline_graph();
     void disp_grouping();
 };
+
+Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
+                         MachineParams &_arch_params,
+                         DependenceAnalysis &_dep_analy,
+                         RegionCosts &_cost_model,
+                         const vector<Function> &_outputs,
+                         bool _gpu_schedule):
+    pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
+    dep_analy(_dep_analy), cost_model(_cost_model), outputs(_outputs),
+    gpu_schedule(_gpu_schedule)
+{
+    // Place each stage of a function in its own group
+    for (auto& f: dep_analy.env) {
+        int num_stages = f.second.updates().size() + 1;
+        for (int s = 0; s < num_stages; s++) {
+            FStage stg(f.second, s);
+            Group g(stg, {stg});
+            groups.insert(make_pair(stg, g));
+        }
+    }
+
+    // Find consumers of each function and relate groups with their children
+    for (auto& f: dep_analy.env) {
+        int num_stages = f.second.updates().size() + 1;
+        for (int s = 0; s < num_stages; s++) {
+
+            FindAllCalls find;
+            Definition def = get_stage_definition(f.second, s);
+            def.accept(&find);
+
+            for (const string& c: find.calls) {
+                if (c != f.first && dep_analy.env.find(c) != dep_analy.env.end()) {
+                    // Consumer depends on the last stage of the producer
+                    Function prod_func = dep_analy.env.at(c);
+                    int final_stage = prod_func.updates().size();
+
+                    FStage prod_stage(prod_func, final_stage);
+                    FStage cons_stage(f.second, s);
+
+                    children[prod_stage].insert(cons_stage);
+                }
+            }
+
+            if (s > 0) {
+                // Add dependencies between all the stages in a function
+                FStage prod_stage(f.second, s-1);
+                FStage cons_stage(f.second, s);
+
+                children[prod_stage].insert(cons_stage);
+            }
+        }
+    }
+}
 
 void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eval,
                                Partitioner::Level level) {
