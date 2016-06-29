@@ -51,11 +51,43 @@ void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
 }
 
+
+namespace {
+
+// We keep a small pool of small pre-allocated buffers for use by Halide
+// code; some kernels end up doing per-scanline allocations and frees,
+// which can cause a noticable performance impact on some workloads.
+// 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
+// the size of each buffer. The pre-allocated buffers are shared among threads
+// and we use __sync_val_compare_and_swap primitive to synchronize the buffer
+// allocation.
+// TODO(psuriana): make num_buffers configurable by user
+const int num_buffers = 10;
+const int buffer_size = 1024 * 64;
+int buf_is_used[num_buffers];
+char mem_buf[num_buffers][buffer_size]
+    __attribute__((aligned(128))); /* Hexagon requires 128-byte alignment. */
+
+}
+
 void *halide_malloc(void *user_context, size_t x) {
+    if (x <= buffer_size) {
+        for (int i = 0; i < num_buffers; ++i) {
+            if (__sync_val_compare_and_swap(buf_is_used+i, 0, 1) == 0) {
+                return mem_buf[i];
+            }
+        }
+    }
     return memalign(128, x);
 }
 
 void halide_free(void *user_context, void *ptr) {
+    for (int i = 0; i < num_buffers; ++i) {
+        if (mem_buf[i] == ptr) {
+            buf_is_used[i] = 0;
+            return;
+        }
+    }
     free(ptr);
 }
 
