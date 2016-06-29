@@ -1427,7 +1427,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 }
 
 Stage &Stage::hexagon(VarOrRVar x) {
-    invalidate_cache();
     set_dim_device_api(x, DeviceAPI::Hexagon);
     return *this;
 }
@@ -1778,6 +1777,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 }
 
 Func &Func::hexagon(VarOrRVar x) {
+    invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).hexagon(x);
     return *this;
 }
