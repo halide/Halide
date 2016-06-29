@@ -168,9 +168,8 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
-void Pipeline::auto_schedule(const Target &target) {
-  generate_schedules(contents->outputs, target);
-  return;
+string Pipeline::auto_schedule(const Target &target) {
+  return generate_schedules(contents->outputs, target);
 }
 
 void Pipeline::compile_to(const Outputs &output_files,

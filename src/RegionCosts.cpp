@@ -258,9 +258,9 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
 
 void disp_regions(map<string, Box> &regions) {
     for (auto &reg: regions) {
-        debug(0) << reg.first;
-        debug(0) << reg.second;
-        debug(0) << "\n";
+        debug(3) << reg.first;
+        debug(3) << reg.second;
+        debug(3) << "\n";
     }
 }
 
@@ -297,16 +297,6 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
             }
         }
     } while (funcs_to_inline);
-
-    /*
-       ExprCost cost;
-       e.accept(&cost);
-       debug(0) << "Original:" << e << "," << cost.ops << '\n';
-
-       ExprCost cost_inlined;
-       inlined_expr.accept(&cost_inlined);
-       debug(0) << "Inlined:" << inlined_expr << "," << cost_inlined.ops << '\n';
-    */
 
     return inlined_expr;
 }
@@ -623,7 +613,7 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
 
     vector<Function> outs;
     for (auto &f: num_consumers) {
-        if (f.second    == 0) {
+        if (f.second == 0) {
             outs.push_back(env.at(f.first));
         }
     }
@@ -690,22 +680,22 @@ int64_t RegionCosts::input_region_size(const map<string, Box> &input_regions) {
 }
 
 void RegionCosts::disp_func_costs() {
-    debug(0) << "===========================" << '\n';
-    debug(0) << "Pipeline per element costs:" << '\n';
-    debug(0) << "===========================" << '\n';
+    debug(3) << "===========================" << '\n';
+    debug(3) << "Pipeline per element costs:" << '\n';
+    debug(3) << "===========================" << '\n';
     for (auto &kv : env) {
         int stage = 0;
         for (auto &cost: func_cost[kv.first]) {
             Definition def = get_stage_definition(kv.second, stage);
             for (auto &e: def.values()) {
-                debug(0) << e << '\n';
+                debug(3) << e << '\n';
             }
-            debug(0) << "(" << kv.first << "," << stage << ")" <<
+            debug(3) << "(" << kv.first << "," << stage << ")" <<
                      "(" << cost.first << "," << cost.second << ")" << '\n';
             stage++;
         }
     }
-    debug(0) << "===========================" << '\n';
+    debug(3) << "===========================" << '\n';
 }
 
 }

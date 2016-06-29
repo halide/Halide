@@ -24,8 +24,8 @@ namespace Halide {
 namespace Internal {
 
 /* Determine a schedule for functions in the pipeline */
-void generate_schedules(const std::vector<Function> &outputs,
-                        const Target &target);
+string generate_schedules(const std::vector<Function> &outputs,
+                          const Target &target);
 }
 }
 
