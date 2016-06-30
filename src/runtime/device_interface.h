@@ -17,12 +17,19 @@ struct halide_device_interface {
     int (*device_release)(void *user_context);
     int (*copy_to_host)(void *user_context, struct buffer_t *buf);
     int (*copy_to_device)(void *user_context, struct buffer_t *buf);
+    int (*device_and_host_malloc)(void *user_context, struct buffer_t *buf);
+    int (*device_and_host_free)(void *user_context, struct buffer_t *buf);
 };
 
 extern WEAK uint64_t halide_new_device_wrapper(uint64_t handle, const struct halide_device_interface *device_interface);
 extern WEAK void halide_delete_device_wrapper(uint64_t dev_field);
 extern WEAK uint64_t halide_get_device_handle(uint64_t dev_field);
 extern WEAK const struct halide_device_interface *halide_get_device_interface(uint64_t dev_field);
+
+extern WEAK int halide_default_device_and_host_malloc(void *user_context, struct buffer_t *buf,
+                                                      const struct halide_device_interface *device_interface);
+extern WEAK int halide_default_device_and_host_free(void *user_context, struct buffer_t *buf,
+                                                    const struct halide_device_interface *device_interface);
 
 }
 
