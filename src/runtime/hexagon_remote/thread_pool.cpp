@@ -69,6 +69,10 @@ void halide_mutex_destroy(halide_mutex *mutex) {
     memset(mutex, 0, sizeof(halide_mutex));
 }
 
+struct halide_cond {
+    uint64_t _private[8];
+};
+
 void halide_cond_init(struct halide_cond *cond) {
     qurt_cond_init((qurt_cond_t *)cond);
 }
