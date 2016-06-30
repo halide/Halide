@@ -1,24 +1,33 @@
-#ifndef HALIDE_CUDA_OPENCL_SHARED_H
-#define HALIDE_CUDA_OPENCL_SHARED_H
+#ifndef HALIDE_RUNTIME_DEVICE_BUFFER_UTILS_H
+#define HALIDE_RUNTIME_DEVICE_BUFFER_UTILS_H
 
+#include "HalideRuntime.h"
 #include "device_interface.h"
+#include "printer.h"
 
 namespace Halide { namespace Runtime { namespace Internal {
 
+// TODO: Make this a method on he new buffer_t.
 // Compute the total amount of memory we'd need to allocate on gpu to
 // represent a given buffer (using the same strides as the host
 // allocation).
-WEAK size_t buf_size(void *user_context, buffer_t *buf) {
+WEAK size_t buf_size(const buffer_t *buf) {
     size_t size = buf->elem_size;
     for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
-        size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
+        size_t positive_stride;
+        if (buf->stride[i] < 0) {
+            positive_stride = (size_t)-buf->stride[i];
+        } else {
+            positive_stride = (size_t)buf->stride[i];
+        }
+        size_t total_dim_size = buf->elem_size * buf->extent[i] * positive_stride;
         if (total_dim_size > size) {
             size = total_dim_size;
         }
     }
-    halide_assert(user_context, size);
     return size;
 }
+
 
 // A host <-> dev copy should be done with the fewest possible number
 // of contiguous copies to minimize driver overhead. If our buffer_t
@@ -49,6 +58,31 @@ struct device_copy {
     uint64_t stride_bytes[MAX_COPY_DIMS];
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
+
+    inline void copy_memory(void *user_context) const {
+        // If this is a zero copy buffer, these pointers will be the same.
+        if (src != dst) {
+            // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+            // in case negative strides.
+            for (int w = 0; w < (int)extent[3]; w++) {
+                for (int z = 0; z < (int)extent[2]; z++) {
+                    for (int y = 0; y < (int)extent[1]; y++) {
+                        for (int x = 0; x < (int)extent[0]; x++) {
+                            uint64_t off = (x * stride_bytes[0] +
+                                            y * stride_bytes[1] +
+                                            z * stride_bytes[2] +
+                                            w * stride_bytes[3]);
+                            const void *from = (void *)(src + off);
+                            void *to = (void *)(dst + off);
+                            memcpy(to, from, chunk_size);
+                        }
+                    }
+                }
+            }
+        } else {
+            debug(user_context) << "device_copy::copy_memory: no copy needed as pointers are the same.\n";
+        }
+    }
 };
 
 WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
@@ -124,5 +158,4 @@ WEAK device_copy make_device_to_host_copy(const buffer_t *buf) {
 
 }}} // namespace Halide::Runtime::Internal
 
-#endif // HALIDE_CUDA_OPENCL_SHARED_H
-
+#endif // HALIDE_DEVICE_BUFFER_UTILS_H
