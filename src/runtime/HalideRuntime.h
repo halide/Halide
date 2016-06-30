@@ -78,18 +78,14 @@ typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
-/** These are allocated statically inside the runtime, hence the fixed
- * size. They must be initialized with zero. The first time
- * halide_mutex_lock is called, the lock must be initialized in a
- * thread safe manner. This incurs a small overhead for a once
- * mechanism, but makes the lock reliably easy to setup and use
- * without depending on e.g. C++ constructor logic.
+/** Cross-platform mutex. These are allocated statically inside the
+ * runtime, hence the fixed size. They must be initialized with
+ * zero. The first time halide_mutex_lock is called, the lock must be
+ * initialized in a thread safe manner. This incurs a small overhead
+ * for a once mechanism, but makes the lock reliably easy to setup and
+ * use without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
-    uint64_t _private[8];
-};
-
-struct halide_cond {
     uint64_t _private[8];
 };
 
@@ -103,11 +99,6 @@ struct halide_cond {
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
 extern void halide_mutex_destroy(struct halide_mutex *mutex);
-
-extern void halide_cond_init(struct halide_cond *cond);
-extern void halide_cond_destroy(struct halide_cond *cond);
-extern void halide_cond_broadcast(struct halide_cond *cond);
-extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
