@@ -535,7 +535,7 @@ struct Partitioner {
     RegionCosts &cost_model;
     const vector<Function> &outputs;
 
-    map<FStage, set<FStage> > children;
+    map<FStage, set<FStage>> children;
 
     bool gpu_schedule;
 
@@ -562,6 +562,9 @@ struct Partitioner {
 
     map<string, int64_t> evaluate_reuse(const FStage &stg,
                                         const set<string> &prods);
+
+    void analyze_spatial_locality();
+    int64_t find_acc_stride(string var, string func_acc, vector<Expr> acc_exprs);
 
     map<string, int> bounds_to_estimates(const DimBounds &bounds);
 
@@ -608,7 +611,7 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
     gpu_schedule(_gpu_schedule)
 {
     // Place each stage of a function in its own group
-    for (auto& f: dep_analy.env) {
+    for (auto &f: dep_analy.env) {
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
@@ -618,7 +621,7 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
     }
 
     // Find consumers of each function and relate groups with their children
-    for (auto& f: dep_analy.env) {
+    for (auto &f: dep_analy.env) {
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
 
@@ -626,7 +629,7 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
             Definition def = get_stage_definition(f.second, s);
             def.accept(&find);
 
-            for (const string& c: find.calls) {
+            for (const string &c: find.funcs_called) {
                 if (c != f.first && dep_analy.env.find(c) != dep_analy.env.end()) {
                     // Consumer depends on the last stage of the producer
                     Function prod_func = dep_analy.env.at(c);
@@ -961,8 +964,6 @@ Partitioner::generate_tile_configs(const FStage &stg) {
 pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
 
-    // TODO: Add sanity checks for the cost model
-
     // Initialize to no tiling
     map<string, int> no_tile_config;
     Group no_tile = g;
@@ -1138,6 +1139,7 @@ void Partitioner::group(Partitioner::Level level) {
                  post_merge_mem_cost) = get_pipeline_cost();
 
         disp_pipeline_costs();
+        // TODO: Add sanity checks for the cost model
         internal_assert((pre_merge_arith_cost + pre_merge_mem_cost) >=
                         (post_merge_mem_cost + post_merge_arith_cost));
     }
@@ -1197,23 +1199,6 @@ Partitioner::get_bounds_from_tile_sizes(const FStage &s,
 }
 
 Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_analysis) {
-    // Estimating the number of accesses to slow memory
-
-    // 1) Assume all loads are a miss if the working set does not fit in cache.
-    // This ignores any locality that results from the iteration order. This is
-    // pretty aggresive in estimating the benefit of fusion.
-    //
-    // 2) Assume that the intermediates are loaded only once even if they do not
-    // fit in cache. It is a pretty good model for pipelines which are streaming
-    // in nature. This gives a conservative estimate of fusion benefit and does
-    // not accurately capture scenarios where there is significant reuse.
-    //
-    // The actual number of accesses will inbetween 2) and 1) for now going with
-    // model 1).
-    //
-    // TODO: Model needs to be refined further to account for spatial locality and
-    // iteration order.
-
     // Get the definition corresponding to the group output
     Definition def = get_stage_definition(g.output.func, g.output.stage_num);
 
@@ -1227,7 +1212,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         Definition stg_def = get_stage_definition(stg.func, stg.stage_num);
 
         stg_def.accept(&find);
-        for (auto &c: find.calls) {
+        for (auto &c: find.funcs_called) {
             bool is_member = false;
             for (auto& m: g.members) {
                 if (m.func.name() == c) {
@@ -1353,6 +1338,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     int64_t per_tile_arith_cost = group_cost.first;
     int64_t per_tile_mem_cost = 0;
 
+    // TODO: Add comments on the cost model
     // Old cost model keeping it here for reference
     /*
     if (tile_inter_size > arch_params.l1_size) {
@@ -1745,6 +1731,18 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
             rvars.insert(split_vars.first.name());
             rvars.insert(split_vars.second.name());
         }
+
+        // TODO: Reorder vector dim to the inner most if it is the inner
+        // most storage dimension of the func
+        if (vec_dim_index > 0) {
+            for (auto &sdim: Stage(Func(func)).get_schedule().storage_dims()) {
+                debug(0) << sdim.var << '\n';
+            }
+            user_warning << "Outer dim vectorization of var " << vec_dim_name
+                         << " in function " << f_handle.name() << '\n';
+            //Var inner_var(get_base_name(dims[0].var));
+            //f_handle.reorder(split_vars.first, split_vars.second, inner_var);
+        }
     }
 }
 
@@ -1964,7 +1962,7 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
     // Grab the group bounds early as they rely on the dimensions of the group
     // outputs which will be altered by modifying schedules
     map<FStage, map<FStage, DimBounds>> group_bounds =
-                                        get_group_member_bounds();
+            get_group_member_bounds();
 
     for (const pair<FStage, Group>& g: groups) {
         for (const string& inline_func: g.second.inlined) {
@@ -1983,6 +1981,100 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
     for (auto& g: groups)
         sched += generate_group_cpu_schedule(g.second, t, group_bounds[g.first]);
     return sched;
+}
+
+class ExprUsesVar : public IRVisitor {
+ public:
+  string var;
+  bool var_used;
+
+  using IRVisitor::visit;
+
+  ExprUsesVar(string _var): var(_var) {
+      var_used = false;
+  }
+
+  void visit(const Variable * v) {
+      if(v->name == var) {
+          var_used = true;
+      }
+  }
+};
+
+int64_t Partitioner::find_acc_stride(string var, string func_acc,
+                                     vector<Expr> acc_exprs) {
+
+    size_t num_storage_dims = 0;
+
+    int64_t bytes_per_ele = 0;
+    if (dep_analy.env.find(func_acc) != dep_analy.env.end()) {
+        Function f = dep_analy.env.at(func_acc);
+        for (auto &e: f.values()) {
+            bytes_per_ele += e.type().bytes();
+        }
+        num_storage_dims = f.schedule().storage_dims().size();
+    } else {
+        bytes_per_ele = cost_model.inputs.at(func_acc).bytes();
+        num_storage_dims = pipeline_bounds.at(func_acc).size();
+    }
+
+    int64_t curr_stride = bytes_per_ele;
+    int64_t stride = 0;
+
+    for (size_t sdim = 0; sdim < num_storage_dims; sdim++) {
+        // Check if the expression is dependent on the var
+        ExprUsesVar uses_var(var);
+        acc_exprs[sdim].accept(&uses_var);
+        // Get the estimate for the current dimension from the
+        // pipeline_bounds
+        if (uses_var.var_used) {
+           stride = std::max(stride, curr_stride);
+        }
+
+        Interval dim_range = pipeline_bounds.at(func_acc)[sdim];
+        int64_t dim_extent = get_extent(dim_range);
+        curr_stride *= dim_extent;
+    }
+
+    return stride;
+}
+
+void Partitioner::analyze_spatial_locality() {
+    // For each stage in the pipeline get the functions
+    // being accessed and the stride at which they are being
+    // accessed for each loop variable in the definition
+    for (auto &f: dep_analy.env) {
+        int num_stages = f.second.updates().size() + 1;
+        for (int s = 0; s < num_stages; s++) {
+            FindAllCalls find;
+            Definition def = get_stage_definition(f.second, s);
+            def.accept(&find);
+
+            vector<pair<string, vector<Expr>>> call_args = find.call_args;
+
+            debug(0) << "\nAnalyzing definition " << f.first << "," << s << '\n';
+            // Add the access on the left hand side to call_args
+            vector<Expr> left_arg_exprs;
+            for (size_t arg = 0; arg < def.args().size(); arg++) {
+                left_arg_exprs.push_back(def.args()[arg]);
+            }
+            call_args.push_back(make_pair(f.first, left_arg_exprs));
+
+            const vector<Dim> &dims = def.schedule().dims();
+            for (size_t d = 0; d < dims.size() - 1; d++) {
+                debug(0) << "Loop var " << dims[d].var << '\n';
+                for (const pair<string, vector<Expr>> &call: call_args) {
+                    int64_t stride =
+                            find_acc_stride(dims[d].var, call.first, call.second);
+                    debug(0) << call.first << "(";
+                    for (auto &e: call.second) {
+                        debug(0) << e << ",";
+                    }
+                    debug(0) << ") " << "stride:" << stride  << '\n';
+                }
+            }
+        }
+    }
 }
 
 string generate_schedules(const vector<Function>& outputs, const Target& target) {
@@ -2045,7 +2137,7 @@ string generate_schedules(const vector<Function>& outputs, const Target& target)
         for (int s = 0; s < num_stages; s++) {
             FStage curr_s(f.second, s);
             map<string, int64_t> reuse =
-                    part.evaluate_reuse(curr_s, find.calls);
+                    part.evaluate_reuse(curr_s, find.funcs_called);
             debug(0) << curr_s << '\n';
             for (auto &dir: reuse) {
                 debug(0) << dir.first << " " << dir.second << ',';
@@ -2054,6 +2146,7 @@ string generate_schedules(const vector<Function>& outputs, const Target& target)
             debug(0) << '\n';
         }
     }*/
+    part.analyze_spatial_locality();
 
     // Show the current pipeline graph
     // TODO: Output the graph in dot format

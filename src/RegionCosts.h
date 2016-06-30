@@ -24,19 +24,24 @@ using std::map;
 using std::pair;
 using std::set;
 using std::vector;
+using std::make_pair;
 
 typedef map<string, Interval> DimBounds;
 
 class FindAllCalls : public IRVisitor {
  public:
-  set<string> calls;
+  set<string> funcs_called;
+  vector<pair<string, vector<Expr>>> call_args;
   using IRVisitor::visit;
 
   void visit(const Call *call) {
       // See if images need to be included
       if (call->call_type == Call::Halide ||
           call->call_type == Call::Image) {
-          calls.insert(call->name);
+          funcs_called.insert(call->name);
+          pair<string, vector<Expr>> arg_exprs =
+                  make_pair(call->name, call->args);
+          call_args.push_back(arg_exprs);
       }
       for (size_t i = 0; (i < call->args.size()); i++)
           call->args[i].accept(this);

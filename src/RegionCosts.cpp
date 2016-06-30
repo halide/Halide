@@ -270,7 +270,7 @@ RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
 
         FindImageInputs find;
         kv.second.accept(&find);
-        for (auto& in: find.input_type) {
+        for (auto &in: find.input_type) {
             inputs[in.first] = in.second;
         }
     }
@@ -288,7 +288,7 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
         funcs_to_inline = false;
         FindAllCalls find;
         inlined_expr.accept(&find);
-        set<string> &calls = find.calls;
+        set<string> &calls = find.funcs_called;
         for (auto &call: calls) {
             if (inlines.find(call) != inlines.end() && env.at(call).is_pure()) {
                 funcs_to_inline = true;
