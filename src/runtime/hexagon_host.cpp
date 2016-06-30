@@ -1,8 +1,8 @@
 #include "runtime_internal.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "printer.h"
-#include "cuda_opencl_shared.h"
 #include "scoped_mutex_lock.h"
 
 #define O_TRUNC 00001000
@@ -353,7 +353,8 @@ WEAK int halide_hexagon_device_malloc(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf_size(buf);
+    halide_assert(user_context, size != 0);
 
     // Hexagon code generation generates clamped ramp loads in a way
     // that requires up to an extra vector beyond the end of the
@@ -457,39 +458,6 @@ WEAK int halide_hexagon_device_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-namespace {
-
-// Implement a device copy using memcpy.
-WEAK void device_memcpy(void *user_context, device_copy c) {
-    if (c.src == c.dst) {
-        // This is a zero copy buffer, copy is a no-op.
-        return;
-    }
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = (void *)(c.src + off);
-                    void *dst = (void *)(c.dst + off);
-                    uint64_t size = c.chunk_size;
-                    debug(user_context) << "    memcpy "
-                                        << "(" << x << ", " << y << ", " << z << ", " << w << "), "
-                                        << src << " -> " << (void *)dst << ", " << size << " bytes\n";
-                    memcpy(dst, src, size);
-                }
-            }
-        }
-    }
-}
-
-}  // namespace
-
 WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
     int err = halide_hexagon_device_malloc(user_context, buf);
     if (err) {
@@ -509,7 +477,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, buffer_t* buf) {
 
     // Get the descriptor associated with the ion buffer.
     c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
-    device_memcpy(user_context, c);
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -533,7 +501,7 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, buffer_t* buf) {
 
     // Get the descriptor associated with the ion buffer.
     c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
-    device_memcpy(user_context, c);
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -603,6 +571,22 @@ WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer_t
     return handle->size;
 }
 
+WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    debug(user_context) << "halide_hexagon_device_and_host_malloc called.\n";
+    int result = halide_hexagon_device_malloc(user_context, buf);
+    if (result == 0) {
+        buf->host = (uint8_t *)halide_hexagon_get_device_handle(user_context, buf);
+    }
+    return result;
+}
+
+WEAK int halide_hexagon_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    debug(user_context) << "halide_hexagon_device_and_host_free called.\n";
+    halide_hexagon_device_free(user_context, buf);
+    buf->host = NULL;
+    return 0;
+}
+
 WEAK const halide_device_interface *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
@@ -649,6 +633,8 @@ WEAK halide_device_interface hexagon_device_interface = {
     halide_hexagon_device_release,
     halide_hexagon_copy_to_host,
     halide_hexagon_copy_to_device,
+    halide_hexagon_device_and_host_malloc,
+    halide_hexagon_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Hexagon
