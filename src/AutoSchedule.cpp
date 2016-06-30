@@ -563,8 +563,13 @@ struct Partitioner {
     map<string, int64_t> evaluate_reuse(const FStage &stg,
                                         const set<string> &prods);
 
-    void analyze_spatial_locality();
-    int64_t find_acc_stride(string var, string func_acc, vector<Expr> acc_exprs);
+    map<string, int64_t>
+            analyze_spatial_locality(const FStage &stg,
+                                     map<string, Box> &parent_bounds);
+
+    int64_t find_max_access_stride(string var, string func_acc,
+                                   vector<Expr> acc_exprs,
+                                   const Box &buffer_bounds);
 
     map<string, int> bounds_to_estimates(const DimBounds &bounds);
 
@@ -1627,16 +1632,17 @@ map<FStage, map<FStage, DimBounds>> Partitioner::get_group_member_bounds() {
             prods.insert(s.func.name());
         }
 
-        map<string, Box> conc_reg =
+        map<string, Box> reg_computed =
                 dep_analy.regions_required(g.output.func, g.output.stage_num,
-                                           bounds, prods, false);
+                                           bounds, prods, true);
 
         for (const FStage &s: g.members) {
-            if (conc_reg.find(s.func.name()) != conc_reg.end()) {
+            if (reg_computed.find(s.func.name()) != reg_computed.end()) {
                 map<string, int> tile_sizes;
                 const vector<string> &args = s.func.args();
                 for (size_t arg = 0; arg < args.size(); arg++) {
-                    tile_sizes[args[arg]] = get_extent(conc_reg[s.func.name()][arg]);
+                    tile_sizes[args[arg]] =
+                            get_extent(reg_computed[s.func.name()][arg]);
                 }
                 mem_bounds[s] = get_bounds_from_tile_sizes(s, tile_sizes);
             }
@@ -1956,16 +1962,16 @@ string Partitioner::generate_group_cpu_schedule(
     return sched;
 }
 
-string Partitioner::generate_cpu_schedule(const Target& t) {
+string Partitioner::generate_cpu_schedule(const Target &t) {
     string sched = "";
 
     // Grab the group bounds early as they rely on the dimensions of the group
     // outputs which will be altered by modifying schedules
     map<FStage, map<FStage, DimBounds>> group_bounds =
-            get_group_member_bounds();
+                                get_group_member_bounds();
 
-    for (const pair<FStage, Group>& g: groups) {
-        for (const string& inline_func: g.second.inlined) {
+    for (const pair<FStage, Group> &g: groups) {
+        for (const string &inline_func: g.second.inlined) {
             Function f = dep_analy.env.at(inline_func);
             Func f_handle(f);
             // TODO: inling functions with update definitions has different
@@ -1978,8 +1984,10 @@ string Partitioner::generate_cpu_schedule(const Target& t) {
         }
     }
 
-    for (auto& g: groups)
+    for (auto &g: groups) {
         sched += generate_group_cpu_schedule(g.second, t, group_bounds[g.first]);
+    }
+
     return sched;
 }
 
@@ -2001,9 +2009,9 @@ class ExprUsesVar : public IRVisitor {
   }
 };
 
-int64_t Partitioner::find_acc_stride(string var, string func_acc,
-                                     vector<Expr> acc_exprs) {
-
+int64_t Partitioner::find_max_access_stride(string var, string func_acc,
+                                            vector<Expr> acc_exprs,
+                                            const Box &buffer_bounds) {
     size_t num_storage_dims = 0;
 
     int64_t bytes_per_ele = 0;
@@ -2015,7 +2023,7 @@ int64_t Partitioner::find_acc_stride(string var, string func_acc,
         num_storage_dims = f.schedule().storage_dims().size();
     } else {
         bytes_per_ele = cost_model.inputs.at(func_acc).bytes();
-        num_storage_dims = pipeline_bounds.at(func_acc).size();
+        num_storage_dims = buffer_bounds.size();
     }
 
     int64_t curr_stride = bytes_per_ele;
@@ -2025,13 +2033,12 @@ int64_t Partitioner::find_acc_stride(string var, string func_acc,
         // Check if the expression is dependent on the var
         ExprUsesVar uses_var(var);
         acc_exprs[sdim].accept(&uses_var);
-        // Get the estimate for the current dimension from the
-        // pipeline_bounds
+
         if (uses_var.var_used) {
            stride = std::max(stride, curr_stride);
         }
 
-        Interval dim_range = pipeline_bounds.at(func_acc)[sdim];
+        Interval dim_range = buffer_bounds[sdim];
         int64_t dim_extent = get_extent(dim_range);
         curr_stride *= dim_extent;
     }
@@ -2039,42 +2046,46 @@ int64_t Partitioner::find_acc_stride(string var, string func_acc,
     return stride;
 }
 
-void Partitioner::analyze_spatial_locality() {
-    // For each stage in the pipeline get the functions
-    // being accessed and the stride at which they are being
-    // accessed for each loop variable in the definition
-    for (auto &f: dep_analy.env) {
-        int num_stages = f.second.updates().size() + 1;
-        for (int s = 0; s < num_stages; s++) {
-            FindAllCalls find;
-            Definition def = get_stage_definition(f.second, s);
-            def.accept(&find);
+map<string, int64_t>
+Partitioner::analyze_spatial_locality(const FStage &stg,
+                                      map<string, Box> &parent_bounds) {
 
-            vector<pair<string, vector<Expr>>> call_args = find.call_args;
+    FindAllCalls find;
+    Definition def = get_stage_definition(stg.func, stg.stage_num );
+    def.accept(&find);
 
-            debug(0) << "\nAnalyzing definition " << f.first << "," << s << '\n';
-            // Add the access on the left hand side to call_args
-            vector<Expr> left_arg_exprs;
-            for (size_t arg = 0; arg < def.args().size(); arg++) {
-                left_arg_exprs.push_back(def.args()[arg]);
-            }
-            call_args.push_back(make_pair(f.first, left_arg_exprs));
+    vector<pair<string, vector<Expr>>> call_args = find.call_args;
 
-            const vector<Dim> &dims = def.schedule().dims();
-            for (size_t d = 0; d < dims.size() - 1; d++) {
-                debug(0) << "Loop var " << dims[d].var << '\n';
-                for (const pair<string, vector<Expr>> &call: call_args) {
-                    int64_t stride =
-                            find_acc_stride(dims[d].var, call.first, call.second);
-                    debug(0) << call.first << "(";
-                    for (auto &e: call.second) {
-                        debug(0) << e << ",";
-                    }
-                    debug(0) << ") " << "stride:" << stride  << '\n';
-                }
-            }
-        }
+    // TODO: Handle inlining
+    //debug(0) << "\nAnalyzing definition " << f.first << "," << s << '\n';
+    // Add the access on the left hand side to call_args
+    vector<Expr> left_arg_exprs;
+    for (size_t arg = 0; arg < def.args().size(); arg++) {
+        left_arg_exprs.push_back(def.args()[arg]);
     }
+    call_args.push_back(make_pair(stg.func.name(), left_arg_exprs));
+
+    map<string, int64_t> var_strides;
+    const vector<Dim> &dims = def.schedule().dims();
+
+    for (size_t d = 0; d < dims.size() - 1; d++) {
+        //debug(0) << "Loop var " << dims[d].var << '\n';
+        int total_stride = 0;
+        for (const pair<string, vector<Expr>> &call: call_args) {
+            total_stride +=
+                    find_max_access_stride(dims[d].var, call.first, call.second,
+                                           parent_bounds.at(call.first));
+            /*debug(0) << call.first << "(";
+                       for (auto &e: call.second) {
+                       debug(0) << e << ",";
+                       }
+                       debug(0) << ") " << "total stride:" << total_stride  << '\n';
+                       */
+        }
+        var_strides[dims[d].var] = total_stride;
+    }
+
+    return var_strides;
 }
 
 string generate_schedules(const vector<Function>& outputs, const Target& target) {
@@ -2146,7 +2157,6 @@ string generate_schedules(const vector<Function>& outputs, const Target& target)
             debug(0) << '\n';
         }
     }*/
-    part.analyze_spatial_locality();
 
     // Show the current pipeline graph
     // TODO: Output the graph in dot format
