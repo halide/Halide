@@ -134,7 +134,12 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
                     const std::string &dst_file, bool deterministic) {
     internal_assert(!src_files.empty());
-#if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
+#if LLVM_VERSION >= 39
+    std::vector<llvm::NewArchiveMember> new_members;
+    for (auto &src : src_files) {
+        new_members.emplace_back(std::move(llvm::NewArchiveMember::getFile(src, true).get()));
+    }
+#elif LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
     std::vector<llvm::NewArchiveIterator> new_members;
     for (auto &src : src_files) {
 #if LLVM_VERSION == 37
