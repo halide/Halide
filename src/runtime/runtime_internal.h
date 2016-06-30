@@ -150,6 +150,17 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
 
+
+// Condition variables. Only available on some platforms (those that use the common thread pool).
+struct halide_cond {
+    uint64_t _private[8];
+};
+
+WEAK void halide_cond_init(struct halide_cond *cond);
+WEAK void halide_cond_destroy(struct halide_cond *cond);
+WEAK void halide_cond_broadcast(struct halide_cond *cond);
+WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
+
 }  // extern "C"
 
 /** A macro that calls halide_print if the supplied condition is
@@ -203,8 +214,6 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
 }
 
 }}}
-
-
 
 using namespace Halide::Runtime::Internal;
 
