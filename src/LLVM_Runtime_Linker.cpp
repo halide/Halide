@@ -773,7 +773,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // No externally resolved symbols are allowed here.
-                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_noos(c, bits_64, debug));
             }
         }
