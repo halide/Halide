@@ -187,8 +187,6 @@ class InjectHexagonRpc : public IRMutator {
             for (const auto& i : c.vars) {
                 Expr arg = Variable::make(i.second, i.first);
                 Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
-
-                // sizeof(scalar-type) will always fit into int32
                 arg_sizes.push_back(Expr((uint64_t) i.second.bytes()));
                 arg_ptrs.push_back(arg_ptr);
                 arg_flags.push_back(0x0);
@@ -277,7 +275,7 @@ public:
 
         // Dump the llvm module to a temp file as .ll
         TemporaryFile tmp_bitcode("hex", ".ll");
-        TemporaryFile tmp_shared_object("hex", ".so");
+        TemporaryFile tmp_shared_object("hex", ".o");
         std::unique_ptr<llvm::raw_fd_ostream> ostream =
             make_raw_fd_ostream(tmp_bitcode.pathname());
         compile_llvm_module_to_llvm_assembly(*llvm_module, *ostream);
@@ -298,14 +296,20 @@ public:
             }
         }
 
-        hex_command += " ";
+        hex_command += " -c ";
         hex_command += tmp_bitcode.pathname();
-        hex_command += " -fPIC -O3 -mllvm -lsr-complexity-limit=65535 -Wno-override-module -shared ";
+        if (0) { // This path should also work, if we want to use PIC code
+            hex_command += " -fpic -O3 -Wno-override-module ";
+        } else {
+            hex_command += " -fno-pic -G 0 -mlong-calls -O3 -Wno-override-module ";
+        }
         if (device_code.target().has_feature(Target::HVX_v62)) {
             hex_command += " -mv62";
         }
         if (device_code.target().has_feature(Target::HVX_128)) {
             hex_command += " -mhvx-double";
+        } else {
+            hex_command += " -mhvx";
         }
         hex_command += " -o " + tmp_shared_object.pathname();
         int result = system(hex_command.c_str());

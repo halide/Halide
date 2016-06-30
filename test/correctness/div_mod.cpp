@@ -16,12 +16,12 @@ using namespace Halide;
 // results in Halide are not used or tested.)
 
 // Dimensions of the test data, and rate of salting with extreme values (1 in SALTRATE)
-#define WIDTH 2048
-#define HEIGHT 2048
+#define WIDTH 1024
+#define HEIGHT 1024
 #define SALTRATE 50
 // Portion of the test data to use for testing the simplifier
 # define SWIDTH 32
-# define SHEIGHT 2048
+# define SHEIGHT 1024
 
 // Generate poor quality pseudo random numbers.
 // For reproducibility, the array indices are used as the seed for each
@@ -51,7 +51,6 @@ uint64_t ubits(int unique, int i, int j) {
     bits = (bits ^ (bits >> 32)) * mu;
     return bits;
 }
-
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
 template <typename T>
 bool less_than_zero(T val) {
@@ -261,11 +260,17 @@ Image<T> init(Type t, int unique, int width, int height) {
     return result;
 }
 
+enum ScheduleVariant {
+  CPU,
+  TiledGPU,
+  Hexagon
+};
+
 // division tests division and mod operations.
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
-bool div_mod(int vector_width) {
+bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target) {
     std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
 
     int i, j;
@@ -295,16 +300,20 @@ bool div_mod(int vector_width) {
     Func f;
     Var x, y;
     f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
-    Target target = get_jit_target_from_environment();
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
     }
-    if (target.has_gpu_feature()) {
-        f.compute_root().gpu_tile(x, y, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        // TODO: Null pointer dereference on simulator?
-        // f.compute_root().hexagon();
-    }
+    switch (scheduling) {
+        case CPU:
+            break;
+        case TiledGPU:
+            f.compute_root().gpu_tile(x, y, 16, 16);
+            break;
+        case Hexagon:
+            f.compute_root().hexagon();
+            break;
+    };
+     
     Realization R = f.realize(WIDTH, HEIGHT, target);
     Image<T> q(R[0]);
     Image<T> r(R[1]);
@@ -421,6 +430,7 @@ int main(int argc, char **argv) {
     bool success = true;
     success &= f_mod<float,double,32>();
 
+<<<<<<< HEAD
     for (int vector_width = 1; vector_width <= 16; vector_width *= 2) {
         if (target.supports_type(UInt(64))) {
             success &= div_mod<uint8_t,uint64_t,8>(vector_width);
@@ -431,6 +441,34 @@ int main(int argc, char **argv) {
             success &= div_mod<int8_t,int64_t,8>(vector_width);
             success &= div_mod<int16_t,int64_t,16>(vector_width);
             success &= div_mod<int32_t,int64_t,32>(vector_width);
+        }
+=======
+    int maximum_vector_width = 16;
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Metal)) {
+        maximum_vector_width = 4;
+    }
+
+    ScheduleVariant scheduling = CPU;
+    if (target.has_gpu_feature()) {
+        scheduling = TiledGPU;
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        // TODO: Pranav, I think this still needs the size change and Makefile changes.
+        maximum_vector_width = 1;
+        scheduling = Hexagon;
+    }
+
+    for (int vector_width = 1; vector_width <= maximum_vector_width; vector_width *= 2) {
+        if (target.supports_type(UInt(64))) {
+            success &= div_mod<uint8_t,uint64_t,8>(vector_width, scheduling, target);
+            success &= div_mod<uint16_t,uint64_t,16>(vector_width, scheduling, target);
+            success &= div_mod<uint32_t,uint64_t,32>(vector_width, scheduling, target);
+        }
+
+        if (target.supports_type(Int(64))) {
+            success &= div_mod<int8_t,int64_t,8>(vector_width, scheduling, target);
+            success &= div_mod<int16_t,int64_t,16>(vector_width, scheduling, target);
+            success &= div_mod<int32_t,int64_t,32>(vector_width, scheduling, target);
         }
     }
 

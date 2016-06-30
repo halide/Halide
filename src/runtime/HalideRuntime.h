@@ -78,24 +78,27 @@ typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
-/** These are allocated statically inside the runtime, hence the fixed
- * size. They must be initialized with zero. The first time
- * halide_mutex_lock is called, the lock must be initialized in a
- * thread safe manner. This incurs a small overhead for a once
- * mechanism, but makes the lock reliably easy to setup and use
- * without depending on e.g. C++ constructor logic.
+/** Cross-platform mutex. These are allocated statically inside the
+ * runtime, hence the fixed size. They must be initialized with
+ * zero. The first time halide_mutex_lock is called, the lock must be
+ * initialized in a thread safe manner. This incurs a small overhead
+ * for a once mechanism, but makes the lock reliably easy to setup and
+ * use without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
     uint64_t _private[8];
 };
 
-/** A basic set of mutex functions, which call platform specific code
- * for mutual exclusion.
+/** A basic set of mutex and condition variable functions, which call
+ * platform specific code for mutual exclusion. Equivalent to posix
+ * calls. Mutexes should initially be set to zero'd memory. Any
+ * resources required are created on first lock. Calling destroy
+ * re-zeros the memory.
  */
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
-extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
+extern void halide_mutex_destroy(struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -130,13 +133,19 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                           uint8_t *closure);
 //@}
 
-/** Spawn a thread, independent of halide's thread pool. */
-extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
+struct halide_thread;
 
-/** Set the number of threads used by Halide's thread pool. No effect
- * on OS X or iOS. If changed after the first use of a parallel Halide
- * routine, shuts down and then reinitializes the thread pool. */
-extern void halide_set_num_threads(int n);
+/** Spawn a thread. Returns a handle to the thread for the purposes of
+ * joining it. The thread must be joined in order to clean up any
+ * resources associated with it. */
+extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure);
+
+/** Join a thread. */
+extern void halide_join_thread(struct halide_thread *);
+
+/** Set the number of threads used by Halide's thread pool. Returns
+ * the old number. No effect on OS X or iOS. */
+extern int halide_set_num_threads(int n);
 
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and

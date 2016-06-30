@@ -30,9 +30,38 @@ WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
 
 }
 
-WEAK void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure) {
-    dispatch_async_f(dispatch_get_global_queue(0, 0), closure, f);
+namespace Halide { namespace Runtime { namespace Internal {
+struct spawned_thread {
+    void (*f)(void *);
+    void *closure;
+    dispatch_semaphore_t join_semaphore;
+};
+WEAK void spawn_thread_helper(void *arg) {
+    spawned_thread *t = (spawned_thread *)arg;
+    t->f(t->closure);
+    dispatch_semaphore_signal(t->join_semaphore);
 }
+}}} // namespace Halide::Runtime::Internal
+
+
+WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
+    spawned_thread *thread = (spawned_thread *)malloc(sizeof(spawned_thread));
+    thread->f = f;
+    thread->closure = closure;
+    thread->join_semaphore = dispatch_semaphore_create(0);
+    dispatch_async_f(dispatch_get_global_queue(0, 0), thread, spawn_thread_helper);
+    return (halide_thread *)thread;
+}
+
+WEAK void halide_join_thread(halide_thread *thread_arg) {
+    spawned_thread *thread = (spawned_thread *)thread_arg;
+    dispatch_semaphore_wait(thread->join_semaphore, DISPATCH_TIME_FOREVER);
+    free(thread);
+}
+
+// Join thread and condition variables intentionally unimplemented for
+// now on OS X. Use of them will result in linker errors. Currently
+// only the common thread pool uses them.
 
 namespace Halide { namespace Runtime { namespace Internal {
 
@@ -87,7 +116,7 @@ WEAK halide_do_par_for_t custom_do_par_for = default_do_par_for;
 
 extern "C" {
 
-WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
     if (mutex->once != 0) {
         dispatch_release(mutex->semaphore);
@@ -109,7 +138,8 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
 WEAK void halide_shutdown_thread_pool() {
 }
 
-WEAK void halide_set_num_threads(int) {
+WEAK int halide_set_num_threads(int) {
+    return 1;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {

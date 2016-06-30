@@ -596,7 +596,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_io \
   posix_print \
   posix_tempfile \
-  posix_thread_pool \
+  posix_threads \
   powerpc_cpu_features \
   profiler \
   profiler_inlined \
@@ -605,6 +605,7 @@ RUNTIME_CPP_COMPONENTS = \
   renderscript \
   runtime_api \
   ssp \
+  thread_pool \
   to_string \
   tracing \
   windows_clock \
@@ -613,7 +614,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_tempfile \
-  windows_thread_pool \
+  windows_threads \
   write_debug_image \
   x86_cpu_features
 

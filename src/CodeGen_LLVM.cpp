@@ -3360,6 +3360,9 @@ void CodeGen_LLVM::visit(const Store *op) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
+    } else if (const Let *let = op->index.as<Let>()) {
+        Stmt s = Store::make(op->name, op->value, let->body, op->param);
+        codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();

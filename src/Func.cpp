@@ -1780,6 +1780,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 }
 
 Func &Func::hexagon(VarOrRVar x) {
+    invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).hexagon(x);
     return *this;
 }
