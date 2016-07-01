@@ -23,8 +23,8 @@ void simplify_box(Box &b) {
 struct FStage {
     Function func;
     uint32_t stage_num;
-    FStage(Function _func, uint32_t _stage_num) :
-          func(_func), stage_num(_stage_num) {}
+    FStage(Function func, uint32_t stage_num) :
+          func(func), stage_num(stage_num) {}
 
     bool operator==(const FStage &other_stage) const {
         return (func.name() == other_stage.func.name()) &&
@@ -95,9 +95,9 @@ struct DependenceAnalysis {
 
     // TODO: Build a cache for bounds queries
 
-    DependenceAnalysis(map<string, Function> &_env,
-                       const FuncValueBounds &_func_val_bounds):
-                       env(_env), func_val_bounds(_func_val_bounds) {}
+    DependenceAnalysis(map<string, Function> &env,
+                       const FuncValueBounds &func_val_bounds):
+                       env(env), func_val_bounds(func_val_bounds) {}
 
     map<string, Box> regions_required(Function f, int stage_num,
                                       const DimBounds &bounds,
@@ -436,7 +436,7 @@ struct Partitioner {
         string prod;
         FStage cons;
 
-        FusionChoice(string _prod, FStage _cons) : prod(_prod), cons(_cons) {}
+        FusionChoice(string prod, FStage cons) : prod(prod), cons(cons) {}
 
         bool operator==(const FusionChoice &other) const {
             return (prod == other.prod) &&
@@ -467,8 +467,8 @@ struct Partitioner {
         // Tile sizes along the dimensions of the output function of the group
         map<string, int> tile_sizes;
 
-        Group(FStage _output, vector<FStage> _members):
-              output(_output), members(_members) { }
+        Group(FStage output, vector<FStage> members):
+              output(output), members(members) { }
 
         friend std::ostream& operator <<(std::ostream &stream, const Group &g) {
 
@@ -516,9 +516,9 @@ struct Partitioner {
     struct EvalConfig {
         map<string, int> tile_sizes;
         GroupAnalysis analy;
-        EvalConfig(const map<string, int> &_tile_sizes,
-                   const GroupAnalysis &_analy) :
-                   tile_sizes(_tile_sizes), analy(_analy) {}
+        EvalConfig(const map<string, int> &tile_sizes,
+                   const GroupAnalysis &analy) :
+                   tile_sizes(tile_sizes), analy(analy) {}
     };
 
     map<FusionChoice, EvalConfig> fusion_cache;
@@ -1780,7 +1780,6 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
 
 void reorder_dims(Stage f_handle, Definition def,
                   map<string, int64_t> strides, string &sched) {
-    // TODO: Do not reorder impure reduction dimensions relative to each other
     vector<Dim> &dims = def.schedule().dims();
     vector<pair<string, bool>> order;
 
@@ -2114,7 +2113,7 @@ struct ExprUsesVar : public IRVisitor {
 
     using IRVisitor::visit;
 
-    ExprUsesVar(string _var): var(_var) {
+    ExprUsesVar(string var): var(var) {
         var_used = false;
     }
 
