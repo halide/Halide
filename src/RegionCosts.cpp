@@ -166,8 +166,9 @@ struct ExprCost : public IRVisitor {
 int64_t get_func_value_size(const Function &f) {
     int64_t size = 0;
     const vector<Type> &types = f.output_types();
-    for (size_t i = 0; i < types.size(); i++)
+    for (size_t i = 0; i < types.size(); i++) {
         size += types[i].bytes();
+    }
     internal_assert(types.size() != 0);
     return size;
 }
@@ -177,10 +178,11 @@ int get_extent(const Interval &i) {
         const IntImm * bmin = i.min.as<IntImm>();
         const IntImm * bmax = i.max.as<IntImm>();
         // Count only if the overlap makes sense
-        if (bmin->value <= bmax->value)
+        if (bmin->value <= bmax->value) {
             return (bmax->value - bmin->value + 1);
-        else
+        } else {
             return 0;
+        }
     }
     return -1;
 }
@@ -190,9 +192,9 @@ int64_t box_area(const Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
         // Maybe should check for unsigned integers and floats too
         int64_t extent = get_extent(b[i]);
-        if (extent > 0 && box_area > 0)
+        if (extent > 0 && box_area > 0) {
             box_area = box_area * extent;
-        else if (extent == 0) {
+        } else if (extent == 0) {
             box_area = 0;
             break;
         } else {
@@ -277,8 +279,9 @@ RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
 
 Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
 
-    if (inlines.empty())
+    if (inlines.empty()) {
         return e;
+    }
 
     bool funcs_to_inline = false;
     Expr inlined_expr = e;
@@ -399,8 +402,7 @@ RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines){
         pair<int64_t, int64_t> cost = region_cost(f.first, f.second, inlines);
         if (cost.first < 0) {
             return cost;
-        }
-        else {
+        } else {
             total_cost.first += cost.first;
             total_cost.second += cost.second;
         }
@@ -629,10 +631,11 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
         // Inlined functions do not have allocations
         int64_t size = inlined.find(f.first) != inlined.end()? 0:
                 region_size(f.first, f.second);
-        if (size < 0)
+        if (size < 0) {
             return -1;
-        else
+        } else {
             func_sizes[f.first] = size;
+        }
     }
 
     for (auto &f: order) {

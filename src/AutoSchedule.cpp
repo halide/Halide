@@ -153,10 +153,11 @@ DependenceAnalysis::regions_required(Function f,
 
         for (auto &reg: stage_regions) {
             // Merge region with an existing region for the function
-            if (regions.find(reg.first) == regions.end())
+            if (regions.find(reg.first) == regions.end()) {
                 regions[reg.first] = reg.second;
-            else
+            } else {
                 merge_boxes(regions[reg.first], reg.second);
+            }
         }
     }
     return regions;
@@ -206,10 +207,11 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 // Merge the regions with the regions found while looking at
                 // the values
                 for (auto &reg: arg_regions) {
-                    if (curr_regions.find(reg.first) == curr_regions.end())
+                    if (curr_regions.find(reg.first) == curr_regions.end()) {
                         curr_regions[reg.first] = reg.second;
-                    else
+                    } else {
                         merge_boxes(curr_regions[reg.first], reg.second);
+                    }
                 }
 
                 Interval arg_bounds =
@@ -229,15 +231,17 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 // when querying only for the values computed.
                 if (!values_computed ||
                     (values_computed && reg.first != s.func.name())) {
-                    if (regions.find(reg.first) == regions.end())
+                    if (regions.find(reg.first) == regions.end()) {
                         regions[reg.first] = reg.second;
-                    else
+                    } else {
                         merge_boxes(regions[reg.first], reg.second);
+                    }
                 }
 
                 // Skip adding to the queue if not the set of producers
-                if (prods.find(reg.first) == prods.end())
+                if (prods.find(reg.first) == prods.end()) {
                     continue;
+                }
 
                 if (env.find(reg.first) != env.end() &&
                     reg.first != s.func.name()) {
@@ -297,8 +301,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b: curr_f.schedule().estimates()) {
                     uint32_t num_pure_args = curr_f.args().size();
-                    if (i < num_pure_args && b.var == curr_f.args()[i])
+                    if (i < num_pure_args && b.var == curr_f.args()[i]) {
                         lower = Expr(b.min.as<IntImm>()->value);
+                    }
                 }
             }
 
@@ -342,8 +347,7 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
             Interval bound = Interval(b.second.min + len,
                                       b.second.max + len);
             shifted_bounds[b.first] = bound;
-        }
-        else {
+        } else {
             shifted_bounds[b.first] = b.second;
         }
     }
@@ -359,25 +363,25 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
             // i.e., the shifted regions do not contain a function that was
             // there in the original regions.
             continue;
-        } else {
-            Box b = reg.second;
-            Box b_shifted = regions_shifted[reg.first];
-            // The boxes should be of the same size
-            internal_assert(b.size() == b_shifted.size());
-            // The box used makes things complicated ignoring it for now
-            Box b_intersect;
-            for (uint32_t i = 0 ; i < b.size(); i++)
-                b_intersect.push_back(interval_intersect(b[i], b_shifted[i]));
-            // A function should appear once in the regions and therefore cannot
-            // already be present in the overlaps map
-            internal_assert(overalps.find(reg.first) == overalps.end());
-            overalps[reg.first] = b_intersect;
         }
+        Box b = reg.second;
+        Box b_shifted = regions_shifted[reg.first];
+        // The boxes should be of the same size
+        internal_assert(b.size() == b_shifted.size());
+        // The box used makes things complicated ignoring it for now
+        Box b_intersect;
+        for (uint32_t i = 0 ; i < b.size(); i++)
+            b_intersect.push_back(interval_intersect(b[i], b_shifted[i]));
+        // A function should appear once in the regions and therefore cannot
+        // already be present in the overlaps map
+        internal_assert(overalps.find(reg.first) == overalps.end());
+        overalps[reg.first] = b_intersect;
     }
 
     // Simplify
-    for (auto &f : overalps)
+    for (auto &f : overalps) {
         simplify_box(f.second);
+    }
 
     return overalps;
 }
@@ -418,10 +422,11 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
 
         for (auto &reg: regions) {
             // Merge region with an existing region for the function in the global map
-            if (pipeline_bounds.find(reg.first) == pipeline_bounds.end())
+            if (pipeline_bounds.find(reg.first) == pipeline_bounds.end()) {
                 pipeline_bounds[reg.first] = reg.second;
-            else
+            } else {
                 merge_boxes(pipeline_bounds[reg.first], reg.second);
+            }
         }
     }
 
@@ -862,7 +867,6 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             // Check if the candidate has been evaluated for fusion before
             if (fusion_cache.find(cand_choice) != fusion_cache.end()) {
                 best_config = fusion_cache.at(cand_choice);
-
             } else {
                 best_config = evaluate_choice(cand_choice, level);
                 // Cache the result of the evaluation for the pair
@@ -1051,8 +1055,9 @@ void Partitioner::group(Partitioner::Level level) {
             const Function &prod_f = dep_analy.env.at(g.first.func.name());
             bool is_final_stage = (g.first.stage_num == prod_f.updates().size());
 
-            if (is_output || !is_final_stage)
+            if (is_output || !is_final_stage) {
                 continue;
+            }
 
             if (children.find(g.first) != children.end()) {
                 // All the stages beloning to a function are considered to be a
@@ -1108,8 +1113,9 @@ void Partitioner::group(Partitioner::Level level) {
         set<FusionChoice> invalid_keys;
         for (auto &c: cand_group_children) {
             for (auto &entry: fusion_cache) {
-                if (entry.first.prod == c.func.name() || entry.first.cons == c)
+                if (entry.first.prod == c.func.name() || entry.first.cons == c) {
                     invalid_keys.insert(entry.first);
+                }
             }
         }
 
@@ -1196,8 +1202,7 @@ Partitioner::get_bounds_from_tile_sizes(const FStage &s,
                 // extent of the bounds to that of the dimension estimate
                 bounds[var] = bound;
             }
-        }
-        else {
+        } else {
             bounds[var] = bound;
         }
     }
@@ -1499,8 +1504,9 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
         fused.tile_sizes = tile_sizes;
 
         for (auto &prod_g: prod_groups) {
-            for (const FStage &s: prod_g.members)
+            for (const FStage &s: prod_g.members) {
                 fused.inlined.insert(s.func.name());
+            }
         }
 
         for (const string &f: cons.inlined) {
@@ -2017,8 +2023,9 @@ string Partitioner::generate_group_cpu_schedule(
     for (const FStage &mem: g.members) {
         // Skip member stages that have been inlined
         if (g.inlined.find(mem.func.name()) != g.inlined.end() ||
-            mem.func.name() == g_out.name())
+            mem.func.name() == g_out.name()) {
             continue;
+        }
 
         // Get the definition corresponding to the stage
         Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
