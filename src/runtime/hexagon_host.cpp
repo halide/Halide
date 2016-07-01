@@ -33,6 +33,7 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
+typedef int (*remote_poll_profiler_func_fn)(int *);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -43,6 +44,7 @@ WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
+WEAK remote_poll_profiler_func_fn remote_poll_profiler_func = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
@@ -71,6 +73,20 @@ WEAK void poll_log(void *user_context) {
             break;
         }
     }
+}
+
+WEAK int get_remote_profiler_func() {
+    if (!remote_poll_profiler_func) {
+        // If profiling isn't supported remotely, bill everything to
+        // 'overhead'
+        return 0;
+    }
+
+    int func = 0;
+    if (int result = remote_poll_profiler_func(&func)) {
+        error(NULL) << "Hexagon: remote_poll_profiler_func failed " << result << "\n";
+    }
+    return func;
 }
 
 template <typename T>
@@ -113,6 +129,8 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // This symbol is optional.
     get_symbol(user_context, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
+
+    get_symbol(user_context, "halide_hexagon_remote_poll_profiler_func", remote_poll_profiler_func, /* required */ false);
 
     host_malloc_init();
 
@@ -287,6 +305,8 @@ WEAK int halide_hexagon_run(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    halide_profiler_get_state()->get_current_func = get_remote_profiler_func;
+
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run -> ";
     result = remote_run(module, *function,
@@ -299,6 +319,8 @@ WEAK int halide_hexagon_run(void *user_context,
         error(user_context) << "Hexagon pipeline failed.\n";
         return result;
     }
+
+    halide_profiler_get_state()->get_current_func = NULL;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

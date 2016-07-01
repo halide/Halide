@@ -965,6 +965,11 @@ struct halide_profiler_state {
      * periodically by the profiler thread. */
     int current_func;
 
+    /** A function that the profiler thread should call to get the
+     * currently running Func. If null, it reads from the int above
+     * instead. */
+    int (*get_current_func)();
+
     /** Is the profiler thread running. */
     bool started;
 };
