@@ -33,7 +33,7 @@ pipeline_hvx64-%.o: pipeline
 	HL_TARGET=$*-hvx_64 ./pipeline pipeline_hvx64-$* pipeline_hvx64
 
 pipeline_hvx128-%.o: pipeline
-	HL_TARGET=$*-profile-hvx_128 ./pipeline pipeline_hvx128-$* pipeline_hvx128
+	HL_TARGET=$*-hvx_128 ./pipeline pipeline_hvx128-$* pipeline_hvx128
 
 process-%: process.cpp pipeline_cpu-%.o pipeline_hvx64-%.o pipeline_hvx128-%.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline_cpu-$*.o pipeline_hvx64-$*.o pipeline_hvx128-$*.o -o process-$* $(LDFLAGS-$*)
