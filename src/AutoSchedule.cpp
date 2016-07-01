@@ -1449,17 +1449,21 @@ Partitioner::Group Partitioner::fuse_groups(const Group &prod_group,
                                             const Group &cons_group) {
 
     vector<FStage> fused_members;
-    for (auto &s: prod_group.members)
+    for (auto &s: prod_group.members) {
         fused_members.push_back(s);
-    for (auto &s: cons_group.members)
+    }
+    for (auto &s: cons_group.members) {
         fused_members.push_back(s);
+    }
 
     Group fused_group(cons_group.output, fused_members);
 
-    for (auto &f: prod_group.inlined)
+    for (auto &f: prod_group.inlined) {
         fused_group.inlined.insert(f);
-    for (auto &f: cons_group.inlined)
+    }
+    for (auto &f: cons_group.inlined) {
         fused_group.inlined.insert(f);
+    }
 
     return fused_group;
 }
@@ -1959,10 +1963,12 @@ string Partitioner::generate_group_cpu_schedule(
     if (outer_dims.size() > 0) {
 
         vector<VarOrRVar> ordering;
-        for (auto &v: inner_dims)
+        for (auto &v: inner_dims) {
             ordering.push_back(v);
-        for (auto &v: outer_dims)
+        }
+        for (auto &v: outer_dims) {
             ordering.push_back(v);
+        }
 
         string var_order = ordering[0].name();
         for (size_t o = 1; o < ordering.size(); o++) {

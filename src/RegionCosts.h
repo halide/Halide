@@ -42,8 +42,9 @@ struct FindAllCalls : public IRVisitor {
                 make_pair(call->name, call->args);
             call_args.push_back(arg_exprs);
         }
-        for (size_t i = 0; (i < call->args.size()); i++)
+        for (size_t i = 0; (i < call->args.size()); i++) {
             call->args[i].accept(this);
+        }
     }
 };
 
@@ -55,8 +56,9 @@ struct FindImageInputs : public IRVisitor {
         if (call->call_type == Call::Image) {
             input_type[call->name] = call->type;
         }
-        for (size_t i = 0; (i < call->args.size()); i++)
+        for (size_t i = 0; (i < call->args.size()); i++) {
             call->args[i].accept(this);
+        }
     }
 };
 

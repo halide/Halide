@@ -134,8 +134,9 @@ struct ExprCost : public IRVisitor {
             }
         }
 
-        for (size_t i = 0; (i < call->args.size()); i++)
+        for (size_t i = 0; (i < call->args.size()); i++) {
             call->args[i].accept(this);
+        }
     }
 
     void visit(const Let * let) {
@@ -601,8 +602,9 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
                                       const set<string> &inlined) {
 
     map<string, int> num_consumers;
-    for (auto &f: regions)
+    for (auto &f: regions) {
         num_consumers[f.first] = 0;
+    }
 
     for (auto &f: regions) {
         map<string, Function> prods = find_direct_calls(env.at(f.first));
