@@ -14,6 +14,7 @@ extern "C" {
 }
 
 #include "log.h"
+#include "profiler.h"
 
 // ELF comes in 32 and 64-bit variants. Define ELF64 to use the 64-bit
 // variant.
