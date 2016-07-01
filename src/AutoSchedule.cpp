@@ -124,7 +124,7 @@ DependenceAnalysis::overlap_regions(Function f, int stage_num,
                                     const set<string> &prods,
                                     bool values_computed) {
 
-    vector< map<string, Box> > conc_overlaps;
+    vector<map<string, Box>> conc_overlaps;
 
     Definition def = get_stage_definition(f, stage_num);
     const vector<Dim> &dims = def.schedule().dims();
@@ -356,7 +356,7 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
             regions_required(f, stage_num, shifted_bounds, prods,
                              values_computed);
 
-    map<string, Box> overalps;
+    map<string, Box> overlaps;
     for (auto &reg: regions) {
         if (regions_shifted.find(reg.first) == regions.end()) {
             // It will be interesting to log cases where this actually happens
@@ -374,16 +374,16 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
             b_intersect.push_back(interval_intersect(b[i], b_shifted[i]));
         // A function should appear once in the regions and therefore cannot
         // already be present in the overlaps map
-        internal_assert(overalps.find(reg.first) == overalps.end());
-        overalps[reg.first] = b_intersect;
+        internal_assert(overlaps.find(reg.first) == overlaps.end());
+        overlaps[reg.first] = b_intersect;
     }
 
     // Simplify
-    for (auto &f : overalps) {
+    for (auto &f : overlaps) {
         simplify_box(f.second);
     }
 
-    return overalps;
+    return overlaps;
 }
 
 map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
@@ -508,8 +508,8 @@ struct Partitioner {
         // Estimate of the parallelism
         int64_t parallelism;
 
-        friend std::ostream& operator <<(std::ostream &stream,
-                                         const GroupAnalysis &analy) {
+        friend std::ostream& operator<<(std::ostream &stream,
+                                        const GroupAnalysis &analy) {
             stream << "[arith cost:" << analy.arith_cost << ",";
             stream << "mem_cost:" << analy.mem_cost << ",";
             stream << "parallelism:" << analy.parallelism << "]\n";
@@ -2251,7 +2251,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
         return sched;
     }
 
-    map<string, vector<string> > update_args;
+    map<string, vector<string>> update_args;
     set<string> reductions;
     DependenceAnalysis dep_analy(env, func_val_bounds);
 
