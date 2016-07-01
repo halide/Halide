@@ -532,7 +532,7 @@ struct Partitioner {
     const map<string, Box> &pipeline_bounds;
     const MachineParams &arch_params;
     DependenceAnalysis &dep_analy;
-    RegionCosts &cost_model;
+    RegionCosts &costs;
     const vector<Function> &outputs;
 
     map<FStage, set<FStage>> children;
@@ -540,7 +540,7 @@ struct Partitioner {
     bool gpu_schedule;
 
     Partitioner(map<string, Box> &_pipeline_bounds, MachineParams &_arch_params,
-                DependenceAnalysis &_dep_analy, RegionCosts &_cost_model,
+                DependenceAnalysis &_dep_analy, RegionCosts &_costs,
                 const vector<Function> &_outputs, bool _gpu_schedule);
 
     void merge_groups(const FusionChoice &choice, const EvalConfig &eval,
@@ -610,11 +610,11 @@ struct Partitioner {
 Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
                          MachineParams &_arch_params,
                          DependenceAnalysis &_dep_analy,
-                         RegionCosts &_cost_model,
+                         RegionCosts &_costs,
                          const vector<Function> &_outputs,
                          bool _gpu_schedule):
     pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-    dep_analy(_dep_analy), cost_model(_cost_model), outputs(_outputs),
+    dep_analy(_dep_analy), costs(_costs), outputs(_outputs),
     gpu_schedule(_gpu_schedule)
 {
     // Place each stage of a function in its own group
@@ -1304,10 +1304,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // Aggregate costs for intermediate functions in a tile and the
     // tile output
     pair<int64_t, int64_t> tile_cost =
-            cost_model.region_cost(group_reg, g.inlined);
+            costs.region_cost(group_reg, g.inlined);
 
     pair<int64_t, int64_t> out_cost =
-            cost_model.stage_region_cost(g.output.func.name(),
+            costs.stage_region_cost(g.output.func.name(),
                                          g.output.stage_num,
                                          tile_bounds, g.inlined);
 
@@ -1321,10 +1321,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
 
     // Detailed load costs for all the group intermediates
     map<string, int64_t> group_load_costs =
-            cost_model.detailed_load_costs(group_reg, g.inlined);
+            costs.detailed_load_costs(group_reg, g.inlined);
 
     map<string, int64_t> out_load_costs =
-            cost_model.stage_detailed_load_costs(g.output.func.name(),
+            costs.stage_detailed_load_costs(g.output.func.name(),
                                                  g.output.stage_num,
                                                  tile_bounds, g.inlined);
 
@@ -1377,29 +1377,29 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         int64_t footprint = 0;
         if (group_mem.find(f_load.first) != group_mem.end() &&
             f_load.first != g.output.func.name()) {
-            footprint = cost_model.region_size(f_load.first,
+            footprint = costs.region_size(f_load.first,
                                                alloc_reg[f_load.first]);
         } else {
             int64_t initial_footprint = 0;
             if (dep_analy.env.find(f_load.first) != dep_analy.env.end()) {
                 // Initial loads
                 initial_footprint =
-                        cost_model.region_size(f_load.first,
+                        costs.region_size(f_load.first,
                                                pipeline_bounds.at(f_load.first));
                 // Subsequent loads
-                footprint = cost_model.region_size(f_load.first,
+                footprint = costs.region_size(f_load.first,
                                                    alloc_reg.at(f_load.first));
             } else {
                 // Initial loads
                 initial_footprint =
-                        cost_model.input_region_size(f_load.first,
+                        costs.input_region_size(f_load.first,
                                                      pipeline_bounds.at(f_load.first));
                 // Subsequent loads
                 if (f_load.first == g.output.func.name()) {
-                    footprint = cost_model.input_region_size(f_load.first,
+                    footprint = costs.input_region_size(f_load.first,
                                                              out_tile_extent);
                 } else {
-                    footprint = cost_model.input_region_size(f_load.first,
+                    footprint = costs.input_region_size(f_load.first,
                                                              alloc_reg.at(f_load.first));
                 }
             }
@@ -2139,7 +2139,7 @@ int64_t Partitioner::find_max_access_stride(string var, string func_acc,
         }
         num_storage_dims = f.schedule().storage_dims().size();
     } else {
-        bytes_per_ele = cost_model.inputs.at(func_acc).bytes();
+        bytes_per_ele = costs.inputs.at(func_acc).bytes();
         num_storage_dims = buffer_bounds.size();
     }
 
@@ -2259,11 +2259,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
 
     // Initialize the cost model
     // Compute the expression costs for each function in the pipeline
-    RegionCosts cost_model(env);
-    cost_model.disp_func_costs();
+    RegionCosts costs(env);
+    costs.disp_func_costs();
 
     Partitioner part(pipeline_bounds, arch_params, dep_analy,
-                     cost_model, outputs, false);
+                     costs, outputs, false);
 
     // Compute and display reuse
     /* TODO: Use the reuse estimates to reorder loops
