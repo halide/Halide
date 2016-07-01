@@ -16,6 +16,7 @@
 #include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "ExtractKernels.h"
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
@@ -262,11 +263,12 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
-    debug(0) << "Lowering after final simplification:\n" << s << "\n\n";
+    debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
-    debug(1) << "Splitting off Hexagon offload...\n";
-    s = inject_hexagon_rpc(s, t);
-    debug(0) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
+    debug(1) << "Extracting device kernels...\n";
+    s = extract_device_kernels(s, pipeline_name, t);
+    //s = inject_hexagon_rpc(s, t);
+    debug(2) << "Lowering after extracting device kernels:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

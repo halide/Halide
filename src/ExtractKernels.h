@@ -13,7 +13,7 @@ namespace Internal {
 
 /** Pull loops marked with device APIs to a separate modules, and call them
  * through the host runtime module. */
-Stmt extract_device_kernels(Stmt s, const string &function_name,
+Stmt extract_device_kernels(Stmt s, const std::string &function_name,
 						    const Target &host_target);
 
 }

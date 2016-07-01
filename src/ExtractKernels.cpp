@@ -63,8 +63,8 @@ DeviceAPI device_api_for_target_feature(const Target &t) {
         return DeviceAPI::CUDA;
     } else if (t.has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
-    } else if (t.has_feature(Target::GLSL)) {
-        return DeviceAPI::OpenGL;
+    } else if (t.has_feature(Target::OpenGL)) {
+        return DeviceAPI::GLSL;
     } else if (t.has_feature(Target::Renderscript)) {
         return DeviceAPI::Renderscript;
     } else if (t.has_feature(Target::OpenGLCompute)) {
@@ -109,12 +109,12 @@ class InjectDeviceRPC : public IRMutator {
         return Call::make(Handle(), Call::address_of, {var}, Call::Intrinsic);
     }
 
-    Expr module_state(string &api_unique_name) {
+    Expr module_state(const string &api_unique_name) {
         return state_var("module_state_" + function_name + "_" + api_unique_name,
                          type_of<void*>());
     }
 
-    Expr module_state_ptr(string &api_unique_name) {
+    Expr module_state_ptr(const string &api_unique_name) {
         return state_var_ptr("module_state_" + function_name + "_" + api_unique_name,
                              type_of<void*>());
     }
@@ -295,12 +295,13 @@ class InjectDeviceRPC : public IRMutator {
     }
 
 public:
-    InjectDeviceRPC(const string& name, const Target &target) : , device_code("hexagon", target) {}
+    InjectDeviceRPC(const string& name, const Target &target) :
+        function_name(name), device_code("hexagon", target) {}
 
     Stmt initialize_gpu_kernel(const Module &device_code) {
         // Skip if there are no device kernels.
         if (device_code.functions().empty()) {
-            return s;
+            return Stmt();
         }
 
         Target t = device_code.target();
@@ -352,7 +353,8 @@ public:
         so.read(reinterpret_cast<char*>(&object[0]), object.size());
 
         size_t code_size = object.size();
-        Expr code_ptr = buffer_ptr(&object[0], code_size, api_unique_name + "_code");
+        string code_name = api_unique_name + "_code";
+        Expr code_ptr = buffer_ptr(&object[0], code_size, code_name.c_str());
 
         // Wrap the statement in calls to halide_initialize_kernels.
         string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
@@ -365,7 +367,7 @@ public:
     Stmt initialize_hexagon_kernel(const Module &device_code) {
         // Skip if there are no device kernels.
         if (device_code.functions().empty()) {
-            return s;
+            return Stmt();
         }
 
         // Compile the device code.
@@ -458,8 +460,10 @@ public:
     Stmt inject(Stmt s) {
         s = mutate(s);
 
-        s = Block::make(initialize_hexagon_kernel(device_code), s);
-
+        Stmt hexagon = initialize_hexagon_kernel(device_code);
+        if (hexagon.defined()) {
+            s = Block::make(hexagon, s);
+        }
         return s;
     }
 };
