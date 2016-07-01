@@ -35,8 +35,7 @@ struct FindAllCalls : public IRVisitor {
 
     void visit(const Call *call) {
         // See if images need to be included
-        if (call->call_type == Call::Halide ||
-                call->call_type == Call::Image) {
+        if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             funcs_called.insert(call->name);
             pair<string, vector<Expr>> arg_exprs =
                 make_pair(call->name, call->args);
@@ -72,41 +71,41 @@ struct RegionCosts {
 
     pair<int64_t, int64_t>
         stage_region_cost(string func, int stage, DimBounds &bounds,
-                const set<string> &inlines = set<string>());
+                          const set<string> &inlines = set<string>());
 
     pair<int64_t, int64_t>
         stage_region_cost(string func, int stage, Box &region,
-                const set<string> &inlines = set<string>());
+                          const set<string> &inlines = set<string>());
 
     pair<int64_t, int64_t>
         region_cost(string func, Box &region,
-                const set<string> &inlines = set<string>());
+                    const set<string> &inlines = set<string>());
 
     pair<int64_t, int64_t>
         region_cost(map<string, Box> &regions,
-                const set<string> &inlines = set<string>());
+                    const set<string> &inlines = set<string>());
 
     vector<pair<int64_t, int64_t>>
         get_func_cost(const Function &f,
-                const set<string> &inlines = set<string>());
+                      const set<string> &inlines = set<string>());
     map<string, int64_t>
         stage_detailed_load_costs(string func, int stage,
-                DimBounds &bounds,
-                const set<string> &inlines = set<string>());
+                                  DimBounds &bounds,
+                                  const set<string> &inlines = set<string>());
     map<string, int64_t>
         stage_detailed_load_costs(string func, int stage,
-                const set<string> &inlines = set<string>());
+                                  const set<string> &inlines = set<string>());
     map<string, int64_t>
         detailed_load_costs(string func, const Box &region,
-                const set<string> &inlines = set<string>());
+                            const set<string> &inlines = set<string>());
     map<string, int64_t>
         detailed_load_costs(const map<string, Box> &regions,
-                const set<string> &inlines = set<string>());
+                            const set<string> &inlines = set<string>());
 
     int64_t region_size(string func, const Box &region);
 
     int64_t region_footprint(const map<string, Box> &regions,
-            const set<string> &inlined = set<string>());
+                             const set<string> &inlined = set<string>());
 
     int64_t input_region_size(string input, const Box &region);
 
@@ -119,13 +118,19 @@ struct RegionCosts {
 
 // Utility functions
 int get_extent(const Interval &i);
+
 int64_t box_area(const Box &b);
+
 void disp_regions(const map<string, Box> &regions);
+
 Definition get_stage_definition(const Function &f, int stage_num);
+
 void combine_load_costs(map<string, int64_t> &result,
                         const map<string, int64_t> &partial);
+
 DimBounds get_stage_bounds(Function f, int stage_num,
                            const DimBounds &pure_bounds);
+
 vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
 
 }
