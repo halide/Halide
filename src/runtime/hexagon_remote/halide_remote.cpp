@@ -257,6 +257,11 @@ int halide_hexagon_remote_poll_profiler_func(int *out) {
     return 0;
 }
 
+halide_profiler_state *halide_profiler_get_state() {
+    static halide_profiler_state hvx_profiler_state;
+    return &hvx_profiler_state;
+}
+
 
 
 }  // extern "C"
