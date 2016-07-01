@@ -107,6 +107,8 @@ WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_sleep_ms(void *user_context, int ms);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
+WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj);
+WEAK void halide_device_host_nop_free(void *user_context, void *obj);
 
 // The pipeline_state is declared as void* type since halide_profiler_pipeline_stats
 // is defined inside HalideRuntime.h which includes this header file.
@@ -126,6 +128,12 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         int num_funcs,
                                         const uint64_t *func_names);
 
+WEAK int halide_host_cpu_count();
+
+WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
+                                       const struct halide_device_interface *device_interface);
+WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf);
+
 struct halide_filter_metadata_t;
 struct _halide_runtime_internal_registered_filter_t {
     // This is a _halide_runtime_internal_registered_filter_t, but
@@ -141,6 +149,17 @@ struct mxArray;
 WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
+
+
+// Condition variables. Only available on some platforms (those that use the common thread pool).
+struct halide_cond {
+    uint64_t _private[8];
+};
+
+WEAK void halide_cond_init(struct halide_cond *cond);
+WEAK void halide_cond_destroy(struct halide_cond *cond);
+WEAK void halide_cond_broadcast(struct halide_cond *cond);
+WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 
 }  // extern "C"
 
@@ -195,8 +214,6 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
 }
 
 }}}
-
-
 
 using namespace Halide::Runtime::Internal;
 
