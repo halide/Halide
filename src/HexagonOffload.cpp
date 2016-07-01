@@ -347,6 +347,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     // llvm currently disagrees with hexagon clang as to what
     // constitutes valid debug info.
     static const Target::Feature shared_features[] = {
+        Target::Profile,
         Target::NoAsserts,
         Target::HVX_64,
         Target::HVX_128,
