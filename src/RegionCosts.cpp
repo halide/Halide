@@ -643,7 +643,7 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
         }
         working_set_size = std::max(curr_size, working_set_size);
         map<string, Function> prods = find_direct_calls(env.at(f));
-        for (auto& p: prods) {
+        for (auto &p: prods) {
             if (num_consumers.find(p.first) != num_consumers.end()) {
                 num_consumers[p.first] -= 1;
                 if (num_consumers[p.first] == 0) {

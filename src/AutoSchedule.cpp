@@ -151,7 +151,7 @@ DependenceAnalysis::regions_required(Function f,
         map<string, Box> stage_regions =
                 regions_required(f, s, bounds, prods, values_computed);
 
-        for (auto& reg: stage_regions) {
+        for (auto &reg: stage_regions) {
             // Merge region with an existing region for the function
             if (regions.find(reg.first) == regions.end())
                 regions[reg.first] = reg.second;
@@ -205,7 +205,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
                 // Merge the regions with the regions found while looking at
                 // the values
-                for (auto& reg: arg_regions) {
+                for (auto &reg: arg_regions) {
                     if (curr_regions.find(reg.first) == curr_regions.end())
                         curr_regions[reg.first] = reg.second;
                     else
@@ -246,7 +246,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
                     Function prod_func = env.at(reg.first);
                     DimBounds prod_pure_bounds;
-                    const vector<string>& args = prod_func.args();
+                    const vector<string> &args = prod_func.args();
 
                     internal_assert(reg.second.size() == args.size());
 
@@ -294,8 +294,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 user_warning <<
                 "Bounds for the following expression could not be inferred" <<
                 "might result in suboptimal scheduling decisions:\n" << lower << '\n';
-                const Function& curr_f = env.at(f_reg.first);
-                for (auto& b: curr_f.schedule().estimates()) {
+                const Function &curr_f = env.at(f_reg.first);
+                for (auto &b: curr_f.schedule().estimates()) {
                     uint32_t num_pure_args = curr_f.args().size();
                     if (i < num_pure_args && b.var == curr_f.args()[i])
                         lower = Expr(b.min.as<IntImm>()->value);
@@ -306,8 +306,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 user_warning <<
                 "Bounds for the following expression could not be inferred" <<
                 "might result in suboptimal scheduling decisions:\n" << upper << '\n';
-                const Function& curr_f = env.at(f_reg.first);
-                for (auto& b: curr_f.schedule().estimates()) {
+                const Function &curr_f = env.at(f_reg.first);
+                for (auto &b: curr_f.schedule().estimates()) {
                     uint32_t num_pure_args = curr_f.args().size();
                     if (i < num_pure_args && b.var == curr_f.args()[i]) {
                         const IntImm * bmin = b.min.as<IntImm>();
@@ -376,7 +376,7 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
     }
 
     // Simplify
-    for (auto& f : overalps)
+    for (auto &f : overalps)
         simplify_box(f.second);
 
     return overalps;
@@ -389,9 +389,9 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analy,
     for (auto &out: outputs) {
         DimBounds pure_bounds;
         Box out_box;
-        for (auto& arg: out.args()) {
+        for (auto &arg: out.args()) {
             bool estimate_found = false;
-            for (auto& est: out.schedule().estimates()) {
+            for (auto &est: out.schedule().estimates()) {
                 if (est.var == arg) {
                     Interval I = Interval(est.min, simplify(est.min + est.extent - 1));
                     pure_bounds[arg] = I;
@@ -702,7 +702,7 @@ void Partitioner::disp_grouping() {
     debug(3) << "\n=========" << '\n';
     debug(3) << "Grouping:" << '\n';
     debug(3) << "=========" << '\n';
-    for (auto& g: groups) {
+    for (auto &g: groups) {
         debug(3) << g.second << '\n';
     }
     debug(3) << "=========" << '\n';
@@ -712,9 +712,9 @@ void Partitioner::disp_pipeline_graph() {
     debug(3) << "\n================" << '\n';
     debug(3) << "Pipeline graph:" << '\n';
     debug(3) << "================" << '\n';
-    for (auto& f: children) {
+    for (auto &f: children) {
         debug(3) << f.first << ": [";
-        for (auto& c: f.second) {
+        for (auto &c: f.second) {
             debug(3) << c << ",";
         }
         debug(3) << "]" << '\n';
@@ -905,7 +905,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
     const vector<Dim> &dims = def.schedule().dims();
 
     set<string> pure_vars;
-    for (const string& arg: stg.func.args()) {
+    for (const string &arg: stg.func.args()) {
         pure_vars.insert(arg);
     }
 
@@ -1082,7 +1082,7 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << "\n============================" << '\n';
         debug(3) << "Current grouping candidates:" << '\n';
         debug(3) << "============================" << '\n';
-        for (auto& p: cand) {
+        for (auto &p: cand) {
             debug(3) << "[" << p.first << "," << p.second << "]" << '\n';
         }
 
@@ -1152,17 +1152,17 @@ void Partitioner::group(Partitioner::Level level) {
     }
 }
 
-DimBounds Partitioner::get_bounds(const FStage& s) {
+DimBounds Partitioner::get_bounds(const FStage &s) {
 
     Definition def = get_stage_definition(s.func, s.stage_num);
     DimBounds bounds;
 
-    const vector<string>& args = s.func.args();
+    const vector<string> &args = s.func.args();
     for (size_t d = 0; d < args.size(); d++) {
         bounds[args[d]] = pipeline_bounds.at(s.func.name())[d];
     }
 
-    for (const ReductionVariable& rvar: def.schedule().rvars()) {
+    for (const ReductionVariable &rvar: def.schedule().rvars()) {
         bounds[rvar.var] = Interval(simplify(rvar.min),
                                     simplify(rvar.min + rvar.extent - 1));
     }
@@ -1221,7 +1221,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         stg_def.accept(&find);
         for (auto &c: find.funcs_called) {
             bool is_member = false;
-            for (auto& m: g.members) {
+            for (auto &m: g.members) {
                 if (m.func.name() == c) {
                     is_member = true;
                     break;
@@ -2214,7 +2214,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     return var_strides;
 }
 
-string generate_schedules(const vector<Function>& outputs, const Target& target) {
+string generate_schedules(const vector<Function> &outputs, const Target &target) {
 
     string sched;
     // Compute an environment map which is used throughout the auto scheduling
