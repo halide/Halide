@@ -14,6 +14,7 @@ extern "C" {
 }
 
 #include "log.h"
+#include "profiler.h"
 
 // ELF comes in 32 and 64-bit variants. Define ELF64 to use the 64-bit
 // variant.
@@ -579,6 +580,7 @@ struct elf_t {
             {"memcpy", (char *)(&memcpy)},
             {"memmove", (char *)(&memmove)},
             {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
+            {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
             {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
             {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
             {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
