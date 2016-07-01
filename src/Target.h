@@ -290,6 +290,9 @@ EXPORT Target get_jit_target_from_environment();
  * Target::FeatureEnd */
 EXPORT Target::Feature target_feature_for_device_api(DeviceAPI api);
 
+/** Return the unique string representation of a device api */
+EXPORT std::string device_api_to_string(DeviceAPI device_api);
+
 namespace Internal {
 
 EXPORT void target_test();

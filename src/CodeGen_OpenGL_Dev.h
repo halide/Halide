@@ -34,7 +34,7 @@ public:
 
     void dump();
 
-    std::string api_unique_name() { return "opengl"; }
+    std::string api_unique_name() { return device_api_to_string(DeviceAPI::GLSL); }
 
 private:
     CodeGen_GLSL *glc;

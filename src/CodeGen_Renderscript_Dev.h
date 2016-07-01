@@ -38,7 +38,7 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "renderscript"; }
+    std::string api_unique_name() { return device_api_to_string(DeviceAPI::Renderscript); }
 
     virtual size_t slots_taken() const;
 

@@ -512,6 +512,24 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     }
 }
 
+std::string device_api_to_string(DeviceAPI device_api) {
+    static const std::map<DeviceAPI, std::string> device_api_map = {
+        {DeviceAPI::None, "none"},
+        {DeviceAPI::Host, "host"},
+        {DeviceAPI::Default_GPU, "defaultgpu"},
+        {DeviceAPI::CUDA, "cuda"},
+        {DeviceAPI::OpenCL, "opencl"},
+        {DeviceAPI::GLSL, "opengl"},
+        {DeviceAPI::Renderscript, "renderscript"},
+        {DeviceAPI::OpenGLCompute, "openglcompute"},
+        {DeviceAPI::Metal, "metal"},
+        {DeviceAPI::Hexagon, "hexagon"},
+    };
+    auto iter = device_api_map.find(device_api);
+    internal_assert(iter != device_api_map.end());
+    return iter->second;
+}
+
 namespace Internal {
 
 EXPORT void target_test() {

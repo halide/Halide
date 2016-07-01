@@ -1881,11 +1881,10 @@ namespace Internal {
 
 inline void schedule_scalar(Func f) {
     Target t = get_jit_target_from_environment();
-    if (t.has_gpu_feature()) {
-        f.gpu_single_thread();
-    }
     if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
         f.hexagon();
+    } else if (t.has_gpu_feature()) {
+        f.gpu_single_thread();
     }
 }
 

@@ -1027,6 +1027,7 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
     }
 
     for (const Definition &def : definitions) {
+        DeviceAPI device_api = DeviceAPI::None;
         const Schedule &s = def.schedule();
         for (const Dim &d : s.dims()) {
             if (!target.supports_device_api(d.device_api)) {
@@ -1034,6 +1035,15 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
                            << " requires " << d.device_api
                            << " but no compatible target feature is enabled in target "
                            << target.to_string() << "\n";
+            }
+            if (device_api == DeviceAPI::None) {
+                device_api = d.device_api;
+            } else if (d.device_api != DeviceAPI::None) {
+                user_assert(d.device_api == device_api)
+                    << "Schedule for Func " << f.name() << " has multiple DeviceAPIs: "
+                    << device_api_to_string(device_api) << " and "
+                    << device_api_to_string(d.device_api)
+                    << "; can only schedule a Func in one device\n";
             }
         }
     }

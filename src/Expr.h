@@ -5,6 +5,7 @@
  * Base classes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <map>
 #include <string>
 #include <vector>
 

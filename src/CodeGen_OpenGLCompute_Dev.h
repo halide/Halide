@@ -35,7 +35,7 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "openglcompute"; }
+    std::string api_unique_name() { return device_api_to_string(DeviceAPI::OpenGLCompute); }
 
 protected:
 
