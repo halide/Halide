@@ -87,39 +87,31 @@ bin/%/thread_pool.o: thread_pool.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c thread_pool.cpp -o $@
 
-bin/%/halide_remote.o: halide_remote.cpp elf.h profiler.h
+bin/%/halide_remote.o: halide_remote.cpp elf.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
-
-bin/%/profiler.o: profiler.cpp profiler.h
-	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c profiler.cpp -o $@
 
 bin/%/halide_host.o: halide_host.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_host.cpp -o $@
 
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/profiler.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -lc -o $@ \
 	    -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	    -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail \
 	    -Wl,-soname=libhalide_hexagon_remote_skel.so \
-	    -Wl,--start-group  bin/$*/halide_remote.o bin/$*/thread_pool.o bin/$*/profiler.o bin/$*/halide_hexagon_remote_skel.o -Wl,--end-group
+	    -Wl,--start-group  bin/$*/halide_remote.o bin/$*/thread_pool.o bin/$*/halide_hexagon_remote_skel.o -Wl,--end-group
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
 	mkdir -p $(@D)
 	$(CC-$*) $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so $^ -shared -o $@
 
 # Build rules for the simulator implementation.
-bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h elf.h profiler.h
+bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h elf.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -DSIMULATOR -c sim_remote.cpp -o $@
-
-bin/%/sim_profiler.o: profiler.cpp profiler.h
-	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -DSIMULATOR -c profiler.cpp -o $@
 
 bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
@@ -135,9 +127,9 @@ LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
 FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
 LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
 
-bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/sim_profiler.o
+bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/sim_profiler.o $(LIBDL) \
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o $(LIBDL) \
 	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --whole-archive $(LIB_QURT) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	    --dynamic-linker= -E --force-dynamic
 
