@@ -81,7 +81,7 @@ WEAK int get_remote_profiler_func() {
 
     int func = 0;
     if (int result = remote_poll_profiler_func(&func)) {
-        error(NULL) << "Hexagon: remote_poll_profiler_func failed " << result << "\n";
+        print(NULL) << "Hexagon: remote_poll_profiler_func failed " << result << "\n";
     }
     return func;
 }
