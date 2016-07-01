@@ -77,9 +77,8 @@ WEAK void poll_log(void *user_context) {
 
 WEAK int get_remote_profiler_func() {
     if (!remote_poll_profiler_func) {
-        // If profiling isn't supported remotely, bill everything to
-        // 'overhead'
-        return 0;
+        // This should only have been called if there's a remote profiler func installed.
+        error(NULL) << "Hexagon: remote_poll_profiler_func not found\n";
     }
 
     int func = 0;
@@ -305,7 +304,13 @@ WEAK int halide_hexagon_run(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    halide_profiler_get_state()->get_current_func = get_remote_profiler_func;
+    // If remote profiling is supported, tell the profiler to call
+    // get_remote_profiler_func to retrieve the current
+    // func. Otherwise leave it alone - the cost of remote running
+    // will be billed to the calling Func.
+    if (remote_poll_profiler_func) {
+        halide_profiler_get_state()->get_current_func = get_remote_profiler_func;
+    }
 
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run -> ";
