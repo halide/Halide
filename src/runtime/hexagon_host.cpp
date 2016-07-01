@@ -59,7 +59,9 @@ WEAK void poll_log(void *user_context) {
         int read = 0;
         int result = remote_poll_log(&message[0], sizeof(message), &read);
         if (result != 0) {
-            debug(user_context) << "Hexagon: remote_poll_log failed " << result << "\n";
+            // Don't make this an error, otherwise we might obscure
+            // more information about errors that would come later.
+            print(user_context) << "Hexagon: remote_poll_log failed " << result << "\n";
             return;
         }
 
