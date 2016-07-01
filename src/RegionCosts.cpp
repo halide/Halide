@@ -117,7 +117,8 @@ class ExprCost : public IRVisitor {
               call->name == "bitwise_xor" || call->name == "bitwise_or" ||
               call->name == "shift_left" || call->name == "shift_right" ||
               call->name == "shift_left" || call->name == "shift_right" ||
-              call->name == "div_round_to_zero" || call->name == "mod_round_to_zero") {
+              call->name == "div_round_to_zero" || call->name == "mod_round_to_zero" ||
+              call->name == "undef") {
               ops+=1;
           } else if (call->name == "abs" || call->name == "absd" ||
                      call->name == "lerp" || call->name == "random" ||
