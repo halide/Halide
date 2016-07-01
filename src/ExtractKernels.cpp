@@ -82,6 +82,74 @@ DeviceAPI device_api_for_target_feature(const Target &t) {
     }
 }
 
+// Sniff the contents of a kernel to extracts the bounds of all the
+// thread indices (so we know how many threads to launch), and the
+// amount of shared memory to allocate.
+class ExtractBounds : public IRVisitor {
+public:
+
+    Expr num_threads[4];
+    Expr num_blocks[4];
+    Expr shared_mem_size;
+
+    ExtractBounds() : shared_mem_size(0), found_shared(false) {
+        for (int i = 0; i < 4; i++) {
+            num_threads[i] = num_blocks[i] = 1;
+        }
+    }
+
+private:
+
+    bool found_shared;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            internal_assert(is_zero(op->min));
+        }
+
+        if (ends_with(op->name, ".__thread_id_x")) {
+            num_threads[0] = op->extent;
+        } else if (ends_with(op->name, ".__thread_id_y")) {
+            num_threads[1] = op->extent;
+        } else if (ends_with(op->name, ".__thread_id_z")) {
+            num_threads[2] = op->extent;
+        } else if (ends_with(op->name, ".__thread_id_w")) {
+            num_threads[3] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_x")) {
+            num_blocks[0] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_y")) {
+            num_blocks[1] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_z")) {
+            num_blocks[2] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_w")) {
+            num_blocks[3] = op->extent;
+        }
+
+        op->body.accept(this);
+    }
+
+    void visit(const LetStmt *op) {
+        if (expr_uses_var(shared_mem_size, op->name)) {
+            shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
+        }
+        op->body.accept(this);
+    }
+
+    void visit(const Allocate *allocate) {
+        user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
+            "(Memoization is not supported inside GPU kernels at present.)\n";
+
+        if (allocate->name == "__shared") {
+            internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
+            shared_mem_size = allocate->extents[0];
+            found_shared = true;
+        }
+        allocate->body.accept(this);
+    }
+};
+
 class InjectDeviceRPC : public IRMutator {
     string function_name;
     map<string, Expr> state_vars;
@@ -246,8 +314,295 @@ class InjectDeviceRPC : public IRMutator {
 
         debug(1) << "Launching " << api_func_name << " device kernel\n";
 
-        return Stmt();
-    }
+        ExtractBounds bounds;
+        body.accept(&bounds);
+
+        debug(2) << "GPU Kernel bounds: ("
+                 << bounds.num_threads[0] << ", "
+                 << bounds.num_threads[1] << ", "
+                 << bounds.num_threads[2] << ", "
+                 << bounds.num_threads[3] << ") threads, ("
+                 << bounds.num_blocks[0] << ", "
+                 << bounds.num_blocks[1] << ", "
+                 << bounds.num_blocks[2] << ", "
+                 << bounds.num_blocks[3] << ") blocks\n";
+
+        // compile the kernel
+        string kernel_name = unique_name("kernel_" + loop_name);
+        for (size_t i = 0; i < kernel_name.size(); i++) {
+            if (!isalnum(kernel_name[i])) {
+                kernel_name[i] = '_';
+            }
+        }
+
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32_t->getPointerTo());
+        Value *zero_int32 = codegen(Expr(cast<int>(0)));
+
+        Value *gpu_num_padded_attributes  = zero_int32;
+        Value *gpu_vertex_buffer   = null_float_ptr;
+        Value *gpu_num_coords_dim0 = zero_int32;
+        Value *gpu_num_coords_dim1 = zero_int32;
+
+        if (device_api == DeviceAPI::GLSL) {
+
+            // GL draw calls that invoke the GLSL shader are issued for pairs of
+            // for-loops over spatial x and y dimensions. For each for-loop we create
+            // one scalar vertex attribute for the spatial dimension corresponding to
+            // that loop, plus one scalar attribute for each expression previously
+            // labeled as "glsl_varying"
+
+            // Pass variables created during setup_gpu_vertex_buffer to the
+            // dev run function call.
+            gpu_num_padded_attributes = codegen(Variable::make(Int(32), "glsl.num_padded_attributes"));
+            gpu_num_coords_dim0 = codegen(Variable::make(Int(32), "glsl.num_coords_dim0"));
+            gpu_num_coords_dim1 = codegen(Variable::make(Int(32), "glsl.num_coords_dim1"));
+
+            // Look up the allocation for the vertex buffer and cast it to the
+            // right type
+            gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
+            gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
+                                                           CodeGen_LLVM::f32_t->getPointerTo());
+        }
+
+        // compute a closure over the state passed into the kernel
+        HostClosure c(body, loop_name);
+
+        // Determine the arguments that must be passed into the halide function
+        vector<DeviceArgument> closure_args = c.arguments();
+
+        if (device_api == DeviceAPI::Renderscript) {
+            closure_args.insert(closure_args.begin(), DeviceArgument(".rs_slot_offset", false, Int(32), 0));
+        }
+
+        // Halide allows passing of scalar float and integer arguments. For
+        // OpenGL, pack these into vec4 uniforms and varying attributes
+        if (device_api == DeviceAPI::GLSL) {
+
+            int num_uniform_floats = 0;
+
+            // The spatial x and y coordinates are passed in the first two
+            // scalar float varying slots
+            int num_varying_floats = 2;
+            int num_uniform_ints   = 0;
+
+            // Pack scalar parameters into vec4
+            for (size_t i = 0; i < closure_args.size(); i++) {
+                if (closure_args[i].is_buffer) {
+                    continue;
+                } else if (ends_with(closure_args[i].name, ".varying")) {
+                    closure_args[i].packed_index = num_varying_floats++;
+                } else if (closure_args[i].type.is_float()) {
+                    closure_args[i].packed_index = num_uniform_floats++;
+                } else if (closure_args[i].type.is_int()) {
+                    closure_args[i].packed_index = num_uniform_ints++;
+                }
+            }
+        }
+
+        for (size_t i = 0; i < closure_args.size(); i++) {
+            if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
+                closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
+            }
+        }
+
+        CodeGen_GPU_Dev *gpu_codegen = cgdev[device_api];
+        int slots_taken = 0;
+        if (target.has_feature(Target::Renderscript)) {
+            slots_taken = gpu_codegen->slots_taken();
+            debug(4) << "Slots taken = " << slots_taken << "\n";
+        }
+
+        user_assert(gpu_codegen != nullptr)
+            << "Loop is scheduled on device " << device_api
+            << " which does not appear in target " << target.to_string() << "\n";
+        gpu_codegen->add_kernel(loop, kernel_name, closure_args);
+
+        // get the actual name of the generated kernel for this loop
+        kernel_name = gpu_codegen->get_current_kernel_name();
+        debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
+        Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
+
+        llvm::Type *target_size_t_type = (target.bits == 32) ? i32_t : i64_t;
+
+        // build the kernel arguments array
+        llvm::PointerType *arg_t = i8_t->getPointerTo(); // void*
+        int num_args = (int)closure_args.size();
+
+        // nullptr-terminated list
+        llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
+        Value *gpu_args_arr =
+            create_alloca_at_entry(
+                gpu_args_arr_type,
+                num_args+1, false,
+                kernel_name + "_args");
+
+        // nullptr-terminated list of size_t's
+        llvm::Type *gpu_arg_sizes_arr_type = ArrayType::get(target_size_t_type,
+                                                            num_args+1);
+        Value *gpu_arg_sizes_arr =
+            create_alloca_at_entry(
+                gpu_arg_sizes_arr_type,
+                num_args+1, false,
+                kernel_name + "_arg_sizes");
+
+        llvm::Type *gpu_arg_is_buffer_arr_type = ArrayType::get(i8_t, num_args+1);
+        Value *gpu_arg_is_buffer_arr =
+            create_alloca_at_entry(
+                gpu_arg_is_buffer_arr_type,
+                num_args+1, false,
+                kernel_name + "_arg_is_buffer");
+
+        for (int i = 0; i < num_args; i++) {
+            // get the closure argument
+            string name = closure_args[i].name;
+            Value *val;
+
+            if (closure_args[i].is_buffer) {
+                // If it's a buffer, dereference the dev handle
+                val = buffer_dev(sym_get(name + ".buffer"));
+            } else if (ends_with(name, ".varying")) {
+                // Expressions for varying attributes are passed in the
+                // expression mesh. Pass a non-nullptr value in the argument array
+                // to keep it in sync with the argument names encoded in the
+                // shader header
+                val = ConstantInt::get(target_size_t_type, 1);
+            } else if (name.compare(".rs_slot_offset") == 0) {
+                user_assert(target.has_feature(Target::Renderscript)) <<
+                    ".rs_slot_offset variable is used by Renderscript only.";
+                // First argument for Renderscript _run method is slot offset.
+                val = ConstantInt::get(target_size_t_type, slots_taken);
+            } else {
+                // Otherwise just look up the symbol
+                val = sym_get(name);
+            }
+
+            // allocate stack space to mirror the closure element. It
+            // might be in a register and we need a pointer to it for
+            // the gpu args array.
+            Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
+            // store the closure value into the stack space
+            builder->CreateStore(val, ptr);
+
+            // store a void * pointer to the argument into the gpu_args_arr
+            Value *bits = builder->CreateBitCast(ptr, arg_t);
+            builder->CreateStore(bits,
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_args_arr_type,
+#endif
+                                    gpu_args_arr,
+                                    0,
+                                    i));
+
+            // store the size of the argument. Buffer arguments get
+            // the dev field, which is 64-bits.
+            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
+            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_arg_sizes_arr_type,
+#endif
+                                    gpu_arg_sizes_arr,
+                                    0,
+                                    i));
+
+            builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
+                                 builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                    gpu_arg_is_buffer_arr_type,
+#endif
+                                    gpu_arg_is_buffer_arr,
+                                    0,
+                                    i));
+        }
+        // nullptr-terminate the lists
+        builder->CreateStore(ConstantPointerNull::get(arg_t),
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_args_arr_type,
+#endif
+                                gpu_args_arr,
+                                0,
+                                num_args));
+        builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_arg_sizes_arr_type,
+#endif
+                                gpu_arg_sizes_arr,
+                                0,
+                                num_args));
+        builder->CreateStore(ConstantInt::get(i8_t, 0),
+                             builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                                gpu_arg_is_buffer_arr_type,
+#endif
+                                gpu_arg_is_buffer_arr,
+                                0,
+                                num_args));
+
+        std::string api_unique_name = gpu_codegen->api_unique_name();
+
+        // TODO: only three dimensions can be passed to
+        // cuLaunchKernel. How should we handle blkid[3]?
+        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
+        debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
+        debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
+        debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
+        debug(3) << "bounds.num_blocks[2] = " << bounds.num_blocks[2] << "\n";
+        debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
+        debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
+        debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
+        Value *launch_args[] = {
+            get_user_context(),
+            builder->CreateLoad(get_module_state(api_unique_name)),
+            entry_name_str,
+            codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
+            codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
+            codegen(bounds.shared_mem_size),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_arg_sizes_arr_type,
+#endif
+                gpu_arg_sizes_arr,
+                0,
+                0,
+                "gpu_arg_sizes_ar_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_args_arr_type,
+#endif
+                gpu_args_arr,
+                0,
+                0,
+                "gpu_args_arr_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(
+#if LLVM_VERSION >= 37
+                gpu_arg_is_buffer_arr_type,
+#endif
+                gpu_arg_is_buffer_arr,
+                0,
+                0,
+                "gpu_arg_is_buffer_ref" + api_unique_name),
+            gpu_num_padded_attributes,
+            gpu_vertex_buffer,
+            gpu_num_coords_dim0,
+            gpu_num_coords_dim1,
+        };
+        std::string run_fn_name = "halide_" + api_unique_name + "_run";
+        llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
+        internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
+        Value *result = builder->CreateCall(dev_run_fn, launch_args);
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
+
+        CodeGen_CPU::create_assertion(did_succeed,
+                                      // Should have already called halide_error inside the gpu runtime
+                                      halide_error_code_device_run_failed,
+                                      result);
+
+        return call_extern_and_assert("run_fn_name", params);
+}
+
 
     void visit(const For *loop) {
         if ((loop->device_api == DeviceAPI::None) || (loop->device_api == DeviceAPI::Host)) {
