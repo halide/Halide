@@ -205,7 +205,7 @@ int64_t box_area(const Box &b) {
 
 void combine_load_costs(map<string, int64_t> &result,
         const map<string, int64_t> &partial) {
-    for (auto &kv: partial) {
+    for (auto &kv : partial) {
         if (result.find(kv.first) == result.end()) {
             result[kv.first] = kv.second;
         } else {
@@ -234,11 +234,11 @@ DimBounds get_stage_bounds(Function f, int stage_num,
     // Assumes that the domain of the pure vars across all the update
     // definitions is the same which may not be true. This can overestimate
     // the extent of the domain.
-    for (auto &b: pure_bounds) {
+    for (auto &b : pure_bounds) {
         bounds[b.first] = b.second;
     }
 
-    for (auto &rvar: def.schedule().rvars()) {
+    for (auto &rvar : def.schedule().rvars()) {
         Interval simple_bounds = Interval(rvar.min,
                 simplify(rvar.min + rvar.extent - 1));
         bounds[rvar.var] = simple_bounds;
@@ -257,7 +257,7 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
 }
 
 void disp_regions(const map<string, Box> &regions) {
-    for (auto &reg: regions) {
+    for (auto &reg : regions) {
         debug(3) << reg.first;
         debug(3) << reg.second;
         debug(3) << "\n";
@@ -270,7 +270,7 @@ RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
 
         FindImageInputs find;
         kv.second.accept(&find);
-        for (auto &in: find.input_type) {
+        for (auto &in : find.input_type) {
             inputs[in.first] = in.second;
         }
     }
@@ -289,7 +289,7 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
         FindAllCalls find;
         inlined_expr.accept(&find);
         set<string> &calls = find.funcs_called;
-        for (auto &call: calls) {
+        for (auto &call : calls) {
             if (inlines.find(call) != inlines.end() && env.at(call).is_pure()) {
                 funcs_to_inline = true;
                 inlined_expr = inline_function(inlined_expr, env.at(call));
@@ -386,7 +386,7 @@ RegionCosts::region_cost(string func, Box &region, const set<string> &inlines) {
 pair<int64_t, int64_t>
 RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines){
     pair<int64_t, int64_t> total_cost(0, 0);
-    for (auto &f: regions) {
+    for (auto &f : regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function
         if (inlines.find(f.first) != inlines.end()) {
@@ -414,7 +414,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
     Function curr_f = env.at(func);
     Definition def = get_stage_definition(curr_f, stage);
 
-    for (auto &e: def.values()) {
+    for (auto &e : def.values()) {
         Expr inlined_expr = perform_inline(e, inlines);
         ExprCost cost_visitor;
         inlined_expr.accept(&cost_visitor);
@@ -451,7 +451,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
             stage_detailed_load_costs(func, stage, inlines);
 
     int64_t area = box_area(stage_region);
-    for (auto &kv: load_costs) {
+    for (auto &kv : load_costs) {
         if (area >= 0) {
             load_costs[kv.first] *= area;
         } else {
@@ -493,7 +493,7 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
 
         int64_t area = box_area(stage_region);
 
-        for (auto &kv: stage_load_costs) {
+        for (auto &kv : stage_load_costs) {
             if (area >= 0) {
                 stage_load_costs[kv.first] *= area;
             } else {
@@ -511,7 +511,7 @@ map<string, int64_t>
 RegionCosts::detailed_load_costs(const map<string, Box> &regions,
                                  const set<string> &inlines) {
     map<string, int64_t> load_costs;
-    for (auto &r: regions) {
+    for (auto &r : regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function
         if (inlines.find(r.first) != inlines.end()) {
@@ -533,7 +533,7 @@ RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
     vector<pair<int64_t, int64_t>> func_costs;
     int64_t total_ops = 0;
     int64_t total_bytes = 0;
-    for (auto &e: f.values()) {
+    for (auto &e : f.values()) {
         Expr inlined_expr = perform_inline(e, inlines);
         ExprCost cost_visitor;
         inlined_expr.accept(&cost_visitor);
@@ -549,10 +549,10 @@ RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
 
     // Estimating cost when reductions are involved
     if (!f.is_pure()) {
-        for (const Definition &u: f.updates()) {
+        for (const Definition &u : f.updates()) {
             int64_t ops = 0;
             int64_t bytes = 0;
-            for (auto &e: u.values()) {
+            for (auto &e : u.values()) {
                 Expr inlined_expr = perform_inline(e, inlines);
                 ExprCost cost_visitor;
                 inlined_expr.accept(&cost_visitor);
@@ -564,7 +564,7 @@ RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
                 ops += 1;
             }
 
-            for (auto &arg: u.args()) {
+            for (auto &arg : u.args()) {
                 Expr inlined_arg = perform_inline(arg, inlines);
                 ExprCost cost_visitor;
                 inlined_arg.accept(&cost_visitor);
@@ -592,20 +592,20 @@ int64_t RegionCosts::region_size(string func, const Box &region) {
 int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
                                       const set<string> &inlined) {
     map<string, int> num_consumers;
-    for (auto &f: regions) {
+    for (auto &f : regions) {
         num_consumers[f.first] = 0;
     }
 
-    for (auto &f: regions) {
+    for (auto &f : regions) {
         map<string, Function> prods = find_direct_calls(env.at(f.first));
-        for (auto &p: prods) {
+        for (auto &p : prods) {
             if (regions.find(p.first) != regions.end())
                 num_consumers[p.first] += 1;
         }
     }
 
     vector<Function> outs;
-    for (auto &f: num_consumers) {
+    for (auto &f : num_consumers) {
         if (f.second == 0) {
             outs.push_back(env.at(f.first));
         }
@@ -619,7 +619,7 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
 
     map<string, int64_t> func_sizes;
 
-    for (auto &f: regions) {
+    for (auto &f : regions) {
         // Inlined functions do not have allocations
         bool is_inlined = inlined.find(f.first) != inlined.end();
         int64_t size = is_inlined? 0: region_size(f.first, f.second);
@@ -630,13 +630,13 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
         }
     }
 
-    for (auto &f: order) {
+    for (auto &f : order) {
         if (regions.find(f) != regions.end()) {
             curr_size += func_sizes.at(f);
         }
         working_set_size = std::max(curr_size, working_set_size);
         map<string, Function> prods = find_direct_calls(env.at(f));
-        for (auto &p: prods) {
+        for (auto &p : prods) {
             if (num_consumers.find(p.first) != num_consumers.end()) {
                 num_consumers[p.first] -= 1;
                 if (num_consumers[p.first] == 0) {
@@ -662,7 +662,7 @@ int64_t RegionCosts::input_region_size(string input, const Box &region) {
 
 int64_t RegionCosts::input_region_size(const map<string, Box> &input_regions) {
     int64_t total_size = 0;
-    for (auto &reg: input_regions) {
+    for (auto &reg : input_regions) {
         int64_t size = input_region_size(reg.first, reg.second);
         if (size < 0) {
             return -1;
@@ -679,9 +679,9 @@ void RegionCosts::disp_func_costs() {
     debug(3) << "===========================" << '\n';
     for (auto &kv : env) {
         int stage = 0;
-        for (auto &cost: func_cost[kv.first]) {
+        for (auto &cost : func_cost[kv.first]) {
             Definition def = get_stage_definition(kv.second, stage);
-            for (auto &e: def.values()) {
+            for (auto &e : def.values()) {
                 debug(3) << e << '\n';
             }
             debug(3) << "(" << kv.first << "," << stage << ")" <<
