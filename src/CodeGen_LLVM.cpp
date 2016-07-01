@@ -2444,6 +2444,8 @@ void CodeGen_LLVM::visit(const Call *op) {
             << "The second argument to predicated_store must be call to address_of of the store's address\n";
         const Load *load = store_addr->args[0].as<Load>();
         internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+        internal_assert(load->index.type().lanes() > 1) << "Predicated store should take vectorized store as argument\n";
+
         internal_assert(op->args[1].defined()) << "Predicate of predicated_store should not be undefined\n";
         internal_assert(op->args[1].type().lanes() == load->type.lanes())
             << "Predicate of predicated_store should have the same number of lanes as the store index\n";
@@ -2465,9 +2467,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
         const Ramp *ramp = load->index.as<Ramp>();
-        internal_assert(ramp) << "Predicated store should take vectorized store as argument\n";
 
-        if (is_one(ramp->stride)) { // Dense vector store
+        if (ramp && is_one(ramp->stride)) { // Dense vector store
             debug(4) << "Predicated dense vector store\n\t" << Expr(op) << "\n";
             Value *vpred = codegen(op->args[1]);
             Halide::Type value_type = op->args[2].type();
@@ -2553,6 +2554,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             << "The second argument to predicated_load must be call to address_of of the load's address\n";
         const Load *load = load_addr->args[0].as<Load>();
         internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+        internal_assert(load->index.type().lanes() > 1) << "Predicated load should take vectorized load as argument\n";
         internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
         internal_assert(op->args[1].type().lanes() == load->type.lanes())
             << "Predicate of predicated_load should have the same number of lanes as the Load\n";
@@ -2567,8 +2569,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
         const Ramp *ramp = load->index.as<Ramp>();
-        internal_assert(ramp) << "Predicated load should take vectorized load as argument\n";
-        const IntImm *stride = ramp->stride.as<IntImm>();
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
         if (ramp && is_one(ramp->stride)) { // Dense vector store
             value = codegen_dense_vector_load(load, codegen(op->args[1]));
