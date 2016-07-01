@@ -12,156 +12,154 @@ using std::make_pair;
 using std::deque;
 
 
-bool has_suffix(const std::string &str, const std::string &suffix)
-{
+bool has_suffix(const std::string &str, const std::string &suffix) {
     return str.size() >= suffix.size() &&
             str.compare(str.size() - suffix.size(),
                         suffix.size(), suffix) == 0;
 }
 
-class ExprCost : public IRVisitor {
- public:
-  int64_t ops;
-  int64_t byte_loads;
-  map<string, int64_t> detailed_byte_loads;
+struct ExprCost : public IRVisitor {
+    int64_t ops;
+    int64_t byte_loads;
+    map<string, int64_t> detailed_byte_loads;
 
-  ExprCost() {
-      ops = 0; byte_loads = 0;
-  }
+    ExprCost() {
+        ops = 0; byte_loads = 0;
+    }
 
-  using IRVisitor::visit;
+    using IRVisitor::visit;
 
-  void visit(const IntImm *) {}
-  void visit(const UIntImm *) {}
-  void visit(const FloatImm *) {}
-  void visit(const StringImm *) {}
-  void visit(const Cast * op) {
-      op->value.accept(this);
-      ops+=1;
-  }
-  void visit(const Variable *) {}
+    void visit(const IntImm *) {}
+    void visit(const UIntImm *) {}
+    void visit(const FloatImm *) {}
+    void visit(const StringImm *) {}
+    void visit(const Cast * op) {
+        op->value.accept(this);
+        ops+=1;
+    }
+    void visit(const Variable *) {}
 
-  template<typename T>
-  void visit_binary_operator(const T *op, int cost) {
-      op->a.accept(this);
-      op->b.accept(this);
-      ops += cost;
-  }
+    template<typename T>
+        void visit_binary_operator(const T *op, int cost) {
+            op->a.accept(this);
+            op->b.accept(this);
+            ops += cost;
+        }
 
-  // TODO: Figure out the right costs
-  void visit(const Add *op) {visit_binary_operator(op, 1);}
-  void visit(const Sub *op) {visit_binary_operator(op, 1);}
-  void visit(const Mul *op) {visit_binary_operator(op, 1);}
-  void visit(const Div *op) {visit_binary_operator(op, 1);}
-  void visit(const Mod *op) {visit_binary_operator(op, 1);}
-  void visit(const Min *op) {visit_binary_operator(op, 1);}
-  void visit(const Max *op) {visit_binary_operator(op, 1);}
-  void visit(const EQ *op) {visit_binary_operator(op, 1);}
-  void visit(const NE *op) {visit_binary_operator(op, 1);}
-  void visit(const LT *op) {visit_binary_operator(op, 1);}
-  void visit(const LE *op) {visit_binary_operator(op, 1);}
-  void visit(const GT *op) {visit_binary_operator(op, 1);}
-  void visit(const GE *op) {visit_binary_operator(op, 1);}
-  void visit(const And *op) {visit_binary_operator(op, 1);}
-  void visit(const Or *op) {visit_binary_operator(op, 1);}
+    // TODO: Figure out the right costs
+    void visit(const Add *op) {visit_binary_operator(op, 1);}
+    void visit(const Sub *op) {visit_binary_operator(op, 1);}
+    void visit(const Mul *op) {visit_binary_operator(op, 1);}
+    void visit(const Div *op) {visit_binary_operator(op, 1);}
+    void visit(const Mod *op) {visit_binary_operator(op, 1);}
+    void visit(const Min *op) {visit_binary_operator(op, 1);}
+    void visit(const Max *op) {visit_binary_operator(op, 1);}
+    void visit(const EQ *op) {visit_binary_operator(op, 1);}
+    void visit(const NE *op) {visit_binary_operator(op, 1);}
+    void visit(const LT *op) {visit_binary_operator(op, 1);}
+    void visit(const LE *op) {visit_binary_operator(op, 1);}
+    void visit(const GT *op) {visit_binary_operator(op, 1);}
+    void visit(const GE *op) {visit_binary_operator(op, 1);}
+    void visit(const And *op) {visit_binary_operator(op, 1);}
+    void visit(const Or *op) {visit_binary_operator(op, 1);}
 
-  void visit(const Not *op) {
-      op->a.accept(this);
-      ops+=1;
-  }
+    void visit(const Not *op) {
+        op->a.accept(this);
+        ops+=1;
+    }
 
-  void visit(const Select *op) {
-      op->condition.accept(this);
-      op->true_value.accept(this);
-      op->false_value.accept(this);
-      ops+=1;
-  }
+    void visit(const Select *op) {
+        op->condition.accept(this);
+        op->true_value.accept(this);
+        op->false_value.accept(this);
+        ops+=1;
+    }
 
-  void visit(const Call * call) {
-      if (call->call_type == Call::Halide ||
-          call->call_type == Call::Image) {
-          ops+=1;
-          byte_loads += call->type.bytes();
-          if (detailed_byte_loads.find(call->name) ==
-              detailed_byte_loads.end()) {
-              detailed_byte_loads[call->name] = call->type.bytes();
-          } else {
-              detailed_byte_loads[call->name] += call->type.bytes();
-          }
-      } else if (call->call_type == Call::Extern ||
-                 call->call_type == Call::PureExtern) {
-          // TODO: Suffix based matching is kind of sketchy but going ahead
-          // with it for now. Also not all the PureExtern's are accounted
-          // for yet.
-          if (has_suffix(call->name, "_f64")) {
-              ops+=20;
-          } else if(has_suffix(call->name, "_f32")) {
-              ops+=10;
-          } else if(has_suffix(call->name, "_f16")) {
-              ops+=5;
-          } else {
-              // There is no visibility into an extern stage so there is
-              // no way to know the cost of the call statically. This may
-              // require profiling or user annotation
-              //
-              // For now making this a large constant so that functions with
-              // unknown extern calls are forced to be compute_root
-              user_warning << "Unknown extern call " << call->name << '\n';
-              ops+=999;
-          }
-      } else if (call->call_type == Call::Intrinsic ||
-                 call->call_type == Call::PureIntrinsic) {
-          if (call->name == "shuffle_vector" || call->name == "interleave_vectors" ||
-              call->name == "concat_vectors" || call->name == "reinterpret" ||
-              call->name == "bitwise_and" || call->name == "bitwise_not" ||
-              call->name == "bitwise_xor" || call->name == "bitwise_or" ||
-              call->name == "shift_left" || call->name == "shift_right" ||
-              call->name == "shift_left" || call->name == "shift_right" ||
-              call->name == "div_round_to_zero" || call->name == "mod_round_to_zero" ||
-              call->name == "undef") {
-              ops+=1;
-          } else if (call->name == "abs" || call->name == "absd" ||
-                     call->name == "lerp" || call->name == "random" ||
-                     call->name == "count_leading_zeros" ||
-                     call->name == "count_trailing_zeros") {
+    void visit(const Call * call) {
+        if (call->call_type == Call::Halide ||
+                call->call_type == Call::Image) {
+            ops+=1;
+            byte_loads += call->type.bytes();
+            if (detailed_byte_loads.find(call->name) ==
+                    detailed_byte_loads.end()) {
+                detailed_byte_loads[call->name] = call->type.bytes();
+            } else {
+                detailed_byte_loads[call->name] += call->type.bytes();
+            }
+        } else if (call->call_type == Call::Extern ||
+                call->call_type == Call::PureExtern) {
+            // TODO: Suffix based matching is kind of sketchy but going ahead
+            // with it for now. Also not all the PureExtern's are accounted
+            // for yet.
+            if (has_suffix(call->name, "_f64")) {
+                ops+=20;
+            } else if(has_suffix(call->name, "_f32")) {
+                ops+=10;
+            } else if(has_suffix(call->name, "_f16")) {
+                ops+=5;
+            } else {
+                // There is no visibility into an extern stage so there is
+                // no way to know the cost of the call statically. This may
+                // require profiling or user annotation
+                //
+                // For now making this a large constant so that functions with
+                // unknown extern calls are forced to be compute_root
+                user_warning << "Unknown extern call " << call->name << '\n';
+                ops+=999;
+            }
+        } else if (call->call_type == Call::Intrinsic ||
+                call->call_type == Call::PureIntrinsic) {
+            if (call->name == "shuffle_vector" || call->name == "interleave_vectors" ||
+                    call->name == "concat_vectors" || call->name == "reinterpret" ||
+                    call->name == "bitwise_and" || call->name == "bitwise_not" ||
+                    call->name == "bitwise_xor" || call->name == "bitwise_or" ||
+                    call->name == "shift_left" || call->name == "shift_right" ||
+                    call->name == "shift_left" || call->name == "shift_right" ||
+                    call->name == "div_round_to_zero" || call->name == "mod_round_to_zero" ||
+                    call->name == "undef") {
+                ops+=1;
+            } else if (call->name == "abs" || call->name == "absd" ||
+                    call->name == "lerp" || call->name == "random" ||
+                    call->name == "count_leading_zeros" ||
+                    call->name == "count_trailing_zeros") {
 
-              ops+=5;
-          } else if (call->name == "likely") {
-              // TODO: only account for the cost of the likely portion of the
-              // expression
-              ops+=1;
-          } else {
-              user_warning << "Unknown intrinsic call " << call->name << '\n';
-              ops+=1;
-          }
-      }
+                ops+=5;
+            } else if (call->name == "likely") {
+                // TODO: only account for the cost of the likely portion of the
+                // expression
+                ops+=1;
+            } else {
+                user_warning << "Unknown intrinsic call " << call->name << '\n';
+                ops+=1;
+            }
+        }
 
-      for (size_t i = 0; (i < call->args.size()); i++)
-          call->args[i].accept(this);
-  }
+        for (size_t i = 0; (i < call->args.size()); i++)
+            call->args[i].accept(this);
+    }
 
-  void visit(const Let * let) {
-      let->value.accept(this);
-      let->body.accept(this);
-  }
+    void visit(const Let * let) {
+        let->value.accept(this);
+        let->body.accept(this);
+    }
 
-  // Should not hit any of these IR nodes when traversing IR at the level the
-  // auto scheduler operates
-  void visit(const Load *) { internal_assert(0); }
-  void visit(const Ramp *) { internal_assert(0); }
-  void visit(const Broadcast *) { internal_assert(0); }
-  void visit(const LetStmt *) { internal_assert(0); }
-  void visit(const AssertStmt *) {}
-  void visit(const ProducerConsumer *) { internal_assert(0); }
-  void visit(const For *) { internal_assert(0); }
-  void visit(const Store *) { internal_assert(0); }
-  void visit(const Provide *) { internal_assert(0); }
-  void visit(const Allocate *) { internal_assert(0); }
-  void visit(const Free *) { internal_assert(0); }
-  void visit(const Realize *) { internal_assert(0); }
-  void visit(const Block *) { internal_assert(0); }
-  void visit(const IfThenElse *) { internal_assert(0); }
-  void visit(const Evaluate *) { internal_assert(0); }
+    // Should not hit any of these IR nodes when traversing IR at the level the
+    // auto scheduler operates
+    void visit(const Load *) { internal_assert(0); }
+    void visit(const Ramp *) { internal_assert(0); }
+    void visit(const Broadcast *) { internal_assert(0); }
+    void visit(const LetStmt *) { internal_assert(0); }
+    void visit(const AssertStmt *) {}
+    void visit(const ProducerConsumer *) { internal_assert(0); }
+    void visit(const For *) { internal_assert(0); }
+    void visit(const Store *) { internal_assert(0); }
+    void visit(const Provide *) { internal_assert(0); }
+    void visit(const Allocate *) { internal_assert(0); }
+    void visit(const Free *) { internal_assert(0); }
+    void visit(const Realize *) { internal_assert(0); }
+    void visit(const Block *) { internal_assert(0); }
+    void visit(const IfThenElse *) { internal_assert(0); }
+    void visit(const Evaluate *) { internal_assert(0); }
 };
 
 // Utility functions
@@ -205,7 +203,7 @@ int64_t box_area(const Box &b) {
 }
 
 void combine_load_costs(map<string, int64_t> &result,
-                        const map<string, int64_t> &partial) {
+        const map<string, int64_t> &partial) {
     for (auto &kv: partial) {
         if (result.find(kv.first) == result.end()) {
             result[kv.first] = kv.second;
@@ -228,7 +226,7 @@ Definition get_stage_definition(const Function &f, int stage_num) {
 }
 
 DimBounds get_stage_bounds(Function f, int stage_num,
-                           const DimBounds &pure_bounds) {
+        const DimBounds &pure_bounds) {
     DimBounds bounds;
     Definition def = get_stage_definition(f, stage_num);
 
@@ -241,7 +239,7 @@ DimBounds get_stage_bounds(Function f, int stage_num,
 
     for (auto &rvar: def.schedule().rvars()) {
         Interval simple_bounds = Interval(rvar.min,
-                                          simplify(rvar.min + rvar.extent - 1));
+                simplify(rvar.min + rvar.extent - 1));
         bounds[rvar.var] = simple_bounds;
     }
 

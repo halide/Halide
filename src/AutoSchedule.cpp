@@ -2108,22 +2108,21 @@ string Partitioner::generate_cpu_schedule(const Target &t) {
     return sched;
 }
 
-class ExprUsesVar : public IRVisitor {
- public:
-  string var;
-  bool var_used;
+struct ExprUsesVar : public IRVisitor {
+    string var;
+    bool var_used;
 
-  using IRVisitor::visit;
+    using IRVisitor::visit;
 
-  ExprUsesVar(string _var): var(_var) {
-      var_used = false;
-  }
+    ExprUsesVar(string _var): var(_var) {
+        var_used = false;
+    }
 
-  void visit(const Variable * v) {
-      if(v->name == var) {
-          var_used = true;
-      }
-  }
+    void visit(const Variable * v) {
+        if(v->name == var) {
+            var_used = true;
+        }
+    }
 };
 
 int64_t Partitioner::find_max_access_stride(string var, string func_acc,
