@@ -148,6 +148,9 @@ int read_memory(void *dest, int src, int size) {
     return 0;
 }
 
+// A frequently-updated local copy of the remote profiler state.
+int profiler_current_func;
+
 int send_message(int msg, const std::vector<int> &arguments) {
     assert(sim);
 
@@ -180,6 +183,23 @@ int send_message(int msg, const std::vector<int> &arguments) {
         return -1;
     }
 
+    // Get the remote address of the current func. There's a remote
+    // pointer to it, so we need to walk through a few levels of
+    // indirection.
+    HEX_4u_t remote_profiler_current_func_addr_addr = 0;
+    HEX_4u_t remote_profiler_current_func_addr = 0;
+    status = sim->ReadSymbolValue("profiler_current_func_addr",
+                                  &remote_profiler_current_func_addr_addr);
+    if (status != HEX_STAT_SUCCESS) {
+        printf("HexagonWrapper::ReadSymbolValue(profiler_current_func_addr) failed: %d\n", status);
+        return -1;
+    }
+    if (read_memory(&remote_profiler_current_func_addr,
+                    remote_profiler_current_func_addr_addr,
+                    sizeof(HEX_4u_t))) {
+        return -1;
+    }
+
     HEXAPI_CoreState state;
     if (msg == Message::Break) {
         // If we're trying to end the remote simulation, just run
@@ -208,6 +228,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
                 }
                 return ret;
             }
+
+            // Grab the remote profiler state in case we're profiling
+            read_memory(&profiler_current_func, remote_profiler_current_func_addr, sizeof(int));
         } while (state == HEX_CORE_SUCCESS);
         printf("HexagonWrapper::StepTime failed: %d\n", state);
         return -1;
@@ -394,6 +417,13 @@ void *halide_hexagon_host_malloc(size_t x) {
 
 void halide_hexagon_host_free(void *ptr) {
     free(((void**)ptr)[-1]);
+}
+
+int halide_hexagon_remote_poll_profiler_func(int *func) {
+    // The stepping code periodically grabs the remote value of
+    // current_func for us.
+    *func = profiler_current_func;
+    return 0;
 }
 
 }  // extern "C"
