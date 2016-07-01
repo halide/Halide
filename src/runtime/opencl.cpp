@@ -1,11 +1,10 @@
 #include "HalideRuntimeOpenCL.h"
 #include "scoped_spin_lock.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
 #include "mini_cl.h"
-
-#include "cuda_opencl_shared.h"
 
 #define INLINE inline __attribute__((always_inline))
 
@@ -705,7 +704,8 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf_size(buf);
+    halide_assert(user_context, size != 0);
     if (buf->dev) {
         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
@@ -1071,6 +1071,14 @@ WEAK int halide_opencl_run(void *user_context,
     return 0;
 }
 
+WEAK int halide_opencl_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &opencl_device_interface);
+}
+
+WEAK int halide_opencl_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &opencl_device_interface);
+}
+
 WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, uintptr_t mem) {
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
@@ -1186,6 +1194,8 @@ WEAK halide_device_interface opencl_device_interface = {
     halide_opencl_device_release,
     halide_opencl_copy_to_host,
     halide_opencl_copy_to_device,
+    halide_opencl_device_and_host_malloc,
+    halide_opencl_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL

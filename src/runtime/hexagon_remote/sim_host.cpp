@@ -353,6 +353,11 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+    if (!sim) {
+        // Due to static destructor ordering issues, the simulator
+        // might have been freed before this gets called.
+        return 0;
+    }
     // Print out sim statistics if desired.
     if (getenv("HL_HEXAGON_SIM_STATS")) {
         char Buf[4096];
