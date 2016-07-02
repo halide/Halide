@@ -329,7 +329,7 @@ RegionCosts::stage_region_cost(string func, int stage,
 
 pair<int64_t, int64_t>
 RegionCosts::stage_region_cost(string func, int stage, Box &region,
-                                 const set<string> &inlines) {
+                               const set<string> &inlines) {
     Function curr_f = env.at(func);
     Definition def = get_stage_definition(curr_f, stage);
 
