@@ -36,6 +36,8 @@ using std::make_pair;
 
 typedef map<string, Interval> DimBounds;
 
+const int64_t unknown = std::numeric_limits<int64_t>::min();
+
 /** Visitor for keeping track of functions that are called and the arguments
  * with which they are called. */
 struct FindAllCalls : public IRVisitor {
@@ -178,7 +180,7 @@ struct RegionCosts {
 int64_t get_extent(const Interval &i);
 
 /* Returns the size of an n-d box. */
-int64_t box_area(const Box &b);
+int64_t box_size(const Box &b);
 
 void disp_regions(const map<string, Box> &regions);
 

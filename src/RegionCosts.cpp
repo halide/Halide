@@ -188,6 +188,8 @@ int64_t get_func_value_size(const Function &f) {
 
 /* Returns the size of a interval. */
 int64_t get_extent(const Interval &i) {
+    // The concrete extent of a interval can be determined only when both the
+    // expressions for min and max are integers.
     if ((i.min.as<IntImm>()) && (i.max.as<IntImm>())) {
         const IntImm *bmin = i.min.as<IntImm>();
         const IntImm *bmax = i.max.as<IntImm>();
@@ -199,27 +201,23 @@ int64_t get_extent(const Interval &i) {
             return 0;
         }
     }
-    // TODO: Make the return value a named constant like extent_unknown to
-    // improve readability.
-    return -1;
+    return unknown;
 }
 
-int64_t box_area(const Box &b) {
-    int64_t box_area = 1;
+int64_t box_size(const Box &b) {
+    int64_t size = 1;
     for (size_t i = 0; i < b.size(); i++) {
         int64_t extent = get_extent(b[i]);
-        if (extent > 0 && box_area > 0) {
-            box_area = box_area * extent;
+        if (extent != unknown && size != unknown) {
+            size *= extent;
         } else if (extent == 0) {
-            box_area = 0;
+            size = 0;
             break;
         } else {
-            // TODO: use a named constant like area_unknown to improve
-            // readability.
-            box_area = -1;
+            size = unknown;
         }
     }
-    return box_area;
+    return size;
 }
 
 /* Adds partial load costs to the corresponding function in the result costs. */
@@ -229,12 +227,10 @@ void combine_load_costs(map<string, int64_t> &result,
         if (result.find(kv.first) == result.end()) {
             result[kv.first] = kv.second;
         } else {
-            if (kv.second >= 0) {
+            if (kv.second != unknown) {
                 result[kv.first] += kv.second;
             } else {
-                // TODO: use named constant like cost_unknown to improve
-                // readability.
-                result[kv.first] = -1;
+                result[kv.first] = unknown;
             }
         }
     }
@@ -258,7 +254,7 @@ DimBounds get_stage_bounds(Function f, int stage_num,
 
     // Assumes that the domain of the pure vars across all the update
     // definitions is the same. This may not be true and can result in
-    // overestimation of the extent.
+    // over estimation of the extent.
     for (auto &b : pure_bounds) {
         bounds[b.first] = b.second;
     }
@@ -350,20 +346,18 @@ RegionCosts::stage_region_cost(string func, int stage,
         stage_region.push_back(bounds.at(dims[d].var));
     }
 
-    int64_t area = box_area(stage_region);
-    // TODO: Use named constant like area_unknown to improve readability.
-    if (area < 0) {
-        // Area could not be determined therefore it is not possible to
+    int64_t size = box_size(stage_region);
+    if (size == unknown) {
+        // Size could not be determined therefore it is not possible to
         // determine the arithmetic and memory costs.
-        // TODO: Use named constant like cost_unknown to improve readability.
-        return make_pair(-1, -1);
+        return make_pair(unknown, unknown);
     }
 
     // If there is nothing to be inlined use the pre-computed function cost.
     vector<pair<int64_t, int64_t>> cost =
             inlines.empty() ? func_cost[func] : get_func_cost(curr_f, inlines);
 
-    return make_pair(area * cost[stage].first, area * cost[stage].second);
+    return make_pair(size * cost[stage].first, size * cost[stage].second);
 }
 
 pair<int64_t, int64_t>
@@ -389,19 +383,17 @@ RegionCosts::stage_region_cost(string func, int stage, Box &region,
         stage_region.push_back(stage_bounds.at(dims[d].var));
     }
 
-    int64_t area = box_area(stage_region);
-    // TODO: Use named constant like area_unknown to improve readability.
-    if (area < 0) {
-        // Area could not be determined therefore it is not possible to
+    int64_t size = box_size(stage_region);
+    if (size == unknown) {
+        // Size could not be determined therefore it is not possible to
         // determine the arithmetic and memory costs.
-        // TODO: Use named constant like cost_unknown to improve readability.
-        return make_pair(-1, -1);
+        return make_pair(unknown, unknown);
     }
 
     vector<pair<int64_t, int64_t>> cost =
             inlines.empty() ? func_cost.at(func) : get_func_cost(curr_f, inlines);
 
-    return make_pair(area * cost.at(stage).first, area * cost.at(stage).second);
+    return make_pair(size * cost.at(stage).first, size * cost.at(stage).second);
 }
 
 pair<int64_t, int64_t>
@@ -493,12 +485,12 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
     map<string, int64_t> load_costs =
             stage_detailed_load_costs(func, stage, inlines);
 
-    int64_t area = box_area(stage_region);
+    int64_t size = box_size(stage_region);
     for (auto &kv : load_costs) {
-        if (area >= 0) {
-            load_costs[kv.first] *= area;
+        if (size != unknown) {
+            load_costs[kv.first] *= size;
         } else {
-            load_costs[kv.first] = -1;
+            load_costs[kv.first] = unknown;
         }
     }
 
@@ -534,13 +526,13 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
             stage_region.push_back(stage_bounds[s].at(dims[d].var));
         }
 
-        int64_t area = box_area(stage_region);
+        int64_t size = box_size(stage_region);
 
         for (auto &kv : stage_load_costs) {
-            if (area >= 0) {
-                stage_load_costs[kv.first] *= area;
+            if (size != unknown) {
+                stage_load_costs[kv.first] *= size;
             } else {
-                stage_load_costs[kv.first] = -1;
+                stage_load_costs[kv.first] = unknown;
             }
         }
 
@@ -623,13 +615,12 @@ RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
 
 int64_t RegionCosts::region_size(string func, const Box &region) {
     const Function &f = env.at(func);
-    int64_t area = box_area(region);
-    if (area < 0) {
-        // Area could not be determined
-        return -1;
+    int64_t size = box_size(region);
+    if (size == unknown) {
+        return unknown;
     }
     int64_t size_per_ele = get_func_value_size(f);
-    return area * size_per_ele;
+    return size * size_per_ele;
 }
 
 int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
@@ -694,21 +685,20 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
 }
 
 int64_t RegionCosts::input_region_size(string input, const Box &region) {
-    int64_t area = box_area(region);
-    if (area < 0) {
-        // Area could not be determined
-        return -1;
+    int64_t size = box_size(region);
+    if (size == unknown) {
+        return unknown;
     }
     int64_t size_per_ele = inputs.at(input).bytes();
-    return area * size_per_ele;
+    return size * size_per_ele;
 }
 
 int64_t RegionCosts::input_region_size(const map<string, Box> &input_regions) {
     int64_t total_size = 0;
     for (auto &reg : input_regions) {
         int64_t size = input_region_size(reg.first, reg.second);
-        if (size < 0) {
-            return -1;
+        if (size == unknown) {
+            return unknown;
         } else {
             total_size += size;
         }

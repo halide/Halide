@@ -823,11 +823,11 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
         int64_t total_reuse = 0;
         disp_regions(reuse_regions[d]);
         for (auto &reg : reuse_regions[d]) {
-            int64_t area = box_area(reg.second);
-            if (area >= 0) {
-                total_reuse += area;
+            int64_t size = box_size(reg.second);
+            if (size != unknown) {
+                total_reuse += size;
             } else {
-                total_reuse = -1;
+                total_reuse = unknown;
                 break;
             }
         }
