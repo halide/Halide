@@ -1,7 +1,15 @@
 #ifndef HALIDE_INTERNAL_REGION_COSTS_H
 #define HALIDE_INTERNAL_REGION_COSTS_H
 
+/** \file
+ *
+ * Defines RegionCosts - used by the auto scheduler to query the cost of
+ * computing function regions, and related classes to analyze pipeline
+ * functions.
+ */
+
 #include<set>
+#include<limits>
 
 #include "IR.h"
 #include "IRVisitor.h"
@@ -28,8 +36,8 @@ using std::make_pair;
 
 typedef map<string, Interval> DimBounds;
 
-/** Visitor for keeping track of functions that are called as well as the
- * arguments with which they are called. */
+/** Visitor for keeping track of functions that are called and the arguments
+ * with which they are called. */
 struct FindAllCalls : public IRVisitor {
     set<string> funcs_called;
     vector<pair<string, vector<Expr>>> call_args;
@@ -70,27 +78,27 @@ struct FindImageInputs : public IRVisitor {
 struct RegionCosts {
     /** Environment map which contains all the functions in the pipeline. */
     const map<string, Function> &env;
-    /** Map containing the cost of computing a value in each stage of a function.
-     *  The number of entries in the vector is equal to the number of stages in
-     *  a function. The first and second components of a pair represent the
-     *  arithmetic cost and memory cost respectively. */
+    /** Map containing the cost of computing a value in each stage of a
+     * function.  The number of entries in the vector is equal to the number of
+     * stages in a function. The first and second components of a pair
+     * represent the arithmetic cost and memory cost respectively. */
     map<string, vector<pair<int64_t, int64_t>>> func_cost;
     map<string, Type> inputs;
 
-    /** Recursively inlines all the functions in the set inlines in to the
-     *  expression e and returns the resulting expression. */
+    /** Recursively inlines all the functions in the set inlines into the
+     * expression e and returns the resulting expression. */
     Expr perform_inline(Expr e, const set<string> &inlines = set<string>());
 
     /** Computes the cost of producing a region (specified by bounds) of a
-     * function stage (specified by func and stage). inlines is the set of
-     * names of all the inlined functions. Returns a pair representing
-     * arithmetic and memory cost. */
+     * function stage (specified by func and stage). inlines specifies names of
+     * all the inlined functions. Returns a pair representing arithmetic and
+     * memory cost. */
     pair<int64_t, int64_t>
         stage_region_cost(string func, int stage, DimBounds &bounds,
                           const set<string> &inlines = set<string>());
 
     /** Computes the cost of producing a region of a function stage (specified
-     * by func and stage). inlines is the set of names of all the inlined
+     * by func and stage). inlines specifies names of all the inlined
      * functions. Returns a pair representing arithmetic and memory cost. */
     pair<int64_t, int64_t>
         stage_region_cost(string func, int stage, Box &region,
@@ -98,7 +106,7 @@ struct RegionCosts {
 
     /** Computes the cost of producing a region of function func. Adds up the
      * cost of all the stages of func required to produce the region. inlines
-     * is the set of names of all the inlined functions. Returns a pair
+     * specifies names of all the inlined functions. Returns a pair
      * representing arithmetic and memory cost. */
     pair<int64_t, int64_t>
         region_cost(string func, Box &region,
@@ -111,21 +119,22 @@ struct RegionCosts {
                     const set<string> &inlines = set<string>());
 
     /** Computes the cost of producing a single value of each stage of the f.
-     * inlines is the set of names of all the inlined functions. Returns a
-     * vector of pairs representing arithmetic and memory cost. Each entry in
-     * the vector corresponds to stage in f. */
+     * inlines specifies names of all the inlined functions. Returns a vector
+     * of pairs representing arithmetic and memory cost. Each entry in the
+     * vector corresponds to stage in f. */
     vector<pair<int64_t, int64_t>>
         get_func_cost(const Function &f, const set<string> &inlines = set<string>());
 
-    /** Computes the memory costs for computing a region (specified by bounds) of
-     * a function stage (specified by func and stage). Returns a map of the cost
-     * incurred to access each of the functions required to produce func. */
+    /** Computes the memory costs for computing a region (specified by bounds)
+     * of a function stage (specified by func and stage). Returns a map
+     * containing the costs incurred to access each of the functions required
+     * to produce func. */
     map<string, int64_t>
         stage_detailed_load_costs(string func, int stage, DimBounds &bounds,
                                   const set<string> &inlines = set<string>());
 
-    /** Same as stage_detailed_load_costs above but computes the cost for a single
-     * value of a function stage. */
+    /** Returns a map containing the costs incurred to access each of the functions
+     * required to produce a single value of a function stage. */
     map<string, int64_t>
         stage_detailed_load_costs(string func, int stage,
                                   const set<string> &inlines = set<string>());
@@ -147,7 +156,7 @@ struct RegionCosts {
 
     /** Returns the size of the peak amount of memory allocated in bytes. Takes
      * the realization order of the function regions and the early free mechanism
-     * to compute the peak footprint. */
+     * into account while computing the peak footprint. */
     int64_t region_footprint(const map<string, Box> &regions,
                              const set<string> &inlined = set<string>());
 
@@ -165,9 +174,8 @@ struct RegionCosts {
     RegionCosts(const map<string, Function> &env);
 };
 
-// Utility functions
 /* Returns the size of a interval. */
-int get_extent(const Interval &i);
+int64_t get_extent(const Interval &i);
 
 /* Returns the size of an n-d box. */
 int64_t box_area(const Box &b);
@@ -177,17 +185,17 @@ void disp_regions(const map<string, Box> &regions);
 /* Returns the appropriate definition based on the stage of a function. */
 Definition get_stage_definition(const Function &f, int stage_num);
 
-/* Adds loads costs for a function in the partial costs to the result costs. */
+/* Adds partial load costs to the corresponding function in the result costs. */
 void combine_load_costs(map<string, int64_t> &result,
                         const map<string, int64_t> &partial);
 
-/* Returns the required bounds of an intermediate stage (given by stage_num) of
- * function f given the pure bounds of the final stage. */
+/* Returns the required bounds of an intermediate stage (f, stage_num) of
+ * function f given the bounds of the pure dimensions of f. */
 DimBounds get_stage_bounds(Function f, int stage_num,
                            const DimBounds &pure_bounds);
 
-/* Same as above but returns the bounds for all the stages of the function f.
- * Each entry in the vector corresponds to a stage.*/
+/* Returns the required bounds for all the stages of the function f. Each entry
+ * in the return vector corresponds to a stage.*/
 vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
 
 }

@@ -11,16 +11,20 @@ using std::vector;
 using std::make_pair;
 using std::deque;
 
-
 bool has_suffix(const std::string &str, const std::string &suffix) {
     return str.size() >= suffix.size() &&
             str.compare(str.size() - suffix.size(),
                         suffix.size(), suffix) == 0;
 }
 
+/** Visitor for tracking the arithmetic and memory cost. */
 struct ExprCost : public IRVisitor {
+    // Estimate of cycles spent doing arithmetic.
     int64_t ops;
+    // Estimate of bytes loaded.
     int64_t byte_loads;
+    // Detailed breakdown of bytes loaded by the allocation/function
+    // they are loaded from.
     map<string, int64_t> detailed_byte_loads;
 
     ExprCost() {
@@ -30,15 +34,17 @@ struct ExprCost : public IRVisitor {
 
     using IRVisitor::visit;
 
+    // Immediate values and variables do not incur any cost.
     void visit(const IntImm *) {}
     void visit(const UIntImm *) {}
     void visit(const FloatImm *) {}
     void visit(const StringImm *) {}
+    void visit(const Variable *) {}
+
     void visit(const Cast *op) {
         op->value.accept(this);
         ops+=1;
     }
-    void visit(const Variable *) {}
 
     template<typename T>
         void visit_binary_operator(const T *op, int cost) {
@@ -47,7 +53,16 @@ struct ExprCost : public IRVisitor {
             ops += cost;
         }
 
-    // TODO: Figure out the right costs
+    // The costs of all the simple binary operations is set to one.
+    // TODO: Changing the costs for division and multiplication may be
+    // beneficial. Write a test case to validate this and update the costs
+    // accordingly.
+
+    // TODO: Only account for the likely portion of the expression in the case
+    // of max, min, and select. This will help costing functions with boundary
+    // conditions better. The likely intrinsic triggers loop partitioning and
+    // on average (steady stage) the cost of the expression will be equivalent
+    // to the likely portion.
     void visit(const Add *op) { visit_binary_operator(op, 1); }
     void visit(const Sub *op) { visit_binary_operator(op, 1); }
     void visit(const Mul *op) { visit_binary_operator(op, 1); }
@@ -78,18 +93,18 @@ struct ExprCost : public IRVisitor {
 
     void visit(const Call *call) {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
+            // Each call also counts as an op since it results in a load instruction.
             ops += 1;
             byte_loads += call->type.bytes();
-            if (detailed_byte_loads.find(call->name) ==
-                    detailed_byte_loads.end()) {
+            if (detailed_byte_loads.find(call->name) == detailed_byte_loads.end()) {
                 detailed_byte_loads[call->name] = call->type.bytes();
             } else {
                 detailed_byte_loads[call->name] += call->type.bytes();
             }
         } else if (call->call_type == Call::Extern || call->call_type == Call::PureExtern) {
-            // TODO: Suffix based matching is kind of sketchy but going ahead
-            // with it for now. Also not all the PureExtern's are accounted
-            // for yet.
+            // TODO: Suffix based matching is kind of sketchy; but going ahead
+            // with it for now. Also not all the PureExtern's are accounted for
+            // yet.
             if (has_suffix(call->name, "_f64")) {
                 ops += 20;
             } else if(has_suffix(call->name, "_f32")) {
@@ -97,14 +112,15 @@ struct ExprCost : public IRVisitor {
             } else if(has_suffix(call->name, "_f16")) {
                 ops += 5;
             } else {
-                // There is no visibility into an extern stage so there is
-                // no way to know the cost of the call statically. This may
-                // require profiling or user annotation
-                //
-                // For now making this a large constant so that functions with
-                // unknown extern calls are forced to be compute_root
+                // There is no visibility into an extern stage so there is no
+                // way to know the cost of the call statically. Modeling the
+                // cost of an extern stage requires profiling or user annotation.
+
+                // For now treating the cost to be large constant so that
+                // functions with unknown extern calls are forced to be
+                // compute_root.
                 user_warning << "Unknown extern call " << call->name << '\n';
-                ops += 999;
+                ops += std::numeric_limits<int64_t>::max();
             }
         } else if (call->call_type == Call::Intrinsic || call->call_type == Call::PureIntrinsic) {
             if (call->name == "shuffle_vector" || call->name == "interleave_vectors" ||
@@ -120,12 +136,9 @@ struct ExprCost : public IRVisitor {
                     call->name == "lerp" || call->name == "random" ||
                     call->name == "count_leading_zeros" ||
                     call->name == "count_trailing_zeros") {
-
                 ops += 5;
             } else if (call->name == "likely") {
-                // TODO: only account for the cost of the likely portion of the
-                // expression
-                ops += 1;
+
             } else {
                 user_warning << "Unknown intrinsic call " << call->name << '\n';
                 ops += 1;
@@ -142,13 +155,13 @@ struct ExprCost : public IRVisitor {
         let->body.accept(this);
     }
 
-    // Should not hit any of these IR nodes when traversing IR at the level the
-    // auto scheduler operates
+    // None of the following IR nodes should be encountered when traversing the
+    // IR at the level at which the auto scheduler operates.
     void visit(const Load *) { internal_assert(0); }
     void visit(const Ramp *) { internal_assert(0); }
     void visit(const Broadcast *) { internal_assert(0); }
     void visit(const LetStmt *) { internal_assert(0); }
-    void visit(const AssertStmt *) {}
+    void visit(const AssertStmt *) { internal_assert(0); }
     void visit(const ProducerConsumer *) { internal_assert(0); }
     void visit(const For *) { internal_assert(0); }
     void visit(const Store *) { internal_assert(0); }
@@ -161,7 +174,8 @@ struct ExprCost : public IRVisitor {
     void visit(const Evaluate *) { internal_assert(0); }
 };
 
-// Utility functions
+/** Returns the number of bytes required to store a single value of the
+ * function. */
 int64_t get_func_value_size(const Function &f) {
     int64_t size = 0;
     const vector<Type> &types = f.output_types();
@@ -172,24 +186,27 @@ int64_t get_func_value_size(const Function &f) {
     return size;
 }
 
-int get_extent(const Interval &i) {
+/* Returns the size of a interval. */
+int64_t get_extent(const Interval &i) {
     if ((i.min.as<IntImm>()) && (i.max.as<IntImm>())) {
         const IntImm *bmin = i.min.as<IntImm>();
         const IntImm *bmax = i.max.as<IntImm>();
-        // Count only if the overlap makes sense
+        // The extent only makes sense when the max >= min otherwise
+        // it is considered to be zero.
         if (bmin->value <= bmax->value) {
             return (bmax->value - bmin->value + 1);
         } else {
             return 0;
         }
     }
+    // TODO: Make the return value a named constant like extent_unknown to
+    // improve readability.
     return -1;
 }
 
 int64_t box_area(const Box &b) {
     int64_t box_area = 1;
     for (size_t i = 0; i < b.size(); i++) {
-        // Maybe should check for unsigned integers and floats too
         int64_t extent = get_extent(b[i]);
         if (extent > 0 && box_area > 0) {
             box_area = box_area * extent;
@@ -197,14 +214,17 @@ int64_t box_area(const Box &b) {
             box_area = 0;
             break;
         } else {
+            // TODO: use a named constant like area_unknown to improve
+            // readability.
             box_area = -1;
         }
     }
     return box_area;
 }
 
+/* Adds partial load costs to the corresponding function in the result costs. */
 void combine_load_costs(map<string, int64_t> &result,
-        const map<string, int64_t> &partial) {
+                        const map<string, int64_t> &partial) {
     for (auto &kv : partial) {
         if (result.find(kv.first) == result.end()) {
             result[kv.first] = kv.second;
@@ -212,12 +232,15 @@ void combine_load_costs(map<string, int64_t> &result,
             if (kv.second >= 0) {
                 result[kv.first] += kv.second;
             } else {
+                // TODO: use named constant like cost_unknown to improve
+                // readability.
                 result[kv.first] = -1;
             }
         }
     }
 }
 
+/* Returns the appropriate definition based on the stage of a function. */
 Definition get_stage_definition(const Function &f, int stage_num) {
     if (stage_num == 0) {
         return f.definition();
@@ -226,27 +249,30 @@ Definition get_stage_definition(const Function &f, int stage_num) {
     return f.updates()[stage_num - 1];
 }
 
+/* Returns the required bounds of an intermediate stage (f, stage_num) of
+ * function f given the bounds of the pure dimensions of f. */
 DimBounds get_stage_bounds(Function f, int stage_num,
-        const DimBounds &pure_bounds) {
+                           const DimBounds &pure_bounds) {
     DimBounds bounds;
     Definition def = get_stage_definition(f, stage_num);
 
     // Assumes that the domain of the pure vars across all the update
-    // definitions is the same which may not be true. This can overestimate
-    // the extent of the domain.
+    // definitions is the same. This may not be true and can result in
+    // overestimation of the extent.
     for (auto &b : pure_bounds) {
         bounds[b.first] = b.second;
     }
 
     for (auto &rvar : def.schedule().rvars()) {
-        Interval simple_bounds = Interval(rvar.min,
-                simplify(rvar.min + rvar.extent - 1));
+        Interval simple_bounds = Interval(rvar.min, simplify(rvar.min + rvar.extent - 1));
         bounds[rvar.var] = simple_bounds;
     }
 
     return bounds;
 }
 
+/* Returns the required bounds for all the stages of the function f. Each entry
+ * in the return vector corresponds to a stage.*/
 vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
     vector<DimBounds> stage_bounds;
     size_t num_stages = f.updates().size() + 1;
@@ -266,16 +292,20 @@ void disp_regions(const map<string, Box> &regions) {
 
 RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
     for (auto &kv : env) {
+        // Pre-compute the function costs without any inlining.
         func_cost[kv.first] = get_func_cost(kv.second);
 
         FindImageInputs find;
         kv.second.accept(&find);
+        // Get the types of all the image inputs to the pipeline.
         for (auto &in : find.input_type) {
             inputs[in.first] = in.second;
         }
     }
 }
 
+ /** Recursively inlines all the functions in the set inlines into the
+  * expression e and returns the resulting expression. */
 Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
     if (inlines.empty()) {
         return e;
@@ -286,13 +316,19 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
 
     do {
         funcs_to_inline = false;
+        // Find all the function calls in the current expression.
         FindAllCalls find;
         inlined_expr.accept(&find);
         set<string> &calls = find.funcs_called;
+        // Check if any of the calls are in the set of functions to be inlined.
         for (auto &call : calls) {
-            if (inlines.find(call) != inlines.end() && env.at(call).is_pure()) {
-                funcs_to_inline = true;
+            if (inlines.find(call) != inlines.end()) {
+                // Impure functions cannot be inlined.
+                internal_assert(env.at(call).is_pure());
+                // Inline the function call and set the flag to check for
+                // further inlining opportunities.
                 inlined_expr = inline_function(inlined_expr, env.at(call));
+                funcs_to_inline = true;
                 break;
             }
         }
@@ -315,14 +351,17 @@ RegionCosts::stage_region_cost(string func, int stage,
     }
 
     int64_t area = box_area(stage_region);
+    // TODO: Use named constant like area_unknown to improve readability.
     if (area < 0) {
-        // Area could not be determined therfore it is not possible to
-        // determine the cost as well
+        // Area could not be determined therefore it is not possible to
+        // determine the arithmetic and memory costs.
+        // TODO: Use named constant like cost_unknown to improve readability.
         return make_pair(-1, -1);
     }
 
-    vector<pair<int64_t, int64_t>> cost = inlines.empty() ? func_cost[func]:
-                                            get_func_cost(curr_f, inlines);
+    // If there is nothing to be inlined use the pre-computed function cost.
+    vector<pair<int64_t, int64_t>> cost =
+            inlines.empty() ? func_cost[func] : get_func_cost(curr_f, inlines);
 
     return make_pair(area * cost[stage].first, area * cost[stage].second);
 }
@@ -341,6 +380,8 @@ RegionCosts::stage_region_cost(string func, int stage, Box &region,
 
     DimBounds stage_bounds = get_stage_bounds(curr_f, stage, pure_bounds);
 
+    // TODO: Remove code duplication. The exact same code is present in
+    // the other stage_region_cost.
     Box stage_region;
 
     const vector<Dim> &dims = def.schedule().dims();
@@ -349,14 +390,16 @@ RegionCosts::stage_region_cost(string func, int stage, Box &region,
     }
 
     int64_t area = box_area(stage_region);
+    // TODO: Use named constant like area_unknown to improve readability.
     if (area < 0) {
-        // Area could not be determined therfore it is not possible to
-        // determine the cost as well
+        // Area could not be determined therefore it is not possible to
+        // determine the arithmetic and memory costs.
+        // TODO: Use named constant like cost_unknown to improve readability.
         return make_pair(-1, -1);
     }
 
-    vector<pair<int64_t, int64_t>> cost = inlines.empty() ? func_cost.at(func):
-                                            get_func_cost(curr_f, inlines);
+    vector<pair<int64_t, int64_t>> cost =
+            inlines.empty() ? func_cost.at(func) : get_func_cost(curr_f, inlines);
 
     return make_pair(area * cost.at(stage).first, area * cost.at(stage).second);
 }
