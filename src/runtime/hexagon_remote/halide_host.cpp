@@ -11,6 +11,11 @@
 #include <sys/mman.h>
 #include <linux/types.h>
 
+#include "bin/src/halide_hexagon_remote.h"
+
+typedef halide_hexagon_remote_handle_t handle_t;
+typedef halide_hexagon_remote_buffer buffer;
+
 typedef int ion_user_handle_t;
 
 struct ion_allocation_data {
@@ -207,6 +212,14 @@ void halide_hexagon_host_free(void *ptr) {
     close(rec->ion_fd);
 
     free(rec);
+}
+
+// This is a shim for calling v2 from v1.
+handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
+                                          const char* name, int nameLen) {
+    handle_t sym = 0;
+    int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, &sym);
+    return result == 0 ? sym : 0;
 }
 
 }  // extern "C"
