@@ -20,6 +20,7 @@ void simplify_box(Box &b) {
     }
 }
 
+/* Representation of a function stage in the pipeline. */
 struct FStage {
     Function func;
     uint32_t stage_num;
@@ -51,13 +52,14 @@ struct MachineParams {
     uint32_t balance;
 };
 
+/* Set the compute and store level of all the function stages in the
+ * environment as root. */
 void set_schedule_defaults(map<string, Function> &env) {
-    // Changing the default to compute root.
     for (auto &kv : env) {
         kv.second.schedule().store_level() = LoopLevel::root();
         kv.second.schedule().compute_level() = LoopLevel::root();
 
-        // Initializing the schedules for update definitions.
+        // Set schedules for update definitions.
         for (size_t u = 0; u < kv.second.updates().size(); u++) {
             kv.second.update_schedule(u).store_level() = LoopLevel::root();
             kv.second.update_schedule(u).compute_level() = LoopLevel::root();
@@ -65,6 +67,8 @@ void set_schedule_defaults(map<string, Function> &env) {
     }
 }
 
+/* Returns true if all the pipeline outputs have estimates specified
+ * on each of their dimensions. */
 bool check_estimates_on_outputs(const vector<Function> &outputs) {
     bool estimates_avail = true;
     for (auto &out : outputs) {
@@ -363,12 +367,14 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
         }
         Box b = reg.second;
         Box b_shifted = regions_shifted[reg.first];
-        // The boxes should be of the same size
+        // The boxes should be of the same size.
         internal_assert(b.size() == b_shifted.size());
+
         // The box used makes things complicated ignoring it for now
         Box b_intersect;
-        for (uint32_t i = 0 ; i < b.size(); i++)
+        for (uint32_t i = 0 ; i < b.size(); i++) {
             b_intersect.push_back(interval_intersect(b[i], b_shifted[i]));
+        }
         // A function should appear once in the regions and therefore cannot
         // already be present in the overlaps map
         internal_assert(overlaps.find(reg.first) == overlaps.end());
@@ -1800,6 +1806,7 @@ void reorder_dims(Stage f_handle, Definition def,
         strides.erase(curr_min_var.first);
     }
 
+    // TODO: Remove debug code.
     /*
     debug(0) << "Var order for stage:" << f_handle.name() << '\n';
     for (auto &o : order) {
@@ -2116,8 +2123,10 @@ int64_t Partitioner::find_max_access_stride(string var, string func_acc,
                                             vector<Expr> acc_exprs,
                                             const Box &buffer_bounds) {
     size_t num_storage_dims = 0;
-
     int64_t bytes_per_ele = 0;
+
+    // Get the number of dimensions of the allocated storage and the
+    // number of bytes required to store a single value of func_acc.
     if (dep_analysis.env.find(func_acc) != dep_analysis.env.end()) {
         Function f = dep_analysis.env.at(func_acc);
         for (auto &e : f.values()) {
@@ -2133,7 +2142,8 @@ int64_t Partitioner::find_max_access_stride(string var, string func_acc,
     int64_t stride = 0;
 
     for (size_t sdim = 0; sdim < num_storage_dims; sdim++) {
-        // Check if the expression is dependent on the var
+        // Check if the access expression is dependent on the loop variable
+        // var. Expressions that do not involve the variable have stride 0.
         ExprUsesVar uses_var(var);
         acc_exprs[sdim].accept(&uses_var);
 
@@ -2149,18 +2159,37 @@ int64_t Partitioner::find_max_access_stride(string var, string func_acc,
     return stride;
 }
 
+/* Returns the sum of access strides along each of the loop variables of a stage.
+ * The bounds of all the allocations accessed is specified in parent_bounds. */
 map<string, int64_t>
 Partitioner::analyze_spatial_locality(const FStage &stg,
                                       const map<string, Box> &parent_bounds) {
+    // Get all the allocations accessed in the definition corresponding to stg.
     FindAllCalls find;
-    Definition def = get_stage_definition(stg.func, stg.stage_num );
+    Definition def = get_stage_definition(stg.func, stg.stage_num);
     def.accept(&find);
 
     vector<pair<string, vector<Expr>>> call_args = find.call_args;
 
-    // TODO: Handle inlining
+    // TODO: Handle inlining. When a function is inlined into another the
+    // stride of the accesses should be computed on the expression post inlining.
+    // For example:
+    // f(x, y) = ...;
+    // g(x, y) = f(y, x); // transpose
+    // h(x, y) = g(y, x); // transpose
+    //
+    // If both g and f are inlined into h then the resulting expression for h
+    // will look like:
+    // h(x, y) = f(x, y);
+    //
+    // Computing the stride of a loop over x in the function h will be incorrect
+    // if inlining is not taken into account.
+
+    // TODO: remove debug code.
     //debug(0) << "\nAnalyzing definition " << f.first << "," << s << '\n';
-    // Add the access on the left hand side to call_args
+
+    // Account for the spatial locality of the store. Add the access on the
+    // left hand side to call_args.
     vector<Expr> left_arg_exprs;
     for (size_t arg = 0; arg < def.args().size(); arg++) {
         left_arg_exprs.push_back(def.args()[arg]);
@@ -2171,7 +2200,10 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     const vector<Dim> &dims = def.schedule().dims();
 
     for (size_t d = 0; d < dims.size() - 1; d++) {
+        // TODO: remove debug code.
         //debug(0) << "Loop var " << dims[d].var << '\n';
+
+        // Accumulate the stride for each access for a loop dimension.
         int total_stride = 0;
         for (const pair<string, vector<Expr>> &call : call_args) {
             Box call_alloc_reg;
@@ -2184,14 +2216,6 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
             total_stride +=
                     find_max_access_stride(dims[d].var, call.first, call.second,
                                            call_alloc_reg);
-            /*
-            debug(0) << call.first << "(";
-            for (auto &e : call.second) {
-                debug(0) << e << ",";
-            }
-            debug(0) << ") " << "total stride:" << total_stride  << '\n';
-            */
-
         }
         var_strides[dims[d].var] = total_stride;
     }
@@ -2199,27 +2223,34 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     return var_strides;
 }
 
+/* Finds a schedule for all the functions in the pipeline required to compute
+ * the outputs. Applies the schedule and returns a string representation of the
+ * schedule. The target architecture is specified by target. */
 string generate_schedules(const vector<Function> &outputs, const Target &target) {
     string sched;
-    // Compute an environment map which is used throughout the auto scheduling
-    // process
+    // Make an environment map which is used throughout the auto scheduling
+    // process.
     map<string, Function> env;
     for (Function f : outputs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
+    // Compute the bounds of function values which are used for dependence
+    // analysis.
     vector<string> order = realization_order(outputs, env);
-
     FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
 
+    // The auto scheduling algorithm requires estimates on the outputs of the
+    // pipeline to get quantitative estimates of costs for computing functions
+    // in the pipeline.
     bool estimates_avail = check_estimates_on_outputs(outputs);
 
     if (!estimates_avail) {
         user_warning << "Please provide estimates for each dimension" <<
                         "of the pipeline output functions.\n";
 
-        // TODO: Update sched even in the degenerate case
+        // Computing all the pipeline stages at root and storing them at root.
         set_schedule_defaults(env);
         return sched;
     }
@@ -2232,8 +2263,8 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
     // on outputs. Also report functions where the bounds could not be inferred.
     map<string, Box> pipeline_bounds = get_pipeline_bounds(dep_analysis, outputs);
 
-    // Set machine parameters
-    // TODO: Expose machine parameters to the user
+    // Set machine parameters.
+    // TODO: Expose machine parameters to the user.
     MachineParams arch_params;
     arch_params.parallelism = 16;
     arch_params.vec_len = 8;
@@ -2241,8 +2272,8 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
     arch_params.last_level_size = 2 * 8 * 1024 * 1024; // 64 MB
     arch_params.balance = 40;
 
-    // Initialize the cost model
-    // Compute the expression costs for each function in the pipeline
+    // Initialize the cost model.
+    // Compute the expression costs for each function in the pipeline.
     RegionCosts costs(env);
     costs.disp_func_costs();
 
@@ -2268,8 +2299,8 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
         }
     }*/
 
-    // Show the current pipeline graph
-    // TODO: Output the graph in dot format
+    // Show the current pipeline graph.
+    // TODO: Output the graph in dot format.
     part.disp_pipeline_graph();
     part.disp_pipeline_bounds();
 
