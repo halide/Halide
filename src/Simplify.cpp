@@ -3487,6 +3487,32 @@ private:
             } else {
                 internal_error << "Unreachable";
             }
+        } else if (op->is_intrinsic(Call::predicated_store)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            internal_assert(call->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
+            const Call *addr = call->args[0].as<Call>();
+            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
+                << "The first argument to predicated_store must be call to address_of of the store\n";
+            const Broadcast *broadcast = addr->args[0].as<Broadcast>();
+            const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
+            internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
+
+            const Call *val = call->args[2].as<Call>();
+            if (val && val->is_intrinsic(Call::predicated_load)) {
+                const Call *load_addr = call->args[0].as<Call>();
+                internal_assert(load_addr);
+                const Broadcast *b = load_addr->args[0].as<Broadcast>();
+                const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
+                Expr store_index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
+                Expr val_index = b ? Broadcast::make(l->index, b->lanes) : l->index;
+                if (l && (l->name == load->name) && equal(val_index, store_index)) {
+                    // foo[ramp(x, 0, 1)] = foo[ramp(x, 0, 1)] is a no-op
+                    expr = make_zero(op->type);
+                }
+            }
+
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
@@ -5035,6 +5061,23 @@ void simplify_test() {
             e = max(e, 1)/2;
         }
         check(e, e);
+    }
+
+    {
+        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr index = ramp(x + y, 1, 8);
+
+        Expr load = Load::make(index.type(), "f", index, Buffer(), Parameter());
+        Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
+        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+
+        Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
+                               {Load::make(index.type(), "f", index, Buffer(), Parameter())},
+                               Call::Intrinsic);
+        Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                         {dest, pred, value},
+                                         Call::Intrinsic));
+        check(stmt, Evaluate::make(make_zero(value.type())));
     }
 
     std::cout << "Simplify test passed" << std::endl;

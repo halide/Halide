@@ -2438,16 +2438,17 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen_buffer_pointer(load->name, load->type, load->index);
 
     } else if (op->is_intrinsic(Call::predicated_store)) {
-        internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {predicate, store addr, value}\n";
+        internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
         const Call *store_addr = op->args[0].as<Call>();
         internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
-            << "The second argument to predicated_store must be call to address_of of the store's address\n";
-        const Load *load = store_addr->args[0].as<Load>();
-        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
-        internal_assert(load->index.type().lanes() > 1) << "Predicated store should take vectorized store as argument\n";
+            << "The first argument to predicated_store must be call to address_of of the store\n";
+
+        const Broadcast *broadcast = store_addr->args[0].as<Broadcast>();
+        const Load *load = broadcast ? broadcast->value.as<Load>() : store_addr->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
 
         internal_assert(op->args[1].defined()) << "Predicate of predicated_store should not be undefined\n";
-        internal_assert(op->args[1].type().lanes() == load->type.lanes())
+        internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
             << "Predicate of predicated_store should have the same number of lanes as the store index\n";
         internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
             << "Predicate of predicated_store should have the same number of lanes as the store value\n";
@@ -2515,11 +2516,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                 add_tbaa_metadata(store_inst, load->name, slice_index);
             }
         } else { // It's not dense vector store, we need to scalarize it
-            debug(4) << "Scalarize predicated vector store\n\t" << Expr(op) << "\n";
             Value *vpred = codegen(op->args[1]);
             Value *vval = codegen(op->args[2]);
-            Value *vindex = codegen(load->index);
-            for (int i = 0; i < ramp->lanes; i++) {
+            Expr index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
+            Value *vindex = codegen(index);
+            for (int i = 0; i < index.type().lanes(); i++) {
                 Constant *lane = ConstantInt::get(i32_t, i);
                 Value *p = builder->CreateExtractElement(vpred, lane);
                 Value *v = builder->CreateExtractElement(vval, lane);
@@ -2543,21 +2544,20 @@ void CodeGen_LLVM::visit(const Call *op) {
                 sym_pop(pred_name);
                 sym_pop(val_name);
                 sym_pop(idx_name);
-                value->dump();
             }
         }
 
     } else if (op->is_intrinsic(Call::predicated_load)) {
-        internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {predicate, load addr}\n";
+        internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {load addr, predicate}\n";
         const Call *load_addr = op->args[0].as<Call>();
         internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
-            << "The second argument to predicated_load must be call to address_of of the load's address\n";
-        const Load *load = load_addr->args[0].as<Load>();
-        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
-        internal_assert(load->index.type().lanes() > 1) << "Predicated load should take vectorized load as argument\n";
+            << "The first argument to predicated_load must be call to address_of of the load\n";
+        const Broadcast *broadcast = load_addr->args[0].as<Broadcast>();
+        const Load *load = broadcast ? broadcast->value.as<Load>() : load_addr->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
         internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
-        internal_assert(op->args[1].type().lanes() == load->type.lanes())
-            << "Predicate of predicated_load should have the same number of lanes as the Load\n";
+        internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
+            << "Predicate of predicated_load should have the same number of lanes as the load\n";
 
         // If it's a Handle, load it as a uint64_t and then cast
         if (load->type.is_handle()) {
@@ -2593,8 +2593,8 @@ void CodeGen_LLVM::visit(const Call *op) {
             Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
             value = shuffle_vectors(flipped, indices);
         } else { // It's not dense vector load, we need to scalarize it
-            debug(4) << "Scalarize predicated vector load\n\t" << Expr(op) << "\n";
-            Expr load_expr = Expr(load);
+            Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
+            debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
             Expr pred_load = Call::make(load_expr.type(),
                                         Call::if_then_else,
                                         {op->args[1], load_expr, make_zero(load_expr.type())},
