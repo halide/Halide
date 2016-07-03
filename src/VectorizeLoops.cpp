@@ -235,7 +235,7 @@ bool uses_gpu_vars(Expr s) {
 // Wrap a vectorized predicate around a Load/Store node.
 class PredicateLoadStore : public IRMutator {
     string var;
-    Expr predicate;
+    Expr vector_predicate;
     int lanes;
     bool valid;
     bool vectorized;
@@ -244,29 +244,54 @@ class PredicateLoadStore : public IRMutator {
 
     void visit(const Load *op) {
         if (!valid) {
-            IRMutator::visit(op);
+            expr = op;
             return;
         }
-        internal_assert(op->index.type().lanes() == lanes);
-        Expr src = Call::make(Handle(), Call::address_of, {Expr(op)}, Call::Intrinsic);
-        expr = Call::make(op->type, Call::predicated_load, {src, predicate}, Call::Intrinsic);
-        vectorized = true;
+        if (!op->index.type().is_scalar()) {
+            Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of, {Expr(op)}, Call::Intrinsic);
+            expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
+            vectorized = true;
+        } else if (expr_uses_var(op->index, var)) {
+            Expr index = Broadcast::make(op->index, lanes);
+            Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of,
+                                  {Load::make(op->type, op->name, index, op->image, op->param)},
+                                  Call::Intrinsic);
+            expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
+            vectorized = true;
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
     void visit(const Store *op) {
         if (!valid) {
-            IRMutator::visit(op);
+            stmt = op;
             return;
         }
-        internal_assert(op->index.type().lanes() == lanes);
-        internal_assert(op->value.type().lanes() == lanes);
-        Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(op->value.type(), op->name, op->index, Buffer(), op->param)},
-                               Call::Intrinsic);
-        stmt = Evaluate::make(Call::make(op->value.type(), Call::predicated_store,
-                                         {dest, predicate, mutate(op->value)},
-                                         Call::Intrinsic));
-        vectorized = true;
+        if (!op->index.type().is_scalar()) {
+            internal_assert(op->index.type().lanes() == lanes);
+            internal_assert(op->value.type().lanes() == lanes);
+            Expr value = mutate(op->value);
+            Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
+                                   {Load::make(op->value.type(), op->name, op->index, Buffer(), op->param)},
+                                   Call::Intrinsic);
+            stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                             {dest, vector_predicate, value},
+                                             Call::Intrinsic));
+            vectorized = true;
+        } else if (expr_uses_var(op->index, var)) {
+            Expr value = Broadcast::make(op->value, lanes);
+            Expr index = Broadcast::make(op->index, lanes);
+            Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
+                                   {Load::make(value.type(), op->name, index, Buffer(), op->param)},
+                                   Call::Intrinsic);
+            stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                             {dest, vector_predicate, mutate(value)},
+                                             Call::Intrinsic));
+            vectorized = true;
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
     Expr merge_predicate(Expr pred, Expr new_pred) {
@@ -285,9 +310,9 @@ class PredicateLoadStore : public IRMutator {
         }
         if (op->is_intrinsic(Call::predicated_store) || op->is_intrinsic(Call::predicated_load)) {
             vector<Expr> new_args(op->args);
-            new_args[1] = merge_predicate(op->args[1], predicate);
+            new_args[1] = merge_predicate(op->args[1], vector_predicate);
             if (!valid) {
-                IRMutator::visit(op);
+                expr = op;
                 return;
             }
             expr = Call::make(op->type, op->name, new_args, op->call_type,
@@ -295,14 +320,15 @@ class PredicateLoadStore : public IRMutator {
             vectorized = true;
         } else {
             valid = false;
-            IRMutator::visit(op);
+            expr = op;
         }
     }
 
 public:
-    PredicateLoadStore(string v, Expr pred, int l) :
-            var(v), predicate(pred), lanes(l), valid(true), vectorized(false) {
-        internal_assert(pred.type().lanes() == lanes);
+    PredicateLoadStore(string v, Expr vpred) :
+            var(v), vector_predicate(vpred), lanes(vpred.type().lanes()),
+            valid(true), vectorized(false) {
+        internal_assert(lanes > 1);
     }
     bool is_vectorized() const  {
         return valid && vectorized;
@@ -446,7 +472,7 @@ class VectorSubs : public IRMutator {
                 // dimension variable inside the shuffled expression
                 Expr shuffled_expr = op->args[0];
 
-                bool has_scalarized_expr = expr_uses_var(shuffled_expr,var);
+                bool has_scalarized_expr = expr_uses_var(shuffled_expr, var);
                 if (has_scalarized_expr) {
                     shuffled_expr = scalarize(op);
                 }
@@ -706,6 +732,7 @@ class VectorSubs : public IRMutator {
 
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
+
         if (lanes > 1) {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
@@ -714,12 +741,12 @@ class VectorSubs : public IRMutator {
             bool vectorize_predicate = !uses_gpu_vars(cond);
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(var, cond, lanes);
+                PredicateLoadStore p(var, cond);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(var, !cond, lanes);
+                PredicateLoadStore p(var, !cond);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
