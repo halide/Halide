@@ -84,6 +84,7 @@ struct allocation_record {
 
 // Make a dummy allocation so we don't need a special case for the head node.
 allocation_record allocations = { NULL, };
+volatile int init_count = 0;
 pthread_mutex_t allocations_mutex;
 
 extern "C" {
@@ -91,11 +92,21 @@ extern "C" {
 __attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
-    pthread_mutex_init(&allocations_mutex, NULL);
+    if (__sync_fetch_and_add(&init_count, 1) == 0) {
+        pthread_mutex_init(&allocations_mutex, NULL);
+    }
 }
 
 void halide_hexagon_host_malloc_deinit() {
-    pthread_mutex_destroy(&allocations_mutex);
+    if (__sync_fetch_and_sub(&init_count, 1) == 1) {
+        pthread_mutex_destroy(&allocations_mutex);
+        allocation_record *leaks = allocations.next;
+        while (leaks) {
+            __android_log_print(ANDROID_LOG_WARN, "halide", "leaked hexagon host allocation %p, size=%d",
+                                leaks->buf, leaks->size);
+            leaks = leaks->next;
+        }
+    }
 }
 
 void *halide_hexagon_host_malloc(size_t size) {
@@ -105,18 +116,20 @@ void *halide_hexagon_host_malloc(size_t size) {
         return NULL;
     }
 
-    const int heap_id = 25;  // system heap
+    const int system_heap_id = 25;
+    const int heap_id = system_heap_id;
     const int ion_flags = 1;  // cached
-
-    // Align the size up to pages.
-    size = (size + 0x1000 - 1) & ~(0x1000 - 1);
 
     // Hexagon can only access a small number of mappings of these
     // sizes. We reduce the number of mappings required by aligning
     // large allocations to these sizes.
     static const size_t alignments[] = { 0x1000, 0x4000, 0x10000, 0x40000, 0x100000 };
     size_t alignment = alignments[0];
-    if (heap_id != 25) {
+
+    // Align the size up to pages.
+    size = (size + alignment - 1) & ~(alignment - 1);
+
+    if (heap_id != system_heap_id) {
         for (size_t i = 0; i < sizeof(alignments) / sizeof(alignments[0]); i++) {
             if (size >= alignments[i]) {
                 alignment = alignments[i];
@@ -192,8 +205,8 @@ void halide_hexagon_host_free(void *ptr) {
     // Find the record for this allocation and remove it from the list.
     pthread_mutex_lock(&allocations_mutex);
     allocation_record *rec = &allocations;
-    while (rec->next) {
-        if (rec->next->buf == ptr) {
+    while (rec) {
+        if (rec->next && rec->next->buf == ptr) {
             allocation_record *before_rec = rec;
             rec = before_rec->next;
             before_rec->next = before_rec->next->next;
