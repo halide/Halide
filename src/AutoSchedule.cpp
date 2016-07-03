@@ -2047,37 +2047,50 @@ string Partitioner::generate_group_cpu_schedule(
     return sched;
 }
 
+/** Realizes the scheduling by following the grouping structure. Returns a
+ * string representation of the schedule.
+ *
+ * TODO: A mode where schedules are not applied to the functions might be
+ * interesting.
+ *
+ * TODO: The current form of the schedule returned is not very useful since it
+ * cannot be manipulated and introspected very easily. The problem is that all
+ * of the scheduling uses internal function and variable names which are not
+ * visible to the user. Additionally, functions like sum and maximum are not
+ * user visible. More thought needs to into interaction between the user and
+ * auto scheduling. */
 string Partitioner::generate_cpu_schedule(const Target &t) {
     string sched = "";
 
     // Grab the group bounds early as they rely on the dimensions of the group
-    // outputs which will be altered by modifying schedules
+    // outputs which will be altered by modifying schedules.
     map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
     map<FStage, map<string, Box>> storage_bounds = group_storage_bounds();
 
+    // Mark all the functions that are Inlined.
     for (const pair<FStage, Group> &g : groups) {
         for (const string &inline_func : g.second.inlined) {
             Function f = dep_analysis.env.at(inline_func);
             Func f_handle(f);
-            // TODO: inling functions with update definitions has different
+            // TODO: Inlining functions with update definitions has different
             // behavior than pure functions. They may need to be computed above
             // the inner most vector loop to avoid complications with varying
             // extents across different vector lanes.
-
             f_handle.compute_inline();
             sched += f_handle.name() + ".compute_inline()" + ";\n";
         }
     }
 
+    // Realize schedule for each group in the pipeline.
     for (auto &g : groups) {
-        sched += generate_group_cpu_schedule(g.second, t,
-                                             loop_bounds[g.first],
+        sched += generate_group_cpu_schedule(g.second, t, loop_bounds[g.first],
                                              storage_bounds[g.first]);
     }
 
     return sched;
 }
 
+/* Visitor to check if a variable is used in an expression. */
 struct ExprUsesVar : public IRVisitor {
     string var;
     bool var_used;
@@ -2095,6 +2108,10 @@ struct ExprUsesVar : public IRVisitor {
     }
 };
 
+/* Returns the maximum stride a loop over var accesses the allocation func_acc.
+ * Access expressions along each dimension of the allocation are specified by
+ * acc_exprs. The dimensions of the allocation are specified by
+ * buffer_bounds.*/
 int64_t Partitioner::find_max_access_stride(string var, string func_acc,
                                             vector<Expr> acc_exprs,
                                             const Box &buffer_bounds) {
