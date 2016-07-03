@@ -220,7 +220,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s);
     s = simplify(s);
-    debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
+    debug(0) << "Lowering after vectorizing:\n" << s << "\n\n";
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
