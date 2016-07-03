@@ -11,10 +11,13 @@ interface halide_hexagon_remote
     long get_symbol_v2(in handle_t module_ptr, in sequence<char> name, rout handle_t sym_ptr);
 
     // Routine to run a pipeline on the remote side.
-    long run(in handle_t module_ptr, in handle_t symbol,
-             in sequence<buffer> input_buffers,
-             rout sequence<buffer> output_buffers,
-             in sequence<buffer> input_scalars);
+    // v2: Pass all scalars and small input buffers in a single
+    // buffer. The null input buffers are passed in the small buffer
+    // instead, followed by scalar_count scalars.
+    long run_v2(in handle_t module_ptr, in handle_t symbol,
+                in sequence<buffer> input_buffers,
+                rout sequence<buffer> output_buffers,
+                in long scalar_count, in buffer small);
 
     // Routine to clean up a module on the remote side.
     long release_kernels(in handle_t module_ptr, in long size);
