@@ -3,14 +3,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
-using std::map;
-using std::pair;
-using std::set;
-using std::vector;
-using std::make_pair;
-using std::deque;
-
 bool has_suffix(const std::string &str, const std::string &suffix) {
     return str.size() >= suffix.size() &&
             str.compare(str.size() - suffix.size(),
@@ -19,17 +11,13 @@ bool has_suffix(const std::string &str, const std::string &suffix) {
 
 /** Visitor for tracking the arithmetic and memory cost. */
 struct ExprCost : public IRVisitor {
-    // Estimate of cycles spent doing arithmetic.
-    int64_t ops;
-    // Estimate of bytes loaded.
-    int64_t byte_loads;
+    Cost cost;
     // Detailed breakdown of bytes loaded by the allocation/function
     // they are loaded from.
     map<string, int64_t> detailed_byte_loads;
 
     ExprCost() {
-        ops = 0;
-        byte_loads = 0;
+        cost = Cost(0, 0);
     }
 
     using IRVisitor::visit;
@@ -43,14 +31,14 @@ struct ExprCost : public IRVisitor {
 
     void visit(const Cast *op) {
         op->value.accept(this);
-        ops+=1;
+        cost.arith += 1;
     }
 
     template<typename T>
-        void visit_binary_operator(const T *op, int cost) {
+        void visit_binary_operator(const T *op, int op_cost) {
             op->a.accept(this);
             op->b.accept(this);
-            ops += cost;
+            cost.arith += op_cost;
         }
 
     // The costs of all the simple binary operations is set to one.
@@ -81,21 +69,21 @@ struct ExprCost : public IRVisitor {
 
     void visit(const Not *op) {
         op->a.accept(this);
-        ops += 1;
+        cost.arith += 1;
     }
 
     void visit(const Select *op) {
         op->condition.accept(this);
         op->true_value.accept(this);
         op->false_value.accept(this);
-        ops += 1;
+        cost.arith += 1;
     }
 
     void visit(const Call *call) {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             // Each call also counts as an op since it results in a load instruction.
-            ops += 1;
-            byte_loads += call->type.bytes();
+            cost.arith += 1;
+            cost.memory += call->type.bytes();
             if (detailed_byte_loads.find(call->name) == detailed_byte_loads.end()) {
                 detailed_byte_loads[call->name] = call->type.bytes();
             } else {
@@ -106,21 +94,21 @@ struct ExprCost : public IRVisitor {
             // with it for now. Also not all the PureExtern's are accounted for
             // yet.
             if (has_suffix(call->name, "_f64")) {
-                ops += 20;
+                cost.arith += 20;
             } else if(has_suffix(call->name, "_f32")) {
-                ops += 10;
+                cost.arith += 10;
             } else if(has_suffix(call->name, "_f16")) {
-                ops += 5;
+                cost.arith += 5;
             } else {
                 // There is no visibility into an extern stage so there is no
                 // way to know the cost of the call statically. Modeling the
                 // cost of an extern stage requires profiling or user annotation.
 
-                // For now treating the cost to be large constant so that
+                // For now setting the cost to be large constant so that
                 // functions with unknown extern calls are forced to be
                 // compute_root.
                 user_warning << "Unknown extern call " << call->name << '\n';
-                ops += std::numeric_limits<int64_t>::max();
+                cost.arith = std::numeric_limits<int64_t>::max();
             }
         } else if (call->call_type == Call::Intrinsic || call->call_type == Call::PureIntrinsic) {
             if (call->name == "shuffle_vector" || call->name == "interleave_vectors" ||
@@ -131,17 +119,16 @@ struct ExprCost : public IRVisitor {
                     call->name == "shift_left" || call->name == "shift_right" ||
                     call->name == "div_round_to_zero" || call->name == "mod_round_to_zero" ||
                     call->name == "undef") {
-                ops += 1;
+                cost.arith += 1;
             } else if (call->name == "abs" || call->name == "absd" ||
                     call->name == "lerp" || call->name == "random" ||
                     call->name == "count_leading_zeros" ||
                     call->name == "count_trailing_zeros") {
-                ops += 5;
+                cost.arith += 5;
             } else if (call->name == "likely") {
-
+                // Likely does not result in actual operations.
             } else {
-                user_warning << "Unknown intrinsic call " << call->name << '\n';
-                ops += 1;
+                internal_error << "Unknown intrinsic call " << call->name << '\n';
             }
         }
 
@@ -333,9 +320,8 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
     return inlined_expr;
 }
 
-pair<int64_t, int64_t>
-RegionCosts::stage_region_cost(string func, int stage,
-                               DimBounds &bounds, const set<string> &inlines) {
+Cost RegionCosts::stage_region_cost(string func, int stage,
+                                    DimBounds &bounds, const set<string> &inlines) {
     Function curr_f = env.at(func);
     Definition def = get_stage_definition(curr_f, stage);
 
@@ -350,19 +336,18 @@ RegionCosts::stage_region_cost(string func, int stage,
     if (size == unknown) {
         // Size could not be determined therefore it is not possible to
         // determine the arithmetic and memory costs.
-        return make_pair(unknown, unknown);
+        return Cost(unknown, unknown);
     }
 
     // If there is nothing to be inlined use the pre-computed function cost.
-    vector<pair<int64_t, int64_t>> cost =
+    vector<Cost> costs =
             inlines.empty() ? func_cost[func] : get_func_cost(curr_f, inlines);
 
-    return make_pair(size * cost[stage].first, size * cost[stage].second);
+    return Cost(size * costs[stage].arith, size * costs[stage].memory);
 }
 
-pair<int64_t, int64_t>
-RegionCosts::stage_region_cost(string func, int stage, Box &region,
-                               const set<string> &inlines) {
+Cost RegionCosts::stage_region_cost(string func, int stage, Box &region,
+                                    const set<string> &inlines) {
     Function curr_f = env.at(func);
     Definition def = get_stage_definition(curr_f, stage);
 
@@ -387,58 +372,55 @@ RegionCosts::stage_region_cost(string func, int stage, Box &region,
     if (size == unknown) {
         // Size could not be determined therefore it is not possible to
         // determine the arithmetic and memory costs.
-        return make_pair(unknown, unknown);
+        return Cost(unknown, unknown);
     }
 
-    vector<pair<int64_t, int64_t>> cost =
+    vector<Cost> costs =
             inlines.empty() ? func_cost.at(func) : get_func_cost(curr_f, inlines);
 
-    return make_pair(size * cost.at(stage).first, size * cost.at(stage).second);
+    return Cost(size * costs.at(stage).arith, size * costs.at(stage).memory);
 }
 
-pair<int64_t, int64_t>
-RegionCosts::region_cost(string func, Box &region, const set<string> &inlines) {
+Cost RegionCosts::region_cost(string func, Box &region, const set<string> &inlines) {
     Function curr_f = env.at(func);
-    pair<int64_t, int64_t> region_cost(0, 0);
+    Cost region_cost(0, 0);
 
     int num_stages = curr_f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
+        Cost stage_cost = stage_region_cost(func, s, region, inlines);
 
-        pair<int64_t, int64_t> stage_cost =
-                stage_region_cost(func, s, region, inlines);
-        if (stage_cost.first >= 0) {
-            region_cost.first += stage_cost.first;
-            region_cost.second += stage_cost.second;
+        if (stage_cost.arith == unknown) {
+            return Cost(unknown, unknown);
         } else {
-            return make_pair(-1, -1);
+            region_cost.arith += stage_cost.arith;
+            region_cost.memory += stage_cost.memory;
         }
     }
 
-    internal_assert(region_cost.first >= 0 && region_cost.second >=0);
+    internal_assert(region_cost.arith != unknown && region_cost.memory != unknown);
     return region_cost;
 }
 
-pair<int64_t, int64_t>
-RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines){
-    pair<int64_t, int64_t> total_cost(0, 0);
+Cost RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inlines){
+    Cost total_cost(0, 0);
     for (auto &f : regions) {
         // The cost for pure inlined functions will be accounted in the
-        // consumer of the inlined function
+        // consumer of the inlined function so they should be skipped.
         if (inlines.find(f.first) != inlines.end()) {
             internal_assert(env.at(f.first).is_pure());
             continue;
         }
 
-        pair<int64_t, int64_t> cost = region_cost(f.first, f.second, inlines);
-        if (cost.first < 0) {
-            return cost;
+        Cost cost = region_cost(f.first, f.second, inlines);
+        if (cost.arith == unknown) {
+            return Cost(unknown, unknown);
         } else {
-            total_cost.first += cost.first;
-            total_cost.second += cost.second;
+            total_cost.arith += cost.arith;
+            total_cost.memory += cost.memory;
         }
     }
 
-    internal_assert(total_cost.first >= 0 && total_cost.second >=0);
+    internal_assert(total_cost.arith != unknown && total_cost.memory != unknown);
     return total_cost;
 }
 
@@ -548,7 +530,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
     map<string, int64_t> load_costs;
     for (auto &r : regions) {
         // The cost for pure inlined functions will be accounted in the
-        // consumer of the inlined function
+        // consumer of the inlined function so they should be skipped.
         if (inlines.find(r.first) != inlines.end()) {
             internal_assert(env.at(r.first).is_pure());
             continue;
@@ -563,51 +545,49 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
     return load_costs;
 }
 
-vector<pair<int64_t, int64_t>>
-RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
-    vector<pair<int64_t, int64_t>> func_costs;
-    int64_t total_ops = 0;
-    int64_t total_bytes = 0;
+vector<Cost> RegionCosts::get_func_cost(const Function &f,
+                                        const set<string> &inlines) {
+    vector<Cost> func_costs;
+    Cost total_cost(0, 0);
     for (auto &e : f.values()) {
         Expr inlined_expr = perform_inline(e, inlines);
         ExprCost cost_visitor;
         inlined_expr.accept(&cost_visitor);
-        total_ops += cost_visitor.ops;
-        total_bytes += cost_visitor.byte_loads;
+        total_cost.arith += cost_visitor.cost.arith;
+        total_cost.memory += cost_visitor.cost.memory;
 
         // Accounting for the store
-        total_bytes += e.type().bytes();
-        total_ops += 1;
+        total_cost.memory += e.type().bytes();
+        total_cost.arith += 1;
     }
 
-    func_costs.push_back(make_pair(total_ops, total_bytes));
+    func_costs.push_back(total_cost);
 
     // Estimating cost when reductions are involved
     if (!f.is_pure()) {
         for (const Definition &u : f.updates()) {
-            int64_t ops = 0;
-            int64_t bytes = 0;
+            Cost def_cost(0, 0);
             for (auto &e : u.values()) {
                 Expr inlined_expr = perform_inline(e, inlines);
                 ExprCost cost_visitor;
                 inlined_expr.accept(&cost_visitor);
-                ops += cost_visitor.ops;
-                bytes += cost_visitor.byte_loads;
+                def_cost.arith += cost_visitor.cost.arith;
+                def_cost.memory += cost_visitor.cost.memory;
 
                 // Accounting for the store
-                bytes += e.type().bytes();
-                ops += 1;
+                def_cost.memory += e.type().bytes();
+                def_cost.arith += 1;
             }
 
             for (auto &arg : u.args()) {
                 Expr inlined_arg = perform_inline(arg, inlines);
                 ExprCost cost_visitor;
                 inlined_arg.accept(&cost_visitor);
-                ops += cost_visitor.ops;
-                bytes += cost_visitor.byte_loads;
+                def_cost.arith += cost_visitor.cost.arith;
+                def_cost.memory += cost_visitor.cost.memory;
             }
 
-            func_costs.push_back(make_pair(ops, bytes));
+            func_costs.push_back(def_cost);
         }
     }
     return func_costs;
@@ -718,7 +698,7 @@ void RegionCosts::disp_func_costs() {
                 debug(3) << e << '\n';
             }
             debug(3) << "(" << kv.first << "," << stage << ")" <<
-                     "(" << cost.first << "," << cost.second << ")" << '\n';
+                     "(" << cost.arith << "," << cost.memory << ")" << '\n';
             stage++;
         }
     }
