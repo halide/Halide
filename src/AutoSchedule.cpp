@@ -554,8 +554,7 @@ struct Partitioner {
     struct EvalConfig {
         map<string, int> tile_sizes;
         GroupAnalysis analysis;
-        EvalConfig(const map<string, int> &tile_sizes,
-                   const GroupAnalysis &analysis) :
+        EvalConfig(const map<string, int> &tile_sizes, const GroupAnalysis &analysis) :
                    tile_sizes(tile_sizes), analysis(analysis) {}
     };
 
