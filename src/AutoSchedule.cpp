@@ -463,16 +463,62 @@ struct Partitioner {
         }
     };
 
+    /* A group is a sub-pipeline with a single output. Members of a group are
+     * either inlined into the consumer functions within the group or computed
+     * at tiles of the output, specified by tile_sizes.
+     *
+     * TODO: The restriction of computing either at the inline or tile level
+     * makes the space of scheduling choices for a group very tractable.
+     * However, the restriction might miss good schedules which can only be
+     * realized by computing the members of the group at different levels of
+     * the group.
+     *
+     * There are two approaches to extending the space of schedules considered:
+     * 1) Recursive grouping: Treat the problem of determining the compute levels
+     * within a group as a smaller instance of the grouping problem with
+     * different parameters for the input, output sizes, and cache behavior.
+     *
+     * 2) Tightening: Always compute a function at the lowest level possible
+     * without introducing redundant work. This is a restricted form of recursive
+     * grouping which does not explore the trade-off between redundant work and
+     * locality.
+     *
+     * Either approach can be implemented as a post process for each group
+     * after the initial grouping process finishes. The cost model may
+     * already make sub-optimal higher level partitioning when it is not aware
+     * of the benefits of the post processing. However, it should strictly be
+     * an improvement over the initial grouping. As a first step it is good
+     * to make it a post process.
+     *
+     * Incorporating the recursive grouping process into the cost model can be
+     * tricky and can potentially make the cost of analyzing a group
+     * prohibitive, as it requires solving smaller instances of the grouping
+     * problem for analyzing each configuration. On the other hand tightening
+     * can be integrated into the cost model with out significantly increasing
+     * the time to analyze a grouping configuration.
+     *
+     * TODO: Sliding window schedules be implemented as a post pass by moving
+     * the store level of all the members of the group to the outermost serial
+     * loop. Can be incorporated in the cost model with some effort.
+     *
+     * TODO: Register tiling is an important transformation especially for
+     * benchmarks with significant reuse of the data (like matrix multiply and
+     * convolutional layers). The mechanism for realizing register tiling is
+     * completely unrolling small tiles of the innermost kernels. Unrolling
+     * interacts with vectorization, storage layout, and depends on the outer
+     * level tiling. The approach for doing register tiling is unclear at this
+     * point.
+     * */
     struct Group {
-        // The output stage representing the group
+        // The output stage representing the group.
         FStage output;
-        // All the functions that belong to the group
+        // Functions that belong to the group.
         vector<FStage> members;
 
         // Schedule information
-        // All the members of the group which are inlined
+        // Members of the group which are inlined.
         set<string> inlined;
-        // Tile sizes along the dimensions of the output function of the group
+        // Tile sizes along dimensions of the output function of the group.
         map<string, int> tile_sizes;
 
         Group(FStage output, vector<FStage> members):
@@ -533,7 +579,7 @@ struct Partitioner {
     map<FStage, Group> groups;
     map<FStage, GroupAnalysis> group_costs;
 
-    // Levels that are targetted by the grouping algorithm
+    // Levels that are targeted by the grouping algorithm.
     enum Level {INLINE, FAST_MEM};
 
     const map<string, Box> &pipeline_bounds;
