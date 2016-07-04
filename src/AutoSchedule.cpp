@@ -643,6 +643,8 @@ struct Partitioner {
     void disp_grouping();
 };
 
+/* Constructs a partitioner and builds the pipeline graph the grouping
+ * algorithm operates on. */
 Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
                          MachineParams &_arch_params,
                          DependenceAnalysis &_dep_analysis,
@@ -652,7 +654,8 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
     pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
     dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs),
     gpu_schedule(_gpu_schedule) {
-    // Place each stage of a function in its own group
+    // Place each stage of a function in its own group. Each stage
+    // is a node in the pipeline graph.
     for (auto &f : dep_analysis.env) {
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
@@ -662,7 +665,7 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
         }
     }
 
-    // Find consumers of each function and relate groups with their children
+    // Find consumers of each function and use it to populate the children map.
     for (auto &f : dep_analysis.env) {
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
@@ -672,8 +675,11 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
             def.accept(&find);
 
             for (const string &c : find.funcs_called) {
+                // Filter out the calls to pipeline inputs. env only contains
+                // the functions computed and not the inputs.
                 if (c != f.first && dep_analysis.env.find(c) != dep_analysis.env.end()) {
-                    // Consumer depends on the last stage of the producer
+                    // Consumer depends only on the last stage of a producer
+                    // with multiple stages.
                     Function prod_func = dep_analysis.env.at(c);
                     int final_stage = prod_func.updates().size();
 
@@ -685,7 +691,8 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
             }
 
             if (s > 0) {
-                // Add dependencies between all the stages in a function
+                // Update the children map to reflect the dependencies between
+                // different stages of the same function.
                 FStage prod_stage(f.second, s - 1);
                 FStage cons_stage(f.second, s);
 
@@ -729,39 +736,41 @@ void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eva
     child_group.tile_sizes = eval.tile_sizes;
 
     // Update group costs.
+    // TODO: check if this is necessary or if the analysis from eval can just
+    // be reused.
     group_costs[child] = analyze_group(child_group, false);
 }
 
 void Partitioner::disp_grouping() {
-    debug(3) << "\n=========" << '\n';
-    debug(3) << "Grouping:" << '\n';
-    debug(3) << "=========" << '\n';
+    debug(debug_level) << "\n=========" << '\n';
+    debug(debug_level) << "Grouping:" << '\n';
+    debug(debug_level) << "=========" << '\n';
     for (auto &g : groups) {
-        debug(3) << g.second << '\n';
+        debug(debug_level) << g.second << '\n';
     }
-    debug(3) << "=========" << '\n';
+    debug(debug_level) << "=========" << '\n';
 }
 
 void Partitioner::disp_pipeline_graph() {
-    debug(3) << "\n================" << '\n';
-    debug(3) << "Pipeline graph:" << '\n';
-    debug(3) << "================" << '\n';
+    debug(debug_level) << "\n================" << '\n';
+    debug(debug_level) << "Pipeline graph:" << '\n';
+    debug(debug_level) << "================" << '\n';
     for (auto &f : children) {
-        debug(3) << f.first << ": [";
+        debug(debug_level) << f.first << ": [";
         for (auto &c : f.second) {
-            debug(3) << c << ",";
+            debug(debug_level) << c << ",";
         }
-        debug(3) << "]" << '\n';
+        debug(debug_level) << "]" << '\n';
     }
-    debug(3) << "================" << '\n';
+    debug(debug_level) << "================" << '\n';
 }
 
 void Partitioner::disp_pipeline_bounds() {
-    debug(3) << "\n================" << '\n';
-    debug(3) << "Pipeline bounds:" << '\n';
-    debug(3) << "================" << '\n';
+    debug(debug_level) << "\n================" << '\n';
+    debug(debug_level) << "Pipeline bounds:" << '\n';
+    debug(debug_level) << "================" << '\n';
     disp_regions(pipeline_bounds);
-    debug(3) << "===============" << '\n';
+    debug(debug_level) << "===============" << '\n';
 }
 
 Cost Partitioner::get_pipeline_cost() {
@@ -779,22 +788,22 @@ Cost Partitioner::get_pipeline_cost() {
 void Partitioner::disp_pipeline_costs() {
     internal_assert(group_costs.size() > 0);
     Cost total_cost(0, 0);
-    debug(3) << "\n===============" << '\n';
-    debug(3) << "Pipeline costs:" << '\n';
-    debug(3) << "===============" << '\n';
-    debug(3) << "Group:(name) [arith cost, mem cost, parallelism]" << '\n';
+    debug(debug_level) << "\n===============" << '\n';
+    debug(debug_level) << "Pipeline costs:" << '\n';
+    debug(debug_level) << "===============" << '\n';
+    debug(debug_level) << "Group:(name) [arith cost, mem cost, parallelism]" << '\n';
     for (const pair<FStage, Group> &g : groups) {
         GroupAnalysis analysis = group_costs.at(g.first);
         total_cost.arith += analysis.cost.arith;
         total_cost.memory += analysis.cost.memory;
 
-        debug(3) << "Group:" << g.first << "[";
-        debug(3) << analysis.cost.arith << "," <<
+        debug(debug_level) << "Group:" << g.first << "[";
+        debug(debug_level) << analysis.cost.arith << "," <<
                     analysis.cost.memory << "," << analysis.parallelism << "]\n";
     }
-    debug(3) << "Total arithmetic cost:" << total_cost.arith << '\n';
-    debug(3) << "Total memory cost:" << total_cost.memory << '\n';
-    debug(3) << "===============" << '\n';
+    debug(debug_level) << "Total arithmetic cost:" << total_cost.arith << '\n';
+    debug(debug_level) << "Total memory cost:" << total_cost.memory << '\n';
+    debug(debug_level) << "===============" << '\n';
 }
 
 void Partitioner::initialize_groups_inline() {
@@ -869,6 +878,9 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
     return reuse;
 }
 
+/* Picks the best choice among all the fusion options currently available. Uses
+ * the cost model to estimate the benefit of each choice. Returns a vector of
+ * choice and configuration pairs which describe the best fusion choice.*/
 vector<pair<Partitioner::FusionChoice, Partitioner::EvalConfig>>
 Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
                                    Partitioner::Level level) {
@@ -901,12 +913,13 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
             choices.push_back(make_pair(cand_choice, best_config));
         }
 
-        int64_t overall_benefit = estimate_benefit(choices, false, true);
+        bool no_redundant_work = false;
+        int64_t overall_benefit = estimate_benefit(choices, no_redundant_work, true);
 
         for (auto &choice : choices) {
-            debug(3) << "Cand choice:" << choice.first;
+            debug(debug_level) << "Cand choice:" << choice.first;
         }
-        debug(3) << "Cand benefit:" << overall_benefit << '\n';
+        debug(debug_level) << "Cand benefit:" << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (best_benefit < overall_benefit) {
@@ -916,10 +929,10 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
     }
 
     for (auto &choice : best_choices) {
-        debug(3) << "\nBest choice:" << choice.first;
+        debug(debug_level) << "\nBest choice:" << choice.first;
     }
     if (best_choices.size() > 0) {
-        debug(3) << "Best benefit:" << best_benefit << '\n';
+        debug(debug_level) << "Best benefit:" << best_benefit << '\n';
     }
 
     return best_choices;
@@ -996,6 +1009,8 @@ Partitioner::generate_tile_configs(const FStage &stg) {
     return tile_configs;
 }
 
+/* Finds the best tiling configuration among a set of tile configurations and
+ * returning the configuration with the highest estimated benefit. */
 pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
     // Initialize to no tiling
@@ -1028,10 +1043,10 @@ Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
                                            no_redundant_work, true);
 
         if (show_analysis) {
-            debug(3) << "Benefit relative to not tiling:" << benefit << '\n';
-            debug(3) << "Best analysis:" << new_analysis;
-            debug(3) << "No tile analysis:" << no_tile_analysis;
-            debug(3) << "arith cost:" <<
+            debug(debug_level) << "Benefit relative to not tiling:" << benefit << '\n';
+            debug(debug_level) << "Best analysis:" << new_analysis;
+            debug(debug_level) << "No tile analysis:" << no_tile_analysis;
+            debug(debug_level) << "arith cost:" <<
                 (float)new_analysis.cost.arith / no_tile_analysis.cost.arith << "," <<
                 "mem cost:" <<
                 (float)new_analysis.cost.memory / no_tile_analysis.cost.memory << '\n';
@@ -1044,7 +1059,7 @@ Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
         }
     }
 
-    debug(3) << "\nBest grouping:\n" << best_group << '\n';
+    debug(debug_level) << "\nBest grouping:\n" << best_group << '\n';
 
     return make_pair(best_config, best_analysis);
 }
@@ -1080,33 +1095,32 @@ void Partitioner::group(Partitioner::Level level) {
             if (children.find(g.first) != children.end()) {
                 // All the stages beloning to a function are considered to be a
                 // single child.
-                set<string> child_funcs;
+                set<string> child_groups;
                 for (const FStage &s : children[g.first]) {
-                    child_funcs.insert(s.func.name());
+                    child_groups.insert(s.func.name());
                 }
 
-                int num_children = child_funcs.size();
+                int num_children = child_groups.size();
                 // Only groups with a single child are considered for fusion
                 // when grouping for computing in tiles. This is because the
                 // scheduling model does not allow functions to be computed at
                 // different points.
                 if (num_children == 1 && level == Partitioner::FAST_MEM) {
                     string prod_name = prod_f.name();
-                    string cons_name = (*child_funcs.begin());
+                    string cons_name = (*child_groups.begin());
                     cand.push_back(make_pair(prod_name, cons_name));
-                } else if(num_children > 0  && level == Partitioner::INLINE &&
-                          prod_f.is_pure()) {
+                } else if(level == Partitioner::INLINE && prod_f.is_pure()) {
                     string prod_name = prod_f.name();
                     cand.push_back(make_pair(prod_name, ""));
                 }
             }
         }
 
-        debug(3) << "\n============================" << '\n';
-        debug(3) << "Current grouping candidates:" << '\n';
-        debug(3) << "============================" << '\n';
+        debug(debug_level) << "\n============================" << '\n';
+        debug(debug_level) << "Current grouping candidates:" << '\n';
+        debug(debug_level) << "============================" << '\n';
         for (auto &p : cand) {
-            debug(3) << "[" << p.first << "," << p.second << "]" << '\n';
+            debug(debug_level) << "[" << p.first << "," << p.second << "]" << '\n';
         }
 
         vector<pair<FusionChoice, EvalConfig>> best;
@@ -1118,18 +1132,20 @@ void Partitioner::group(Partitioner::Level level) {
             fixpoint = false;
         }
 
-        // TODO: state assumptions behind the following code
+        // The following code makes the assumption that all the stages of a function
+        // will be in the same group. choose_candidate_ensures that the fusion choice
+        // it returns adheres to this constraint.
         string prod = best[0].first.prod;
 
         Function prod_f = dep_analysis.env.at(prod);
         size_t num_stages = prod_f.updates().size() + 1;
 
         FStage final_stage(prod_f, num_stages - 1);
-        set<FStage> cand_group_children = children[final_stage];
+        set<FStage> prod_group_children = children[final_stage];
 
         // Invalidate entries of the fusion cache
         set<FusionChoice> invalid_keys;
-        for (auto &c : cand_group_children) {
+        for (auto &c : prod_group_children) {
             for (auto &entry : fusion_cache) {
                 if (entry.first.prod == c.func.name() || entry.first.cons == c) {
                     invalid_keys.insert(entry.first);
@@ -1147,18 +1163,23 @@ void Partitioner::group(Partitioner::Level level) {
         }
 
         for (size_t s = 0; s < num_stages; s++) {
-            FStage cand_group(prod_f, s);
-            groups.erase(cand_group);
-            group_costs.erase(cand_group);
+            FStage prod_group(prod_f, s);
+            groups.erase(prod_group);
+            group_costs.erase(prod_group);
 
             // Update the children mapping
-            children.erase(cand_group);
+            children.erase(prod_group);
             for (auto &f : children) {
                 set<FStage> &cons = f.second;
-                if (cons.find(cand_group) != cons.end()) {
-                    cons.erase(cand_group);
-                    cons.insert(cand_group_children.begin(),
-                                cand_group_children.end());
+                if (cons.find(prod_group) != cons.end()) {
+                    cons.erase(prod_group);
+                    // For a function with multiple stages all the stages will
+                    // be in the same group and the consumers of the function
+                    // only depend on the last stage. Therefore, when the
+                    // producer group has multiple stages, parents of the
+                    // producers should point to the consumers of the last
+                    // stage of the producer.
+                    cons.insert(prod_group_children.begin(), prod_group_children.end());
                 }
             }
         }
@@ -1306,15 +1327,15 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
     g_analysis.parallelism = unknown;
 
     if (show_analysis) {
-        debug(3) << "==============\n";
-        debug(3) << "Group Analysis\n";
-        debug(3) << "==============\n";
-        debug(3) << g;
-        debug(3) << "\nProd reg:" << '\n';
+        debug(debug_level) << "==============\n";
+        debug(debug_level) << "Group Analysis\n";
+        debug(debug_level) << "==============\n";
+        debug(debug_level) << g;
+        debug(debug_level) << "\nProd reg:" << '\n';
         disp_regions(prod_reg);
-        debug(3) << "Input reg:" << '\n';
+        debug(debug_level) << "Input reg:" << '\n';
         disp_regions(input_reg);
-        debug(3) << "Group reg:" << '\n';
+        debug(debug_level) << "Group reg:" << '\n';
         disp_regions(group_reg);
     }
 
@@ -1435,14 +1456,14 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
     }
 
     if (show_analysis) {
-        debug(3) << "\nDetailed loads:\n";
+        debug(debug_level) << "\nDetailed loads:\n";
         for (auto &f_load : group_load_costs) {
-            debug(3) << "(" << f_load.first << "," << f_load.second << ")";
+            debug(debug_level) << "(" << f_load.first << "," << f_load.second << ")";
         }
-        debug(3) << '\n';
+        debug(debug_level) << '\n';
 
-        debug(3) << "\nPer tile memory cost:" << per_tile_cost.memory << '\n';
-        debug(3) << "Per tile arith cost:" << per_tile_cost.arith << '\n';
+        debug(debug_level) << "\nPer tile memory cost:" << per_tile_cost.memory << '\n';
+        debug(debug_level) << "Per tile arith cost:" << per_tile_cost.arith << '\n';
     }
 
     g_analysis.cost.memory = per_tile_cost.memory * estimate_tiles;

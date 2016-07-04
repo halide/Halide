@@ -36,6 +36,7 @@ using std::make_pair;
 
 typedef map<string, Interval> DimBounds;
 
+const int debug_level = 3;
 const int64_t unknown = std::numeric_limits<int64_t>::min();
 
 /** Visitor for keeping track of functions that are called and the arguments

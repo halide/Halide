@@ -267,9 +267,9 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
 
 void disp_regions(const map<string, Box> &regions) {
     for (auto &reg : regions) {
-        debug(3) << reg.first;
-        debug(3) << reg.second;
-        debug(3) << "\n";
+        debug(debug_level) << reg.first;
+        debug(debug_level) << reg.second;
+        debug(debug_level) << "\n";
     }
 }
 
@@ -687,22 +687,22 @@ int64_t RegionCosts::input_region_size(const map<string, Box> &input_regions) {
 }
 
 void RegionCosts::disp_func_costs() {
-    debug(3) << "===========================" << '\n';
-    debug(3) << "Pipeline per element costs:" << '\n';
-    debug(3) << "===========================" << '\n';
+    debug(debug_level) << "===========================" << '\n';
+    debug(debug_level) << "Pipeline per element costs:" << '\n';
+    debug(debug_level) << "===========================" << '\n';
     for (auto &kv : env) {
         int stage = 0;
         for (auto &cost : func_cost[kv.first]) {
             Definition def = get_stage_definition(kv.second, stage);
             for (auto &e : def.values()) {
-                debug(3) << e << '\n';
+                debug(debug_level) << e << '\n';
             }
-            debug(3) << "(" << kv.first << "," << stage << ")" <<
+            debug(debug_level) << "(" << kv.first << "," << stage << ")" <<
                      "(" << cost.arith << "," << cost.memory << ")" << '\n';
             stage++;
         }
     }
-    debug(3) << "===========================" << '\n';
+    debug(debug_level) << "===========================" << '\n';
 }
 
 }

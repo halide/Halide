@@ -289,6 +289,11 @@ double run_test(bool auto_schedule) {
         p.auto_schedule(target);
     }
 
+    if (auto_schedule) {
+        p.compile_to_lowered_stmt("lens_blur.html", {left_im, right_im}, HTML, target);
+    } else {
+        p.compile_to_lowered_stmt("lens_blur_manual.html", {left_im, right_im}, HTML, target);
+    }
     // Inspect the schedule
     final.print_loop_nest();
 
