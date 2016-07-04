@@ -20,6 +20,17 @@ void simplify_box(Box &b) {
     }
 }
 
+void merge_regions(map<string, Box> &result, map<string, Box> &partial) {
+    // Merge regions from partial with an existing region if any in the result.
+    for (auto &reg : partial) {
+        if (result.find(reg.first) == result.end()) {
+            result[reg.first] = reg.second;
+        } else {
+            merge_boxes(result[reg.first], reg.second);
+        }
+    }
+}
+
 /* Representation of a function stage in the pipeline. */
 struct FStage {
     Function func;
@@ -80,10 +91,8 @@ bool check_estimates_on_outputs(const vector<Function> &outputs) {
         const vector<string> &vars = out.args();
 
         for (uint32_t i = 0; i < estimates.size(); i++) {
-            if (std::find(vars.begin(), vars.end(),
-                          estimates[i].var) == vars.end() ||
-                !((estimates[i].min.as<IntImm>()) &&
-                  (estimates[i].extent.as<IntImm>()))) {
+            if (std::find(vars.begin(), vars.end(), estimates[i].var) == vars.end() ||
+                !((estimates[i].min.as<IntImm>()) && (estimates[i].extent.as<IntImm>()))) {
                 estimates_avail = false;
                 break;
             }
@@ -149,19 +158,11 @@ DependenceAnalysis::regions_required(Function f,
     map<string, Box> regions;
     int num_stages = f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
-
         DimBounds bounds = get_stage_bounds(f, s, pure_bounds);
         map<string, Box> stage_regions =
                 regions_required(f, s, bounds, prods, values_computed);
 
-        for (auto &reg : stage_regions) {
-            // Merge region with an existing region for the function
-            if (regions.find(reg.first) == regions.end()) {
-                regions[reg.first] = reg.second;
-            } else {
-                merge_boxes(regions[reg.first], reg.second);
-            }
-        }
+        merge_regions(regions, stage_regions);
     }
     return regions;
 }
@@ -207,14 +208,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         boxes_required(arg, curr_scope, func_val_bounds);
 
                 // Merge the regions with the regions found while looking at
-                // the values
-                for (auto &reg : arg_regions) {
-                    if (curr_regions.find(reg.first) == curr_regions.end()) {
-                        curr_regions[reg.first] = reg.second;
-                    } else {
-                        merge_boxes(curr_regions[reg.first], reg.second);
-                    }
-                }
+                // the values.
+                merge_regions(curr_regions, arg_regions);
 
                 Interval arg_bounds =
                         bounds_of_expr_in_scope(arg, curr_scope, func_val_bounds);
@@ -231,8 +226,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 // Merge region with an existing region for the function in the
                 // global map. Do not merge the parent funtion itself to the region
                 // when querying only for the values computed.
-                if (!values_computed ||
-                    (values_computed && reg.first != s.func.name())) {
+                if (!values_computed || (values_computed && reg.first != s.func.name())) {
                     if (regions.find(reg.first) == regions.end()) {
                         regions[reg.first] = reg.second;
                     } else {
@@ -245,10 +239,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     continue;
                 }
 
-                if (env.find(reg.first) != env.end() &&
-                    reg.first != s.func.name()) {
+                if (env.find(reg.first) != env.end() && reg.first != s.func.name()) {
                     // Add all the stages of the function representing the
-                    // region into the queue
+                    // region into the queue.
 
                     Function prod_func = env.at(reg.first);
                     DimBounds prod_pure_bounds;
@@ -297,9 +290,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
             // Use the estimates if the lower and upper bounds cannot be determined
             if (!lower.as<IntImm>() && in_env) {
-                user_warning << "Bounds for the following expression could\
+                user_warning << "Bounds for " << lower << " could\
                                  not be inferred might result in suboptimal\
-                                 scheduling decisions:\n" << lower << '\n';
+                                 scheduling decisions\n";
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
                     uint32_t num_pure_args = curr_f.args().size();
@@ -310,9 +303,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             }
 
             if (!upper.as<IntImm>() && in_env) {
-                user_warning << "Bounds for the following expression could\
+                user_warning << "Bounds for " << upper << " could\
                                  not be inferred might result in suboptimal\
-                                 scheduling decisions:\n" << upper << '\n';
+                                 scheduling decisions\n";
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
                     uint32_t num_pure_args = curr_f.args().size();
@@ -423,37 +416,29 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
         // Add the output region to the pipeline bounds as well
         regions[out.name()] = out_box;
 
-        for (auto &reg : regions) {
-            // Merge region with an existing region for the function in the global map
-            if (pipeline_bounds.find(reg.first) == pipeline_bounds.end()) {
-                pipeline_bounds[reg.first] = reg.second;
-            } else {
-                merge_boxes(pipeline_bounds[reg.first], reg.second);
-            }
-        }
+        merge_regions(pipeline_bounds, regions);
     }
 
     return pipeline_bounds;
 }
 
+/* Implements the grouping algorithm and the cost model for making the grouping
+ * choices. */
 struct Partitioner {
-
+    /* FusionChoice encodes the choice of the prod_group being merged with
+       the cons_group. */
     struct FusionChoice {
-        // FusionChoice encodes the choice of the prod_group being merged with
-        // the cons_group at the granularity of the tile given by tile_sizes
         string prod;
         FStage cons;
 
         FusionChoice(string prod, FStage cons) : prod(prod), cons(cons) {}
 
         bool operator==(const FusionChoice &other) const {
-            return (prod == other.prod) &&
-                    (cons == other.cons);
+            return (prod == other.prod) && (cons == other.cons);
         }
 
         bool operator<(const FusionChoice &other) const {
-            return prod < other.prod || (prod == other.prod &&
-                                         cons < other.cons) ;
+            return prod < other.prod || (prod == other.prod && cons < other.cons);
         }
 
         friend std::ostream& operator<<(std::ostream &stream,
@@ -577,6 +562,7 @@ struct Partitioner {
     map<FusionChoice, EvalConfig> fusion_cache;
 
     map<FStage, Group> groups;
+    map<FStage, set<FStage>> children;
     map<FStage, GroupAnalysis> group_costs;
 
     // Levels that are targeted by the grouping algorithm.
@@ -587,8 +573,6 @@ struct Partitioner {
     DependenceAnalysis &dep_analysis;
     RegionCosts &costs;
     const vector<Function> &outputs;
-
-    map<FStage, set<FStage>> children;
 
     bool gpu_schedule;
 
@@ -745,7 +729,7 @@ void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eva
 
     child_group.tile_sizes = eval.tile_sizes;
 
-    // Update group costs
+    // Update group costs.
     group_costs[child] = analyze_group(child_group, false);
 }
 
@@ -866,7 +850,7 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
 
     vector<map<string, Box>> reuse_regions =
                 dep_analysis.overlap_regions(stg.func, stg.stage_num,
-                                          bounds, prods, false);
+                                             bounds, prods, false);
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         int64_t total_reuse = 0;
@@ -892,7 +876,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
     vector<pair<FusionChoice, EvalConfig>> best_choices;
     int64_t best_benefit = 0;
     for (auto &p : cands) {
-        // Compute the aggregate benefit for inlining into all the children
+        // Compute the aggregate benefit for inlining into all the children.
         vector<pair<FusionChoice, EvalConfig>> choices;
 
         Function prod_f = dep_analysis.env.at(p.first);
@@ -944,7 +928,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
 
 vector<map<string, int>>
 Partitioner::generate_tile_configs(const FStage &stg) {
-    int min_vec_dim_size = 64;
+    int min_inner_dim_size = 64;
 
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     const vector<Dim> &dims = def.schedule().dims();
@@ -973,7 +957,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
             for (size_t j = 0; j < tile_vars.size(); j++) {
                 if (j == i) {
                     tiling[tile_vars[j]] = (j == 0) ?
-                                std::max(dim_size, min_vec_dim_size): dim_size;
+                                std::max(dim_size, min_inner_dim_size): dim_size;
                 } else if (j < i) {
                     tiling[tile_vars[j]] =
                             size_variants[size_variants.size() - 1];
@@ -990,7 +974,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
         map<string, int> tiling;
         for (size_t j = 0; j < tile_vars.size(); j++) {
             tiling[tile_vars[j]] = j == 0 ?
-                            std::max(dim_size, min_vec_dim_size): dim_size;
+                            std::max(dim_size, min_inner_dim_size): dim_size;
         }
         tile_configs.push_back(tiling);
     }
@@ -1001,7 +985,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
         for (size_t j = 0; j < tile_vars.size(); j++) {
             if (((i >> (j)) & 1) == 1) {
                 if (j == 0) {
-                    tiling[tile_vars[j]] = min_vec_dim_size;
+                    tiling[tile_vars[j]] = min_inner_dim_size;
                 } else {
                     tiling[tile_vars[j]] = 1;
                 }
