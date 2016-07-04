@@ -632,8 +632,7 @@ struct Partitioner {
     int64_t estimate_benefit(const vector<pair<FusionChoice, EvalConfig>> &choices,
                              bool no_redundant_work, bool ensure_parallelism);
 
-    void initialize_groups_inline();
-    void initialize_groups_fast_mem();
+    void initialize_groups();
 
     Cost get_pipeline_cost();
 
@@ -806,25 +805,7 @@ void Partitioner::disp_pipeline_costs() {
     debug(debug_level) << "===============" << '\n';
 }
 
-void Partitioner::initialize_groups_inline() {
-    for (pair<const FStage, Group> &g : groups) {
-        map<string, int> tile_sizes;
-        Definition def = get_stage_definition(g.first.func,
-                                              g.first.stage_num);
-
-        const vector<Dim> &dims = def.schedule().dims();
-        for (size_t d = 0; d < dims.size() - 1; d++) {
-            tile_sizes[dims[d].var] = 1;
-        }
-
-        g.second.tile_sizes = tile_sizes;
-        GroupAnalysis inline_analysis = analyze_group(g.second, false);
-        group_costs[g.second.output] = inline_analysis;
-    }
-    fusion_cache.clear();
-}
-
-void Partitioner::initialize_groups_fast_mem() {
+void Partitioner::initialize_groups() {
     for (pair<const FStage, Group> &g : groups) {
         pair<map<string, int>, GroupAnalysis> best =
             find_best_tile_config(g.second, Partitioner::FAST_MEM);
@@ -2354,13 +2335,13 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
     part.disp_pipeline_graph();
     part.disp_pipeline_bounds();
 
-    part.initialize_groups_inline();
+    part.initialize_groups();
     part.disp_pipeline_costs();
 
     part.group(Partitioner::INLINE);
     part.disp_grouping();
 
-    part.initialize_groups_fast_mem();
+    part.fusion_cache.clear();
     part.group(Partitioner::FAST_MEM);
 
     part.disp_pipeline_costs();
