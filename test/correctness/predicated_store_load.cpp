@@ -115,13 +115,11 @@ int scalar_load_test() {
     r.where(r.x + r.y < 24);
 
     ref(x, y) = 10;
-    //ref(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
-    ref(r.x, r.y) = 1 + max(g(0, 1), 3);
+    ref(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
     Image<int> im_ref = ref.realize(80, 80);
 
     f(x, y) = 10;
-    //f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
-    f(r.x, r.y) = 1 + max(g(0, 1), 3);
+    f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
     f.update(0).vectorize(r.x, 8);
 
     Image<int> im = f.realize(80, 80);
@@ -186,6 +184,32 @@ int not_dependent_on_vectorized_var_test() {
     return 0;
 }
 
+int no_op_store_test() {
+    Var x("x"), y("y");
+    Func f ("f"), ref("ref");
+
+    RDom r(0, 40, 0, 40);
+    r.where(r.x + r.y < 24);
+
+    ref(x, y) = x + y;
+    ref(2*r.x + 1, r.y) = ref(2*r.x + 1, r.y);
+    ref(2*r.x, 3*r.y) = ref(2*r.x, 3*r.y);
+    Image<int> im_ref = ref.realize(120, 120);
+
+    f(x, y) = x + y;
+    f(2*r.x + 1, r.y) = f(2*r.x + 1, r.y);
+    f(2*r.x, 3*r.y) = f(2*r.x, 3*r.y);
+    f.update(0).vectorize(r.x, 8);
+    f.update(1).vectorize(r.y, 8);
+
+    Image<int> im = f.realize(120, 120);
+    auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("Running vectorized predicated store scalarized predicated load test\n");
     if (vectorized_predicated_store_scalarized_predicated_load_test() != 0) {
@@ -214,6 +238,11 @@ int main(int argc, char **argv) {
 
     printf("Running not dependent on vectorized var test\n");
     if (not_dependent_on_vectorized_var_test() != 0) {
+        return -1;
+    }
+
+    printf("Running no-op store test\n");
+    if (no_op_store_test() != 0) {
         return -1;
     }
 
