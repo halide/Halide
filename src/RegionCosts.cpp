@@ -45,11 +45,6 @@ struct ExprCost : public IRVisitor {
     // beneficial. Write a test case to validate this and update the costs
     // accordingly.
 
-    // TODO: Only account for the likely portion of the expression in the case
-    // of max, min, and select. This will help costing functions with boundary
-    // conditions better. The likely intrinsic triggers loop partitioning and
-    // on average (steady stage) the cost of the expression will be equivalent
-    // to the likely portion.
     void visit(const Add *op) { visit_binary_operator(op, 1); }
     void visit(const Sub *op) { visit_binary_operator(op, 1); }
     void visit(const Mul *op) { visit_binary_operator(op, 1); }
@@ -264,31 +259,10 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
     return stage_bounds;
 }
 
-void disp_regions(const map<string, Box> &regions) {
-    for (auto &reg : regions) {
-        debug(debug_level) << reg.first;
-        debug(debug_level) << reg.second;
-        debug(debug_level) << "\n";
-    }
-}
-
-RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
-    for (auto &kv : env) {
-        // Pre-compute the function costs without any inlining.
-        func_cost[kv.first] = get_func_cost(kv.second);
-
-        FindImageInputs find;
-        kv.second.accept(&find);
-        // Get the types of all the image inputs to the pipeline.
-        for (auto &in : find.input_type) {
-            inputs[in.first] = in.second;
-        }
-    }
-}
-
  /** Recursively inlines all the functions in the set inlines into the
   * expression e and returns the resulting expression. */
-Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
+Expr perform_inline(Expr e, const map<string, Function> &env,
+                    const set<string> &inlines) {
     if (inlines.empty()) {
         return e;
     }
@@ -317,6 +291,28 @@ Expr RegionCosts::perform_inline(Expr e, const set<string> &inlines) {
     } while (funcs_to_inline);
 
     return inlined_expr;
+}
+
+void disp_regions(const map<string, Box> &regions, int dlevel) {
+    for (auto &reg : regions) {
+        debug(dlevel) << reg.first;
+        debug(dlevel) << reg.second;
+        debug(dlevel) << "\n";
+    }
+}
+
+RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
+    for (auto &kv : env) {
+        // Pre-compute the function costs without any inlining.
+        func_cost[kv.first] = get_func_cost(kv.second);
+
+        FindImageInputs find;
+        kv.second.accept(&find);
+        // Get the types of all the image inputs to the pipeline.
+        for (auto &in : find.input_type) {
+            inputs[in.first] = in.second;
+        }
+    }
 }
 
 Cost RegionCosts::stage_region_cost(string func, int stage,
@@ -423,7 +419,11 @@ Cost RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inli
     return total_cost;
 }
 
-
+/* Helper class for only accounting for the likely portion of the expression in
+ * the case of max, min, and select. This will help costing functions with
+ * boundary conditions better. The likely intrinsic triggers loop partitioning
+ * and on average (steady stage) the cost of the expression will be equivalent
+ * to the likely portion. */
 class LikelyExpression : public IRMutator {
 public:
     using IRMutator::mutate;
@@ -440,7 +440,7 @@ public:
         } else if (call_b && call_b->name == "likely") {
             expr = new_b;
         } else {
-            expr = Max::make(new_a, new_b);
+            expr = Min::make(new_a, new_b);
         }
     }
 
@@ -468,8 +468,9 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
     Definition def = get_stage_definition(curr_f, stage);
 
     for (auto &e : def.values()) {
-        Expr likely_expr = LikelyExpression().mutate(e);
-        Expr inlined_expr = perform_inline(likely_expr, inlines);
+        Expr inlined_expr = perform_inline(e, env, inlines);
+        // TODO: Handle likely.
+        //inlined_expr = LikelyExpression().mutate(inlined_expr);
         inlined_expr = simplify(inlined_expr);
 
         ExprCost cost_visitor;
@@ -589,8 +590,9 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
     vector<Cost> func_costs;
     Cost total_cost(0, 0);
     for (auto &e : f.values()) {
-        Expr likely_expr = LikelyExpression().mutate(e);
-        Expr inlined_expr = perform_inline(likely_expr, inlines);
+        Expr inlined_expr = perform_inline(e, env, inlines);
+        // TODO: Handle likely.
+        //inlined_expr = LikelyExpression().mutate(inlined_expr);
         inlined_expr = simplify(inlined_expr);
 
         ExprCost cost_visitor;
@@ -610,8 +612,9 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
         for (const Definition &u : f.updates()) {
             Cost def_cost(0, 0);
             for (auto &e : u.values()) {
-                Expr likely_expr = LikelyExpression().mutate(e);
-                Expr inlined_expr = perform_inline(likely_expr, inlines);
+                Expr inlined_expr = perform_inline(e, env, inlines);
+                // TODO: Handle likely.
+                //inlined_expr = LikelyExpression().mutate(e);
                 inlined_expr = simplify(inlined_expr);
 
                 ExprCost cost_visitor;
@@ -625,8 +628,9 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
             }
 
             for (auto &arg : u.args()) {
-                Expr likely_arg = LikelyExpression().mutate(arg);
-                Expr inlined_arg = perform_inline(likely_arg, inlines);
+                Expr inlined_arg = perform_inline(arg, env, inlines);
+                // TODO: Handle likely.
+                //inlined_arg = LikelyExpression().mutate(inlined_arg);
                 inlined_arg = simplify(inlined_arg);
 
                 ExprCost cost_visitor;
@@ -743,8 +747,7 @@ void RegionCosts::disp_func_costs() {
         for (auto &cost : func_cost[kv.first]) {
             Definition def = get_stage_definition(kv.second, stage);
             for (auto &e : def.values()) {
-                Expr likely_expr = LikelyExpression().mutate(e);
-                debug(debug_level) << simplify(likely_expr) << '\n';
+                debug(debug_level) << simplify(e) << '\n';
             }
             debug(debug_level) << "(" << kv.first << "," << stage << ")" <<
                      "(" << cost.arith << "," << cost.memory << ")" << '\n';

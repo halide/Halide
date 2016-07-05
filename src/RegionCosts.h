@@ -100,32 +100,28 @@ struct RegionCosts {
     map<string, vector<Cost>> func_cost;
     map<string, Type> inputs;
 
-    /** Recursively inlines all the functions in the set inlines into the
-     * expression e and returns the resulting expression. */
-    Expr perform_inline(Expr e, const set<string> &inlines = set<string>());
-
     /** Returns the cost of producing a region (specified by bounds) of a
      * function stage (specified by func and stage). inlines specifies names of
      * all the inlined functions. */
-     Cost stage_region_cost(string func, int stage, DimBounds &bounds,
-                            const set<string> &inlines = set<string>());
+    Cost stage_region_cost(string func, int stage, DimBounds &bounds,
+                           const set<string> &inlines = set<string>());
 
     /** Returns the cost of producing a region of a function stage (specified
      * by func and stage). inlines specifies names of all the inlined
      * functions. */
-     Cost stage_region_cost(string func, int stage, Box &region,
-                            const set<string> &inlines = set<string>());
+    Cost stage_region_cost(string func, int stage, Box &region,
+                           const set<string> &inlines = set<string>());
 
     /** Returns the cost of producing a region of function func. Adds up the
      * cost of all the stages of func required to produce the region. inlines
      * specifies names of all the inlined functions. */
-     Cost region_cost(string func, Box &region,
-                      const set<string> &inlines = set<string>());
+    Cost region_cost(string func, Box &region,
+                     const set<string> &inlines = set<string>());
 
     /** Same as region cost but computes the total cost of a many function
      * regions. */
-     Cost region_cost(map<string, Box> &regions,
-                      const set<string> &inlines = set<string>());
+    Cost region_cost(map<string, Box> &regions,
+                     const set<string> &inlines = set<string>());
 
     /** Computes the cost of producing a single value of each stage of the f.
      * inlines specifies names of all the inlined functions. Returns a vector
@@ -182,29 +178,34 @@ struct RegionCosts {
     RegionCosts(const map<string, Function> &env);
 };
 
-/* Returns the size of a interval. */
+/** Returns the size of a interval. */
 int64_t get_extent(const Interval &i);
 
-/* Returns the size of an n-d box. */
+/** Returns the size of an n-d box. */
 int64_t box_size(const Box &b);
 
-void disp_regions(const map<string, Box> &regions);
+void disp_regions(const map<string, Box> &regions, int dlevel = debug_level);
 
-/* Returns the appropriate definition based on the stage of a function. */
+/** Returns the appropriate definition based on the stage of a function. */
 Definition get_stage_definition(const Function &f, int stage_num);
 
-/* Adds partial load costs to the corresponding function in the result costs. */
+/** Adds partial load costs to the corresponding function in the result costs. */
 void combine_load_costs(map<string, int64_t> &result,
                         const map<string, int64_t> &partial);
 
-/* Returns the required bounds of an intermediate stage (f, stage_num) of
+/** Returns the required bounds of an intermediate stage (f, stage_num) of
  * function f given the bounds of the pure dimensions of f. */
 DimBounds get_stage_bounds(Function f, int stage_num,
                            const DimBounds &pure_bounds);
 
-/* Returns the required bounds for all the stages of the function f. Each entry
+/** Returns the required bounds for all the stages of the function f. Each entry
  * in the return vector corresponds to a stage.*/
 vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
+
+/** Recursively inlines all the functions in the set inlines into the
+ * expression e and returns the resulting expression. */
+Expr perform_inline(Expr e, const map<string, Function> &env,
+                    const set<string> &inlines = set<string>());
 
 }
 }

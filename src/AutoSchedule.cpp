@@ -602,11 +602,11 @@ struct Partitioner {
 
     map<string, int64_t>
             analyze_spatial_locality(const FStage &stg,
-                                     const map<string, Box> &parent_bounds);
+                                     const map<string, Box> &parent_bounds,
+                                     const set<string> &inlines = set<string>());
 
-    int64_t find_max_access_stride(string var, string func_acc,
-                                   vector<Expr> acc_exprs,
-                                   const Box &buffer_bounds);
+    int64_t find_max_access_stride(const set<string> &vars, string func_acc,
+                                   vector<Expr> acc_exprs, const Box &buffer_bounds);
 
     map<string, int> bounds_to_estimates(const DimBounds &bounds);
 
@@ -614,7 +614,8 @@ struct Partitioner {
 
     string generate_group_cpu_schedule(const Group &g, const Target &t,
                                        const map<FStage, DimBounds> &group_loop_bounds,
-                                       const map<string, Box> &group_storage_bounds);
+                                       const map<string, Box> &group_storage_bounds,
+                                       const set<string> &inlines);
 
     DimBounds get_bounds(const FStage &stg);
 
@@ -1277,11 +1278,11 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
 
     map<string, Box> alloc_reg =
             dep_analysis.regions_required(g.output.func, g.output.stage_num,
-                                       tile_bounds, group_mem, false);
+                                          tile_bounds, group_mem, false);
 
     map<string, Box> compute_reg =
             dep_analysis.regions_required(g.output.func, g.output.stage_num,
-                                       tile_bounds, group_mem, true);
+                                          tile_bounds, group_mem, true);
 
     map<string, Box> group_reg, prod_reg, input_reg;
 
@@ -1390,8 +1391,7 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
         int64_t footprint = 0;
         if (group_mem.find(f_load.first) != group_mem.end() &&
             f_load.first != g.output.func.name()) {
-            footprint = costs.region_size(f_load.first,
-                                               alloc_reg[f_load.first]);
+            footprint = costs.region_size(f_load.first, alloc_reg[f_load.first]);
         } else {
             int64_t initial_footprint = 0;
             if (dep_analysis.env.find(f_load.first) != dep_analysis.env.end()) {
@@ -1645,7 +1645,8 @@ map<FStage, map<string, Box>> Partitioner::group_storage_bounds() {
                                            bounds, prods, false);
         map<string, Box> group_alloc;
         for (const FStage &s : g.members) {
-            if (reg_alloc.find(s.func.name()) != reg_alloc.end()) {
+            if (reg_alloc.find(s.func.name()) != reg_alloc.end()
+                && s.func.name() != g.output.func.name()) {
                 group_alloc[s.func.name()] = reg_alloc[s.func.name()];
             }
         }
@@ -1731,8 +1732,8 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
     const vector<Dim> &dims = f_handle.get_schedule().dims();
     int vec_dim_index = -1;
 
-    // Set the vector length as the maximum of the values produced by a
-    // function
+    // Set the vector length as the maximum of the natural vector size for all
+    // the values produced by the function.
     int vec_len = 0;
     for (auto &type : func.output_types()) {
         vec_len = std::max(vec_len, t.natural_vector_size(type));
@@ -1771,12 +1772,12 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
         }
 
         // TODO: Reorder vector dim to the inner most if it is the inner
-        // most storage dimension of the func
+        // most storage dimension of the func.
+        //
+        // TODO: Check if the warning is necessary.
         if (vec_dim_index > 0) {
             user_warning << "Outer dim vectorization of var " << vec_dim_name
                          << " in function " << f_handle.name() << '\n';
-            //Var inner_var(get_base_name(dims[0].var));
-            //f_handle.reorder(split_vars.first, split_vars.second, inner_var);
         }
     }
 }
@@ -1861,7 +1862,8 @@ void reorder_dims(Stage f_handle, Definition def,
 string Partitioner::generate_group_cpu_schedule(
                     const Group &g, const Target &t,
                     const map<FStage, DimBounds> &group_loop_bounds,
-                    const map<string, Box> &group_storage_bounds) {
+                    const map<string, Box> &group_storage_bounds,
+                    const set<string> &inlines) {
     string sched = "";
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
@@ -1872,8 +1874,7 @@ string Partitioner::generate_group_cpu_schedule(
     debug(1) << g;
 
     // Get the definition corresponding to the stage
-    Definition def = get_stage_definition(g_out,
-                                          g.output.stage_num);
+    Definition def = get_stage_definition(g_out, g.output.stage_num);
 
     // Get the estimates for stage bounds
     DimBounds stg_bounds = get_bounds(g.output);
@@ -1916,7 +1917,7 @@ string Partitioner::generate_group_cpu_schedule(
 
     // Reorder the dimensions for better spatial locality
     map<string, int64_t> strides =
-            analyze_spatial_locality(g.output, group_storage_bounds);
+            analyze_spatial_locality(g.output, group_storage_bounds, inlines);
     reorder_dims(f_handle, def, strides, sched);
 
     vector<string> dim_vars;
@@ -1977,10 +1978,13 @@ string Partitioner::generate_group_cpu_schedule(
     // Parallelize definition
     uint32_t def_par = 1;
     // TODO: Investigate if it is better to pull one large dimension and
-    // parallelize over it or generate nested parallelism
+    // parallelize over it or generate nested parallelism.
+    //
+    // TODO: Currently reordering based on locality may reorder a reduction
+    // to be the outer most. This will kill all parallelism.
     //
     // Go from the outer to the inner most loop till sufficient parallelism
-    // is achieved
+    // is achieved.
     int dim_start = dims.size() - 2;
     for (int d = dim_start; d >= 0; d--) {
         string var = get_base_name(dims[d].var);
@@ -2072,7 +2076,7 @@ string Partitioner::generate_group_cpu_schedule(
 
         // Reorder the dimensions for better spatial locality
         map<string, int64_t> mem_strides =
-                analyze_spatial_locality(mem, group_storage_bounds);
+                analyze_spatial_locality(mem, group_storage_bounds, inlines);
         reorder_dims(mem_handle, mem_def, mem_strides, sched);
 
         vectorize_stage(mem_handle, mem_def, mem.func, t, mem_rvars,
@@ -2102,9 +2106,11 @@ string Partitioner::generate_cpu_schedule(const Target &t) {
     map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
     map<FStage, map<string, Box>> storage_bounds = group_storage_bounds();
 
+    set<string> inlines;
     // Mark all the functions that are Inlined.
     for (const pair<FStage, Group> &g : groups) {
         for (const string &inline_func : g.second.inlined) {
+            inlines.insert(inline_func);
             Function f = dep_analysis.env.at(inline_func);
             Func f_handle(f);
             // TODO: Inlining functions with update definitions has different
@@ -2119,27 +2125,50 @@ string Partitioner::generate_cpu_schedule(const Target &t) {
     // Realize schedule for each group in the pipeline.
     for (auto &g : groups) {
         sched += generate_group_cpu_schedule(g.second, t, loop_bounds[g.first],
-                                             storage_bounds[g.first]);
+                                             storage_bounds[g.first], inlines);
     }
 
     return sched;
 }
 
-/* Visitor to check if a variable is used in an expression. */
-struct ExprUsesVar : public IRVisitor {
-    string var;
+/* Visitor to check if any of the variables is used in an expression. */
+struct ExprUsesVars : public IRVisitor {
+    set<string> vars;
+    bool vars_used;
+
+    using IRVisitor::visit;
+
+    ExprUsesVars(const set<string> &vars): vars(vars) {
+        vars_used = false;
+    }
+
+    void visit(const Variable * v) {
+        if(vars.find(v->name) != vars.end()) {
+            vars_used = true;
+        }
+    }
+};
+
+/* Visitor to get all the variables the dependent on a variable. */
+struct VarsUsingVar : public IRVisitor {
+    set<string> vars;
     bool var_used;
 
     using IRVisitor::visit;
 
-    ExprUsesVar(string var): var(var) {
+    VarsUsingVar(string var) {
+        vars.insert(var);
         var_used = false;
     }
 
-    void visit(const Variable * v) {
-        if(v->name == var) {
-            var_used = true;
+    void visit(const Let *let) {
+        ExprUsesVars check(vars);
+        let->value.accept(&check);
+        if (check.vars_used) {
+            vars.insert(let->name);
         }
+        let->value.accept(this);
+        let->body.accept(this);
     }
 };
 
@@ -2147,8 +2176,8 @@ struct ExprUsesVar : public IRVisitor {
  * Access expressions along each dimension of the allocation are specified by
  * acc_exprs. The dimensions of the allocation are specified by
  * buffer_bounds.*/
-int64_t Partitioner::find_max_access_stride(string var, string func_acc,
-                                            vector<Expr> acc_exprs,
+int64_t Partitioner::find_max_access_stride(const set<string> &vars,
+                                            string func_acc, vector<Expr> acc_exprs,
                                             const Box &buffer_bounds) {
     size_t num_storage_dims = 0;
     int64_t bytes_per_ele = 0;
@@ -2172,10 +2201,10 @@ int64_t Partitioner::find_max_access_stride(string var, string func_acc,
     for (size_t sdim = 0; sdim < num_storage_dims; sdim++) {
         // Check if the access expression is dependent on the loop variable
         // var. Expressions that do not involve the variable have stride 0.
-        ExprUsesVar uses_var(var);
-        acc_exprs[sdim].accept(&uses_var);
+        ExprUsesVars uses_vars(vars);
+        acc_exprs[sdim].accept(&uses_vars);
 
-        if (uses_var.var_used) {
+        if (uses_vars.vars_used) {
            stride = std::max(stride, curr_stride);
         }
 
@@ -2191,15 +2220,9 @@ int64_t Partitioner::find_max_access_stride(string var, string func_acc,
  * The bounds of all the allocations accessed is specified in parent_bounds. */
 map<string, int64_t>
 Partitioner::analyze_spatial_locality(const FStage &stg,
-                                      const map<string, Box> &parent_bounds) {
-    // Get all the allocations accessed in the definition corresponding to stg.
-    FindAllCalls find;
-    Definition def = get_stage_definition(stg.func, stg.stage_num);
-    def.accept(&find);
-
-    vector<pair<string, vector<Expr>>> call_args = find.call_args;
-
-    // TODO: Handle inlining. When a function is inlined into another the
+                                      const map<string, Box> &parent_bounds,
+                                      const set<string> &inlines) {
+    // Handle inlining. When a function is inlined into another the
     // stride of the accesses should be computed on the expression post inlining.
     // For example:
     // f(x, y) = ...;
@@ -2212,9 +2235,28 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     //
     // Computing the stride of a loop over x in the function h will be incorrect
     // if inlining is not taken into account.
+    // Get all the allocations accessed in the definition corresponding to stg.
+
+    FindAllCalls find;
+    Definition def = get_stage_definition(stg.func, stg.stage_num);
+    for (size_t v = 0; v < def.values().size(); v++) {
+        def.values()[v] = perform_inline(def.values()[v], dep_analysis.env,
+                                         inlines);
+    }
+    for (size_t arg = 0; arg < def.args().size(); arg++) {
+        def.args()[arg] = perform_inline(def.args()[arg], dep_analysis.env,
+                                         inlines);
+    }
+    def.accept(&find);
+
+    vector<pair<string, vector<Expr>>> call_args = find.call_args;
 
     // TODO: remove debug code.
-    //debug(0) << "\nAnalyzing definition " << f.first << "," << s << '\n';
+    /*
+    debug(0) << "\nAnalyzing stage " << stg << '\n';
+    debug(0) << "Parent bounds " << '\n';
+    disp_regions(parent_bounds, 0);
+    */
 
     // Account for the spatial locality of the store. Add the access on the
     // left hand side to call_args.
@@ -2228,8 +2270,9 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     const vector<Dim> &dims = def.schedule().dims();
 
     for (size_t d = 0; d < dims.size() - 1; d++) {
-        // TODO: remove debug code.
-        //debug(0) << "Loop var " << dims[d].var << '\n';
+        // Get all the variables involving the dimension in the definition.
+        VarsUsingVar dep_vars(dims[d].var);
+        def.accept(&dep_vars);
 
         // Accumulate the stride for each access for a loop dimension.
         int total_stride = 0;
@@ -2240,9 +2283,8 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
             } else {
                 call_alloc_reg = pipeline_bounds.at(call.first);
             }
-
             total_stride +=
-                    find_max_access_stride(dims[d].var, call.first, call.second,
+                    find_max_access_stride(dep_vars.vars, call.first, call.second,
                                            call_alloc_reg);
         }
         var_strides[dims[d].var] = total_stride;
