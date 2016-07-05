@@ -13,6 +13,7 @@
 
 #include "IR.h"
 #include "IRVisitor.h"
+#include "IRMutator.h"
 #include "Expr.h"
 #include "Function.h"
 #include "Interval.h"

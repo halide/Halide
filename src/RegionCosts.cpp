@@ -34,12 +34,11 @@ struct ExprCost : public IRVisitor {
         cost.arith += 1;
     }
 
-    template<typename T>
-        void visit_binary_operator(const T *op, int op_cost) {
-            op->a.accept(this);
-            op->b.accept(this);
-            cost.arith += op_cost;
-        }
+    template<typename T> void visit_binary_operator(const T *op, int op_cost) {
+        op->a.accept(this);
+        op->b.accept(this);
+        cost.arith += op_cost;
+    }
 
     // The costs of all the simple binary operations is set to one.
     // TODO: Changing the costs for division and multiplication may be
@@ -424,6 +423,43 @@ Cost RegionCosts::region_cost(map<string, Box> &regions, const set<string> &inli
     return total_cost;
 }
 
+
+class LikelyExpression : public IRMutator {
+public:
+    using IRMutator::mutate;
+    using IRMutator::visit;
+
+    void visit(const Min *op) {
+        Expr new_a = mutate(op->a);
+        Expr new_b = mutate(op->b);
+
+        const Call *call_a = (new_a).as<Call>();
+        const Call *call_b = (new_b).as<Call>();
+        if (call_a && call_a->name == "likely") {
+            expr = new_a;
+        } else if (call_b && call_b->name == "likely") {
+            expr = new_b;
+        } else {
+            expr = Max::make(new_a, new_b);
+        }
+    }
+
+    void visit(const Max *op) {
+        Expr new_a = mutate(op->a);
+        Expr new_b = mutate(op->b);
+
+        const Call *call_a = (new_a).as<Call>();
+        const Call *call_b = (new_b).as<Call>();
+        if (call_a && call_a->name == "likely") {
+            expr = new_a;
+        } else if (call_b && call_b->name == "likely") {
+            expr = new_b;
+        } else {
+            expr = Max::make(new_a, new_b);
+        }
+    }
+};
+
 map<string, int64_t>
 RegionCosts::stage_detailed_load_costs(string func, int stage,
                                        const set<string> &inlines) {
@@ -432,7 +468,10 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
     Definition def = get_stage_definition(curr_f, stage);
 
     for (auto &e : def.values()) {
-        Expr inlined_expr = perform_inline(e, inlines);
+        Expr likely_expr = LikelyExpression().mutate(e);
+        Expr inlined_expr = perform_inline(likely_expr, inlines);
+        inlined_expr = simplify(inlined_expr);
+
         ExprCost cost_visitor;
         inlined_expr.accept(&cost_visitor);
         const map<string, int64_t> &expr_load_costs =
@@ -550,7 +589,10 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
     vector<Cost> func_costs;
     Cost total_cost(0, 0);
     for (auto &e : f.values()) {
-        Expr inlined_expr = perform_inline(e, inlines);
+        Expr likely_expr = LikelyExpression().mutate(e);
+        Expr inlined_expr = perform_inline(likely_expr, inlines);
+        inlined_expr = simplify(inlined_expr);
+
         ExprCost cost_visitor;
         inlined_expr.accept(&cost_visitor);
         total_cost.arith += cost_visitor.cost.arith;
@@ -568,7 +610,10 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
         for (const Definition &u : f.updates()) {
             Cost def_cost(0, 0);
             for (auto &e : u.values()) {
-                Expr inlined_expr = perform_inline(e, inlines);
+                Expr likely_expr = LikelyExpression().mutate(e);
+                Expr inlined_expr = perform_inline(likely_expr, inlines);
+                inlined_expr = simplify(inlined_expr);
+
                 ExprCost cost_visitor;
                 inlined_expr.accept(&cost_visitor);
                 def_cost.arith += cost_visitor.cost.arith;
@@ -580,7 +625,10 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
             }
 
             for (auto &arg : u.args()) {
-                Expr inlined_arg = perform_inline(arg, inlines);
+                Expr likely_arg = LikelyExpression().mutate(arg);
+                Expr inlined_arg = perform_inline(likely_arg, inlines);
+                inlined_arg = simplify(inlined_arg);
+
                 ExprCost cost_visitor;
                 inlined_arg.accept(&cost_visitor);
                 def_cost.arith += cost_visitor.cost.arith;
@@ -695,7 +743,8 @@ void RegionCosts::disp_func_costs() {
         for (auto &cost : func_cost[kv.first]) {
             Definition def = get_stage_definition(kv.second, stage);
             for (auto &e : def.values()) {
-                debug(debug_level) << e << '\n';
+                Expr likely_expr = LikelyExpression().mutate(e);
+                debug(debug_level) << simplify(likely_expr) << '\n';
             }
             debug(debug_level) << "(" << kv.first << "," << stage << ")" <<
                      "(" << cost.arith << "," << cost.memory << ")" << '\n';

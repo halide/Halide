@@ -623,8 +623,7 @@ struct Partitioner {
 
     vector<map<string, int>> generate_tile_configs(const FStage &stg);
 
-    pair<map<string, int>, GroupAnalysis>
-            find_best_tile_config(const Group &g, Partitioner::Level level);
+    pair<map<string, int>, GroupAnalysis> find_best_tile_config(const Group &g);
 
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
                              bool no_redundant_work, bool ensure_parallelism);
@@ -807,8 +806,7 @@ void Partitioner::disp_pipeline_costs() {
 
 void Partitioner::initialize_groups() {
     for (pair<const FStage, Group> &g : groups) {
-        pair<map<string, int>, GroupAnalysis> best =
-            find_best_tile_config(g.second, Partitioner::FAST_MEM);
+        pair<map<string, int>, GroupAnalysis> best = find_best_tile_config(g.second);
         g.second.tile_sizes = best.first;
         group_costs[g.second.output] = best.second;
     }
@@ -993,7 +991,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
 /* Finds the best tiling configuration among a set of tile configurations and
  * returning the configuration with the highest estimated benefit. */
 pair<map<string, int>, Partitioner::GroupAnalysis>
-Partitioner::find_best_tile_config(const Group &g, Partitioner::Level level) {
+Partitioner::find_best_tile_config(const Group &g) {
     // Initialize to no tiling
     map<string, int> no_tile_config;
     Group no_tile = g;
@@ -1083,9 +1081,8 @@ void Partitioner::group(Partitioner::Level level) {
 
                 int num_children = child_groups.size();
                 // Only groups with a single child are considered for fusion
-                // when grouping for computing in tiles. This is because the
-                // scheduling model does not allow functions to be computed at
-                // different points.
+                // when grouping for computing in tiles. The scheduling model
+                // does not allow functions to be computed at different points.
                 if (num_children == 1 && level == Partitioner::FAST_MEM) {
                     string prod_name = prod_f.name();
                     string cons_name = (*child_groups.begin());
@@ -1529,7 +1526,7 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
         best_tile_config = tile_sizes;
 
     } else {
-        pair<map<string, int>, GroupAnalysis> config = find_best_tile_config(fused, level);
+        pair<map<string, int>, GroupAnalysis> config = find_best_tile_config(fused);
         best_tile_config = config.first;
         fused_analysis = config.second;
     }
@@ -2345,6 +2342,8 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
     part.group(Partitioner::FAST_MEM);
 
     part.disp_pipeline_costs();
+    part.disp_grouping();
+    part.disp_pipeline_graph();
 
     sched = part.generate_cpu_schedule(target);
 
