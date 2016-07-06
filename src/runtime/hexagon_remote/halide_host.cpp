@@ -14,6 +14,8 @@
 
 #include "bin/src/halide_hexagon_remote.h"
 
+namespace {
+
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
@@ -85,6 +87,8 @@ struct allocation_record {
 allocation_record allocations = { NULL, };
 pthread_mutex_t allocations_mutex;
 
+}  // namespace
+
 extern "C" {
 
 __attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
@@ -107,14 +111,15 @@ void *halide_hexagon_host_malloc(size_t size) {
     const int heap_id = 25;  // system heap
     const int ion_flags = 1;  // cached
 
-    // Align the size up to pages.
-    size = (size + 0x1000 - 1) & ~(0x1000 - 1);
-
     // Hexagon can only access a small number of mappings of these
     // sizes. We reduce the number of mappings required by aligning
     // large allocations to these sizes.
     static const size_t alignments[] = { 0x1000, 0x4000, 0x10000, 0x40000, 0x100000 };
     size_t alignment = alignments[0];
+
+    // Align the size up to the minimum alignment.
+    size = (size + alignment - 1) & ~(alignment - 1);
+
     if (heap_id != 25) {
         for (size_t i = 0; i < sizeof(alignments) / sizeof(alignments[0]); i++) {
             if (size >= alignments[i]) {
