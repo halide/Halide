@@ -34,6 +34,9 @@ int main(int argc, char **argv) {
                             input_bounded(x, y + 1, c),
                             input_bounded(x, y + 2, c));
 
+    RDom r(0, 1000);
+    blur_y(x, y, c) += cast<uint8_t>(r);
+
     Func blur("blur");
     blur(x, y, c) = blur5(blur_y(x - 2, y, c),
                           blur_y(x - 1, y, c),
@@ -59,7 +62,7 @@ int main(int argc, char **argv) {
             .hexagon()
             .split(x, xo, xi, vector_size*2, TailStrategy::RoundUp)
             .vectorize(xi, vector_size)
-            .parallel(y, 16);
+            .parallel(y, 64);
         blur_y.compute_at(blur, y)
             .vectorize(x, vector_size, TailStrategy::RoundUp);
 
