@@ -7,6 +7,8 @@ include ../support/Makefile.inc
 CXX-host ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
+CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
+CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?=
 CXXFLAGS-arm-64-android ?=
@@ -15,8 +17,10 @@ CXXFLAGS-arm-32-android ?=
 LDFLAGS-host ?= -lpthread -ldl -lm
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
+LDFLAGS-arm-64-profile-android ?= -llog -fPIE -pie
+LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
-all: process-host process-arm-64-android process-arm-32-android
+all: process-host process-arm-64-android process-arm-32-android process-arm-64-profile-android process-arm-32-profile-android
 
 pipeline: pipeline.cpp
 	$(CXX) $(CXXFLAGS) pipeline.cpp -g $(LIB_HALIDE) -o pipeline \

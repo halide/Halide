@@ -89,7 +89,7 @@ bin/%/thread_pool.o: thread_pool.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c thread_pool.cpp -o $@
 
-bin/%/halide_remote.o: halide_remote.cpp
+bin/%/halide_remote.o: halide_remote.cpp elf.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
 
