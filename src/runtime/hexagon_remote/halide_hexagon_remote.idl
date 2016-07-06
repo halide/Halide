@@ -22,5 +22,5 @@ interface halide_hexagon_remote
     long poll_log(rout sequence<char> log, rout long read_size);
 
     // Retrieve the current profiling Func ID
-    long poll_profiler_func(rout long id);
+    long poll_profiler_state(rout long func, rout long threads);
 };
