@@ -574,8 +574,11 @@ class PartitionLoops : public IRMutator {
             std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
             max_vals.push_back(op->min + op->extent - 1);
             epilogue_val = fold_left(max_vals, Min::make) + 1;
+            // Stop the epilogue from running before the start of the loop/prologue
             if (make_prologue) {
                 epilogue_val = max(epilogue_val, prologue_val);
+            } else {
+                epilogue_val = max(op->min, epilogue_val);
             }
             // epilogue_val = print(epilogue_val, epilogue_name);
             max_steady = Variable::make(Int(32), epilogue_name);
