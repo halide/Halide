@@ -191,13 +191,13 @@ void halide_hexagon_host_free(void *ptr) {
     // Find the record for this allocation and remove it from the list.
     pthread_mutex_lock(&allocations_mutex);
     allocation_record *rec = &allocations;
-    while (rec->next) {
-        if (rec->next->buf == ptr) {
+    while (rec) {
+        if (rec && rec->next->buf == ptr) {
             allocation_record *before_rec = rec;
             rec = before_rec->next;
             before_rec->next = before_rec->next->next;
             break;
-        } else {
+        } else if (rec) {
             rec = rec->next;
         }
     }
