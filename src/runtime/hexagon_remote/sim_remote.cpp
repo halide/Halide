@@ -198,6 +198,15 @@ int release_kernels(handle_t module_ptr, int codeLen) {
 }
 
 extern "C" {
+halide_profiler_state profiler_state;
+int *profiler_current_func_addr = &profiler_state.current_func;
+}
+
+halide_profiler_state *halide_profiler_get_state() {
+    return (halide_profiler_state *)(&profiler_state);
+}
+
+extern "C" {
 
 // The global symbols with which we pass RPC commands and results.
 volatile int rpc_call = Message::None;
