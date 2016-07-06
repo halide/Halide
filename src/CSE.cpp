@@ -408,7 +408,7 @@ void cse_test() {
     Expr e, correct;
 
     // This is fine as-is.
-    /*e = ssa_block({sin(x), tf[0]*tf[0]});
+    e = ssa_block({sin(x), tf[0]*tf[0]});
     check(e, e);
 
     // Test a simple case.
@@ -461,7 +461,7 @@ void cse_test() {
         e = e*e + e + i;
         e = e*e - e * i;
     }
-    Expr result = common_subexpression_elimination(e);*/
+    Expr result = common_subexpression_elimination(e);
 
     {
         Expr pred = x*x + y*y > 0;
