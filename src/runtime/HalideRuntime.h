@@ -958,9 +958,6 @@ struct halide_profiler_state {
      * reordering the linked list of pipeline stats). */
     struct halide_mutex lock;
 
-    /** A linked list of stats gathered for each pipeline. */
-    struct halide_profiler_pipeline_stats *pipelines;
-
     /** The amount of time the profiler thread sleeps between samples
      * in milliseconds. Defaults to 1 */
     int sleep_time;
@@ -972,15 +969,11 @@ struct halide_profiler_state {
      * periodically by the profiler thread. */
     int current_func;
 
-    /** The number of threads currently doing work. TODO, inject following code:
-        decr_active_threads
-        parallel for :
-          incr_active_threads
-          work
-          decr_active_threads
-        incr_active_threads
-     */
+    /** The number of threads currently doing work. */
     int active_threads;
+
+    /** A linked list of stats gathered for each pipeline. */
+    struct halide_profiler_pipeline_stats *pipelines;
 
     /** Retrieve remote profiler state. Used so that the sampling
      * profiler can follow along with execution that occurs elsewhere,

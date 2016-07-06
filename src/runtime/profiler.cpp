@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, NULL, false};
+    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, 0, NULL, false};
     return &s;
 }
 }
@@ -103,7 +103,6 @@ WEAK void sampling_profiler_thread(void *) {
         uint64_t t1 = halide_current_time_ns(NULL);
         uint64_t t = t1;
         while (1) {
-            uint64_t t_now = halide_current_time_ns(NULL);
             int func, active_threads;
             if (s->get_remote_profiler_state) {
                 // Execution has disappeared into remote code running
@@ -111,8 +110,9 @@ WEAK void sampling_profiler_thread(void *) {
                 s->get_remote_profiler_state(&func, &active_threads);
             } else {
                 func = s->current_func;
-                active_threads = halide_get_active_threads();
+                active_threads = s->active_threads;
             }
+            uint64_t t_now = halide_current_time_ns(NULL);
             if (func == halide_profiler_please_stop) {
                 break;
             } else if (func >= 0) {
@@ -123,9 +123,9 @@ WEAK void sampling_profiler_thread(void *) {
             t = t_now;
 
             // Release the lock, sleep, reacquire.
-            //int sleep_ms = s->sleep_time;
+            int sleep_ms = s->sleep_time;
             halide_mutex_unlock(&s->lock);
-            //halide_sleep_ms(NULL, sleep_ms);
+            halide_sleep_ms(NULL, sleep_ms);
             halide_mutex_lock(&s->lock);
         }
     }
@@ -179,6 +179,8 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
     halide_profiler_state *s = halide_profiler_get_state();
 
     ScopedMutexLock lock(&s->lock);
+
+    halide_profiler_incr_active_threads(s);
 
     if (!s->started) {
         halide_start_clock(user_context);
@@ -435,6 +437,7 @@ WEAK void halide_profiler_shutdown() {
 
 WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
     ((halide_profiler_state *)state)->current_func = halide_profiler_outside_of_halide;
+    halide_profiler_decr_active_threads((halide_profiler_state *)state);
 }
 
-}
+} // extern "C"
