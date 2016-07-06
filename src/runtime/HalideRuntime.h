@@ -78,24 +78,27 @@ typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
-/** These are allocated statically inside the runtime, hence the fixed
- * size. They must be initialized with zero. The first time
- * halide_mutex_lock is called, the lock must be initialized in a
- * thread safe manner. This incurs a small overhead for a once
- * mechanism, but makes the lock reliably easy to setup and use
- * without depending on e.g. C++ constructor logic.
+/** Cross-platform mutex. These are allocated statically inside the
+ * runtime, hence the fixed size. They must be initialized with
+ * zero. The first time halide_mutex_lock is called, the lock must be
+ * initialized in a thread safe manner. This incurs a small overhead
+ * for a once mechanism, but makes the lock reliably easy to setup and
+ * use without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
     uint64_t _private[8];
 };
 
-/** A basic set of mutex functions, which call platform specific code
- * for mutual exclusion.
+/** A basic set of mutex and condition variable functions, which call
+ * platform specific code for mutual exclusion. Equivalent to posix
+ * calls. Mutexes should initially be set to zero'd memory. Any
+ * resources required are created on first lock. Calling destroy
+ * re-zeros the memory.
  */
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
-extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
+extern void halide_mutex_destroy(struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -111,8 +114,8 @@ extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
 //@{
 typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
 extern int halide_do_par_for(void *user_context,
-			     halide_task_t task,
-			     int min, int size, uint8_t *closure);
+                             halide_task_t task,
+                             int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
 //@}
 
@@ -130,13 +133,19 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                           uint8_t *closure);
 //@}
 
-/** Spawn a thread, independent of halide's thread pool. */
-extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
+struct halide_thread;
 
-/** Set the number of threads used by Halide's thread pool. No effect
- * on OS X or iOS. If changed after the first use of a parallel Halide
- * routine, shuts down and then reinitializes the thread pool. */
-extern void halide_set_num_threads(int n);
+/** Spawn a thread. Returns a handle to the thread for the purposes of
+ * joining it. The thread must be joined in order to clean up any
+ * resources associated with it. */
+extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure);
+
+/** Join a thread. */
+extern void halide_join_thread(struct halide_thread *);
+
+/** Set the number of threads used by Halide's thread pool. Returns
+ * the old number. No effect on OS X or iOS. */
+extern int halide_set_num_threads(int n);
 
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and
@@ -169,6 +178,68 @@ extern int32_t halide_debug_to_file(void *user_context, const char *filename,
                                     int32_t type_code,
                                     struct buffer_t *buf);
 
+/** Types in the halide type system. They can be ints, unsigned ints,
+ * or floats (of various bit-widths), or a handle (which is always 64-bits).
+ * Note that the int/uint/float values do not imply a specific bit width
+ * (the bit width is expected to be encoded in a separate value).
+ */
+typedef enum halide_type_code_t
+#if __cplusplus >= 201103L
+: uint8_t
+#endif
+{
+    halide_type_int = 0,   //!< signed integers
+    halide_type_uint = 1,  //!< unsigned integers
+    halide_type_float = 2, //!< floating point numbers
+    halide_type_handle = 3 //!< opaque pointer type (void *)
+} halide_type_code_t;
+
+// Note that while __attribute__ can go before or after the declaration,
+// __declspec apparently is only allowed before.
+#ifndef HALIDE_ATTRIBUTE_ALIGN
+    #ifdef _MSC_VER
+        #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
+    #else
+        #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
+    #endif
+#endif
+
+/** A runtime tag for a type in the halide type system. Can be ints,
+ * unsigned ints, or floats of various bit-widths (the 'bits'
+ * field). Can also be vectors of the same (by setting the 'lanes'
+ * field to something larger than one). This struct should be
+ * exactly 32-bits in size. */
+struct halide_type_t {
+    /** The basic type code: signed integer, unsigned integer, or floating point. */
+#if __cplusplus >= 201103L
+    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
+#else
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
+#endif
+
+    /** The number of bits of precision of a single scalar value of this type. */
+    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
+
+    /** How many elements in a vector. This is 1 for scalar types. */
+    HALIDE_ATTRIBUTE_ALIGN(2) uint16_t lanes;
+
+#ifdef __cplusplus
+    /** Construct a runtime representation of a Halide type from:
+     * code: The fundamental type from an enum.
+     * bits: The bit size of one element.
+     * lanes: The number of vector elements in the type. */
+    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+        : code(code), bits(bits), lanes(lanes) {
+    }
+
+    /** Default constructor is required e.g. to declare halide_trace_event
+     * instances. */
+    halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+
+    /** Size in bytes for a single element, even if width is not 1, of this type. */
+    size_t bytes() { return (bits + 7) / 8; }
+#endif
+};
 
 enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_store = 1,
@@ -181,16 +252,12 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_begin_pipeline = 8,
                               halide_trace_end_pipeline = 9};
 
-// TODO: Update to use halide_type_t
-// Tracking issue filed here: https://github.com/halide/Halide/issues/980
 #pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
     enum halide_trace_event_code event;
     int32_t parent_id;
-    int32_t type_code;
-    int32_t bits;
-    int32_t vector_width;
+    halide_type_t type;
     int32_t value_index;
     void *value;
     int32_t dimensions;
@@ -644,65 +711,6 @@ extern int halide_can_use_target_features(uint64_t features);
 extern int halide_default_can_use_target_features(uint64_t features);
 
 
-/** Types in the halide type system. They can be ints, unsigned ints,
- * or floats (of various bit-widths), or a handle (which is always 64-bits).
- * Note that the int/uint/float values do not imply a specific bit width
- * (the bit width is expected to be encoded in a separate value).
- */
-typedef enum halide_type_code_t
-#if __cplusplus >= 201103L
-: uint8_t
-#endif
-{
-    halide_type_int = 0,   //!< signed integers
-    halide_type_uint = 1,  //!< unsigned integers
-    halide_type_float = 2, //!< floating point numbers
-    halide_type_handle = 3 //!< opaque pointer type (void *)
-} halide_type_code_t;
-
-// Note that while __attribute__ can go before or after the declaration,
-// __declspec apparently is only allowed before.
-#ifndef HALIDE_ATTRIBUTE_ALIGN
-    #ifdef _MSC_VER
-        #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
-    #else
-        #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
-    #endif
-#endif
-
-/** A runtime tag for a type in the halide type system. Can be ints,
- * unsigned ints, or floats of various bit-widths (the 'bits'
- * field). Can also be vectors of the same (by setting the 'lanes'
- * field to something larger than one). This struct should be
- * exactly 32-bits in size. */
-struct halide_type_t {
-    /** The basic type code: signed integer, unsigned integer, or floating point. */
-#if __cplusplus >= 201103L
-    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
-#else
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
-#endif
-
-    /** The number of bits of precision of a single scalar value of this type. */
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
-
-    /** How many elements in a vector. This is 1 for scalar types. */
-    HALIDE_ATTRIBUTE_ALIGN(2) uint16_t lanes;
-
-#ifdef __cplusplus
-    /** Construct a runtime representation of a Halide type from:
-     * code: The fundamental type from an enum.
-     * bits: The bit size of one element.
-     * lanes: The number of vector elements in the type. */
-    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
-        : code(code), bits(bits), lanes(lanes) {
-    }
-
-    /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; }
-#endif
-};
-
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
@@ -812,8 +820,7 @@ struct halide_filter_argument_t {
     const char *name;       // name of the argument; will never be null or empty.
     int32_t kind;           // actually halide_argument_kind_t
     int32_t dimensions;     // always zero for scalar arguments
-    int32_t type_code;      // actually halide_type_code_t
-    int32_t type_bits;      // [1, 8, 16, 32, 64]
+    halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)
@@ -877,23 +884,23 @@ struct halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
+    /** The current memory allocation of this Func. */
+    uint64_t memory_current;
+
+    /** The peak memory allocation of this Func. */
+    uint64_t memory_peak;
+
+    /** The total memory allocation of this Func. */
+    uint64_t memory_total;
+
+    /** The peak stack allocation of this Func threads. */
+    uint64_t stack_peak;
+
     /** The name of this Func. A global constant string. */
     const char *name;
 
-    /** The current memory allocation of this Func. */
-    int memory_current;
-
-    /** The peak memory allocation of this Func. */
-    int memory_peak;
-
-    /** The total memory allocation of this Func. */
-    int memory_total;
-
     /** The total number of memory allocation of this Func. */
     int num_allocs;
-
-    /** The peak stack allocation of this Func threads. */
-    int stack_peak;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -901,6 +908,15 @@ struct halide_profiler_func_stats {
 struct halide_profiler_pipeline_stats {
     /** Total time spent inside this pipeline (in nanoseconds) */
     uint64_t time;
+
+    /** The current memory allocation of funcs in this pipeline. */
+    uint64_t memory_current;
+
+    /** The peak memory allocation of funcs in this pipeline. */
+    uint64_t memory_peak;
+
+    /** The total memory allocation of funcs in this pipeline. */
+    uint64_t memory_total;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
@@ -923,15 +939,6 @@ struct halide_profiler_pipeline_stats {
 
     /** The total number of samples taken inside of this pipeline. */
     int samples;
-
-    /** The current memory allocation of funcs in this pipeline. */
-    int memory_current;
-
-    /** The peak memory allocation of funcs in this pipeline. */
-    int memory_peak;
-
-    /** The total memory allocation of funcs in this pipeline. */
-    int memory_total;
 
     /** The total number of memory allocation of funcs in this pipeline. */
     int num_allocs;
@@ -957,6 +964,11 @@ struct halide_profiler_state {
     /** The id of the current running Func. Set by the pipeline, read
      * periodically by the profiler thread. */
     int current_func;
+
+    /** A function that the profiler thread should call to get the
+     * currently running Func. If null, it reads from the int above
+     * instead. */
+    int (*get_current_func)();
 
     /** Is the profiler thread running. */
     bool started;

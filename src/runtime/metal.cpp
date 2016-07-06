@@ -1,9 +1,9 @@
 #include "HalideRuntimeMetal.h"
 #include "scoped_spin_lock.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
-#include "cuda_opencl_shared.h"
 #include "objc_support.h"
 
 #include "metal_objc_platform_dependent.h"
@@ -320,7 +320,8 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
         << "halide_metal_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-    size_t size = buf_size(user_context, buf);
+   size_t size = buf_size(buf);
+    halide_assert(user_context, size != 0);
     if (buf->dev) {
         // This buffer already has a device allocation
         return 0;
@@ -374,6 +375,7 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
 
 
 WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
+    debug(user_context) << "halide_metal_device_free called on buf " << buf << " dev is " << buf->dev << "\n";
     if (buf->dev == 0) {
         return 0;
     }
@@ -536,7 +538,8 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
     }
 
     mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
-    size_t total_size = buf_size(user_context, buffer);
+    size_t total_size = buf_size(buffer);
+    halide_assert(user_context, total_size != 0);
     NSRange total_extent;
     total_extent.location = 0;
     total_extent.length = total_size;
@@ -545,26 +548,12 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
 
     halide_assert(user_context, buffer->host && buffer->dev);
 
-    device_copy c = make_host_to_device_copy(buffer);
-    uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.dst);
+    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
 
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = (void *)(c.src + off);
-                    void *dst = device_ptr  + off;
-                    memcpy(dst, src, c.chunk_size);
-                }
-            }
-        }
-    }
+    device_copy c = make_host_to_device_copy(buffer);
+    c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
+
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -589,25 +578,9 @@ WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buffer) {
     halide_assert(user_context, buffer->host && buffer->dev);
 
     device_copy c = make_device_to_host_copy(buffer);
-    uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.src);
+    c.src = (uint64_t)buffer_contents((mtl_buffer *)c.src);
 
-    // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-    // in case negative strides.
-    for (int w = 0; w < (int)c.extent[3]; w++) {
-        for (int z = 0; z < (int)c.extent[2]; z++) {
-            for (int y = 0; y < (int)c.extent[1]; y++) {
-                for (int x = 0; x < (int)c.extent[0]; x++) {
-                    uint64_t off = (x * c.stride_bytes[0] +
-                                    y * c.stride_bytes[1] +
-                                    z * c.stride_bytes[2] +
-                                    w * c.stride_bytes[3]);
-                    void *src = device_ptr + off;
-                    void *dst = (void *)(c.dst + off);
-                    memcpy(dst, src, c.chunk_size);
-                }
-            }
-        }
-    }
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -740,6 +713,24 @@ WEAK int halide_metal_run(void *user_context,
     return 0;
 }
 
+WEAK int halide_metal_device_and_host_malloc(void *user_context, struct buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_and_host_malloc called.\n";
+    int result = halide_metal_device_malloc(user_context, buffer);
+    if (result == 0) {
+        mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
+        buffer->host = (uint8_t *)buffer_contents(metal_buffer);
+        debug(user_context) << "halide_metal_device_and_host_malloc dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+    }
+    return result;
+}
+
+WEAK int halide_metal_device_and_host_free(void *user_context, struct buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_and_host_free called.\n";
+    halide_metal_device_free(user_context, buffer);
+    buffer->host = NULL;
+    return 0;
+}
+
 WEAK int halide_metal_wrap_buffer(void *user_context, struct buffer_t *buf, uintptr_t buffer) {
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
@@ -795,6 +786,8 @@ WEAK halide_device_interface metal_device_interface = {
     halide_metal_device_release,
     halide_metal_copy_to_host,
     halide_metal_copy_to_device,
+    halide_metal_device_and_host_malloc,
+    halide_metal_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal

@@ -197,7 +197,7 @@ WEAK void halide_matlab_describe_pipeline(stringstream &desc, const halide_filte
         } else if (arg->kind == halide_argument_kind_input_scalar) {
             desc << "scalar ";
         }
-        desc << get_class_name(get_class_id(arg->type_code, arg->type_bits));
+        desc << get_class_name(get_class_id(arg->type.code, arg->type.bits));
         desc << " '" << arg->name << "'";
     }
     desc << ")";
@@ -265,7 +265,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
     int expected_dims = arg->dimensions;
 
     // Validate that the data type of a buffer matches exactly.
-    mxClassID arg_class_id = get_class_id(arg->type_code, arg->type_bits);
+    mxClassID arg_class_id = get_class_id(arg->type.code, arg->type.bits);
     mxClassID class_id = mxGetClassID(arr);
     if (class_id != arg_class_id) {
         error(user_context) << "Expected type of class " << get_class_name(arg_class_id)
@@ -335,8 +335,8 @@ WEAK int halide_matlab_array_to_scalar(void *user_context,
     }
 
     double value = mxGetScalar(arr);
-    int32_t type_code = arg->type_code;
-    int32_t type_bits = arg->type_bits;
+    int32_t type_code = arg->type.code;
+    int32_t type_bits = arg->type.bits;
 
     if (type_code == halide_type_int) {
         switch (type_bits) {
@@ -422,7 +422,7 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
             }
             args[i] = buf;
         } else {
-            size_t size_bytes = max(8, (arg_metadata->type_bits + 7) / 8);
+            size_t size_bytes = max(8, (arg_metadata->type.bits + 7) / 8);
             void *scalar = __builtin_alloca(size_bytes);
             memset(scalar, 0, size_bytes);
             result = halide_matlab_array_to_scalar(user_context, arg, arg_metadata, scalar);

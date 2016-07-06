@@ -33,36 +33,40 @@ HALIDE_DIR=$(cd ${TOOLS_DIR}/.. && pwd)
 
 LIBHALIDE=${HALIDE_DIR}/bin/libHalide.so
 
+# Initialize sources array.
+GENERATOR_SRCS=()
+
 while getopts "c:e:f:g:l:n:o:s:x:" opt; do
   case $opt in
     c)
-      CXX=${OPTARG}
+      CXX="${OPTARG}"
       ;;
     e)
-      EMIT_OPTIONS=${OPTARG}
+      EMIT_OPTIONS="${OPTARG}"
       ;;
     f)
-      FUNCTION_NAME=${OPTARG}
+      FUNCTION_NAME="${OPTARG}"
       ;;
     g)
-      GENERATOR_NAME=${OPTARG}
+      GENERATOR_NAME="${OPTARG}"
       ;;
     l)
-      LIBHALIDE=${OPTARG}
+      LIBHALIDE="${OPTARG}"
       ;;
     n)
-      FILE_BASE_NAME=${OPTARG}
+      FILE_BASE_NAME="${OPTARG}"
       ;;
     o)
-      OUTPUT_DIR=${OPTARG}
+      OUTPUT_DIR="${OPTARG}"
       ;;
     s)
-      GENERATOR_SRCS=${OPTARG}
+      GENERATOR_SRCS+=("${OPTARG}")
       ;;
     x)
-      EXTENSIONS_OPTIONS=${OPTARG}
+      EXTENSIONS_OPTIONS="${OPTARG}"
       ;;
     *)
+      echo "Unknown option: ${opt}"
       usage
       ;;
   esac
@@ -72,7 +76,16 @@ shift $(($OPTIND - 1))
 # It's OK for GENERATOR_NAME and FUNCTION_NAME to be empty:
 # if the source we're compiling has only one generator registered,
 # we just use that one (and assume that FUNCTION_NAME=GENERATOR_NAME)
-if [ -z "${CXX}" ] || [ -z "${OUTPUT_DIR}" ] || [ -z "${GENERATOR_SRCS}" ]; then
+if [ -z "${CXX}" ]; then 
+  echo "C++ (-c) compiler must be specified."
+  usage
+fi
+if [ -z "${OUTPUT_DIR}" ]; then
+  echo "Output directory (-o) must be specified."
+  usage
+fi
+if [ -z "${GENERATOR_SRCS[*]}" ]; then 
+  echo "Generator sources (-s) must be specified."
   usage
 fi
 
@@ -97,7 +110,9 @@ if [ -n "${EMIT_OPTIONS}" ]; then
 fi
 
 mkdir -p ${OUTPUT_DIR}
+
 GENGEN=`mktemp ${OUTPUT_DIR}/gengen.XXXX`
-${CXX} -g -std=c++11 -fno-rtti -I${HALIDE_DIR}/include ${GENERATOR_SRCS} ${TOOLS_DIR}/GenGen.cpp ${LIBHALIDE} -lz -lpthread -ldl -o ${GENGEN}
+
+${CXX} -g -std=c++11 -fno-rtti -I${HALIDE_DIR}/include ${GENERATOR_SRCS[@]} ${TOOLS_DIR}/GenGen.cpp "${LIBHALIDE}" -lz -lpthread -ldl -o ${GENGEN}
 ${GENGEN} ${GENERATOR_FLAG} ${FUNCTION_FLAG} ${EXTENSIONS_FLAG} ${FILE_BASE_NAME_FLAG} ${EMIT_OPTIONS_FLAG} -o ${OUTPUT_DIR} $@
 rm ${GENGEN}

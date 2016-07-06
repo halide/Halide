@@ -50,29 +50,6 @@ int main(int argc, char *argv[]) {
         return ret;
     }
 
-    // Verify that internal buffers are released.
-    Func f, g, h;
-    f(x) = x;
-    g(x) = f(x);
-    h(x) = g(x);
-
-    f.compute_root();
-    g.compute_root();
-
-    if (target.has_gpu_feature()) {
-        g.gpu_tile(x, 32);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        g.hexagon();
-    }
-    h.set_custom_print(halide_print);
-
-    h.realize(256);
-
-    ret = validate_gpu_object_lifetime(true /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
-    if (ret != 0) {
-        return ret;
-    }
-
     std::cout << "Success!" << std::endl;
     return 0;
 }

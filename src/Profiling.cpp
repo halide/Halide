@@ -9,6 +9,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include "Util.h"
 
 namespace Halide {
@@ -31,8 +32,8 @@ public:
         stack.push_back(0);
     }
 
-    map<int, int> func_stack_current; // map from func id -> current stack allocation
-    map<int, int> func_stack_peak; // map from func id -> peak stack allocation
+    map<int, uint64_t> func_stack_current; // map from func id -> current stack allocation
+    map<int, uint64_t> func_stack_peak; // map from func id -> peak stack allocation
 
 private:
     using IRMutator::visit;
@@ -43,6 +44,8 @@ private:
     };
 
     Scope<AllocSize> func_alloc_sizes;
+
+    bool profiling_memory = true;
 
     // Strip down the tuple name, e.g. f.0 into f
     string normalize_name(const string &name) {
@@ -73,16 +76,14 @@ private:
 
         Expr cond = simplify(condition);
         if (is_zero(cond)) { // Condition always false
-            return 0;
+            return make_zero(UInt(64));
         }
 
         int32_t constant_size = Allocate::constant_allocation_size(extents, name);
         if (constant_size > 0) {
             int64_t stack_bytes = constant_size * type.bytes();
-            if (stack_bytes > ((int64_t(1) << 31) - 1)) { // Out of memory
-                return 0;
-            } else if (can_allocation_fit_on_stack(stack_bytes)) { // Allocation on stack
-                return Expr((int32_t)stack_bytes);
+            if (can_allocation_fit_on_stack(stack_bytes)) { // Allocation on stack
+                return make_const(UInt(64), stack_bytes);
             }
         }
 
@@ -91,11 +92,11 @@ private:
         internal_assert(extents.size() > 0);
 
         on_stack = false;
-        Expr size = extents[0];
+        Expr size = cast<uint64_t>(extents[0]);
         for (size_t i = 1; i < extents.size(); i++) {
             size *= extents[i];
         }
-        size = simplify(Select::make(condition, size * type.bytes(), 0));
+        size = simplify(Select::make(condition, size * type.bytes(), make_zero(UInt(64))));
         return size;
     }
 
@@ -112,13 +113,14 @@ private:
 
         bool on_stack;
         Expr size = compute_allocation_size(new_extents, condition, op->type, op->name, on_stack);
+        internal_assert(size.type() == UInt(64));
         func_alloc_sizes.push(op->name, {on_stack, size});
 
         // compute_allocation_size() might return a zero size, if the allocation is
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
         if (!is_zero(size) && on_stack) {
-            const int64_t *int_size = as_const_int(size);
+            const uint64_t *int_size = as_const_uint(size);
             internal_assert(int_size != NULL); // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
@@ -140,7 +142,7 @@ private:
             stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
         }
 
-        if (!is_zero(size) && !on_stack) {
+        if (!is_zero(size) && !on_stack && profiling_memory) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
             debug(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
             Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
@@ -153,6 +155,7 @@ private:
         int idx = get_func_id(op->name);
 
         AllocSize alloc = func_alloc_sizes.get(op->name);
+        internal_assert(alloc.size.type() == UInt(64));
         func_alloc_sizes.pop(op->name);
 
         IRMutator::visit(op);
@@ -161,12 +164,14 @@ private:
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
 
             if (!alloc.on_stack) {
-                debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
-                Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
-                                           {profiler_pipeline_state, idx, alloc.size}, Call::Extern);
-                stmt = Block::make(Evaluate::make(set_task), stmt);
+                if (profiling_memory) {
+                    debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
+                    Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
+                                               {profiler_pipeline_state, idx, alloc.size}, Call::Extern);
+                    stmt = Block::make(Evaluate::make(set_task), stmt);
+                }
             } else {
-                const int64_t *int_size = as_const_int(alloc.size);
+                const uint64_t *int_size = as_const_uint(alloc.size);
                 internal_assert(int_size != nullptr);
 
                 func_stack_current[idx] -= *int_size;
@@ -206,8 +211,27 @@ private:
 
     void visit(const For *op) {
         // We profile by storing a token to global memory, so don't enter GPU loops
-        if (op->device_api == DeviceAPI::None ||
-            op->device_api == DeviceAPI::Host) {
+        if (op->device_api == DeviceAPI::Hexagon) {
+            bool old_profiling_memory = profiling_memory;
+            profiling_memory = false;
+            IRMutator::visit(op);
+            profiling_memory = old_profiling_memory;
+
+            Stmt for_loop = stmt;
+            const For *f = for_loop.as<For>();
+            internal_assert(f);
+
+            // Get the profiler state pointer from scratch inside the
+            // kernel. There will be a separate copy of the state on
+            // the DSP that the host side will periodically query.
+            Stmt body = f->body;
+            Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
+            body = substitute("profiler_state", Variable::make(Handle(), "hvx_profiler_state"), body);
+            body = LetStmt::make("hvx_profiler_state", get_state, body);
+            stmt = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, body);
+
+        } else if (op->device_api == DeviceAPI::None ||
+                   op->device_api == DeviceAPI::Host) {
             IRMutator::visit(op);
         } else {
             stmt = op;
@@ -257,10 +281,12 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     if (!no_stack_alloc) {
         for (int i = num_funcs-1; i >= 0; --i) {
-            s = Block::make(Store::make("profiling_func_stack_peak_buf", profiling.func_stack_peak[i], i, Parameter()), s);
+            s = Block::make(Store::make("profiling_func_stack_peak_buf",
+                                        make_const(UInt(64), profiling.func_stack_peak[i]),
+                                        i, Parameter()), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
-        s = Allocate::make("profiling_func_stack_peak_buf", Int(32), {num_funcs}, const_true(), s);
+        s = Allocate::make("profiling_func_stack_peak_buf", UInt(64), {num_funcs}, const_true(), s);
     }
 
     for (std::pair<string, int> p : profiling.indices) {
