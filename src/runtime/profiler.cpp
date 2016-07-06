@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, false};
+    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, NULL, false};
     return &s;
 }
 }
@@ -96,6 +96,9 @@ WEAK void sampling_profiler_thread(void *) {
         while (1) {
             uint64_t t_now = halide_current_time_ns(NULL);
             int func = s->current_func;
+            if (s->get_current_func) {
+                func = s->get_current_func();
+            }
             if (func == halide_profiler_please_stop) {
                 break;
             } else if (func >= 0) {
@@ -124,9 +127,9 @@ namespace {
 
 template <typename T>
 void sync_compare_max_and_swap(T *ptr, T val) {
-    int old_val = *ptr;
+    T old_val = *ptr;
     while (val > old_val) {
-        int temp = old_val;
+        T temp = old_val;
         old_val = __sync_val_compare_and_swap(ptr, old_val, val);
         if (temp == old_val) {
             return;
@@ -165,7 +168,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
     if (!s->started) {
         halide_start_clock(user_context);
-        halide_spawn_thread(user_context, sampling_profiler_thread, NULL);
+        halide_spawn_thread(sampling_profiler_thread, NULL);
         s->started = true;
     }
 
@@ -182,7 +185,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
 WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
-                                            int *f_values) {
+                                            uint64_t *f_values) {
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *) pipeline_state;
     halide_assert(user_context, p_stats != NULL);
 
@@ -203,7 +206,7 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
 WEAK void halide_profiler_memory_allocate(void *user_context,
                                           void *pipeline_state,
                                           int func_id,
-                                          int incr) {
+                                          uint64_t incr) {
     // It's possible to have 'incr' equal to zero if the allocation is not
     // executed conditionally.
     if (incr == 0) {
@@ -226,20 +229,20 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     // Update per-pipeline memory stats
     __sync_add_and_fetch(&p_stats->num_allocs, 1);
     __sync_add_and_fetch(&p_stats->memory_total, incr);
-    int p_mem_current = __sync_add_and_fetch(&p_stats->memory_current, incr);
+    uint64_t p_mem_current = __sync_add_and_fetch(&p_stats->memory_current, incr);
     sync_compare_max_and_swap(&p_stats->memory_peak, p_mem_current);
 
     // Update per-func memory stats
     __sync_add_and_fetch(&f_stats->num_allocs, 1);
     __sync_add_and_fetch(&f_stats->memory_total, incr);
-    int f_mem_current = __sync_add_and_fetch(&f_stats->memory_current, incr);
+    uint64_t f_mem_current = __sync_add_and_fetch(&f_stats->memory_current, incr);
     sync_compare_max_and_swap(&f_stats->memory_peak, f_mem_current);
 }
 
 WEAK void halide_profiler_memory_free(void *user_context,
                                       void *pipeline_state,
                                       int func_id,
-                                      int decr) {
+                                      uint64_t decr) {
     // It's possible to have 'decr' equal to zero if the allocation is not
     // executed conditionally.
     if (decr == 0) {

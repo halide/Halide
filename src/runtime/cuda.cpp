@@ -1,8 +1,8 @@
 #include "HalideRuntimeCuda.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 #include "mini_cuda.h"
-#include "cuda_opencl_shared.h"
 
 #define INLINE inline __attribute__((always_inline))
 
@@ -443,8 +443,7 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuMemFree failed: "
-                            << get_error_name(err);
+        // We may be called as a destructor, so don't raise an error here.
         return err;
     }
 
@@ -521,7 +520,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, buffer_t *buf) {
         return ctx.error;
     }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf_size(buf);
+    halide_assert(user_context, size != 0);
     if (buf->dev) {
         // This buffer already has a device allocation
         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
@@ -814,6 +814,14 @@ WEAK int halide_cuda_run(void *user_context,
     return 0;
 }
 
+WEAK int halide_cuda_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &cuda_device_interface);
+}
+
+WEAK int halide_cuda_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &cuda_device_interface);
+}
+
 WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, uintptr_t device_ptr) {
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
@@ -912,6 +920,8 @@ WEAK halide_device_interface cuda_device_interface = {
     halide_cuda_device_release,
     halide_cuda_copy_to_host,
     halide_cuda_copy_to_device,
+    halide_cuda_device_and_host_malloc,
+    halide_cuda_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Cuda

@@ -135,14 +135,28 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
                     const std::string &dst_file, bool deterministic) {
     internal_assert(!src_files.empty());
 #if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
+
+#if LLVM_VERSION >= 39
+    std::vector<llvm::NewArchiveMember> new_members;
+    for (auto &src : src_files) {
+        llvm::Expected<llvm::NewArchiveMember> new_member =
+            llvm::NewArchiveMember::getFile(src, /*Deterministic=*/true);
+        internal_assert((bool)new_member)
+            << src << ": " << llvm::toString(new_member.takeError()) << "\n";
+        new_members.push_back(std::move(*new_member));
+    }
+#elif LLVM_VERSION == 37
     std::vector<llvm::NewArchiveIterator> new_members;
     for (auto &src : src_files) {
-#if LLVM_VERSION == 37
         new_members.push_back(llvm::NewArchiveIterator(src, src));
-#else
-        new_members.push_back(llvm::NewArchiveIterator(src));
-#endif
     }
+#else
+    std::vector<llvm::NewArchiveIterator> new_members;
+    for (auto &src : src_files) {
+        new_members.push_back(llvm::NewArchiveIterator(src));
+    }
+#endif
+
     const bool write_symtab = true;
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin()
         ? llvm::object::Archive::K_BSD

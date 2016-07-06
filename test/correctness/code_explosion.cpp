@@ -9,8 +9,8 @@ int main(int argc, char **argv) {
 
     // Try a nest of highly connection funcs all marked inline.
     std::vector<Func> funcs;
-    funcs.push_back(lambda(x, x));
-    funcs.push_back(lambda(x, x));
+    funcs.push_back(lambda(x, cast<uint32_t>(x)));
+    funcs.push_back(lambda(x, cast<uint32_t>(x)));
     for (int i = 2; i < size; i++) {
         funcs.push_back(lambda(x, funcs[i-1](x) + funcs[i-2](x)));
     }
@@ -23,8 +23,8 @@ int main(int argc, char **argv) {
     Func f;
     std::vector<Expr> e(size);
 
-    e[0] = x;
-    e[1] = x;
+    e[0] = cast<uint32_t>(x);
+    e[1] = cast<uint32_t>(x);
     for (size_t i = 2; i < e.size(); i++) {
         e[i] = e[i-1] + e[i-2];
     }
