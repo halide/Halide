@@ -1980,32 +1980,41 @@ string Partitioner::generate_group_cpu_schedule(
     // TODO: Investigate if it is better to pull one large dimension and
     // parallelize over it or generate nested parallelism.
     //
-    // TODO: Currently reordering based on locality may reorder a reduction
-    // to be the outer most. This will kill all parallelism.
-    //
     // Go from the outer to the inner most loop till sufficient parallelism
     // is achieved.
-    int dim_start = dims.size() - 2;
-    for (int d = dim_start; d >= 0; d--) {
-        string var = get_base_name(dims[d].var);
-        bool is_rvar = (rvars.find(var) != rvars.end());
-        VarOrRVar v(var, is_rvar);
+    bool nested_parallelism = true;
+    if (nested_parallelism) {
+        int dim_start = dims.size() - 2;
+        string seq_var = "";
+        for (int d = dim_start; d >= 0; d--) {
+            string var = get_base_name(dims[d].var);
+            bool is_rvar = (rvars.find(var) != rvars.end());
+            VarOrRVar v(var, is_rvar);
 
-        if (is_rvar && !can_parallelize_rvar(var, g_out.name(), def)) {
-            break;
-        }
+            if (is_rvar && !can_parallelize_rvar(var, g_out.name(), def)) {
+                if (seq_var == "") {
+                    seq_var = var;
+                }
+                continue;
+            }
 
-        if (def_par >= arch_params.parallelism) {
-            // Enough parallelism to saturate target machine
-            break;
-        }
+            if (def_par >= arch_params.parallelism) {
+                // Enough parallelism to saturate target machine
+                break;
+            }
 
-        if (stg_estimates.find(var) != stg_estimates.end()) {
-            f_handle.parallel(v);
-            sched += f_handle.name() + ".parallel(" + var + ");\n";
-            def_par *= stg_estimates[var];
-        } else {
-            break;
+            if (stg_estimates.find(var) != stg_estimates.end()) {
+                if (seq_var != "") {
+                    VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
+                    f_handle.reorder(seq, v);
+                    sched += f_handle.name() + ".reorder(" + seq_var + "," + var + ");\n";
+                }
+                f_handle.parallel(v);
+                sched += f_handle.name() + ".parallel(" + var + ");\n";
+                def_par *= stg_estimates[var];
+            } else {
+                break;
+            }
         }
     }
 
@@ -2014,7 +2023,7 @@ string Partitioner::generate_group_cpu_schedule(
                          f_handle.name() << '\n';
     }
 
-    // The level at which group members will be computed
+    // Find the level at which group members will be computed.
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
     VarOrRVar tile_inner_var("", false);
     if (outer_dims.size() > 0) {
@@ -2096,7 +2105,7 @@ string Partitioner::generate_group_cpu_schedule(
  * cannot be manipulated and introspected very easily. The problem is that all
  * of the scheduling uses internal function and variable names which are not
  * visible to the user. Additionally, functions like sum and maximum are not
- * user visible. More thought needs to into interaction between the user and
+ * user visible. More thought needs to go into interaction between the user and
  * auto scheduling. */
 string Partitioner::generate_cpu_schedule(const Target &t) {
     string sched = "";
