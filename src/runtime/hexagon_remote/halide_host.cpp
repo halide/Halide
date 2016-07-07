@@ -16,6 +16,14 @@
 
 namespace {
 
+enum ion_heap_id {
+    system_heap_id = 25,
+};
+
+enum ion_flags {
+    ion_flag_cached = 1,
+};
+
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
@@ -85,7 +93,7 @@ struct allocation_record {
 
 // Make a dummy allocation so we don't need a special case for the head node.
 allocation_record allocations = { NULL, };
-pthread_mutex_t allocations_mutex;
+pthread_mutex_t allocations_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 }  // namespace
 
@@ -108,8 +116,8 @@ void *halide_hexagon_host_malloc(size_t size) {
         return NULL;
     }
 
-    const int heap_id = 25;  // system heap
-    const int ion_flags = 1;  // cached
+    const int heap_id = system_heap_id;
+    const int ion_flags = ion_flag_cached;
 
     // Hexagon can only access a small number of mappings of these
     // sizes. We reduce the number of mappings required by aligning
@@ -120,7 +128,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     // Align the size up to the minimum alignment.
     size = (size + alignment - 1) & ~(alignment - 1);
 
-    if (heap_id != 25) {
+    if (heap_id != system_heap_id) {
         for (size_t i = 0; i < sizeof(alignments) / sizeof(alignments[0]); i++) {
             if (size >= alignments[i]) {
                 alignment = alignments[i];
@@ -197,12 +205,12 @@ void halide_hexagon_host_free(void *ptr) {
     pthread_mutex_lock(&allocations_mutex);
     allocation_record *rec = &allocations;
     while (rec) {
-        if (rec && rec->next->buf == ptr) {
+        if (rec->next && rec->next->buf == ptr) {
             allocation_record *before_rec = rec;
             rec = before_rec->next;
             before_rec->next = before_rec->next->next;
             break;
-        } else if (rec) {
+        } else {
             rec = rec->next;
         }
     }
