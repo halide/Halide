@@ -715,8 +715,6 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(uint64_t features);
 
 
-
-
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
