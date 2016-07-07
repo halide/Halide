@@ -1412,6 +1412,7 @@ inline Expr reinterpret(Expr e) {
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
+    user_assert(!x.type().is_float() && !y.type().is_float()) << "bitwise and only takes integers\n";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1427,6 +1428,7 @@ inline Expr operator&(Expr x, Expr y) {
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
+    user_assert(!x.type().is_float() && !y.type().is_float()) << "bitwise or only takes integers\n";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1441,7 +1443,8 @@ inline Expr operator|(Expr x, Expr y) {
  * have the same type). The type of the result is the type of the
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
-    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
+    user_assert(x.defined() && y.defined()) << "bitwise xor of undefined Expr\n";
+    user_assert(!x.type().is_float() && !y.type().is_float()) << "bitwise xor only takes integers\n";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1454,7 +1457,8 @@ inline Expr operator^(Expr x, Expr y) {
 
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
-    user_assert(x.defined()) << "bitwise or of undefined Expr\n";
+    user_assert(x.defined()) << "bitwise not of undefined Expr\n";
+    user_assert(!x.type().is_float()) << "bitwise not only takes integer\n";
     return Internal::Call::make(x.type(), Internal::Call::bitwise_not, {x}, Internal::Call::PureIntrinsic);
 }
 

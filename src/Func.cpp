@@ -1616,6 +1616,10 @@ Func &Func::unroll(VarOrRVar var, int factor, TailStrategy tail) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
+    user_assert(!min.defined() || (min.type() == Int(32))) << "Min bound of a Func must be of type int32\n";
+    user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
+    user_assert(extent.type() == Int(32)) << "Extent bound of a Func must be of type int32\n";
+
     invalidate_cache();
     bool found = false;
     for (size_t i = 0; i < func.args().size(); i++) {
