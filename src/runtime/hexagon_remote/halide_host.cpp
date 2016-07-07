@@ -19,23 +19,27 @@ namespace {
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
+// Allocations that are intended to be shared with Hexagon can be
+// shared without copying if they are contiguous in physical
+// memory. Android's ION allocator gives us a mechanism with which we
+// can allocate contiguous physical memory.
 typedef int ion_user_handle_t;
 
 struct ion_allocation_data {
-	size_t len;
-	size_t align;
-	unsigned int heap_id_mask;
-	unsigned int flags;
-	ion_user_handle_t handle;
+    size_t len;
+    size_t align;
+    unsigned int heap_id_mask;
+    unsigned int flags;
+    ion_user_handle_t handle;
 };
 
 struct ion_fd_data {
-	ion_user_handle_t handle;
-	int fd;
+    ion_user_handle_t handle;
+    int fd;
 };
 
 struct ion_handle_data {
-	ion_user_handle_t handle;
+    ion_user_handle_t handle;
 };
 
 #define ION_IOC_ALLOC _IOWR('I', 0, ion_allocation_data)
@@ -74,6 +78,9 @@ int ion_free(int ion_fd, ion_user_handle_t ion_handle) {
     return 0;
 }
 
+// We need to be able to keep track of the size and some other
+// information about ION allocations, so define a simple linked list
+// of allocations we can traverse later.
 struct allocation_record {
     allocation_record *next;
     int ion_fd;
@@ -83,7 +90,8 @@ struct allocation_record {
     size_t size;
 };
 
-// Make a dummy allocation so we don't need a special case for the head node.
+// Make a dummy allocation so we don't need a special case for the
+// head list node.
 allocation_record allocations = { NULL, };
 pthread_mutex_t allocations_mutex;
 
@@ -91,6 +99,9 @@ pthread_mutex_t allocations_mutex;
 
 extern "C" {
 
+// If this symbol is defined in the stub library we are going to link
+// to, we need to call this in order to actually get zero copy
+// behavior from our buffers.
 __attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
