@@ -16,6 +16,13 @@
 
 namespace {
 
+typedef halide_hexagon_remote_handle_t handle_t;
+typedef halide_hexagon_remote_buffer buffer;
+
+// Allocations that are intended to be shared with Hexagon can be
+// shared without copying if they are contiguous in physical
+// memory. Android's ION allocator gives us a mechanism with which we
+// can allocate contiguous physical memory.
 enum ion_heap_id {
     system_heap_id = 25,
 };
@@ -24,13 +31,6 @@ enum ion_flags {
     ion_flag_cached = 1,
 };
 
-typedef halide_hexagon_remote_handle_t handle_t;
-typedef halide_hexagon_remote_buffer buffer;
-
-// Allocations that are intended to be shared with Hexagon can be
-// shared without copying if they are contiguous in physical
-// memory. Android's ION allocator gives us a mechanism with which we
-// can allocate contiguous physical memory.
 typedef int ion_user_handle_t;
 
 struct ion_allocation_data {
