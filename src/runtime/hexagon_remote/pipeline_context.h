@@ -108,7 +108,6 @@ class PipelineContext {
                     power_off_hvx_already_locked();
                 }
             }
-            // Sleep until
             // Sleep for 100 ms. We could sleep for longer (5 seconds
             // minus time since last use), but we also need to wake up
             // periodically to check if we should exit.
