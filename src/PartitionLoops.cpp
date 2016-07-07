@@ -217,14 +217,48 @@ struct Simplification {
     Interval interval;
 };
 
+template<typename T>
+class ExprUsesValidBuffers : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    const Scope<T> &allocated_buffers;
+
+    void visit(const Load *op) {
+        if (!allocated_buffers.contains(op->name)) {
+            valid = false;
+        } else {
+            IRGraphVisitor::visit(op);
+        }
+    }
+public:
+    ExprUsesValidBuffers(const Scope<T> &buffers) : allocated_buffers(buffers), valid(true) {}
+    bool valid;
+};
+
+/** Check if any references to buffers in an expression is valid (i.e. the buffers
+ * have already been allocated).
+ */
+template<typename T>
+bool expr_uses_valid_buffers(Expr e, const Scope<T> &buffers) {
+    ExprUsesValidBuffers<T> uses(buffers);
+    e.accept(&uses);
+    return uses.valid;
+}
+
 // Then we define the visitor that hunts for them.
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
     Scope<int> depends_on_loop_var;
+    const Scope<int> &allocated_buffers;
 
     void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
         if (!expr_uses_vars(condition, depends_on_loop_var)) {
+            return;
+        }
+        if (!expr_uses_valid_buffers(condition, allocated_buffers)) {
+            // The condition refers to an unallocated buffer. We should
+            // throw away the condition
             return;
         }
         condition = RemoveLikelyTags().mutate(condition);
@@ -347,7 +381,7 @@ class FindSimplifications : public IRVisitor {
 public:
     vector<Simplification> simplifications;
 
-    FindSimplifications(const std::string &v) {
+    FindSimplifications(const std::string &v, const Scope<int> &buffers) : allocated_buffers(buffers) {
         depends_on_loop_var.push(v, 0);
     }
 };
@@ -397,7 +431,18 @@ bool contains_thread_barrier(Stmt s) {
 class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
+    Scope<int> allocated_buffers;
     bool in_gpu_loop = false;
+
+    void visit(const Allocate *op) {
+        allocated_buffers.push(op->name, 0);
+        IRMutator::visit(op);
+    }
+
+    void visit(const Free *op) {
+        allocated_buffers.pop(op->name);
+        IRMutator::visit(op);
+    }
 
     void visit(const For *op) {
         Stmt body = op->body;
@@ -414,7 +459,7 @@ class PartitionLoops : public IRMutator {
         }
 
         // Find simplifications in this loop body
-        FindSimplifications finder(op->name);
+        FindSimplifications finder(op->name, allocated_buffers);
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
