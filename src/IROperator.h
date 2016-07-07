@@ -1412,7 +1412,10 @@ inline Expr reinterpret(Expr e) {
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
-    user_assert(!x.type().is_float() && !y.type().is_float()) << "bitwise and only takes integers\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "The first argument to bitwise and must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "The second argument to bitwise and must be an integer or unsigned integer";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1428,7 +1431,10 @@ inline Expr operator&(Expr x, Expr y) {
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
-    user_assert(!x.type().is_float() && !y.type().is_float()) << "bitwise or only takes integers\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "The first argument to bitwise or must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "The second argument to bitwise or must be an integer or unsigned integer";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1444,7 +1450,10 @@ inline Expr operator|(Expr x, Expr y) {
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "bitwise xor of undefined Expr\n";
-    user_assert(!x.type().is_float() && !y.type().is_float()) << "bitwise xor only takes integers\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "The first argument to bitwise xor must be an integer or unsigned integer";
+    user_assert(y.type().is_int() || y.type().is_uint())
+        << "The second argument to bitwise xor must be an integer or unsigned integer";
     // First widen or narrow, then bitcast.
     if (y.type().bits() != x.type().bits()) {
         y = cast(y.type().with_bits(x.type().bits()), y);
@@ -1458,7 +1467,8 @@ inline Expr operator^(Expr x, Expr y) {
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
     user_assert(x.defined()) << "bitwise not of undefined Expr\n";
-    user_assert(!x.type().is_float()) << "bitwise not only takes integer\n";
+    user_assert(x.type().is_int() || x.type().is_uint())
+        << "Argument to bitwise not must be an integer or unsigned integer";
     return Internal::Call::make(x.type(), Internal::Call::bitwise_not, {x}, Internal::Call::PureIntrinsic);
 }
 
