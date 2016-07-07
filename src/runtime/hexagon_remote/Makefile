@@ -41,17 +41,6 @@ COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
-# rpcmem doesn't have a precompiled library in the SDK, so we just
-# include its source directly.
-# TODO: There must be a better way to do this, without requiring users
-# to go to the SDK and build rpcmem with the SDK makefiles
-# (non-trivial effort).
-COMMON_CCFLAGS += \
-	-I ${HEXAGON_SDK_LIBS}/common/rpcmem/inc \
-	-I ${HEXAGON_SDK_INCLUDES}/qlist \
-	-I ${HEXAGON_SDK_INCLUDES}/a1std
-RPCMEM_C = ${HEXAGON_SDK_LIBS}/common/rpcmem/src/rpcmem_android.c
-
 CC-host = ${CXX}
 CXX-host = ${CXX}
 
@@ -119,7 +108,7 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
 	mkdir -p $(@D)
-	$(CC-$*) $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so $^ ${RPCMEM_C} -shared -o $@
+	$(CC-$*) $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so $^ -shared -o $@
 
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h elf.h

@@ -190,8 +190,10 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     return 0;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen,
+                                        handle_t *sym_ptr) {
+    *sym_ptr = reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    return *sym_ptr != 0 ? 0 : -1;
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
