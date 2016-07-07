@@ -100,11 +100,11 @@ class PipelineContext {
         // useful work has been done for 5 seconds. If so, turn off
         // HVX.
         const uint64_t poll_rate_us = 100 * 1000;
-        const uint64_t timeout = 5 * 1000 * 1000;
+        const uint64_t timeout_us = 5 * 1000 * 1000;
         while (running) {
             if (hvx_powered) {
                 uint64_t current_time = HAP_perf_get_time_us();
-                if (current_time > last_did_work_time_us + timeout) {
+                if (current_time > last_did_work_time_us + timeout_us) {
                     power_off_hvx_already_locked();
                 }
             }
