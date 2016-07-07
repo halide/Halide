@@ -10,7 +10,6 @@ extern "C" {
 #include <fcntl.h>
 
 #include "HAP_farf.h"
-#include "HAP_power.h"
 
 }
 
@@ -150,41 +149,8 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
 
-    if (context_count == 0) {
-        HAP_power_request_t request;
-
-        request.type = HAP_power_set_apptype;
-        request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-        int retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
-            return -1;
-        }
-
-        request.type = HAP_power_set_HVX;
-        request.hvx.power_up = TRUE;
-        retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", retval);
-            return -1;
-        }
-
-        request.type = HAP_power_set_mips_bw;
-        request.mips_bw.set_mips = TRUE;
-        request.mips_bw.mipsPerThread = 500;
-        request.mips_bw.mipsTotal = 1000;
-        request.mips_bw.set_bus_bw = TRUE;
-        request.mips_bw.bwBytePerSec = static_cast<uint64_t>(12000) * 1000000;
-        request.mips_bw.busbwUsagePercentage = 100;
-        request.mips_bw.set_latency = TRUE;
-        request.mips_bw.latency = 1;
-        retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
-            return -1;
-        }
-    }
-
+    // Eagerly power on hvx here, to avoid latency on launching the first pipeline.
+    run_context.power_on_hvx();
     context_count++;
 
     return 0;
@@ -244,11 +210,12 @@ int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
-
-    if (context_count-- == 0) {
-        HAP_power_request(0, 0, -1);
+    context_count--;
+    if (context_count == 0) {
+        // We've released the last kernel. This is probably a good
+        // time to power off HVX.
+        run_context.power_off_hvx();
     }
-
     return 0;
 }
 
