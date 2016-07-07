@@ -217,32 +217,28 @@ struct Simplification {
     Interval interval;
 };
 
-template<typename T>
-class ExprUsesValidBuffers : public IRGraphVisitor {
-    using IRGraphVisitor::visit;
+class ExprUsesInvalidBuffers : public IRVisitor {
+    using IRVisitor::visit;
 
-    const Scope<T> &allocated_buffers;
+    const Scope<int> &invalid_buffers;
 
     void visit(const Load *op) {
-        if (!allocated_buffers.contains(op->name)) {
-            valid = false;
+        if (invalid_buffers.contains(op->name)) {
+            invalid = true;
         } else {
-            IRGraphVisitor::visit(op);
+            IRVisitor::visit(op);
         }
     }
 public:
-    ExprUsesValidBuffers(const Scope<T> &buffers) : allocated_buffers(buffers), valid(true) {}
-    bool valid;
+    ExprUsesInvalidBuffers(const Scope<int> &buffers) : invalid_buffers(buffers), invalid(false) {}
+    bool invalid;
 };
 
-/** Check if any references to buffers in an expression is valid (i.e. the buffers
- * have already been allocated).
- */
-template<typename T>
-bool expr_uses_valid_buffers(Expr e, const Scope<T> &buffers) {
-    ExprUsesValidBuffers<T> uses(buffers);
+/** Check if any references to buffers in an expression is invalid. */
+bool expr_uses_invalid_buffers(Expr e, const Scope<int> &invalid_buffers) {
+    ExprUsesInvalidBuffers uses(invalid_buffers);
     e.accept(&uses);
-    return uses.valid;
+    return uses.invalid;
 }
 
 // Then we define the visitor that hunts for them.
@@ -250,15 +246,20 @@ class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
     Scope<int> depends_on_loop_var;
-    const Scope<int> &allocated_buffers;
+    Scope<int> buffers;
+
+    void visit(const Allocate *op) {
+        buffers.push(op->name, 0);
+        IRVisitor::visit(op);
+    }
 
     void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
         if (!expr_uses_vars(condition, depends_on_loop_var)) {
             return;
         }
-        if (!expr_uses_valid_buffers(condition, allocated_buffers)) {
-            // The condition refers to an unallocated buffer. We should
-            // throw away the condition
+        if (expr_uses_invalid_buffers(condition, buffers)) {
+            // The condition refers to buffer allocated in the inner loop.
+            // We should throw away the condition
             return;
         }
         condition = RemoveLikelyTags().mutate(condition);
@@ -381,7 +382,7 @@ class FindSimplifications : public IRVisitor {
 public:
     vector<Simplification> simplifications;
 
-    FindSimplifications(const std::string &v, const Scope<int> &buffers) : allocated_buffers(buffers) {
+    FindSimplifications(const std::string &v) {
         depends_on_loop_var.push(v, 0);
     }
 };
@@ -431,18 +432,7 @@ bool contains_thread_barrier(Stmt s) {
 class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
-    Scope<int> allocated_buffers;
     bool in_gpu_loop = false;
-
-    void visit(const Allocate *op) {
-        allocated_buffers.push(op->name, 0);
-        IRMutator::visit(op);
-    }
-
-    void visit(const Free *op) {
-        allocated_buffers.pop(op->name);
-        IRMutator::visit(op);
-    }
 
     void visit(const For *op) {
         Stmt body = op->body;
@@ -459,7 +449,7 @@ class PartitionLoops : public IRMutator {
         }
 
         // Find simplifications in this loop body
-        FindSimplifications finder(op->name, allocated_buffers);
+        FindSimplifications finder(op->name);
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
