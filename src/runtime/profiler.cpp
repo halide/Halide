@@ -180,8 +180,6 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
     ScopedMutexLock lock(&s->lock);
 
-    halide_profiler_incr_active_threads(s);
-
     if (!s->started) {
         halide_start_clock(user_context);
         halide_spawn_thread(sampling_profiler_thread, NULL);
@@ -437,7 +435,6 @@ WEAK void halide_profiler_shutdown() {
 
 WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
     ((halide_profiler_state *)state)->current_func = halide_profiler_outside_of_halide;
-    halide_profiler_decr_active_threads((halide_profiler_state *)state);
 }
 
 } // extern "C"

@@ -295,6 +295,15 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
         s = Block::make(update_stack, s);
     }
 
+    Expr profiler_state = Variable::make(Handle(), "profiler_state");
+    Stmt incr_active_threads =
+        Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
+                                  {profiler_state}, Call::Extern));
+    Stmt decr_active_threads =
+        Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
+                                  {profiler_state}, Call::Extern));
+    s = Block::make({incr_active_threads, s, decr_active_threads});
+
     s = LetStmt::make("profiler_pipeline_state", get_pipeline_state, s);
     s = LetStmt::make("profiler_state", get_state, s);
     // If there was a problem starting the profiler, it will call an
