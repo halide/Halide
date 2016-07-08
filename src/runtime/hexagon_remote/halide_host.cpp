@@ -14,6 +14,8 @@
 
 #include "bin/src/halide_hexagon_remote.h"
 
+#include "stdio.h"
+
 namespace {
 
 typedef halide_hexagon_remote_handle_t handle_t;
@@ -158,7 +160,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     // Map the ion handle to a file buffer.
     int buf_fd = ion_map(ion_fd, handle);
     if (buf_fd < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(ion_fd, %d", handle);
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(ion_fd, %d) failed", handle);
         ion_free(ion_fd, handle);
         close(ion_fd);
         return NULL;
@@ -167,8 +169,9 @@ void *halide_hexagon_host_malloc(size_t size) {
     // Map the file buffer to a pointer.
     void *buf = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, buf_fd, 0);
     if (buf == MAP_FAILED) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "mmap(NULL, %d, PROT_READ | PROT_WRITE, MAP_SHARED, %d, 0)",
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "mmap(NULL, %d, PROT_READ | PROT_WRITE, MAP_SHARED, %d, 0) failed",
                             size, buf_fd);
+        close(buf_fd);
         ion_free(ion_fd, handle);
         close(ion_fd);
         return NULL;
@@ -184,6 +187,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     if (!rec) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "malloc failed");
         munmap(buf, size);
+        close(buf_fd);
         ion_free(ion_fd, handle);
         close(ion_fd);
         return NULL;
@@ -240,6 +244,7 @@ void halide_hexagon_host_free(void *ptr) {
     munmap(rec->buf, rec->size);
 
     // free the ION allocation
+    close(rec->buf_fd);
     if (ion_free(rec->ion_fd, rec->handle) < 0) {
         __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(ion_fd, %d) failed", rec->handle);
     }
