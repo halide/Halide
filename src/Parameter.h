@@ -153,6 +153,9 @@ public:
     EXPORT Expr get_min_value() const;
     EXPORT void set_max_value(Expr e);
     EXPORT Expr get_max_value() const;
+    EXPORT void estimate(Expr e);
+    EXPORT Expr get_estimate() const;
+    EXPORT bool has_estimate() const;
     // @}
 };
 

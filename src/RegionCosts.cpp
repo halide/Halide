@@ -721,8 +721,8 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
         // Inlined functions do not have allocations
         bool is_inlined = inlined.find(f.first) != inlined.end();
         int64_t size = is_inlined? 0: region_size(f.first, f.second);
-        if (size < 0) {
-            return -1;
+        if (size == unknown) {
+            return unknown;
         } else {
             func_sizes[f.first] = size;
         }

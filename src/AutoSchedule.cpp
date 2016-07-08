@@ -222,6 +222,18 @@ void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
     }
 }
 
+struct GetVarEstimates : public IRVisitor {
+    map<string, Expr> var_estimates;
+    using IRVisitor::visit;
+
+    void visit(const Variable *var) {
+        if (var->param.defined() && !var->param.is_buffer() &&
+            var->param.has_estimate()) {
+            var_estimates[var->param.name()] = var->param.get_estimate();
+        }
+    }
+};
+
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, int stage_num,
                                      const DimBounds &bounds,
@@ -243,8 +255,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         Scope<Interval> curr_scope;
 
         const vector<Dim> &dims = def.schedule().dims();
-        // TODO: Enable parameter estimates and add the values of the parameter
-        // estimates into the scope.
+
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
@@ -253,6 +264,13 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     Interval(simplify(curr_bounds.at(dims[d].var).min),
                              simplify(curr_bounds.at(dims[d].var).max));
             curr_scope.push(var_name, simple_bounds);
+        }
+
+        // Add parameter estimates to the current scope.
+        GetVarEstimates collect_estimates;
+        def.accept(&collect_estimates);
+        for (auto &est : collect_estimates.var_estimates) {
+            curr_scope.push(est.first, Interval(est.second, est.second));
         }
 
         // If the function has an extern definition there is no visibility into
@@ -337,9 +355,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             Expr lower = f_reg.second[i].min;
             Expr upper = f_reg.second[i].max;
 
-            // TODO: Assumes estimates cannot be provided on input parameters
-            // like images. Need to have a better way of doing this see if
-            // input parameters can have estimates attached to them.
             bool in_env = (env.find(f_reg.first) != env.end());
 
             // Use the estimates if the lower and upper bounds cannot be determined
@@ -1375,9 +1390,16 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
     Cost out_cost = costs.stage_region_cost(g.output.func.name(),
                                             g.output.stage_num,
                                             tile_bounds, g.inlined);
+    bool bounds_defined = true;
+    for (auto &reg : alloc_reg) {
+        if (box_size(reg.second) == unknown) {
+            bounds_defined = false;
+        }
+    }
 
     if (tile_cost.arith == unknown || tile_cost.memory == unknown ||
-        out_cost.arith == unknown || out_cost.memory == unknown) {
+        out_cost.arith == unknown || out_cost.memory == unknown ||
+        !bounds_defined) {
         return g_analysis;
     }
 
@@ -1448,22 +1470,22 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
                 // Initial loads
                 initial_footprint =
                         costs.region_size(f_load.first,
-                                               pipeline_bounds.at(f_load.first));
+                                          pipeline_bounds.at(f_load.first));
                 // Subsequent loads
                 footprint = costs.region_size(f_load.first,
-                                                   alloc_reg.at(f_load.first));
+                                              alloc_reg.at(f_load.first));
             } else {
                 // Initial loads
                 initial_footprint =
                         costs.input_region_size(f_load.first,
-                                                     pipeline_bounds.at(f_load.first));
+                                                pipeline_bounds.at(f_load.first));
                 // Subsequent loads
                 if (f_load.first == g.output.func.name()) {
                     footprint = costs.input_region_size(f_load.first,
-                                                             out_tile_extent);
+                                                        out_tile_extent);
                 } else {
                     footprint = costs.input_region_size(f_load.first,
-                                                             alloc_reg.at(f_load.first));
+                                                        alloc_reg.at(f_load.first));
                 }
             }
 
