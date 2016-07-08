@@ -5,17 +5,20 @@
 
 #include <qurt.h>
 
+#include "HAP_power.h"
+#include "HAP_perf.h"
+
 // We can't control the stack size on the thread which receives our
 // FastRPC calls. To work around this, we make our own thread, and
-// forward the calls to that thread.
-
+// forward the calls to that thread. That thread is managed by the
+// following context class. This context also manages turning HVX
+// power on and off as needed.
 typedef int (*pipeline_argv_t)(void **);
 
 class PipelineContext {
-    void *stack;
-    qurt_thread_t thread;
-    qurt_cond_t wakeup_thread;
-    qurt_cond_t wakeup_caller;
+    void *stack, *watchdog_stack;
+    qurt_thread_t thread, watchdog_thread;
+    qurt_cond_t wakeup_thread, wakeup_caller, wakeup_watchdog;
     qurt_mutex_t work_mutex;
 
     // Shared state
@@ -23,15 +26,113 @@ class PipelineContext {
     void **args;
     int result;
     bool running;
+    uint64_t last_did_work_time_us;
+    bool hvx_powered;
+
+    // Turn HVX power on if it isn't already on. Requires that the
+    // work_mutex is held.
+    int power_on_hvx_already_locked() {
+        if (hvx_powered) return 0;
+
+        // log_printf("Powering on HVX\n");
+
+        HAP_power_request_t request;
+
+        request.type = HAP_power_set_apptype;
+        request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
+        int retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
+            return -1;
+        }
+
+        request.type = HAP_power_set_HVX;
+        request.hvx.power_up = TRUE;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", retval);
+            return -1;
+        }
+
+        request.type = HAP_power_set_mips_bw;
+        request.mips_bw.set_mips = TRUE;
+        request.mips_bw.mipsPerThread = 500;
+        request.mips_bw.mipsTotal = 1000;
+        request.mips_bw.set_bus_bw = TRUE;
+        request.mips_bw.bwBytePerSec = static_cast<uint64_t>(12000) * 1000000;
+        request.mips_bw.busbwUsagePercentage = 100;
+        request.mips_bw.set_latency = TRUE;
+        request.mips_bw.latency = 1;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
+            return -1;
+        }
+
+        hvx_powered = true;
+        qurt_cond_signal(&wakeup_watchdog);
+        return 0;
+    }
+
+    // Turn HVX power off if it's on. Requires that the work_mutex is
+    // held.
+    void power_off_hvx_already_locked() {
+        if (!hvx_powered) return;
+
+        // log_printf("Powering off HVX\n");
+
+        HAP_power_request(0, 0, -1);
+        hvx_powered = false;
+    }
 
     void thread_main() {
         qurt_mutex_lock(&work_mutex);
         while (running) {
             qurt_cond_wait(&wakeup_thread, &work_mutex);
             if (function) {
+                power_on_hvx_already_locked();
                 result = function(args);
+                last_did_work_time_us = HAP_perf_get_time_us();
                 function = NULL;
                 qurt_cond_signal(&wakeup_caller);
+            }
+        }
+        qurt_mutex_unlock(&work_mutex);
+    }
+
+    void thread_watchdog() {
+        qurt_mutex_lock(&work_mutex);
+        // Every 100ms, wake up and check if HVX is powered on but no
+        // useful work has been done for one second. If so, turn off
+        // HVX.
+        const uint64_t poll_rate_us = 100 * 1000;
+        const uint64_t timeout_us = 1 * 1000 * 1000;
+        while (running) {
+            uint64_t current_time = HAP_perf_get_time_us();
+            if (hvx_powered) {
+                if (current_time > last_did_work_time_us + timeout_us) {
+                    power_off_hvx_already_locked();
+                }
+            }
+
+            if (hvx_powered) {
+                // If the power is on, sleep for 100 ms. We could sleep
+                // for longer (5 seconds minus time since last use), but
+                // we also need to wake up periodically to check if we
+                // should exit.
+                // log_printf("Sleeping @ %lld\n", (long long)(current_time / 1000));
+                qurt_mutex_unlock(&work_mutex);
+                // TODO: How do I sleep? qurt_timer_sleep returns immediately with -1
+                while (HAP_perf_get_time_us() - current_time < poll_rate_us);
+                qurt_mutex_lock(&work_mutex);
+                // log_printf("Waking from sleep\n");
+            } else {
+                // If the power is off, wait on a condition variable that
+                // gets signalled when the power gets turned on. Spurious
+                // wake-ups are fine too.
+                // log_printf("Waiting on cond var\n");
+                qurt_cond_wait(&wakeup_watchdog, &work_mutex);
+                // log_printf("Waking up from cond var\n");
             }
         }
         qurt_mutex_unlock(&work_mutex);
@@ -41,12 +142,19 @@ class PipelineContext {
         static_cast<PipelineContext *>(data)->thread_main();
     }
 
+    static void redirect_watchdog(void *data) {
+        static_cast<PipelineContext *>(data)->thread_watchdog();
+    }
+
 public:
     PipelineContext(int stack_alignment, int stack_size)
-        : stack(NULL), function(NULL), args(NULL), running(true) {
+        : stack(NULL), function(NULL), args(NULL), running(true), hvx_powered(false) {
         qurt_mutex_init(&work_mutex);
         qurt_cond_init(&wakeup_thread);
         qurt_cond_init(&wakeup_caller);
+        qurt_cond_init(&wakeup_watchdog);
+
+        last_did_work_time_us = HAP_perf_get_time_us();
 
         // Allocate the stack for this thread.
         stack = memalign(stack_alignment, stack_size);
@@ -57,6 +165,32 @@ public:
         qurt_thread_attr_set_stack_size(&thread_attr, stack_size);
         qurt_thread_attr_set_priority(&thread_attr, 100);
         qurt_thread_create(&thread, &thread_attr, redirect_main, this);
+
+        // Also make a low-priority watchdog thread to periodically
+        // wake up the worker thread, so that HVX can get powered off
+        // when not in use. One page is sufficient stack for it.
+        watchdog_stack = memalign(stack_alignment, 4096);
+        qurt_thread_attr_t watchdog_thread_attr;
+        qurt_thread_attr_init(&watchdog_thread_attr);
+        qurt_thread_attr_set_stack_addr(&watchdog_thread_attr, watchdog_stack);
+        qurt_thread_attr_set_stack_size(&watchdog_thread_attr, 4096);
+        qurt_thread_attr_set_priority(&watchdog_thread_attr, 255);
+        qurt_thread_create(&watchdog_thread, &watchdog_thread_attr, redirect_watchdog, this);
+    }
+
+    // Turn on power to the HVX units. Does nothing if it's already on.
+    int power_on_hvx() {
+        qurt_mutex_lock(&work_mutex);
+        int ret = power_on_hvx_already_locked();
+        qurt_mutex_unlock(&work_mutex);
+        return ret;
+    }
+
+    // Turn off power to the HVX units. Does nothing if it's already off.
+    void power_off_hvx() {
+        qurt_mutex_lock(&work_mutex);
+        power_off_hvx_already_locked();
+        qurt_mutex_unlock(&work_mutex);
     }
 
     ~PipelineContext() {
@@ -64,16 +198,22 @@ public:
         qurt_mutex_lock(&work_mutex);
         running = false;
         qurt_cond_signal(&wakeup_thread);
+        qurt_cond_signal(&wakeup_watchdog);
         qurt_mutex_unlock(&work_mutex);
 
         int status;
         qurt_thread_join(thread, &status);
+        // This delays process exit by up to the poll interval of the
+        // watchdog thread. Probably doesn't matter.
+        qurt_thread_join(watchdog_thread, &status);
 
         qurt_cond_destroy(&wakeup_thread);
         qurt_cond_destroy(&wakeup_caller);
+        qurt_cond_destroy(&wakeup_watchdog);
         qurt_mutex_destroy(&work_mutex);
 
         free(stack);
+        free(watchdog_stack);
     }
 
     int run(pipeline_argv_t function, void **args) {
