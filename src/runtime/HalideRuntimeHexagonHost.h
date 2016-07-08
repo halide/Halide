@@ -43,6 +43,18 @@ extern void *halide_hexagon_detach_device_handle(void *user_context, struct buff
 extern void *halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf);
 extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf);
 
+/** Power HVX on and off. Calling a Halide pipeline will do this
+ * automatically on each pipeline invocation; however, it costs a
+ * small but possibly significant amount of time for short running
+ * pipelines. To avoid this cost, HVX can be powered on prior to
+ * running several pipelines, and powered off afterwards. If HVX is
+ * powered on, subsequent calls to power HVX on will be cheap. */
+// @{
+extern int halide_hexagon_power_hvx_on(void *user_context);
+extern int halide_hexagon_power_hvx_off(void *user_context);
+extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
+// @}
+
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */
 // @{

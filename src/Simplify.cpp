@@ -1452,9 +1452,9 @@ private:
                    ib > 0 &&
                    (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
-            // (x*4 - y) / 2 -> x*2 - y/2
+            // (x*4 - y) / 2 -> x*2 + (-y)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a->a * ratio) - (sub_a->b / b));
+            expr = mutate((mul_a_a->a * ratio) + (-sub_a->b) / b);
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    mul_a_b &&
@@ -4266,7 +4266,7 @@ void check_algebra() {
     check((x*2)/4, x/2);
     check((x*4 + y)/2, x*2 + y/2);
     check((y + x*4)/2, y/2 + x*2);
-    check((x*4 - y)/2, x*2 - y/2);
+    check((x*4 - y)/2, x*2 + (0 - y)/2);
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
