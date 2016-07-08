@@ -305,7 +305,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
              << "  runs: " << p->runs
              << "  time/run: " << t / p->runs << " ms\n";
         if (!serial) {
-            sstr << " average thread pool utilization: " << threads << "\n";
+            sstr << " average threads used: " << threads << "\n";
         }
         sstr << " heap allocations: " << p->num_allocs
              << "  peak heap usage: " << p->memory_peak << " bytes\n";
