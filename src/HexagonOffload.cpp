@@ -270,6 +270,9 @@ public:
         }
         for (auto &fn : llvm_module->functions()) {
             fn.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+            for (size_t i = 0; i < fn.arg_size(); i++) {
+                fn.removeAttribute(i, llvm::Attribute::WriteOnly);
+            }
         }
         #endif
 
