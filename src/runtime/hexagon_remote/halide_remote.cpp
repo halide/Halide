@@ -269,8 +269,9 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     return 0;
 }
 
-int halide_hexagon_remote_poll_profiler_func(int *out) {
-    *out = halide_profiler_get_state()->current_func;
+int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    *func = halide_profiler_get_state()->current_func;
+    *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
 

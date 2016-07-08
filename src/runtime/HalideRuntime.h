@@ -897,8 +897,11 @@ struct halide_profiler_func_stats {
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
-    /** The peak stack allocation of this Func threads. */
+    /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
+
+    /** The average number of thread pool worker threads active while computing this Func. */
+    uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The name of this Func. A global constant string. */
     const char *name;
@@ -921,6 +924,10 @@ struct halide_profiler_pipeline_stats {
 
     /** The total memory allocation of funcs in this pipeline. */
     uint64_t memory_total;
+
+    /** The average number of thread pool worker threads doing useful
+     * work while computing this pipeline. */
+    uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
@@ -955,9 +962,6 @@ struct halide_profiler_state {
      * reordering the linked list of pipeline stats). */
     struct halide_mutex lock;
 
-    /** A linked list of stats gathered for each pipeline. */
-    struct halide_profiler_pipeline_stats *pipelines;
-
     /** The amount of time the profiler thread sleeps between samples
      * in milliseconds. Defaults to 1 */
     int sleep_time;
@@ -969,10 +973,16 @@ struct halide_profiler_state {
      * periodically by the profiler thread. */
     int current_func;
 
-    /** A function that the profiler thread should call to get the
-     * currently running Func. If null, it reads from the int above
-     * instead. */
-    int (*get_current_func)();
+    /** The number of threads currently doing work. */
+    int active_threads;
+
+    /** A linked list of stats gathered for each pipeline. */
+    struct halide_profiler_pipeline_stats *pipelines;
+
+    /** Retrieve remote profiler state. Used so that the sampling
+     * profiler can follow along with execution that occurs elsewhere,
+     * e.g. on a DSP. If null, it reads from the int above instead. */
+    void (*get_remote_profiler_state)(int *func, int *active_workers);
 
     /** Is the profiler thread running. */
     bool started;

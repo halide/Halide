@@ -33,7 +33,7 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
-typedef int (*remote_poll_profiler_func_fn)(int *);
+typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
 
 typedef void (*host_malloc_init_fn)();
@@ -45,7 +45,7 @@ WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
-WEAK remote_poll_profiler_func_fn remote_poll_profiler_func = NULL;
+WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
 
@@ -78,17 +78,13 @@ WEAK void poll_log(void *user_context) {
     }
 }
 
-WEAK int get_remote_profiler_func() {
-    if (!remote_poll_profiler_func) {
+WEAK void get_remote_profiler_state(int *func, int *threads) {
+    if (!remote_poll_profiler_state) {
         // This should only have been called if there's a remote profiler func installed.
         error(NULL) << "Hexagon: remote_poll_profiler_func not found\n";
     }
 
-    int func = 0;
-    if (int result = remote_poll_profiler_func(&func)) {
-        print(NULL) << "Hexagon: remote_poll_profiler_func failed " << result << "\n";
-    }
-    return func;
+    remote_poll_profiler_state(func, threads);
 }
 
 template <typename T>
@@ -131,7 +127,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // These symbols are optional.
     get_symbol(user_context, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
-    get_symbol(user_context, "halide_hexagon_remote_poll_profiler_func", remote_poll_profiler_func, /* required */ false);
+    get_symbol(user_context, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
 
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
@@ -314,8 +310,8 @@ WEAK int halide_hexagon_run(void *user_context,
     // get_remote_profiler_func to retrieve the current
     // func. Otherwise leave it alone - the cost of remote running
     // will be billed to the calling Func.
-    if (remote_poll_profiler_func) {
-        halide_profiler_get_state()->get_current_func = get_remote_profiler_func;
+    if (remote_poll_profiler_state) {
+        halide_profiler_get_state()->get_remote_profiler_state = get_remote_profiler_state;
     }
 
     // Call the pipeline on the device side.
@@ -331,7 +327,7 @@ WEAK int halide_hexagon_run(void *user_context,
         return result;
     }
 
-    halide_profiler_get_state()->get_current_func = NULL;
+    halide_profiler_get_state()->get_remote_profiler_state = NULL;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
