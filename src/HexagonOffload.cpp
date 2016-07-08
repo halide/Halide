@@ -270,6 +270,9 @@ public:
         }
         for (auto &fn : llvm_module->functions()) {
             fn.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+            for (size_t i = 0; i < fn.arg_size(); i++) {
+                fn.removeAttribute(i, llvm::Attribute::WriteOnly);
+            }
         }
         #endif
 
@@ -347,6 +350,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     // llvm currently disagrees with hexagon clang as to what
     // constitutes valid debug info.
     static const Target::Feature shared_features[] = {
+        Target::Profile,
         Target::NoAsserts,
         Target::HVX_64,
         Target::HVX_128,

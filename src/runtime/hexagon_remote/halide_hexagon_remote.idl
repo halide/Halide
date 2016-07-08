@@ -20,4 +20,7 @@ interface halide_hexagon_remote
 
     // Retrive messages written by log_printf.
     long poll_log(rout sequence<char> log, rout long read_size);
+
+    // Retrieve the current profiling Func ID
+    long poll_profiler_func(rout long id);
 };

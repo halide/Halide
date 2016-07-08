@@ -51,7 +51,6 @@ void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
 }
 
-
 namespace {
 
 // We keep a small pool of small pre-allocated buffers for use by Halide
@@ -252,5 +251,17 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
 
     return 0;
 }
+
+int halide_hexagon_remote_poll_profiler_func(int *out) {
+    *out = halide_profiler_get_state()->current_func;
+    return 0;
+}
+
+halide_profiler_state *halide_profiler_get_state() {
+    static halide_profiler_state hvx_profiler_state;
+    return &hvx_profiler_state;
+}
+
+
 
 }  // extern "C"

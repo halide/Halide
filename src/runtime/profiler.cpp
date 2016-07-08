@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, false};
+    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, NULL, false};
     return &s;
 }
 }
@@ -96,6 +96,9 @@ WEAK void sampling_profiler_thread(void *) {
         while (1) {
             uint64_t t_now = halide_current_time_ns(NULL);
             int func = s->current_func;
+            if (s->get_current_func) {
+                func = s->get_current_func();
+            }
             if (func == halide_profiler_please_stop) {
                 break;
             } else if (func >= 0) {

@@ -184,7 +184,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
