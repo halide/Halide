@@ -692,7 +692,11 @@ typedef enum halide_target_feature_t {
  *
  * The default implementation simply calls halide_default_can_use_target_features.
  */
+// @{
 extern int halide_can_use_target_features(uint64_t features);
+typedef int (*halide_can_use_target_features_t)(uint64_t);
+extern halide_can_use_target_features_t halide_set_custom_can_use_target_features(halide_can_use_target_features_t);
+// @}
 
 /**
  * This is the default implementation of halide_can_use_target_features; it is provided
