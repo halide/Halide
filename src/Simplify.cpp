@@ -1335,16 +1335,16 @@ private:
             sub_a_b = sub_a->b.as<Sub>();
         }
 
-        if(add_a_a) {
+        if (add_a_a) {
             mul_a_a_a = add_a_a->a.as<Mul>();
-        } else if(sub_a_a) {
+        } else if (sub_a_a) {
             mul_a_a_a = sub_a_a->a.as<Mul>();
         }
 
-        if(add_a_b) {
+        if (add_a_b) {
             mul_a_b_a = add_a_b->a.as<Mul>();
             mul_a_b_b = add_a_b->b.as<Mul>();
-        } else if(sub_a_b) {
+        } else if (sub_a_b) {
             mul_a_b_a = sub_a_b->a.as<Mul>();
             mul_a_b_b = sub_a_b->b.as<Mul>();
         }
@@ -1490,52 +1490,92 @@ private:
             // (y - x*4) / 2 -> y/2 - x*2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((sub_a->a / b) - (mul_a_b->a * ratio));
-        } else if (no_overflow(op->type) && add_a && add_a_a &&
-                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // ((x*4 + y) + z) / 2 -> x*2 + (y + z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b  + add_a->b) / b);
-        } else if (no_overflow(op->type) && add_a && sub_a_a &&
-                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   sub_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // ((x*4 - y) + z) / 2 -> x*2 + (z - y)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((mul_a_a_a->a * ratio) + (add_a->b - sub_a_a->b) / b);
-        } else if (no_overflow(op->type) && sub_a && add_a_a &&
-                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   add_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // ((x*4 + y) - z) / 2 -> x*2 + (y - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b - sub_a->b) / b);
-        } else if (no_overflow(op->type) && sub_a && sub_a_a &&
-                   mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   sub_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // ((x*4 - y) - z) / 2 -> x*2 + (0 - y - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((mul_a_a_a->a * ratio) + (- sub_a_a->b - sub_a->b) / b);
-        } else if (no_overflow(op->type) && add_a && add_a_b &&
-                   mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_a_b &&
+                   mul_a_b_a &&
+                   const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // (x + (y*4 + z)) / 2 -> y*2 + (x + z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((mul_a_b_a->a * ratio) + (add_a->a + add_a_b->b) / b);
-        } else if (no_overflow(op->type) && add_a && sub_a_b &&
-                   mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   sub_a_b &&
+                   mul_a_b_a &&
+                   const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // (x + (y*4 - z)) / 2 -> y*2 + (x - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((mul_a_b_a->a * ratio) + (add_a->a - sub_a_b->b) / b);
-        } else if (no_overflow(op->type) && sub_a && add_a_b &&
-                   mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   add_a_b &&
+                   mul_a_b_a &&
+                   const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // (x - (y*4 + z)) / 2 -> (x - z)/2 - y*2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((sub_a->a - add_a_b->b) / b - (mul_a_b_a->a * ratio));
-        } else if (no_overflow(op->type) && add_a && sub_a_b &&
-                   mul_a_b_b && const_int(mul_a_b_b->b, &ia) && const_int(b, &ib) &&
-                   ib > 0 && (ia % ib == 0)) {
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   sub_a_b &&
+                   mul_a_b_b &&
+                   const_int(mul_a_b_b->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
             // (x - (z*4 - y)) / 2 -> (x + (y - z*4)) / 2  -- by a rule from Sub
             // (x + (y - z*4)) / 2 -> (x + y)/2 - z*2  -- by this rule
             Expr ratio = make_const(op->type, div_imp(ia, ib));
