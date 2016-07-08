@@ -100,6 +100,13 @@ public:
         return (uint64_t)(dst-buf);
     }
 
+    // Delete the last N characters
+    void erase(int n) {
+        dst -= n;
+        if (dst < buf) dst = buf;
+        dst[0] = 0;
+    }
+
     ~Printer() {
         if (type == ErrorPrinter) {
             halide_error(user_context, buf);
