@@ -62,11 +62,9 @@ CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
-	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc \
-	${HEXAGON_SDK_LIBS}/common/adspmsgd/ship/android_Release_aarch64/adspmsgd.a
+	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc
 CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
-	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release/ -ladsprpc \
-	${HEXAGON_SDK_LIBS}/common/adspmsgd/ship/android_Release/adspmsgd.a
+	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release/ -ladsprpc
 
 .PHONY: all
 all: hosts remotes
