@@ -36,14 +36,12 @@ int main(int argc, char **argv) {
         f(x) = sqrt(x - 42.3333333f) / 17.0f - tan(x);
         f.vectorize(x, 8);
 
-        // Pipelines that use all the bits should be wrong about half the time
         Image<float> im_ref = f.realize(size, target);
         Image<float> im_fuzzed = f.realize(size, target_fuzzed);
 
         int differences = 0;
         for (int i = 0; i < im_ref.width(); i++) {
-            // Test for exact floating point equality, which is exactly
-            // the sort of thing FuzzFloatStores is trying to discourage.
+            // Pipelines that use all the bits should be wrong about half the time
             if (im_ref(i) != im_fuzzed(i)) {
                 differences++;
             }
