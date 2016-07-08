@@ -1616,6 +1616,15 @@ Func &Func::unroll(VarOrRVar var, int factor, TailStrategy tail) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
+    user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
+    user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
+    user_assert(Int(32).can_represent(extent.type())) << "Can't represent extent bound in int32\n";
+
+    if (min.defined()) {
+        min = cast<int32_t>(min);
+    }
+    extent = cast<int32_t>(extent);
+
     invalidate_cache();
     bool found = false;
     for (size_t i = 0; i < func.args().size(); i++) {
