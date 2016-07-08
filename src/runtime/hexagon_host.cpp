@@ -623,6 +623,9 @@ WEAK int halide_hexagon_device_and_host_free(void *user_context, struct buffer_t
 }
 
 WEAK int halide_hexagon_power_hvx_on(void *user_context) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
     debug(user_context) << "halide_hexagon_power_hvx_on\n";
     if (!remote_power_hvx_on) {
         // The function is not available in this version of the
@@ -631,7 +634,7 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
     }
 
     debug(user_context) << "    remote_power_hvx_on -> ";
-    int result = remote_power_hvx_on();
+    result = remote_power_hvx_on();
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
         error(user_context) << "remote_power_hvx_on failed.\n";
@@ -641,6 +644,9 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
 }
 
 WEAK int halide_hexagon_power_hvx_off(void *user_context) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
     debug(user_context) << "halide_hexagon_power_hvx_off\n";
     if (!remote_power_hvx_off) {
         // The function is not available in this version of the
@@ -649,7 +655,7 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
     }
 
     debug(user_context) << "    remote_power_hvx_off -> ";
-    int result = remote_power_hvx_off();
+    result = remote_power_hvx_off();
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
         error(user_context) << "remote_power_hvx_off failed.\n";
