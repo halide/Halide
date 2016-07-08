@@ -52,6 +52,7 @@ extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer
 // @{
 extern int halide_hexagon_power_hvx_on(void *user_context);
 extern int halide_hexagon_power_hvx_off(void *user_context);
+extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
 // @}
 
 /** These are forward declared here to allow clients to override the
