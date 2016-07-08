@@ -15,8 +15,8 @@ namespace Internal {
  * not this dramatically changes the output of a pipeline correlates
  * very well with whether or not a pipeline will produce very
  * different outputs on different architectures (e.g. with and without
- * FMA). It's a useful way to detect bad tests, such as those that
- * expect exact floating point equality across platforms. */
+ * FMA). It's also a useful way to detect bad tests, such as those
+ * that expect exact floating point equality across platforms. */
 Stmt fuzz_float_stores(Stmt s);
 
 }
