@@ -18,7 +18,7 @@ typedef int (*pipeline_argv_t)(void **);
 class PipelineContext {
     void *stack, *watchdog_stack;
     qurt_thread_t thread, watchdog_thread;
-    qurt_cond_t wakeup_thread, wakeup_caller;
+    qurt_cond_t wakeup_thread, wakeup_caller, wakeup_watchdog;
     qurt_mutex_t work_mutex;
 
     // Shared state
@@ -33,6 +33,8 @@ class PipelineContext {
     // work_mutex is held.
     int power_on_hvx_already_locked() {
         if (hvx_powered) return 0;
+
+        // log_printf("Powering on HVX\n");
 
         HAP_power_request_t request;
 
@@ -68,6 +70,7 @@ class PipelineContext {
         }
 
         hvx_powered = true;
+        qurt_cond_signal(&wakeup_watchdog);
         return 0;
     }
 
@@ -75,6 +78,9 @@ class PipelineContext {
     // held.
     void power_off_hvx_already_locked() {
         if (!hvx_powered) return;
+
+        // log_printf("Powering off HVX\n");
+
         HAP_power_request(0, 0, -1);
         hvx_powered = false;
     }
@@ -97,23 +103,37 @@ class PipelineContext {
     void thread_watchdog() {
         qurt_mutex_lock(&work_mutex);
         // Every 100ms, wake up and check if HVX is powered on but no
-        // useful work has been done for 5 seconds. If so, turn off
+        // useful work has been done for one second. If so, turn off
         // HVX.
         const uint64_t poll_rate_us = 100 * 1000;
-        const uint64_t timeout_us = 5 * 1000 * 1000;
+        const uint64_t timeout_us = 1 * 1000 * 1000;
         while (running) {
+            uint64_t current_time = HAP_perf_get_time_us();
             if (hvx_powered) {
-                uint64_t current_time = HAP_perf_get_time_us();
                 if (current_time > last_did_work_time_us + timeout_us) {
                     power_off_hvx_already_locked();
                 }
             }
-            // Sleep for 100 ms. We could sleep for longer (5 seconds
-            // minus time since last use), but we also need to wake up
-            // periodically to check if we should exit.
-            qurt_mutex_unlock(&work_mutex);
-            qurt_timer_sleep(poll_rate_us);
-            qurt_mutex_lock(&work_mutex);
+
+            if (hvx_powered) {
+                // If the power is on, sleep for 100 ms. We could sleep
+                // for longer (5 seconds minus time since last use), but
+                // we also need to wake up periodically to check if we
+                // should exit.
+                // log_printf("Sleeping @ %lld\n", (long long)(current_time / 1000));
+                qurt_mutex_unlock(&work_mutex);
+                // TODO: How do I sleep? qurt_timer_sleep returns immediately with -1
+                while (HAP_perf_get_time_us() - current_time < poll_rate_us);
+                qurt_mutex_lock(&work_mutex);
+                // log_printf("Waking from sleep\n");
+            } else {
+                // If the power is off, wait on a condition variable that
+                // gets signalled when the power gets turned on. Spurious
+                // wake-ups are fine too.
+                // log_printf("Waiting on cond var\n");
+                qurt_cond_wait(&wakeup_watchdog, &work_mutex);
+                // log_printf("Waking up from cond var\n");
+            }
         }
         qurt_mutex_unlock(&work_mutex);
     }
@@ -132,6 +152,7 @@ public:
         qurt_mutex_init(&work_mutex);
         qurt_cond_init(&wakeup_thread);
         qurt_cond_init(&wakeup_caller);
+        qurt_cond_init(&wakeup_watchdog);
 
         last_did_work_time_us = HAP_perf_get_time_us();
 
@@ -177,6 +198,7 @@ public:
         qurt_mutex_lock(&work_mutex);
         running = false;
         qurt_cond_signal(&wakeup_thread);
+        qurt_cond_signal(&wakeup_watchdog);
         qurt_mutex_unlock(&work_mutex);
 
         int status;
@@ -187,6 +209,7 @@ public:
 
         qurt_cond_destroy(&wakeup_thread);
         qurt_cond_destroy(&wakeup_caller);
+        qurt_cond_destroy(&wakeup_watchdog);
         qurt_mutex_destroy(&work_mutex);
 
         free(stack);
