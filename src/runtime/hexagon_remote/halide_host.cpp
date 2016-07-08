@@ -220,13 +220,11 @@ void halide_hexagon_host_free(void *ptr) {
     pthread_mutex_lock(&allocations_mutex);
     allocation_record *rec = &allocations;
     while (rec) {
-        if (rec->next && rec->next->buf == ptr) {
-            allocation_record *before_rec = rec;
-            rec = before_rec->next;
-            before_rec->next = before_rec->next->next;
+        allocation_record *cur = rec;
+        rec = rec->next;
+        if (rec && rec->buf == ptr) {
+            cur->next = rec->next;
             break;
-        } else {
-            rec = rec->next;
         }
     }
     pthread_mutex_unlock(&allocations_mutex);
