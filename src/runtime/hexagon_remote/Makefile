@@ -41,9 +41,6 @@ COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
-# Try to avoid dependencies on versioned runtimes.
-STATIC_DEPS ?= -static-libgcc -static-libstdc++
-
 CC-host = ${CXX}
 CXX-host = ${CXX}
 
@@ -59,14 +56,14 @@ CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/pre
 CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 
-CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC ${STATIC_DEPS} \
+CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
-CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie ${STATIC_DEPS} \
+CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
 	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc
-CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie ${STATIC_DEPS} \
+CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
 	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release/ -ladsprpc
 
 .PHONY: all
