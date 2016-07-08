@@ -664,6 +664,10 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
     return 0;
 }
 
+WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
+    halide_hexagon_power_hvx_off(user_context);
+}
+
 WEAK const halide_device_interface *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
