@@ -217,14 +217,49 @@ struct Simplification {
     Interval interval;
 };
 
+class ExprUsesInvalidBuffers : public IRVisitor {
+    using IRVisitor::visit;
+
+    const Scope<int> &invalid_buffers;
+
+    void visit(const Load *op) {
+        if (invalid_buffers.contains(op->name)) {
+            invalid = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    ExprUsesInvalidBuffers(const Scope<int> &buffers) : invalid_buffers(buffers), invalid(false) {}
+    bool invalid;
+};
+
+/** Check if any references to buffers in an expression is invalid. */
+bool expr_uses_invalid_buffers(Expr e, const Scope<int> &invalid_buffers) {
+    ExprUsesInvalidBuffers uses(invalid_buffers);
+    e.accept(&uses);
+    return uses.invalid;
+}
+
 // Then we define the visitor that hunts for them.
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
     Scope<int> depends_on_loop_var;
+    Scope<int> buffers;
+
+    void visit(const Allocate *op) {
+        buffers.push(op->name, 0);
+        IRVisitor::visit(op);
+    }
 
     void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
         if (!expr_uses_vars(condition, depends_on_loop_var)) {
+            return;
+        }
+        if (expr_uses_invalid_buffers(condition, buffers)) {
+            // The condition refers to buffer allocated in the inner loop.
+            // We should throw away the condition
             return;
         }
         condition = RemoveLikelyTags().mutate(condition);
