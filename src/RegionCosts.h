@@ -207,6 +207,7 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
 Expr perform_inline(Expr e, const map<string, Function> &env,
                     const set<string> &inlines = set<string>());
 
+set<string> get_parents(Function f, int stage);
 }
 }
 

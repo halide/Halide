@@ -167,6 +167,61 @@ DependenceAnalysis::regions_required(Function f,
     return regions;
 }
 
+void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
+                        const Function &prod_func, Box &region) {
+    DimBounds prod_pure_bounds;
+    const vector<string> &args = prod_func.args();
+
+    internal_assert(region.size() == args.size());
+
+    for (size_t v = 0; v < args.size(); v++) {
+        prod_pure_bounds[args[v]] = region[v];
+    }
+
+    vector<DimBounds> prod_bounds =
+            get_stage_bounds(prod_func, prod_pure_bounds);
+
+    size_t num_stages = prod_func.updates().size() + 1;
+
+    internal_assert(prod_bounds.size() == num_stages);
+
+    for (size_t prod_s = 0; prod_s < num_stages; prod_s++) {
+        FStage prod_stage(prod_func, prod_s);
+        f_queue.push_back(make_pair(prod_stage, prod_bounds[prod_s]));
+    }
+}
+
+void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
+                             map<string, Box> &regions,
+                             map<string, Box> &curr_regions,
+                             const set<string> &prods,
+                             const map<string, Function> &env,
+                             bool values_computed, string curr_func_name) {
+    for (auto &reg : curr_regions) {
+        // Merge region with an existing region for the function in the
+        // global map. Do not merge the parent function itself to the region
+        // when querying only for the values computed.
+        if (!values_computed || (values_computed && reg.first != curr_func_name)) {
+            if (regions.find(reg.first) == regions.end()) {
+                regions[reg.first] = reg.second;
+            } else {
+                merge_boxes(regions[reg.first], reg.second);
+            }
+        }
+
+        // Skip adding to the queue if not the set of producers
+        if (prods.find(reg.first) == prods.end()) {
+            continue;
+        }
+
+        if (env.find(reg.first) != env.end() && reg.first != curr_func_name) {
+            // Add all the stages of the function representing the
+            // region into the queue.
+            queue_func_regions(f_queue, env.at(reg.first), reg.second);
+        }
+    }
+}
+
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, int stage_num,
                                      const DimBounds &bounds,
@@ -180,6 +235,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
     // Recursively compute the regions required
     while(!f_queue.empty()) {
+
         FStage s = f_queue.front().first;
         DimBounds curr_bounds = f_queue.front().second;
 
@@ -187,6 +243,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         Scope<Interval> curr_scope;
 
         const vector<Dim> &dims = def.schedule().dims();
+        // TODO: Enable parameter estimates and add the values of the parameter
+        // estimates into the scope.
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
@@ -197,8 +255,48 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             curr_scope.push(var_name, simple_bounds);
         }
 
-        for (auto &val : def.values()) {
+        // If the function has an extern definition there is no visibility into
+        // the expression defining the function. So the regions required will be
+        // the entire domain of the inputs to the extern func. Use the estimates
+        // on the inputs to the extern function if available.
+        //
+        // TODO: Attempt to query the extern function for the input bounds by
+        // calling the extern func in the bounds query mode.
+        if (s.func.has_extern_definition()) {
+            for (const ExternFuncArgument &arg : s.func.extern_arguments()) {
+                if (arg.is_func()) {
+                    string prod_name = Function(arg.func).name();
+                    const Function &prod_func = env.at(prod_name);
+                    map<string, Box> prod_reg;
+                    const vector<string> &args = prod_func.args();
+                    for (size_t v = 0; v < args.size(); v++) {
+                        prod_reg[prod_name].push_back(Interval());
+                    }
+                    merge_and_queue_regions(f_queue, regions, prod_reg, prods,
+                                            env, values_computed, s.func.name());
+                } else if (arg.is_expr()) {
+                    map<string, Box> arg_regions =
+                            boxes_required(arg.expr, curr_scope, func_val_bounds);
 
+                    merge_and_queue_regions(f_queue, regions, arg_regions, prods,
+                                            env, values_computed, s.func.name());
+                } else if (arg.is_image_param() || arg.is_buffer()) {
+                    Buffer buf;
+                    if (arg.is_image_param()) {
+                        buf = arg.image_param.get_buffer();
+                    } else {
+                        buf = arg.buffer;
+                    }
+                    map<string, Box> buf_reg;
+                    for (int v = 0; v < buf.dimensions(); v++) {
+                        buf_reg[buf.name()].push_back(Interval());
+                    }
+                    merge_regions(regions, buf_reg);
+                }
+            }
+        }
+
+        for (auto &val : def.values()) {
             map<string, Box> curr_regions =
                     boxes_required(val, curr_scope, func_val_bounds);
 
@@ -222,52 +320,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 merge_boxes(curr_regions[s.func.name()], left_reg);
             }
 
-            for (auto &reg : curr_regions) {
-                // Merge region with an existing region for the function in the
-                // global map. Do not merge the parent funtion itself to the region
-                // when querying only for the values computed.
-                if (!values_computed || (values_computed && reg.first != s.func.name())) {
-                    if (regions.find(reg.first) == regions.end()) {
-                        regions[reg.first] = reg.second;
-                    } else {
-                        merge_boxes(regions[reg.first], reg.second);
-                    }
-                }
-
-                // Skip adding to the queue if not the set of producers
-                if (prods.find(reg.first) == prods.end()) {
-                    continue;
-                }
-
-                if (env.find(reg.first) != env.end() && reg.first != s.func.name()) {
-                    // Add all the stages of the function representing the
-                    // region into the queue.
-
-                    Function prod_func = env.at(reg.first);
-                    DimBounds prod_pure_bounds;
-                    const vector<string> &args = prod_func.args();
-
-                    internal_assert(reg.second.size() == args.size());
-
-                    for (size_t v = 0; v < args.size(); v++) {
-                        prod_pure_bounds[args[v]] = reg.second[v];
-                    }
-
-                    vector<DimBounds> prod_bounds =
-                                get_stage_bounds(env.at(reg.first),
-                                                 prod_pure_bounds);
-
-                    size_t num_stages = prod_func.updates().size() + 1;
-
-                    internal_assert(prod_bounds.size() == num_stages);
-
-                    for (size_t prod_s = 0; prod_s < num_stages; prod_s++) {
-                        FStage prod_stage(prod_func, prod_s);
-                        f_queue.push_back(make_pair(prod_stage,
-                                                    prod_bounds[prod_s]));
-                    }
-                }
-            }
+            merge_and_queue_regions(f_queue, regions, curr_regions,
+                                    prods, env, values_computed, s.func.name());
         }
         f_queue.pop_front();
     }
@@ -279,7 +333,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         simplify_box(f_reg.second);
 
         Box concrete_box;
-        for (uint32_t i = 0; i < f_reg.second.size(); i++) {
+        for (size_t i = 0; i < f_reg.second.size(); i++) {
             Expr lower = f_reg.second[i].min;
             Expr upper = f_reg.second[i].max;
 
@@ -295,7 +349,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                                  scheduling decisions\n";
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
-                    uint32_t num_pure_args = curr_f.args().size();
+                    size_t num_pure_args = curr_f.args().size();
                     if (i < num_pure_args && b.var == curr_f.args()[i]) {
                         lower = Expr(b.min.as<IntImm>()->value);
                     }
@@ -308,7 +362,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                                  scheduling decisions\n";
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
-                    uint32_t num_pure_args = curr_f.args().size();
+                    size_t num_pure_args = curr_f.args().size();
                     if (i < num_pure_args && b.var == curr_f.args()[i]) {
                         const IntImm * bmin = b.min.as<IntImm>();
                         const IntImm * bextent = b.extent.as<IntImm>();
@@ -608,7 +662,7 @@ struct Partitioner {
     int64_t find_max_access_stride(const set<string> &vars, string func_acc,
                                    vector<Expr> acc_exprs, const Box &buffer_bounds);
 
-    map<string, int> bounds_to_estimates(const DimBounds &bounds);
+    map<string, int64_t> bounds_to_estimates(const DimBounds &bounds);
 
     string generate_cpu_schedule(const Target &t);
 
@@ -637,7 +691,7 @@ struct Partitioner {
     Cost get_pipeline_cost();
 
     void disp_pipeline_costs();
-    void disp_pipeline_bounds();
+    void disp_pipeline_bounds(int dlevel);
     void disp_pipeline_graph();
     void disp_grouping();
 };
@@ -669,11 +723,9 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
 
-            FindAllCalls find;
-            Definition def = get_stage_definition(f.second, s);
-            def.accept(&find);
+            set<string> parents = get_parents(f.second, s);
 
-            for (const string &c : find.funcs_called) {
+            for (const string &c : parents) {
                 // Filter out the calls to pipeline inputs. env only contains
                 // the functions computed and not the inputs.
                 if (c != f.first && dep_analysis.env.find(c) != dep_analysis.env.end()) {
@@ -764,12 +816,12 @@ void Partitioner::disp_pipeline_graph() {
     debug(debug_level) << "================" << '\n';
 }
 
-void Partitioner::disp_pipeline_bounds() {
-    debug(debug_level) << "\n================" << '\n';
-    debug(debug_level) << "Pipeline bounds:" << '\n';
-    debug(debug_level) << "================" << '\n';
-    disp_regions(pipeline_bounds);
-    debug(debug_level) << "===============" << '\n';
+void Partitioner::disp_pipeline_bounds(int dlevel = debug_level) {
+    debug(dlevel) << "\n================" << '\n';
+    debug(dlevel) << "Pipeline bounds:" << '\n';
+    debug(dlevel) << "================" << '\n';
+    disp_regions(pipeline_bounds, dlevel);
+    debug(dlevel) << "===============" << '\n';
 }
 
 Cost Partitioner::get_pipeline_cost() {
@@ -1232,12 +1284,8 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
 
     for (auto &stg : g.members) {
         group_mem.insert(stg.func.name());
-
-        FindAllCalls find;
-        Definition stg_def = get_stage_definition(stg.func, stg.stage_num);
-
-        stg_def.accept(&find);
-        for (auto &c : find.funcs_called) {
+        set<string> parents = get_parents(stg.func, stg.stage_num);
+        for (auto &c : parents) {
             bool is_member = false;
             for (auto &m : g.members) {
                 if (m.func.name() == c) {
@@ -1265,6 +1313,7 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
         if (g.tile_sizes.find(var) != g.tile_sizes.end()) {
             int size = g.tile_sizes.at(var);
             int extent = get_extent(stg_bounds.at(var));
+            internal_assert(extent != unknown);
             estimate_tiles *= std::ceil((float)extent / size);
             num_ele_per_tile *= size;
             if (can_parallelize_rvar(var, g.output.func.name(), def)) {
@@ -1305,16 +1354,17 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
     g_analysis.cost = Cost(unknown, unknown);
     g_analysis.parallelism = unknown;
 
+    // TODO: remove debug code.
     if (show_analysis) {
-        debug(debug_level) << "==============\n";
-        debug(debug_level) << "Group Analysis\n";
-        debug(debug_level) << "==============\n";
-        debug(debug_level) << g;
-        debug(debug_level) << "\nProd reg:" << '\n';
-        disp_regions(prod_reg);
-        debug(debug_level) << "Input reg:" << '\n';
-        disp_regions(input_reg);
-        debug(debug_level) << "Group reg:" << '\n';
+        debug(0) << "==============\n";
+        debug(0) << "Group Analysis\n";
+        debug(0) << "==============\n";
+        debug(0) << g;
+        debug(0) << "\nProd reg:" << '\n';
+        disp_regions(prod_reg, 0);
+        debug(0) << "Input reg:" << '\n';
+        disp_regions(input_reg, 0);
+        debug(0) << "Group reg:" << '\n';
         disp_regions(group_reg);
     }
 
@@ -1620,10 +1670,10 @@ int64_t Partitioner::estimate_benefit(
                             no_redundant_work, ensure_parallelism);
 }
 
-map<string, int> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
-    map<string, int> estimates;
+map<string, int64_t> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
+    map<string, int64_t> estimates;
     for (auto &bound : bounds) {
-        int estimate = get_extent(bound.second);
+        int64_t estimate = get_extent(bound.second);
         estimates[bound.first] = estimate;
     }
     return estimates;
@@ -1702,7 +1752,7 @@ string get_base_name(string name) {
 
 pair<VarOrRVar, VarOrRVar>
 split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
-          string out_suffix, map<string, int> &estimates, string &sched) {
+          string out_suffix, map<string, int64_t> &estimates, string &sched) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
     string inner_name = arg_name + in_suffix;
@@ -1717,7 +1767,8 @@ split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
     sched += f_handle.name() + ".split(" + arg_name + ',' +
              outer_name + ',' + inner_name + ',' + std::to_string(factor) + ");\n";
 
-    internal_assert(estimates.find(arg_name) != estimates.end());
+    internal_assert(estimates.find(arg_name) != estimates.end() &&
+                    estimates[arg_name] != unknown);
 
     estimates[inner_name] = factor;
     estimates[outer_name] = std::ceil((float)estimates.at(arg_name) / factor);
@@ -1728,7 +1779,7 @@ split_dim(Stage f_handle, VarOrRVar v, int factor, string in_suffix,
 
 void vectorize_stage(Stage f_handle, Definition def, Function func,
                      const Target &t, set<string> &rvars,
-                     map<string, int> &estimates, string &sched) {
+                     map<string, int64_t> &estimates, string &sched) {
     const vector<Dim> &dims = f_handle.get_schedule().dims();
     int vec_dim_index = -1;
 
@@ -1745,7 +1796,8 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
         if (rvars.find(dim_name) != rvars.end()) {
             can_vectorize = can_parallelize_rvar(dim_name, func.name(), def);
         }
-        if (estimates.find(dim_name) != estimates.end()) {
+        if (estimates.find(dim_name) != estimates.end() &&
+            estimates[dim_name] != unknown) {
             if (can_vectorize && estimates[dim_name] >= vec_len) {
                 vec_dim_index = d;
                 break;
@@ -1868,17 +1920,17 @@ string Partitioner::generate_group_cpu_schedule(
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
 
-    debug(1) << "\n================\n";
-    debug(1) << "Scheduling group:\n";
-    debug(1) << "=================\n";
-    debug(1) << g;
+    debug(debug_level) << "\n================\n";
+    debug(debug_level) << "Scheduling group:\n";
+    debug(debug_level) << "=================\n";
+    debug(debug_level) << g;
 
     // Get the definition corresponding to the stage
     Definition def = get_stage_definition(g_out, g.output.stage_num);
 
     // Get the estimates for stage bounds
     DimBounds stg_bounds = get_bounds(g.output);
-    map<string, int> stg_estimates = bounds_to_estimates(stg_bounds);
+    map<string, int64_t> stg_estimates = bounds_to_estimates(stg_bounds);
 
     Stage f_handle = Stage(Func(g_out));
 
@@ -1893,6 +1945,12 @@ string Partitioner::generate_group_cpu_schedule(
 
     string var_prefix = g_out.name() + "_" +
                         std::to_string(g.output.stage_num);
+
+
+    if (g.output.func.has_extern_definition()) {
+        internal_assert(g.members.size() == 1);
+        return sched;
+    }
 
     // Realize tiling and update the dimension estimates
     vector<VarOrRVar> outer_dims;
@@ -1930,6 +1988,7 @@ string Partitioner::generate_group_cpu_schedule(
         VarOrRVar v(var, is_rvar);
 
         if (g.tile_sizes.find(var) != g.tile_sizes.end() &&
+            stg_estimates.at(var) != unknown &&
             stg_estimates.at(var) > g.tile_sizes.at(var)) {
             int tile_size = g.tile_sizes.at(var);
             if (tile_size > 1) {
@@ -2003,7 +2062,8 @@ string Partitioner::generate_group_cpu_schedule(
                 break;
             }
 
-            if (stg_estimates.find(var) != stg_estimates.end()) {
+            if (stg_estimates.find(var) != stg_estimates.end() &&
+                stg_estimates[var] != unknown) {
                 if (seq_var != "") {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
@@ -2043,7 +2103,7 @@ string Partitioner::generate_group_cpu_schedule(
         Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
 
         // Get the estimates for the dimensions of the member stage
-        map<string, int> mem_estimates =
+        map<string, int64_t> mem_estimates =
                 bounds_to_estimates(group_loop_bounds.at(mem));
 
         set<string> mem_rvars;
@@ -2231,6 +2291,7 @@ map<string, int64_t>
 Partitioner::analyze_spatial_locality(const FStage &stg,
                                       const map<string, Box> &parent_bounds,
                                       const set<string> &inlines) {
+    internal_assert(!stg.func.has_extern_definition());
     // Handle inlining. When a function is inlined into another the
     // stride of the accesses should be computed on the expression post inlining.
     // For example:
@@ -2326,7 +2387,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
     bool estimates_avail = check_estimates_on_outputs(outputs);
 
     if (!estimates_avail) {
-        user_warning << "Please provide estimates for each dimension" <<
+        user_warning << "Please provide estimates for each dimension " <<
                         "of the pipeline output functions.\n";
 
         // Computing all the pipeline stages at root and storing them at root.

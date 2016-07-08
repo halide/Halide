@@ -83,7 +83,8 @@ struct ExprCost : public IRVisitor {
             } else {
                 detailed_byte_loads[call->name] += call->type.bytes();
             }
-        } else if (call->call_type == Call::Extern || call->call_type == Call::PureExtern) {
+        } else if (call->call_type == Call::Extern || call->call_type == Call::PureExtern ||
+                   call->call_type == Call::ExternCPlusPlus) {
             // TODO: Suffix based matching is kind of sketchy; but going ahead
             // with it for now. Also not all the PureExtern's are accounted for
             // yet.
@@ -97,12 +98,7 @@ struct ExprCost : public IRVisitor {
                 // There is no visibility into an extern stage so there is no
                 // way to know the cost of the call statically. Modeling the
                 // cost of an extern stage requires profiling or user annotation.
-
-                // For now setting the cost to be large constant so that
-                // functions with unknown extern calls are forced to be
-                // compute_root.
                 user_warning << "Unknown extern call " << call->name << '\n';
-                cost.arith = std::numeric_limits<int64_t>::max();
             }
         } else if (call->call_type == Call::Intrinsic || call->call_type == Call::PureIntrinsic) {
             if (call->name == "shuffle_vector" || call->name == "interleave_vectors" ||
@@ -279,11 +275,12 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // Check if any of the calls are in the set of functions to be inlined.
         for (auto &call : calls) {
             if (inlines.find(call) != inlines.end()) {
+                Function prod_func = env.at(call);
                 // Impure functions cannot be inlined.
-                internal_assert(env.at(call).is_pure());
+                internal_assert(prod_func.is_pure());
                 // Inline the function call and set the flag to check for
                 // further inlining opportunities.
-                inlined_expr = inline_function(inlined_expr, env.at(call));
+                inlined_expr = inline_function(inlined_expr, prod_func);
                 funcs_to_inline = true;
                 break;
             }
@@ -291,6 +288,38 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
     } while (funcs_to_inline);
 
     return inlined_expr;
+}
+
+set<string> get_parents(Function f, int stage) {
+    set<string> parents;
+    if (f.has_extern_definition()) {
+        internal_assert(stage == 0);
+        for (const ExternFuncArgument &arg : f.extern_arguments()) {
+            if (arg.is_func()) {
+                string prod_name = Function(arg.func).name();
+                parents.insert(prod_name);
+            } else if (arg.is_expr()) {
+                FindAllCalls find;
+                arg.expr.accept(&find);
+                parents.insert(find.funcs_called.begin(),
+                               find.funcs_called.end());
+            } else if (arg.is_image_param() || arg.is_buffer()) {
+                Buffer buf;
+                if (arg.is_image_param()) {
+                    buf = arg.image_param.get_buffer();
+                } else {
+                    buf = arg.buffer;
+                }
+                parents.insert(buf.name());
+            }
+        }
+    } else {
+        FindAllCalls find;
+        Definition def = get_stage_definition(f, stage);
+        def.accept(&find);
+        parents.insert(find.funcs_called.begin(), find.funcs_called.end());
+    }
+    return parents;
 }
 
 void disp_regions(const map<string, Box> &regions, int dlevel) {
@@ -587,8 +616,11 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
 
 vector<Cost> RegionCosts::get_func_cost(const Function &f,
                                         const set<string> &inlines) {
+    if (f.has_extern_definition()) {
+        return { Cost(unknown, unknown) };
+    }
     vector<Cost> func_costs;
-    Cost total_cost(0, 0);
+    Cost pure_cost(0, 0);
     for (auto &e : f.values()) {
         Expr inlined_expr = perform_inline(e, env, inlines);
         // TODO: Handle likely.
@@ -597,15 +629,15 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f,
 
         ExprCost cost_visitor;
         inlined_expr.accept(&cost_visitor);
-        total_cost.arith += cost_visitor.cost.arith;
-        total_cost.memory += cost_visitor.cost.memory;
+        pure_cost.arith += cost_visitor.cost.arith;
+        pure_cost.memory += cost_visitor.cost.memory;
 
         // Accounting for the store
-        total_cost.memory += e.type().bytes();
-        total_cost.arith += 1;
+        pure_cost.memory += e.type().bytes();
+        pure_cost.arith += 1;
     }
 
-    func_costs.push_back(total_cost);
+    func_costs.push_back(pure_cost);
 
     // Estimating cost when reductions are involved
     if (!f.is_pure()) {
