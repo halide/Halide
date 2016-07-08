@@ -143,8 +143,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_profiler_report,
     (void *)&halide_profiler_reset,
     (void *)&halide_profiler_stack_peak_update,
-    (void *)&halide_profiler_incr_active_threads,
-    (void *)&halide_profiler_decr_active_threads,
     (void *)&halide_qurt_hvx_lock,
     (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_qurt_hvx_unlock_as_destructor,
