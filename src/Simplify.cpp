@@ -1500,9 +1500,9 @@ private:
         } else if (no_overflow(op->type) && add_a && sub_a_a &&
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // ((x*4 - y) + z) / 2 -> x*2 - (y - z)/2
+            // ((x*4 - y) + z) / 2 -> x*2 + (z - y)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) - (sub_a_a->b - add_a->b) / b);
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a->b - sub_a_a->b) / b);
         } else if (no_overflow(op->type) && sub_a && add_a_a &&
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
@@ -1512,9 +1512,9 @@ private:
         } else if (no_overflow(op->type) && sub_a && sub_a_a &&
                    mul_a_a_a && const_int(mul_a_a_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
-            // ((x*4 - y) - z) / 2 -> x*2 - (y + z)/2
+            // ((x*4 - y) - z) / 2 -> x*2 + (0 - y - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) - (sub_a_a->b + sub_a->b) / b);
+            expr = mutate((mul_a_a_a->a * ratio) + (- sub_a_a->b - sub_a->b) / b);
         } else if (no_overflow(op->type) && add_a && add_a_b &&
                    mul_a_b_a && const_int(mul_a_b_a->b, &ia) && const_int(b, &ib) &&
                    ib > 0 && (ia % ib == 0)) {
@@ -4351,9 +4351,9 @@ void check_algebra() {
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
     check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
-    check(((x*4 - y) + z) / 2, x*2 - (y - z)/2);
+    check(((x*4 - y) + z) / 2, x*2 + (z - y)/2);
     check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
-    check(((x*4 - y) - z) / 2, x*2 - (y + z)/2);
+    check(((x*4 - y) - z) / 2, x*2 + (0 - y - z)/2);
     check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
     check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
     check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
