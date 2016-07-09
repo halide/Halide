@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
         input_func(x) = sin(x);
         Image<float> input = input_func.realize(100);
 
-        // Then we define a 2-valued Tuple which tracks the maximum
-        // value and its index.
+        // Then we define a 2-valued Tuple which tracks the index of
+        // the maximum value and the value itself.
         Func arg_max;
 
         // Pure definition.
