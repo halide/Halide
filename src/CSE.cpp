@@ -88,12 +88,12 @@ public:
     map<Expr, int, ExprCompare> shallow_numbering;
 
     Scope<int> let_substitutions;
-    bool can_lift_load;
+    bool protect_loads_in_scope;
     int number;
 
     IRCompareCache cache;
 
-    GVN() : can_lift_load(true), number(0), cache(8) {}
+    GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
 
     Stmt mutate(Stmt s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
@@ -148,7 +148,7 @@ public:
         }
 
         // Add it to the numbering.
-        if ((e.as<Load>() == nullptr) || can_lift_load) {
+        if ((e.as<Load>() == nullptr) || !protect_loads_in_scope) {
             Entry entry = {e, 0};
             number = (int)entries.size();
             numbering[with_cache(e)] = number;
@@ -179,15 +179,15 @@ public:
     }
 
     void visit(const Call *call) {
-        bool old_can_lift_load = can_lift_load;
+        bool old_protect_loads_in_scope = protect_loads_in_scope;
         if (call->is_intrinsic(Call::address_of) ||
             call->is_intrinsic(Call::predicated_store) ||
             call->is_intrinsic(Call::predicated_load)) {
             // We shouldn't lift load out of a address_of/predicated_store/predicated_load node
-            can_lift_load = false;
+            protect_loads_in_scope = true;
         }
         IRMutator::visit(call);
-        can_lift_load = old_can_lift_load;
+        protect_loads_in_scope = old_protect_loads_in_scope;
     }
 
 };
@@ -195,9 +195,9 @@ public:
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
-    bool can_lift_load;
+    bool protect_loads_in_scope;
 public:
-    ComputeUseCounts(GVN &g) : gvn(g), can_lift_load(true) {}
+    ComputeUseCounts(GVN &g) : gvn(g), protect_loads_in_scope(false) {}
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
@@ -214,7 +214,7 @@ public:
         // If we're not supposed to lift out load node (i.e. we're inside an
         // address_of call node), just use the generic visitor to visit the
         // load index.
-        if ((e.as<Load>() != nullptr) && !can_lift_load) {
+        if ((e.as<Load>() != nullptr) && protect_loads_in_scope) {
             e.accept(this);
             return;
         }
@@ -235,15 +235,15 @@ public:
 
 
     void visit(const Call *call) {
-        bool old_can_lift_load = can_lift_load;
+        bool old_protect_loads_in_scope = protect_loads_in_scope;
         if (call->is_intrinsic(Call::address_of) ||
             call->is_intrinsic(Call::predicated_store) ||
             call->is_intrinsic(Call::predicated_load)) {
             // We shouldn't lift load out of a address_of/predicated_store/predicated_load node.
-            can_lift_load = false;
+            protect_loads_in_scope = true;
         }
         IRGraphVisitor::visit(call);
-        can_lift_load = old_can_lift_load;
+        protect_loads_in_scope = old_protect_loads_in_scope;
     }
 };
 

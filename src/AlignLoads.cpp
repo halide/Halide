@@ -26,7 +26,7 @@ Expr slice_vector(Expr vec, Expr start, Expr stride, int lanes) {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator {
 public:
-    AlignLoads(int alignment) : required_alignment(alignment) {}
+    AlignLoads(int alignment) : required_alignment(alignment), inside_address_of(false) {}
 
 private:
     // The desired alignment of a vector load.
@@ -34,6 +34,8 @@ private:
 
     // Alignment info for variables in scope.
     Scope<ModulusRemainder> alignment_info;
+
+    bool inside_address_of;
 
     using IRMutator::visit;
 
@@ -43,7 +45,21 @@ private:
                                  index, load->image, load->param));
     }
 
+    void visit(const Call *op) {
+        bool old_inside_address_of = inside_address_of;
+        if (op->is_intrinsic(Call::address_of)) {
+            inside_address_of = true;
+        }
+        IRMutator::visit(op);
+        inside_address_of = old_inside_address_of;
+    }
+
     void visit(const Load *op) {
+        if (inside_address_of) {
+            // We shouldn't mess with load inside an address_of.
+            IRMutator::visit(op);
+            return;
+        }
         if (!op->type.is_vector()) {
             // Nothing to do for scalar loads.
             IRMutator::visit(op);
