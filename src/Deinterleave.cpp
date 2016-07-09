@@ -289,8 +289,8 @@ private:
             internal_assert(addr->args.size() == 1) << "address_of should only take 1 argument";
 
             std::vector<Expr> args(op->args.size());
-            args[0] = Call::make(addr->type, addr->name, {mutate(addr->args[0])}, addr->call_type,
-                                 addr->func, addr->value_index, addr->image, addr->param);
+            args[0] = Call::make(Handle().with_lanes(new_lanes), addr->name, {mutate(addr->args[0])},
+                                 addr->call_type, addr->func, addr->value_index, addr->image, addr->param);
             for (size_t i = 1; i < args.size(); i++) {
                 args[i] = mutate(op->args[i]);
             }
