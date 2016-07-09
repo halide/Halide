@@ -2054,6 +2054,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
 
     int native_bits = native_vector_bits();
     int native_bytes = native_bits / 8;
+
     // We assume halide_malloc for the platform returns
     // buffers aligned to at least the native vector
     // width. (i.e. 16-byte alignment on arm, and 32-byte
@@ -2457,7 +2458,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // memory, so convert stores of handles to stores of uint64_ts.
         if (op->args[2].type().is_handle()) {
             Expr v = reinterpret(UInt(64, op->args[2].type().lanes()), op->args[2]);
-            Expr dest = Call::make(Handle(), Call::address_of,
+            Expr dest = Call::make(Handle().with_lanes(v.type().lanes()), Call::address_of,
                                    {Load::make(v.type(), load->name, load->index, load->image, load->param)},
                                    Call::Intrinsic);
             Expr expr = Call::make(v.type(), Call::predicated_store,
@@ -2516,6 +2517,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 add_tbaa_metadata(store_inst, load->name, slice_index);
             }
         } else { // It's not dense vector store, we need to scalarize it
+            debug(4) << "Scalarize predicated vector store\n";
             Value *vpred = codegen(op->args[1]);
             Value *vval = codegen(op->args[2]);
             Expr index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
@@ -2523,6 +2525,10 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (int i = 0; i < index.type().lanes(); i++) {
                 Constant *lane = ConstantInt::get(i32_t, i);
                 Value *p = builder->CreateExtractElement(vpred, lane);
+                if (p->getType() != i1_t) {
+                    p = builder->CreateIsNotNull(p);
+                }
+
                 Value *v = builder->CreateExtractElement(vval, lane);
                 Value *idx = builder->CreateExtractElement(vindex, lane);
                 internal_assert(p && v && idx);
@@ -2546,7 +2552,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                 sym_pop(idx_name);
             }
         }
-
     } else if (op->is_intrinsic(Call::predicated_load)) {
         internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {load addr, predicate}\n";
         const Call *load_addr = op->args[0].as<Call>();
@@ -2562,7 +2567,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // If it's a Handle, load it as a uint64_t and then cast
         if (load->type.is_handle()) {
             Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
-            Expr src = Call::make(Handle(), Call::address_of, {uint64_load}, Call::Intrinsic);
+            Expr src = Call::make(Handle().with_lanes(uint64_load.type().lanes()), Call::address_of, {uint64_load}, Call::Intrinsic);
             Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, op->args[1]}, Call::Intrinsic);
             codegen(reinterpret(load->type, expr));
             return;
@@ -2571,7 +2576,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         const Ramp *ramp = load->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
-        if (ramp && is_one(ramp->stride)) { // Dense vector store
+        if (ramp && is_one(ramp->stride)) { // Dense vector load
             value = codegen_dense_vector_load(load, codegen(op->args[1]));
         } else if (ramp && stride && stride->value == -1) {
             debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
@@ -2600,8 +2605,42 @@ void CodeGen_LLVM::visit(const Call *op) {
                                         {op->args[1], load_expr, make_zero(load_expr.type())},
                                         Internal::Call::Intrinsic);
             value = codegen(pred_load);
-        }
 
+            /*Value *vpred = codegen(op->args[1]);
+            Expr index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
+            Value *vindex = codegen(index);
+
+            Value *result = UndefValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < index.type().lanes(); i++) {
+                Constant *lane = ConstantInt::get(i32_t, i);
+                Value *p = builder->CreateExtractElement(vpred, lane);
+                if (p->getType() != i1_t) {
+                    p = builder->CreateIsNotNull(p);
+                }
+                Value *idx = builder->CreateExtractElement(vindex, lane);
+                internal_assert(p && idx);
+
+                string pred_name = unique_name("pred");
+                string idx_name = unique_name("idx");
+                Expr pred = Variable::make(op->args[1].type().element_of(), pred_name);
+                Expr load_idx = Variable::make(load->index.type().element_of(), idx_name);
+
+                sym_push(pred_name, p);
+                sym_push(idx_name, idx);
+
+                Expr load_expr = Load::make(load->type.element_of(), load->name, load_idx, load->image, load->param);
+                Expr pred_load = Call::make(load_expr.type(),
+                                            Call::if_then_else,
+                                            {pred, load_expr, make_zero(load_expr.type())},
+                                            Internal::Call::Intrinsic);
+                Value *v = codegen(pred_load);
+                result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
+
+                sym_pop(pred_name);
+                sym_pop(idx_name);
+            }
+            value = result;*/
+        }
     } else if (op->is_intrinsic(Call::trace) ||
                op->is_intrinsic(Call::trace_expr)) {
 
@@ -2754,7 +2793,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+            Value *cond = codegen(op->args[0]);
+            if (cond->getType() != i1_t) {
+                cond = builder->CreateIsNotNull(cond);
+            }
+            builder->CreateCondBr(cond, true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
