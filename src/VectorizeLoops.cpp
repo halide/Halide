@@ -758,18 +758,19 @@ class VectorSubs : public IRMutator {
             const Call *c = cond.as<Call>();
             if (c && (c->is_intrinsic(Call::likely) ||
                 c->is_intrinsic(Call::likely_if_innermost))) {
+
+                // The meaning of the likely intrinsic is that
+                // Halide should optimize for the case in which
+                // *every* likely value is true. We can do that by
+                // generating a scalar condition that checks if
+                // the least-true lane is true.
+                Expr all_true = bounds_of_lanes(c->args[0]).min;
+
+                // Wrap it in the same flavor of likely
+                all_true = Call::make(Bool(), c->name,
+                                      {all_true}, Call::PureIntrinsic);
+
                 if (!vectorize_predicate) {
-                    // The meaning of the likely intrinsic is that
-                    // Halide should optimize for the case in which
-                    // *every* likely value is true. We can do that by
-                    // generating a scalar condition that checks if
-                    // the least-true lane is true.
-                    Expr all_true = bounds_of_lanes(c->args[0]).min;
-
-                    // Wrap it in the same flavor of likely
-                    all_true = Call::make(Bool(), c->name,
-                                          {all_true}, Call::PureIntrinsic);
-
                     // We should strip the likelies from the case
                     // that's going to scalarize, because it's no
                     // longer likely.
@@ -782,7 +783,10 @@ class VectorSubs : public IRMutator {
                                          scalarize(without_likelies));
                     debug(4) << "...With all_true likely: \n" << stmt << "\n";
                 } else {
-                    stmt = predicated_stmt;
+                    stmt =
+                        IfThenElse::make(all_true,
+                                         then_case,
+                                         predicated_stmt);
                     debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
                 }
             } else {
