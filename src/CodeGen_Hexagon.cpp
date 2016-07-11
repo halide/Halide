@@ -1429,7 +1429,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         // hexagon is not handled by the LLVM
 
         // If any of the predicate lane is true, then just do normal load; otherwise,
-        // if none of the predicate lanes is true, just load 0
+        // if none of the predicate lanes is true, just load undef
         Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
         debug(4) << "Predicated vector load on hexagon\n\t" << load_expr << "\n";
         Value *vpred = codegen(op->args[1]);
@@ -1455,7 +1455,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         BasicBlock *true_pred = builder->GetInsertBlock();
 
         builder->SetInsertPoint(false_bb);
-        Value *false_value = codegen(make_zero(load_expr.type()));
+        Value *false_value = UndefValue::get(llvm_type_of(load_expr.type()));
         builder->CreateBr(after_bb);
         BasicBlock *false_pred = builder->GetInsertBlock();
 
