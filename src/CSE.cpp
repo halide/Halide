@@ -58,14 +58,8 @@ bool should_extract(Expr e) {
         return !is_const(a->stride);
     }
 
-    if (e.as<IfThenElse>() != nullptr) {
-        return false;
-    }
-
     if (const Call *a = e.as<Call>()) {
-        if (a->is_intrinsic(Call::address_of) ||
-            a->is_intrinsic(Call::predicated_store) ||
-            a->is_intrinsic(Call::predicated_load)) {
+        if (a->is_intrinsic(Call::address_of)) {
             return false;
         }
     }
@@ -206,6 +200,7 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
+        debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
         if (!should_extract(e)) {
             e.accept(this);
             return;
@@ -512,6 +507,27 @@ void cse_test() {
         correct = ssa_block({x*x + y*y,
                              t[0] > 0,
                              cse_pred_store});
+
+        check(e, correct);
+    }
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, Buffer(), Parameter());
+        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer(), Parameter());
+        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
+        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             cse_pred_load,
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + t[3]) + t[3]});
 
         check(e, correct);
     }
