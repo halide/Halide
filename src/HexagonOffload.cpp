@@ -55,6 +55,23 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
+// Wrap the stmt in a call to power_hvx_on, calling power_hvx_off
+// as a destructor if successful.
+Stmt power_hvx_on(Stmt stmt) {
+    Expr power_on = Call::make(Int(32), "halide_hexagon_power_hvx_on", {}, Call::Extern);
+    string power_on_result_name = unique_name("power_on_result");
+    Expr power_on_result_var = Variable::make(Int(32), power_on_result_name);
+    Stmt check_power_on = LetStmt::make(power_on_result_name, power_on,
+                                        AssertStmt::make(EQ::make(power_on_result_var, 0), power_on_result_var));
+
+    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+    Expr power_off = Call::make(Int(32), Call::register_destructor,
+                                {Expr("halide_hexagon_power_hvx_off_as_destructor"), dummy_obj}, Call::Intrinsic);
+
+    stmt = Block::make(Evaluate::make(power_off), stmt);
+    stmt = Block::make(check_power_on, stmt);
+    return stmt;
+}
 
 class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_vars;
@@ -246,6 +263,12 @@ public:
             return s;
         }
 
+        // If we got here, it means the pipeline runs at least one
+        // Hexagon kernel. To reduce overhead of individual
+        // sub-pipelines running on Hexagon, we can power on HVX once
+        // for the duration of this pipeline.
+        s = power_hvx_on(s);
+
         // Compile the device code.
         // TODO: Currently, this requires shelling out to
         // hexagon-clang from the Qualcomm Hexagon SDK, because the
@@ -270,6 +293,9 @@ public:
         }
         for (auto &fn : llvm_module->functions()) {
             fn.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+            for (size_t i = 0; i < fn.arg_size(); i++) {
+                fn.removeAttribute(i, llvm::Attribute::WriteOnly);
+            }
         }
         #endif
 

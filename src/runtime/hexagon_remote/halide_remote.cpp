@@ -112,7 +112,6 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(const char *),
                              void *(*)(void *, const char *));
 
-int context_count = 0;
 PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
@@ -150,7 +149,17 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
 
-    if (context_count == 0) {
+    return 0;
+}
+
+handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+}
+
+volatile int power_ref_count = 0;
+
+int halide_hexagon_remote_power_hvx_on() {
+    if (power_ref_count == 0) {
         HAP_power_request_t request;
 
         request.type = HAP_power_set_apptype;
@@ -184,14 +193,16 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
             return -1;
         }
     }
-
-    context_count++;
-
+    power_ref_count++;
     return 0;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+int halide_hexagon_remote_power_hvx_off() {
+    power_ref_count--;
+    if (power_ref_count == 0) {
+        HAP_power_request(0, 0, -1);
+    }
+    return 0;
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
@@ -231,8 +242,19 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         *next_arg = input_scalarsPtrs[i].data;
     }
 
+    // Prior to running the pipeline, power HVX on (if it was not already on).
+    int result = halide_hexagon_remote_power_hvx_on();
+    if (result != 0) {
+        return result;
+    }
+
     // Call the pipeline and return the result.
-    return run_context.run(pipeline, args);
+    result = run_context.run(pipeline, args);
+
+    // Power HVX off.
+    halide_hexagon_remote_power_hvx_off();
+
+    return result;
 }
 
 int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
@@ -244,16 +266,12 @@ int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
-
-    if (context_count-- == 0) {
-        HAP_power_request(0, 0, -1);
-    }
-
     return 0;
 }
 
-int halide_hexagon_remote_poll_profiler_func(int *out) {
-    *out = halide_profiler_get_state()->current_func;
+int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    *func = halide_profiler_get_state()->current_func;
+    *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
 
