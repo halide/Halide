@@ -1465,7 +1465,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
         phi->addIncoming(false_value, false_pred);
 
         value = phi;
-        value->dump();
     } else {
         CodeGen_Posix::visit(op);
     }
