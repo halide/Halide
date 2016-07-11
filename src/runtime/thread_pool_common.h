@@ -239,6 +239,9 @@ using namespace Halide::Runtime::Internal;
 extern "C" {
 
 WEAK int halide_set_num_threads(int n) {
+    if (n < 0) {
+        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+    }
     // Don't make this an atomic swap - we don't want to be changing
     // the desired number of threads while another thread is in the
     // middle of a sequence of non-atomic operations.

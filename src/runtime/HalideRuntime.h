@@ -144,7 +144,21 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 extern void halide_join_thread(struct halide_thread *);
 
 /** Set the number of threads used by Halide's thread pool. Returns
- * the old number. No effect on OS X or iOS. */
+ * the old number. 
+ *
+ * n < 0  : error condition
+ * n == 0 : use a reasonable system default (typically, number of cpus online).
+ * n == 1 : use exactly one thread; this will always enforce serial execution
+ * n > 1  : use a pool of exactly n threads.
+ *
+ * Note that the default iOS and OSX behavior will treat n > 1 like n == 0;
+ * that is, any positive value other than 1 will use a system-determined number
+ * of threads.
+ *
+ * (Note that this is only guaranteed when using the default implementations
+ * of halide_do_par_for(); custom implementations may completely ignore values
+ * passed to halide_set_num_threads().)
+ */
 extern int halide_set_num_threads(int n);
 
 /** Halide calls these functions to allocate and free memory. To
