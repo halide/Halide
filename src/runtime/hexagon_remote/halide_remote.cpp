@@ -205,6 +205,12 @@ int halide_hexagon_remote_power_hvx_off() {
     return 0;
 }
 
+int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen,
+                                        handle_t *sym_ptr) {
+    *sym_ptr = reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    return *sym_ptr != 0 ? 0 : -1;
+}
+
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
                               buffer *output_buffersPtrs, int output_buffersLen,
