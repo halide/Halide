@@ -90,6 +90,9 @@ class AllocationInference : public IRMutator {
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
 
+            internal_assert(min_var.type() == min.type());
+            internal_assert(max_var.type() == max.type());
+
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
                                         {f_args[i], f.name(), min_var, max_var, b[i].min, b[i].max},
                                         Call::Extern);
