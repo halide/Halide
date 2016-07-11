@@ -187,8 +187,6 @@ class InjectHexagonRpc : public IRMutator {
             for (const auto& i : c.vars) {
                 Expr arg = Variable::make(i.second, i.first);
                 Expr arg_ptr = Call::make(type_of<void *>(), Call::make_struct, {arg}, Call::Intrinsic);
-
-                // sizeof(scalar-type) will always fit into int32
                 arg_sizes.push_back(Expr((uint64_t) i.second.bytes()));
                 arg_ptrs.push_back(arg_ptr);
                 arg_flags.push_back(0x0);

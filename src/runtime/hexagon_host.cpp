@@ -150,7 +150,7 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
 }  // namespace
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, size_t code_size) {
+                                           const uint8_t *code, uint64_t code_size) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
 
@@ -222,11 +222,11 @@ namespace {
 // necessary. Only arguments with flags&flag_mask == flag_value are
 // added to the mapped_args array. Returns the number of arguments
 // mapped, or a negative number on error.
-WEAK int map_arguments(void *user_context, size_t arg_count,
-                       size_t arg_sizes[], void *args[], int arg_flags[], int flag_mask, int flag_value,
+WEAK int map_arguments(void *user_context, int arg_count,
+                       uint64_t arg_sizes[], void *args[], int arg_flags[], int flag_mask, int flag_value,
                        remote_buffer *mapped_args) {
     int mapped_count = 0;
-    for (size_t i = 0; i < arg_count; i++) {
+    for (int i = 0; i < arg_count; i++) {
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
         if (arg_flags[i] != 0) {
@@ -253,7 +253,7 @@ WEAK int halide_hexagon_run(void *user_context,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
-                            size_t arg_sizes[],
+                            uint64_t arg_sizes[],
                             void *args[],
                             int arg_flags[]) {
     halide_assert(user_context, state_ptr != NULL);
@@ -347,6 +347,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
         }
         state = state->next;
     }
+    state_list = NULL;
 
     return 0;
 }
@@ -571,7 +572,7 @@ WEAK int halide_hexagon_device_sync(void *user_context, struct buffer_t *) {
 }
 
 WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *buf,
-                                           void *ion_buf, size_t size) {
+                                           void *ion_buf, uint64_t size) {
     halide_assert(user_context, buf->dev == 0);
     if (buf->dev != 0) {
         return -2;
@@ -614,7 +615,7 @@ WEAK void *halide_hexagon_get_device_handle(void *user_context, struct buffer_t 
     return handle->buffer;
 }
 
-WEAK size_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf) {
+WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf) {
     if (buf->dev == NULL) {
         return 0;
     }
