@@ -1367,7 +1367,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             return;
         }
 
-        // We need to scalarize the predicated store since masked load on
+        // We need to scalarize the predicated store since masked store/load on
         // hexagon is not handled by the LLVM
         debug(4) << "Scalarize predicated vector store on hexagon\n";
         Value *vpred = codegen(op->args[1]);
@@ -1425,10 +1425,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
             return;
         }
 
+        // We need to scalarize the predicated store since masked load on
+        // hexagon is not handled by the LLVM
+
         // If any of the predicate lane is true, then just do normal load; otherwise,
         // if none of the predicate lanes is true, just load 0
-
-        /*Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
+        Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
         debug(4) << "Predicated vector load on hexagon\n\t" << load_expr << "\n";
         Value *vpred = codegen(op->args[1]);
 
@@ -1445,27 +1447,25 @@ void CodeGen_Hexagon::visit(const Call *op) {
         builder->CreateCondBr(any_true, true_bb, false_bb);
 
         builder->SetInsertPoint(true_bb);
-        codegen(load_expr);
+        Value *true_value = codegen(load_expr);
         builder->CreateBr(after_bb);
+        // The true value might have jumped to a new block (e.g. if there was a
+        // nested select). To generate a correct PHI node, grab the current
+        // block.
+        BasicBlock *true_pred = builder->GetInsertBlock();
 
         builder->SetInsertPoint(false_bb);
-        codegen(make_zero(load_expr.type()));
+        Value *false_value = codegen(make_zero(load_expr.type()));
         builder->CreateBr(after_bb);
+        BasicBlock *false_pred = builder->GetInsertBlock();
 
-        builder->SetInsertPoint(after_bb);*/
+        builder->SetInsertPoint(after_bb);
+        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+        phi->addIncoming(true_value, true_pred);
+        phi->addIncoming(false_value, false_pred);
 
-        if (true) { //TODO(psuriana) : need to compute this bound
-            // Some of the predicate lanes are true, do normal load
-            Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
-            debug(0) << "Perform normal vector load on hexagon\n\t" << load_expr << "\n";
-            value = codegen(load_expr);
-        } else {
-            // None of the predicate lanes is true, just load 0
-            debug(0) << "None of the predicate lanes is true, load zeros on hexagon\n";
-            Constant *zero = ConstantInt::get(i32_t, 0);
-            value = ConstantVector::getSplat(op->type.lanes(), zero);
-        }
-
+        value = phi;
+        value->dump();
     } else {
         CodeGen_Posix::visit(op);
     }
