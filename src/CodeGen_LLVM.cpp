@@ -2605,41 +2605,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                                         {op->args[1], load_expr, make_zero(load_expr.type())},
                                         Internal::Call::Intrinsic);
             value = codegen(pred_load);
-
-            /*Value *vpred = codegen(op->args[1]);
-            Expr index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
-            Value *vindex = codegen(index);
-
-            Value *result = UndefValue::get(llvm_type_of(op->type));
-            for (int i = 0; i < index.type().lanes(); i++) {
-                Constant *lane = ConstantInt::get(i32_t, i);
-                Value *p = builder->CreateExtractElement(vpred, lane);
-                if (p->getType() != i1_t) {
-                    p = builder->CreateIsNotNull(p);
-                }
-                Value *idx = builder->CreateExtractElement(vindex, lane);
-                internal_assert(p && idx);
-
-                string pred_name = unique_name("pred");
-                string idx_name = unique_name("idx");
-                Expr pred = Variable::make(op->args[1].type().element_of(), pred_name);
-                Expr load_idx = Variable::make(load->index.type().element_of(), idx_name);
-
-                sym_push(pred_name, p);
-                sym_push(idx_name, idx);
-
-                Expr load_expr = Load::make(load->type.element_of(), load->name, load_idx, load->image, load->param);
-                Expr pred_load = Call::make(load_expr.type(),
-                                            Call::if_then_else,
-                                            {pred, load_expr, make_zero(load_expr.type())},
-                                            Internal::Call::Intrinsic);
-                Value *v = codegen(pred_load);
-                result = builder->CreateInsertElement(result, v, ConstantInt::get(i32_t, i));
-
-                sym_pop(pred_name);
-                sym_pop(idx_name);
-            }
-            value = result;*/
         }
     } else if (op->is_intrinsic(Call::trace) ||
                op->is_intrinsic(Call::trace_expr)) {
