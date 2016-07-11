@@ -173,6 +173,10 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                         << ", code_size: " << (int)code_size << ")\n";
     halide_assert(user_context, state_ptr != NULL);
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     // Create the state object if necessary. This only happens once,
     // regardless of how many times halide_hexagon_initialize_kernels
     // or halide_hexagon_device_release is called.
@@ -209,6 +213,11 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     } else {
         debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
     }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
 
     return result != 0 ? -1 : 0;
 }
@@ -331,7 +340,7 @@ WEAK int halide_hexagon_run(void *user_context,
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return result != 0 ? -1 : 0;
@@ -629,6 +638,10 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
         return 0;
     }
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     debug(user_context) << "    remote_power_hvx_on -> ";
     result = remote_power_hvx_on();
     debug(user_context) << "        " << result << "\n";
@@ -636,6 +649,12 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
         error(user_context) << "remote_power_hvx_on failed.\n";
         return result;
     }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
     return 0;
 }
 
@@ -650,6 +669,10 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
         return 0;
     }
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     debug(user_context) << "    remote_power_hvx_off -> ";
     result = remote_power_hvx_off();
     debug(user_context) << "        " << result << "\n";
@@ -657,6 +680,12 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
         error(user_context) << "remote_power_hvx_off failed.\n";
         return result;
     }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
     return 0;
 }
 
