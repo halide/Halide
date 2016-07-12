@@ -790,23 +790,6 @@ __QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_poll_profiler_state)(in
    uint32_t _mid = 7;
    return _stub_method_6(_halide_hexagon_remote_handle(), _mid, (uint32_t*)func, (uint32_t*)threads);
 }
-static __inline int _stub_method_5(remote_handle _handle, uint32_t _mid, uint32_t _rout0[1]) {
-   int _numIn[1];
-   remote_arg _pra[1];
-   uint32_t _primROut[1];
-   int _nErr = 0;
-   _numIn[0] = 0;
-   _pra[(_numIn[0] + 0)].buf.pv = (void*)_primROut;
-   _pra[(_numIn[0] + 0)].buf.nLen = sizeof(_primROut);
-   _TRY(_nErr, __QAIC_REMOTE(remote_handle_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 0, 1, 0, 0), _pra));
-   _COPY(_rout0, 0, _primROut, 0, 4);
-   _CATCH(_nErr) {}
-   return _nErr;
-}
-__QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_poll_profiler_func)(int* id) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 5;
-   return _stub_method_5(_halide_hexagon_remote_handle(), _mid, (uint32_t*)id);
-}
 #ifdef __cplusplus
 }
 #endif
