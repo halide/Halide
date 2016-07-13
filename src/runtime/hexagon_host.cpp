@@ -5,8 +5,6 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
-#define O_TRUNC 00001000
-
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
 struct ion_device_handle {
