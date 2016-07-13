@@ -44,11 +44,15 @@ extern "C" {
 
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
-    log_printf("%s", str);
+    if (str) {
+        log_printf("%s", str);
+    }
 }
 
 void halide_error(void *user_context, const char *str) {
-    if (str[strlen(str) - 1] != '\n') {
+    if (!str) {
+        log_printf("Unknown error\n");
+    } else if (*str && str[strlen(str) - 1] != '\n') {
         log_printf("Error: %s\n", str);
     } else {
         log_printf("Error: %s", str);
