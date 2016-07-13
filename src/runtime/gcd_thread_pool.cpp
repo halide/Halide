@@ -100,7 +100,7 @@ WEAK void halide_do_gcd_task(void *job, size_t idx) {
 
 WEAK int default_do_par_for(void *user_context, halide_task_t f,
                             int min, int size, uint8_t *closure) {
-    if (custom_num_threads == 1) {
+    if (custom_num_threads == 1 || size == 1) {
         // GCD doesn't really allow us to limit the threads,
         // so ensure that there's no parallelism by executing serially.
         for (int x = min; x < min + size; x++) {
