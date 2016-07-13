@@ -1126,18 +1126,16 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         rhs << "((halide_buffer_t *)(" << a0 << "))->host";
     } else if (op->is_intrinsic(Call::set_host_dirty)) {
-        internal_assert(op->args.size() == 2);
+        internal_assert(op->args.size() == 1);
         string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
         do_indent();
-        stream << "((halide_buffer_t *)(" << a0 << "))->set_host_dirty(" << a1 << ");\n";
+        stream << "((halide_buffer_t *)(" << a0 << "))->set_host_dirty(true);\n";
         rhs << "0";
     } else if (op->is_intrinsic(Call::set_device_dirty)) {
-        internal_assert(op->args.size() == 2);
+        internal_assert(op->args.size() == 1);
         string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
         do_indent();
-        stream << "((halide_buffer_t *)(" << a0 << "))->set_device_dirty(" << a1 << ");\n";
+        stream << "((halide_buffer_t *)(" << a0 << "))->set_device_dirty(true);\n";
         rhs << "0";
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
