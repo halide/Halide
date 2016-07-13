@@ -210,31 +210,55 @@ private:
     }
 
     void visit(const For *op) {
+        Stmt body = op->body;
+
+        // The for loop indicates a device transition or a
+        // parallel job launch. Decrement the number of active
+        // threads outside the loop, and increment it inside the
+        // body.
+        bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
+                                      op->for_type == ForType::Parallel);
+
+        Expr state = Variable::make(Handle(), "profiler_state");
+        Stmt incr_active_threads =
+            Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
+                                      {state}, Call::Extern));
+        Stmt decr_active_threads =
+            Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
+                                      {state}, Call::Extern));
+
+        if (update_active_threads) {
+            body = Block::make({incr_active_threads, body, decr_active_threads});
+        }
+
         // We profile by storing a token to global memory, so don't enter GPU loops
         if (op->device_api == DeviceAPI::Hexagon) {
+            // TODO: This is for all offload targets that support
+            // limited internal profiling, which is currently just
+            // hexagon. We don't support per-func stats remotely,
+            // which means we can't do memory accounting.
             bool old_profiling_memory = profiling_memory;
             profiling_memory = false;
-            IRMutator::visit(op);
+            body = mutate(body);
             profiling_memory = old_profiling_memory;
-
-            Stmt for_loop = stmt;
-            const For *f = for_loop.as<For>();
-            internal_assert(f);
 
             // Get the profiler state pointer from scratch inside the
             // kernel. There will be a separate copy of the state on
             // the DSP that the host side will periodically query.
-            Stmt body = f->body;
             Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
             body = substitute("profiler_state", Variable::make(Handle(), "hvx_profiler_state"), body);
             body = LetStmt::make("hvx_profiler_state", get_state, body);
-            stmt = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, body);
-
         } else if (op->device_api == DeviceAPI::None ||
                    op->device_api == DeviceAPI::Host) {
-            IRMutator::visit(op);
+            body = mutate(body);
         } else {
-            stmt = op;
+            body = op->body;
+        }
+
+        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+
+        if (update_active_threads) {
+            stmt = Block::make({decr_active_threads, stmt, incr_active_threads});
         }
     }
 };
@@ -270,6 +294,15 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
                                            {profiler_pipeline_state, func_stack_peak_buf}, Call::Extern));
         s = Block::make(update_stack, s);
     }
+
+    Expr profiler_state = Variable::make(Handle(), "profiler_state");
+    Stmt incr_active_threads =
+        Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
+                                  {profiler_state}, Call::Extern));
+    Stmt decr_active_threads =
+        Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
+                                  {profiler_state}, Call::Extern));
+    s = Block::make({incr_active_threads, s, decr_active_threads});
 
     s = LetStmt::make("profiler_pipeline_state", get_pipeline_state, s);
     s = LetStmt::make("profiler_state", get_state, s);
