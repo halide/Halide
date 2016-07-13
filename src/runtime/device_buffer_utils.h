@@ -21,10 +21,10 @@ namespace Halide { namespace Runtime { namespace Internal {
 // all, so the strides could be in any order.
 //
 // We solve it by representing a copy job we need to perform as a
-// device_copy struct. It describes a 4D array of copies to
-// perform. Initially it describes copying over a single pixel at a
-// time. We then try to discover contiguous groups of copies that can
-// be coalesced into a single larger copy.
+// device_copy struct. It describes a multi-dimensional array of
+// copies to perform. Initially it describes copying over a single
+// pixel at a time. We then try to discover contiguous groups of
+// copies that can be coalesced into a single larger copy.
 
 // The struct that describes a host <-> dev copy to perform.
 #define MAX_COPY_DIMS 16
@@ -37,26 +37,26 @@ struct device_copy {
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
 
-    inline void copy_memory(void *user_context) const {
+    void copy_memory_helper(int d, int64_t off) const {
+        // Skip size-1 dimensions
+        while (extent[d] == 1 && d) d--;
+
+        if (d == 0) {
+            const void *from = (void *)(src + off);
+            void *to = (void *)(dst + off);
+            memcpy(to, from, chunk_size);
+        } else {
+            for (uint64_t i = 0; i < extent[d]; i++) {
+                copy_memory_helper(d - 1, off);
+                off += i * stride_bytes[d - 1];
+            }
+        }
+    }
+
+    void copy_memory(void *user_context) const {
         // If this is a zero copy buffer, these pointers will be the same.
         if (src != dst) {
-            // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-            // in case negative strides.
-            for (int w = 0; w < (int)extent[3]; w++) {
-                for (int z = 0; z < (int)extent[2]; z++) {
-                    for (int y = 0; y < (int)extent[1]; y++) {
-                        for (int x = 0; x < (int)extent[0]; x++) {
-                            uint64_t off = (x * stride_bytes[0] +
-                                            y * stride_bytes[1] +
-                                            z * stride_bytes[2] +
-                                            w * stride_bytes[3]);
-                            const void *from = (void *)(src + off);
-                            void *to = (void *)(dst + off);
-                            memcpy(to, from, chunk_size);
-                        }
-                    }
-                }
-            }
+            copy_memory_helper(MAX_COPY_DIMS-1, 0);
         } else {
             debug(user_context) << "device_copy::copy_memory: no copy needed as pointers are the same.\n";
         }

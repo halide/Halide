@@ -799,17 +799,17 @@ WEAK int halide_cuda_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_cuda_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+WEAK int halide_cuda_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_malloc(user_context, buf, &cuda_device_interface);
 }
 
-WEAK int halide_cuda_device_and_host_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_cuda_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_free(user_context, buf, &cuda_device_interface);
 }
 
-WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, uintptr_t device_ptr) {
-    halide_assert(user_context, buf->dev == 0);
-    if (buf->dev != 0) {
+WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uintptr_t device_ptr) {
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
         return -2;
     }
     buf->device = device_ptr;

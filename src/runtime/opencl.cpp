@@ -1042,17 +1042,17 @@ WEAK int halide_opencl_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_opencl_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opencl_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_malloc(user_context, buf, &opencl_device_interface);
 }
 
-WEAK int halide_opencl_device_and_host_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opencl_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_free(user_context, buf, &opencl_device_interface);
 }
 
-WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, uintptr_t mem) {
+WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uintptr_t mem) {
     halide_assert(user_context, buf->device == 0);
-    if (buf->dev != 0) {
+    if (buf->device != 0) {
         return -2;
     }
     buf->device = mem;

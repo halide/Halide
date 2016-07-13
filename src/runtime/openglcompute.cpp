@@ -654,15 +654,15 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
    return 0;
 }
 
-WEAK int halide_openglcompute_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+WEAK int halide_openglcompute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_malloc(user_context, buf, &openglcompute_device_interface);
 }
 
-WEAK int halide_openglcompute_device_and_host_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_openglcompute_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_free(user_context, buf, &openglcompute_device_interface);
 }
 
-WEAK const struct halide_device_interface *halide_openglcompute_device_interface() {
+WEAK const struct halide_device_interface_t *halide_openglcompute_device_interface() {
     return &openglcompute_device_interface;
 }
 

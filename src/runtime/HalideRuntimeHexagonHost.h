@@ -41,8 +41,8 @@ extern void *halide_hexagon_detach_device_handle(void *user_context, struct hali
 
 /** Return the underlying device handle for a buffer_t. If there is
  * no device memory (dev field is NULL), this returns 0. */
-extern void *halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf);
-extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf);
+extern void *halide_hexagon_get_device_handle(void *user_context, struct halide_buffer_t *buf);
+extern uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_buffer_t *buf);
 
 /** Power HVX on and off. Calling a Halide pipeline will do this
  * automatically on each pipeline invocation; however, it costs a
@@ -55,7 +55,6 @@ extern int halide_hexagon_power_hvx_on(void *user_context);
 extern int halide_hexagon_power_hvx_off(void *user_context);
 extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
 // @}
->>>>>>> master
 
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */

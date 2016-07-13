@@ -235,7 +235,6 @@ struct halide_type_t {
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
->>>>>>> master
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */

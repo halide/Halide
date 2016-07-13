@@ -149,20 +149,20 @@ const struct halide_device_interface_t *halide_opengl_device_interface() {
     return nullptr;
 }
 
-int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t tex) {
+int halide_opengl_wrap_texture(void *user_context, struct halide_buffer_t *buf, uintptr_t tex) {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
-    int (*fn)(void *user_context, struct buffer_t *buf, uint ptr_ttex);
+    int (*fn)(void *user_context, struct halide_buffer_t *buf, uint ptr_ttex);
     if (lookup_runtime_routine("halide_opengl_wrap_texture", target, fn)) {
         return (*fn)(user_context, buf, tex);
     }
     return 0;
 }
 
-uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf) {
+uintptr_t halide_opengl_detach_texture(void *user_context, struct halide_buffer_t *buf) {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
-    uintptr_t (*fn)(void *user_context, struct buffer_t *buf);
+    uintptr_t (*fn)(void *user_context, struct halide_buffer_t *buf);
     if (lookup_runtime_routine("halide_opengl_detach_texture", target, fn)) {
         return (*fn)(user_context, buf);
     }
@@ -170,7 +170,7 @@ uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf)
 }
 
 
-const struct halide_device_interface *halide_openglcompute_device_interface() {
+const struct halide_device_interface_t *halide_openglcompute_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::OpenGLCompute);
     struct halide_device_interface_t *(*fn)();

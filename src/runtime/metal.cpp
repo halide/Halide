@@ -374,7 +374,8 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t* buf) {
 
 
 WEAK int halide_metal_device_free(void *user_context, halide_buffer_t* buf) {
-    debug(user_context) << "halide_metal_device_free called on buf " << buf << " dev is " << buf->dev << "\n";
+    debug(user_context) << "halide_metal_device_free called on buf "
+                        << buf << " device is " << buf->device << "\n";
     if (buf->device == 0) {
         return 0;
     }
@@ -559,9 +560,12 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t* buffer
     did_modify_range_if_supported(metal_buffer, total_extent);
     halide_metal_device_sync_internal(metal_context.queue, buffer);
 
-    halide_assert(user_context, buffer->host && buffer->device)
+    halide_assert(user_context, buffer->host && buffer->device);
 
-    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+    debug(user_context) << "halide_metal_copy_to_device"
+                        << " device = " << (void *)buffer->device
+                        << " metal_buffer = " << metal_buffer
+                        << " host = " << buffer->host << "\n";
 
     device_copy c = make_host_to_device_copy(buffer);
     c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
@@ -736,8 +740,8 @@ WEAK int halide_metal_device_and_host_malloc(void *user_context, struct halide_b
     if (result == 0) {
         mtl_buffer *metal_buffer = (mtl_buffer *)(buffer->device);
         buffer->host = (uint8_t *)buffer_contents(metal_buffer);
-        debug(user_context) << "halide_metal_device_and_host_malloc "
-                            << "device = " << (void*)buffer->dev
+        debug(user_context) << "halide_metal_device_and_host_malloc"
+                            << " device = " << (void*)buffer->device
                             << " metal_buffer = " << metal_buffer
                             << " host = " << buffer->host << "\n";
     }

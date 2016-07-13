@@ -26,12 +26,11 @@ extern WEAK void halide_delete_device_wrapper(uint64_t dev_field);
 extern WEAK uint64_t halide_get_device_handle(uint64_t dev_field);
 extern WEAK const struct halide_device_interface *halide_get_device_interface(uint64_t dev_field);
 
-extern WEAK int halide_default_device_and_host_malloc(void *user_context, struct buffer_t *buf,
-                                                      const struct halide_device_interface *device_interface);
-extern WEAK int halide_default_device_and_host_free(void *user_context, struct buffer_t *buf,
-                                                    const struct halide_device_interface *device_interface);
+extern WEAK int halide_default_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,
+                                                      const struct halide_device_interface_t *device_interface);
+extern WEAK int halide_default_device_and_host_free(void *user_context, struct halide_buffer_t *buf,
+                                                    const struct halide_device_interface_t *device_interface);
 
->>>>>>> master
 }
 
 #endif // HALIDE_DEVICE_INTERFACE_H

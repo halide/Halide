@@ -609,7 +609,7 @@ WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_b
     return handle->size;
 }
 
-WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context) << "halide_hexagon_device_and_host_malloc called.\n";
     int result = halide_hexagon_device_malloc(user_context, buf);
     if (result == 0) {
@@ -618,7 +618,7 @@ WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct buffer
     return result;
 }
 
-WEAK int halide_hexagon_device_and_host_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_hexagon_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context) << "halide_hexagon_device_and_host_free called.\n";
     halide_hexagon_device_free(user_context, buf);
     buf->host = NULL;
@@ -691,8 +691,7 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
     halide_hexagon_power_hvx_off(user_context);
 }
 
-WEAK const halide_device_interface *halide_hexagon_device_interface() {
->>>>>>> master
+WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
 

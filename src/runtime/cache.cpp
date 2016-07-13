@@ -292,7 +292,7 @@ WEAK void prune_cache() {
 
             // Decrease cache used amount.
             for (uint32_t i = 0; i < prune_candidate->tuple_count; i++) {
-                current_cache_size -= prune_candidate->buf[i]->size_in_bytes();
+                current_cache_size -= prune_candidate->buf[i].size_in_bytes();
             }
 
             // Deallocate the entry.
@@ -474,10 +474,6 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
         for (int32_t i = 0; i < tuple_count; i++) {
             halide_buffer_t *buf = tuple_buffers[i];
             added_size += buf->size_in_bytes();
-=======
-            buffer_t *buf = tuple_buffers[i];
-            added_size += buf_size(buf);
->>>>>>> master
         }
     }
     current_cache_size += added_size;

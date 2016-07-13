@@ -2004,11 +2004,11 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     return 0;
 }
 
-WEAK int halide_opengl_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opengl_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_malloc(user_context, buf, &opengl_device_interface);
 }
 
-WEAK int halide_opengl_device_and_host_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opengl_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_free(user_context, buf, &opengl_device_interface);
 }
 
@@ -2092,7 +2092,7 @@ WEAK uintptr_t halide_opengl_detach_texture(void *user_context, halide_buffer_t 
         return 0;
     }
 
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
+    halide_assert(user_context, buf->device_interface == &opengl_device_interface);
     uint64_t handle = buf->device;
     buf->device = 0;
     buf->device_interface->release_module();
