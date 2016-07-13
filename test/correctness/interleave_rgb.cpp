@@ -16,7 +16,7 @@ bool test_interleave() {
     Target target = get_jit_target_from_environment();
     input.compute_root();
     interleaved.reorder(c, x, y).bound(c, 0, 3);
-    interleaved.output_buffer().set_stride(0, 3).set_stride(2, 1).set_extent(2, 3);
+    interleaved.output_buffer().dim(0).set_stride(3).dim(2).set_stride(1).set_extent(3);
 
     if (target.has_gpu_feature()) {
         interleaved.gpu_tile(x, y, 16, 16);
@@ -25,10 +25,10 @@ bool test_interleave() {
     } else {
         interleaved.vectorize(x, target.natural_vector_size<uint8_t>()).unroll(c);
     }
-    Buffer buff(type_of<T>(), 256, 128, 3);
-    buff.raw_buffer()->stride[0] = 3;
-    buff.raw_buffer()->stride[1] = 3 * buff.extent(0);
-    buff.raw_buffer()->stride[2] = 1;
+    Buffer buff(type_of<T>(), {256, 128, 3});
+    buff.raw_buffer()->dim[0].stride = 3;
+    buff.raw_buffer()->dim[1].stride = 3 * buff.dim(0).extent();
+    buff.raw_buffer()->dim[2].stride = 1;
 
     Realization r({buff});
     interleaved.realize(r, target);
