@@ -1448,7 +1448,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
         for (int i = 1; i < op->args[1].type().lanes(); i++) {
             lane = ConstantInt::get(i32_t, i);
-            any_true = builder->CreateAnd(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
+            any_true = builder->CreateOr(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
         }
 
         BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
