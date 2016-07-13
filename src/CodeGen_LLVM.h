@@ -495,7 +495,10 @@ private:
 
     llvm::Function *add_argv_wrapper(const std::string &name);
 
-    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred);
+    llvm::Value *codegen_predicated_dense_vector_load(const Load *load, llvm::Value *vpred);
+
+    virtual void codegen_predicated_vector_load(const Call *op);
+    virtual void codegen_predicated_vector_store(const Call *op);
 };
 
 }
