@@ -79,24 +79,27 @@ typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
-/** These are allocated statically inside the runtime, hence the fixed
- * size. They must be initialized with zero. The first time
- * halide_mutex_lock is called, the lock must be initialized in a
- * thread safe manner. This incurs a small overhead for a once
- * mechanism, but makes the lock reliably easy to setup and use
- * without depending on e.g. C++ constructor logic.
+/** Cross-platform mutex. These are allocated statically inside the
+ * runtime, hence the fixed size. They must be initialized with
+ * zero. The first time halide_mutex_lock is called, the lock must be
+ * initialized in a thread safe manner. This incurs a small overhead
+ * for a once mechanism, but makes the lock reliably easy to setup and
+ * use without depending on e.g. C++ constructor logic.
  */
 struct halide_mutex {
     uint64_t _private[8];
 };
 
-/** A basic set of mutex functions, which call platform specific code
- * for mutual exclusion.
+/** A basic set of mutex and condition variable functions, which call
+ * platform specific code for mutual exclusion. Equivalent to posix
+ * calls. Mutexes should initially be set to zero'd memory. Any
+ * resources required are created on first lock. Calling destroy
+ * re-zeros the memory.
  */
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
-extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
+extern void halide_mutex_destroy(struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -112,8 +115,8 @@ extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
 //@{
 typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
 extern int halide_do_par_for(void *user_context,
-			     halide_task_t task,
-			     int min, int size, uint8_t *closure);
+                             halide_task_t task,
+                             int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
 //@}
 
@@ -131,13 +134,19 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                           uint8_t *closure);
 //@}
 
-/** Spawn a thread, independent of halide's thread pool. */
-extern void halide_spawn_thread(void *user_context, void (*f)(void *), void *closure);
+struct halide_thread;
 
-/** Set the number of threads used by Halide's thread pool. No effect
- * on OS X or iOS. If changed after the first use of a parallel Halide
- * routine, shuts down and then reinitializes the thread pool. */
-extern void halide_set_num_threads(int n);
+/** Spawn a thread. Returns a handle to the thread for the purposes of
+ * joining it. The thread must be joined in order to clean up any
+ * resources associated with it. */
+extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure);
+
+/** Join a thread. */
+extern void halide_join_thread(struct halide_thread *);
+
+/** Set the number of threads used by Halide's thread pool. Returns
+ * the old number. No effect on OS X or iOS. */
+extern int halide_set_num_threads(int n);
 
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and
@@ -224,6 +233,9 @@ struct halide_type_t {
         : code(code), bits(bits), lanes(lanes) {
     }
 
+    /** Default constructor is required e.g. to declare halide_trace_event
+     * instances. */
+>>>>>>> master
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
@@ -717,7 +729,11 @@ typedef enum halide_target_feature_t {
  *
  * The default implementation simply calls halide_default_can_use_target_features.
  */
+// @{
 extern int halide_can_use_target_features(uint64_t features);
+typedef int (*halide_can_use_target_features_t)(uint64_t);
+extern halide_can_use_target_features_t halide_set_custom_can_use_target_features(halide_can_use_target_features_t);
+// @}
 
 /**
  * This is the default implementation of halide_can_use_target_features; it is provided
@@ -1094,8 +1110,11 @@ struct halide_profiler_func_stats {
     /** The total memory allocation of this Func. */
     uint64_t memory_total;
 
-    /** The peak stack allocation of this Func threads. */
+    /** The peak stack allocation of this Func's threads. */
     uint64_t stack_peak;
+
+    /** The average number of thread pool worker threads active while computing this Func. */
+    uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The name of this Func. A global constant string. */
     const char *name;
@@ -1118,6 +1137,10 @@ struct halide_profiler_pipeline_stats {
 
     /** The total memory allocation of funcs in this pipeline. */
     uint64_t memory_total;
+
+    /** The average number of thread pool worker threads doing useful
+     * work while computing this pipeline. */
+    uint64_t active_threads_numerator, active_threads_denominator;
 
     /** The name of this pipeline. A global constant string. */
     const char *name;
@@ -1152,9 +1175,6 @@ struct halide_profiler_state {
      * reordering the linked list of pipeline stats). */
     struct halide_mutex lock;
 
-    /** A linked list of stats gathered for each pipeline. */
-    struct halide_profiler_pipeline_stats *pipelines;
-
     /** The amount of time the profiler thread sleeps between samples
      * in milliseconds. Defaults to 1 */
     int sleep_time;
@@ -1165,6 +1185,17 @@ struct halide_profiler_state {
     /** The id of the current running Func. Set by the pipeline, read
      * periodically by the profiler thread. */
     int current_func;
+
+    /** The number of threads currently doing work. */
+    int active_threads;
+
+    /** A linked list of stats gathered for each pipeline. */
+    struct halide_profiler_pipeline_stats *pipelines;
+
+    /** Retrieve remote profiler state. Used so that the sampling
+     * profiler can follow along with execution that occurs elsewhere,
+     * e.g. on a DSP. If null, it reads from the int above instead. */
+    void (*get_remote_profiler_state)(int *func, int *active_workers);
 
     /** Is the profiler thread running. */
     bool started;

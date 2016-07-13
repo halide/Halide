@@ -104,7 +104,7 @@ private:
 
             // Load a dense vector covering all of the addresses in the load.
             Expr dense_base = simplify(ramp->base - shift);
-            Expr dense_index = Ramp::make(dense_base, 1, (lanes - 1)*stride + 1 + shift);
+            Expr dense_index = Ramp::make(dense_base, 1, lanes*stride);
             Expr dense = make_load(op, dense_index);
 
             // Shuffle the dense load.

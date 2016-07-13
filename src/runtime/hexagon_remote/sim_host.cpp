@@ -148,6 +148,9 @@ int read_memory(void *dest, int src, int size) {
     return 0;
 }
 
+// A frequently-updated local copy of the remote profiler state.
+int profiler_current_func;
+
 int send_message(int msg, const std::vector<int> &arguments) {
     assert(sim);
 
@@ -180,6 +183,23 @@ int send_message(int msg, const std::vector<int> &arguments) {
         return -1;
     }
 
+    // Get the remote address of the current func. There's a remote
+    // pointer to it, so we need to walk through a few levels of
+    // indirection.
+    HEX_4u_t remote_profiler_current_func_addr_addr = 0;
+    HEX_4u_t remote_profiler_current_func_addr = 0;
+    status = sim->ReadSymbolValue("profiler_current_func_addr",
+                                  &remote_profiler_current_func_addr_addr);
+    if (status != HEX_STAT_SUCCESS) {
+        printf("HexagonWrapper::ReadSymbolValue(profiler_current_func_addr) failed: %d\n", status);
+        return -1;
+    }
+    if (read_memory(&remote_profiler_current_func_addr,
+                    remote_profiler_current_func_addr_addr,
+                    sizeof(HEX_4u_t))) {
+        return -1;
+    }
+
     HEXAPI_CoreState state;
     if (msg == Message::Break) {
         // If we're trying to end the remote simulation, just run
@@ -208,6 +228,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
                 }
                 return ret;
             }
+
+            // Grab the remote profiler state in case we're profiling
+            read_memory(&profiler_current_func, remote_profiler_current_func_addr, sizeof(int));
         } while (state == HEX_CORE_SUCCESS);
         printf("HexagonWrapper::StepTime failed: %d\n", state);
         return -1;
@@ -353,6 +376,11 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+    if (!sim) {
+        // Due to static destructor ordering issues, the simulator
+        // might have been freed before this gets called.
+        return 0;
+    }
     // Print out sim statistics if desired.
     if (getenv("HL_HEXAGON_SIM_STATS")) {
         char Buf[4096];
@@ -365,6 +393,38 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
         }
     }
     return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), codeLen});
+}
+
+void halide_hexagon_host_malloc_init() {
+}
+
+void halide_hexagon_host_malloc_deinit() {
+}
+
+void *halide_hexagon_host_malloc(size_t x) {
+    // Allocate enough space for aligning the pointer we return.
+    const size_t alignment = 4096;
+    void *orig = malloc(x + alignment);
+    if (orig == NULL) {
+        return NULL;
+    }
+
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+
+void halide_hexagon_host_free(void *ptr) {
+    free(((void**)ptr)[-1]);
+}
+
+int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    // The stepping code periodically grabs the remote value of
+    // current_func for us.
+    *func = profiler_current_func;
+    *threads = 1;
+    return 0;
 }
 
 }  // extern "C"

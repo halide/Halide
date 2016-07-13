@@ -238,17 +238,17 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
-    {"hvx_64", Target::HVX_64},
-    {"hvx_128", Target::HVX_128},
-    {"hvx_v62", Target::HVX_v62},
     {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
     {"mingw", Target::MinGW},
-    {"large_buffers", Target::LargeBuffers},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
+    {"large_buffers", Target::LargeBuffers},
+    {"hvx_64", Target::HVX_64},
+    {"hvx_128", Target::HVX_128},
+    {"hvx_v62", Target::HVX_v62},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -494,6 +494,8 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
+    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128) ||
+                                        has_feature(Target::HVX_v62);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }

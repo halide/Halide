@@ -23,8 +23,6 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
-  android_ion
-  android_mman
   android_opengl_context
   android_tempfile
   arm_cpu_features
@@ -34,7 +32,6 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
-  fake_ion
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -43,7 +40,6 @@ set(RUNTIME_CPP
   ios_io
   linux_clock
   linux_host_cpu_count
-  linux_mman
   linux_opengl_context
   matlab
   metadata
@@ -71,7 +67,7 @@ set(RUNTIME_CPP
   posix_io
   posix_print
   posix_tempfile
-  posix_thread_pool
+  posix_threads
   powerpc_cpu_features
   profiler
   profiler_inlined
@@ -80,6 +76,7 @@ set(RUNTIME_CPP
   renderscript
   runtime_api
   ssp
+  thread_pool
   to_string
   tracing
   windows_clock
@@ -88,7 +85,7 @@ set(RUNTIME_CPP
   windows_io
   windows_opencl
   windows_tempfile
-  windows_thread_pool
+  windows_threads
   write_debug_image
   x86_cpu_features
 )

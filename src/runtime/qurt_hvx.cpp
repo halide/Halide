@@ -1,7 +1,7 @@
 #include "runtime_internal.h"
 #include "HalideRuntimeQurt.h"
 #include "printer.h"
-#include "qurt.h"
+#include "mini_qurt.h"
 
 using namespace Halide::Runtime::Internal::Qurt;
 

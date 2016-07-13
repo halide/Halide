@@ -1,4 +1,5 @@
 #include "HalideRuntimeRenderscript.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
@@ -801,6 +802,9 @@ WEAK int halide_renderscript_device_malloc(void *user_context, halide_buffer_t *
         return ctx.error;
     }
 
+    size_t size = buf->size_in_bytes();
+    halide_assert(user_context, size != 0);
+
     if (buf->device) {
         // This buffer already has a device allocation
         debug(user_context) << "renderscript_device_malloc: This buffer already has a "
@@ -1145,6 +1149,14 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
     return 0;
 }
 
+WEAK int halide_renderscript_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &renderscript_device_interface);
+}
+
+WEAK int halide_renderscript_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &renderscript_device_interface);
+}
+
 WEAK const struct halide_device_interface_t *halide_renderscript_device_interface() {
     return &renderscript_device_interface;
 }
@@ -1178,12 +1190,18 @@ WEAK const char *get_error_name(RSError error) {
 }
 
 WEAK halide_device_interface_t renderscript_device_interface = {
-    halide_use_jit_module,  halide_release_jit_module,
+    halide_use_jit_module,
+    halide_release_jit_module,
     halide_renderscript_device_malloc,
-    halide_renderscript_device_free,  halide_renderscript_device_sync,
+    halide_renderscript_device_free,
+    halide_renderscript_device_sync,
     halide_renderscript_device_release,
-    halide_renderscript_copy_to_host, halide_renderscript_copy_to_device,
+    halide_renderscript_copy_to_host,
+    halide_renderscript_copy_to_device,
+    halide_renderscript_device_and_host_malloc,
+    halide_renderscript_device_and_host_free,
 };
+
 }
 }
 }

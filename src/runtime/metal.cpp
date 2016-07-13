@@ -1,9 +1,9 @@
 #include "HalideRuntimeMetal.h"
 #include "scoped_spin_lock.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
-#include "cuda_opencl_shared.h"
 #include "objc_support.h"
 
 #include "metal_objc_platform_dependent.h"
@@ -321,6 +321,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t* buf) {
         << ", buf: " << buf << ")\n";
 
     size_t size = buf->size_in_bytes();
+    halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
         return 0;
@@ -373,6 +374,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t* buf) {
 
 
 WEAK int halide_metal_device_free(void *user_context, halide_buffer_t* buf) {
+    debug(user_context) << "halide_metal_device_free called on buf " << buf << " dev is " << buf->dev << "\n";
     if (buf->device == 0) {
         return 0;
     }
@@ -549,6 +551,8 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t* buffer
 
     mtl_buffer *metal_buffer = (mtl_buffer *)buffer->device;
     size_t total_size = buffer->size_in_bytes();
+    halide_assert(user_context, total_size != 0);
+
     NSRange total_extent;
     total_extent.location = 0;
     total_extent.length = total_size;
@@ -557,15 +561,12 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t* buffer
 
     halide_assert(user_context, buffer->host && buffer->device)
 
+    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+
     device_copy c = make_host_to_device_copy(buffer);
-    uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.dst);
+    c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
 
-    halide_assert(user_context, buffer->dimensions <= MAX_COPY_DIMS);
-    if (buffer->dimensions > MAX_COPY_DIMS) {
-        return -1;
-    }
-
-    do_multidimensional_copy(c, device_ptr, (uint8_t *)c.src, buffer->dimensions);
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -594,9 +595,9 @@ WEAK int halide_metal_copy_to_host(void *user_context, halide_buffer_t* buffer) 
     }
 
     device_copy c = make_device_to_host_copy(buffer);
-    uint8_t *device_ptr = (uint8_t *)buffer_contents((mtl_buffer *)c.src);
+    c.src = (uint64_t)buffer_contents((mtl_buffer *)c.src);
 
-    do_multidimensional_copy(c, (uint8_t *)(c.dst), device_ptr, buffer->dimensions);
+    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -729,6 +730,27 @@ WEAK int halide_metal_run(void *user_context,
     return 0;
 }
 
+WEAK int halide_metal_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_and_host_malloc called.\n";
+    int result = halide_metal_device_malloc(user_context, buffer);
+    if (result == 0) {
+        mtl_buffer *metal_buffer = (mtl_buffer *)(buffer->device);
+        buffer->host = (uint8_t *)buffer_contents(metal_buffer);
+        debug(user_context) << "halide_metal_device_and_host_malloc "
+                            << "device = " << (void*)buffer->dev
+                            << " metal_buffer = " << metal_buffer
+                            << " host = " << buffer->host << "\n";
+    }
+    return result;
+}
+
+WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
+    debug(user_context) << "halide_metal_device_and_host_free called.\n";
+    halide_metal_device_free(user_context, buffer);
+    buffer->host = NULL;
+    return 0;
+}
+
 WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uintptr_t buffer) {
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
@@ -786,6 +808,8 @@ WEAK halide_device_interface_t metal_device_interface = {
     halide_metal_device_release,
     halide_metal_copy_to_host,
     halide_metal_copy_to_device,
+    halide_metal_device_and_host_malloc,
+    halide_metal_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal

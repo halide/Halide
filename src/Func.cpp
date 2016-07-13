@@ -131,7 +131,7 @@ vector<RVar> Func::rvars(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    const std::vector<ReductionVariable> rvars = func.schedule().rvars();
+    const std::vector<ReductionVariable> rvars = func.update(idx).schedule().rvars();
     std::vector<RVar> rvs(rvars.size());
     for (size_t i = 0; i < rvars.size(); i++) {
         rvs[i] = RVar(rvars[i].var);
@@ -1616,6 +1616,15 @@ Func &Func::unroll(VarOrRVar var, int factor, TailStrategy tail) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
+    user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
+    user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
+    user_assert(Int(32).can_represent(extent.type())) << "Can't represent extent bound in int32\n";
+
+    if (min.defined()) {
+        min = cast<int32_t>(min);
+    }
+    extent = cast<int32_t>(extent);
+
     invalidate_cache();
     bool found = false;
     for (size_t i = 0; i < func.args().size(); i++) {
@@ -1777,6 +1786,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 }
 
 Func &Func::hexagon(VarOrRVar x) {
+    invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).hexagon(x);
     return *this;
 }
