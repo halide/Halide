@@ -736,9 +736,16 @@ class VectorSubs : public IRMutator {
 
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
-        body = RewriteAccessToVectorAlloc(var, op->name, lanes).mutate(body);
+        string v = unique_name('v');
+        body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
 
+        scope.push(v, Ramp::make(0, 1, lanes));
         body = mutate(body);
+        scope.pop(v);
+
+        // Replace the widened 'v' with the actual ramp
+        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
+        body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
 
         stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
