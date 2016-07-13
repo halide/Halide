@@ -2074,20 +2074,15 @@ WEAK uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t 
     uint64_t handle = halide_get_device_handle(buf->dev);
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
-    if (handle == HALIDE_OPENGL_RENDER_TARGET) {
-        const GLuint tex = 0;
-        TextureInfo *texinfo = unlink_texture_info(tex);
-        if (!texinfo) {
-            error(user_context) << "Internal error: texture " << tex << " not found.";
-            return -3;
-        }
-        halide_assert(user_context, !texinfo->halide_allocated);
-        free(texinfo);
-        // client_bound always return 0 here.
-        return 0;
-    } else {
-        return (uintptr_t)handle;
+    GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : handle;
+    TextureInfo *texinfo = unlink_texture_info(tex);
+    if (!texinfo) {
+        error(user_context) << "Internal error: texture " << tex << " not found.";
+        return -3;
     }
+    halide_assert(user_context, !texinfo->halide_allocated);
+    free(texinfo);
+    return (uintptr_t) tex;
 }
 
 WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *buf) {

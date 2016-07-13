@@ -24,6 +24,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         -DHALIDE_SHARED_LIBRARY="${HALIDE_SHARED_LIBRARY}" \
         -DWITH_APPS=ON \
         -DWITH_TESTS=ON \
+        -DWITH_TEST_OPENGL=OFF \
         -DWITH_TUTORIALS=OFF \
         -DWITH_DOCS=ON \
         -DCMAKE_BUILD_TYPE=Release \
