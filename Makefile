@@ -207,8 +207,7 @@ endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
 endif
-# Someone with a linux box with opengl installed please fix the line below
-OPENGL_LD_FLAGS ?= -lopengl
+OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
 endif
 
