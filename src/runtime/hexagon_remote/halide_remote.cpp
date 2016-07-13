@@ -52,7 +52,7 @@ void halide_print(void *user_context, const char *str) {
 void halide_error(void *user_context, const char *str) {
     if (!str) {
         log_printf("Unknown error\n");
-    } else if (*str && str[strlen(str) - 1] != '\n') {
+    } else if (*str == '\0' || str[strlen(str) - 1] != '\n') {
         log_printf("Error: %s\n", str);
     } else {
         log_printf("Error: %s", str);
