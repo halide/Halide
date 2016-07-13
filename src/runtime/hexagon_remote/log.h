@@ -42,16 +42,21 @@ public:
         qurt_mutex_unlock(&lock);
     }
 
-    int read(char *out, int out_size) {
+    int read(char *out, int out_size, char delim = 0) {
         qurt_mutex_lock(&lock);
         if (out_size > write_cursor - read_cursor) {
             out_size = write_cursor - read_cursor;
         }
-        for (int i = 0; i < out_size; i++, read_cursor++) {
-            out[i] = buffer[read_cursor & (size - 1)];
+        int i = 0;
+        while (i < out_size) {
+            char out_i = buffer[read_cursor++ & (size - 1)];
+            out[i++] = out_i;
+            if (out_i == delim) {
+                break;
+            }
         }
         qurt_mutex_unlock(&lock);
-        return out_size;
+        return i;
     }
 };
 
