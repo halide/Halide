@@ -48,7 +48,11 @@ void halide_print(void *user_context, const char *str) {
 }
 
 void halide_error(void *user_context, const char *str) {
-    log_printf("Error: %s\n", str);
+    if (str[strlen(str) - 1] != '\n') {
+        log_printf("Error: %s\n", str);
+    } else {
+        log_printf("Error: %s", str);
+    }
 }
 
 namespace {
