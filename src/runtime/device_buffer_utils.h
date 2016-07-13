@@ -48,7 +48,7 @@ struct device_copy {
         } else {
             for (uint64_t i = 0; i < extent[d]; i++) {
                 copy_memory_helper(d - 1, off);
-                off += i * stride_bytes[d - 1];
+                off += stride_bytes[d - 1];
             }
         }
     }

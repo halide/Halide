@@ -824,8 +824,8 @@ WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
 #endif
     else {
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            off += i * c.stride_bytes[d-1];
             int err = do_multidimensional_copy(user_context, ctx, c, off, d-1, d_to_h);
+            off += c.stride_bytes[d-1];
             if (err) {
                 return err;
             }

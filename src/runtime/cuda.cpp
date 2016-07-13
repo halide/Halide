@@ -595,9 +595,10 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c, uint
             return (int)err;
         }
     } else {
+        ssize_t off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            ssize_t off = i * c.stride_bytes[d-1];
             int err = do_multidimensional_copy(user_context, c, dst + off, src + off, d-1, d_to_h);
+            off += c.stride_bytes[d-1];
             if (err) {
                 return err;
             }
