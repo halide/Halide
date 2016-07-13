@@ -242,7 +242,17 @@ class PredicateLoadStore : public IRMutator {
 
     using IRMutator::visit;
 
+    // Only predicate store/load if the vector is of type 32-bit value and has
+    // lane size no less than 4.
+    bool should_predicate_store_load(int bit_size, int lanes) {
+        if ((bit_size != 32) || (lanes < 4)) {
+            return false;
+        }
+        return true;
+    }
+
     void visit(const Load *op) {
+        valid = valid && should_predicate_store_load(op->type.bits(), op->type.lanes());
         if (!valid) {
             expr = op;
             return;
@@ -264,6 +274,7 @@ class PredicateLoadStore : public IRMutator {
     }
 
     void visit(const Store *op) {
+        valid = valid && should_predicate_store_load(op->value.type().bits(), op->value.type().lanes());
         if (!valid) {
             stmt = op;
             return;
