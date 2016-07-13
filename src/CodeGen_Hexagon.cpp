@@ -944,10 +944,10 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
-                int pass_index = lut_passes*j + k;
+                int pass_index = lut_passes * j + k;
                 Value *mask[2] = {
-                    ConstantInt::get(i32_t, 2*pass_index + 0),
-                    ConstantInt::get(i32_t, 2*pass_index + 1),
+                    ConstantInt::get(i32_t, 2 * pass_index + 0),
+                    ConstantInt::get(i32_t, 2 * pass_index + 1),
                 };
                 if (result_i == nullptr) {
                     // The first native LUT, use vlut.
@@ -955,7 +955,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
                                                 {idx_i, lut_slices[j], mask[0]});
                     result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
                                                 {result_i, idx_i, lut_slices[j], mask[1]});
-                } else if (max_index >= pass_index*native_lut_elements/lut_passes) {
+                } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
                     for (int m = 0; m < 2; m++) {
