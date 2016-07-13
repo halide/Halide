@@ -234,6 +234,21 @@ struct GetVarEstimates : public IRVisitor {
     }
 };
 
+class SubtituteVarEstimates: public IRMutator {
+public:
+    using IRMutator::mutate;
+    using IRMutator::visit;
+
+    void visit(const Variable *var) {
+        if (var->param.defined() && !var->param.is_buffer() &&
+            var->param.has_estimate()) {
+            expr = var->param.get_estimate();
+        } else {
+            expr = var;
+        }
+    }
+};
+
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, int stage_num,
                                      const DimBounds &bounds,
@@ -260,18 +275,20 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
 
-            Interval simple_bounds =
-                    Interval(simplify(curr_bounds.at(dims[d].var).min),
-                             simplify(curr_bounds.at(dims[d].var).max));
+            Expr lower = SubtituteVarEstimates().mutate(curr_bounds.at(dims[d].var).min);
+            Expr upper = SubtituteVarEstimates().mutate(curr_bounds.at(dims[d].var).max);
+            Interval simple_bounds = Interval(simplify(lower), simplify(upper));
             curr_scope.push(var_name, simple_bounds);
         }
 
         // Add parameter estimates to the current scope.
+        /*
         GetVarEstimates collect_estimates;
         def.accept(&collect_estimates);
         for (auto &est : collect_estimates.var_estimates) {
             curr_scope.push(est.first, Interval(est.second, est.second));
         }
+        */
 
         // If the function has an extern definition there is no visibility into
         // the expression defining the function. So the regions required will be
@@ -293,8 +310,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     merge_and_queue_regions(f_queue, regions, prod_reg, prods,
                                             env, values_computed, s.func.name());
                 } else if (arg.is_expr()) {
+                    Expr subs_arg = SubtituteVarEstimates().mutate(arg.expr);
                     map<string, Box> arg_regions =
-                            boxes_required(arg.expr, curr_scope, func_val_bounds);
+                            boxes_required(subs_arg, curr_scope, func_val_bounds);
 
                     merge_and_queue_regions(f_queue, regions, arg_regions, prods,
                                             env, values_computed, s.func.name());
@@ -315,13 +333,15 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         }
 
         for (auto &val : def.values()) {
+            Expr subs_val = SubtituteVarEstimates().mutate(val);
             map<string, Box> curr_regions =
-                    boxes_required(val, curr_scope, func_val_bounds);
+                    boxes_required(subs_val, curr_scope, func_val_bounds);
 
             Box left_reg;
             for (const Expr &arg : def.args()) {
+                Expr subs_arg = SubtituteVarEstimates().mutate(arg);
                 map<string, Box> arg_regions =
-                        boxes_required(arg, curr_scope, func_val_bounds);
+                        boxes_required(subs_arg, curr_scope, func_val_bounds);
 
                 // Merge the regions with the regions found while looking at
                 // the values.
@@ -1249,8 +1269,9 @@ DimBounds Partitioner::get_bounds(const FStage &s) {
     }
 
     for (const ReductionVariable &rvar : def.schedule().rvars()) {
-        bounds[rvar.var] = Interval(simplify(rvar.min),
-                                    simplify(rvar.min + rvar.extent - 1));
+        Expr lower = SubtituteVarEstimates().mutate(rvar.min);
+        Expr upper = SubtituteVarEstimates().mutate(rvar.min + rvar.extent - 1);
+        bounds[rvar.var] = Interval(simplify(lower),simplify(upper));
     }
     return bounds;
 }
@@ -1271,7 +1292,7 @@ Partitioner::get_bounds_from_tile_sizes(const FStage &s,
             int size = tile_sizes.at(var);
             // Check if the bounds allow for tiling with the given tile size
             // i.e., ensure atleast 2 tiles
-            int extent = get_extent(bound);
+            int64_t extent = get_extent(bound);
             if (extent >= 2 * size) {
                 // TODO: Maybe shift this to the center of the pipeline bound
                 bounds[var] = Interval(0, size - 1);
@@ -1323,12 +1344,20 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
 
     DimBounds stg_bounds = get_bounds(g.output);
 
+    GroupAnalysis g_analysis;
+    g_analysis.cost = Cost(unknown, unknown);
+    g_analysis.parallelism = unknown;
+
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         string var = dims[d].var;
         if (g.tile_sizes.find(var) != g.tile_sizes.end()) {
             int size = g.tile_sizes.at(var);
-            int extent = get_extent(stg_bounds.at(var));
-            internal_assert(extent != unknown);
+            int64_t extent = get_extent(stg_bounds.at(var));
+
+            if (extent == unknown) {
+                return g_analysis;
+            }
+
             estimate_tiles *= std::ceil((float)extent / size);
             num_ele_per_tile *= size;
             if (can_parallelize_rvar(var, g.output.func.name(), def)) {
@@ -1364,10 +1393,6 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
             }
         }
     }
-
-    GroupAnalysis g_analysis;
-    g_analysis.cost = Cost(unknown, unknown);
-    g_analysis.parallelism = unknown;
 
     // TODO: remove debug code.
     if (show_analysis) {
