@@ -419,10 +419,11 @@ void halide_hexagon_host_free(void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
-int halide_hexagon_remote_poll_profiler_func(int *func) {
+int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     // The stepping code periodically grabs the remote value of
     // current_func for us.
     *func = profiler_current_func;
+    *threads = 1;
     return 0;
 }
 
