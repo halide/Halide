@@ -461,30 +461,33 @@ private:
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
-            // For these narrowing ops, we have the choice of non-interleaving
-            // instructions (vpack), or instructions which interleave
-            // (vsat). Because we don't know which one we prefer during
-            // pattern matching, we match these for now and replace them with
-            // the instructions that interleave later if it makes sense.
+            // For some of the following narrowing casts, we have the choice of
+            // non-interleaving or interleaving instructions. Because we don't
+            // know which one we prefer during pattern matching, we match the
+            // non-interleaving versions for now and replace them with the
+            // instructions that interleave later if it makes sense.
+
+            // Saturating narrowing casts. These may interleave later with trunc_sat.
             { "halide.hexagon.pack_satub.vh", u8_sat(wild_i16x) },
             { "halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x) },
             { "halide.hexagon.pack_satb.vh", i8_sat(wild_i16x) },
             { "halide.hexagon.pack_sath.vw", i16_sat(wild_i32x) },
 
-            // Narrowing casts
-            { "halide.hexagon.trunclo.vh", u8(wild_u16x/256), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vh", u8(wild_i16x/256), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vh", i8(wild_u16x/256), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vh", i8(wild_i16x/256), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vw", u16(wild_u32x/65536), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vw", u16(wild_i32x/65536), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vw", i16(wild_u32x/65536), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunclo.vw", i16(wild_i32x/65536), Pattern::DeinterleaveOp0 },
+            // Narrowing casts. These may interleave later with trunclo.
+            { "halide.hexagon.packhi.vh", u8(wild_u16x/256) },
+            { "halide.hexagon.packhi.vh", u8(wild_i16x/256) },
+            { "halide.hexagon.packhi.vh", i8(wild_u16x/256) },
+            { "halide.hexagon.packhi.vh", i8(wild_i16x/256) },
+            { "halide.hexagon.packhi.vw", u16(wild_u32x/65536) },
+            { "halide.hexagon.packhi.vw", u16(wild_i32x/65536) },
+            { "halide.hexagon.packhi.vw", i16(wild_u32x/65536) },
+            { "halide.hexagon.packhi.vw", i16(wild_i32x/65536) },
+
+            // Narrowing with shifting.
             { "halide.hexagon.trunc_shr.vw.w",  i16(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
             { "halide.hexagon.trunc_shr.vw.w",  i16(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
-            // Similar to saturating narrows above, we have the choice of
-            // non-interleaving or interleaving instructions.
+            // Narrowing casts. These may interleave later with trunc.
             { "halide.hexagon.pack.vh", u8(wild_u16x) },
             { "halide.hexagon.pack.vh", u8(wild_i16x) },
             { "halide.hexagon.pack.vh", i8(wild_u16x) },
@@ -905,6 +908,8 @@ private:
         static std::map<string, DeinterleavingAlternative> deinterleaving_alts = {
             { "halide.hexagon.pack.vh", { "halide.hexagon.trunc.vh" } },
             { "halide.hexagon.pack.vw", { "halide.hexagon.trunc.vw" } },
+            { "halide.hexagon.packhi.vh", { "halide.hexagon.trunclo.vh" } },
+            { "halide.hexagon.packhi.vw", { "halide.hexagon.trunclo.vw" } },
             { "halide.hexagon.pack_satub.vh", { "halide.hexagon.trunc_satub.vh" } },
             { "halide.hexagon.pack_sath.vw", { "halide.hexagon.trunc_sath.vw" } },
             // For this one, we don't have a simple alternative. But,
