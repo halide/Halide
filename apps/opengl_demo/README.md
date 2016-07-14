@@ -15,7 +15,7 @@ In this example we use AOT compilation twice:  Once with `target=host` to produc
 
 The sample filter inverts the RGB channels of the input image.
 
-*This demo is known to work on OS X 10.11.  Linux and Windows have not yet been tested.*
+*This demo is known to work on OS X 10.11 and Ubuntu Linux 16.04. Windows has not yet been tested.*
 
 ### Instructions:
 
@@ -49,6 +49,12 @@ brew tap halide/halide
 brew install halide
 ```
 
+On Ubuntu Linux, everything but libdrawtext can be installed via system packages:
+
+```sh
+sudo apt-get install libglfw3-dev libx11-dev freeglut3-dev libfreetype6-dev libgl-dev libpng
+```
+
 ### Files:
 
 * `sample_filter.cpp`
@@ -57,7 +63,7 @@ brew install halide
 
 * `main.cpp`
 
-   Contains all the Halide client code.  
+   Contains all the Halide client code.
 
    Note that it `#include`s the generated files `build/sample_filter_cpu.h` and `build/sample_filter_opengl.h`.
 
