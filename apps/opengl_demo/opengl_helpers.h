@@ -2,7 +2,12 @@
 #define _OPENGL_HELPERS_H_
 
 #include <string>
+
+#if defined(__APPLE__)
 #include <OpenGL/gl.h>
+#else
+#include <GL/gl.h>
+#endif
 
 namespace OpenGLHelpers {
     void setup(float dpi_scale);

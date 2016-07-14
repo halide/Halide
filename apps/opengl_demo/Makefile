@@ -10,7 +10,7 @@
 #
 #  HALIDE_TOOLS_DIR = /usr/local/share/halide/tools
 #  HALIDE_LIB_PATH =
-#  HALIDE_INC_PATH = 
+#  HALIDE_INC_PATH =
 #
 # These settings are for building within the Halide source tree:
 HALIDE_TOOLS_DIR = ../../tools
@@ -19,14 +19,26 @@ HALIDE_INC_PATH  = -I ../../include
 
 # Platform-specific settings.
 #
-# These are for OS X:
-DTX_FONT    = /Library/Fonts/Arial.ttf
-OPENGL_LIBS = -framework OpenGL -framework GLUT
+UNAME = $(shell uname)
+
+ifeq ($(UNAME),Darwin)
+
+  # These are for OS X:
+  DTX_FONT       = /Library/Fonts/Arial.ttf
+  OPENGL_LIBS    = -lglfw3 -framework OpenGL -framework GLUT
+
+else
+
+  # These are for Ubuntu Linux
+  DTX_FONT       = /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  OPENGL_LIBS    = -lglfw -lGL -lglut -lX11 -lpthread -ldl
+
+endif
 
 #
 # General build settings.  Should be good cross-platform.
 #
-MAIN_LIBS      = -lglfw3 -lpng -ldrawtext $(OPENGL_LIBS)
+MAIN_LIBS      = -lpng -ldrawtext $(OPENGL_LIBS)
 GENERATOR_LIBS = -lHalide -lz -lcurses
 CXXFLAGS       = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
 
@@ -65,10 +77,10 @@ build/main.o: \
 # depends on the halide filter source in sample_filter.cpp
 #
 build/sample_filter_cpu.o build/sample_filter_cpu.h: build/generate_sample_filter
-	build/generate_sample_filter -e o,h,stmt -o build -f sample_filter_cpu target=host
+	LD_LIBRARY_PATH=../../bin build/generate_sample_filter -e o,h,stmt -o build -f sample_filter_cpu target=host
 
 build/sample_filter_opengl.o build/sample_filter_opengl.h: build/generate_sample_filter
-	build/generate_sample_filter -e o,h,stmt -o build -f sample_filter_opengl target=host-opengl-debug
+	LD_LIBRARY_PATH=../../bin build/generate_sample_filter -e o,h,stmt -o build -f sample_filter_opengl target=host-opengl-debug
 
 build/generate_sample_filter: sample_filter.cpp
 	@mkdir -p build

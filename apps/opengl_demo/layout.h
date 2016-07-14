@@ -1,7 +1,11 @@
 #ifndef _LAYOUT_HELPERS_H_
 #define _LAYOUT_HELPERS_H_
 
+#if defined(__APPLE__)
 #include <OpenGL/gl.h>
+#else
+#include <GL/gl.h>
+#endif
 
 namespace Layout {
 
