@@ -1453,22 +1453,22 @@ void check_hvx_all() {
     // different instructions that have a built in interleaving that
     // we can cancel with the deinterleaving from widening.
     check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16(u8_1) * 127));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16(i8_1) * 127));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16(i8_1) * 63));
     check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(u16(u8_1) * 127));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16(i8_1) * 127));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16(i8_1) * 63));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32(u16_1) * 32767));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32(i16_1) * 32767));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32(i16_1) * 16383));
     check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(u32(u16_1) * 32767));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32(i16_1) * 32767));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32(i16_1) * 16383));
 
     check("vshuffo(v*.b,v*.b)", hvx_width/1, u8((u16(u8_1) * 127) >> 8));
-    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8((i16(i8_1) * 127) >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8((i16(i8_1) * 63) >> 8));
     check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((u16(u8_1) * 127) >> 8));
-    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((i16(i8_1) * 127) >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((i16(i8_1) * 63) >> 8));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((u32(u16_1) * 32767) >> 16));
-    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 32767) >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 16383) >> 16));
     check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((u32(u16_1) * 32767) >> 16));
-    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 32767) >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 16383) >> 16));
 
     check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
     check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
