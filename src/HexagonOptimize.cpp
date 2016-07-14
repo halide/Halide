@@ -956,6 +956,45 @@ private:
     using IRMutator::visit;
 };
 
+// After eliminating interleaves, there may be some that remain. This
+// mutator attempts to replace interleaves paired with other
+// operations that do not require an interleave. It's important to do
+// this after all other efforts to eliminate the interleaves,
+// otherwise this might eat some interleaves that could have cancelled
+// with other operations.
+class FuseInterleaves : public IRMutator {
+private:
+    void visit(const Call *op) {
+        // This is a list of {f, g} pairs that if the first operation
+        // is interleaved, interleave(f(x)) is equivalent to g(x).
+        static std::vector<std::pair<std::string, std::string>> non_deinterleaving_alts = {
+            { "halide.hexagon.zxt.vub", "halide.hexagon.unpack.vub" },
+            { "halide.hexagon.sxt.vb", "halide.hexagon.unpack.vb" },
+            { "halide.hexagon.zxt.vuh", "halide.hexagon.unpack.vuh" },
+            { "halide.hexagon.sxt.vh", "halide.hexagon.unpack.vh" },
+        };
+
+        if (is_native_interleave(op)) {
+            if (const Call *arg = op->args[0].as<Call>()) {
+                for (const auto &i : non_deinterleaving_alts) {
+                    if (arg->name == i.first) {
+                        std::vector<Expr> args = arg->args;
+                        for (Expr &j : args) {
+                            j = mutate(j);
+                        }
+                        expr = Call::make(op->type, i.second, args, Call::PureExtern);
+                        return;
+                    }
+                }
+            }
+        }
+
+        IRMutator::visit(op);
+    }
+
+    using IRMutator::visit;
+};
+
 // Find an upper bound of bounds.max - bounds.min.
 Expr span_of_bounds(Interval bounds) {
     internal_assert(bounds.is_bounded());
@@ -1069,6 +1108,10 @@ Stmt optimize_hexagon_instructions(Stmt s) {
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
     s = EliminateInterleaves().mutate(s);
+
+    // There may be interleaves left over that we can fuse with other
+    // operations.
+    s = FuseInterleaves().mutate(s);
 
     // TODO: If all of the stores to a buffer are interleaved, and all
     // of the loads are immediately deinterleaved, then we can remove
