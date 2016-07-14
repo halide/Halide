@@ -1340,19 +1340,19 @@ void check_hvx_all() {
 #if 0
     // It's quite difficult to write a single expression that tests vzxt
     // and vsxt, because it gets rewritten as vpack/vunpack.
-    check("vzxt(v*.ub)", hvx_width/1, u16(u8(u16_1)));
-    check("vzxt(v*.ub)", hvx_width/1, i16(u8(u16_1)));
-    check("vzxt(v*.uh)", hvx_width/2, u32(u16(u32_1)));
-    check("vzxt(v*.uh)", hvx_width/2, i32(u16(u32_1)));
-    check("vsxt(v*.b)", hvx_width/1, u16(i8(i16_1)));
-    check("vsxt(v*.b)", hvx_width/1, i16(i8(i16_1)));
-    check("vsxt(v*.h)", hvx_width/2, u32(i16(i32_1)));
-    check("vsxt(v*.h)", hvx_width/2, i32(i16(i32_1)));
+    check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
+    check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
+    check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
+    check("vzxt(v*.uh)", hvx_width/2, i32(u16_1));
+    check("vsxt(v*.b)", hvx_width/1, u16(i8_1));
+    check("vsxt(v*.b)", hvx_width/1, i16(i8_1));
+    check("vsxt(v*.h)", hvx_width/2, u32(i16_1));
+    check("vsxt(v*.h)", hvx_width/2, i32(i16_1));
 
-    check("vzxt(v*.ub)", hvx_width/1, u32(u8(u32_1)));
-    check("vzxt(v*.ub)", hvx_width/1, i32(u8(u32_1)));
-    check("vsxt(v*.b)", hvx_width/1, u32(i8(i32_1)));
-    check("vsxt(v*.b)", hvx_width/1, i32(i8(i32_1)));
+    check("vzxt(v*.ub)", hvx_width/1, u32(u8_1));
+    check("vzxt(v*.ub)", hvx_width/1, i32(u8_1));
+    check("vsxt(v*.b)", hvx_width/1, u32(i8_1));
+    check("vsxt(v*.b)", hvx_width/1, i32(i8_1));
 #endif
 
     check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
