@@ -327,7 +327,7 @@ int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
     // Read one line at a time.
     // Leave room for appending a null terminator.
     *read_size = global_log.read(out, size - 1, '\n');
-    out[*read_size - 1] = 0;
+    out[*read_size] = 0;
     return 0;
 }
 
