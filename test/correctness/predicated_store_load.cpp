@@ -12,6 +12,52 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
+class CountPredicatedStoreLoad : public IRVisitor {
+public:
+    int store_count;
+    int load_count;
+
+    CountPredicatedStoreLoad() : store_count(0), load_count(0) {}
+
+protected:
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::predicated_store)) {
+            store_count++;
+        } else if (op->is_intrinsic(Call::predicated_load)) {
+            load_count++;
+        }
+        IRVisitor::visit(op);
+    }
+};
+
+class CheckPredicatedStoreLoadCount : public IRMutator {
+    int correct_store_count;
+    int correct_load_count;
+public:
+    CheckPredicatedStoreLoadCount(int store, int load) :
+        correct_store_count(store), correct_load_count(load) {}
+    using IRMutator::mutate;
+
+    Stmt mutate(Stmt s) {
+        CountPredicatedStoreLoad c;
+        s.accept(&c);
+
+        if (c.store_count != correct_store_count) {
+            printf("There were %d predicated stores. There were supposed to be %d\n",
+                   c.store_count, correct_store_count);
+            exit(-1);
+        }
+        if (c.load_count != correct_load_count) {
+            printf("There were %d predicated loads. There were supposed to be %d\n",
+                   c.load_count, correct_load_count);
+            exit(-1);
+        }
+        return s;
+    }
+};
+
 int check_image(const Image<int> &im, const std::function<int(int,int,int)> &func) {
     for (int z = 0; z < im.channels(); z++) {
         for (int y = 0; y < im.height(); y++) {
@@ -46,6 +92,8 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
     f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
     f.update(0).vectorize(r.x, 8);
 
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 3));
+
     Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
@@ -68,6 +116,10 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
     f.vectorize(x, 8);
 
+    // Should have 1 store and 2 loads from the steady-state and another
+    // 1 store and 2 loads from the tail
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(2, 4));
+
     Image<int> im = f.realize(size, size);
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
@@ -85,7 +137,7 @@ int multiple_vectorized_predicate_test() {
     g.compute_root();
 
     RDom r(0, size, 0, size);
-    r.where(r.x < 23);
+    r.where(r.x + r.y < 23);
     r.where(r.x*r.y + r.x*r.x < 300);
 
     ref(x, y) = 10;
@@ -95,6 +147,8 @@ int multiple_vectorized_predicate_test() {
     f(x, y) = 10;
     f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(20-r.x, r.y);
     f.update(0).vectorize(r.x, 8);
+
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 2));
 
     Image<int> im = f.realize(size, size);
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -121,6 +175,8 @@ int scalar_load_test() {
     f(x, y) = 10;
     f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
     f.update(0).vectorize(r.x, 8);
+
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 2));
 
     Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -149,6 +205,8 @@ int scalar_store_test() {
     f.update(0).allow_race_conditions();
     f.update(0).vectorize(r.x, 8);
 
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 1));
+
     Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
@@ -176,6 +234,8 @@ int not_dependent_on_vectorized_var_test() {
     f.update(0).allow_race_conditions();
     f.update(0).vectorize(r.z, 8);
 
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(0, 0));
+
     Image<int> im = f.realize(80, 80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
@@ -201,6 +261,8 @@ int no_op_store_test() {
     f(2*r.x, 3*r.y) = f(2*r.x, 3*r.y);
     f.update(0).vectorize(r.x, 8);
     f.update(1).vectorize(r.y, 8);
+
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(0, 0));
 
     Image<int> im = f.realize(120, 120);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
