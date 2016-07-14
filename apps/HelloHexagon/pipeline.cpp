@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
             .hexagon()
             .split(x, xo, xi, vector_size*2, TailStrategy::RoundUp)
             .vectorize(xi, vector_size)
-            .parallel(y, 16);
+            .parallel(y, 256);
         blur_y.compute_at(blur, y)
             .vectorize(x, vector_size, TailStrategy::RoundUp);
 

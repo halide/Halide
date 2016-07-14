@@ -56,8 +56,8 @@ int main(int argc, char **argv) {
 
     int iterations = atoi(argv[2]);
 
-    const int W = 1024;
-    const int H = 1024;
+    const int W = 16384;
+    const int H = 256;
 
     // Set up the buffer_t describing the input buffer.
     buffer_t in = { 0 };

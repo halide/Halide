@@ -11,6 +11,7 @@ extern "C" {
 
 #include "HAP_farf.h"
 #include "HAP_power.h"
+#include "HAP_perf.h"
 
 }
 
@@ -85,7 +86,10 @@ void *halide_malloc(void *user_context, size_t x) {
             }
         }
     }
-    return memalign(128, x);
+    uint64 before = HAP_perf_get_time_us();
+    void *result = memalign(128, x);
+    log_printf("malloc(%d) thread=%d time=%d\n", x, qurt_thread_get_id(), HAP_perf_get_time_us() - before);
+    return result;
 }
 
 void halide_free(void *user_context, void *ptr) {

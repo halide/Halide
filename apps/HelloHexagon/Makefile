@@ -43,8 +43,8 @@ run-%-android: process-%-android
 	adb push process-$*-android /data/
 	adb shell chmod +x /data/process-$*-android
 	adb shell /data/process-$*-android cpu 10
-	adb shell /data/process-$*-android hvx64 10
-	adb shell /data/process-$*-android hvx128 10
+	adb shell /data/process-$*-android hvx64 1
+	adb shell /data/process-$*-android hvx128 1
 
 run-host: process-host
 	./process-host cpu 10
