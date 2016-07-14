@@ -735,17 +735,10 @@ class VectorSubs : public IRMutator {
         Stmt body = op->body;
 
         // Rewrite loads and stores to this allocation like so:
-        // foo[x] -> foo[x*lanes + v]
-        string v = unique_name('v');
-        body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
+        // foo[x] -> foo[x*lanes + var]
+        body = RewriteAccessToVectorAlloc(var, op->name, lanes).mutate(body);
 
-        scope.push(v, Ramp::make(0, 1, lanes));
         body = mutate(body);
-        scope.pop(v);
-
-        // Replace the widened 'v' with the actual ramp
-        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
-        body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
 
         stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
@@ -817,10 +810,17 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            // Replace the var with a ramp within the body
             Expr for_var = Variable::make(Int(32), for_loop->name);
-            Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
-            stmt = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
+
+            Stmt body = for_loop->body;
+            if (!is_zero(for_loop->min)) {
+                Expr adjusted = for_var + for_loop->min;
+                body = substitute(for_loop->name, adjusted, for_loop->body);
+            }
+
+            // Replace the var with a ramp within the body
+            Expr replacement = Ramp::make(0, 1, extent->value);
+            stmt = VectorSubs(for_loop->name, replacement).mutate(body);
         } else {
             IRMutator::visit(for_loop);
         }
