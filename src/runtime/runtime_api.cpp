@@ -154,6 +154,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_renderscript_initialize_kernels,
     (void *)&halide_renderscript_run,
     (void *)&halide_runtime_internal_register_metadata,
+    (void *)&halide_set_custom_can_use_target_features,
     (void *)&halide_set_custom_do_par_for,
     (void *)&halide_set_custom_do_task,
     (void *)&halide_set_custom_free,
