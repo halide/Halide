@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
     bool ok = true;
 
     // As for now, we would only vectorize predicated store/load if it is of
-    // type 32-bit value and has lanes no less than 4
+    // type 32-bit value and has lanes no less than 4 for x86
     ok = ok && test<float>(4);
     ok = ok && test<float>(8);
 
