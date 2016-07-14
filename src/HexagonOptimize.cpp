@@ -963,7 +963,6 @@ private:
 // otherwise this might eat some interleaves that could have cancelled
 // with other operations.
 class FuseInterleaves : public IRMutator {
-private:
     void visit(const Call *op) {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
