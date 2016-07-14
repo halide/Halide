@@ -48,7 +48,10 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 WEAK void halide_shutdown_thread_pool() {
 }
 
-WEAK int halide_set_num_threads(int) {
+WEAK int halide_set_num_threads(int n) {
+    if (n < 0) {
+        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+    }
     return 1;
 }
 
