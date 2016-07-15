@@ -317,15 +317,21 @@ private:
             new_args[i] = new_arg;
         }
 
+        bool all_values_undefined = true;
         for (size_t i = 0; i < op->values.size(); i++) {
             Expr old_value = op->values[i];
             Expr new_value = mutate(old_value);
             if (!expr.defined()) {
-                stmt = Stmt();
-                return;
+                new_value = undef(old_value.type());
+            } else {
+                all_values_undefined = false;
             }
             if (!new_value.same_as(old_value)) changed = true;
             new_values[i] = new_value;
+        }
+        if (all_values_undefined) {
+            stmt = Stmt();
+            return;
         }
 
         if (predicate.defined()) {

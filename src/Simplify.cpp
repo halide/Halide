@@ -3994,8 +3994,8 @@ private:
 
         const Load *load = value.as<Load>();
 
-        if (load && load->name == op->name && equal(load->index, index)) {
-            // foo[x] = foo[x] is a no-op
+        if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
+            // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
         } else if (value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
