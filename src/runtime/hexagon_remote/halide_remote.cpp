@@ -44,11 +44,19 @@ extern "C" {
 
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
-    log_printf("%s", str);
+    if (str) {
+        log_printf("%s", str);
+    }
 }
 
 void halide_error(void *user_context, const char *str) {
-    halide_print(user_context, str);
+    if (!str) {
+        log_printf("Unknown error\n");
+    } else if (*str == '\0' || str[strlen(str) - 1] != '\n') {
+        log_printf("Error: %s\n", str);
+    } else {
+        log_printf("Error: %s", str);
+    }
 }
 
 namespace {
@@ -316,9 +324,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
+    // Read one line at a time.
     // Leave room for appending a null terminator.
-    *read_size = global_log.read(out, size - 1);
-    out[*read_size - 1] = 0;
+    *read_size = global_log.read(out, size - 1, '\n');
+    out[*read_size] = 0;
     return 0;
 }
 
