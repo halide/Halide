@@ -224,6 +224,12 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16v2,  "sxt.vb",  {i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32v2,  "sxt.vh",  {i16v1} },
 
+        // Similar to zxt/sxt, but without deinterleaving the result.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackub), u16v2, "unpack.vub", {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackuh), u32v2, "unpack.vuh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackb),  i16v2, "unpack.vb",  {i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackh),  i32v2, "unpack.vh",  {i16v1} },
+
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
@@ -248,6 +254,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16v1, "pack_sath.vw",  {i32v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8v1,  "pack.vh",       {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16v1, "pack.vw",       {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackob),      i8v1,  "packhi.vh",     {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackoh),      i16v1, "packhi.vw",     {i32v2} },
+
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
