@@ -1526,7 +1526,8 @@ void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, 
+        Handle(1, halide_handle_traits<const void*>::type_info()), 0);
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
@@ -1561,7 +1562,7 @@ void CodeGen_C::test() {
         "extern \"C\" {\n"
         "#endif\n"
         "\n\n"
-        "int test1(buffer_t *_buf_buffer, float _alpha, int32_t _beta, void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == nullptr) && (_buf_buffer->dev == 0);\n"

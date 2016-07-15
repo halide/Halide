@@ -106,7 +106,10 @@ struct PipelineContents {
 
     PipelineContents() :
         module("", Target()) {
-        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, Handle(), 0);
+        // user_context needs to be a const void * (not a non-const void *)
+        // to maintain backwards compatibility with existing code.
+        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, 
+            Handle(1, halide_handle_traits<const void*>::type_info()), 0);
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
                                            /*is_explicit_name*/ true, /*register_instance*/ false);
     }
