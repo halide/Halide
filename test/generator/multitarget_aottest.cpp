@@ -36,7 +36,7 @@ bool use_debug_feature() {
 
 static std::atomic<int> can_use_count;
 
-extern "C" int halide_can_use_target_features(uint64_t features) {
+int my_can_use_target_features(uint64_t features) {
     can_use_count += 1;
     if (features & (1ULL << halide_target_feature_debug)) {
         if (use_debug_feature()) {
@@ -51,6 +51,8 @@ extern "C" int halide_can_use_target_features(uint64_t features) {
 int main(int argc, char **argv) {
     const int W = 32, H = 32;
     Image<uint32_t> output(W, H);
+
+    halide_set_custom_can_use_target_features(my_can_use_target_features);
 
     buffer_t *o_buf = output;
     if (HalideTest::multitarget(o_buf) != 0) {
