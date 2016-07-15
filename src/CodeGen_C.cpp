@@ -233,7 +233,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
              (!type.handle_type->namespaces.empty() ||
               !type.handle_type->enclosing_types.empty() ||
               type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
-            oss << "const void *";
+            oss << "void *";
         } else {
             if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
                 oss << "struct ";
@@ -1561,7 +1561,7 @@ void CodeGen_C::test() {
         "extern \"C\" {\n"
         "#endif\n"
         "\n\n"
-        "int test1(buffer_t *_buf_buffer, float _alpha, int32_t _beta, const void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(buffer_t *_buf_buffer, float _alpha, int32_t _beta, void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == nullptr) && (_buf_buffer->dev == 0);\n"

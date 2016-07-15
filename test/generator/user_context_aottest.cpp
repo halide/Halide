@@ -8,7 +8,7 @@
 
 using namespace Halide::Tools;
 
-static const void *context_pointer = (void *)0xf00dd00d;
+static void *context_pointer = (void *)0xf00dd00d;
 
 static bool called_error = false;
 static bool called_trace = false;
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
     // verify that calling via the _argv entry point
     // also produces the correct result
-    const void* arg0 = context_pointer;
+    void* arg0 = context_pointer;
     buffer_t arg1 = *input;
     buffer_t arg2 = *output;
     void* args[3] = { &arg0, &arg1, &arg2 };

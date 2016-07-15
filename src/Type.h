@@ -142,20 +142,46 @@ template<> struct halide_c_type_to_name<float> { static const bool known_type = 
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
 
+// Default case (should be only Unknown types, since we specialize for Known types below).
+// We require that all unknown types be pointers, and translate them all to void*
+// (preserving const-ness and volatile-ness).
 template<typename T, bool KnownType>
 struct halide_internal_handle_traits {
-    static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) { return nullptr; }
+    static const halide_handle_cplusplus_type *type_info(bool is_ptr, 
+            halide_handle_cplusplus_type::ReferenceType ref_type) { 
+        static_assert(!KnownType, "Only unknown types handled here");
+        internal_assert(is_ptr) << "Unknown types must be pointers";
+        internal_assert(ref_type == halide_handle_cplusplus_type::NotReference) << "Unknown types must not be references";
+        static const halide_handle_cplusplus_type the_info{
+            {halide_cplusplus_type_name::Simple, "void"},
+            {}, 
+            {},
+            { 
+                (uint8_t)(halide_handle_cplusplus_type::Pointer |
+                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
+            },
+            halide_handle_cplusplus_type::NotReference
+        };
+        return &the_info;
+    }
 };
 
+// Known types
 template<typename T>
 struct halide_internal_handle_traits<T, true> {
     static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) {
         static const halide_handle_cplusplus_type the_info{
-            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), {}, {},
-            { (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
-              (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
-              (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))},
-            ref_type};
+            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), 
+            {}, 
+            {},
+            { 
+                (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
+                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
+            },
+            ref_type
+        };
         return &the_info;
     }
 };
