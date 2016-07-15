@@ -151,7 +151,7 @@ const struct halide_device_interface *halide_opengl_device_interface() {
 int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t tex) {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
-    int (*fn)(void *user_context, struct buffer_t *buf, uint ptr_ttex);
+    int (*fn)(void *, struct buffer_t *, uintptr_t);
     if (lookup_runtime_routine("halide_opengl_wrap_texture", target, fn)) {
         return (*fn)(user_context, buf, tex);
     }
