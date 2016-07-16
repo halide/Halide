@@ -2004,8 +2004,139 @@ public:
 };
 }
 
+<<<<<<< 25a09d9386e56be01be753fa50659fea56fbd862
 FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos,
                  int count) : func(f), implicit_count(count), args(a){
+=======
+vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
+    vector<string> a = args;
+
+    for (size_t i = 0; i < e.size(); i++) {
+        user_assert(e[i].defined())
+            << "Argument " << i << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
+
+    CountImplicitVars count(e);
+
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
+                func.name() << " at position " << implicit_placeholder_pos << "\n";
+
+            vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i).name());
+                iter++;
+            }
+        }
+    }
+
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (a[j] == v.name()) {
+                found = true;
+            }
+        }
+        user_assert(found)
+            << "Right-hand-side of pure definition of " << func.name()
+            << " uses implicit variables, but the left-hand-side does not"
+            << " contain the placeholder symbol '_'.\n";
+    }
+
+    return a;
+}
+
+Stage FuncRefVar::operator=(Expr e) {
+    return (*this) = Tuple({e});
+}
+
+Stage FuncRefVar::operator=(const Tuple &e) {
+    // If the function has already been defined, this must actually be an update
+    if (func.has_pure_definition()) {
+        return FuncRefExpr(func, args) = e;
+    }
+
+    // Find implicit args in the expr and add them to the args list before calling define
+    vector<string> a = args_with_implicit_vars(e.as_vector());
+    func.define(a, e.as_vector());
+
+    return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
+}
+
+Stage FuncRefVar::operator=(const FuncRefVar &e) {
+    if (e.size() == 1) {
+        return (*this) = Expr(e);
+    } else {
+        return (*this) = Tuple(e);
+    }
+}
+
+Stage FuncRefVar::operator=(const FuncRefExpr &e) {
+    if (e.size() == 1) {
+        return (*this) = Expr(e);
+    } else {
+        return (*this) = Tuple(e);
+    }
+}
+
+Stage FuncRefVar::operator+=(Expr e) {
+    // This is actually an update
+    return FuncRefExpr(func, args) += e;
+}
+
+Stage FuncRefVar::operator*=(Expr e) {
+    // This is actually an update
+    return FuncRefExpr(func, args) *= e;
+}
+
+Stage FuncRefVar::operator-=(Expr e) {
+    // This is actually an update
+    return FuncRefExpr(func, args) -= e;
+}
+
+Stage FuncRefVar::operator/=(Expr e) {
+    // This is actually an update
+    return FuncRefExpr(func, args) /= e;
+}
+
+FuncRefVar::operator Expr() const {
+    user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    vector<Expr> expr_args(args.size());
+    for (size_t i = 0; i < expr_args.size(); i++) {
+        expr_args[i] = Var(args[i]);
+    }
+    user_assert(func.outputs() == 1)
+        << "Can't convert a reference Func \"" << func.name()
+        << "\" to an Expr, because \"" << func.name() << "\" returns a Tuple.\n";
+    return Call::make(func, expr_args);
+}
+
+FuncTupleElementRef<FuncRefVar> FuncRefVar::operator[](int i) const {
+    user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+
+    user_assert(func.outputs() != 1)
+        << "Can't index into a reference to Func \"" << func.name()
+        << "\", because it does not return a Tuple.\n";
+    user_assert(i >= 0 && i < func.outputs())
+        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
+    vector<Expr> expr_args(args.size());
+    for (size_t j = 0; j < expr_args.size(); j++) {
+        expr_args[j] = Var(args[j]);
+    }
+    return FuncTupleElementRef<FuncRefVar>(*this, expr_args, i);
+}
+
+size_t FuncRefVar::size() const {
+    return func.outputs();
+}
+
+FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
+>>>>>>> allow func tuple element to be updated via operator[]
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
@@ -2264,7 +2395,7 @@ FuncRef::operator Expr() const {
     return Call::make(func, args);
 }
 
-Expr FuncRef::operator[](int i) const {
+FuncTupleElementRef<FuncRefExpr> FuncRefExpr::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2275,7 +2406,7 @@ Expr FuncRef::operator[](int i) const {
     user_assert(i >= 0 && i < func.outputs())
         << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
 
-    return Call::make(func, args, i);
+    return FuncTupleElementRef<FuncRefExpr>(*this, args, i);
 }
 
 size_t FuncRef::size() const {
