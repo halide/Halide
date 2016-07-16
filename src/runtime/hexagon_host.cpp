@@ -33,6 +33,7 @@ typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
+typedef int (*remote_set_heap_size_fn)(int);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -46,6 +47,8 @@ WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
+
+WEAK remote_set_heap_size_fn remote_set_heap_size = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
@@ -130,6 +133,8 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
+
+    get_symbol(user_context, "remote_set_heap_size", remote_set_heap_size, /* required */ false);
 
     host_malloc_init();
 
@@ -628,6 +633,16 @@ WEAK int halide_hexagon_device_and_host_free(void *user_context, struct buffer_t
 WEAK int halide_hexagon_power_hvx_on(void *user_context) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
+
+    debug(user_context) << "halide_set_heap_size\n";
+    if (!remote_set_heap_size) {
+        debug(user_context) << "could not find halide_set_heap_size\n";
+    } else {
+        result = remote_set_heap_size(1024*1024*16);
+        debug(user_context) << "        " << result << "\n";
+        if (result != 0)
+            error(user_context) << "remote_set_heap_size failed.\n";
+    }
 
     debug(user_context) << "halide_hexagon_power_hvx_on\n";
     if (!remote_power_hvx_on) {
