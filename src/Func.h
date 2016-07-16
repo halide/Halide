@@ -239,6 +239,179 @@ public:
 // For backwards compatibility, keep the ScheduleHandle name.
 typedef Stage ScheduleHandle;
 
+class FuncRefExpr;
+class FuncRefVar;
+
+/** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
+ * z are Vars or Exprs. If could be the left hand side of an update
+ * definition, or it could be a call to a function. We don't know
+ * until we see how this object gets used.
+ */
+template <typename FuncRefType>
+class FuncTupleElementRef {
+    FuncRefType func_ref;
+    std::vector<Expr> args; // args to the function
+    int idx;                // Index to function outputs
+
+    Tuple values_with_undefs(Expr e) const {
+        std::vector<Expr> values(func_ref.size());
+        for (int i = 0; i < (int)values.size(); ++i) {
+            if (i == idx) {
+                values[i] = e;
+            } else {
+                Type t = func_ref.function().values()[i].type();
+                values[i] = undef(t);
+            }
+        }
+        return Tuple(values);
+    }
+public:
+    FuncTupleElementRef(const FuncRefType &ref, const std::vector<Expr>& args, int idx)
+        : func_ref(ref), args(args), idx(idx) {}
+
+    /** Use this as the left-hand-side of an update definition of a Func with
+     * multiple outputs indexed by 'idx' (see \ref RDom). The function must
+     * already have a pure definition.
+     */
+    EXPORT Stage operator=(Expr e) {
+        return func_ref = values_with_undefs(e);
+    }
+
+    /** Define this function with multiple outputs indexed by 'idx' as a sum
+     * reduction over the given expression. The expression should refer to some
+     * RDom to sum over. If the function does not already have a pure
+     * definition, this sets it to zero.
+     */
+    EXPORT Stage operator+=(Expr e) {
+        return func_ref = values_with_undefs(Expr(*this) + e);
+    }
+
+    /** Define this function with multiple outputs indexed by 'idx' as a sum
+     * reduction over the negative of the given expression. The expression
+     * should refer to some RDom to sum over. If the function does not already
+     * have a pure definition, this sets it to zero.
+     */
+    EXPORT Stage operator-=(Expr e) {
+        return func_ref = values_with_undefs(Expr(*this) - e);
+    }
+
+    /** Define this function with multiple outputs indexed by 'idx' as a product
+     * reduction. The expression should refer to some RDom to take the product
+     * over. If the function does not already have a pure definition, this sets
+     * it to 1.
+     */
+    EXPORT Stage operator*=(Expr e) {
+        return func_ref = values_with_undefs(Expr(*this) * e);
+    }
+
+    /** Define this function with multiple outputs indexed by 'idx' as the
+     * product reduction over the inverse of the expression. The expression
+     * should refer to some RDom to take the product over. If the function does
+     * not already have a pure definition, this sets it to 1.
+     */
+    EXPORT Stage operator/=(Expr e) {
+        return func_ref = values_with_undefs(Expr(*this) / e);
+    }
+
+    /* Override the usual assignment operator, so that
+     * f(x, y)[index] = g(x, y) defines f.
+     */
+    // @{
+    EXPORT Stage operator=(const FuncRefVar &e) {
+        return func_ref = values_with_undefs(e);
+    }
+    EXPORT Stage operator=(const FuncRefExpr &e) {
+        return func_ref = values_with_undefs(e);
+    }
+    // @}
+
+    /** Use this as a call to the function with multiple outputs at
+     * index 'idx', and not the left-hand-side of a definition. */
+    EXPORT operator Expr() const {
+        return Internal::Call::make(func_ref.function(), args, idx);
+    }
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func_ref.function();}
+
+    /** Return index to the function outputs */
+    EXPORT int index() const {return idx;}
+};
+
+/** A fragment of front-end syntax of the form f(x, y, z), where x,
+ * y, z are Vars. It could be the left-hand side of a function
+ * definition, or it could be a call to a function. We don't know
+ * until we see how this object gets used.
+ */
+class FuncRefVar {
+    Internal::Function func;
+    int implicit_placeholder_pos;
+    std::vector<std::string> args;
+    std::vector<std::string> args_with_implicit_vars(const std::vector<Expr> &e) const;
+public:
+    FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
+
+    /**  Use this as the left-hand-side of a definition. */
+    EXPORT Stage operator=(Expr);
+
+    /** Use this as the left-hand-side of a definition for a Func with
+     * multiple outputs. */
+    EXPORT Stage operator=(const Tuple &);
+
+    /** Define this function as a sum reduction over the given
+     * expression. The expression should refer to some RDom to sum
+     * over. If the function does not already have a pure definition,
+     * this sets it to zero.
+     */
+    EXPORT Stage operator+=(Expr);
+
+    /** Define this function as a sum reduction over the negative of
+     * the given expression. The expression should refer to some RDom
+     * to sum over. If the function does not already have a pure
+     * definition, this sets it to zero.
+     */
+    EXPORT Stage operator-=(Expr);
+
+    /** Define this function as a product reduction. The expression
+     * should refer to some RDom to take the product over. If the
+     * function does not already have a pure definition, this sets it
+     * to 1.
+     */
+    EXPORT Stage operator*=(Expr);
+
+    /** Define this function as the product reduction over the inverse
+     * of the expression. The expression should refer to some RDom to
+     * take the product over. If the function does not already have a
+     * pure definition, this sets it to 1.
+     */
+    EXPORT Stage operator/=(Expr);
+
+    /** Override the usual assignment operator, so that
+     * f(x, y) = g(x, y) defines f.
+     */
+    // @{
+    EXPORT Stage operator=(const FuncRefVar &e);
+    EXPORT Stage operator=(const FuncRefExpr &e);
+    // @}
+
+    /** Use this FuncRefVar as a call to the function, and not as the
+     * left-hand-side of a definition. Only works for single-output
+     * funcs.
+     */
+    EXPORT operator Expr() const;
+
+    /** When a FuncRefVar refers to a function that provides multiple
+     * outputs, you can access each output as an Expr using
+     * operator[] */
+    EXPORT FuncTupleElementRef<FuncRefVar> operator[](int) const;
+
+    /** How many outputs does the function this refers to produce. */
+    EXPORT size_t size() const;
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func;}
+};
+
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
  * z are Vars or Exprs. If could be the left hand side of a definition or
  * an update definition, or it could be a call to a function. We don't know
@@ -335,7 +508,7 @@ public:
      * outputs, you can access each output as an Expr using
      * operator[].
      */
-    EXPORT Expr operator[](int) const;
+    EXPORT FuncTupleElementRef<FuncRefExpr> operator[](int) const;
 
     /** How many outputs does the function this refers to produce. */
     EXPORT size_t size() const;
