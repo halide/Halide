@@ -272,7 +272,7 @@ define weak_odr void @halide.l2fetch(i32 %addr, i64 %param) nounwind uwtable rea
   store i64 %param, i64* %param.addr, align 8
   %0 = load i32, i32* %addr.addr, align 4
   %1 = load i64, i64* %param.addr, align 8
-  call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %0, i64 %1) #1, !srcloc !2
+  call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %0, i64 %1)
   ret void
 }
 
