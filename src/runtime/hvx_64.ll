@@ -264,3 +264,15 @@ define weak_odr <64 x i8> @halide.hexagon.shr.vb.vb(<64 x i8> %a, <64 x i8> %b) 
   %r = bitcast <16 x i32> %r_32 to <64 x i8>
   ret <64 x i8> %r
 }
+
+define weak_odr void @halide.l2fetch(i32 %addr, i64 %param) nounwind uwtable readnone alwaysinline {
+  %addr.addr = alloca i32, align 4
+  %param.addr = alloca i64, align 8
+  store i32 %addr, i32* %addr.addr, align 4
+  store i64 %param, i64* %param.addr, align 8
+  %0 = load i32, i32* %addr.addr, align 4
+  %1 = load i64, i64* %param.addr, align 8
+  call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %0, i64 %1) #1, !srcloc !2
+  ret void
+}
+
