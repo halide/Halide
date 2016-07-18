@@ -335,7 +335,7 @@ class PredicateLoadStore : public IRMutator {
                               op->func, op->value_index, op->image, op->param);
             vectorized = true;
         } else {
-            valid = false;
+            valid = valid && op->is_pure();
             expr = op;
         }
     }

@@ -3491,6 +3491,14 @@ private:
             IRMutator::visit(op);
             const Call *call = expr.as<Call>();
 
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated store is always false
+                expr = make_zero(op->type);
+                return;
+            }
+
             internal_assert(call->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
             const Call *addr = call->args[0].as<Call>();
             internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
@@ -3513,6 +3521,17 @@ private:
                 }
             }
 
+        } else if (op->is_intrinsic(Call::predicated_load)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated load is always false. Replace
+                // with undef
+                expr = undef(call->type);
+            }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;

@@ -1291,21 +1291,17 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 }
 
 void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
-    internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {load addr, predicate}\n";
     const Call *load_addr = op->args[0].as<Call>();
     internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
         << "The first argument to predicated_load must be call to address_of of the load\n";
     const Broadcast *broadcast = load_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : load_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
-    internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
-    internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
-        << "Predicate of predicated_load should have the same number of lanes as the load\n";
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (load->type.is_handle()) {
         Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
-        Expr src = Call::make(Handle(), Call::address_of, {uint64_load}, Call::Intrinsic);
+        Expr src = Call::make(Handle().with_lanes(uint64_load.type().lanes()), Call::address_of, {uint64_load}, Call::Intrinsic);
         Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, op->args[1]}, Call::Intrinsic);
         codegen(reinterpret(load->type, expr));
         return;
@@ -1354,7 +1350,6 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
 }
 
 void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *op) {
-    internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
     const Call *store_addr = op->args[0].as<Call>();
     internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
         << "The first argument to predicated_store must be call to address_of of the store\n";
@@ -1362,12 +1357,6 @@ void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *op) {
     const Broadcast *broadcast = store_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : store_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
-
-    internal_assert(op->args[1].defined()) << "Predicate of predicated_store should not be undefined\n";
-    internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
-        << "Predicate of predicated_store should have the same number of lanes as the store index\n";
-    internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
-        << "Predicate of predicated_store should have the same number of lanes as the store value\n";
 
     // Even on 32-bit systems, Handles are treated as 64-bit in
     // memory, so convert stores of handles to stores of uint64_ts.
