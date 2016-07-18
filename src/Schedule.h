@@ -167,6 +167,11 @@ struct StorageDim {
     bool fold_forward;
 };
 
+struct Prefetch {
+    std::string var;
+    Expr param;
+};
+
 class ReductionDomain;
 
 struct FunctionContents;
@@ -248,6 +253,13 @@ public:
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
+    // @}
+
+    /** You may perform prefetching in some of the dimensions of a
+     * function. See \ref Func::hexagon_prefetch */
+    // @{
+    const std::vector<Prefetch> &prefetches() const;
+    std::vector<Prefetch> &prefetches();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper
