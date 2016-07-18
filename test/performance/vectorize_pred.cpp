@@ -78,7 +78,6 @@ bool test(int vec_width) {
         return false;
     }
 
-
     return true;
 }
 

@@ -32,27 +32,42 @@ protected:
     }
 };
 
-class CheckPredicatedStoreLoadCount : public IRMutator {
-    int correct_store_count;
-    int correct_load_count;
+class CheckPredicatedStoreLoad : public IRMutator {
+    int has_store_count;
+    int has_load_count;
 public:
-    CheckPredicatedStoreLoadCount(int store, int load) :
-        correct_store_count(store), correct_load_count(load) {}
+    CheckPredicatedStoreLoad(bool store, bool load) :
+        has_store_count(store), has_load_count(load) {}
     using IRMutator::mutate;
 
     Stmt mutate(Stmt s) {
         CountPredicatedStoreLoad c;
         s.accept(&c);
 
-        if (c.store_count != correct_store_count) {
-            printf("There were %d predicated stores. There were supposed to be %d\n",
-                   c.store_count, correct_store_count);
-            exit(-1);
+        if (has_store_count) {
+            if (c.store_count == 0) {
+                printf("There should be some predicated stores but didn't find any\n");
+                exit(-1);
+            }
+        } else {
+            if (c.store_count > 0) {
+                printf("There were %d predicated stores. There weren't supposed to be any stores\n",
+                       c.store_count);
+                exit(-1);
+            }
         }
-        if (c.load_count != correct_load_count) {
-            printf("There were %d predicated loads. There were supposed to be %d\n",
-                   c.load_count, correct_load_count);
-            exit(-1);
+
+        if (has_load_count) {
+            if (c.load_count == 0) {
+                printf("There should be some predicated loads but didn't find any\n");
+                exit(-1);
+            }
+        } else {
+            if (c.load_count > 0) {
+                printf("There were %d predicated loads. There weren't supposed to be any loads\n",
+                       c.load_count);
+                exit(-1);
+            }
         }
         return s;
     }
@@ -92,7 +107,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
     f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
     f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 3));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
 
     Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -116,9 +131,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
     f.vectorize(x, 8);
 
-    // Should have 1 store and 2 loads from the steady-state and another
-    // 1 store and 2 loads from the tail
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(2, 4));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
 
     Image<int> im = f.realize(size, size);
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -148,7 +161,7 @@ int multiple_vectorized_predicate_test() {
     f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(20-r.x, r.y);
     f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 2));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
 
     Image<int> im = f.realize(size, size);
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -176,7 +189,7 @@ int scalar_load_test() {
     f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
     f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 2));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
 
     Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -205,7 +218,7 @@ int scalar_store_test() {
     f.update(0).allow_race_conditions();
     f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(1, 1));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
 
     Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -234,7 +247,7 @@ int not_dependent_on_vectorized_var_test() {
     f.update(0).allow_race_conditions();
     f.update(0).vectorize(r.z, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
 
     Image<int> im = f.realize(80, 80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -262,9 +275,37 @@ int no_op_store_test() {
     f.update(0).vectorize(r.x, 8);
     f.update(1).vectorize(r.y, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoadCount(0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
 
     Image<int> im = f.realize(120, 120);
+    auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
+int vectorized_predicated_predicate_with_pure_call_test() {
+    Var x("x"), y("y");
+    Func f ("f"), g("g"), ref("ref");
+
+    g(x, y) = x + y;
+    g.compute_root();
+
+    RDom r(0, 50, 0, 50);
+    r.where(r.x + r.y < r.x*r.y);
+
+    ref(x, y) = 10;
+    ref(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
+    Image<int> im_ref = ref.realize(80, 80);
+
+    f(x, y) = 10;
+    f(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
+    f.update(0).vectorize(r.x, 8);
+
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+
+    Image<int> im = f.realize(80, 80);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -305,6 +346,11 @@ int main(int argc, char **argv) {
 
     printf("Running no-op store test\n");
     if (no_op_store_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorized predicated with pure call test\n");
+    if (vectorized_predicated_predicate_with_pure_call_test() != 0) {
         return -1;
     }
 

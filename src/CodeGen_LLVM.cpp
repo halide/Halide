@@ -1731,8 +1731,6 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
-    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
-
     // If it's a Handle, load it as a uint64_t and then cast
     if (op->type.is_handle()) {
         codegen(reinterpret(op->type, Load::make(UInt(64, op->type.lanes()), op->name, op->index, op->image, op->param)));
@@ -1751,53 +1749,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
         if (ramp && stride && stride->value == 1) {
-            int alignment = op->type.bytes(); // The size of a single element
-
-            int native_bits = native_vector_bits();
-            int native_bytes = native_bits / 8;
-            // We assume halide_malloc for the platform returns
-            // buffers aligned to at least the native vector
-            // width. (i.e. 16-byte alignment on arm, and 32-byte
-            // alignment on x86), so this is the maximum alignment we
-            // can infer based on the index alone.
-
-            // Boost the alignment if possible, up to the native vector width.
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            while ((mod_rem.remainder & 1) == 0 &&
-                   (mod_rem.modulus & 1) == 0 &&
-                   alignment < native_bytes) {
-                mod_rem.modulus /= 2;
-                mod_rem.remainder /= 2;
-                alignment *= 2;
-            }
-
-            // If it is an external buffer, then we cannot assume that the host pointer
-            // is aligned to at least native vector width. However, we may be able to do
-            // better than just assuming that it is unaligned.
-            if (is_external && op->param.defined()) {
-                int host_alignment = op->param.host_alignment();
-                alignment = gcd(alignment, host_alignment);
-            }
-
-            // For dense vector loads wider than the native vector
-            // width, bust them up into native vectors
-            int load_lanes = op->type.lanes();
-            int native_lanes = native_bits / op->type.bits();
-            vector<Value *> slices;
-            for (int i = 0; i < load_lanes; i += native_lanes) {
-                int slice_lanes = std::min(native_lanes, load_lanes - i);
-                Expr slice_base = simplify(ramp->base + i);
-                Expr slice_stride = make_one(slice_base.type());
-                Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
-                llvm::Type *slice_type = VectorType::get(llvm_type_of(op->type.element_of()), slice_lanes);
-                Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-                Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
-                LoadInst *load = builder->CreateAlignedLoad(vec_ptr, alignment);
-                add_tbaa_metadata(load, op->name, slice_index);
-                slices.push_back(load);
-            }
-            value = concat_vectors(slices);
-
+            value = codegen_predicated_dense_vector_load(op, nullptr);
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
@@ -2044,20 +1996,12 @@ void CodeGen_LLVM::scalarize(Expr e) {
 }
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Call *op) {
-    internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
     const Call *store_addr = op->args[0].as<Call>();
     internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
         << "The first argument to predicated_store must be call to address_of of the store\n";
-
     const Broadcast *broadcast = store_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : store_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
-
-    internal_assert(op->args[1].defined()) << "Predicate of predicated_store should not be undefined\n";
-    internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
-        << "Predicate of predicated_store should have the same number of lanes as the store index\n";
-    internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
-        << "Predicate of predicated_store should have the same number of lanes as the store value\n";
 
     // Even on 32-bit systems, Handles are treated as 64-bit in
     // memory, so convert stores of handles to stores of uint64_ts.
@@ -2209,8 +2153,13 @@ Value *CodeGen_LLVM::codegen_predicated_dense_vector_load(const Load *load, Valu
         Value *elt_ptr = codegen_buffer_pointer(load->name, load->type.element_of(), slice_base);
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
-        Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-        Instruction *load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+        Instruction *load_inst;
+        if (vpred != nullptr) {
+            Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+            load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+        } else {
+            load_inst = builder->CreateAlignedLoad(vec_ptr, alignment);
+        }
         add_tbaa_metadata(load_inst, load->name, slice_index);
         slices.push_back(load_inst);
     }
@@ -2219,16 +2168,12 @@ Value *CodeGen_LLVM::codegen_predicated_dense_vector_load(const Load *load, Valu
 }
 
 void CodeGen_LLVM::codegen_predicated_vector_load(const Call *op) {
-    internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {load addr, predicate}\n";
     const Call *load_addr = op->args[0].as<Call>();
     internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
         << "The first argument to predicated_load must be call to address_of of the load\n";
     const Broadcast *broadcast = load_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : load_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
-    internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
-    internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
-        << "Predicate of predicated_load should have the same number of lanes as the load\n";
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (load->type.is_handle()) {
@@ -2611,9 +2556,23 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen_buffer_pointer(load->name, load->type, load->index);
 
     } else if (op->is_intrinsic(Call::predicated_store)) {
+        internal_assert(op->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
+        internal_assert(op->args[1].defined()) << "Predicate of predicated_store should not be undefined\n";
+        internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
+            << "Predicate of predicated_store should have the same number of lanes as the store index\n";
+        internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
+            << "Predicate of predicated_store should have the same number of lanes as the store value\n";
+
         codegen_predicated_vector_store(op);
+
     } else if (op->is_intrinsic(Call::predicated_load)) {
+        internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {load addr, predicate}\n";
+        internal_assert(op->args[1].defined()) << "Predicate of predicated_load should not be undefined\n";
+        internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
+            << "Predicate of predicated_load should have the same number of lanes as the load\n";
+
         codegen_predicated_vector_load(op);
+
     } else if (op->is_intrinsic(Call::trace) ||
                op->is_intrinsic(Call::trace_expr)) {
 
