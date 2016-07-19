@@ -228,6 +228,12 @@ void Schedule::accept(IRVisitor *visitor) const {
         if (b.extent.defined()) {
             b.extent.accept(visitor);
         }
+        if (b.modulus.defined()) {
+            b.modulus.accept(visitor);
+        }
+        if (b.remainder.defined()) {
+            b.remainder.accept(visitor);
+        }
     }
 }
 
