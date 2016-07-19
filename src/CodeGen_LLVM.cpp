@@ -2829,6 +2829,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::CallInst *call = builder->CreateCall(phi, call_args);
 #endif
         value = call;
+    } else if (op->is_intrinsic(Call::prefetch)) {
+        user_warning << "Ignored prefetch directive.";
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"

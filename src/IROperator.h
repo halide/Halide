@@ -1904,6 +1904,14 @@ inline Expr likely_if_innermost(Expr e) {
                                 {e}, Internal::Call::PureIntrinsic);
 }
 
+/** Expressions tagged with this intrinsic should be prefetched
+ * if the target supports prefetching
+ */
+inline Expr prefetch(Expr a, Expr p) {
+    return Internal::Call::make(a.type(), Internal::Call::prefetch,
+                                {a, p}, Internal::Call::PureIntrinsic);
+}
+
 }
 
 #endif

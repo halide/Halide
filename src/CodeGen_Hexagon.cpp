@@ -1355,6 +1355,17 @@ void CodeGen_Hexagon::visit(const Call *op) {
             return;
         }
     }
+
+    if (op->is_intrinsic("prefetch")) {
+        user_warning << "CodeGen_Hexagon: saw prefetch intrinsic";
+        string instr = "halide.l2fetch";
+        Expr addr  = op->args[1];
+        Expr param = op->args[2];
+        value = call_intrin(op->type,
+                            instr, {addr, param});
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 
