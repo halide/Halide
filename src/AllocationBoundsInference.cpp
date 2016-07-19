@@ -96,6 +96,7 @@ class AllocationInference : public IRMutator {
                 max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
                 max_plus_one += bound.remainder;
                 extent = simplify(max_plus_one - min);
+                max = max_plus_one - 1;
             }
 
             Expr min_var = Variable::make(Int(32), min_name);
