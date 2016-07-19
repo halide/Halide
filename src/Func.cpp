@@ -1638,13 +1638,22 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Bound b = {var.name(), min, extent};
+    Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
     return *this;
 }
 
 Func &Func::bound_extent(Var var, Expr extent) {
     return bound(var, Expr(), extent);
+}
+
+Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
+    // TODO: error checking
+    invalidate_cache();
+
+    Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
+    func.schedule().bounds().push_back(b);
+    return *this;
 }
 
 Func &Func::tile(VarOrRVar x, VarOrRVar y,

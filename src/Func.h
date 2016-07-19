@@ -1084,6 +1084,8 @@ public:
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
 
+    EXPORT Func &align_bounds(Var var, Expr modulus, Expr remainder = 0);
+
     /** Bound the extent of a Func's realization, but not its
      * min. This means the dimension can be unrolled or vectorized
      * even when its min is not fixed (for example because it is

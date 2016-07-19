@@ -75,9 +75,15 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
+
     // First hunt through the bounds for them.
     for (const Bound &i : s.bounds()) {
-        known_size_dims[i.var] = i.extent;
+        if (i.extent.defined()) {
+            known_size_dims[i.var] = i.extent;
+        }
+        if (i.modulus.defined()) {
+            known_size_dims[i.var] = i.modulus;
+        }
     }
     // Then use any reduction domain.
     for (const ReductionVariable &i : s.rvars()) {
@@ -591,6 +597,10 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr max_var = Variable::make(Int(32), max_name);
             if (!b.min.defined()) {
                 b.min = min_var;
+            }
+            if (!b.extent.defined()) {
+                // This is just a bounds alignment, which always expands the region computed.
+                continue;
             }
 
             Expr max_val = (b.extent + b.min) - 1;

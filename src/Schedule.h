@@ -155,7 +155,7 @@ struct Dim {
 
 struct Bound {
     std::string var;
-    Expr min, extent;
+    Expr min, extent, modulus, remainder;
 };
 
 struct ScheduleContents;
