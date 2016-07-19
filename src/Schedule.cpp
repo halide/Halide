@@ -51,6 +51,12 @@ struct ScheduleContents {
             if (b.extent.defined()) {
                 b.extent = mutator->mutate(b.extent);
             }
+            if (b.modulus.defined()) {
+                b.modulus = mutator->mutate(b.modulus);
+            }
+            if (b.remainder.defined()) {
+                b.remainder = mutator->mutate(b.remainder);
+            }
         }
     }
 };
