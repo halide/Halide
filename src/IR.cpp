@@ -626,6 +626,7 @@ Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
+Call::ConstString Call::prefetch = "prefetch";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
 
 }
