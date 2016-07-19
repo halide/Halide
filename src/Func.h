@@ -1084,6 +1084,14 @@ public:
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
 
+    /** Expand the region computed so that the min coordinates is
+     * congruent to 'remainder' modulo 'modulus', and the extent is a
+     * multiple of 'modulus'. For example, f.align_bounds(x, 2) forces
+     * the min and extent realized to be even, and calling
+     * f.align_bounds(x, 2, 1) forces the min to be odd and the extent
+     * to be even. The region computed always contains the region that
+     * would have been computed without this directive, so no
+     * assertions are injected. */
     EXPORT Func &align_bounds(Var var, Expr modulus, Expr remainder = 0);
 
     /** Bound the extent of a Func's realization, but not its
