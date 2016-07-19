@@ -1656,6 +1656,9 @@ Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
     modulus = cast<int32_t>(modulus);
     remainder = cast<int32_t>(remainder);
 
+    // Reduce the remainder
+    remainder = remainder % modulus;
+
     invalidate_cache();
 
     bool found = false;
