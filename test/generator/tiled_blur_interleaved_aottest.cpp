@@ -1,10 +1,10 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
+#include "HalideImage.h"
 #include <assert.h>
 
 #include "tiled_blur_interleaved.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
@@ -32,7 +32,7 @@ int my_halide_trace(void *user_context, const halide_trace_event *ev) {
 int main(int argc, char **argv) {
     halide_set_custom_trace(&my_halide_trace);
 
-    Image<float> input(W, H, 3);
+    Image<float> input = Image<float>::make_interleaved(W, H, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             for (int c = 0; c < 3; c++) {
@@ -40,27 +40,12 @@ int main(int argc, char **argv) {
             }
         }
     }
-    Image<float> output(W, H, 3);
+    Image<float> output(3, W, H);
+    output = output.transposed(0, 1).transposed(1, 2);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
 
-    halide_buffer_t in = { 0 };
-    halide_buffer_t out = { 0 };
-    halide_dimension_t shape[] = {{0, W, 3},
-                                  {0, H, W*3},
-                                  {0, 3, 1}};
-
-    in.host = (uint8_t *)input.data();
-    in.dim = shape;
-    in.dimensions = 3;
-    in.type = halide_type_of<float>();
-
-    out.host = (uint8_t *)output.data();
-    out.dim = shape;
-    out.dimensions = 3;
-    out.type = halide_type_of<float>();
-
-    tiled_blur_interleaved(&in, &out);
+    tiled_blur_interleaved(&input, &output);
 
     printf("Success!\n");
     return 0;

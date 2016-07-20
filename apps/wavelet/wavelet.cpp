@@ -5,8 +5,8 @@
 #include "daubechies_x.h"
 #include "inverse_daubechies_x.h"
 
-#include "halide_image.h"
-#include "halide_image_io.h"
+#include "HalideImage.h"
+#include "HalideImageIO.h"
 
 using namespace Halide::Tools;
 
@@ -68,16 +68,16 @@ int main(int argc, char **argv) {
     Image<float> transformed(input.width()/2, input.height(), 2);
     Image<float> inverse_transformed(input.width(), input.height(), 1);
 
-    _assert(haar_x(input, transformed) == 0, "haar_x failed");
+    _assert(haar_x(&input, &transformed) == 0, "haar_x failed");
     save_transformed(transformed, dirname + "/haar_x.png");
 
-    _assert(inverse_haar_x(transformed, inverse_transformed) == 0, "inverse_haar_x failed");
+    _assert(inverse_haar_x(&transformed, &inverse_transformed) == 0, "inverse_haar_x failed");
     save_untransformed(inverse_transformed, dirname + "/inverse_haar_x.png");
 
-    _assert(daubechies_x(input, transformed) == 0, "daubechies_x failed");
+    _assert(daubechies_x(&input, &transformed) == 0, "daubechies_x failed");
     save_transformed(transformed, dirname + "/daubechies_x.png");
 
-    _assert(inverse_daubechies_x(transformed, inverse_transformed) == 0, "inverse_daubechies_x failed");
+    _assert(inverse_daubechies_x(&transformed, &inverse_transformed) == 0, "inverse_daubechies_x failed");
     save_untransformed(inverse_transformed, dirname + "/inverse_daubechies_x.png");
 
     printf("Done.\n");

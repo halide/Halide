@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 #include "memory_profiler_mandelbrot.h"
 
 using namespace Halide::Tools;
@@ -63,7 +63,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     Image<int> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
     memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
-                               output.width(), output.height(), output);
+                               output.width(), output.height(), &output);
 
     return 0;
 }

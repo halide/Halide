@@ -21,7 +21,7 @@
 using namespace Halide;
 
 // Include some support code for loading pngs.
-#include "halide_image_io.h"
+#include "HalideImageIO.h"
 using namespace Halide::Tools;
 
 // Include a clock to do performance testing.
@@ -162,7 +162,7 @@ public:
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
         padded.gpu_threads(x, y);
-        
+
         // JIT-compile the pipeline for the GPU. CUDA, OpenCL, or
         // Metal are not enabled by default. We have to construct a
         // Target object, enable one of them, and then pass that

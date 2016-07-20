@@ -224,7 +224,7 @@ Stmt add_image_checks(Stmt s,
             Expr type_lanes = Variable::make(UInt(16), type_lanes_name, image, param, rdom);
             Expr error = Call::make(Int(32), "halide_error_bad_type",
                                     {error_name,
-                                     type_code, make_const(UInt(8), type.code()),
+                                     type_code, make_const(UInt(8), (int)type.code()),
                                      type_bits, make_const(UInt(8), type.bits()),
                                      type_lanes, make_const(UInt(16), type.lanes())},
                                     Call::Extern);

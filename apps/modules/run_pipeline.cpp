@@ -1,7 +1,7 @@
 #include "pipeline.h"
 
-#include "halide_image.h"
-#include "halide_image_io.h"
+#include "HalideImage.h"
+#include "HalideImageIO.h"
 
 using namespace Halide::Tools;
 
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     Image<uint8_t> input = load_image(argv[1]);
     Image<uint8_t> output(input.width(), input.height(), 1);
 
-    if (pipeline(input, output) != 0) {
+    if (pipeline(&input, &output) != 0) {
         printf("Failure.\n");
         return 1;
     }

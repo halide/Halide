@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "HalideImage.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -8,7 +9,6 @@
 
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
@@ -428,15 +428,15 @@ int main(int argc, char **argv) {
     EXPECT_EQ(15, enum_results["metadata_tester"]);
     EXPECT_EQ(16, enum_results["metadata_tester_ucon"]);
 
-    const Image<uint8_t> input = make_image<uint8_t>();
+    Image<uint8_t> input = make_image<uint8_t>();
 
     Image<float> output0(kSize, kSize, 3);
     Image<float> output1(kSize, kSize, 3);
 
-    result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
+    result = metadata_tester(&input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, &output0, &output1);
     EXPECT_EQ(0, result);
 
-    result = metadata_tester_ucon(user_context, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
+    result = metadata_tester_ucon(user_context, &input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, &output0, &output1);
     EXPECT_EQ(0, result);
 
     verify(input, output0, output1);

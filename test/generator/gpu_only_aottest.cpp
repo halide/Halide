@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
+#include "HalideImage.h"
 #include <assert.h>
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
@@ -9,7 +10,6 @@
 #endif
 
 #include "gpu_only.h"
-#include "halide_image.h"
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {

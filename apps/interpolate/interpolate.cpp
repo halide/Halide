@@ -6,7 +6,7 @@ using namespace Halide;
 #include <limits>
 
 #include "benchmark.h"
-#include "halide_image_io.h"
+#include "HalideImageIO.h"
 
 using namespace Halide::Tools;
 

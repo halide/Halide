@@ -20,7 +20,7 @@
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "halide_image_io.h"
+#include "HalideImageIO.h"
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {

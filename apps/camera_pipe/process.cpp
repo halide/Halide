@@ -3,8 +3,8 @@
 
 #include "benchmark.h"
 #include "curved.h"
-#include "halide_image.h"
-#include "halide_image_io.h"
+#include "HalideImage.h"
+#include "HalideImageIO.h"
 #include "halide_malloc_trace.h"
 
 #include <cstdint>
@@ -64,8 +64,8 @@ int main(int argc, char **argv) {
 
     best = benchmark(timing_iterations, 1, [&]() {
         curved(color_temp, gamma, contrast, blackLevel, whiteLevel,
-               input, matrix_3200, matrix_7000,
-               output);
+               &input, matrix_3200, matrix_7000,
+               &output);
     });
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
     fprintf(stderr, "output: %s\n", argv[6]);

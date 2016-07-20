@@ -529,14 +529,17 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer()) {
                 string name = print_name(args[i].name);
-                stream << "    halide_nd_buffer_t<" << (int)args[i].dimensions
-                       << "> " << name << "_upgraded;\n"
-                       << "    " << name << "_upgraded.type = halide_type_of<"
-                       << print_type(args[i].type) << ">();\n"
-                       << "    err = halide_upgrade_buffer_t(" << ucon << ", "
-                       << "\"" << args[i].name << "\", "
-                       << name << "_buffer, "
-                       << "&" << name << "_upgraded);\n"
+                int dims = (int)args[i].dimensions;
+                stream << "    halide_dimension_t " << name << "_upgraded_shape[" << dims << "];\n"
+                       << "    halide_buffer_t " << name << "_upgraded = {0};\n"
+                       << "    " << name << "_upgraded.dimensions = " << dims << ";\n"
+                       << "    " << name << "_upgraded.dim = " << name << "_upgraded_shape;\n"
+                       << "    " << name << "_upgraded.type = halide_type_of<" << print_type(args[i].type) << ">();\n"
+                       << "    err = halide_upgrade_buffer_t("
+                           << ucon << ", "
+                           << "\"" << args[i].name << "\", "
+                           << name << "_buffer, "
+                           << "&" << name << "_upgraded);\n"
                        << "    if (err) return err;\n";
             }
         }

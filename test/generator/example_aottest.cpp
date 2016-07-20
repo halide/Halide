@@ -1,10 +1,10 @@
 #include "HalideRuntime.h"
+#include "HalideImage.h"
 
 #include <math.h>
 #include <stdio.h>
 
 #include "example.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
@@ -35,10 +35,10 @@ int main(int argc, char **argv) {
   const int channels = 3;
 
   // We can, of course, pass whatever values for Param/ImageParam that we like.
-  example(3.3245f, output);
+  example(3.3245f, &output);
   verify(output, compiletime_factor, 3.3245f, channels);
 
-  example(-1.234f, output);
+  example(-1.234f, &output);
   verify(output, compiletime_factor, -1.234f, channels);
 
   printf("Success!\n");

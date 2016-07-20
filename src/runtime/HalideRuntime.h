@@ -51,7 +51,7 @@ extern "C" {
 
 // Forward-declare to suppress warnings if compiling as C.
 #ifndef BUFFER_T_DEFINED
-struct buffer_t;
+struct halide_buffer_t;
 #endif
 
 /** Print a message to stderr. Main use is to support HL_TRACE
@@ -775,6 +775,8 @@ typedef struct halide_dimension_t {
 #endif
 } halide_dimension_t;
 
+} // extern "C"
+
 /**
  * The raw representation of an image passed around by generated
  * Halide code. It includes some stuff to track whether the image is
@@ -834,11 +836,11 @@ typedef struct halide_buffer_t {
         return get_flag(flag_device_dirty);
     }
 
-    void set_host_dirty(bool v) {
+    void set_host_dirty(bool v = true) {
         set_flag(flag_host_dirty, v);
     }
 
-    void set_device_dirty(bool v) {
+    void set_device_dirty(bool v = true) {
         set_flag(flag_device_dirty, v);
     }
     // @}
@@ -877,6 +879,11 @@ typedef struct halide_buffer_t {
         return host + index * type.bytes();
     }
 
+    /** The total number of bytes spanned by the data in memory. */
+    size_t size_in_bytes() const {
+        return (size_t)(end() - begin());
+    }
+
     /** A pointer to the element at the given location. */
     uint8_t *address_of(const int pos[]) const {
         ptrdiff_t index = 0;
@@ -886,64 +893,99 @@ typedef struct halide_buffer_t {
         return host + index * type.bytes();
     }
 
-    /** The total number of bytes spanned by the data in memory. */
-    size_t size_in_bytes() const {
-        return (size_t)(end() - begin());
+    /** A reference to the element at the given location. */
+    template<typename T>
+    T& at(const int pos[]) const {
+        return *((T *)address_of(pos));
+    }
+
+#if __cplusplus > 199711L
+    template<typename T, typename ...Args>
+    T& at(Args... args) const {
+        return *((T *)address_of(args...));
+    }
+
+    template<typename ...Args>
+    uint8_t *address_of(Args... args) const {
+        const int pos[] = {args...};
+        return address_of(pos);
+    }
+#endif
+
+    template<typename Fn>
+    void for_every_contiguous_block(Fn f) const {
+        // Make a list of the dimensions, sorted by decreasing absolute
+        // stride. They're probably already in order of increasing stride,
+        // so use reverse insertion sort.
+        int sorted_dims[dimensions];
+        for (int i = 0; i < dimensions; i++) {
+            int next_dim = dimensions - i - 1;
+            sorted_dims[i] = next_dim;
+            int abs_stride_i = dim[next_dim].stride;
+            if (abs_stride_i < 0) {
+                abs_stride_i = -abs_stride_i;
+            }
+            for (int j = i-1; j >= 0; j--) {
+                int abs_stride_j = dim[sorted_dims[j]].stride;
+                if (abs_stride_j < 0) {
+                    abs_stride_j = -abs_stride_j;
+                }
+                if (abs_stride_j < abs_stride_i) {
+                    int tmp = sorted_dims[j+1];
+                    sorted_dims[j+1] = sorted_dims[j];
+                    sorted_dims[j] = tmp;
+                }
+            }
+        }
+
+        struct {
+            const halide_buffer_t &buf;
+            Fn f;
+            void process(int *sorted_dims, size_t bytes,
+                         uint8_t *begin, uint8_t *end) {
+                if (begin + bytes >= end) {
+                    f(begin, end);
+                } else {
+                    halide_dimension_t d = buf.dim[*sorted_dims];
+                    bytes /= d.extent;
+                    if (d.stride < 0) {
+                        d.stride = -d.stride;
+                    }
+                    end -= (d.extent - 1) * d.stride * buf.type.bytes();
+                    for (int i = 0; i < d.extent; i++) {
+                        process(sorted_dims + 1, bytes, begin, end);
+                        if (d.stride == 0) break;
+                        begin += d.stride * buf.type.bytes();
+                        end += d.stride * buf.type.bytes();
+                    }
+                }
+            }
+        } helper = {*this, f};
+
+        helper.process(sorted_dims,
+                       number_of_elements() * type.bytes(),
+                       begin(), end());
+    }
+
+    template<typename T, typename Fn>
+    void for_every_element(Fn f) {
+        struct {
+            const halide_buffer_t &buf;
+            Fn f;
+            void operator()(uint8_t *begin, uint8_t *end) {
+                while (begin < end) {
+                    f(*((T *)begin));
+                    begin += buf.type.bytes();
+                }
+            }
+        } process_span = {*this, f};
+        for_every_contiguous_block(process_span);
     }
 
 #endif
 } halide_buffer_t;
 
 #ifdef __cplusplus
-} // extern "C"
-
-/** A wrapper for halide_buffer_t that knows the dimensionality at
- * compile-time and allocates enough space for the dimensions. Can
- * represent buffers of up-to D dimensions. */
-template<int D>
-struct halide_nd_buffer_t : public halide_buffer_t {
-    halide_dimension_t dim_storage[D];
-    halide_nd_buffer_t() {
-        memset(this, 0, sizeof(*this));
-        dimensions = D;
-        dim = dim_storage;
-    }
-
-    /** Make a copy of another halide_nd_buffer_t. Also copies the
-     * shape array.  We need custom copy and assignment operators to
-     * set the dim pointer correctly. */
-    halide_nd_buffer_t(const halide_nd_buffer_t<D> &other) {
-        memcpy(this, &other, sizeof(*this));
-        dim = dim_storage;
-    }
-
-    /** Copy the fields and shape from another halide_nd_buffer_t. */
-    halide_nd_buffer_t &operator=(const halide_nd_buffer_t<D> &other) {
-        memcpy(this, &other, sizeof(*this));
-        dim = dim_storage;
-    }
-
-    /** Construct a halide_nd_buffer_t from a halide_buffer_t. Checks
-     * there are enough dimensions at runtime and calls halide_error
-     * if there aren't. */
-    explicit halide_nd_buffer_t(const halide_buffer_t &other) : halide_buffer_t(other) {
-        if (other.dimensions > D) {
-            halide_error(NULL, "Can't construct a halide_nd_buffer_t from a halide_buffer_t of greater dimensionality\n");
-        }
-
-        device = other.device;
-        device_interface = other.device_interface;
-        host = other.host;
-        flags = other.flags;
-        type = other.type;
-        dimensions = other.dimensions;
-
-        for (int i = 0; i < other.dimensions && i < D; i++) {
-            dim[i] = other.dim[i];
-        }
-    }
-};
-
 extern "C" {
 #endif
 
@@ -1342,6 +1384,7 @@ struct halide_type_of_helper<bool> {
 template<typename T> halide_type_t halide_type_of() {
     return halide_type_of_helper<T>();
 }
+
 
 #endif
 

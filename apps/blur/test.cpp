@@ -4,15 +4,9 @@
 #include <cstdio>
 
 #include "benchmark.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 
 using namespace Halide::Tools;
-
-//#define cimg_display 0
-//#include "CImg.h"
-//using namespace cimg_library;
-
-// typedef CImg<uint16_t> Image;
 
 double t;
 
@@ -177,12 +171,12 @@ Image<uint16_t> blur_halide(Image<uint16_t> in) {
     Image<uint16_t> out(in.width()-8, in.height()-2);
 
     // Call it once to initialize the halide runtime stuff
-    halide_blur(in, out);
+    halide_blur(&in, &out);
 
     t = benchmark(10, 1, [&]() {
         // Compute the same region of the output as blur_fast (i.e., we're
         // still being sloppy with boundary conditions)
-        halide_blur(in, out);
+        halide_blur(&in, &out);
     });
 
     return out;

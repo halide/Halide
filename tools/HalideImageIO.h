@@ -1,5 +1,5 @@
 // This simple PNG IO library works with *both* the Halide::Image<T> type *and*
-// the simple halide_image.h version. Also now includes PPM support for faster load/save.
+// the simple HalideImage.h version. Also now includes PPM support for faster load/save.
 
 #ifndef HALIDE_IMAGE_IO_H
 #define HALIDE_IMAGE_IO_H
@@ -200,7 +200,7 @@ bool load_png(const std::string &filename, ImageType *im) {
     // convert the data to ImageType::ElemType
 
     int c_stride = &(*im)(0, 0, 1) - &(*im)(0, 0, 0);
-    typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
+    typename ImageType::ElemType *ptr = &(*im)(0, 0, 0);
     if (bit_depth == 8) {
         for (int y = 0; y < im->height(); y++) {
             uint8_t *srcPtr = (uint8_t *)(row_pointers.p[y]);
@@ -286,7 +286,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     // im.copyToHost(); // in case the image is on the gpu
 
     int c_stride = &im(0, 0, 1) - &im(0, 0, 0);
-    typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
+    typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)(&im(0, 0, 0));
 
     for (int y = 0; y < im.height(); y++) {
         uint8_t *dstPtr = (uint8_t *)(row_pointers.p[y]);
@@ -367,7 +367,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height);
         if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 8-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        typename ImageType::ElemType *im_data = (&(*im)(0, 0, 0));
         uint8_t *p = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -378,7 +378,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
         if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        typename ImageType::ElemType *im_data = (&(*im)(0, 0, 0));
         uint16_t *p = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -472,7 +472,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     if (bit_depth == 8) {
         std::vector<uint8_t> data(width*height*3);
         if (!check(fread((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        typename ImageType::ElemType *im_data = &(*im)(0, 0, 0);
         uint8_t *row = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -485,7 +485,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
         int little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
         if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
-        typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
+        typename ImageType::ElemType *im_data = &(*im)(0, 0, 0);
         uint16_t *row = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {

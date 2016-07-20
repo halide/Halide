@@ -5,7 +5,7 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include <halide_image_io.h>
+#include <HalideImageIO.h>
 #include <benchmark.h>
 
 enum InterpolationType {

@@ -10,11 +10,12 @@ int main(int argc, char **argv) {
 
 #include <math.h>
 #include "HalideRuntime.h"
+#include "HalideImage.h"
 #include <assert.h>
 #include <string.h>
 
 #include "acquire_release.h"
-#include "halide_image.h"
+
 
 using namespace Halide::Tools;
 
@@ -213,11 +214,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    input.set_host_dirty();
+    input.set_host_dirty(true);
 
     Image<float> output(W, H);
 
-    acquire_release(input, output);
+    acquire_release(&input, &output);
 
     output.copy_to_host();
 

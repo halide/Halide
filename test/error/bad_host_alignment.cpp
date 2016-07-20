@@ -10,9 +10,11 @@ int main(int argc, char **argv) {
     int arr[11][10];
     uint8_t *ptr = reinterpret_cast<uint8_t*>(arr);
     ptr += 1;
-    halide_nd_buffer_t<1> buf;
+    halide_buffer_t buf;
+    halide_dimension_t shape = {0, 10, 1};
+    buf.dim = &shape;
+    buf.dimensions = 1;
     buf.host = ptr;
-    buf.dim[0] = {0, 10, 1};
     buf.type = halide_type_of<uint8_t>();
     Buffer param_buf(&buf);
     ImageParam in(UInt(8), 2);

@@ -4,8 +4,7 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeOpenGL.h"
 #include "SimpleAppAPI.h"
-
-#include "halide_image.h"
+#include "HalideImage.h"
 
 #include "example4.h"
 #include "example4_glsl.h"
@@ -58,34 +57,34 @@ static int run_test(void *uc, int channels, Implementation imp, Layout layout) {
   halide_printf(uc, "\n---------------------------\n%s\n", name.c_str());
   Image<uint8_t> input(kWidth, kHeight, channels, 0, (layout == kChunky));
   Image<uint8_t> output(kWidth, kHeight, channels, 0, (layout == kChunky));
-  (void) halide_smooth_buffer_host<uint8_t>(uc, kSeed, input);
+  (void) halide_smooth_buffer_host<uint8_t>(uc, kSeed, &input);
   if (imp == kGLSL) {
     // Call once to ensure OpenGL is inited (we want to time the
     // cost of copy-to-device alone)
-    halide_copy_to_device(uc, input, halide_opengl_device_interface());
+    halide_copy_to_device(uc, &input, halide_opengl_device_interface());
     // Mark as dirty so the next call won't be a no-op
     input.set_host_dirty();
     {
       ScopedTimer timer(uc, name + " halide_copy_to_device input");
-      halide_copy_to_device(uc, input, halide_opengl_device_interface());
+      halide_copy_to_device(uc, &input, halide_opengl_device_interface());
     }
     {
       ScopedTimer timer(uc, name + " halide_copy_to_device output");
-      halide_copy_to_device(uc, output, halide_opengl_device_interface());
+      halide_copy_to_device(uc, &output, halide_opengl_device_interface());
     }
   }
   // Call once to compile shader, warm up, etc.
   ExampleFunc example = exampleFuncs[channels-1][imp];
-  (void) example(input, output);
+  (void) example(&input, &output);
   {
     ScopedTimer timer(uc, name, kIter);
     for (int i = 0; i < kIter; ++i) {
-      (void) example(input, output);
+      (void) example(&input, &output);
     }
   }
   if (imp == kGLSL) {
     ScopedTimer timer(uc, name + " halide_copy_to_host");
-    halide_copy_to_host(uc, output);
+    halide_copy_to_host(uc, &output);
   }
   // halide_buffer_display(input);
   // halide_buffer_print(input);
@@ -131,4 +130,3 @@ bool example_test() {
 
   return errors > 0;
 }
-

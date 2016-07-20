@@ -3,7 +3,7 @@
 #include <assert.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 #include "user_context.h"
 
 using namespace Halide::Tools;
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     called_trace = false;
     called_malloc = false;
     called_free = false;
-    result = user_context(context_pointer, input, output);
+    result = user_context(context_pointer, &input, &output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
         exit(-1);
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     // verify that calling via the _argv entry point
     // also produces the correct result
     const void* arg0 = context_pointer;
-    void* args[3] = { &arg0, input.raw_buffer(), output.raw_buffer() };
+    void* args[3] = { &arg0, &input, &output };
     called_error = false;
     called_trace = false;
     called_malloc = false;
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
     called_trace = false;
     called_malloc = false;
     called_free = false;
-    result = user_context(context_pointer, input, big_output);
+    result = user_context(context_pointer, &input, &big_output);
     if (result == 0) {
         fprintf(stderr, "Expected this to fail, but got %d\n", result);
         exit(-1);

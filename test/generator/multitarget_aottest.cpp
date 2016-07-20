@@ -3,7 +3,7 @@
 #include <tuple>
 #include "HalideRuntime.h"
 #include "multitarget.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 
 using namespace Halide::Tools;
 
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
 
     halide_set_custom_can_use_target_features(my_can_use_target_features);
 
-    halide_buffer_t *o_buf = output;
+    halide_buffer_t *o_buf = &output;
 
     if (HalideTest::multitarget(o_buf) != 0) {
         printf("Error at multitarget\n");
