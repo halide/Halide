@@ -2131,9 +2131,7 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 
 template <typename BinaryOp>
 Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
-    if (e.size() == 1) {
-        return (*this) = BinaryOp()(Expr(*this), e[0]);
-    }
+    internal_assert(e.size() > 1);
 
     vector<Expr> init_values(e.size());
     for (int i = 0; i < (int)init_values.size(); ++i) {
@@ -2161,11 +2159,18 @@ Stage FuncRef::operator+=(Expr e) {
 }
 
 Stage FuncRef::operator+=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) += e[0];
+    }
     return func_ref_update<std::plus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator+=(const FuncRef &e) {
-    return (*this) += Tuple(e);
+    if (e.size() == 1) {
+        return (*this) += Expr(e);
+    } else {
+        return (*this) += Tuple(e);
+    }
 }
 
 Stage FuncRef::operator*=(Expr e) {
@@ -2173,11 +2178,18 @@ Stage FuncRef::operator*=(Expr e) {
 }
 
 Stage FuncRef::operator*=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) *= e[0];
+    }
     return func_ref_update<std::multiplies<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator*=(const FuncRef &e) {
-    return (*this) *= Tuple(e);
+    if (e.size() == 1) {
+        return (*this) *= Expr(e);
+    } else {
+        return (*this) *= Tuple(e);
+    }
 }
 
 Stage FuncRef::operator-=(Expr e) {
@@ -2185,11 +2197,18 @@ Stage FuncRef::operator-=(Expr e) {
 }
 
 Stage FuncRef::operator-=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) -= e[0];
+    }
     return func_ref_update<std::minus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator-=(const FuncRef &e) {
-    return (*this) -= Tuple(e);
+    if (e.size() == 1) {
+        return (*this) -= Expr(e);
+    } else {
+        return (*this) -= Tuple(e);
+    }
 }
 
 Stage FuncRef::operator/=(Expr e) {
@@ -2197,11 +2216,18 @@ Stage FuncRef::operator/=(Expr e) {
 }
 
 Stage FuncRef::operator/=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) /= e[0];
+    }
     return func_ref_update<std::divides<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator/=(const FuncRef &e) {
-    return (*this) /= Tuple(e);
+    if (e.size() == 1) {
+        return (*this) /= Expr(e);
+    } else {
+        return (*this) /= Tuple(e);
+    }
 }
 
 FuncRef::operator Expr() const {

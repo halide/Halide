@@ -9,6 +9,26 @@ int main(int argc, char **argv) {
         Var x("x"), y("y");
         Func f("f");
 
+        f(x, y) += Tuple(x + y);
+
+        Realization result = f.realize(1024, 1024);
+        Image<int> a = result[0];
+        for (int y = 0; y < a.height(); y++) {
+            for (int x = 0; x < a.width(); x++) {
+                int correct_a = x + y;
+                if (a(x, y) != correct_a) {
+                    printf("result(%d, %d) = (%d) instead of (%d)\n",
+                           x, y, a(x, y), correct_a);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f");
+
         f(x, y) += Tuple(4, 8);
         f(x, y) *= Tuple(x + y, x + 13);
         f(x, y) /= Tuple(2, 2);
@@ -72,6 +92,28 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f");
+
+        f(x, y) = Tuple(x + y);
+        f(x, y) += Tuple(x);
+        f(x, y) *= f(x, y);
+
+        Realization result = f.realize(1024, 1024);
+        Image<int> a = result[0];
+        for (int y = 0; y < a.height(); y++) {
+            for (int x = 0; x < a.width(); x++) {
+                int correct_a = (2*x + y)*(2*x + y);
+                if (a(x, y) != correct_a) {
+                    printf("result(%d, %d) = (%d) instead of (%d)\n",
+                           x, y, a(x, y), correct_a);
                     return -1;
                 }
             }
