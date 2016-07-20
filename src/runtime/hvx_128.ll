@@ -266,23 +266,11 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vb.vb(<128 x i8> %a, <128 x i8> %
 }
 
 define weak_odr void @halide.hexagon.l2fetch.Rt(i32 %addr, i32 %param) nounwind uwtable readnone alwaysinline {
-  %addr.addr = alloca i32, align 4
-  %param.addr = alloca i32, align 8
-  store i32 %addr, i32* %addr.addr, align 4
-  store i32 %param, i32* %param.addr, align 8
-  %a = load i32, i32* %addr.addr, align 4
-  %p = load i32, i32* %param.addr, align 8
-  call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %a, i32 %p)
+  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %addr, i32 %param)
   ret void
 }
 
 define weak_odr void @halide.hexagon.l2fetch.Rtt(i32 %addr, i64 %param) nounwind uwtable readnone alwaysinline {
-  %addr.addr = alloca i32, align 4
-  %param.addr = alloca i64, align 8
-  store i32 %addr, i32* %addr.addr, align 4
-  store i64 %param, i64* %param.addr, align 8
-  %a = load i32, i32* %addr.addr, align 4
-  %p = load i64, i64* %param.addr, align 8
-  call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %a, i64 %p)
+  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %addr, i64 %param)
   ret void
 }
