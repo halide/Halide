@@ -347,14 +347,15 @@ private:
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
         } else if (cast &&
-                   (op->type.code() == Type::Int || op->type.code() == Type::UInt) &&
-                   (cast->type.code() == Type::Int || cast->type.code() == Type::UInt) &&
-                   op->type.bits() < cast->type.bits() &&
-                   op->type.bits() < op->value.type().bits()) {
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   (cast->type.is_int() || cast->type.is_uint()) &&
+                   op->type.bits() <= cast->type.bits() &&
+                   op->type.bits() <= op->value.type().bits()) {
             // If this is a cast between integer types, where the
             // outer cast is narrower than the inner cast and the
             // inner cast's argument, the inner cast can be
-            // eliminated.
+            // eliminated. The inner cast is either a sign extend
+            // or a zero extend, and the outer cast truncates the extended bits
             expr = mutate(Cast::make(op->type, cast->value));
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
