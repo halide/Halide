@@ -2130,120 +2130,79 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
     define_base_case(func, a, Tuple(e));
 }
 
-Stage FuncRef::operator+=(Expr e) {
+template <typename BinaryOp>
+Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
+    if (e.size() == 1) {
+        return (*this) = BinaryOp()(Expr(*this), e[0]);
+    }
+
+    vector<Expr> init_values(e.size());
+    for (int i = 0; i < (int)init_values.size(); ++i) {
+        init_values[i] = cast(e[i].type(), init_val);
+    }
+    vector<Expr> a = args_with_implicit_vars(e.as_vector());
+    define_base_case(func, a, Tuple(init_values));
+
+    vector<Expr> values(e.size());
+    for (int i = 0; i < (int)values.size(); ++i) {
+        values[i] = BinaryOp()((*this)[i], e[i]);
+    }
+    return (*this) = Tuple(values);
+}
+
+template <typename BinaryOp>
+Stage FuncRef::func_ref_update(Expr e, int init_val) {
     vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 0));
-    return (*this) = Expr(*this) + e;
+    define_base_case(func, a, cast(e.type(), init_val));
+    return (*this) = BinaryOp()(Expr(*this), e);
+}
+
+Stage FuncRef::operator+=(Expr e) {
+    return func_ref_update<std::plus<Expr>>(e, 0);
+}
+
+Stage FuncRef::operator+=(const Tuple &e) {
+    return func_ref_update<std::plus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator+=(const FuncRef &e) {
     return (*this) += (Expr)e;
 }
 
-Stage FuncRef::operator+=(const Tuple &e) {
-    if (e.size() == 1) {
-        return (*this) += e[0];
-    }
-
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), 0);
-    }
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    define_base_case(func, a, Tuple(init_values));
-
-    vector<Expr> values(e.size());
-    for (int i = 0; i < (int)values.size(); ++i) {
-        values[i] = (*this)[i] + e[i];
-    }
-    return (*this) = Tuple(values);
+Stage FuncRef::operator*=(Expr e) {
+    return func_ref_update<std::multiplies<Expr>>(e, 1);
 }
 
-Stage FuncRef::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 1));
-    return (*this) = Expr(*this) * e;
+Stage FuncRef::operator*=(const Tuple &e) {
+    return func_ref_update<std::multiplies<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator*=(const FuncRef &e) {
     return (*this) *= (Expr)e;
 }
 
-Stage FuncRef::operator*=(const Tuple &e) {
-    if (e.size() == 1) {
-        return (*this) *= e[0];
-    }
-
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), 1);
-    }
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    define_base_case(func, a, Tuple(init_values));
-
-    vector<Expr> values(e.size());
-    for (int i = 0; i < (int)values.size(); ++i) {
-        values[i] = (*this)[i] * e[i];
-    }
-    return (*this) = Tuple(values);
+Stage FuncRef::operator-=(Expr e) {
+    return func_ref_update<std::minus<Expr>>(e, 0);
 }
 
-Stage FuncRef::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 0));
-    return (*this) = Expr(*this) - e;
+Stage FuncRef::operator-=(const Tuple &e) {
+    return func_ref_update<std::minus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator-=(const FuncRef &e) {
     return (*this) -= (Expr)e;
 }
 
-Stage FuncRef::operator-=(const Tuple &e) {
-    if (e.size() == 1) {
-        return (*this) -= e[0];
-    }
-
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), 0);
-    }
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    define_base_case(func, a, Tuple(init_values));
-
-    vector<Expr> values(e.size());
-    for (int i = 0; i < (int)values.size(); ++i) {
-        values[i] = (*this)[i] - e[i];
-    }
-    return (*this) = Tuple(values);
+Stage FuncRef::operator/=(Expr e) {
+    return func_ref_update<std::divides<Expr>>(e, 1);
 }
 
-Stage FuncRef::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 1));
-    return (*this) = Expr(*this) / e;
+Stage FuncRef::operator/=(const Tuple &e) {
+    return func_ref_update<std::divides<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator/=(const FuncRef &e) {
     return (*this) /= (Expr)e;
-}
-
-Stage FuncRef::operator/=(const Tuple &e) {
-    if (e.size() == 1) {
-        return (*this) /= e[0];
-    }
-
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), 1);
-    }
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    define_base_case(func, a, Tuple(init_values));
-
-    vector<Expr> values(e.size());
-    for (int i = 0; i < (int)values.size(); ++i) {
-        values[i] = (*this)[i] / e[i];
-    }
-    return (*this) = Tuple(values);
 }
 
 FuncRef::operator Expr() const {
