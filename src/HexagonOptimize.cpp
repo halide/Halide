@@ -398,7 +398,7 @@ private:
 
     void visit(const Max *op) {
         IRMutator::visit(op);
-        const Max *newOp = expr.as<Max>();
+
         if (op->type.is_vector()) {
             // This pattern is weird (two operands must match, result
             // needs 1 added) and we're unlikely to need another
@@ -413,47 +413,6 @@ private:
                     expr = Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
                     return;
                 }
-            }
-            
-            Expr a = newOp->a;
-            Expr b = newOp->b;
-            const Call *call_a = a.as<Call>();
-            const Call *call_b = b.as<Call>();
-            if (call_a && call_b && call_a->is_intrinsic(Call::slice_vector) &&
-                call_b->is_intrinsic(Call::slice_vector)) {
-                const int64_t *stride_a = as_const_int(call_a->args[2]);
-                const int64_t *stride_b = as_const_int(call_b->args[2]);
-                if (*stride_a == 1 && *stride_b == 1) {
-                    const Call *concat_a = call_a->args[0].as<Call>();
-                    const Call *concat_b = call_b->args[0].as<Call>();
-                    if (concat_a && concat_b) {
-                        const std::vector<Expr> &slices_a = concat_a->args;
-                        const std::vector<Expr> &slices_b = concat_b->args;
-                        if (slices_a.size() == slices_b.size()) {
-                            bool success = true;
-                            for (size_t i = 0; i < slices_a.size(); i++) {
-                                if (slices_a[i].type() != slices_b[i].type()) {
-                                    success = false;
-                                    break;
-                                }
-                            }
-                            if (success) {
-                                vector<Expr> new_slices;
-                                for (size_t i = 0; i < slices_a.size(); i++) {
-                                    new_slices.push_back(max(slices_a[i], slices_b[i]));
-                                }
-                                Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
-                                expr = Call::make(op->type, Call::slice_vector,
-                                                  { concat_v, call_a->args[1], call_a->args[2], call_a->args[3] }, Call::PureIntrinsic);
-                                debug(4) << "Doing dilate wala optimization" << expr << "\n";
-                                return;
-                                
-                            }
-                        }
-                    }
-                }
-                // check if both strides are 1.
- 
             }
         }
     }
@@ -1090,6 +1049,84 @@ class OptimizeShuffles : public IRMutator {
     }
 };
 
+class HoistSliceVectors : public IRMutator {
+    using IRMutator::visit;
+
+    vector<Expr> op_a;
+    vector<Expr> op_b;
+    Expr start_lane, result_lanes;
+
+    template <typename T>
+    bool visit_binary(const T *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
+        if (call_a && call_b &&
+            call_a->is_intrinsic(Call::slice_vector) &&
+            call_b->is_intrinsic(Call::slice_vector)) {
+
+            const int64_t *stride_a = as_const_int(call_a->args[2]);
+            const int64_t *stride_b = as_const_int(call_b->args[2]);
+            if (*stride_a != 1 || *stride_b != 1) {
+                return false;
+            }
+
+            const Call *concat_a = call_a->args[0].as<Call>();
+            const Call *concat_b = call_b->args[0].as<Call>();
+            if (!concat_a || !concat_b) {
+                return false;
+            }
+
+            const std::vector<Expr> &slices_a = concat_a->args;
+            const std::vector<Expr> &slices_b = concat_b->args;
+            if (slices_a.size() != slices_b.size()) {
+                return false;
+            }
+
+            for (size_t i = 0; i < slices_a.size(); i++) {
+                if (slices_a[i].type() != slices_b[i].type()) {
+                    return false;
+                }
+            }
+
+            for (size_t i = 0; i < slices_a.size(); i++) {
+                op_a.push_back(slices_a[i]);
+                op_b.push_back(slices_b[i]);
+            }
+            start_lane = call_a->args[1];
+            result_lanes = call_a->args[3];
+            return true;
+        }
+        return false;
+    }
+    void visit(const Max *op) {
+        if (op->type.is_vector()) {
+            debug(4) << "Trying to optimize " << (Expr) op << "\n";
+            if (visit_binary(op)) {
+                internal_assert(op_a.size() == op_b.size());
+                vector<Expr> new_slices;
+                Type t = op_a[0].type();
+                int lanes = 0;
+                for(size_t i = 0; i < op_a.size(); i++) {
+                    new_slices.push_back(max(op_a[i], op_b[i]));
+                    lanes += op_a[i].type().lanes();
+                }
+                Expr concat_v = Call::make(t.with_lanes(lanes), Call::concat_vectors, new_slices, Call::PureIntrinsic);
+                expr = Call::make(op->type, Call::slice_vector,
+                                  { concat_v, start_lane, 1 /*for now, we only deal with stride 1 */, result_lanes },
+                                  Call::PureIntrinsic);
+                debug(4) << "Hoisting slice_vector: " << expr << "\n";
+                op_a.clear();
+                op_b.clear();
+                new_slices.clear();
+                return;
+            }
+        }
+        IRMutator::visit(op);
+    }
+};
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s) {
@@ -1103,6 +1140,7 @@ Stmt optimize_hexagon_instructions(Stmt s) {
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);
 
+    s = HoistSliceVectors().mutate(s);
     // Try to eliminate any redundant interleave/deinterleave pairs.
     s = EliminateInterleaves().mutate(s);
 
