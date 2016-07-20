@@ -16,6 +16,12 @@ interface halide_hexagon_remote
     long power_hvx_on();
     long power_hvx_off();
 
+    // malloc stalls for a long time if the allocation causes the
+    // Hexagon heap to grow. This function enables an application to
+    // reserve memory up front to avoid requiring the heap to grow during
+    // a run call.
+    long reserve_memory(in unsigned long min, in unsigned long max);
+
     // Routine to run a pipeline on the remote side.
     long run(in handle_t module_ptr, in handle_t symbol,
              in sequence<buffer> input_buffers,
