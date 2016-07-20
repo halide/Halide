@@ -1023,6 +1023,7 @@ Expr span_of_bounds(Interval bounds) {
 // Replace indirect loads with dynamic_shuffle intrinsics where
 // possible.
 class OptimizeShuffles : public IRMutator {
+    int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
 
@@ -1055,33 +1056,44 @@ class OptimizeShuffles : public IRMutator {
         }
 
         Expr index = mutate(op->index);
-        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
-        if (index_bounds.is_bounded()) {
-            Expr index_span = span_of_bounds(index_bounds);
-            index_span = common_subexpression_elimination(index_span);
-            index_span = simplify(index_span);
+        Interval unaligned_index_bounds = bounds_of_expr_in_scope(index, bounds);
+        if (unaligned_index_bounds.is_bounded()) {
+            // We want to try both the unaligned and aligned
+            // bounds. The unaligned bounds might fit in 256 elements,
+            // while the aligned bounds do not.
+            int align = lut_alignment / op->type.bytes();
+            Interval aligned_index_bounds = {
+                (unaligned_index_bounds.min / align) * align,
+                ((unaligned_index_bounds.max + align) / align) * align - 1
+            };
 
-            if (can_prove(index_span < 256)) {
-                // This is a lookup within an up to 256 element array. We
-                // can use dynamic_shuffle for this.
-                int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
-                Expr base = simplify(index_bounds.min);
+            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+                Expr index_span = span_of_bounds(index_bounds);
+                index_span = common_subexpression_elimination(index_span);
+                index_span = simplify(index_span);
 
-                // Load all of the possible indices loaded from the
-                // LUT. Note that for clamped ramps, this loads up to 1
-                // vector past the max. CodeGen_Hexagon::allocation_padding
-                // returns a native vector size to account for this.
-                Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
-                                      Ramp::make(base, 1, const_extent),
-                                      op->image, op->param);
+                if (can_prove(index_span < 256)) {
+                    // This is a lookup within an up to 256 element array. We
+                    // can use dynamic_shuffle for this.
+                    int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
+                    Expr base = simplify(index_bounds.min);
 
-                // We know the size of the LUT is not more than 256, so we
-                // can safely cast the index to 8 bit, which
-                // dynamic_shuffle requires.
-                index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
+                    // Load all of the possible indices loaded from the
+                    // LUT. Note that for clamped ramps, this loads up to 1
+                    // vector past the max. CodeGen_Hexagon::allocation_padding
+                    // returns a native vector size to account for this.
+                    Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
+                                          Ramp::make(base, 1, const_extent),
+                                          op->image, op->param);
 
-                expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
-                return;
+                    // We know the size of the LUT is not more than 256, so we
+                    // can safely cast the index to 8 bit, which
+                    // dynamic_shuffle requires.
+                    index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
+
+                    expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
+                    return;
+                }
             }
         }
         if (!index.same_as(op->index)) {
@@ -1090,14 +1102,17 @@ class OptimizeShuffles : public IRMutator {
             expr = op;
         }
     }
+
+public:
+    OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
 }  // namespace
 
-Stmt optimize_hexagon_shuffles(Stmt s) {
+Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
-    return OptimizeShuffles().mutate(s);
+    return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
 Stmt optimize_hexagon_instructions(Stmt s) {
