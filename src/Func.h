@@ -256,6 +256,19 @@ class FuncRef {
     int implicit_placeholder_pos;
     std::vector<Expr> args;
     std::vector<Expr> args_with_implicit_vars(const std::vector<Expr> &e) const;
+
+    /** Helper for function update by Tuple. If the function does not
+     * already have a pure definition, init_val will be used as RHS of
+     * each tuple element in the initial function definition. */
+    template <typename BinaryOp>
+    Stage func_ref_update(const Tuple &e, int init_val);
+
+    /** Helper for function update by Expr. If the function does not
+     * already have a pure definition, init_val will be used as RHS in
+     * the initial function definition. */
+    template <typename BinaryOp>
+    Stage func_ref_update(Expr e, int init_val);
+
 public:
     FuncRef(Internal::Function, const std::vector<Expr> &,
                 int placeholder_pos = -1);
@@ -278,8 +291,8 @@ public:
      */
     // @{
     EXPORT Stage operator+=(Expr);
-    EXPORT Stage operator+=(const FuncRef &);
     EXPORT Stage operator+=(const Tuple &);
+    EXPORT Stage operator+=(const FuncRef &);
     // @}
 
     /** Define this function as a sum reduction over the negative of
@@ -289,8 +302,8 @@ public:
      */
     // @{
     EXPORT Stage operator-=(Expr);
-    EXPORT Stage operator-=(const FuncRef &);
     EXPORT Stage operator-=(const Tuple &);
+    EXPORT Stage operator-=(const FuncRef &);
     // @}
 
     /** Define this function as a product reduction. The expression
@@ -300,8 +313,8 @@ public:
      */
     // @{
     EXPORT Stage operator*=(Expr);
-    EXPORT Stage operator*=(const FuncRef &);
     EXPORT Stage operator*=(const Tuple &);
+    EXPORT Stage operator*=(const FuncRef &);
     // @}
 
     /** Define this function as the product reduction over the inverse
@@ -311,8 +324,8 @@ public:
      */
     // @{
     EXPORT Stage operator/=(Expr);
-    EXPORT Stage operator/=(const FuncRef &);
     EXPORT Stage operator/=(const Tuple &);
+    EXPORT Stage operator/=(const FuncRef &);
     // @}
 
     /* Override the usual assignment operator, so that
