@@ -55,6 +55,11 @@ extern int halide_hexagon_power_hvx_off(void *user_context);
 extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
 // @}
 
+/** Reserve memory for the Hexagon heap. This can avoid a significant
+ * performance penalty for malloc calls that cause the Hexagon heap to
+ * grow. */
+extern int halide_hexagon_reserve_memory(void *user_context, uint32_t min, uint32_t max);
+
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */
 // @{

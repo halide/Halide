@@ -33,6 +33,7 @@ typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
+typedef int (*remote_reserve_memory_fn)(uint64_t, uint64_t);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -46,6 +47,7 @@ WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
+WEAK remote_reserve_memory_fn remote_reserve_memory = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
@@ -130,6 +132,9 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
+
+    // This is an optional function to avoid mallocs growing the DSP heap.
+    get_symbol(user_context, "halide_hexagon_remote_reserve_memory", remote_reserve_memory, /* required */ false);
 
     host_malloc_init();
 
@@ -689,6 +694,37 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
 
 WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
     halide_hexagon_power_hvx_off(user_context);
+}
+
+WEAK int halide_hexagon_reserve_memory(void *user_context, uint32_t min, uint32_t max) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_reserve_memory\n";
+    if (!remote_reserve_memory) {
+        // The function is not available in this version of the
+        // runtime, so we'll just have to deal with the malloc penalty.
+        return 0;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    debug(user_context) << "    remote_reserve_memory(" << min << ", " << max << ") -> ";
+    result = remote_reserve_memory(min, max);
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_reserve_memory failed.\n";
+        return result;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
 }
 
 WEAK const halide_device_interface *halide_hexagon_device_interface() {

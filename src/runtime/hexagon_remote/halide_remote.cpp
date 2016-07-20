@@ -11,6 +11,7 @@ extern "C" {
 
 #include "HAP_farf.h"
 #include "HAP_power.h"
+#include "HAP_mem.h"
 
 }
 
@@ -261,6 +262,15 @@ int halide_hexagon_remote_power_hvx_off() {
             log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
             return -1;
         }
+    }
+    return 0;
+}
+
+int halide_hexagon_remote_reserve_memory(unsigned int min, unsigned int max) {
+    int result = HAP_mem_set_grow_size(min, max);
+    if (result != 0) {
+        log_printf("HAP_mem_set_grow_size failed (%d)\n", result);
+        return -1;
     }
     return 0;
 }

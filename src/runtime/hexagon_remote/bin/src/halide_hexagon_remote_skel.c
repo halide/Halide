@@ -423,12 +423,12 @@ static const SequenceType sequenceTypes[1] = {{&(types[1]),0x0,0x4,0x4,0x0}};
 static const Type types[2] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)}};
 static const Parameter parameters[8] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0}};
 static const Parameter* const parameterArrays[14] = {(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[3])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7])),(&(parameters[2])),(&(parameters[5]))};
-static const Method methods[7] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[5])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[0])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[12])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[10])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[8])),0x1,0x4}};
-static const Method* const methodArrays[8] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6])};
-static const char strings[211] = "poll_profiler_state\0initialize_kernels\0release_kernels\0output_buffers\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v2\0power_hvx_on\0module_ptr\0read_size\0poll_log\0threads\0sym_ptr\0symbol\0func\0name\0code\0run\0";
-static const uint16_t methodStrings[24] = {207,139,185,84,55,70,112,139,197,177,0,192,169,160,165,150,39,139,155,20,202,139,98,126};
-static const uint16_t methodStringsArrays[8] = {19,6,23,22,0,16,13,10};
-__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {8,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
+static const Method methods[8] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[5])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[0])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[12])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[10])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[8])),0x1,0x4}};
+static const Method* const methodArrays[9] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7])};
+static const char strings[234] = "poll_profiler_state\0initialize_kernels\0release_kernels\0output_buffers\0reserve_memory\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v2\0power_hvx_on\0module_ptr\0read_size\0poll_log\0threads\0sym_ptr\0symbol\0func\0name\0code\0run\0max\0min\0";
+static const uint16_t methodStrings[27] = {222,154,200,99,55,85,127,154,212,192,0,207,184,175,180,165,39,154,170,70,230,226,20,217,154,113,141};
+static const uint16_t methodStringsArrays[9] = {22,6,26,25,19,0,16,13,10};
+__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {9,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
 #ifdef __cplusplus
 extern "C" {
@@ -694,12 +694,14 @@ __QAIC_SKEL_EXPORT int __QAIC_SKEL(halide_hexagon_remote_skel_invoke)(uint32_t _
       case 3:
       return _skel_method_4((void*)__QAIC_IMPL(halide_hexagon_remote_power_hvx_off), _sc, _pra);
       case 4:
-      return _skel_method_3((void*)__QAIC_IMPL(halide_hexagon_remote_run), _sc, _pra);
+      return _skel_method_2((void*)__QAIC_IMPL(halide_hexagon_remote_reserve_memory), _sc, _pra);
       case 5:
-      return _skel_method_2((void*)__QAIC_IMPL(halide_hexagon_remote_release_kernels), _sc, _pra);
+      return _skel_method_3((void*)__QAIC_IMPL(halide_hexagon_remote_run), _sc, _pra);
       case 6:
-      return _skel_method_1((void*)__QAIC_IMPL(halide_hexagon_remote_poll_log), _sc, _pra);
+      return _skel_method_2((void*)__QAIC_IMPL(halide_hexagon_remote_release_kernels), _sc, _pra);
       case 7:
+      return _skel_method_1((void*)__QAIC_IMPL(halide_hexagon_remote_poll_log), _sc, _pra);
+      case 8:
       return _skel_method((void*)__QAIC_IMPL(halide_hexagon_remote_poll_profiler_state), _sc, _pra);
    }
    return AEE_EUNSUPPORTED;
