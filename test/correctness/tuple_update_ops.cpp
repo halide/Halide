@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
-    if (0) {
+    {
         Var x("x"), y("y");
         Func f("f");
 
@@ -51,6 +51,28 @@ int main(int argc, char **argv) {
                                x, i, j, a(x, i, j), b(x, i, j), correct_a, correct_b);
                         return -1;
                     }
+                }
+            }
+        }
+    }
+
+    {
+        Var x("x"), y("y");
+        Func f("f");
+
+        f(x, y) = Tuple(x + 13, x + y);
+        f(x, y) *= f(x, y);
+
+        Realization result = f.realize(1024, 1024);
+        Image<int> a = result[0], b = result[1];
+        for (int y = 0; y < a.height(); y++) {
+            for (int x = 0; x < a.width(); x++) {
+                int correct_a = (x + 13)*(x + 13);
+                int correct_b = (x + y)*(x + y);
+                if (a(x, y) != correct_a || b(x, y) != correct_b) {
+                    printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
+                           x, y, a(x, y), b(x, y), correct_a, correct_b);
+                    return -1;
                 }
             }
         }
