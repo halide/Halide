@@ -36,7 +36,7 @@ public:
     }
 
     /** Construct a Tuple of a single Expr */
-    Tuple(Expr e) {
+    explicit Tuple(Expr e) {
         exprs.push_back(e);
     }
 

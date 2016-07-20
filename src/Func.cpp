@@ -2165,7 +2165,7 @@ Stage FuncRef::operator+=(const Tuple &e) {
 }
 
 Stage FuncRef::operator+=(const FuncRef &e) {
-    return (*this) += (Expr)e;
+    return (*this) += Tuple(e);
 }
 
 Stage FuncRef::operator*=(Expr e) {
@@ -2177,7 +2177,7 @@ Stage FuncRef::operator*=(const Tuple &e) {
 }
 
 Stage FuncRef::operator*=(const FuncRef &e) {
-    return (*this) *= (Expr)e;
+    return (*this) *= Tuple(e);
 }
 
 Stage FuncRef::operator-=(Expr e) {
@@ -2189,7 +2189,7 @@ Stage FuncRef::operator-=(const Tuple &e) {
 }
 
 Stage FuncRef::operator-=(const FuncRef &e) {
-    return (*this) -= (Expr)e;
+    return (*this) -= Tuple(e);
 }
 
 Stage FuncRef::operator/=(Expr e) {
@@ -2201,7 +2201,7 @@ Stage FuncRef::operator/=(const Tuple &e) {
 }
 
 Stage FuncRef::operator/=(const FuncRef &e) {
-    return (*this) /= (Expr)e;
+    return (*this) /= Tuple(e);
 }
 
 FuncRef::operator Expr() const {

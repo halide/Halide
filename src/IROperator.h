@@ -56,9 +56,6 @@ EXPORT bool is_negative_const(Expr e);
  */
 EXPORT bool is_negative_negatable_const(Expr e);
 
-/** Is the expression an undef */
-EXPORT bool is_undef(Expr e);
-
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
 EXPORT bool is_zero(Expr e);
