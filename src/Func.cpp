@@ -2087,7 +2087,6 @@ Stage FuncRef::operator=(const Tuple &e) {
         return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
 
     } else {
-        vector<Expr> a = args_with_implicit_vars(e.as_vector());
         func.define_update(args, e.as_vector());
 
         size_t update_stage = func.updates().size() - 1;
@@ -2123,7 +2122,7 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, const Tupl
         }
     }
 
-    FuncRef(func, pure_args) = e; //TODO(psuriana)
+    FuncRef(func, pure_args) = e;
 }
 
 void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
