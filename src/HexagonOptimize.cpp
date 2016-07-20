@@ -1064,7 +1064,7 @@ class OptimizeShuffles : public IRMutator {
             int align = lut_alignment / op->type.bytes();
             Interval aligned_index_bounds = {
                 (unaligned_index_bounds.min / align) * align,
-                ((unaligned_index_bounds.max + align - 1) / align) * align
+                ((unaligned_index_bounds.max + align) / align) * align - 1
             };
 
             for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
