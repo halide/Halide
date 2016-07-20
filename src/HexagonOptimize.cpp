@@ -1058,6 +1058,12 @@ class HoistSliceVectors : public IRMutator {
 
     template <typename T>
     bool visit_binary(const T *op) {
+        if (!op->type.is_vector()) {
+            return false;
+        }
+
+        debug(4) << "Trying to optimize " << (Expr) op << "\n";
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
@@ -1066,6 +1072,12 @@ class HoistSliceVectors : public IRMutator {
         if (call_a && call_b &&
             call_a->is_intrinsic(Call::slice_vector) &&
             call_b->is_intrinsic(Call::slice_vector)) {
+
+            const int64_t *start_lane_a = as_const_int(call_a->args[1]);
+            const int64_t *start_lane_b = as_const_int(call_b->args[1]);
+            if (*start_lane_a != *start_lane_b) {
+                return false;
+            }
 
             const int64_t *stride_a = as_const_int(call_a->args[2]);
             const int64_t *stride_b = as_const_int(call_b->args[2]);
@@ -1091,40 +1103,32 @@ class HoistSliceVectors : public IRMutator {
                 }
             }
 
+            vector<Expr> new_slices;
             for (size_t i = 0; i < slices_a.size(); i++) {
-                op_a.push_back(slices_a[i]);
-                op_b.push_back(slices_b[i]);
+                new_slices.push_back(T::make(slices_a[i], slices_b[i]));
             }
+
             start_lane = call_a->args[1];
             result_lanes = call_a->args[3];
+            Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
+            expr = Call::make(op->type, Call::slice_vector,
+                              { concat_v, start_lane, 1 /*for now, we only deal with stride 1 */, result_lanes },
+                              Call::PureIntrinsic);
+            debug(4) << "Hoisting slice_vector: " << expr << "\n";
             return true;
         }
         return false;
     }
     void visit(const Max *op) {
-        if (op->type.is_vector()) {
-            debug(4) << "Trying to optimize " << (Expr) op << "\n";
-            if (visit_binary(op)) {
-                internal_assert(op_a.size() == op_b.size());
-                vector<Expr> new_slices;
-                Type t = op_a[0].type();
-                int lanes = 0;
-                for(size_t i = 0; i < op_a.size(); i++) {
-                    new_slices.push_back(max(op_a[i], op_b[i]));
-                    lanes += op_a[i].type().lanes();
-                }
-                Expr concat_v = Call::make(t.with_lanes(lanes), Call::concat_vectors, new_slices, Call::PureIntrinsic);
-                expr = Call::make(op->type, Call::slice_vector,
-                                  { concat_v, start_lane, 1 /*for now, we only deal with stride 1 */, result_lanes },
-                                  Call::PureIntrinsic);
-                debug(4) << "Hoisting slice_vector: " << expr << "\n";
-                op_a.clear();
-                op_b.clear();
-                new_slices.clear();
-                return;
-            }
+        if (!visit_binary(op)) {
+            IRMutator::visit(op);
         }
-        IRMutator::visit(op);
+    }
+
+    void visit(const Min *op) {
+        if (!visit_binary(op)) {
+            IRMutator::visit(op);
+        }
     }
 };
 }  // namespace
