@@ -113,7 +113,7 @@ private:
 
 };
 
-Stmt inject_prefetch(Stmt s, const map<string, Function> &env)
+Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
 {
     return InjectPrefetch(env).mutate(s);
 }
