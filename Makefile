@@ -350,6 +350,7 @@ SOURCE_FILES = \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
+  Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
   Qualify.cpp \

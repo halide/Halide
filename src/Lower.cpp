@@ -30,6 +30,7 @@
 #include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -86,9 +87,10 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     simplify_specializations(env);
 
     bool any_memoized = false;
+    bool any_prefetch = false;
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
+    Stmt s = schedule_functions(outputs, order, env, t, any_memoized, any_prefetch);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     if (any_memoized) {
@@ -102,6 +104,14 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
+
+    if (any_prefetch) {
+        debug(1) << "Injecting prefetches...\n";
+        s = inject_prefetch(s, env);
+        debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
+    } else {
+        debug(1) << "Skipping injecting prefetches...\n";
+    }
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);

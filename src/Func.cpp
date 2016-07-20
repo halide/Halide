@@ -1432,6 +1432,9 @@ Stage &Stage::hexagon(VarOrRVar x) {
 }
 
 Stage &Stage::prefetch(VarOrRVar var, Expr param) {
+    std::cerr << "Stage::prefetch " << var.name() 
+                             << " " << param << "\n";
+
     Prefetch prefetch = {var.name(), param};
     definition.schedule().prefetches().push_back(prefetch);
 

@@ -239,7 +239,10 @@ void Schedule::accept(IRVisitor *visitor) const {
         }
     }
     for (const Prefetch &p : prefetches()) {
+        std::cerr << "Schedule::accept prefetches\n";
         if (p.param.defined()) {
+            std::cerr << "Prefetch: " << p.var
+                               << " " << p.param << "\n";
             p.param.accept(visitor);
         }
     }
