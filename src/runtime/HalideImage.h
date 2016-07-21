@@ -17,6 +17,9 @@
 namespace Halide {
 namespace Tools {
 
+template<typename Fn>
+void for_each_element(const halide_buffer_t &buf, Fn f);
+
 /** A templated Image class derived from halide_buffer_t that adds
  * functionality. T is the element type, and D is the maximum number
  * of dimensions. It can usually be left at the default of 4. */
@@ -211,6 +214,10 @@ public:
         return address_of_helper(0, first, rest...);
     }
 
+    T *address_of(const int *pos) const {
+        return (T *)(halide_buffer_t::address_of(pos));
+    }
+
     /** Access a pixel. Make sure you've called copy_to_host before
      * you start accessing pixels directly. */
     template<typename ...Args>
@@ -220,7 +227,7 @@ public:
 
     template<typename ...Args>
     T &operator()() {
-        return (T *)host;
+        return *((T *)host);
     }
 
     template<typename ...Args>
@@ -231,6 +238,14 @@ public:
     template<typename ...Args>
     const T &operator()() const {
         return (T *)host;
+    }
+
+    const T &operator()(const int *pos) const {
+        return *((T *)address_of(pos));
+    }
+
+    T &operator()(const int *pos) {
+        return *((T *)address_of(pos));
     }
 
     /** Conventional names for the first three dimensions. */
@@ -248,19 +263,51 @@ public:
 
     /** Make a new image which is a deep copy of this image. Use crop
      * or slice followed by copy to make a copy of only a portion of
-     * the image. The new image uses the standard planar memory
-     * layout. */
+     * the image. The new image uses the same memory layout as the
+     * original, with holes compacted away. */
     Image<T, D> copy() const {
-        Image<T, D> im = *this;
-        im.allocate();
-        uint8_t *dst = im.begin();
-        for_every_contiguous_block(
-            [&](uint8_t *begin, uint8_t *end) {
-                size_t size = end - begin;
-                memcpy(dst, begin, size);
-                dst += size;
+        Image<T, D> src = *this;
+
+        // Reorder the dimensions of src to have strides in increasing order
+        int swaps[(D*(D+1))/2];
+        int swaps_idx = 0;
+        for (int i = dimensions-1; i > 0; i--) {
+            for (int j = i; j > 0; j--) {
+                if (src.dim[j-1].stride > src.dim[j].stride) {
+                    std::swap(src.dim[j-1], src.dim[j]);
+                    swaps[swaps_idx++] = j;
+                }
+            }
+        }
+
+        // Make a copy of it using this dimension ordering
+        Image<T, D> dst = src;
+        dst.allocate();
+
+        // Concatenate dense inner dimensions into contiguous memcpy tasks
+        Image<T, D> src_slice = src;
+        Image<T, D> dst_slice = dst;
+        int64_t slice_size = 1;
+        while (src_slice.dimensions && src_slice.dim[0].stride == slice_size) {
+            assert(dst_slice.dim[0].stride == slice_size);
+            slice_size *= src_slice.dim[0].stride;
+            src_slice = src_slice.sliced(0, src_slice.dim[0].min);
+            dst_slice = dst_slice.sliced(0, dst_slice.dim[0].min);
+        }
+
+        slice_size *= sizeof(T);
+        // Do the memcpys
+        src_slice.for_each_element([&](const int *pos) {
+                memcpy(dst_slice.address_of(pos), src_slice.address_of(pos), slice_size);
             });
-        return im;
+
+        // Undo the dimension reordering
+        while (swaps_idx > 0) {
+            int j = swaps[--swaps_idx];
+            std::swap(dst.dim[j-1], dst.dim[j]);
+        }
+
+        return dst;
     }
 
     /** Make an image that refers to a sub-range of this image along
@@ -298,6 +345,13 @@ public:
         return im;
     }
 
+    /** Call a callable at each location within the image. See
+     * for_each_element below for more details. */
+    template<typename Fn>
+    void for_each_element(Fn f) const {
+        Halide::Tools::for_each_element(*this, f);
+    }
+
     void copy_to_host() {
         if (device_dirty()) {
             halide_copy_to_host(NULL, this);
@@ -313,9 +367,147 @@ public:
     void device_free() {
         halide_device_free(nullptr, this);
     }
+
 };
 
-}  // namespace Runtime
+// We also define some helpers for iterating over buffers
+
+template<typename Fn>
+struct for_each_element_helpers {
+
+
+    // If f is callable with this many args, call it. The first dummy
+    // argument is to make this version preferable for overload
+    // resolution. The decltype is to make this version impossible if
+    // the function is not callable with this many args.
+    template<typename ...Args>
+    static auto for_each_element_variadic(int, int d, Fn f, const halide_buffer_t &buf, Args... args)
+        -> decltype(f(args...)) {
+        f(args...);
+    }
+
+    // Otherwise add an outer loop over an additional argument and
+    // try again.
+    template<typename ...Args>
+    static void for_each_element_variadic(double, int d, Fn f, const halide_buffer_t &buf, Args... args) {
+        for (int i = 0; i < std::max(1, buf.dim[d].extent); i++) {
+            for_each_element_variadic(0, d-1, f, buf, buf.dim[d].min + i, args...);
+        }
+    }
+
+    // Determine the minimum number of arguments a callable can take using the same trick.
+    template<typename ...Args>
+    static auto num_args(int, int *result, Fn f, Args... args) -> decltype(f(args...)) {
+        *result = sizeof...(args);
+    }
+
+    // The recursive version is only enabled up to a recursion limit of 256
+    template<typename ...Args>
+    static void num_args(double, int *result, Fn f, Args... args) {
+        static_assert(sizeof...(args) <= 256,
+                      "Callable passed to for_each_element must accept either a const int *,"
+                      " or up to 256 ints. No such operator found. Expect infinite template recursion.");
+        return num_args(0, result, f, 0, args...);
+    }
+
+    static int get_number_of_args(Fn f) {
+        int result;
+        num_args(0, &result, f);
+        return result;
+    }
+
+    // A run-time-recursive version (instead of
+    // compile-time-recursive) that requires the callable to take a
+    // pointer to a position array instead.
+    static void for_each_element_array(int d, Fn f, const halide_buffer_t &buf, int *pos) {
+        if (d == -1) {
+            f(pos);
+        } else {
+            pos[d] = buf.dim[d].min;
+            for (int i = 0; i < std::max(1, buf.dim[d].extent); i++) {
+                for_each_element_array(d - 1, f, buf, pos);
+                pos[d]++;
+            }
+        }
+    }
+
+    // If the callable takes a pointer, use the array version
+    template<typename Fn2>
+    static auto for_each_element(int, const halide_buffer_t &buf, Fn2 f)
+        -> decltype(f((const int *)0)) {
+        int pos[buf.dimensions];
+        memset(pos, 0, sizeof(int) * buf.dimensions);
+        for_each_element_array(buf.dimensions - 1, f, buf, pos);
+    }
+
+    // Otherwise try the variadic version
+    template<typename Fn2>
+    static void for_each_element(double, const halide_buffer_t &buf, Fn2 f) {
+        int num_args = get_number_of_args(f);
+        for_each_element_variadic(0, num_args-1, f, buf);
+    }
+};
+
+/** Call a function at each site in a buffer. If the function has more
+ * arguments than the buffer has dimensions, the remaining arguments
+ * will be zero. If it has fewer arguments than the buffer has
+ * dimensions then the last few dimensions of the buffer are not
+ * iterated over. For example, the following code exploits this to set
+ * a floating point RGB image to red:
+
+\code
+Image<float, 3> im(100, 100, 3);
+for_each_element(im, [&](int x, int y) {
+    im(x, y, 0) = 1.0f;
+    im(x, y, 1) = 0.0f;
+    im(x, y, 2) = 0.0f:
+});
+\endcode
+
+ * The compiled code is equivalent to writing the a nested for loop,
+ * and compilers are capable of optimizing it in the same way.
+ *
+ * If the callable can be called with an int * as the sole argument,
+ * that version is called instead, with each element in the buffer
+ * being passed to it in a coordinate array. This is higher-overhead,
+ * but is useful for writing generic code. For example, the following
+ * sets the value at all sites in an arbitrary-dimensional buffer to
+ * their first coordinate:
+
+\code
+for_each_element(im, [&](const int *pos) {im(pos) = pos[0];});
+\endcode
+
+* It is also possible to use for_each_element to iterate over entire
+* rows or columns by cropping the buffer to a single column or row
+* respectively and iterating over elements of the result. For example,
+* to set the diagonal of the image to 1 by iterating over the columns:
+
+\code
+Image<float, 3> im(100, 100, 3);
+for_each_element(im.sliced(1, 0), [&](int x, int c) {
+    im(x, x, c) = 1.0f;
+});
+\endcode
+
+* Or, assuming the memory layout is known, one can memset each row
+* like so:
+
+Image<float, 3> im(100, 100, 3);
+for_each_element(im.sliced(0, 0), [&](int y, int c) {
+    memset(im.address_of(0, y, c), 0, sizeof(float) * im.width());
+});
+
+
+\endcode
+
+*/
+template<typename Fn>
+void for_each_element(const halide_buffer_t &buf, Fn f) {
+    for_each_element_helpers<Fn>::for_each_element(0, buf, f);
+}
+
+}  // namespace Tools
 }  // namespace Halide
 
 #endif  // HALIDE_RUNTIME_IMAGE_H

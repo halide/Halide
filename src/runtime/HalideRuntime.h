@@ -885,101 +885,12 @@ typedef struct halide_buffer_t {
     }
 
     /** A pointer to the element at the given location. */
-    uint8_t *address_of(const int pos[]) const {
+    uint8_t *address_of(const int *pos) const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             index += dim[i].stride * (pos[i] - dim[i].min);
         }
         return host + index * type.bytes();
-    }
-
-    /** A reference to the element at the given location. */
-    template<typename T>
-    T& at(const int pos[]) const {
-        return *((T *)address_of(pos));
-    }
-
-#if __cplusplus > 199711L
-    template<typename T, typename ...Args>
-    T& at(Args... args) const {
-        return *((T *)address_of(args...));
-    }
-
-    template<typename ...Args>
-    uint8_t *address_of(Args... args) const {
-        const int pos[] = {args...};
-        return address_of(pos);
-    }
-#endif
-
-    template<typename Fn>
-    void for_every_contiguous_block(Fn f) const {
-        // Make a list of the dimensions, sorted by decreasing absolute
-        // stride. They're probably already in order of increasing stride,
-        // so use reverse insertion sort.
-        int sorted_dims[dimensions];
-        for (int i = 0; i < dimensions; i++) {
-            int next_dim = dimensions - i - 1;
-            sorted_dims[i] = next_dim;
-            int abs_stride_i = dim[next_dim].stride;
-            if (abs_stride_i < 0) {
-                abs_stride_i = -abs_stride_i;
-            }
-            for (int j = i-1; j >= 0; j--) {
-                int abs_stride_j = dim[sorted_dims[j]].stride;
-                if (abs_stride_j < 0) {
-                    abs_stride_j = -abs_stride_j;
-                }
-                if (abs_stride_j < abs_stride_i) {
-                    int tmp = sorted_dims[j+1];
-                    sorted_dims[j+1] = sorted_dims[j];
-                    sorted_dims[j] = tmp;
-                }
-            }
-        }
-
-        struct {
-            const halide_buffer_t &buf;
-            Fn f;
-            void process(int *sorted_dims, size_t bytes,
-                         uint8_t *begin, uint8_t *end) {
-                if (begin + bytes >= end) {
-                    f(begin, end);
-                } else {
-                    halide_dimension_t d = buf.dim[*sorted_dims];
-                    bytes /= d.extent;
-                    if (d.stride < 0) {
-                        d.stride = -d.stride;
-                    }
-                    end -= (d.extent - 1) * d.stride * buf.type.bytes();
-                    for (int i = 0; i < d.extent; i++) {
-                        process(sorted_dims + 1, bytes, begin, end);
-                        if (d.stride == 0) break;
-                        begin += d.stride * buf.type.bytes();
-                        end += d.stride * buf.type.bytes();
-                    }
-                }
-            }
-        } helper = {*this, f};
-
-        helper.process(sorted_dims,
-                       number_of_elements() * type.bytes(),
-                       begin(), end());
-    }
-
-    template<typename T, typename Fn>
-    void for_every_element(Fn f) {
-        struct {
-            const halide_buffer_t &buf;
-            Fn f;
-            void operator()(uint8_t *begin, uint8_t *end) {
-                while (begin < end) {
-                    f(*((T *)begin));
-                    begin += buf.type.bytes();
-                }
-            }
-        } process_span = {*this, f};
-        for_every_contiguous_block(process_span);
     }
 
 #endif
