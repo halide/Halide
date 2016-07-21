@@ -189,17 +189,20 @@ int Func::dimensions() const {
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRef(func, args, placeholder_pos);
+    int placeholder_pos, count;
+    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    return FuncRef(func, args, placeholder_pos, count);
 }
 
 FuncRef Func::operator()(vector<Expr> args) const {
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRef(func, args, placeholder_pos);
+    int placeholder_pos, count;
+    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    return FuncRef(func, args, placeholder_pos, count);
 }
 
-int Func::add_implicit_vars(vector<Var> &args) const {
+std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
     int placeholder_pos = -1;
+    int count = 0;
     std::vector<Var>::iterator iter = args.begin();
 
     while (iter != args.end() && !iter->same_as(_)) {
@@ -213,6 +216,7 @@ int Func::add_implicit_vars(vector<Var> &args) const {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
+            count++;
         }
     }
 
@@ -221,11 +225,12 @@ int Func::add_implicit_vars(vector<Var> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return placeholder_pos;
+    return std::make_pair(placeholder_pos, count);
 }
 
-int Func::add_implicit_vars(vector<Expr> &args) const {
+std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     int placeholder_pos = -1;
+    int count = 0;
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
@@ -241,6 +246,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
+            count++;
         }
     }
 
@@ -249,7 +255,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return placeholder_pos;
+    return std::make_pair(placeholder_pos, count);
 }
 
 namespace {
@@ -1998,12 +2004,14 @@ public:
 };
 }
 
-FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
+FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos,
+                 int count) : func(f), implicit_count(count), args(a){
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
-FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
+FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos,
+                 int count) : func(f), implicit_count(count) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
@@ -2014,24 +2022,33 @@ FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos
 vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
 
+    for (size_t i = 0; i < a.size(); i++) {
+        user_assert(a[i].defined())
+            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
     for (size_t i = 0; i < e.size(); i++) {
         user_assert(e[i].defined())
-            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+            << "Value " << (i+1) << " in definition of \"" << func.name() << "\" is undefined.\n";
     }
 
     CountImplicitVars count(e);
-    // TODO: Check if there is a test case for this and add one if not.
-    // Implicit vars are also allowed in the lhs of an update. E.g.:
-    // f(x, y, z) = x+y
-    // g(x, y, z) = 0
-    // g(f(r.x, _), _) = 1   (this means g(f(r.x, _0, _1), _0, _1) = 1)
-
     for (size_t i = 0; i < a.size(); i++) {
         a[i].accept(&count);
     }
 
     if (count.count > 0) {
-        if (implicit_placeholder_pos != -1) {
+        if (func.has_pure_definition()) {
+            // If the func already has pure definition, the number of implicit
+            // vars in the RHS can only be at most the number of implicit vars
+            // in the LHS.
+            user_assert(implicit_count >= count.count)
+                << "The update definition of " << func.name() << " uses " << count.count
+                << " implicit variables, but the initial definition uses only "
+                << implicit_count << " implicit variables.\n";
+        } else if (implicit_placeholder_pos != -1) {
+            internal_assert(implicit_count == 0)
+                << "Pure definition can't possibly already have implicit variables defined\n";
+
             Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
             vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
@@ -2075,14 +2092,14 @@ Stage FuncRef::operator=(const Tuple &e) {
         }
 
         // Find implicit args in the expr and add them to the args list before calling define
-        vector<Expr> a = args_with_implicit_vars(e.as_vector());
-        vector<string> a_str(a.size());
-        for (size_t i = 0; i < a.size(); ++i) {
-            const Variable *v = a[i].as<Variable>();
+        vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
+        vector<string> expanded_args_str(expanded_args.size());
+        for (size_t i = 0; i < expanded_args.size(); ++i) {
+            const Variable *v = expanded_args[i].as<Variable>();
             internal_assert(v);
-            a_str[i] = v->name;
+            expanded_args_str[i] = v->name;
         }
-        func.define(a_str, e.as_vector());
+        func.define(expanded_args_str, e.as_vector());
         return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
 
     } else {
@@ -2106,8 +2123,10 @@ Stage FuncRef::operator=(const FuncRef &e) {
 
 // Inject a suitable base-case definition given an update
 // definition. This is a helper for FuncRef::operator+= and co.
-void define_base_case(Internal::Function func, const vector<Expr> &a, const Tuple &e) {
-    if (func.has_pure_definition()) return;
+Func define_base_case(Internal::Function func, const vector<Expr> &a, const Tuple &e) {
+    Func f(func);
+
+    if (func.has_pure_definition()) return f;
     vector<Var> pure_args(a.size());
 
     // Reuse names of existing pure args
@@ -2121,11 +2140,12 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, const Tupl
         }
     }
 
-    FuncRef(func, pure_args) = e;
+    f(pure_args) = e;
+    return f;
 }
 
-void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
-    define_base_case(func, a, Tuple(e));
+Func define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
+    return define_base_case(func, a, Tuple(e));
 }
 
 template <typename BinaryOp>
@@ -2136,21 +2156,21 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
     for (int i = 0; i < (int)init_values.size(); ++i) {
         init_values[i] = cast(e[i].type(), init_val);
     }
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    define_base_case(func, a, Tuple(init_values));
+    vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
+    FuncRef self_ref = define_base_case(func, expanded_args, Tuple(init_values))(expanded_args);
 
     vector<Expr> values(e.size());
     for (int i = 0; i < (int)values.size(); ++i) {
-        values[i] = BinaryOp()((*this)[i], e[i]);
+        values[i] = BinaryOp()(self_ref[i], e[i]);
     }
-    return (*this) = Tuple(values);
+    return self_ref = Tuple(values);
 }
 
 template <typename BinaryOp>
 Stage FuncRef::func_ref_update(Expr e, int init_val) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), init_val));
-    return (*this) = BinaryOp()(Expr(*this), e);
+    vector<Expr> expanded_args = args_with_implicit_vars({e});
+    FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
+    return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
 Stage FuncRef::operator+=(Expr e) {
