@@ -49,7 +49,7 @@ const string preamble =
     "var halide_error_code_matlab_bad_param_type = -21;\n"
     "var halide_error_code_internal_error = -22;\n"
     "if (typeof(Math.fround) != \"function\") { Math.fround = function (x) { return new Float32Array([x])[0]; } }\n"
-    "if (typeof(halide_print) != \"function\") { halide_print = function (user_context, msg) { Console.log(msg); } }\n"
+    "if (typeof(halide_print) != \"function\") { halide_print = function (user_context, msg) { console.log(msg); } }\n"
     "if (typeof(halide_error) != \"function\") { halide_error = function (user_context, msg) { halide_print(user_context, msg); } }\n"
     "if (typeof(halide_trace) != \"function\") { var id = 0; halide_trace = function (user_context, event) { return id++; } }\n"
     "if (typeof(halide_shutdown_trace) != \"function\") { halide_shutdown_trace = function () { return 0; } }\n"
