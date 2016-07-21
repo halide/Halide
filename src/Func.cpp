@@ -1,7 +1,5 @@
 #include <algorithm>
-#include <iostream>
 #include <string.h>
-#include <fstream>
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -35,12 +33,10 @@ namespace Halide {
 
 using std::max;
 using std::min;
-using std::make_pair;
 using std::map;
 using std::string;
 using std::vector;
 using std::pair;
-using std::ofstream;
 
 using namespace Internal;
 
@@ -200,10 +196,10 @@ FuncRef Func::operator()(vector<Expr> args) const {
     return FuncRef(func, args, placeholder_pos, count);
 }
 
-std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
+pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
     int placeholder_pos = -1;
     int count = 0;
-    std::vector<Var>::iterator iter = args.begin();
+    vector<Var>::iterator iter = args.begin();
 
     while (iter != args.end() && !iter->same_as(_)) {
         iter++;
@@ -225,13 +221,13 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return std::make_pair(placeholder_pos, count);
+    return {placeholder_pos, count};
 }
 
-std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
+pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     int placeholder_pos = -1;
     int count = 0;
-    std::vector<Expr>::iterator iter = args.begin();
+    vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
         if (var && var->name == _.name())
@@ -255,7 +251,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return std::make_pair(placeholder_pos, count);
+    return {placeholder_pos, count};
 }
 
 namespace {
