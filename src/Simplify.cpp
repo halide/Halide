@@ -3642,14 +3642,19 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
-
+            const Call *call = new_value.as<Call>();
             const Variable *var_b = nullptr;
+            const Variable *var_a = nullptr;
             if (add) {
                 var_b = add->b.as<Variable>();
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       (call->args.size() == 2)) {
+                var_a = call->args[0].as<Variable>();
+                var_b = call->args[1].as<Variable>();
             }
 
             if (is_const(new_value)) {
@@ -3697,7 +3702,21 @@ private:
                 new_value = cast->value;
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
-            } else {
+            } else if (call && call->is_intrinsic(Call::slice_vector)) {
+                new_value = call->args[0];
+                new_var = Variable::make(new_value.type(), new_name);
+                replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
+                                                              { new_var, call->args[1], call->args[2], call->args[3]},
+                                                              Call::PureIntrinsic), replacement);
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       ((var_a && !var_b) || (!var_a && var_b))) {
+                new_var = Variable::make(var_a ? call->args[1].type() : call->args[0].type(), new_name);
+                Expr op_a = var_a ? call->args[0] : new_var;
+                Expr op_b = var_a ? new_var : call->args[1];
+                replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
+                                                              { op_a, op_b }, Call::PureIntrinsic), replacement);
+                new_value = var_a ? call->args[1] : call->args[0];
+            }else {
                 break;
             }
         }

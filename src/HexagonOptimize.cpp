@@ -1145,6 +1145,7 @@ Stmt optimize_hexagon_instructions(Stmt s) {
     s = OptimizePatterns().mutate(s);
 
     s = HoistSliceVectors().mutate(s);
+    s = simplify(s);
     // Try to eliminate any redundant interleave/deinterleave pairs.
     s = EliminateInterleaves().mutate(s);
 
