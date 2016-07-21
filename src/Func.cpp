@@ -188,14 +188,14 @@ int Func::dimensions() const {
     return func.dimensions();
 }
 
-FuncRefVar Func::operator()(vector<Var> args) const {
+FuncRef Func::operator()(vector<Var> args) const {
     int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
+    return FuncRef(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(vector<Expr> args) const {
+FuncRef Func::operator()(vector<Expr> args) const {
     int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
+    return FuncRef(func, args, placeholder_pos);
 }
 
 int Func::add_implicit_vars(vector<Var> &args) const {
@@ -1976,14 +1976,6 @@ Func::operator Stage() const {
     return Stage(func.definition(), name(), args(), func.schedule().storage_dims());
 }
 
-FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
-    implicit_placeholder_pos = placeholder_pos;
-    args.resize(a.size());
-    for (size_t i = 0; i < a.size(); i++) {
-        args[i] = a[i].name();
-    }
-}
-
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
@@ -2006,148 +1998,20 @@ public:
 };
 }
 
-vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
-    vector<string> a = args;
-
-    for (size_t i = 0; i < e.size(); i++) {
-        user_assert(e[i].defined())
-            << "Argument " << i << " in call to \"" << func.name() << "\" is undefined.\n";
-    }
-
-    CountImplicitVars count(e);
-
-    if (count.count > 0) {
-        if (implicit_placeholder_pos != -1) {
-            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
-                func.name() << " at position " << implicit_placeholder_pos << "\n";
-
-            vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
-            for (int i = 0; i < count.count; i++) {
-                iter = a.insert(iter, Var::implicit(i).name());
-                iter++;
-            }
-        }
-    }
-
-    // Check the implicit vars in the RHS also exist in the LHS
-    for (int i = 0; i < count.count; i++) {
-        Var v = Var::implicit(i);
-        bool found = false;
-        for (size_t j = 0; j < a.size(); j++) {
-            if (a[j] == v.name()) {
-                found = true;
-            }
-        }
-        user_assert(found)
-            << "Right-hand-side of pure definition of " << func.name()
-            << " uses implicit variables, but the left-hand-side does not"
-            << " contain the placeholder symbol '_'.\n";
-    }
-
-    return a;
-}
-
-Stage FuncRefVar::operator=(Expr e) {
-    return (*this) = Tuple({e});
-}
-
-Stage FuncRefVar::operator=(const Tuple &e) {
-    // If the function has already been defined, this must actually be an update
-    if (func.has_pure_definition()) {
-        return FuncRefExpr(func, args) = e;
-    }
-
-    // Find implicit args in the expr and add them to the args list before calling define
-    vector<string> a = args_with_implicit_vars(e.as_vector());
-    func.define(a, e.as_vector());
-
-    return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
-}
-
-Stage FuncRefVar::operator=(const FuncRefVar &e) {
-    if (e.size() == 1) {
-        return (*this) = Expr(e);
-    } else {
-        return (*this) = Tuple(e);
-    }
-}
-
-Stage FuncRefVar::operator=(const FuncRefExpr &e) {
-    if (e.size() == 1) {
-        return (*this) = Expr(e);
-    } else {
-        return (*this) = Tuple(e);
-    }
-}
-
-Stage FuncRefVar::operator+=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) += e;
-}
-
-Stage FuncRefVar::operator*=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) *= e;
-}
-
-Stage FuncRefVar::operator-=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) -= e;
-}
-
-Stage FuncRefVar::operator/=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) /= e;
-}
-
-FuncRefVar::operator Expr() const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
-    vector<Expr> expr_args(args.size());
-    for (size_t i = 0; i < expr_args.size(); i++) {
-        expr_args[i] = Var(args[i]);
-    }
-    user_assert(func.outputs() == 1)
-        << "Can't convert a reference Func \"" << func.name()
-        << "\" to an Expr, because \"" << func.name() << "\" returns a Tuple.\n";
-    return Call::make(func, expr_args);
-}
-
-Expr FuncRefVar::operator[](int i) const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
-
-    user_assert(func.outputs() != 1)
-        << "Can't index into a reference to Func \"" << func.name()
-        << "\", because it does not return a Tuple.\n";
-    user_assert(i >= 0 && i < func.outputs())
-        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
-    vector<Expr> expr_args(args.size());
-    for (size_t j = 0; j < expr_args.size(); j++) {
-        expr_args[j] = Var(args[j]);
-    }
-    return Call::make(func, expr_args, i);
-}
-
-size_t FuncRefVar::size() const {
-    return func.outputs();
-}
-
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
+FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
-                         int placeholder_pos) : func(f) {
+FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
-        args[i] = Var(a[i]);
+        args[i] = a[i];
     }
 }
 
-vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
+vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
 
     for (size_t i = 0; i < e.size(); i++) {
@@ -2198,34 +2062,41 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     return a;
 }
 
-Stage FuncRefExpr::operator=(Expr e) {
-    return (*this) = Tuple({e});
+Stage FuncRef::operator=(Expr e) {
+    return (*this) = Tuple(e);
 }
 
-Stage FuncRefExpr::operator=(const Tuple &e) {
-    user_assert(func.has_pure_definition())
-        << "Can't add an update definition to Func \"" << func.name()
-        << "\" because it does not have a pure definition.\n";
+Stage FuncRef::operator=(const Tuple &e) {
+    if (!func.has_pure_definition()) {
+        for (size_t i = 0; i < args.size(); ++i) {
+            user_assert(args[i].as<Variable>())
+                << "Argument " << (i+1) << " in initial definition of \""
+                << func.name() << "\" is not a Var.\n";
+        }
 
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    func.define_update(args, e.as_vector());
+        // Find implicit args in the expr and add them to the args list before calling define
+        vector<Expr> a = args_with_implicit_vars(e.as_vector());
+        vector<string> a_str(a.size());
+        for (size_t i = 0; i < a.size(); ++i) {
+            const Variable *v = a[i].as<Variable>();
+            internal_assert(v);
+            a_str[i] = v->name;
+        }
+        func.define(a_str, e.as_vector());
+        return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
 
-    size_t update_stage = func.updates().size() - 1;
-    return Stage(func.update(update_stage),
-                 func.name() + ".update(" + std::to_string(update_stage) + ")",
-                 func.args(),
-                 func.schedule().storage_dims());
-}
-
-Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
-    if (e.size() == 1) {
-        return (*this) = Expr(e);
     } else {
-        return (*this) = Tuple(e);
+        func.define_update(args, e.as_vector());
+
+        size_t update_stage = func.updates().size() - 1;
+        return Stage(func.update(update_stage),
+                     func.name() + ".update(" + std::to_string(update_stage) + ")",
+                     func.args(),
+                     func.schedule().storage_dims());
     }
 }
 
-Stage FuncRefExpr::operator=(const FuncRefVar &e) {
+Stage FuncRef::operator=(const FuncRef &e) {
     if (e.size() == 1) {
         return (*this) = Expr(e);
     } else {
@@ -2234,8 +2105,8 @@ Stage FuncRefExpr::operator=(const FuncRefVar &e) {
 }
 
 // Inject a suitable base-case definition given an update
-// definition. This is a helper for FuncRefExpr::operator+= and co.
-void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
+// definition. This is a helper for FuncRef::operator+= and co.
+void define_base_case(Internal::Function func, const vector<Expr> &a, const Tuple &e) {
     if (func.has_pure_definition()) return;
     vector<Var> pure_args(a.size());
 
@@ -2250,34 +2121,119 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
         }
     }
 
-    FuncRefVar(func, pure_args) = e;
+    FuncRef(func, pure_args) = e;
 }
 
-Stage FuncRefExpr::operator+=(Expr e) {
+void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
+    define_base_case(func, a, Tuple(e));
+}
+
+template <typename BinaryOp>
+Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
+    internal_assert(e.size() > 1);
+
+    vector<Expr> init_values(e.size());
+    for (int i = 0; i < (int)init_values.size(); ++i) {
+        init_values[i] = cast(e[i].type(), init_val);
+    }
+    vector<Expr> a = args_with_implicit_vars(e.as_vector());
+    define_base_case(func, a, Tuple(init_values));
+
+    vector<Expr> values(e.size());
+    for (int i = 0; i < (int)values.size(); ++i) {
+        values[i] = BinaryOp()((*this)[i], e[i]);
+    }
+    return (*this) = Tuple(values);
+}
+
+template <typename BinaryOp>
+Stage FuncRef::func_ref_update(Expr e, int init_val) {
     vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 0));
-    return (*this) = Expr(*this) + e;
+    define_base_case(func, a, cast(e.type(), init_val));
+    return (*this) = BinaryOp()(Expr(*this), e);
 }
 
-Stage FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 1));
-    return (*this) = Expr(*this) * e;
+Stage FuncRef::operator+=(Expr e) {
+    return func_ref_update<std::plus<Expr>>(e, 0);
 }
 
-Stage FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 0));
-    return (*this) = Expr(*this) - e;
+Stage FuncRef::operator+=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) += e[0];
+    } else {
+        return func_ref_update<std::plus<Expr>>(e, 0);
+    }
 }
 
-Stage FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 1));
-    return (*this) = Expr(*this) / e;
+Stage FuncRef::operator+=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) += Expr(e);
+    } else {
+        return (*this) += Tuple(e);
+    }
 }
 
-FuncRefExpr::operator Expr() const {
+Stage FuncRef::operator*=(Expr e) {
+    return func_ref_update<std::multiplies<Expr>>(e, 1);
+}
+
+Stage FuncRef::operator*=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) *= e[0];
+    } else {
+        return func_ref_update<std::multiplies<Expr>>(e, 1);
+    }
+}
+
+Stage FuncRef::operator*=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) *= Expr(e);
+    } else {
+        return (*this) *= Tuple(e);
+    }
+}
+
+Stage FuncRef::operator-=(Expr e) {
+    return func_ref_update<std::minus<Expr>>(e, 0);
+}
+
+Stage FuncRef::operator-=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) -= e[0];
+    } else {
+        return func_ref_update<std::minus<Expr>>(e, 0);
+    }
+}
+
+Stage FuncRef::operator-=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) -= Expr(e);
+    } else {
+        return (*this) -= Tuple(e);
+    }
+}
+
+Stage FuncRef::operator/=(Expr e) {
+    return func_ref_update<std::divides<Expr>>(e, 1);
+}
+
+Stage FuncRef::operator/=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) /= e[0];
+    } else {
+        return func_ref_update<std::divides<Expr>>(e, 1);
+    }
+}
+
+Stage FuncRef::operator/=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) /= Expr(e);
+    } else {
+        return (*this) /= Tuple(e);
+    }
+}
+
+FuncRef::operator Expr() const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2288,7 +2244,7 @@ FuncRefExpr::operator Expr() const {
     return Call::make(func, args);
 }
 
-Expr FuncRefExpr::operator[](int i) const {
+Expr FuncRef::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2302,7 +2258,7 @@ Expr FuncRefExpr::operator[](int i) const {
     return Call::make(func, args, i);
 }
 
-size_t FuncRefExpr::size() const {
+size_t FuncRef::size() const {
     return func.outputs();
 }
 
