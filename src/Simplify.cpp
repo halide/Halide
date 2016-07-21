@@ -163,6 +163,8 @@ private:
     // expression is at least as complex as the expression, so
     // recursively mutating the bounds causes havoc.
     bool const_int_bounds(Expr e, int64_t *min_val, int64_t *max_val) {
+        Type t = e.type();
+
         if (const int64_t *i = as_const_int(e)) {
             *min_val = *max_val = *i;
             return true;
@@ -221,19 +223,14 @@ private:
                 *max_val = std::max(max_a, max_b);
                 return true;
             }
-        }
-
-        if (!no_overflow_scalar_int(e.type().element_of())) {
-            return false;
-        }
-
-        if (const Add *add = e.as<Add>()) {
+        } else if (const Add *add = e.as<Add>()) {
             int64_t min_a, min_b, max_a, max_b;
             if (const_int_bounds(add->a, &min_a, &max_a) &&
                 const_int_bounds(add->b, &min_b, &max_b)) {
                 *min_val = min_a + min_b;
                 *max_val = max_a + max_b;
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Sub *sub = e.as<Sub>()) {
             int64_t min_a, min_b, max_a, max_b;
@@ -241,7 +238,8 @@ private:
                 const_int_bounds(sub->b, &min_b, &max_b)) {
                 *min_val = min_a - max_b;
                 *max_val = max_a - min_b;
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Mul *mul = e.as<Mul>()) {
             int64_t min_a, min_b, max_a, max_b;
@@ -254,7 +252,8 @@ private:
                     t3 = max_a*max_b;
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Mod *mod = e.as<Mod>()) {
             int64_t min_b, max_b;
@@ -262,7 +261,8 @@ private:
                 (min_b > 0 || max_b < 0)) {
                 *min_val = 0;
                 *max_val = std::abs(max_b) - 1;
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Div *div = e.as<Div>()) {
             int64_t min_a, min_b, max_a, max_b;
@@ -276,7 +276,8 @@ private:
                     t3 = div_imp(max_a, max_b);
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Ramp *r = e.as<Ramp>()) {
             int64_t min_base, max_base, min_stride, max_stride;
@@ -286,7 +287,8 @@ private:
                 int64_t max_last_lane = max_base + max_stride * (r->lanes - 1);
                 *min_val = std::min(min_base, min_last_lane);
                 *max_val = std::max(max_base, max_last_lane);
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         }
         return false;
@@ -4787,6 +4789,7 @@ void check_bounds() {
     check(max(2, x) - x, 2 - min(x, 2));
 
     {
+        Expr one = broadcast(cast(Int(16), 1), 64);
         Expr three = broadcast(cast(Int(16), 3), 64);
         Expr four = broadcast(cast(Int(16), 4), 64);
         Expr five = broadcast(cast(Int(16), 5), 64);
@@ -4811,16 +4814,6 @@ void check_bounds() {
         check(max(min(max(min(var, four), neg_four), four), three), max(min(var, four), three));
         // max(min(max(min(x, 4), -4), 4), 5) -> 5
         check(max(min(max(min(var, four), neg_four), four), five), five);
-    }
-
-    {
-        Expr one = broadcast(cast(Int(32), 1), 64);
-        Expr four = broadcast(cast(Int(32), 4), 64);
-        Expr five = broadcast(cast(Int(32), 5), 64);
-        Expr neg_four = broadcast(cast(Int(32), -4), 64);
-        Expr var = Variable::make(Int(32).with_lanes(64), "x");
-
-        // For int >= 32 bits
 
         // min(max(min(x, 4), -4) + 1, 4) -> min(max(min(x, 4), -4) + 1, 4)
         check(min(max(min(var, four), neg_four) + one, four), min(max(min(var, four), neg_four) + one, four));
