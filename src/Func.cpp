@@ -2003,8 +2003,7 @@ FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_po
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
-FuncRef::FuncRef(Internal::Function f, const vector<Var> &a,
-                         int placeholder_pos) : func(f) {
+FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
@@ -2161,8 +2160,9 @@ Stage FuncRef::operator+=(Expr e) {
 Stage FuncRef::operator+=(const Tuple &e) {
     if (e.size() == 1) {
         return (*this) += e[0];
+    } else {
+        return func_ref_update<std::plus<Expr>>(e, 0);
     }
-    return func_ref_update<std::plus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator+=(const FuncRef &e) {
@@ -2180,8 +2180,9 @@ Stage FuncRef::operator*=(Expr e) {
 Stage FuncRef::operator*=(const Tuple &e) {
     if (e.size() == 1) {
         return (*this) *= e[0];
+    } else {
+        return func_ref_update<std::multiplies<Expr>>(e, 1);
     }
-    return func_ref_update<std::multiplies<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator*=(const FuncRef &e) {
@@ -2199,8 +2200,9 @@ Stage FuncRef::operator-=(Expr e) {
 Stage FuncRef::operator-=(const Tuple &e) {
     if (e.size() == 1) {
         return (*this) -= e[0];
+    } else {
+        return func_ref_update<std::minus<Expr>>(e, 0);
     }
-    return func_ref_update<std::minus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator-=(const FuncRef &e) {
@@ -2218,8 +2220,9 @@ Stage FuncRef::operator/=(Expr e) {
 Stage FuncRef::operator/=(const Tuple &e) {
     if (e.size() == 1) {
         return (*this) /= e[0];
+    } else {
+        return func_ref_update<std::divides<Expr>>(e, 1);
     }
-    return func_ref_update<std::divides<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator/=(const FuncRef &e) {
