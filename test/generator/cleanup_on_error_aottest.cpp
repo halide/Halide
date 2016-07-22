@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "halide_image.h"
 
 // Grab the internal device_interface functions
 #define WEAK
@@ -8,7 +9,6 @@
 #include <stdlib.h>
 
 #include "cleanup_on_error.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
@@ -60,9 +60,9 @@ int main(int argc, char **argv) {
     halide_set_custom_malloc(&my_halide_malloc);
     halide_set_custom_free(&my_halide_free);
     halide_set_error_handler(&my_halide_error);
-  
+
     Image<int32_t> output(size);
-    int result = cleanup_on_error(output);
+    int result = cleanup_on_error(&output);
 
     if (result != halide_error_code_out_of_memory) {
         printf("The exit status was %d instead of %d\n", result, halide_error_code_out_of_memory);

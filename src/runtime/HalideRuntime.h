@@ -144,7 +144,7 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 extern void halide_join_thread(struct halide_thread *);
 
 /** Set the number of threads used by Halide's thread pool. Returns
- * the old number. 
+ * the old number.
  *
  * n < 0  : error condition
  * n == 0 : use a reasonable system default (typically, number of cpus online).
@@ -251,7 +251,7 @@ struct halide_type_t {
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; }
+    size_t bytes() const { return (bits + 7) / 8; }
 #endif
 };
 

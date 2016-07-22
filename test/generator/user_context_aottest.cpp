@@ -8,7 +8,7 @@
 
 using namespace Halide::Tools;
 
-static const void *context_pointer = (void *)0xf00dd00d;
+static void *context_pointer = (void *)0xf00dd00d;
 
 static bool called_error = false;
 static bool called_trace = false;
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     halide_set_custom_malloc(&my_halide_malloc);
     halide_set_custom_free(&my_halide_free);
     halide_set_custom_trace(&my_halide_trace);
-    
+
     int result;
 
     Image<float> input(10, 10);
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     called_trace = false;
     called_malloc = false;
     called_free = false;
-    result = user_context(context_pointer, input, output);
+    result = user_context(context_pointer, &input, &output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
         exit(-1);
@@ -69,9 +69,7 @@ int main(int argc, char **argv) {
     // verify that calling via the _argv entry point
     // also produces the correct result
     const void* arg0 = context_pointer;
-    buffer_t arg1 = *input;
-    buffer_t arg2 = *output;
-    void* args[3] = { &arg0, &arg1, &arg2 };
+    void* args[3] = { &arg0, &input, &output };
     called_error = false;
     called_trace = false;
     called_malloc = false;
@@ -89,7 +87,7 @@ int main(int argc, char **argv) {
     called_trace = false;
     called_malloc = false;
     called_free = false;
-    result = user_context(context_pointer, input, big_output);
+    result = user_context(context_pointer, &input, &big_output);
     if (result == 0) {
         fprintf(stderr, "Expected this to fail, but got %d\n", result);
         exit(-1);

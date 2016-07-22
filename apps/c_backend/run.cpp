@@ -48,9 +48,9 @@ int main(int argc, char **argv) {
     Image<uint16_t> out_native(423, 633);
     Image<uint16_t> out_c(423, 633);
 
-    pipeline_native(in, out_native);
+    pipeline_native(&in, &out_native);
 
-    pipeline_c(in, out_c);
+    pipeline_c(&in, &out_c);
 
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {

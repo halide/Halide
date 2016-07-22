@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "halide_image.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,8 @@
 
 bool stop = false;
 int max_threads = 1;
+
+using namespace Halide::Tools;
 
 void mess_with_num_threads(void *) {
     while (!stop) {
@@ -25,14 +28,7 @@ int main(int argc, char **argv) {
 
     halide_thread *t = halide_spawn_thread(&mess_with_num_threads, NULL);
 
-    buffer_t out = {0};
-
-    out.host = (uint8_t *)malloc(64*64*sizeof(float));
-    out.elem_size = sizeof(float);
-    out.extent[0] = 64;
-    out.stride[0] = 1;
-    out.extent[1] = 64;
-    out.stride[1] = 64;
+    Image<float> out(64, 64);
 
     for (int i = 0; i < 1000; i++) {
         // The number of threads will oscilate randomly, but the range
