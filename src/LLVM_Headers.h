@@ -52,13 +52,16 @@
 #include <llvm/Target/TargetSubtargetInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
-#include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/ADT/StringMap.h>
 #if LLVM_VERSION >= 37 && !defined(WITH_NATIVE_CLIENT)
 #include <llvm/Object/ArchiveWriter.h>
 #endif
 #include <llvm/Object/ObjectFile.h>
+
+#if LLVM_VERSION >= 39
+#include <llvm/Transforms/Scalar/GVN.h>
+#endif
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3+
 // Protected as at least one installation of llvm elides version macros.
