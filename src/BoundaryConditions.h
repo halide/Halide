@@ -106,7 +106,7 @@ inline NO_INLINE Func constant_exterior(T func_like, Tuple value) {
 }
 template <typename T>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
-    return constant_exterior(func_like, Tuple({value}));
+    return constant_exterior(func_like, Tuple(value));
 }
 
 template <typename T, typename ...Bounds>
@@ -119,7 +119,7 @@ inline NO_INLINE Func constant_exterior(T func_like, Tuple value,
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value,
                                         Bounds... bounds) {
-    return constant_exterior(func_like, Tuple({value}), bounds...);
+    return constant_exterior(func_like, Tuple(value), bounds...);
 }
 // @}
 
