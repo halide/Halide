@@ -242,6 +242,8 @@ public:
     /** Allocate memory for this Image. Drops the reference to any
      * existing memory. */
     void allocate() {
+        assert(dev == 0);
+
         // Conservatively align images to 128 bytes. This is enough
         // alignment for all the platforms we might use.
         size_t size = size_in_bytes();
@@ -443,6 +445,7 @@ public:
     /** Make an image that refers to a sub-range of this image along
      * the given dimension. */
     Image<T, D> cropped(int d, int min, int extent) const {
+        assert(dev == 0);
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Image<T, D> im = *this;
@@ -456,6 +459,7 @@ public:
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
     Image<T, D> transposed(int d1, int d2) const {
+        assert(dev == 0);
         Image<T, D> im = *this;
         std::swap(im.dim[d1], im.dim[d2]);
         return im;
@@ -464,6 +468,7 @@ public:
     /** Make a lower-dimensional image that refers to one slice of this
      * image. */
     Image<T, D> sliced(int d, int pos) const {
+        assert(dev == 0);
         Image<T, D> im = *this;
         im.dimensions--;
         for (int i = d; i < im.dimensions; i++) {
