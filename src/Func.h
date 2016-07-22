@@ -249,6 +249,7 @@ class FuncRef;
 class FuncRef {
     Internal::Function func;
     int implicit_placeholder_pos;
+    int implicit_count;
     std::vector<Expr> args;
     std::vector<Expr> args_with_implicit_vars(const std::vector<Expr> &e) const;
 
@@ -266,9 +267,9 @@ class FuncRef {
 
 public:
     FuncRef(Internal::Function, const std::vector<Expr> &,
-                int placeholder_pos = -1);
+                int placeholder_pos = -1, int count = 0);
     FuncRef(Internal::Function, const std::vector<Var> &,
-                int placeholder_pos = -1);
+                int placeholder_pos = -1, int count = 0);
 
     /** Use this as the left-hand-side of a definition or an update definition
      * (see \ref RDom).
@@ -365,8 +366,8 @@ class Func {
      * up with 'implicit' vars with canonical names. This lets you
      * pass around partially applied Halide functions. */
     // @{
-    int add_implicit_vars(std::vector<Var> &) const;
-    int add_implicit_vars(std::vector<Expr> &) const;
+    std::pair<int, int> add_implicit_vars(std::vector<Var> &) const;
+    std::pair<int, int> add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
     /** The imaging pipeline that outputs this Func alone. */
