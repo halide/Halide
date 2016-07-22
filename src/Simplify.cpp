@@ -179,12 +179,16 @@ private:
             return const_int_bounds(b->value, min_val, max_val);
         } else if (const Max *max = e.as<Max>()) {
             int64_t min_a, min_b, max_a, max_b;
+            // We only need to check the LHS for Min expr since simplify would
+            // canonicalize min/max to always be in the LHS.
             if (const Min *min = max->a.as<Min>()) {
+                // Bound of max(min(x, a), b) : [min_b, max(max_a, max_b)].
+                // We need to check both LHS and RHS of the min, since if a is
+                // a min/max clamp instead of a constant, simplify would have
+                // reordered x and a.
                 if (const_int_bounds(max->b, &min_b, &max_b) &&
                     (const_int_bounds(min->b, &min_a, &max_a) ||
                      const_int_bounds(min->a, &min_a, &max_a))) {
-                    // Bound of max(min(x, 10), -5) : [-5, 10]
-                    // Bound of max(min(4, x), 6) : [6, 6]
                     *min_val = min_b;
                     *max_val = std::max(max_a, max_b);
                     return true;
@@ -197,12 +201,16 @@ private:
             }
         } else if (const Min *min = e.as<Min>()) {
             int64_t min_a, min_b, max_a, max_b;
+            // We only need to check the LHS for Max expr since simplify would
+            // canonicalize min/max to always be in the LHS.
             if (const Max *max = min->a.as<Max>()) {
+                // Bound of min(max(x, a), b) : [min(min_a, min_b), max_b].
+                // We need to check both LHS and RHS of the max, since if a is
+                // a min/max clamp instead of a constant, simplify would have
+                // reordered x and a.
                 if (const_int_bounds(min->b, &min_b, &max_b) &&
                     (const_int_bounds(max->b, &min_a, &max_a) ||
                      const_int_bounds(max->a, &min_a, &max_a))) {
-                    // Bound of min(max(x, 10), -5) : [-5, -5]
-                    // Bound of min(max(4, x), 6) : [4, 6]
                     *min_val = std::min(min_a, min_b);
                     *max_val = max_b;
                     return true;
@@ -2132,13 +2140,13 @@ private:
         } else if (max_a &&
                    min_a_a &&
                    equal(min_a_a->b, b)) {
-            // min(max(min(x, y), z), y) -> max(min(x, y), z)
-            expr = a;
+            // min(max(min(x, y), z), y) -> min(max(x, z), y)
+            expr = mutate(min(max(min_a_a->a, max_a->b), b));
         } else if (max_a &&
                    min_a_a &&
                    equal(min_a_a->a, b)) {
-            // min(max(min(y, x), z), y) -> max(min(y, x), z)
-            expr = a;
+            // min(max(min(y, x), z), y) -> min(max(x, z), y)
+            expr = mutate(min(max(min_a_a->b, max_a->b), b));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
@@ -2412,7 +2420,8 @@ private:
                    broadcast_b ) {
             // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
             expr = mutate(Max::make(max_a->a, Broadcast::make(Max::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
-        } else if (max_a_a &&
+        } else if (max_a &&
+                   max_a_a &&
                    equal(max_a_a->b, b)) {
             // max(max(max(x, y), z), y) -> max(max(x, y), z)
             expr = a;
@@ -2468,13 +2477,13 @@ private:
         } else if (min_a &&
                    max_a_a &&
                    equal(max_a_a->b, b)) {
-            // max(min(max(x, y), z), y) -> min(max(x, y), z)
-            expr = a;
+            // max(min(max(x, y), z), y) -> max(min(x, z), y)
+            expr = mutate(max(min(max_a_a->a, min_a->b), b));
         } else if (min_a &&
                    max_a_a &&
                    equal(max_a_a->a, b)) {
-            // max(min(max(y, x), z), y) -> min(max(y, x), z)
-            expr = a;
+            // max(min(max(y, x), z), y) -> max(min(x, z), y)
+            expr = mutate(max(min(max_a_a->b, min_a->b), b));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
@@ -4701,9 +4710,6 @@ void check_bounds() {
     check(min(x/(-4), y/(-4)), max(x, y)/(-4));
     check(max(x/(-4), y/(-4)), min(x, y)/(-4));
 
-    //check(max(x, 16) - 16, max(x + -16, 0));
-    //check(min(x, -4) + 7, min(x + 7, 3));
-
     // Min and max of clamped expressions
     check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
     check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
@@ -4731,10 +4737,6 @@ void check_bounds() {
 
     check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
     check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
-
-    // Pull constants all the way outside of a clamp
-    //check(clamp(x + 1, -10, 15), clamp(x, -11, 14) + 1);
-    //check(clamp(x + 1, y - 10, 15), clamp(x, y + (-11), 14) + 1);
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -4777,51 +4779,111 @@ void check_bounds() {
     check(min(2, x) - x, 2 - max(x, 2));
     check(max(2, x) - x, 2 - min(x, 2));
 
-    check(max(min(max(x, y), z), y), min(max(x, y), z));
-    check(max(min(max(y, x), z), y), min(max(y, x), z));
-    check(min(max(min(x, y), z), y), max(min(x, y), z));
-    check(min(max(min(y, x), z), y), max(min(y, x), z));
+    check(max(min(max(x, y), z), y), max(min(x, z), y));
+    check(max(min(z, max(x, y)), y), max(min(x, z), y));
+    check(max(y, min(max(x, y), z)), max(min(x, z), y));
+    check(max(y, min(z, max(x, y))), max(min(x, z), y));
+
+    check(max(min(max(y, x), z), y), max(min(x, z), y));
+    check(max(min(z, max(y, x)), y), max(min(x, z), y));
+    check(max(y, min(max(y, x), z)), max(min(x, z), y));
+    check(max(y, min(z, max(y, x))), max(min(x, z), y));
+
+    check(min(max(min(x, y), z), y), min(max(x, z), y));
+    check(min(max(z, min(x, y)), y), min(max(x, z), y));
+    check(min(y, max(min(x, y), z)), min(max(x, z), y));
+    check(min(y, max(z, min(x, y))), min(max(x, z), y));
+
+    check(min(max(min(y, x), z), y), min(max(x, z), y));
+    check(min(max(z, min(y, x)), y), min(max(x, z), y));
+    check(min(y, max(min(y, x), z)), min(max(x, z), y));
+    check(min(y, max(z, min(y, x))), min(max(x, z), y));
 
     {
         Expr one = broadcast(cast(Int(16), 1), 64);
         Expr three = broadcast(cast(Int(16), 3), 64);
         Expr four = broadcast(cast(Int(16), 4), 64);
         Expr five = broadcast(cast(Int(16), 5), 64);
-        Expr neg_four = broadcast(cast(Int(16), -4), 64);
-        Expr neg_five = broadcast(cast(Int(16), -5), 64);
         Expr v1 = Variable::make(Int(16).with_lanes(64), "x");
         Expr v2 = Variable::make(Int(16).with_lanes(64), "y");
 
-        // min(max(min(x, 4), -4), 4) -> max(min(x, 4), -4)
-        check(min(max(min(v1, four), neg_four), four), max(min(v1, four), neg_four));
-        // min(max(min(x, 4), -4), 5) -> max(min(x, 4), -4)
-        check(min(max(min(v1, four), neg_four), five), max(min(v1, four), neg_four));
-        // min(max(min(x, 4), -4), 3) -> min(max(min(x, 4), -4), 3)
-        check(min(max(min(v1, four), neg_four), three), min(max(min(v1, four), neg_four), three));
-        // min(max(min(x, 4), -4), -5) -> -5
-        check(min(max(min(v1, four), neg_four), neg_five), neg_five);
+        // Bound: [-4, 4]
+        std::vector<Expr> clamped = {
+            max(min(v1, four), -four),
+            max(-four, min(v1, four)),
+            min(max(v1, -four), four),
+            min(four, max(v1, -four)),
+            clamp(v1, -four, four)
+        };
 
-        // max(min(max(min(x, 4), -4), 4), -4) -> max(min(x, 4), -4)
-        check(max(min(max(min(v1, four), neg_four), four), neg_four), max(min(v1, four), neg_four));
-        // max(min(max(min(x, 4), -4), 4), -5) -> max(min(x, 4), -4)
-        check(max(min(max(min(v1, four), neg_four), four), neg_five), max(min(v1, four), neg_four));
-        // max(min(max(min(x, 4), -4), 4), 3) -> max(min(x, 4), 3)
-        check(max(min(max(min(v1, four), neg_four), four), three), max(min(v1, four), three));
-        // max(min(max(min(x, 4), -4), 4), 5) -> 5
-        check(max(min(max(min(v1, four), neg_four), four), five), five);
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // min(v, 4) where v=[-4, 4] -> v
+            check(min(clamped[i], four), simplify(clamped[i]));
+            // min(v, 5) where v=[-4, 4] -> v
+            check(min(clamped[i], five), simplify(clamped[i]));
+            // min(v, 3) where v=[-4, 4] -> min(v, 3)
+            check(min(clamped[i], three), simplify(min(clamped[i], three)));
+            // min(v, -5) where v=[-4, 4] -> -5
+            check(min(clamped[i], -five), simplify(-five));
+        }
 
-        // min(max(min(x, 4), -4) + 1, 4) -> min(max(min(x, 4), -4) + 1, 4)
-        check(min(max(min(v1, four), neg_four) + one, four), min(max(min(v1, four), neg_four) + one, four));
-        // min(max(min(x, 4), -4) + 1, 5) -> max(min(x, 4), -4) + 1
-        check(min(max(min(v1, four), neg_four) + one, five), max(min(v1, four), neg_four) + one);
-        // min(max(min(x, 4), -4) + 1, -4) -> -4
-        check(min(max(min(v1, four), neg_four) + one, neg_four), neg_four);
-        // max(min(max(min(x, 4), -4) + 1, 4), -4) -> min(max(min(x, 4), -4) + 1, 4)
-        check(max(min(max(min(v1, four), neg_four) + one, four), neg_four), min(max(min(v1, four), neg_four) + one, four));
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // max(v, 4) where v=[-4, 4] -> 4
+            check(max(clamped[i], four), simplify(four));
+            // max(v, 5) where v=[-4, 4] -> 5
+            check(max(clamped[i], five), simplify(five));
+            // max(v, 3) where v=[-4, 4] -> max(v, 3)
+            check(max(clamped[i], three), simplify(max(clamped[i], three)));
+            // max(v, -5) where v=[-4, 4] -> v
+            check(max(clamped[i], -five), simplify(clamped[i]));
+        }
 
-        Expr t1 = max(min(v1, four), one);          // Bound of max(min(v1, 1), 4): [1, 4]
-        Expr t2 = max(min(v1, neg_four), neg_five); // Bound of max(min(v1, -4), -5): [-5, -4]
-        check(min(max(min(v2, t1), t2), five), max(min(t1, v2), t2));
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // max(min(v, 5), -5) where v=[-4, 4] -> v
+            check(max(min(clamped[i], five), -five), simplify(clamped[i]));
+            // max(min(v, 5), 5) where v=[-4, 4] -> 5
+            check(max(min(clamped[i], five), five), simplify(five));
+
+            // max(min(v, -5), -5) where v=[-4, 4] -> -5
+            check(max(min(clamped[i], -five), -five), simplify(-five));
+            // max(min(v, -5), 5) where v=[-4, 4] -> 5
+            check(max(min(clamped[i], -five), five), simplify(five));
+            // max(min(v, -5), 3) where v=[-4, 4] -> 3
+            check(max(min(clamped[2], -five), three), simplify(three));
+        }
+
+        // max(min(v, 5), 3) where v=[-4, 4] -> max(v, 3)
+        check(max(min(clamped[2], five), three), simplify(max(clamped[2], three)));
+
+        // max(min(v, 5), 3) where v=[-4, 4] -> max(v, 3) -> v=[3, 4]
+        // There is simplification rule that will simplify max(max(min(x, 4), -4), 3)
+        // further into max(min(x, 4), 3)
+        check(max(min(clamped[0], five), three), simplify(max(min(v1, four), three)));
+
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // min(v + 1, 4) where v=[-4, 4] -> min(v + 1, 4)
+            check(min(clamped[i] + one, four), simplify(min(clamped[i] + one, four)));
+            // min(v + 1, 5) where v=[-4, 4] -> v + 1
+            check(min(clamped[i] + one, five), simplify(clamped[i] + one));
+            // min(v + 1, -4) where v=[-4, 4] -> -4
+            check(min(clamped[i] + one, -four), simplify(-four));
+            // max(min(v + 1, 4), -4) where v=[-4, 4] -> min(v + 1, 4)
+            check(max(min(clamped[i] + one, four), -four), simplify(min(clamped[i] + one, four)));
+        }
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // max(v + 1, 4) where v=[-4, 4] -> max(v + 1, 4)
+            check(max(clamped[i] + one, four), simplify(max(clamped[i] + one, four)));
+            // max(v + 1, 5) where v=[-4, 4] -> 5
+            check(max(clamped[i] + one, five), simplify(five));
+            // max(v + 1, -4) where v=[-4, 4] -> -v + 1
+            check(max(clamped[i] + one, -four), simplify(clamped[i] + one));
+            // min(max(v + 1, -4), 4) where v=[-4, 4] -> min(v + 1, 4)
+            check(min(max(clamped[i] + one, -four), four), simplify(min(clamped[i] + one, four)));
+        }
+
+        Expr t1 = clamp(v1, one, four);
+        Expr t2 = clamp(v1, -five, -four);
+        check(min(max(min(v2, t1), t2), five), simplify(max(min(t1, v2), t2)));
     }
 
     {
