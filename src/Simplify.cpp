@@ -2053,6 +2053,10 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            expr = hoist_slice_vector<Min>(min(a, b));
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2367,6 +2371,10 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            expr = hoist_slice_vector<Max>(max(a, b));
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -3610,6 +3618,64 @@ private:
         } else {
             IRMutator::visit(op);
         }
+    }
+    template <typename T>
+    Expr hoist_slice_vector(Expr e) {
+        const T *op = e.as<T>();
+        internal_assert(op);
+
+        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
+
+        const Call *call_a = op->a.template as<Call>();
+        const Call *call_b = op->b.template as<Call>();
+
+        internal_assert(call_a && call_b &&
+                        call_a->is_intrinsic(Call::slice_vector) &&
+                        call_b->is_intrinsic(Call::slice_vector));
+
+        const int64_t *start_lane_a = as_const_int(call_a->args[1]);
+        const int64_t *start_lane_b = as_const_int(call_b->args[1]);
+        if (*start_lane_a != *start_lane_b) {
+            return e;
+        }
+
+        const int64_t *stride_a = as_const_int(call_a->args[2]);
+        const int64_t *stride_b = as_const_int(call_b->args[2]);
+        if (*stride_a != 1 || *stride_b != 1) {
+            return e;
+        }
+
+        const Call *concat_a = call_a->args[0].as<Call>();
+        const Call *concat_b = call_b->args[0].as<Call>();
+        if (!concat_a || !concat_b) {
+            return e;
+        }
+
+        const std::vector<Expr> &slices_a = concat_a->args;
+        const std::vector<Expr> &slices_b = concat_b->args;
+        if (slices_a.size() != slices_b.size()) {
+            return e;
+        }
+
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            if (slices_a[i].type() != slices_b[i].type()) {
+                return e;
+            }
+        }
+
+        vector<Expr> new_slices;
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            new_slices.push_back(T::make(slices_a[i], slices_b[i]));
+        }
+
+        Expr start_lane = call_a->args[1];
+        Expr result_lanes = call_a->args[3];
+        Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
+        Expr ret_expr = Call::make(op->type, Call::slice_vector,
+                                   { concat_v, start_lane, 1 /*for now, we only deal with stride 1 */, result_lanes },
+                                   Call::PureIntrinsic);
+        debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
+        return ret_expr;
     }
 
     template<typename T, typename Body>
