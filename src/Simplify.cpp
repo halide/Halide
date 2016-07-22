@@ -180,14 +180,13 @@ private:
         } else if (const Max *max = e.as<Max>()) {
             int64_t min_a, min_b, max_a, max_b;
             if (const Min *min = max->a.as<Min>()) {
-                if (const_int_bounds(min->b, &min_a, &max_a) &&
-                    (min_a == max_a) &&
-                    const_int_bounds(max->b, &min_b, &max_b) &&
-                    (min_b == max_b)) {
+                if (const_int_bounds(max->b, &min_b, &max_b) &&
+                    (const_int_bounds(min->b, &min_a, &max_a) ||
+                     const_int_bounds(min->a, &min_a, &max_a))) {
                     // Bound of max(min(x, 10), -5) : [-5, 10]
-                    // Bound of max(min(x, 4), 6) : [6, 6]
+                    // Bound of max(min(4, x), 6) : [6, 6]
                     *min_val = min_b;
-                    *max_val = std::max(min_a, min_b);
+                    *max_val = std::max(max_a, max_b);
                     return true;
                 }
             } else if (const_int_bounds(max->a, &min_a, &max_a) &&
@@ -199,14 +198,13 @@ private:
         } else if (const Min *min = e.as<Min>()) {
             int64_t min_a, min_b, max_a, max_b;
             if (const Max *max = min->a.as<Max>()) {
-                if (const_int_bounds(max->b, &min_a, &max_a) &&
-                    (min_a == max_a) &&
-                    const_int_bounds(min->b, &min_b, &max_b) &&
-                    (min_b == max_b)) {
+                if (const_int_bounds(min->b, &min_b, &max_b) &&
+                    (const_int_bounds(max->b, &min_a, &max_a) ||
+                     const_int_bounds(max->a, &min_a, &max_a))) {
                     // Bound of min(max(x, 10), -5) : [-5, -5]
-                    // Bound of min(max(x, 4), 6) : [4, 6]
+                    // Bound of min(max(4, x), 6) : [4, 6]
                     *min_val = std::min(min_a, min_b);
-                    *max_val = min_b;
+                    *max_val = max_b;
                     return true;
                 }
             } else if (const_int_bounds(min->a, &min_a, &max_a) &&
@@ -1886,6 +1884,10 @@ private:
         // Move constants to the right to cut down on number of cases to check
         if (is_simple_const(a) && !is_simple_const(b)) {
             std::swap(a, b);
+        } else if (a.as<Broadcast>() && !b.as<Broadcast>()) {
+            std::swap(a, b);
+        } else if (!a.as<Max>() && b.as<Max>()) {
+            std::swap(a, b);
         }
 
         int64_t ia = 0, ib = 0, ic = 0;
@@ -1914,11 +1916,7 @@ private:
         const Call *call_b = b.as<Call>();
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
-
-        const Broadcast *broadcast_a_a = min_a ? min_a->a.as<Broadcast>() : nullptr;
         const Broadcast *broadcast_a_b = min_a ? min_a->b.as<Broadcast>() : nullptr;
-        const Broadcast *broadcast_b_a = min_b ? min_b->a.as<Broadcast>() : nullptr;
-        const Broadcast *broadcast_b_b = min_b ? min_b->b.as<Broadcast>() : nullptr;
 
         min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
 
@@ -2076,21 +2074,6 @@ private:
             // min(min(x, broadcast(y, n)), broadcast(z, n))) -> min(x, broadcast(min(y, z), n))
             expr = mutate(Min::make(min_a->a, Broadcast::make(Min::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
         } else if (min_a &&
-                   broadcast_a_a &&
-                   broadcast_b ) {
-            // min(min(broadcast(x, n), y), broadcast(z, n))) -> min(y, broadcast(min(x, z), n))
-            expr = mutate(Min::make(min_a->b, Broadcast::make(Min::make(broadcast_a_a->value, broadcast_b->value), broadcast_b->lanes)));
-        } else if (broadcast_a &&
-                   min_b &&
-                   broadcast_b_b) {
-            // min(broadcast(x, n), min(y, broadcast(z, n)))) -> min(y, broadcast(min(x, z), n))
-            expr = mutate(Min::make(min_b->a, Broadcast::make(Min::make(broadcast_a->value, broadcast_b_b->value), broadcast_a->lanes)));
-        } else if (broadcast_a &&
-                   min_b &&
-                   broadcast_b_a) {
-            // min(broadcast(x, n), min(broadcast(y, n), z))) -> min(z, broadcast(min(x, y), n))
-            expr = mutate(Min::make(min_b->b, Broadcast::make(Min::make(broadcast_a->value, broadcast_b_a->value), broadcast_a->lanes)));
-        } else if (min_a &&
                    min_a_a &&
                    equal(min_a_a->b, b)) {
             // min(min(min(x, y), z), y) -> min(min(x, y), z)
@@ -2146,6 +2129,16 @@ private:
                    equal(min_a->b, min_b->b)) {
             // min(min(y, x), min(z, x)) -> min(min(y, z), x)
             expr = mutate(Min::make(Min::make(min_a->a, min_b->a), min_a->b));
+        } else if (max_a &&
+                   min_a_a &&
+                   equal(min_a_a->b, b)) {
+            // min(max(min(x, y), z), y) -> max(min(x, y), z)
+            expr = a;
+        } else if (max_a &&
+                   min_a_a &&
+                   equal(min_a_a->a, b)) {
+            // min(max(min(y, x), z), y) -> max(min(y, x), z)
+            expr = a;
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
@@ -2255,8 +2248,11 @@ private:
         // Move constants to the right to cut down on number of cases to check
         if (is_simple_const(a) && !is_simple_const(b)) {
             std::swap(a, b);
+        } else if (a.as<Broadcast>() && !b.as<Broadcast>()) {
+            std::swap(a, b);
+        } else if (!a.as<Min>() && b.as<Min>()) {
+            std::swap(a, b);
         }
-
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
@@ -2284,11 +2280,9 @@ private:
         const Call *call_b = b.as<Call>();
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
-
-        const Broadcast *broadcast_a_a = max_a ? max_a->a.as<Broadcast>() : nullptr;
         const Broadcast *broadcast_a_b = max_a ? max_a->b.as<Broadcast>() : nullptr;
-        const Broadcast *broadcast_b_a = max_b ? max_b->a.as<Broadcast>() : nullptr;
-        const Broadcast *broadcast_b_b = max_b ? max_b->b.as<Broadcast>() : nullptr;
+
+        max_a_a = min_a ? min_a->a.as<Max>() : max_a_a;
 
         int64_t ramp_min, ramp_max;
 
@@ -2418,21 +2412,6 @@ private:
                    broadcast_b ) {
             // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
             expr = mutate(Max::make(max_a->a, Broadcast::make(Max::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
-        } else if (max_a &&
-                   broadcast_a_a &&
-                   broadcast_b ) {
-            // max(max(broadcast(x, n), y), broadcast(z, n))) -> max(y, broadcast(max(x, z), n))
-            expr = mutate(Max::make(max_a->b, Broadcast::make(Max::make(broadcast_a_a->value, broadcast_b->value), broadcast_b->lanes)));
-        } else if (broadcast_a &&
-                   max_b &&
-                   broadcast_b_b) {
-            // max(broadcast(x, n), max(y, broadcast(z, n)))) -> max(y, broadcast(max(x, z), n))
-            expr = mutate(Max::make(max_b->a, Broadcast::make(Max::make(broadcast_a->value, broadcast_b_b->value), broadcast_a->lanes)));
-        } else if (broadcast_a &&
-                   max_b &&
-                   broadcast_b_a) {
-            // max(broadcast(x, n), max(broadcast(y, n), z))) -> max(z, broadcast(max(x, y), n))
-            expr = mutate(Max::make(max_b->b, Broadcast::make(Max::make(broadcast_a->value, broadcast_b_a->value), broadcast_a->lanes)));
         } else if (max_a_a &&
                    equal(max_a_a->b, b)) {
             // max(max(max(x, y), z), y) -> max(max(x, y), z)
@@ -2486,6 +2465,16 @@ private:
                    equal(min_a->b, min_b->b)) {
             // max(min(y, x), min(z, x)) -> min(max(y, z), x)
             expr = mutate(Min::make(Max::make(min_a->a, min_b->a), min_a->b));
+        } else if (min_a &&
+                   max_a_a &&
+                   equal(max_a_a->b, b)) {
+            // max(min(max(x, y), z), y) -> min(max(x, y), z)
+            expr = a;
+        } else if (min_a &&
+                   max_a_a &&
+                   equal(max_a_a->a, b)) {
+            // max(min(max(y, x), z), y) -> min(max(y, x), z)
+            expr = a;
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
@@ -4788,6 +4777,11 @@ void check_bounds() {
     check(min(2, x) - x, 2 - max(x, 2));
     check(max(2, x) - x, 2 - min(x, 2));
 
+    check(max(min(max(x, y), z), y), min(max(x, y), z));
+    check(max(min(max(y, x), z), y), min(max(y, x), z));
+    check(min(max(min(x, y), z), y), max(min(x, y), z));
+    check(min(max(min(y, x), z), y), max(min(y, x), z));
+
     {
         Expr one = broadcast(cast(Int(16), 1), 64);
         Expr three = broadcast(cast(Int(16), 3), 64);
@@ -4795,34 +4789,39 @@ void check_bounds() {
         Expr five = broadcast(cast(Int(16), 5), 64);
         Expr neg_four = broadcast(cast(Int(16), -4), 64);
         Expr neg_five = broadcast(cast(Int(16), -5), 64);
-        Expr var = Variable::make(Int(16).with_lanes(64), "x");
+        Expr v1 = Variable::make(Int(16).with_lanes(64), "x");
+        Expr v2 = Variable::make(Int(16).with_lanes(64), "y");
 
         // min(max(min(x, 4), -4), 4) -> max(min(x, 4), -4)
-        check(min(max(min(var, four), neg_four), four), max(min(var, four), neg_four));
+        check(min(max(min(v1, four), neg_four), four), max(min(v1, four), neg_four));
         // min(max(min(x, 4), -4), 5) -> max(min(x, 4), -4)
-        check(min(max(min(var, four), neg_four), five), max(min(var, four), neg_four));
+        check(min(max(min(v1, four), neg_four), five), max(min(v1, four), neg_four));
         // min(max(min(x, 4), -4), 3) -> min(max(min(x, 4), -4), 3)
-        check(min(max(min(var, four), neg_four), three), min(max(min(var, four), neg_four), three));
+        check(min(max(min(v1, four), neg_four), three), min(max(min(v1, four), neg_four), three));
         // min(max(min(x, 4), -4), -5) -> -5
-        check(min(max(min(var, four), neg_four), neg_five), neg_five);
+        check(min(max(min(v1, four), neg_four), neg_five), neg_five);
 
         // max(min(max(min(x, 4), -4), 4), -4) -> max(min(x, 4), -4)
-        check(max(min(max(min(var, four), neg_four), four), neg_four), max(min(var, four), neg_four));
+        check(max(min(max(min(v1, four), neg_four), four), neg_four), max(min(v1, four), neg_four));
         // max(min(max(min(x, 4), -4), 4), -5) -> max(min(x, 4), -4)
-        check(max(min(max(min(var, four), neg_four), four), neg_five), max(min(var, four), neg_four));
+        check(max(min(max(min(v1, four), neg_four), four), neg_five), max(min(v1, four), neg_four));
         // max(min(max(min(x, 4), -4), 4), 3) -> max(min(x, 4), 3)
-        check(max(min(max(min(var, four), neg_four), four), three), max(min(var, four), three));
+        check(max(min(max(min(v1, four), neg_four), four), three), max(min(v1, four), three));
         // max(min(max(min(x, 4), -4), 4), 5) -> 5
-        check(max(min(max(min(var, four), neg_four), four), five), five);
+        check(max(min(max(min(v1, four), neg_four), four), five), five);
 
         // min(max(min(x, 4), -4) + 1, 4) -> min(max(min(x, 4), -4) + 1, 4)
-        check(min(max(min(var, four), neg_four) + one, four), min(max(min(var, four), neg_four) + one, four));
+        check(min(max(min(v1, four), neg_four) + one, four), min(max(min(v1, four), neg_four) + one, four));
         // min(max(min(x, 4), -4) + 1, 5) -> max(min(x, 4), -4) + 1
-        check(min(max(min(var, four), neg_four) + one, five), max(min(var, four), neg_four) + one);
+        check(min(max(min(v1, four), neg_four) + one, five), max(min(v1, four), neg_four) + one);
         // min(max(min(x, 4), -4) + 1, -4) -> -4
-        check(min(max(min(var, four), neg_four) + one, neg_four), neg_four);
+        check(min(max(min(v1, four), neg_four) + one, neg_four), neg_four);
         // max(min(max(min(x, 4), -4) + 1, 4), -4) -> min(max(min(x, 4), -4) + 1, 4)
-        check(max(min(max(min(var, four), neg_four) + one, four), neg_four), min(max(min(var, four), neg_four) + one, four));
+        check(max(min(max(min(v1, four), neg_four) + one, four), neg_four), min(max(min(v1, four), neg_four) + one, four));
+
+        Expr t1 = max(min(v1, four), one);          // Bound of max(min(v1, 1), 4): [1, 4]
+        Expr t2 = max(min(v1, neg_four), neg_five); // Bound of max(min(v1, -4), -5): [-5, -4]
+        check(min(max(min(v2, t1), t2), five), max(min(t1, v2), t2));
     }
 
     {
@@ -4835,18 +4834,18 @@ void check_bounds() {
         // min(min(broadcast(x, n), y), broadcast(z, n))) -> min(y, broadcast(min(x, z), n))
         check(min(min(broadcast(x, 64), yv), broadcast(z, 64)), min(yv, broadcast(min(x, z), 64)));
         // min(broadcast(x, n), min(y, broadcast(z, n)))) -> min(y, broadcast(min(x, z), n))
-        check(min(broadcast(x, 64), min(yv, broadcast(z, 64))), min(yv, broadcast(min(x, z), 64)));
+        check(min(broadcast(x, 64), min(yv, broadcast(z, 64))), min(yv, broadcast(min(z, x), 64)));
         // min(broadcast(x, n), min(broadcast(y, n), z))) -> min(z, broadcast(min(x, y), n))
-        check(min(broadcast(x, 64), min(broadcast(y, 64), zv)), min(zv, broadcast(min(x, y), 64)));
+        check(min(broadcast(x, 64), min(broadcast(y, 64), zv)), min(zv, broadcast(min(y, x), 64)));
 
         // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
         check(max(max(xv, broadcast(y, 64)), broadcast(z, 64)), max(xv, broadcast(max(y, z), 64)));
         // max(max(broadcast(x, n), y), broadcast(z, n))) -> max(y, broadcast(max(x, z), n))
         check(max(max(broadcast(x, 64), yv), broadcast(z, 64)), max(yv, broadcast(max(x, z), 64)));
         // max(broadcast(x, n), max(y, broadcast(z, n)))) -> max(y, broadcast(max(x, z), n))
-        check(max(broadcast(x, 64), max(yv, broadcast(z, 64))), max(yv, broadcast(max(x, z), 64)));
+        check(max(broadcast(x, 64), max(yv, broadcast(z, 64))), max(yv, broadcast(max(z, x), 64)));
         // max(broadcast(x, n), max(broadcast(y, n), z))) -> max(z, broadcast(max(x, y), n))
-        check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(x, y), 64)));
+        check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(y, x), 64)));
     }
 }
 
