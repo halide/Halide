@@ -247,9 +247,9 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
     // We prioritize Args over Expr variant
     if(var_args.size() == args_len)
     {
-        h::FuncRefVar ret = that(var_args);
+        h::FuncRef ret = that(var_args);
 
-        p::copy_non_const_reference::apply<h::FuncRefVar &>::type converter;
+        p::copy_non_const_reference::apply<h::FuncRef &>::type converter;
         PyObject* obj = converter( ret );
         return_object = p::object( p::handle<>( obj ) );
     }
@@ -257,9 +257,9 @@ p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
     {   user_assert(expr_args.size() == args_len)
                 << "Not all func_getitem_operator0 arguments where converted to Expr "
                 << "( expr_args.size() " << expr_args.size() << "!= args_len " << args_len << ")";
-        h::FuncRefExpr ret = that(expr_args);
+        h::FuncRef ret = that(expr_args);
 
-        p::copy_non_const_reference::apply<h::FuncRefExpr &>::type converter;
+        p::copy_non_const_reference::apply<h::FuncRef &>::type converter;
         PyObject* obj = converter( ret );
         return_object = p::object( p::handle<>( obj ) );
     }
@@ -308,14 +308,14 @@ h::Stage func_setitem_operator0(h::Func &that, p::tuple args_passed, T right_han
     // We prioritize Args
     if(var_args.size() == args_len)
     {
-        h::FuncRefVar ret = that(var_args);
+        h::FuncRef ret = that(var_args);
         h::Stage s = (ret = right_hand);
         return s;
     }
     else
     {   user_assert(expr_args.size() == args_len) << "Not all func_setitem_operator0 arguments where converted to Expr";
 
-        h::FuncRefExpr ret = that(expr_args);
+        h::FuncRef ret = that(expr_args);
         h::Stage s = (ret = right_hand);
         return s;
     }
@@ -598,12 +598,10 @@ void defineFunc()
             .def("__getitem__", &func_getitem_operator1); // handles the case where a single index object is given
 
     func_class
-            .def("__setitem__", &func_setitem_operator0<h::FuncRefVar>)
-            .def("__setitem__", &func_setitem_operator0<h::FuncRefExpr>)
+            .def("__setitem__", &func_setitem_operator0<h::FuncRef>)
             .def("__setitem__", &func_setitem_operator0<h::Expr>)
             .def("__setitem__", &func_setitem_operator0<h::Tuple>)
-            .def("__setitem__", &func_setitem_operator1<h::FuncRefVar>) // handles the case where a single index object is given
-            .def("__setitem__", &func_setitem_operator1<h::FuncRefExpr>)
+            .def("__setitem__", &func_setitem_operator1<h::FuncRef>) // handles the case where a single index object is given
             .def("__setitem__", &func_setitem_operator1<h::Expr>)
             .def("__setitem__", &func_setitem_operator1<h::Tuple>);
 

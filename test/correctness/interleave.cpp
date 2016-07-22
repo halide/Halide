@@ -41,8 +41,7 @@ void check_interleave_count(Func f, int correct) {
     }
 }
 
-template <typename FuncRefVarOrExpr>
-void define(FuncRefVarOrExpr f, std::vector<Expr> values) {
+void define(FuncRef f, std::vector<Expr> values) {
     if (values.size() == 1) {
         f = values[0];
     } else {
@@ -50,8 +49,7 @@ void define(FuncRefVarOrExpr f, std::vector<Expr> values) {
     }
 }
 
-template <typename FuncRefVarOrExpr>
-void define(FuncRefVarOrExpr f, Expr value, int count) {
+void define(FuncRef f, Expr value, int count) {
     std::vector<Expr> values;
     for (int i = 0; i < count; i++) {
         values.push_back(value);
@@ -59,8 +57,7 @@ void define(FuncRefVarOrExpr f, Expr value, int count) {
     define(f, values);
 }
 
-template <typename FuncRefVarOrExpr>
-Expr element(FuncRefVarOrExpr f, int i) {
+Expr element(FuncRef f, int i) {
     if (f.size() == 1) {
         assert(i == 0);
         return f;
