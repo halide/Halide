@@ -975,10 +975,13 @@ void CodeGen_LLVM::optimize_module() {
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         virtual void add(Pass *p) override {
             // As of 2016/07/21 LLVM gets stuck inside Early GVN on some pipelines.
+            #if LLVM_VERSION >= 39
             if (p->getPassName() == std::string("Early GVN Hoisting of Expressions")) {
+                // Use the older GVN pass instead
                 delete p;
-                return;
+                p = llvm::createGVNPass();
             }
+            #endif
             debug(1) << "Adding function pass: " << p->getPassName() << "\n";
             legacy::FunctionPassManager::add(p);
         }
