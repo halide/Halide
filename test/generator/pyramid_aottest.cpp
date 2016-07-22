@@ -25,9 +25,9 @@ int main(int argc, char **argv) {
     }
 
     // Will throw a compiler error if we didn't compile the generator with 10 levels.
-    pyramid(input,
-            levels[0], levels[1], levels[2], levels[3], levels[4],
-            levels[5], levels[6], levels[7], levels[8], levels[9]);
+    pyramid(&input,
+            &levels[0], &levels[1], &levels[2], &levels[3], &levels[4],
+            &levels[5], &levels[6], &levels[7], &levels[8], &levels[9]);
 
     // The bottom level should be the input
     for (int y = 0; y < input.height(); y++) {

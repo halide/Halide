@@ -1,9 +1,10 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
+#include "halide_image.h"
+
 #include <assert.h>
 #include <string.h>
-#include "halide_image.h"
 
 #include "cxx_mangling_define_extern.h"
 
@@ -31,7 +32,7 @@ int main(int argc, char **argv) {
     Image<double> result(100);
 
     int ptr_arg = 42;
-    assert(HalideTest::cxx_mangling_define_extern(input, &ptr_arg, &ptr_arg, result) == 0);
+    assert(HalideTest::cxx_mangling_define_extern(&input, &ptr_arg, &ptr_arg, &result) == 0);
 
     printf("Success!\n");
     return 0;

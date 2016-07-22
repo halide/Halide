@@ -1,10 +1,10 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
+#include "halide_image.h"
 #include <assert.h>
 
 #include "tiled_blur.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
@@ -40,8 +40,10 @@ int main(int argc, char **argv) {
     }
     Image<float> output(W, H);
 
+    printf("%d %d\n", input.dim[2].extent, input.extent[2]);
+
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
-    tiled_blur(input, output);
+    tiled_blur(&input, &output);
 
     printf("Success!\n");
     return 0;

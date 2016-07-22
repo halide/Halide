@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     for (float t = 0; t < 100; t++) {
         float fx = cos(t / 10.0f), fy = sin(t / 10.0f);
         mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters, output.width(), output.height(),
-                   output);
+                   &output);
     }
 
     char buf[4096];

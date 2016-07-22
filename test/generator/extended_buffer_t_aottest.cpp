@@ -14,12 +14,12 @@ int main(int argc, char **argv) {
             input(x, y) = sinf(x * y + 1);
         }
     }
-    Image<float> output(10, 10, 3);
+    Image<float> output(10, 10);
 
-    fancy_buffer_t fancy_input(input);
+    fancy_buffer_t fancy_input(&input);
     fancy_input.extra_field = 17;
 
-    extended_buffer_t(&fancy_input, output);
+    extended_buffer_t(&fancy_input, &output);
 
     // Output should be input + 17
     for (int y = 0; y < 10; y++) {
