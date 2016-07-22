@@ -37,7 +37,7 @@ WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int min_d
 }
 
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int min_digits) {
-    if (arg < 0 && dst <= end) {
+    if (arg < 0 && dst < end) {
         *dst++ = '-';
         arg = -arg;
     }
