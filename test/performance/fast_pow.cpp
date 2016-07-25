@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
     const int trials = 5;
     const int iterations = 5;
-    pows_per_pixel.set(10);
+    pows_per_pixel.set(20);
 
     // All profiling runs are done into the same buffer, to avoid
     // cache weirdness.
@@ -90,8 +90,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if (t2 < t3) {
-        printf("pow is faster than fast_pow\n");
+    if (t2*1.5 < t3) {
+        printf("pow is more than 1.5x faster than fast_pow\n");
         return -1;
     }
 

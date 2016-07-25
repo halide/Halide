@@ -1,19 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
-
-#if defined(__APPLE__)
-#include <OpenGL/gl.h>
-#else
-#include <GL/gl.h>
-#endif
+#include <stdint.h>
+#include <stddef.h>
+#include "../src/runtime/mini_opengl.h"
 
 #include "Halide.h"
 #include "HalideRuntimeOpenGL.h"
 
 using namespace Halide;
 
+extern "C" void glGenTextures(GLsizei, GLuint *);
+extern "C" void glTexParameteri(GLenum, GLenum, GLint);
+extern "C" void glBindTexture(GLenum, GLuint);
+extern "C" void glTexImage2D(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const GLvoid *);
+
 int main() {
-    
+
     // This test must be run with an OpenGL target
     const Target &target = get_jit_target_from_environment();
     if (!target.has_feature(Target::OpenGL))  {

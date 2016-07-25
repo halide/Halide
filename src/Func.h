@@ -239,105 +239,45 @@ public:
 // For backwards compatibility, keep the ScheduleHandle name.
 typedef Stage ScheduleHandle;
 
-/** A fragment of front-end syntax of the form f(x, y, z), where x,
- * y, z are Vars. It could be the left-hand side of a function
- * definition, or it could be a call to a function. We don't know
- * until we see how this object gets used.
- */
-class FuncRefExpr;
-
-class FuncRefVar {
-    Internal::Function func;
-    int implicit_placeholder_pos;
-    std::vector<std::string> args;
-    std::vector<std::string> args_with_implicit_vars(const std::vector<Expr> &e) const;
-public:
-    FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
-
-    /**  Use this as the left-hand-side of a definition. */
-    EXPORT Stage operator=(Expr);
-
-    /** Use this as the left-hand-side of a definition for a Func with
-     * multiple outputs. */
-    EXPORT Stage operator=(const Tuple &);
-
-    /** Define this function as a sum reduction over the given
-     * expression. The expression should refer to some RDom to sum
-     * over. If the function does not already have a pure definition,
-     * this sets it to zero.
-     */
-    EXPORT Stage operator+=(Expr);
-
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
-     */
-    EXPORT Stage operator-=(Expr);
-
-    /** Define this function as a product reduction. The expression
-     * should refer to some RDom to take the product over. If the
-     * function does not already have a pure definition, this sets it
-     * to 1.
-     */
-    EXPORT Stage operator*=(Expr);
-
-    /** Define this function as the product reduction over the inverse
-     * of the expression. The expression should refer to some RDom to
-     * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1.
-     */
-    EXPORT Stage operator/=(Expr);
-
-    /** Override the usual assignment operator, so that
-     * f(x, y) = g(x, y) defines f.
-     */
-    // @{
-    EXPORT Stage operator=(const FuncRefVar &e);
-    EXPORT Stage operator=(const FuncRefExpr &e);
-    // @}
-
-    /** Use this FuncRefVar as a call to the function, and not as the
-     * left-hand-side of a definition. Only works for single-output
-     * funcs.
-     */
-    EXPORT operator Expr() const;
-
-    /** When a FuncRefVar refers to a function that provides multiple
-     * outputs, you can access each output as an Expr using
-     * operator[] */
-    EXPORT Expr operator[](int) const;
-
-    /** How many outputs does the function this refers to produce. */
-    EXPORT size_t size() const;
-
-    /** What function is this calling? */
-    EXPORT Internal::Function function() const {return func;}
-};
+class FuncRef;
 
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
- * z are Exprs. If could be the left hand side of an update
- * definition, or it could be a call to a function. We don't know
+ * z are Vars or Exprs. If could be the left hand side of a definition or
+ * an update definition, or it could be a call to a function. We don't know
  * until we see how this object gets used.
  */
-class FuncRefExpr {
+class FuncRef {
     Internal::Function func;
     int implicit_placeholder_pos;
+    int implicit_count;
     std::vector<Expr> args;
     std::vector<Expr> args_with_implicit_vars(const std::vector<Expr> &e) const;
-public:
-    FuncRefExpr(Internal::Function, const std::vector<Expr> &,
-                int placeholder_pos = -1);
-    FuncRefExpr(Internal::Function, const std::vector<std::string> &,
-                int placeholder_pos = -1);
 
-    /** Use this as the left-hand-side of an update definition (see
-     * \ref RDom). The function must already have a pure definition.
+    /** Helper for function update by Tuple. If the function does not
+     * already have a pure definition, init_val will be used as RHS of
+     * each tuple element in the initial function definition. */
+    template <typename BinaryOp>
+    Stage func_ref_update(const Tuple &e, int init_val);
+
+    /** Helper for function update by Expr. If the function does not
+     * already have a pure definition, init_val will be used as RHS in
+     * the initial function definition. */
+    template <typename BinaryOp>
+    Stage func_ref_update(Expr e, int init_val);
+
+public:
+    FuncRef(Internal::Function, const std::vector<Expr> &,
+                int placeholder_pos = -1, int count = 0);
+    FuncRef(Internal::Function, const std::vector<Var> &,
+                int placeholder_pos = -1, int count = 0);
+
+    /** Use this as the left-hand-side of a definition or an update definition
+     * (see \ref RDom).
      */
     EXPORT Stage operator=(Expr);
 
-    /** Use this as the left-hand-side of an update definition for a
-     * Func with multiple outputs. */
+    /** Use this as the left-hand-side of a definition or an update definition
+     * for a Func with multiple outputs. */
     EXPORT Stage operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the given
@@ -345,42 +285,55 @@ public:
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
      */
+    // @{
     EXPORT Stage operator+=(Expr);
+    EXPORT Stage operator+=(const Tuple &);
+    EXPORT Stage operator+=(const FuncRef &);
+    // @}
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
      * to sum over. If the function does not already have a pure
      * definition, this sets it to zero.
      */
+    // @{
     EXPORT Stage operator-=(Expr);
+    EXPORT Stage operator-=(const Tuple &);
+    EXPORT Stage operator-=(const FuncRef &);
+    // @}
 
     /** Define this function as a product reduction. The expression
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
      */
+    // @{
     EXPORT Stage operator*=(Expr);
+    EXPORT Stage operator*=(const Tuple &);
+    EXPORT Stage operator*=(const FuncRef &);
+    // @}
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
      * pure definition, this sets it to 1.
      */
+    // @{
     EXPORT Stage operator/=(Expr);
+    EXPORT Stage operator/=(const Tuple &);
+    EXPORT Stage operator/=(const FuncRef &);
+    // @}
 
     /* Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
-    // @{
-    EXPORT Stage operator=(const FuncRefVar &);
-    EXPORT Stage operator=(const FuncRefExpr &);
-    // @}
+    EXPORT Stage operator=(const FuncRef &);
 
     /** Use this as a call to the function, and not the left-hand-side
      * of a definition. Only works for single-output Funcs. */
     EXPORT operator Expr() const;
 
-    /** When a FuncRefExpr refers to a function that provides multiple
+    /** When a FuncRef refers to a function that provides multiple
      * outputs, you can access each output as an Expr using
      * operator[].
      */
@@ -413,8 +366,8 @@ class Func {
      * up with 'implicit' vars with canonical names. This lets you
      * pass around partially applied Halide functions. */
     // @{
-    int add_implicit_vars(std::vector<Var> &) const;
-    int add_implicit_vars(std::vector<Expr> &) const;
+    std::pair<int, int> add_implicit_vars(std::vector<Var> &) const;
+    std::pair<int, int> add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
     /** The imaging pipeline that outputs this Func alone. */
@@ -888,10 +841,10 @@ public:
      * enough implicit vars are added to the end of the argument list
      * to make up the difference (see \ref Var::implicit) */
     // @{
-    EXPORT FuncRefVar operator()(std::vector<Var>) const;
+    EXPORT FuncRef operator()(std::vector<Var>) const;
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRefVar>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
     operator()(Args... args) const {
         std::vector<Var> collected_args;
         Internal::collect_args(collected_args, args...);
@@ -899,17 +852,17 @@ public:
     }
     // @}
 
-    /** Either calls to the function, or the left-hand-side of a
-     * update definition (see \ref RDom). If the function has
+    /** Either calls to the function, or the left-hand-side of
+     * an update definition (see \ref RDom). If the function has
      * already been defined, and fewer arguments are given than the
      * function has dimensions, then enough implicit vars are added to
      * the end of the argument list to make up the difference. (see
      * \ref Var::implicit)*/
     // @{
-    EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
+    EXPORT FuncRef operator()(std::vector<Expr>) const;
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRefExpr>::type
+    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
     operator()(Expr x, Args... args) const {
         std::vector<Expr> collected_args;
         collected_args.push_back(x);
@@ -1083,6 +1036,16 @@ public:
      * more of this function than the bounds you have stated, a
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Expand the region computed so that the min coordinates is
+     * congruent to 'remainder' modulo 'modulus', and the extent is a
+     * multiple of 'modulus'. For example, f.align_bounds(x, 2) forces
+     * the min and extent realized to be even, and calling
+     * f.align_bounds(x, 2, 1) forces the min to be odd and the extent
+     * to be even. The region computed always contains the region that
+     * would have been computed without this directive, so no
+     * assertions are injected. */
+    EXPORT Func &align_bounds(Var var, Expr modulus, Expr remainder = 0);
 
     /** Bound the extent of a Func's realization, but not its
      * min. This means the dimension can be unrolled or vectorized

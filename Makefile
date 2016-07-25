@@ -60,7 +60,11 @@ WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 ifeq ($(LLVM_VERSION_TIMES_10),39)
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
 else
+ifeq ($(LLVM_VERSION_TIMES_10),40)
+WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
+else
 WITH_HEXAGON ?=
+endif
 endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
@@ -1181,7 +1185,7 @@ ifneq (,$(findstring clang version 3.9,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
-ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
+ifneq (,$(findstring clang version 4.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
@@ -1205,7 +1209,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39 40))
 LLVM_OK=yes
 endif
 
