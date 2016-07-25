@@ -36,9 +36,17 @@ int main(int argc, char **argv) {
     assert(strcmp(m->name, "cxx_mangling") == 0);
 
     int ptr_arg = 42;
+    int *int_ptr = &ptr_arg;
+    const int *const_int_ptr = &ptr_arg;
+    void *void_ptr = nullptr;
+    const void *const_void_ptr = nullptr;
+    std::string *string_ptr = nullptr;
+    const std::string *const_string_ptr = nullptr;
+
     assert(HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
                                     -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
-                                    &ptr_arg, &ptr_arg, result) == 0);
+                                    int_ptr, const_int_ptr, void_ptr, const_void_ptr, 
+                                    string_ptr, const_string_ptr, result) == 0);
 
     printf("Success!\n");
     return 0;
