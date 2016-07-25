@@ -346,6 +346,17 @@ private:
             // outer cast is narrower, the inner cast can be
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
+        } else if (cast &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   (cast->type.is_int() || cast->type.is_uint()) &&
+                   op->type.bits() <= cast->type.bits() &&
+                   op->type.bits() <= op->value.type().bits()) {
+            // If this is a cast between integer types, where the
+            // outer cast is narrower than the inner cast and the
+            // inner cast's argument, the inner cast can be
+            // eliminated. The inner cast is either a sign extend
+            // or a zero extend, and the outer cast truncates the extended bits
+            expr = mutate(Cast::make(op->type, cast->value));
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->lanes));
@@ -4241,6 +4252,13 @@ void check_casts() {
 
     check(cast(Int(32), cast(Int(8), 3)), 3);
     check(cast(Int(32), cast(Int(8), 1232)), -48);
+
+    // Check redundant casts
+    check(cast(Float(32), cast(Float(64), x)), cast(Float(32), x));
+    check(cast(Int(16), cast(Int(32), x)), cast(Int(16), x));
+    check(cast(Int(16), cast(UInt(32), x)), cast(Int(16), x));
+    check(cast(UInt(16), cast(Int(32), x)), cast(UInt(16), x));
+    check(cast(UInt(16), cast(UInt(32), x)), cast(UInt(16), x));
 
     // Check evaluation of constant expressions involving casts
     check(cast(UInt(16), 53) + cast(UInt(16), 87), make_const(UInt(16), 140));

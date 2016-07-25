@@ -12,8 +12,7 @@
 
 namespace Halide {
 
-class FuncRefVar;
-class FuncRefExpr;
+class FuncRef;
 
 /** Create a small array of Exprs for defining and calling functions
  * with multiple outputs. */
@@ -36,6 +35,11 @@ public:
         return exprs[x];
     }
 
+    /** Construct a Tuple of a single Expr */
+    explicit Tuple(Expr e) {
+        exprs.push_back(e);
+    }
+
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename ...Args>
@@ -52,10 +56,7 @@ public:
     }
 
     /** Construct a Tuple from a function reference. */
-    // @{
-    EXPORT Tuple(const FuncRefVar &);
-    EXPORT Tuple(const FuncRefExpr &);
-    // @}
+    EXPORT Tuple(const FuncRef &);
 
     /** Treat the tuple as a vector of Exprs */
     const std::vector<Expr> &as_vector() const {

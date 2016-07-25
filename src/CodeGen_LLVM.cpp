@@ -967,8 +967,36 @@ void CodeGen_LLVM::optimize_module() {
     FunctionPassManager function_pass_manager(module.get());
     PassManager module_pass_manager;
     #else
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
+
+    // We override PassManager::add so that we have an opportunity to
+    // blacklist problematic LLVM passes.
+    class MyFunctionPassManager : public legacy::FunctionPassManager {
+    public:
+        MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
+        virtual void add(Pass *p) override {
+            // As of 2016/07/21 LLVM gets stuck inside Early GVN on some pipelines.
+            #if LLVM_VERSION >= 39
+            if (p->getPassName() == std::string("Early GVN Hoisting of Expressions")) {
+                // Use the older GVN pass instead
+                delete p;
+                p = llvm::createGVNPass();
+            }
+            #endif
+            debug(1) << "Adding function pass: " << p->getPassName() << "\n";
+            legacy::FunctionPassManager::add(p);
+        }
+    };
+
+    class MyModulePassManager : public legacy::PassManager {
+    public:
+        virtual void add(Pass *p) override {
+            debug(1) << "Adding module pass: " << p->getPassName() << "\n";
+            legacy::PassManager::add(p);
+        }
+    };
+
+    MyFunctionPassManager function_pass_manager(module.get());
+    MyModulePassManager module_pass_manager;
     #endif
 
     #if (LLVM_VERSION >= 36) && (LLVM_VERSION < 37)
