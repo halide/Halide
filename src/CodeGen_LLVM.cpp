@@ -466,6 +466,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
     }
     return names;
 }
