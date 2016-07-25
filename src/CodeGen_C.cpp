@@ -557,6 +557,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+
+        // And also the metadata.
+        stream << "// Result is never null and points to constant static data\n";
+        stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
     }
 
     // Close namespaces here as metadata must be outside them
@@ -576,9 +580,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (is_header()) {
-        // And also the metadata.
-        stream << "// Result is never null and points to constant static data\n";
-        stream << "extern const struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
     }
 }
 
