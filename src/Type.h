@@ -142,6 +142,29 @@ template<> struct halide_c_type_to_name<float> { static const bool known_type = 
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
 
+// You can make arbitrary user-defined types be "Known" by adding your own specialization of 
+// halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators
+// type safe. e.g.,
+//
+//    struct MyFunStruct { ... };
+//
+//    ...
+//
+//    template<> 
+//    struct halide_c_type_to_name<struct MyFunStruct> { 
+//      static const bool known_type = true; 
+//      static halide_cplusplus_type_name name() { 
+//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"}; 
+//      } 
+//    };
+//
+//    ...
+//
+//    class MyGenerator : public Generator<MyGenerator> {
+//       Param<const MyFunStruct *> my_struct_ptr;
+//       ...
+//    };
+
 // Default case (should be only Unknown types, since we specialize for Known types below).
 // We require that all unknown types be pointers, and translate them all to void*
 // (preserving const-ness and volatile-ness).
