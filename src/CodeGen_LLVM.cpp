@@ -440,6 +440,17 @@ struct MangledNames {
     string metadata_name;
 };
 
+// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
+// properly on Windows: the return type isn't part of the name-mangling scheme
+// on *nix, but is for MSVC.
+template<> 
+struct halide_c_type_to_name<struct halide_filter_metadata_t> { 
+    static const bool known_type = true; 
+    static halide_cplusplus_type_name name() { 
+        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"}; 
+    } 
+};
+
 MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType linkage,
                                const std::vector<LoweredArgument> &args, const Target &target) {
     std::vector<std::string> namespaces;
