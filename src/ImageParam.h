@@ -51,7 +51,7 @@ public:
 
     template <typename ...Args>
     NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, Expr>::type
-    operator()(Args... args) {
+    operator()(Args... args) const {
         std::vector<Expr> exprs = {Expr(args)...};
         return (*this)(exprs);
     };
