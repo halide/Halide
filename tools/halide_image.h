@@ -443,7 +443,8 @@ public:
     }
 
     /** Make an image that refers to a sub-range of this image along
-     * the given dimension. */
+     * the given dimension. Does not assert the crop region is within
+     * the existing bounds. */
     Image<T, D> cropped(int d, int min, int extent) const {
         assert(dev == 0);
         // Make a fresh copy of the underlying buffer (but not a fresh
@@ -459,7 +460,6 @@ public:
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
     Image<T, D> transposed(int d1, int d2) const {
-        assert(dev == 0);
         Image<T, D> im = *this;
         std::swap(im.dim[d1], im.dim[d2]);
         return im;
