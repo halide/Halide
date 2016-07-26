@@ -35,6 +35,19 @@
 
 #endif
 
+// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
+// properly on Windows: the return type isn't part of the name-mangling scheme
+// on *nix, but is for MSVC. Note also that this specialization must be in the
+// same (global) namespace as the others.
+template<> 
+struct halide_c_type_to_name<struct halide_filter_metadata_t> { 
+    static const bool known_type = true; 
+    static halide_cplusplus_type_name name() { 
+        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"}; 
+    } 
+};
+
+
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
@@ -466,6 +479,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
     }
     return names;
 }

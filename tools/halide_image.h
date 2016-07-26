@@ -28,10 +28,10 @@ template<typename T, int D = 4, void *(*Allocate)(size_t) = malloc, void (*Deall
 class Image : public buffer_t {
     static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
 
-    /** halide_buffer_t stores the shape in an array of
-     * halide_dimension_t objects. We use a similar array of
-     * *references* to the buffer shape so that we can start porting
-     * code to halide_buffer_t. */
+    /** The upcoming buffer_t upgrade to halide_buffer_t stores the
+     * shape in an array of halide_dimension_t objects. We use a
+     * similar array of *references* to the buffer shape so that we
+     * can start porting code to halide_buffer_t's interface. */
     struct halide_dimension_t {
         int &min, &stride, &extent;
     } shape[4];
