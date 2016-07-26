@@ -24,7 +24,7 @@ void for_each_element(const buffer_t &buf, Fn f);
  * functionality. T is the element type, and D is the maximum number
  * of dimensions. It must be less than or equal to 4 until we have
  * support for higher-dimensional buffers. */
-template<typename T, int D = 4>
+template<typename T, int D = 4, void *(*Allocate)(size_t) = malloc, void (*Deallocate)(void *) = free>
 class Image : public buffer_t {
     static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
 
@@ -249,9 +249,9 @@ public:
         size_t size = size_in_bytes();
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
-        uint8_t *ptr = (uint8_t *)malloc(sizeof(T)*size + alignment - 1);
+        uint8_t *ptr = (uint8_t *)Allocate(sizeof(T)*size + alignment - 1);
         host = (uint8_t *)((uintptr_t)(ptr + alignment - 1) & ~(alignment - 1));
-        alloc.reset(ptr, free);
+        alloc.reset(ptr, Deallocate);
     }
 
     /** Allocate a new image of the given size. Pass zeroes to make a
