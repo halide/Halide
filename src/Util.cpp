@@ -233,6 +233,16 @@ void file_unlink(const std::string &name) {
     #endif
 }
 
+void dir_rmdir(const std::string &name) {
+    #ifdef _MSC_VER
+    BOOL r = RemoveDirectoryA(name.c_str());
+    internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
+    #else
+    int r = ::rmdir(name.c_str());
+    internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
+    #endif
+}
+
 FileStat file_stat(const std::string &name) {
     #ifdef _MSC_VER
     struct _stat a;
@@ -260,11 +270,11 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
-    TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
-    DWORD ret = GetTempPath(MAX_PATH, tmp_path);
+    char tmp_path[MAX_PATH], tmp_file[MAX_PATH];
+    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
     internal_assert(ret != 0);
-    // Note that GetTempFileName() actually creates the file.
-    ret = GetTempFileName(tmp_path, prefix.c_str(), 0, tmp_file);
+    // Note that GetTempFileNameA() actually creates the file.
+    ret = GetTempFileNameA(tmp_path, prefix.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
     return std::string(tmp_file);
     #else
@@ -276,6 +286,47 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     internal_assert(fd != -1) << "Unable to create temp file for (" << &buf[0] << ")\n";
     close(fd);
     return std::string(&buf[0]);
+    #endif
+}
+
+std::string dir_make_temp() {
+    #ifdef _WIN32
+    char tmp_path[MAX_PATH];
+    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
+    internal_assert(ret != 0);
+    // There's no direct API to do this in Windows;
+    // our clunky-but-adequate approach here is to use 
+    // CoCreateGuid() to create a probably-unique name.
+    // Add a limit on the number of tries just in case.
+    for (int tries = 0; tries < 100; ++tries) {
+        GUID guid;
+        HRESULT hr = CoCreateGuid(&guid);
+        internal_assert(hr == S_OK);
+        char name[256];
+        int result = StringFromGUID2A(guid, name, sizeof(name));
+        internal_assert(result > 0);
+        std::string dir = std::string(tmp_path) + "\\" + std::string(name);
+        result = CreateDirectoryA(dir.c_str, nullptr);
+        if (result) {
+            debug(1) << "temp dir is: " << dir << "\n";
+            return dir;
+        }
+        // If name already existed, just loop and try again.
+        // Any other error, break from loop and fail.
+        if (GetLastError() != ERROR_ALREADY_EXISTS) {
+            break;
+        }
+    }
+    internal_assert(false) << "Unable to create temp directory.\n";
+    return "";
+    #else
+    std::string templ = "/tmp/XXXXXX";
+    // Copy into a temporary buffer, since mkdtemp modifies the buffer in place.
+    std::vector<char> buf(templ.size() + 1);
+    strcpy(&buf[0], templ.c_str());
+    char* result = mkdtemp(&buf[0]);
+    internal_assert(result != nullptr) << "Unable to create temp directory.\n";
+    return std::string(result);
     #endif
 }
 
