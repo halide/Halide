@@ -192,13 +192,24 @@ struct FileStat {
  * file, the caller is responsibly for deleting it. Neither the prefix nor suffix
  * may contain a directory separator.
  */
-std::string file_make_temp(const std::string &prefix, const std::string &suffix);
+EXPORT std::string file_make_temp(const std::string &prefix, const std::string &suffix);
+
+/** Create a unique directory in an arbitrary (but writable) directory; this is 
+ * typically somewhere inside /tmp, but the specific location is not guaranteed. 
+ * The directory will be empty (i.e., this will never return /tmp itself,
+ * but rather a new directory inside /tmp). The caller is responsible for removing the 
+ * directory after use.
+ */
+EXPORT std::string dir_make_temp();
 
 /** Wrapper for access(). Asserts upon error. */
 EXPORT bool file_exists(const std::string &name);
 
 /** Wrapper for unlink(). Asserts upon error. */
 EXPORT void file_unlink(const std::string &name);
+
+/** Wrapper for rmdir(). Asserts upon error. */
+EXPORT void dir_rmdir(const std::string &name);
 
 /** Wrapper for stat(). Asserts upon error. */
 EXPORT FileStat file_stat(const std::string &name);
