@@ -236,7 +236,7 @@ void file_unlink(const std::string &name) {
 void dir_rmdir(const std::string &name) {
     #ifdef _MSC_VER
     BOOL r = RemoveDirectoryA(name.c_str());
-    internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
+    internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
     #else
     int r = ::rmdir(name.c_str());
     internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
@@ -303,10 +303,12 @@ std::string dir_make_temp() {
         HRESULT hr = CoCreateGuid(&guid);
         internal_assert(hr == S_OK);
         char name[256];
-        int result = StringFromGUID2A(guid, name, sizeof(name));
-        internal_assert(result > 0);
-        std::string dir = std::string(tmp_path) + "\\" + std::string(name);
-        result = CreateDirectoryA(dir.c_str, nullptr);
+        sprintf(name, "%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X", 
+            guid.Data1, guid.Data2, guid.Data3, guid.Data4[0], 
+            guid.Data4[1], guid.Data4[2], guid.Data4[3], guid.Data4[4], 
+            guid.Data4[5], guid.Data4[6], guid.Data4[7]);
+        std::string dir = std::string(tmp_path) + std::string(name);
+        BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
         if (result) {
             debug(1) << "temp dir is: " << dir << "\n";
             return dir;
