@@ -215,7 +215,7 @@ if (WITH_TEST_GENERATORS)
                                GENERATOR_NAME "${GEN_NAME}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATED_FUNCTION_NAMESPACE "HalideTest::"
-                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling")
+                               GENERATOR_ARGS "target=host-c_plus_plus_name_mangling-user_context")
       target_link_libraries("${TEST_RUNNER}" ${LIB_cxx_mangling})
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
