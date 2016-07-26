@@ -34,7 +34,7 @@ class Image : public buffer_t {
      * code to halide_buffer_t. */
     struct halide_dimension_t {
         int &min, &stride, &extent;
-    } shape[D];
+    } shape[4];
 
     /** The allocation owned by this Image. NULL if the Image does not
      * own the memory. */
@@ -42,9 +42,9 @@ class Image : public buffer_t {
 
     /** A temporary helper function to get the number of dimensions in
      * a buffer_t. Will disappear when halide_buffer_t is merged. */
-    int buffer_dimensions(const buffer_t *buf) {
+    int buffer_dimensions(const buffer_t &buf) {
         for (int d = 0; d < 4; d++) {
-            if (buf->extent[d] == 0) {
+            if (buf.extent[d] == 0) {
                 return d;
             }
         }
@@ -52,10 +52,10 @@ class Image : public buffer_t {
     }
 
     /** Initialize the shape from a buffer_t. */
-    void initialize_from_buffer(const buffer_t *buf) {
+    void initialize_from_buffer(const buffer_t &buf) {
         dimensions = buffer_dimensions(buf);
         assert(dimensions <= D);
-        memcpy((buffer_t *)this, buf, sizeof(buffer_t));
+        memcpy((buffer_t *)this, &buf, sizeof(buffer_t));
     }
 
     /** Initialize the shape from a parameter pack of ints */
@@ -127,7 +127,7 @@ public:
 
     /** halide_buffer_t accesses its shape via a pointer to an array
      * of dimensions */
-    halide_dimension_t *dim = dim;
+    halide_dimension_t *dim = shape;
 
     /** The total number of elements this buffer represents. Equal to
      * the product of the extents */
@@ -170,11 +170,11 @@ public:
 
     /** A pointer to the element at the given location. */
     T *address_of(const int *pos) const {
-        ptrdiff_t index = 0;
-        for (int i = 0; i < dimensions; i++) {
-            index += dim[i].stride * (pos[i] - dim[i].min);
+        T *ptr = (T *)host;        
+        for (int i = dimensions-1; i >= 0; i--) {
+            ptr += dim[i].stride * (pos[i] - dim[i].min);
         }
-        return (T *)(host + index * type.bytes());
+        return ptr;
     }
 
     /** We need custom constructors and assignment operators so that
@@ -200,7 +200,7 @@ public:
         alloc(other.alloc),
         type(halide_type_of<T>()),
         dim(&shape[0]) {
-        initialize_from_buffer(&other);
+        initialize_from_buffer(other);
     }
 
     Image(const Image<T, D> &&other) :
@@ -211,11 +211,11 @@ public:
         alloc(std::move(other.alloc)),
         type(halide_type_of<T>()),
         dim(&shape[0]) {
-        initialize_from_buffer(&other);
+        initialize_from_buffer(other);
     }
 
     Image<T, D> &operator=(const Image<T, D> &other) {
-        initialize_from_buffer(&other);
+        initialize_from_buffer(other);
         dimensions = other.dimensions;
         type = other.type;
         alloc = other.alloc;
@@ -223,7 +223,7 @@ public:
     }
 
     Image<T, D> &operator=(const Image<T, D> &&other) {
-        initialize_from_buffer(&other);
+        initialize_from_buffer(other);
         dimensions = other.dimensions;
         type = other.type;
         alloc = std::move(other.alloc);
@@ -236,7 +236,7 @@ public:
                {min[2], stride[2], extent[2]},
                {min[3], stride[3], extent[3]}},
         type(halide_type_of<T>()) {
-        initialize_from_buffer(&buf);
+        initialize_from_buffer(buf);
     }
 
     /** Allocate memory for this Image. Drops the reference to any
@@ -335,9 +335,9 @@ public:
 private:
     template<typename ...Args>
     T *address_of_helper(int d, int first, Args... rest) const {
-        return address_of_helper(d+1, rest...) + shape[d].stride * (first - shape[d].min);
+        return address_of_helper(d+1, rest...) + stride[d] * (first - min[d]);
     }
-
+    
     T *address_of_helper(int d) const {
         return (T *)host;
     }
@@ -569,17 +569,48 @@ struct for_each_element_helpers {
         return result;
     }
 
+    /** A version where the callable takes a position array instead,
+     * with compile-time recursion on the dimensionality.  This
+     * overload is preferred to the one below using the same int vs
+     * double trick as above, but is impossible once d hits -1 using
+     * std::enable_if. */
+    template<int d>
+    static typename std::enable_if<d >= 0, void>::type
+    for_each_element_array_helper(int, Fn f, const buffer_t &buf, int *pos) {
+        for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
+            for_each_element_array_helper<d - 1>(0, f, buf, pos);
+        }
+    }
+
+    /** Base case for recursion above. */
+    template<int d>
+    static void for_each_element_array_helper(double, Fn f, const buffer_t &buf, int *pos) {
+        f(pos);
+    }    
+
+    
     /** A run-time-recursive version (instead of
      * compile-time-recursive) that requires the callable to take a
-     * pointer to a position array instead. */
+     * pointer to a position array instead. Dispatches to the
+     * compile-time-recursive version once the dimensionality gets
+     * small. */
     static void for_each_element_array(int d, Fn f, const buffer_t &buf, int *pos) {
         if (d == -1) {
             f(pos);
+        } else if (d == 0) {
+            // Once the dimensionality gets small enough, dispatch to
+            // a compile-time-recursive version for better codegen of
+            // the inner loops.
+            for_each_element_array_helper<0>(0, f, buf, pos);
+        } else if (d == 1) {
+            for_each_element_array_helper<1>(0, f, buf, pos);
+        } else if (d == 2) {
+            for_each_element_array_helper<2>(0, f, buf, pos);
+        } else if (d == 3) {
+            for_each_element_array_helper<3>(0, f, buf, pos);                        
         } else {
-            pos[d] = buf.min[d];
-            for (int i = 0; i < std::max(1, buf.extent[d]); i++) {
+            for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
                 for_each_element_array(d - 1, f, buf, pos);
-                pos[d]++;
             }
         }
     }
