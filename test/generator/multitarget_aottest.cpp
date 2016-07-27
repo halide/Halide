@@ -7,8 +7,7 @@
 
 using namespace Halide::Tools;
 
-// Override halide_error() so that an intentional error doesn't trigger exit()
-extern "C" void halide_error(void *user_context, const char *message) {
+void my_error_handler(void *user_context, const char *message) {
   printf("Saw Error: (%s)\n", message);
 }
 
@@ -57,6 +56,7 @@ int main(int argc, char **argv) {
     const int W = 32, H = 32;
     Image<uint32_t> output(W, H);
 
+    halide_set_error_handler(my_error_handler);
     halide_set_custom_can_use_target_features(my_can_use_target_features);
 
     buffer_t *o_buf = output;
