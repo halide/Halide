@@ -7,6 +7,11 @@
 
 using namespace Halide::Tools;
 
+// Override halide_error() so that an intentional error doesn't trigger exit()
+extern "C" void halide_error(void *user_context, const char *message) {
+  printf("Saw Error: (%s)\n", message);
+}
+
 std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
     if (env_var_name) {
         size_t read = 0;
@@ -81,6 +86,17 @@ int main(int argc, char **argv) {
     if (can_use_count != 1) {
         printf("Error: halide_can_use_target_features was called %d times!\n", (int) can_use_count);
         return -1;
+    }
+
+    {
+        // Verify that the multitarget wrapper code propagates nonzero error
+        // results back to the caller properly.
+        Image<uint8_t> bad_elem_size(W, H);
+        int result = HalideTest::multitarget(bad_elem_size);
+        if (result != halide_error_code_bad_elem_size) {
+            printf("Error: expected to fail with halide_error_code_bad_elem_size (%d) but actually got %d!\n", (int) halide_error_code_bad_elem_size, result);
+            return -1;
+        }
     }
 
     printf("Success: Saw %x for debug=%d\n", output(0, 0), use_debug_feature());
