@@ -8,7 +8,7 @@
 using namespace Halide::Tools;
 
 void my_error_handler(void *user_context, const char *message) {
-  printf("Saw Error: (%s)\n", message);
+    printf("Saw Error: (%s)\n", message);
 }
 
 std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
