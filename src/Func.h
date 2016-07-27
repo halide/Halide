@@ -239,8 +239,6 @@ public:
 // For backwards compatibility, keep the ScheduleHandle name.
 typedef Stage ScheduleHandle;
 
-class FuncRef;
-
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
  * z are Vars or Exprs. If could be the left hand side of a definition or
  * an update definition, or it could be a call to a function. We don't know
