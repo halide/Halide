@@ -95,22 +95,22 @@ class Image : public buffer_t {
 
     /** Get the dimensionality of a multi-dimensional C array */
     template<typename Array, size_t N>
-    int dimensionality_of_array(Array (&vals)[N]) {
+    static int dimensionality_of_array(Array (&vals)[N]) {
         return dimensionality_of_array(vals[0]) + 1;
     }
 
-    int dimensionality_of_array(T &) {
+    static int dimensionality_of_array(T &) {
         return 0;
     }
 
     /** Check if any args in a parameter pack are zero */
     template<typename ...Args>
-    bool any_zero(int first, Args... rest) {
+    static bool any_zero(int first, Args... rest) {
         if (first == 0) return true;
         return any_zero(rest...);
     }
 
-    bool any_zero() {
+    static bool any_zero() {
         return false;
     }
 
@@ -166,15 +166,6 @@ public:
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
         return (size_t)(end() - begin());
-    }
-
-    /** A pointer to the element at the given location. */
-    T *address_of(const int *pos) const {
-        T *ptr = (T *)host;        
-        for (int i = dimensions-1; i >= 0; i--) {
-            ptr += dim[i].stride * (pos[i] - dim[i].min);
-        }
-        return ptr;
     }
 
     /** We need custom constructors and assignment operators so that
@@ -334,26 +325,44 @@ public:
 
 private:
     template<typename ...Args>
-    T *address_of_helper(int d, int first, Args... rest) const {
-        return address_of_helper(d+1, rest...) + stride[d] * (first - min[d]);
+    T *address_of(int d, int first, Args... rest) const {
+        return address_of(d+1, rest...) + stride[d] * (first - min[d]);
     }
     
-    T *address_of_helper(int d) const {
+    T *address_of(int d) const {
         return (T *)host;
     }
 
+    T *address_of(const int *pos) const {
+        T *ptr = (T *)host;        
+        for (int i = dimensions-1; i >= 0; i--) {
+            ptr += dim[i].stride * (pos[i] - dim[i].min);
+        }
+        return ptr;
+    }
 public:
 
-    /** Get pixels or their addresses */
-    // @{
+    /** Access pixels. Note that while these methods are marked const,
+     * they return non-const references. 
+     */
+    //@{
     template<typename ...Args>
-    T *address_of(int first, Args... rest) const {
-        return address_of_helper(0, first, rest...);
+    const T &operator()(int first, Args... rest) const {
+        return *(address_of(0, first, rest...));
+    }
+
+    template<typename ...Args>
+    const T &operator()() const {
+        return *((T *)host);
+    }
+
+    const T &operator()(const int *pos) const {
+        return *((T *)address_of(pos));
     }
 
     template<typename ...Args>
     T &operator()(int first, Args... rest) {
-        return *(address_of(first, rest...));
+        return *(address_of(0, first, rest...));
     }
 
     template<typename ...Args>
@@ -361,23 +370,9 @@ public:
         return *((T *)host);
     }
 
-    template<typename ...Args>
-    const T &operator()(int first, Args... rest) const {
-        return *(address_of(first, rest...));
-    }
-
-    template<typename ...Args>
-    const T &operator()() const {
-        return (T *)host;
-    }
-
-    const T &operator()(const int *pos) const {
+    T &operator()(int *pos) {
         return *((T *)address_of(pos));
-    }
-
-    T &operator()(const int *pos) {
-        return *((T *)address_of(pos));
-    }
+    }    
     // @}
 
     /** Conventional names for the first three dimensions. */
@@ -430,7 +425,7 @@ public:
         slice_size *= sizeof(T);
         // Do the memcpys
         src_slice.for_each_element([&](const int *pos) {
-                memcpy(dst_slice.address_of(pos), src_slice.address_of(pos), slice_size);
+                memcpy(&dst_slice(pos), &src_slice(pos), slice_size);
             });
 
         // Undo the dimension reordering
@@ -686,7 +681,7 @@ for_each_element(im.sliced(1, 0), [&](int x, int c) {
 
 Image<float, 3> im(100, 100, 3);
 for_each_element(im.sliced(0, 0), [&](int y, int c) {
-    memset(im.address_of(0, y, c), 0, sizeof(float) * im.width());
+    memset(&im(0, y, c), 0, sizeof(float) * im.width());
 });
 
 
