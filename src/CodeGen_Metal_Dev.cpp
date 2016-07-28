@@ -125,16 +125,26 @@ string simt_intrinsic(const string &name) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
-    if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), { op->a, op->b }, Call::Extern));
+    int bits;
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " >> " << bits;
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(lower_euclidean_div(op->a, op->b));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
-    if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "smod_" + print_type(op->type), { op->a, op->b }, Call::Extern));
+    int bits;
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(lower_euclidean_mod(op->a, op->b));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
     }
@@ -548,28 +558,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
     }
 }
 
-static string smod_def(string T) {
-    ostringstream ss;
-    ss << T << " smod_" << T << "(" << T << " a, " << T << " b) {\n";
-    ss << T << " r = a % b;\n";
-    ss << "if (r < 0) { r += b < 0 ? -b : b; }\n";
-    ss << "return r;\n";
-    ss << "}\n";
-    return ss.str();
-}
-
-static string sdiv_def(string T) {
-    ostringstream ss;
-    ss << T << " sdiv_" << T << "(" << T << " a, " << T << " b) {\n";
-    ss << T << " q = a / b;\n";
-    ss << T << " r = a - q*b;\n";
-    ss << T << " bs = b >> (8*sizeof(" << T << ") - 1);\n";
-    ss << T << " rs = r >> (8*sizeof(" << T << ") - 1);\n";
-    ss << "return q - (rs&bs) + (rs&~bs);\n";
-    ss << "}\n";
-    return ss.str();
-}
-
 void CodeGen_Metal_Dev::init_module() {
     debug(2) << "Metal device codegen init_module\n";
 
@@ -586,12 +574,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
                << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
-               << smod_def("char") << "\n"
-               << smod_def("short") << "\n"
-               << smod_def("int") << "\n"
-               << sdiv_def("char") << "\n"
-               << sdiv_def("short") << "\n"
-               << sdiv_def("int") << "\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
