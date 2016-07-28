@@ -1,7 +1,7 @@
-// A simple Image class which wraps a buffer_t. This is useful
-// when interacting with a statically-compiled Halide pipeline emitted
-// by Func::compile_to_file, when you do not want to link your
-// processing program against Halide.h/libHalide.a.
+/** \file 
+ * Defines an Image type that inherits from buffer_t and adds
+ * functionality, and methods for more conveniently iterating over the
+ * samples in a buffer_t outside of Halide code. */
 
 #ifndef HALIDE_RUNTIME_IMAGE_H
 #define HALIDE_RUNTIME_IMAGE_H
@@ -21,9 +21,28 @@ template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn f);
 
 /** A templated Image class derived from buffer_t that adds
- * functionality. T is the element type, and D is the maximum number
- * of dimensions. It must be less than or equal to 4 until we have
- * support for higher-dimensional buffers. */
+ * functionality. When using Halide from C++, this is the preferred
+ * way to create input and output buffers. The overhead of using this
+ * class relative to a naked buffer_t is minimal - it uses another
+ * ~100 bytes on the stack, and does no dynamic allocations when using
+ * it to represent existing memory. This overhead will shrink further
+ * in the future once buffer_t is deprecated. 
+ * 
+ * The template parameter T is the element type, and D is the maximum
+ * number of dimensions. It must be less than or equal to 4 for now.
+ * 
+ * The class optionally allocates and owns memory for the image using
+ * a std::shared_ptr allocated with the provided allocator, which
+ * defaults to malloc/free. Any device-side allocation is not owned,
+ * and must be freed manually using device_free.
+ * 
+ * For accessing the shape and type, this class provides both the
+ * buffer_t interface (extent[i], min[i], and stride[i] arrays, the
+ * elem_size field), and also the interface of the yet-to-come
+ * halide_buffer_t, which will replace buffer_t. This is intended to
+ * allow a gradual transition to halide_buffer_t. New code should
+ * access the shape via dim[i].extent, dim[i].min, dim[i].stride, and
+ * the type via the 'type' field. */
 template<typename T, int D = 4, void *(*Allocate)(size_t) = malloc, void (*Deallocate)(void *) = free>
 class Image : public buffer_t {
     static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
@@ -513,7 +532,7 @@ public:
     // @}
 };
 
-// We also define some helpers for iterating over buffers and calling a callable at each site.
+/** Some helpers for for_each_element. */
 template<typename Fn>
 struct for_each_element_helpers {
 
@@ -630,12 +649,14 @@ struct for_each_element_helpers {
     }
 };
 
-/** Call a function at each site in a buffer. If the function has more
- * arguments than the buffer has dimensions, the remaining arguments
- * will be zero. If it has fewer arguments than the buffer has
- * dimensions then the last few dimensions of the buffer are not
- * iterated over. For example, the following code exploits this to set
- * a floating point RGB image to red:
+/** Call a function at each site in a buffer. This is likely to be
+ * much slower than using Halide code to populate a buffer, but is
+ * convenient for tests. If the function has more arguments than the
+ * buffer has dimensions, the remaining arguments will be zero. If it
+ * has fewer arguments than the buffer has dimensions then the last
+ * few dimensions of the buffer are not iterated over. For example,
+ * the following code exploits this to set a floating point RGB image
+ * to red:
 
 \code
 Image<float, 3> im(100, 100, 3);
