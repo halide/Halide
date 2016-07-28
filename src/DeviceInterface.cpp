@@ -148,6 +148,27 @@ const struct halide_device_interface *halide_opengl_device_interface() {
     return nullptr;
 }
 
+int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t tex) {
+    Target target(get_host_target());
+    target.set_feature(Target::OpenGL);
+    int (*fn)(void *, struct buffer_t *, uintptr_t);
+    if (lookup_runtime_routine("halide_opengl_wrap_texture", target, fn)) {
+        return (*fn)(user_context, buf, tex);
+    }
+    return 0;
+}
+
+uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf) {
+    Target target(get_host_target());
+    target.set_feature(Target::OpenGL);
+    uintptr_t (*fn)(void *user_context, struct buffer_t *buf);
+    if (lookup_runtime_routine("halide_opengl_detach_texture", target, fn)) {
+        return (*fn)(user_context, buf);
+    }
+    return 0;
+}
+
+
 const struct halide_device_interface *halide_openglcompute_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::OpenGLCompute);

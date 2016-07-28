@@ -330,10 +330,20 @@ void compile_multitarget(const std::string &fn_name,
     Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
     wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
 
-    Module wrapper_module(fn_name, base_target);
+    // Wrapper function is *always* built with NoRuntime;
+    // also build with NoRuntime and NoAsserts, since the underlying implementations
+    // will implement those (or not).
+    const Target wrapper_target = base_target
+        .with_feature(Target::NoRuntime)
+        .with_feature(Target::NoAsserts)
+        .with_feature(Target::NoBoundsQuery);
+    Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
-    all_temp_object_files.emplace_back(make_temp_object_file(output_files.static_library_name, "_wrapper", base_target));
-    wrapper_module.compile(Outputs().object(all_temp_object_files.back()->pathname()));
+    // The wrapper module must come *first* in the archive, otherwise libraries
+    // that are dynamically found via register_metadata and halide_enumerate_registered_filters()
+    // may get optimized away at link time.
+    all_temp_object_files.insert(all_temp_object_files.begin(), make_temp_object_file(output_files.static_library_name, "_wrapper", base_target));
+    wrapper_module.compile(Outputs().object(all_temp_object_files.front()->pathname()));
 
     if (!output_files.c_header_name.empty()) { 
         debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
