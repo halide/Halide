@@ -252,8 +252,7 @@ public:
         shape {{min[0], stride[0], extent[0]},
                {min[1], stride[1], extent[1]},
                {min[2], stride[2], extent[2]},
-               {min[3], stride[3], extent[3]}}
-        {
+               {min[3], stride[3], extent[3]}} {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
         memset((buffer_t *)this, 0, sizeof(buffer_t));
@@ -274,8 +273,7 @@ public:
         shape {{min[0], stride[0], extent[0]},
                {min[1], stride[1], extent[1]},
                {min[2], stride[2], extent[2]},
-               {min[3], stride[3], extent[3]}}
-        {
+               {min[3], stride[3], extent[3]}} {
         memset((buffer_t *)this, 0, sizeof(buffer_t));
         dimensions = dimensionality_of_array(vals);
         initialize_shape_from_array_shape(shape + dimensions - 1, vals);
@@ -292,8 +290,7 @@ public:
         shape {{min[0], stride[0], extent[0]},
                {min[1], stride[1], extent[1]},
                {min[2], stride[2], extent[2]},
-               {min[3], stride[3], extent[3]}}
-        {
+               {min[3], stride[3], extent[3]}} {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
         memset((buffer_t *)this, 0, sizeof(buffer_t));
