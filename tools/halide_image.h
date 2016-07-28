@@ -367,7 +367,7 @@ public:
         return *((T *)host);
     }
 
-    T &operator()(int *pos) {
+    T &operator()(const int *pos) {
         return *((T *)address_of(pos));
     }    
     // @}
