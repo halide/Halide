@@ -356,13 +356,19 @@ void compile_multitarget(const std::string &fn_name,
     Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
     wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
 
-    // Wrapper function is *always* built with NoRuntime;
-    // also build with NoRuntime and NoAsserts, since the underlying implementations
-    // will implement those (or not).
+    // Always build with NoRuntime: that's handled as a separate module.
+    //
+    // Always build with NoBoundsQuery: underlying code will implement that (or not).
+    //
+    // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
+    // only way to propagate a nonzero result code to our caller. (Note that this
+    // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
+    // arguments; this is regrettable but fairly minor in terms of both code size and speed,
+    // at least for real-world code.)
     const Target wrapper_target = base_target
         .with_feature(Target::NoRuntime)
-        .with_feature(Target::NoAsserts)
-        .with_feature(Target::NoBoundsQuery);
+        .with_feature(Target::NoBoundsQuery)
+        .without_feature(Target::NoAsserts);
     Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
     // The wrapper module must come *first* in the archive, otherwise libraries
