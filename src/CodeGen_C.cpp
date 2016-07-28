@@ -161,7 +161,7 @@ const string globals =
     "}\n";
 }
 
-  CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
+CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
     if (is_header()) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
@@ -431,14 +431,14 @@ public:
     }
 
     void emit_c_declarations(ostream &stream) {
-        for (const auto call : c_externs) {
+        for (const auto &call : c_externs) {
             emit_function_decl(stream, call.second, call.first);
         }
         stream << "\n";
     }
 
     void emit_c_plus_plus_declarations(ostream &stream) {
-        for (const auto ns_or_call : c_plus_plus_externs) {
+        for (const auto &ns_or_call : c_plus_plus_externs) {
             emit_namespace_or_call(stream, ns_or_call.second, ns_or_call.first);
         }
         stream << "\n";
