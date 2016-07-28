@@ -339,8 +339,8 @@ private:
     }
 public:
 
-    /** Access pixels. Note that while these methods are marked const,
-     * they return non-const references. 
+    /** Access elements. Use im(...) to get a reference to an element, and
+     * use &im(...) to get the address of an element. 
      */
     //@{
     template<typename ...Args>
