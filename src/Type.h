@@ -1,6 +1,9 @@
 #ifndef HALIDE_TYPE_H
 #define HALIDE_TYPE_H
 
+#include <array>
+#include <algorithm>
+#include <iterator>
 #include <stdint.h>
 #include "runtime/HalideRuntime.h"
 #include "Error.h"
@@ -18,7 +21,7 @@
  * time type checking for both Halide generated functions and calls
  * from Halide to external functions.
  *
- * These are intended to be constexpr producable, but we don't depend
+ * These are intended to be constexpr producible, but we don't depend
  * on C++11 yet. In C++14, it is possible these will be replaced with
  * introspection/reflection facilities.
  *
@@ -80,7 +83,7 @@ struct halide_handle_cplusplus_type {
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
     /// One set of modifiers on a type.
-    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    /// The const/volatile/restrict properties are "inside" the pointer property.
     enum Modifier : uint8_t {
         Const = 1 << 0,    ///< Bitmask flag for "const"
         Volatile = 1 << 1, ///< Bitmask flag for "volatile"
@@ -90,25 +93,25 @@ struct halide_handle_cplusplus_type {
 
     /// Qualifiers and indirections on type. Allows up to 8 levels. 0 is innermost.
     struct CPPTypeModifiers {
-        uint8_t data[8];
-      CPPTypeModifiers(const std::vector<uint8_t> &vals) {
+        std::array<uint8_t,8> data;
+        CPPTypeModifiers(const std::vector<uint8_t> &vals) {
             user_assert(vals.size() <= sizeof(data)) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
-            std::copy(vals.begin(), vals.end(), &data[0]);
-            std::fill(&data[vals.size()], &data[sizeof(data)], 0);
+            std::copy(vals.begin(), vals.end(), data.begin());
+            std::fill(data.begin() + vals.size(), data.end(), 0);
         }
         const uint8_t &operator[](size_t index) const { return data[index]; }
         bool operator==(const CPPTypeModifiers &rhs) const {
-            return std::equal(&data[0], &data[sizeof(data)], &rhs.data[0]);
+            return std::equal(data.begin(), data.end(), rhs.data.begin());
         }
         const uint8_t *begin() const { return &data[0]; }
-        const uint8_t *end() const { return &data[sizeof(data)]; }
+        const uint8_t *end() const { return begin() + data.size(); }
     } cpp_type_modifiers;
 
     /// References are separate because they only occur at the outermost level.
     /// No modifiers are needed for references as they are not allowed to apply
     /// to the reference itself. (This isn't true for restrict, but that is a C++
     /// extension anyway.) If modifiers are needed, the last entry in the above
-    /// array would be the modifers for the reference.
+    /// array would be the modifiers for the reference.
     enum ReferenceType : uint8_t {
         NotReference = 0,
         LValueReference = 1, // "&"
