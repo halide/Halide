@@ -1,5 +1,6 @@
 # Generator
 halide_project(pipeline "apps" pipeline.cpp)
+halide_project(pipeline_cpp "apps" pipeline_cpp.cpp)
 
 set(pipeline_c_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.h")
 set(pipeline_c_src "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.cpp")
@@ -50,7 +51,7 @@ set_property(SOURCE "${pipeline_cpp_c_src}" PROPERTY LANGUAGE CXX)
 # pipeline.cpp doesn't handle the commandline args passed.
 add_custom_command(OUTPUT "${pipeline_cpp_c_h}" "${pipeline_cpp_c_src}"
                           "${pipeline_cpp_native_h}" "${pipeline_cpp_native_obj}"
-                   COMMAND pipeline
+                   COMMAND pipeline_cpp
                    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                    COMMENT "Generating pipeline outputs"
                   )
