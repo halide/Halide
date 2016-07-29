@@ -95,7 +95,7 @@ struct halide_handle_cplusplus_type {
     struct CPPTypeModifiers {
         std::array<uint8_t, 8> data;
         CPPTypeModifiers(const std::vector<uint8_t> &vals) {
-            user_assert(vals.size() <= sizeof(data)) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
+            user_assert(vals.size() <= data.size()) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
             std::copy(vals.begin(), vals.end(), data.begin());
             std::fill(data.begin() + vals.size(), data.end(), 0);
         }
