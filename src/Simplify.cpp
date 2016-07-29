@@ -71,12 +71,10 @@ bool is_var_relop_simple_const(Expr e, string* name) {
 }
 
 bool is_var_simple_const_comparison(Expr e, string* name) {
+    // It's not clear if GT, LT, etc would be useful 
+    // here; leaving them out until proven otherwise.
     return is_var_relop_simple_const<EQ>(e, name) ||
-           is_var_relop_simple_const<NE>(e, name) ||
-           is_var_relop_simple_const<LT>(e, name) ||
-           is_var_relop_simple_const<LE>(e, name) ||
-           is_var_relop_simple_const<GT>(e, name) ||
-           is_var_relop_simple_const<GE>(e, name);
+           is_var_relop_simple_const<NE>(e, name);
 }
 
 // Returns true iff t is a scalar integral type where overflow is undefined
