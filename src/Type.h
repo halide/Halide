@@ -94,6 +94,7 @@ struct halide_handle_cplusplus_type {
     /// Qualifiers and indirections on type. Allows up to 8 levels. 0 is innermost.
     struct CPPTypeModifiers {
         std::array<uint8_t, 8> data;
+        typedef std::array<uint8_t, 8>::const_iterator const_iterator;
         CPPTypeModifiers(const std::vector<uint8_t> &vals) {
             user_assert(vals.size() <= data.size()) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
             std::copy(vals.begin(), vals.end(), data.begin());
@@ -103,8 +104,8 @@ struct halide_handle_cplusplus_type {
         bool operator==(const CPPTypeModifiers &rhs) const {
             return std::equal(data.begin(), data.end(), rhs.data.begin());
         }
-        std::array<uint8_t, 8>::const_iterator begin() const { return data.begin(); }
-        std::array<uint8_t, 8>::const_iterator end() const { return data.end(); }
+        const_iterator begin() const { return data.begin(); }
+        const_iterator end() const { return data.end(); }
     } cpp_type_modifiers;
 
     /// References are separate because they only occur at the outermost level.
