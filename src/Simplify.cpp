@@ -3106,6 +3106,20 @@ private:
             // (a != k1) && (a == k2) -> (a == k2) && (k1 != k2)
             // (second term always folds away)
             expr = mutate(And::make(b, NE::make(neq_a->b, eq_b->b)));
+        } else if (eq_a &&
+                   eq_a->a.as<Variable>() &&
+                   is_simple_const(eq_a->b) &&
+                   expr_uses_var(b, eq_a->a.as<Variable>()->name)) {
+            // (somevar == k) && b -> (somevar == k) && substitute(somevar, k, b)
+            expr = mutate(And::make(a, substitute(eq_a->a.as<Variable>(), eq_a->b, b)));
+            debug(1) << "WOOHOO3: " << Expr(op) << " -> " << expr << "\n";
+        } else if (eq_b &&
+                   eq_b->a.as<Variable>() &&
+                   is_simple_const(eq_b->b) &&
+                   expr_uses_var(a, eq_b->a.as<Variable>()->name)) {
+            // a && (somevar == k) -> substitute(somevar, k1, a) && (somevar == k)
+            expr = mutate(And::make(substitute(eq_b->a.as<Variable>(), eq_b->b, a), b));
+            debug(1) << "WOOHOO4: " << Expr(op) << " -> " << expr << "\n";
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->lanes == broadcast_b->lanes) {
@@ -5026,6 +5040,10 @@ void check_boolean() {
     check((x != 1) || (x == 2), (x != 1));
     check((x == 1) || (x != 1), t);
     check((x != 1) || (x == 1), t);
+
+    // check for substitution patterns
+    check((b1 == t) && (b1 && b2), (b1 == t) && b2);
+    check((b1 && b2) && (b1 == t), b2 && (b1 == t));
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
