@@ -3112,14 +3112,12 @@ private:
                    expr_uses_var(b, eq_a->a.as<Variable>()->name)) {
             // (somevar == k) && b -> (somevar == k) && substitute(somevar, k, b)
             expr = mutate(And::make(a, substitute(eq_a->a.as<Variable>(), eq_a->b, b)));
-            debug(1) << "WOOHOO3: " << Expr(op) << " -> " << expr << "\n";
         } else if (eq_b &&
                    eq_b->a.as<Variable>() &&
                    is_simple_const(eq_b->b) &&
                    expr_uses_var(a, eq_b->a.as<Variable>()->name)) {
             // a && (somevar == k) -> substitute(somevar, k1, a) && (somevar == k)
             expr = mutate(And::make(substitute(eq_b->a.as<Variable>(), eq_b->b, a), b));
-            debug(1) << "WOOHOO4: " << Expr(op) << " -> " << expr << "\n";
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->lanes == broadcast_b->lanes) {
