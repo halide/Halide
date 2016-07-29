@@ -38,7 +38,9 @@ namespace {
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
-    if (e.as<FloatImm>()) return true;
+    // Don't consider NaN to be a "simple const", since it doesn't obey equality rules assumed elsewere
+    const FloatImm *f = e.as<FloatImm>();
+    if (f && !std::isnan(f->value)) return true;
     if (const Broadcast *b = e.as<Broadcast>()) {
         return is_simple_const(b->value);
     }
@@ -3088,6 +3090,22 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.lanes());
+        } else if (eq_a &&
+                   neq_b &&
+                   equal(eq_a->a, neq_b->a) &&
+                   is_simple_const(eq_a->b) && 
+                   is_simple_const(neq_b->b)) {
+            // (a == k1) && (a != k2) -> (a == k1) && (k1 != k2)
+            // (second term always folds away)
+            expr = mutate(And::make(a, NE::make(eq_a->b, neq_b->b)));
+        } else if (neq_a &&
+                   eq_b &&
+                   equal(neq_a->a, eq_b->a) &&
+                   is_simple_const(neq_a->b) && 
+                   is_simple_const(eq_b->b)) {
+            // (a != k1) && (a == k2) -> (a == k2) && (k1 != k2)
+            // (second term always folds away)
+            expr = mutate(And::make(b, NE::make(neq_a->b, eq_b->b)));
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->lanes == broadcast_b->lanes) {
@@ -3166,6 +3184,22 @@ private:
                    broadcast_a->lanes == broadcast_b->lanes) {
             // x8(a) || x8(b) -> x8(a || b)
             expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->lanes);
+        } else if (eq_a &&
+                   neq_b &&
+                   equal(eq_a->a, neq_b->a) &&
+                   is_simple_const(eq_a->b) && 
+                   is_simple_const(neq_b->b)) {
+            // (a == k1) || (a != k2) -> (a != k2) || (k1 == k2)
+            // (second term always folds away)
+            expr = mutate(Or::make(b, EQ::make(eq_a->b, neq_b->b)));
+        } else if (neq_a &&
+                   eq_b &&
+                   equal(neq_a->a, eq_b->a) &&
+                   is_simple_const(neq_a->b) && 
+                   is_simple_const(eq_b->b)) {
+            // (a != k1) || (a == k2) -> (a != k1) || (k1 == k2)
+            // (second term always folds away)
+            expr = mutate(Or::make(a, EQ::make(neq_a->b, eq_b->b)));
         } else if (var_a && expr_uses_var(b, var_a->name)) {
             expr = mutate(a || substitute(var_a->name, make_zero(a.type()), b));
         } else if (var_b && expr_uses_var(a, var_b->name)) {
@@ -4982,6 +5016,16 @@ void check_boolean() {
     check(broadcast(!b1, 4) && broadcast(b1, 4), broadcast(f, 4));
     check(broadcast(b1, 4) && broadcast(b1, 4), broadcast(b1, 4));
     check(broadcast(b1, 4) || broadcast(b1, 4), broadcast(b1, 4));
+
+    check((x == 1) && (x != 2), (x == 1) && (1 != 2));
+    check((x != 1) && (x == 2), (x == 2) && (1 != 2));
+    check((x == 1) && (x != 1), (x == 1) && (1 != 1));
+    check((x != 1) && (x == 1), (x == 1) && (1 != 1));
+
+    check((x == 1) || (x != 2), (x != 2) || (1 == 2));
+    check((x != 1) || (x == 2), (x != 1) || (1 == 2));
+    check((x == 1) || (x != 1), (x != 1) || (1 == 1));
+    check((x != 1) || (x == 1), (x != 1) || (1 == 1));
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
