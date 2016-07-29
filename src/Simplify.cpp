@@ -5017,8 +5017,8 @@ void check_boolean() {
     check(broadcast(b1, 4) && broadcast(b1, 4), broadcast(b1, 4));
     check(broadcast(b1, 4) || broadcast(b1, 4), broadcast(b1, 4));
 
-    check((x == 1) && (x != 2), f);
-    check((x != 1) && (x == 2), f);
+    check((x == 1) && (x != 2), (x == 1));
+    check((x != 1) && (x == 2), (x == 2));
     check((x == 1) && (x != 1), f);
     check((x != 1) && (x == 1), f);
 
