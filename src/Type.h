@@ -103,8 +103,8 @@ struct halide_handle_cplusplus_type {
         bool operator==(const CPPTypeModifiers &rhs) const {
             return std::equal(data.begin(), data.end(), rhs.data.begin());
         }
-        const uint8_t *begin() const { return &data[0]; }
-        const uint8_t *end() const { return &data[0] + data.size(); }
+        std::array<uint8_t, 8>::const_iterator begin() const { return data.begin(); }
+        std::array<uint8_t, 8>::const_iterator end() const { return data.end(); }
     } cpp_type_modifiers;
 
     /// References are separate because they only occur at the outermost level.
