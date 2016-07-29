@@ -104,7 +104,7 @@ struct halide_handle_cplusplus_type {
             return std::equal(data.begin(), data.end(), rhs.data.begin());
         }
         const uint8_t *begin() const { return &data[0]; }
-        const uint8_t *end() const { return begin() + data.size(); }
+        const uint8_t *end() const { return &data[0] + data.size(); }
     } cpp_type_modifiers;
 
     /// References are separate because they only occur at the outermost level.
