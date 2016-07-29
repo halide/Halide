@@ -47,6 +47,38 @@ bool is_simple_const(Expr e) {
     return false;
 }
 
+// If the Expr is (var relop const) or (const relop var),
+// fill in the var name and return true.
+template<typename RelOp>
+bool is_var_relop_simple_const(Expr e, string* name) {
+    if (const RelOp *r = e.as<RelOp>()) {
+        if (is_simple_const(r->b)) {
+            const Variable *v = r->a.template as<Variable>();
+            if (v) {
+                *name = v->name;
+                return true;
+            }
+        }
+        else if (is_simple_const(r->a)) {
+            const Variable *v = r->b.template as<Variable>();
+            if (v) {
+                *name = v->name;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool is_var_simple_const_comparison(Expr e, string* name) {
+    return is_var_relop_simple_const<EQ>(e, name) ||
+           is_var_relop_simple_const<NE>(e, name) ||
+           is_var_relop_simple_const<LT>(e, name) ||
+           is_var_relop_simple_const<LE>(e, name) ||
+           is_var_relop_simple_const<GT>(e, name) ||
+           is_var_relop_simple_const<GE>(e, name);
+}
+
 // Returns true iff t is a scalar integral type where overflow is undefined
 bool no_overflow_scalar_int(Type t) {
     return (t.is_scalar() && t.is_int() && t.bits() >= 32);
@@ -3152,6 +3184,9 @@ private:
         const LT *lt_b = b.as<LT>();
         const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
+        const And *and_a = a.as<And>();
+        const And *and_b = b.as<And>();
+        string name_a, name_b, name_c;
 
         if (is_one(a)) {
             expr = a;
@@ -3216,6 +3251,24 @@ private:
             expr = mutate(a || substitute(var_a->name, make_zero(a.type()), b));
         } else if (var_b && expr_uses_var(a, var_b->name)) {
             expr = mutate(substitute(var_b->name, make_zero(b.type()), a) || b);
+        } else if (is_var_simple_const_comparison(b, &name_c) &&
+                   and_a &&
+                   ((is_var_simple_const_comparison(and_a->a, &name_a) && name_a == name_c) ||
+                   (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
+            // (a && b) || (c) -> (a || c) && (b || c)
+            // iff c and at least one of a or b is of the form 
+            //     (var == const) or (var != const)
+            // (and the vars are the same)
+            expr = mutate(And::make(Or::make(and_a->a, b), Or::make(and_a->b, b)));
+        } else if (is_var_simple_const_comparison(a, &name_c) &&
+                   and_b &&
+                   ((is_var_simple_const_comparison(and_b->a, &name_a) && name_a == name_c) ||
+                   (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
+            // (c) || (a && b) -> (a || c) && (b || c)
+            // iff c and at least one of a or b is of the form 
+            //     (var == const) or (var != const)
+            // (and the vars are the same)
+            expr = mutate(And::make(Or::make(and_b->a, a), Or::make(and_b->b, a)));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -5042,6 +5095,12 @@ void check_boolean() {
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), (b1 == t) && b2);
     check((b1 && b2) && (b1 == t), b2 && (b1 == t));
+
+    {
+        Expr i = Variable::make(Int(32), "i");
+        check((i!=2 && (i!=4 && (i!=8 && i!=16))) || (i==16), (i!=2 && (i!=4 && (i!=8))));
+        check((i==16) || (i!=2 && (i!=4 && (i!=8 && i!=16))), (i!=2 && (i!=4 && (i!=8))));
+    }
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
