@@ -237,8 +237,10 @@ DimBounds get_stage_bounds(Function f, int stage_num,
     }
 
     for (auto &rvar : def.schedule().rvars()) {
+        Expr lower = SubstituteVarEstimates().mutate(rvar.min);
+        Expr upper = SubstituteVarEstimates().mutate(rvar.min + rvar.extent - 1);
         Interval simple_bounds = Interval(rvar.min, simplify(rvar.min + rvar.extent - 1));
-        bounds[rvar.var] = simple_bounds;
+        bounds[rvar.var] = Interval(simplify(lower),simplify(upper));
     }
 
     return bounds;

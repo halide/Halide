@@ -222,33 +222,6 @@ void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
     }
 }
 
-struct GetVarEstimates : public IRVisitor {
-    map<string, Expr> var_estimates;
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) {
-        if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.has_estimate()) {
-            var_estimates[var->param.name()] = var->param.get_estimate();
-        }
-    }
-};
-
-class SubtituteVarEstimates: public IRMutator {
-public:
-    using IRMutator::mutate;
-    using IRMutator::visit;
-
-    void visit(const Variable *var) {
-        if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.has_estimate()) {
-            expr = var->param.get_estimate();
-        } else {
-            expr = var;
-        }
-    }
-};
-
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, int stage_num,
                                      const DimBounds &bounds,
@@ -275,8 +248,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
 
-            Expr lower = SubtituteVarEstimates().mutate(curr_bounds.at(dims[d].var).min);
-            Expr upper = SubtituteVarEstimates().mutate(curr_bounds.at(dims[d].var).max);
+            Expr lower = SubstituteVarEstimates().mutate(curr_bounds.at(dims[d].var).min);
+            Expr upper = SubstituteVarEstimates().mutate(curr_bounds.at(dims[d].var).max);
             Interval simple_bounds = Interval(simplify(lower), simplify(upper));
             curr_scope.push(var_name, simple_bounds);
         }
@@ -310,7 +283,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     merge_and_queue_regions(f_queue, regions, prod_reg, prods,
                                             env, values_computed, s.func.name());
                 } else if (arg.is_expr()) {
-                    Expr subs_arg = SubtituteVarEstimates().mutate(arg.expr);
+                    Expr subs_arg = SubstituteVarEstimates().mutate(arg.expr);
                     map<string, Box> arg_regions =
                             boxes_required(subs_arg, curr_scope, func_val_bounds);
 
@@ -333,13 +306,13 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         }
 
         for (auto &val : def.values()) {
-            Expr subs_val = SubtituteVarEstimates().mutate(val);
+            Expr subs_val = SubstituteVarEstimates().mutate(val);
             map<string, Box> curr_regions =
                     boxes_required(subs_val, curr_scope, func_val_bounds);
 
             Box left_reg;
             for (const Expr &arg : def.args()) {
-                Expr subs_arg = SubtituteVarEstimates().mutate(arg);
+                Expr subs_arg = SubstituteVarEstimates().mutate(arg);
                 map<string, Box> arg_regions =
                         boxes_required(subs_arg, curr_scope, func_val_bounds);
 
@@ -1268,12 +1241,7 @@ DimBounds Partitioner::get_bounds(const FStage &s) {
         bounds[args[d]] = pipeline_bounds.at(s.func.name())[d];
     }
 
-    for (const ReductionVariable &rvar : def.schedule().rvars()) {
-        Expr lower = SubtituteVarEstimates().mutate(rvar.min);
-        Expr upper = SubtituteVarEstimates().mutate(rvar.min + rvar.extent - 1);
-        bounds[rvar.var] = Interval(simplify(lower),simplify(upper));
-    }
-    return bounds;
+    return get_stage_bounds(s.func, s.stage_num, bounds);
 }
 
 DimBounds
