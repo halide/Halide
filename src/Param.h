@@ -47,7 +47,7 @@ public:
     // @}
 
     /** Construct a scalar parameter of type T an initial value of
-     * 'val'. Only triggers for scalar types. */
+     * 'val'. Only triggers for non-pointer types. */
     template <typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
     explicit Param(T val) :
         param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
