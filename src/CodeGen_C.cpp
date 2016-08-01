@@ -233,7 +233,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
              (!type.handle_type->namespaces.empty() ||
               !type.handle_type->enclosing_types.empty() ||
               type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
-            oss << "const void *";
+            oss << "void *";
         } else {
             if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
                 oss << "struct ";
@@ -557,6 +557,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If this is a header and we are here, we know this is an externally visible Func, so
         // declare the argv function.
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+
+        // And also the metadata.
+        stream << "// Result is never null and points to constant static data\n";
+        stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
     }
 
     // Close namespaces here as metadata must be outside them
@@ -576,9 +580,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (is_header()) {
-        // And also the metadata.
-        stream << "// Result is never null and points to constant static data\n";
-        stream << "extern const struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
     }
 }
 
@@ -1526,7 +1527,7 @@ void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
@@ -1561,7 +1562,7 @@ void CodeGen_C::test() {
         "extern \"C\" {\n"
         "#endif\n"
         "\n\n"
-        "int test1(buffer_t *_buf_buffer, float _alpha, int32_t _beta, const void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == nullptr) && (_buf_buffer->dev == 0);\n"

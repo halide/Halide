@@ -139,7 +139,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Optimizing shuffles...\n";
-    body = optimize_hexagon_shuffles(body);
+    // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
+    const int lut_alignment = 64;
+    body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";
@@ -224,6 +226,12 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16v2,  "sxt.vb",  {i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32v2,  "sxt.vh",  {i16v1} },
 
+        // Similar to zxt/sxt, but without deinterleaving the result.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackub), u16v2, "unpack.vub", {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackuh), u32v2, "unpack.vuh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackb),  i16v2, "unpack.vb",  {i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackh),  i32v2, "unpack.vh",  {i16v1} },
+
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
@@ -248,6 +256,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16v1, "pack_sath.vw",  {i32v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8v1,  "pack.vh",       {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16v1, "pack.vw",       {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackob),      i8v1,  "packhi.vh",     {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackoh),      i16v1, "packhi.vw",     {i32v2} },
+
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
@@ -932,8 +943,10 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // The result will have the same number of elements as idx.
     int idx_elements = idx_ty->getVectorNumElements();
 
-    // Each LUT has 2 mask values for HVX 64, 4 mask values for HVX 128.
-    int lut_passes = is_128B ? 4 : 2;
+    // Each LUT has 1 pair of even/odd mask values for HVX 64, 2 for
+    // HVX 128.  We may not need all of the passes, if the LUT has
+    // fewer than half of the elements in an HVX 128 vector.
+    int lut_passes = is_128B ? 2 : 1;
 
     vector<Value *> result;
     for (int i = 0; i < idx_elements; i += native_idx_elements) {
@@ -942,16 +955,24 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
-                Value *mask = ConstantInt::get(i32_t, lut_passes*j + k);
+                int pass_index = lut_passes * j + k;
+                Value *mask[2] = {
+                    ConstantInt::get(i32_t, 2 * pass_index + 0),
+                    ConstantInt::get(i32_t, 2 * pass_index + 1),
+                };
                 if (result_i == nullptr) {
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut_id,
-                                                {idx_i, lut_slices[j], mask});
-                } else {
+                                                {idx_i, lut_slices[j], mask[0]});
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
+                                                {result_i, idx_i, lut_slices[j], mask[1]});
+                } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
-                    result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
-                                                {result_i, idx_i, lut_slices[j], mask});
+                    for (int m = 0; m < 2; m++) {
+                        result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
+                                                    {result_i, idx_i, lut_slices[j], mask[m]});
+                    }
                 }
             }
         }

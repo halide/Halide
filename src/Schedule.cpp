@@ -53,6 +53,12 @@ struct ScheduleContents {
             if (b.extent.defined()) {
                 b.extent = mutator->mutate(b.extent);
             }
+            if (b.modulus.defined()) {
+                b.modulus = mutator->mutate(b.modulus);
+            }
+            if (b.remainder.defined()) {
+                b.remainder = mutator->mutate(b.remainder);
+            }
         }
 
         for (Bound &b : estimates) {
@@ -241,6 +247,12 @@ void Schedule::accept(IRVisitor *visitor) const {
         }
         if (b.extent.defined()) {
             b.extent.accept(visitor);
+        }
+        if (b.modulus.defined()) {
+            b.modulus.accept(visitor);
+        }
+        if (b.remainder.defined()) {
+            b.remainder.accept(visitor);
         }
     }
     for (const Bound &b : estimates()) {
