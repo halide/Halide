@@ -37,7 +37,7 @@ set(pipeline_cpp_native_obj "${CMAKE_CURRENT_BINARY_DIR}/pipeline_cpp_native.o")
 
 # Final executable for C++ side
 set(run_target_cpp run_c_backend_and_native_cpp)
-add_executable(${run_target_cpp} run.cpp ${pipeline_cpp_c_src} ${pipeline_cpp_c_h} ${pipeline_cpp_native_h})
+add_executable(${run_target_cpp} run_cpp.cpp ${pipeline_cpp_c_src} ${pipeline_cpp_c_h} ${pipeline_cpp_native_h})
 target_compile_options(${run_target_cpp} PUBLIC "-std=c++11")
 target_link_libraries(${run_target_cpp} PRIVATE ${pipeline_cpp_native_obj})
 target_include_directories(${run_target_cpp} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
