@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         // Verify that the multitarget wrapper code propagates nonzero error
         // results back to the caller properly.
         Image<uint8_t> bad_elem_size(W, H);
-        int result = HalideTest::multitarget(bad_elem_size);
+        int result = HalideTest::multitarget(&bad_elem_size);
         if (result != halide_error_code_bad_elem_size) {
             printf("Error: expected to fail with halide_error_code_bad_elem_size (%d) but actually got %d!\n", (int) halide_error_code_bad_elem_size, result);
             return -1;
