@@ -1,6 +1,8 @@
 #ifndef HALIDE_PARAM_H
 #define HALIDE_PARAM_H
 
+#include <type_traits>
+
 #include "IR.h"
 
 /** \file
@@ -9,16 +11,6 @@
  */
 
 namespace Halide {
-
-/** A struct used to detect if a type is a pointer. If it's not a
- * pointer, then not_a_pointer<T>::type is T.  If it is a pointer,
- * then not_a_pointer<T>::type is some internal hidden type that no
- * overload should trigger on. TODO: with C++11 this can be written
- * more cleanly. */
-namespace Internal {
-template<typename T> struct not_a_pointer {typedef T type;};
-template<typename T> struct not_a_pointer<T *> { struct type {}; };
-}
 
 /** A scalar parameter to a halide pipeline. If you're jitting, this
  * should be bound to an actual value of type T using the set method
@@ -55,8 +47,9 @@ public:
     // @}
 
     /** Construct a scalar parameter of type T an initial value of
-     * 'val'. Only triggers for scalar types. */
-    explicit Param(typename Internal::not_a_pointer<T>::type val) :
+     * 'val'. Only triggers for non-pointer types. */
+    template <typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
+    explicit Param(T val) :
         param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
         set(val);
     }
