@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     halide_set_error_handler(my_error_handler);
     halide_set_custom_can_use_target_features(my_can_use_target_features);
 
-    if (HalideTest::multitarget(&output) != 0) {
+    if (HalideTest::multitarget(output) != 0) {
         printf("Error at multitarget\n");
     }
 
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     // halide_can_use_target_features() should be called exactly once, with the
     // result cached; call this a few more times to verify.
     for (int i = 0; i < 10; ++i) {
-        if (HalideTest::multitarget(&output) != 0) {
+        if (HalideTest::multitarget(output) != 0) {
             printf("Error at multitarget\n");
         }
     }
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         // Verify that the multitarget wrapper code propagates nonzero error
         // results back to the caller properly.
         Image<uint8_t> bad_elem_size(W, H);
-        int result = HalideTest::multitarget(&bad_elem_size);
+        int result = HalideTest::multitarget(bad_elem_size);
         if (result != halide_error_code_bad_elem_size) {
             printf("Error: expected to fail with halide_error_code_bad_elem_size (%d) but actually got %d!\n", (int) halide_error_code_bad_elem_size, result);
             return -1;

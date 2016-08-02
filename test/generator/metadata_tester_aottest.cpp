@@ -433,10 +433,10 @@ int main(int argc, char **argv) {
     Image<float> output0(kSize, kSize, 3);
     Image<float> output1(kSize, kSize, 3);
 
-    result = metadata_tester(&input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, &output0, &output1);
+    result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
     EXPECT_EQ(0, result);
 
-    result = metadata_tester_ucon(user_context, &input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, &output0, &output1);
+    result = metadata_tester_ucon(user_context, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
     EXPECT_EQ(0, result);
 
     verify(input, output0, output1);

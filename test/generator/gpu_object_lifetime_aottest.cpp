@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 2; i++) {
         Image<int> output(80);
 
-        gpu_object_lifetime(&output);
+        gpu_object_lifetime(output);
 
         output.copy_to_host();
         output.device_free();

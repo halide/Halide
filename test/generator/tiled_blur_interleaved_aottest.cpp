@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
 
-    tiled_blur_interleaved(&input, &output);
+    tiled_blur_interleaved(input, output);
 
     printf("Success!\n");
     return 0;

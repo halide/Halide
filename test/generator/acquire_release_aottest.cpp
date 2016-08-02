@@ -218,7 +218,7 @@ int main(int argc, char **argv) {
 
     Image<float> output(W, H);
 
-    acquire_release(&input, &output);
+    acquire_release(input, output);
 
     output.copy_to_host();
 
