@@ -21,11 +21,12 @@
 #include "RegionCosts.h"
 
 namespace Halide {
+
 namespace Internal {
 
 /* Determine a schedule for functions in the pipeline */
 string generate_schedules(const std::vector<Function> &outputs,
-                          const Target &target);
+                          const Target &target, const MachineParams &arch_params);
 }
 }
 

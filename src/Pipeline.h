@@ -81,6 +81,9 @@ public:
     EXPORT std::vector<Func> outputs() const;
 
     /** Generate a schedule for the pipeline. */
+    EXPORT std::string auto_schedule(const Target &target,
+                                     const MachineParams &arch_params);
+
     EXPORT std::string auto_schedule(const Target &target);
 
     /** Compile and generate multiple target files with single call.

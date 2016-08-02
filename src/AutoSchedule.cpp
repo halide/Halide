@@ -55,14 +55,6 @@ struct FStage {
     }
 };
 
-struct MachineParams {
-    uint32_t parallelism;
-    uint32_t vec_len;
-    uint32_t register_file_size;
-    uint32_t last_level_size;
-    uint32_t balance;
-};
-
 /* Set the compute and store level of all the function stages in the
  * environment as root. */
 void set_schedule_defaults(map<string, Function> &env) {
@@ -637,7 +629,7 @@ struct Partitioner {
 
     bool gpu_schedule;
 
-    Partitioner(map<string, Box> &_pipeline_bounds, MachineParams &_arch_params,
+    Partitioner(map<string, Box> &_pipeline_bounds, const MachineParams &_arch_params,
                 DependenceAnalysis &_dep_analysis, RegionCosts &_costs,
                 const vector<Function> &_outputs, bool _gpu_schedule);
 
@@ -707,7 +699,7 @@ struct Partitioner {
 /* Constructs a partitioner and builds the pipeline graph the grouping
  * algorithm operates on. */
 Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
-                         MachineParams &_arch_params,
+                         const MachineParams &_arch_params,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs,
                          const vector<Function> &_outputs,
@@ -1451,7 +1443,7 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
     bool model_reuse = false;
 
     // Linear dropoff
-    float load_slope = (float)arch_params.balance / arch_params.last_level_size;
+    float load_slope = (float)arch_params.balance / arch_params.last_level_cache_size;
     for (auto &f_load : group_load_costs) {
         int64_t footprint = 0;
         if (group_mem.find(f_load.first) != group_mem.end() &&
@@ -2381,7 +2373,8 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 /* Finds a schedule for all the functions in the pipeline required to compute
  * the outputs. Applies the schedule and returns a string representation of the
  * schedule. The target architecture is specified by target. */
-string generate_schedules(const vector<Function> &outputs, const Target &target) {
+string generate_schedules(const vector<Function> &outputs, const Target &target,
+                          const MachineParams &arch_params) {
     string sched;
     // Make an environment map which is used throughout the auto scheduling
     // process.
@@ -2417,15 +2410,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target)
     // Compute bounds of all the functions in the pipeline given estimates
     // on outputs. Also report functions where the bounds could not be inferred.
     map<string, Box> pipeline_bounds = get_pipeline_bounds(dep_analysis, outputs);
-
-    // Set machine parameters.
-    // TODO: Expose machine parameters to the user.
-    MachineParams arch_params;
-    arch_params.parallelism = 16;
-    arch_params.vec_len = 8;
-    arch_params.register_file_size = 1024; // 1KB
-    arch_params.last_level_size = 2 * 8 * 1024 * 1024; // 64 MB
-    arch_params.balance = 40;
 
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.

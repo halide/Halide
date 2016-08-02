@@ -170,8 +170,25 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS) <<
+    "Automatic scheduling is currently supported only on these architectures.";
+    return generate_schedules(contents->outputs, target, arch_params);
+}
+
 string Pipeline::auto_schedule(const Target &target) {
-  return generate_schedules(contents->outputs, target);
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS) <<
+    "Automatic scheduling is currently supported only on these architectures.";
+    // Default machine parameters for generic CPU architecture.
+    MachineParams arch_params;
+    arch_params.parallelism = 16;
+    arch_params.vec_len = 8;
+    arch_params.last_level_cache_size = 2 * 8 * 1024 * 1024; // 64 MB
+    arch_params.balance = 40;
+
+    return generate_schedules(contents->outputs, target, arch_params);
 }
 
 void Pipeline::compile_to(const Outputs &output_files,

@@ -17,6 +17,13 @@
 
 namespace Halide {
 
+struct MachineParams {
+    uint32_t parallelism;
+    uint32_t vec_len;
+    uint32_t last_level_cache_size;
+    uint32_t balance;
+};
+
 /** A struct representing a target machine and os to generate code for. */
 struct Target {
     /** The operating system used by the target. Determines which
