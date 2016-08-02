@@ -96,6 +96,16 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
     delete f;
 }
 
+LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
+    : name(name), args(args), body(body), linkage(linkage) {}
+  
+LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
+    : name(name), body(body), linkage(linkage) {
+    for (const Argument &i : args) {
+        this->args.push_back(i);
+    }
+}
+  
 }  // namespace Internal
 
 using namespace Halide::Internal;
