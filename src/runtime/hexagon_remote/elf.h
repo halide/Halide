@@ -517,15 +517,13 @@ struct elf_t {
                 // 1001 0ii0  101s ssss  PPii iiii  iiid dddd
                 // 1001 0ii1  000s ssss  PPii iiii  iiid dddd
                 mask = 0x06003fe0;
-            } else if ((inst >> 24) == 115) {
+            } else if ((inst >> 24) == 115 || (inst >> 24) == 124) {
                 // 0111 0011 -10sssss PP1iiiii iiiddddd
                 // 0111 0011 -11sssss PP1iiiii iiiddddd
                 // 0111 0011 0uusssss PP0iiiii iiiddddd
                 // 0111 0011 1uusssss PP0iiiii iiiddddd
                 // 0111 0011 -00sssss PP1iiiii iiiddddd
                 // 0111 0011 -01sssss PP1iiiii iiiddddd
-                mask = 0x00001fe0;
-            } else if ((inst >> 24) == 124) {
                 // 0111 1100 0IIIIIII PPIiiiii iiiddddd
                 // 0111 0011 -11sssss PP1iiiii iiiddddd
                 mask = 0x00001fe0;
