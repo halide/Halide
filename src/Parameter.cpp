@@ -15,7 +15,7 @@ struct ParameterContents {
     const std::string handle_type;
     Buffer buffer;
     uint64_t data;
-    const int host_alignment;
+    int host_alignment;
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
