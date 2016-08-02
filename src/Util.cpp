@@ -305,6 +305,7 @@ std::string dir_make_temp() {
         internal_assert(hr == S_OK);
         std::ostringstream name;
         name << std::hex
+	     << std::setfill('0')
              << std::setw(8)
              << guid.Data1
              << std::setw(4)
@@ -312,7 +313,7 @@ std::string dir_make_temp() {
              << guid.Data3
              << std::setw(2);
         for (int i = 0; i < 8; i++) {
-            name << guid.Data4[i];
+            name << (int)guid.Data4[i];
         }       
         std::string dir = std::string(tmp_path) + std::string(name.str());
         BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
