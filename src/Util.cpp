@@ -7,6 +7,7 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <iomanip>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -302,12 +303,18 @@ std::string dir_make_temp() {
         GUID guid;
         HRESULT hr = CoCreateGuid(&guid);
         internal_assert(hr == S_OK);
-        char name[256];
-        sprintf(name, "%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X", 
-            guid.Data1, guid.Data2, guid.Data3, guid.Data4[0], 
-            guid.Data4[1], guid.Data4[2], guid.Data4[3], guid.Data4[4], 
-            guid.Data4[5], guid.Data4[6], guid.Data4[7]);
-        std::string dir = std::string(tmp_path) + std::string(name);
+        std::ostringstream name;
+        name << std::hex
+             << std::setw(8)
+             << guid.Data1
+             << std::setw(4)
+             << guid.Data2
+             << guid.Data3
+             << std::setw(2);
+        for (int i = 0; i < 8; i++) {
+            name << guid.Data4[i];
+        }       
+        std::string dir = std::string(tmp_path) + std::string(name.str());
         BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
         if (result) {
             debug(1) << "temp dir is: " << dir << "\n";
