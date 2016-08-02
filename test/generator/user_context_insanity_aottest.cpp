@@ -27,13 +27,13 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     }
     Image<float> output(10, 10);
 
-    user_context_insanity(&got_context[index], &input, &output);
+    user_context_insanity(&got_context[index], input, output);
 
     return 0;
 }
 
 int main(int argc, char **argv) {
-    halide_set_custom_trace(&my_halide_trace);
+    halide_set_custom_trace(my_halide_trace);
 
     // Hijack halide's runtime to run a bunch of instances of this function
     // in parallel.

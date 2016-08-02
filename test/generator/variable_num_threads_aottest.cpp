@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         // will slowly ramp up and back down so you can watch it
         // working in a process monitor.
         max_threads = 1 + std::min(i, 1000-i) / 50;
-        int ret = variable_num_threads(&out);
+        int ret = variable_num_threads(out);
         if (ret) {
             printf("Non zero exit code: %d\n", ret);
             return -1;

@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     halide_set_error_handler(&my_halide_error);
 
     Image<int32_t> output(size);
-    int result = cleanup_on_error(&output);
+    int result = cleanup_on_error(output);
 
     if (result != halide_error_code_out_of_memory) {
         printf("The exit status was %d instead of %d\n", result, halide_error_code_out_of_memory);

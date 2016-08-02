@@ -84,10 +84,10 @@ void verify_dimension_sizes() {
 
 template<typename T>
 void compare_extents(Image<T> const &img, int reference, int dimension) {
-    if (img.dim[dimension].extent == reference)
+    if (img.dim(dimension).extent() == reference)
         return;
-    cout << "Extent of dimension " << dimension << " of " << img.dimensions
-         << " is " << img.dim[dimension].extent << " instead of " << reference << "\n";
+    cout << "Extent of dimension " << dimension << " of " << img.dimensions()
+         << " is " << img.dim(dimension).extent() << " instead of " << reference << "\n";
     exit(-1);
 }
 
@@ -102,7 +102,7 @@ void verify_image_construction_from_array(Array &vals) {
         n *= sizes[i];
     }
     const void *reference = (const void *)first_of_array(vals);
-    const void *under_test = (const void *)img.host;
+    const void *under_test = (const void *)(&img());
     if (reference != under_test) {
         cerr << "Start of array: " << reference
              << "Start of image: " << under_test << "\n";

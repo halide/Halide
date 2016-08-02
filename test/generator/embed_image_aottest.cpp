@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     }
     Image<float> output(10, 10, 3);
 
-    embed_image(&input, &output);
+    embed_image(input, output);
 
     // We expected the color channels to be flipped and multiplied by 0.5
     for (int y = 0; y < 10; y++) {
