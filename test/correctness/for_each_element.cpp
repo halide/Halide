@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
             }
         });
     
-    for (int c = im.dim[2].min; c < im.dim[2].min + im.dim[2].extent; c++) {
-        for (int y = im.dim[1].min; y < im.dim[1].min + im.dim[1].extent; y++) {
-            for (int x = im.dim[0].min; x < im.dim[0].min + im.dim[0].extent; x++) {                    
+    for (int c = im.dim(2).min(); c < im.dim(2).min() + im.dim(2).extent(); c++) {
+        for (int y = im.dim(1).min(); y < im.dim(1).min() + im.dim(1).extent(); y++) {
+            for (int x = im.dim(0).min(); x < im.dim(0).min() + im.dim(0).extent(); x++) {                    
                 int correct = (10*x + 5*y + c)*6;
                 if (im(x, y, c) != correct) {
                     printf("im(%d, %d, %d) = %d instead of %d\n",
