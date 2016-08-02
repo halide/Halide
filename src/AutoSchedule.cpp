@@ -420,7 +420,7 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
         // The box used makes things complicated ignoring it for now
         Box b_intersect;
         for (uint32_t i = 0 ; i < b.size(); i++) {
-            b_intersect.push_back(interval_intersect(b[i], b_shifted[i]));
+            b_intersect.push_back(Interval::make_intersection(b[i], b_shifted[i]));
         }
         // A function should appear once in the regions and therefore cannot
         // already be present in the overlaps map

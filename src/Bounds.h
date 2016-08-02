@@ -143,9 +143,6 @@ Box box_touched(Stmt s, std::string fn,
                 const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
-// TODO: Fix this when intersect and union are made same across solve and bounds
-Interval interval_intersect(const Interval &a, const Interval &b);
-
 /** Compute the maximum and minimum possible value for each function
  * in an environment. */
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
