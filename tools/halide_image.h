@@ -493,9 +493,6 @@ public:
         return buf.host_dirty;
     }    
 
-    // In the future there will also be a host_dirty() method, but
-    // currently it conflicts with a buffer_t field.
-
     void set_device_dirty(bool v = true) {
         buf.dev_dirty = v;
     }
