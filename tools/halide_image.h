@@ -20,7 +20,7 @@ namespace Tools {
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn f);
 
-/** A templated Image class the wraps from buffer_t and adds
+/** A templated Image class that wraps from buffer_t and adds
  * functionality. When using Halide from C++, this is the preferred
  * way to create input and output buffers. The overhead of using this
  * class relative to a naked buffer_t is minimal - it uses another
@@ -476,7 +476,7 @@ public:
      * for_each_element below for more details. */
     template<typename Fn>
     void for_each_element(Fn f) const {
-        Halide::Tools::for_each_element(*this, f);
+        Halide::Tools::for_each_element(buf, f);
     }
 
     /** Methods for managing any GPU allocation. */
