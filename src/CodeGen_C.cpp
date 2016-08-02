@@ -339,11 +339,6 @@ class ExternCallPrototypes : public IRGraphVisitor {
     std::set<std::string> &emitted;
 
     using IRGraphVisitor::visit;
-    // TODO: This class should likely be able to signal an error if C++
-    // code shows up and started_in_c_plus_plus isn't true, but the logic
-    // is orthogonal.
-    const bool started_in_c_plus_plus;
-    bool in_c_plus_plus;
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
@@ -400,7 +395,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
 public:
   ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
-      : emitted(emitted), started_in_c_plus_plus(in_c_plus_plus), in_c_plus_plus(in_c_plus_plus) {
+      : emitted(emitted) {
         size_t j = 0;
         // Make sure we don't catch calls that are already in the global declarations
         for (size_t i = 0; i < globals.size(); i++) {
