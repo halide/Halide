@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     }
     Image<float> output(10, 10);
 
-    fancy_buffer_t fancy_input((buffer_t *)input);
+    fancy_buffer_t fancy_input(input.raw_buffer());
     fancy_input.extra_field = 17;
 
     extended_buffer_t(&fancy_input, output);

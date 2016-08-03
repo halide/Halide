@@ -1,4 +1,4 @@
-/** \file 
+/** \file
  * Defines an Image type that wraps from buffer_t and adds
  * functionality, and methods for more conveniently iterating over the
  * samples in a buffer_t outside of Halide code. */
@@ -26,16 +26,16 @@ void for_each_element(const buffer_t &buf, Fn f);
  * class relative to a naked buffer_t is minimal - it uses another
  * ~100 bytes on the stack, and does no dynamic allocations when using
  * it to represent existing memory. This overhead will shrink further
- * in the future once buffer_t is deprecated. 
- * 
+ * in the future once buffer_t is deprecated.
+ *
  * The template parameter T is the element type, and D is the maximum
  * number of dimensions. It must be less than or equal to 4 for now.
- * 
+ *
  * The class optionally allocates and owns memory for the image using
  * a std::shared_ptr allocated with the provided allocator, which
  * defaults to malloc/free. Any device-side allocation is not owned,
  * and must be freed manually using device_free.
- * 
+ *
  * For accessing the shape and type, this class provides both the
  * buffer_t interface (extent[i], min[i], and stride[i] arrays, the
  * elem_size field), and also the interface of the yet-to-come
@@ -158,7 +158,7 @@ public:
     Dimension dim(int i) const {
         return Dimension(buf, i);
     }
-    
+
     /** The total number of elements this buffer represents. Equal to
      * the product of the extents */
     size_t number_of_elements() const {
@@ -178,7 +178,7 @@ public:
     halide_type_t type() const {
         return halide_type_of<T>();
     }
-    
+
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
     uint8_t *begin() const {
@@ -210,7 +210,7 @@ public:
 
 
     Image() {}
-    
+
     Image(const buffer_t &buf) {
         initialize_from_buffer(buf);
     }
@@ -274,7 +274,7 @@ public:
     struct halide_dimension_t {
         int min, extent, stride;
     };
-    
+
     /** Initialize an Image from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data. */
@@ -316,13 +316,13 @@ private:
     T *address_of(int d, int first, Args... rest) const {
         return address_of(d+1, rest...) + buf.stride[d] * (first - buf.min[d]);
     }
-    
+
     T *address_of(int d) const {
         return (T *)buf.host;
     }
 
     T *address_of(const int *pos) const {
-        T *ptr = (T *)buf.host;        
+        T *ptr = (T *)buf.host;
         for (int i = dimensions() - 1; i >= 0; i--) {
             ptr += dim(i).stride() * (pos[i] - dim(i).min());
         }
@@ -330,12 +330,25 @@ private:
     }
 public:
 
+    /** Get a pointer to the raw buffer_t this wraps. */
+    // @{
+    buffer_t *raw_buffer() {
+        return &buf;
+    }
+
+    const buffer_t *raw_buffer() const {
+        return &buf;
+    }
+    // @}
+
+    /** Provide a cast operator to buffer_t *, so that instances can
+     * be passed directly to Halide filters. */
     operator buffer_t *() {
         return &buf;
     }
 
     /** Access elements. Use im(...) to get a reference to an element, and
-     * use &im(...) to get the address of an element. 
+     * use &im(...) to get the address of an element.
      */
     //@{
     template<typename ...Args>
@@ -364,7 +377,7 @@ public:
 
     T &operator()(const int *pos) {
         return *((T *)address_of(pos));
-    }    
+    }
     // @}
 
     /** Conventional names for the first three dimensions. */
@@ -393,8 +406,8 @@ public:
         for (int i = dimensions()-1; i > 0; i--) {
             for (int j = i; j > 0; j--) {
                 if (src.dim(j-1).stride() > src.dim(j).stride()) {
-                    std::swap(src.buf.min[j-1], src.buf.min[j]);                    
-                    std::swap(src.buf.stride[j-1], src.buf.stride[j]);                    
+                    std::swap(src.buf.min[j-1], src.buf.min[j]);
+                    std::swap(src.buf.stride[j-1], src.buf.stride[j]);
                     std::swap(src.buf.extent[j-1], src.buf.extent[j]);
                     swaps[swaps_idx++] = j;
                 }
@@ -425,8 +438,8 @@ public:
         // Undo the dimension reordering
         while (swaps_idx > 0) {
             int j = swaps[--swaps_idx];
-            std::swap(dst.buf.min[j-1], dst.buf.min[j]);                    
-            std::swap(dst.buf.stride[j-1], dst.buf.stride[j]);                    
+            std::swap(dst.buf.min[j-1], dst.buf.min[j]);
+            std::swap(dst.buf.stride[j-1], dst.buf.stride[j]);
             std::swap(dst.buf.extent[j-1], dst.buf.extent[j]);
         }
 
@@ -491,7 +504,7 @@ public:
 
     bool host_dirty() const {
         return buf.host_dirty;
-    }    
+    }
 
     void set_device_dirty(bool v = true) {
         buf.dev_dirty = v;
@@ -580,9 +593,9 @@ struct for_each_element_helpers {
     template<int d>
     static void for_each_element_array_helper(double, Fn f, const buffer_t &buf, int *pos) {
         f(pos);
-    }    
+    }
 
-    
+
     /** A run-time-recursive version (instead of
      * compile-time-recursive) that requires the callable to take a
      * pointer to a position array instead. Dispatches to the
@@ -601,7 +614,7 @@ struct for_each_element_helpers {
         } else if (d == 2) {
             for_each_element_array_helper<2>(0, f, buf, pos);
         } else if (d == 3) {
-            for_each_element_array_helper<3>(0, f, buf, pos);                        
+            for_each_element_array_helper<3>(0, f, buf, pos);
         } else {
             for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
                 for_each_element_array(d - 1, f, buf, pos);
