@@ -257,10 +257,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
                 }
                 if (modifier & halide_handle_cplusplus_type::Pointer) {
                     oss << " *";
-                } else {
-                    break;
                 }
-
             }
         }
     } else {
