@@ -1,5 +1,5 @@
 /** \file 
- * Defines an Image type that inherits from buffer_t and adds
+ * Defines an Image type that wraps from buffer_t and adds
  * functionality, and methods for more conveniently iterating over the
  * samples in a buffer_t outside of Halide code. */
 
@@ -503,7 +503,7 @@ public:
         }
     }
 
-    void copy_to_device(const struct halide_device_interface_t *device_interface) {
+    void copy_to_device(const struct halide_device_interface *device_interface) {
         if (host_dirty()) {
             halide_copy_to_device(NULL, &buf, device_interface);
         }
