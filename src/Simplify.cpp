@@ -1449,7 +1449,9 @@ private:
         } else if (is_one(b)) {
             expr = a;
         } else if (equal(a, b) &&
-                   !is_zero(b)) {
+                   !is_zero(b) &&
+                   // (n/0)/(n/0) should not be simplified to 1
+                   !(div_a && is_zero(div_a->b))) {
             expr = make_one(op->type);
         } else if (const_int(a, &ia) &&
                    const_int(b, &ib) && ib) {
@@ -4673,6 +4675,20 @@ void check_algebra() {
     check(Expr(-7.25f) % 2.0f, 0.75f);
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
+
+    {
+        Expr z(0);
+        Expr n(1);
+
+        // (0/0)/(0/0) should not simplify to 1
+        check((z/z)/(z/z), (z/z)/(z/z));
+
+        // Nor should (n/0)/(n/0) for nonzero n
+        check((n/z)/(n/z), (n/z)/(n/z));
+
+        // But (0/n)/(0/n) -> 0/0 for nonzero n
+        check((z/n)/(z/n), z/z);
+    }
 }
 
 void check_vectors() {
