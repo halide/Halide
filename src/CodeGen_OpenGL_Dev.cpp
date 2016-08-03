@@ -446,21 +446,12 @@ void CodeGen_GLSL::visit(const Call *op) {
             internal_assert(is_const(c));
 
             const Ramp *rc = c.as<Ramp>();
-
-            // If the x and y coordinates are broadcasts, and the c
-            // coordinate is a dense ramp, we can do a single
-            // texture2D call.
             const Broadcast *bx = op->args[2].as<Broadcast>();
             const Broadcast *by = op->args[3].as<Broadcast>();
-
-            if (bx && by) {
-                internal_assert(!c.as<Broadcast>());
-            }
-
             if (rc && is_zero(rc->base) && is_one(rc->stride) && bx && by) {
-                // If all the arguments are broadcasts, why was this vectorized?
-                internal_assert(rc);
-
+                // If the x and y coordinates are broadcasts, and the c
+                // coordinate is a dense ramp, we can do a single
+                // texture2D call.
                 rhs << "texture2D(" << print_name(buffername) << ", vec2("
                     << print_expr(bx->value) << ", "
                     << print_expr(by->value) << "))";
