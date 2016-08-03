@@ -10,7 +10,9 @@ FIND_PACKAGE(OpenMP)
 if (OPENMP_FOUND)
   target_compile_options(fcam PUBLIC "-fopenmp")
 endif()
-target_compile_options(fcam PRIVATE "-std=c++11")
+if (NOT MSVC)
+  target_compile_options(fcam PRIVATE "-std=c++11")
+endif()
 
 # Final executable
 add_executable(process process.cpp ${curved_h})
