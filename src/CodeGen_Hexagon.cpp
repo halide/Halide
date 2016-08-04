@@ -1368,10 +1368,17 @@ void CodeGen_Hexagon::visit(const Call *op) {
             return;
         } else if (op->is_intrinsic(Call::bool_to_mask)) {
             internal_assert(op->args.size() == 1);
-            // The arg must have come from a comparison, and so is
-            // already a mask of the right width.
-            codegen(op->args[0]);
-            return;
+            if (op->args[0].type().is_vector()) {
+                // The argument is already a mask of the right width. Just
+                // sign-extend to the expected type.
+                op->args[0].accept(this);
+            } else {
+                // The argument is a scalar bool. Converting it to
+                // all-ones or all-zeros is sufficient for HVX masks
+                // (mux just looks at the LSB).
+                Expr equiv = -Cast::make(op->type, op->args[0]);
+                equiv.accept(this);
+            }
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
