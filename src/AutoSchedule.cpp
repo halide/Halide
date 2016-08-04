@@ -639,6 +639,7 @@ struct Partitioner {
         }
     };
 
+    /* Result of the analysis of a group.*/
     struct GroupAnalysis {
         // Estimate of the arithmetic and memory cost for computing the group.
         Cost cost;
@@ -656,14 +657,15 @@ struct Partitioner {
         }
     };
 
-    struct EvalConfig {
+    /* Configuration of a group and the corresponding analysis.*/
+    struct GroupConfig {
         map<string, int> tile_sizes;
         GroupAnalysis analysis;
-        EvalConfig(const map<string, int> &tile_sizes, const GroupAnalysis &analysis) :
+        GroupConfig(const map<string, int> &tile_sizes, const GroupAnalysis &analysis) :
                    tile_sizes(tile_sizes), analysis(analysis) {}
     };
 
-    map<FusionChoice, EvalConfig> fusion_cache;
+    map<FusionChoice, GroupConfig> fusion_cache;
 
     map<FStage, Group> groups;
     map<FStage, set<FStage>> children;
@@ -684,10 +686,10 @@ struct Partitioner {
                 DependenceAnalysis &_dep_analysis, RegionCosts &_costs,
                 const vector<Function> &_outputs, bool _gpu_schedule);
 
-    void merge_groups(const FusionChoice &choice, const EvalConfig &eval,
+    void merge_groups(const FusionChoice &choice, const GroupConfig &eval,
                       Partitioner::Level level);
 
-    EvalConfig evaluate_choice(const FusionChoice &fuse, Partitioner::Level level);
+    GroupConfig evaluate_choice(const FusionChoice &fuse, Partitioner::Level level);
 
     Group fuse_groups(const Group &g1, const Group &g2);
 
@@ -698,7 +700,7 @@ struct Partitioner {
 
     void group(Partitioner::Level level);
 
-    vector<pair<FusionChoice, EvalConfig>>
+    vector<pair<FusionChoice, GroupConfig>>
     choose_candidate_fuse(const vector<pair<string, string>> &cand_pairs,
                           Partitioner::Level level);
 
@@ -734,7 +736,7 @@ struct Partitioner {
     int64_t estimate_benefit(const GroupAnalysis &nofuse, const GroupAnalysis &fuse,
                              bool no_redundant_work, bool ensure_parallelism);
 
-    int64_t estimate_benefit(const vector<pair<FusionChoice, EvalConfig>> &choices,
+    int64_t estimate_benefit(const vector<pair<FusionChoice, GroupConfig>> &choices,
                              bool no_redundant_work, bool ensure_parallelism);
 
     void initialize_groups();
@@ -804,7 +806,7 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
     }
 }
 
-void Partitioner::merge_groups(const FusionChoice &choice, const EvalConfig &eval,
+void Partitioner::merge_groups(const FusionChoice &choice, const GroupConfig &eval,
                                Partitioner::Level level) {
     Function prod_f = dep_analysis.env.at(choice.prod);
     size_t num_stages = prod_f.updates().size() + 1;
@@ -964,14 +966,14 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
 /* Picks the best choice among all the fusion options currently available. Uses
  * the cost model to estimate the benefit of each choice. Returns a vector of
  * choice and configuration pairs which describe the best fusion choice.*/
-vector<pair<Partitioner::FusionChoice, Partitioner::EvalConfig>>
+vector<pair<Partitioner::FusionChoice, Partitioner::GroupConfig>>
 Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
                                    Partitioner::Level level) {
-    vector<pair<FusionChoice, EvalConfig>> best_choices;
+    vector<pair<FusionChoice, GroupConfig>> best_choices;
     int64_t best_benefit = 0;
     for (auto &p : cands) {
         // Compute the aggregate benefit for inlining into all the children.
-        vector<pair<FusionChoice, EvalConfig>> choices;
+        vector<pair<FusionChoice, GroupConfig>> choices;
 
         Function prod_f = dep_analysis.env.at(p.first);
         int final_stage = prod_f.updates().size();
@@ -981,7 +983,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
         for (const FStage &c : children[prod]) {
 
             GroupAnalysis tmp;
-            EvalConfig best_config(map<string, int>(), tmp);
+            GroupConfig best_config(map<string, int>(), tmp);
             FusionChoice cand_choice(prod_f.name(), c);
 
             // Check if the candidate has been evaluated for fusion before
@@ -1023,6 +1025,11 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
 
 vector<map<string, int>>
 Partitioner::generate_tile_configs(const FStage &stg) {
+    // TODO: This is a wart due to the cost model not taking vectorization
+    // and pre-fetching into account. Ensuring the inner most dimension has
+    // atleast size 64 gives enough values for vectorization and can help
+    // with prefetching. This also interacts with the number of parallel tasks
+    // that are generated.
     int min_inner_dim_size = 64;
 
     Definition def = get_stage_definition(stg.func, stg.stage_num);
@@ -1093,7 +1100,7 @@ Partitioner::generate_tile_configs(const FStage &stg) {
 }
 
 /* Finds the best tiling configuration among a set of tile configurations and
- * returning the configuration with the highest estimated benefit. */
+ * returns the configuration with the highest estimated benefit. */
 pair<map<string, int>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g) {
     // Initialize to no tiling
@@ -1205,7 +1212,7 @@ void Partitioner::group(Partitioner::Level level) {
             debug(debug_level) << "[" << p.first << "," << p.second << "]" << '\n';
         }
 
-        vector<pair<FusionChoice, EvalConfig>> best;
+        vector<pair<FusionChoice, GroupConfig>> best;
         best = choose_candidate_fuse(cand, level);
 
         if (!(best.size() > 0)) {
@@ -1587,7 +1594,7 @@ Partitioner::Group Partitioner::fuse_groups(const Group &prod_group,
     return fused_group;
 }
 
-Partitioner::EvalConfig
+Partitioner::GroupConfig
 Partitioner::evaluate_choice(const FusionChoice &choice,
                              Partitioner::Level level) {
     // Create a group that reflects the fusion choice and evaluate the cost
@@ -1643,7 +1650,7 @@ Partitioner::evaluate_choice(const FusionChoice &choice,
         fused_analysis = config.second;
     }
 
-    return EvalConfig(best_tile_config, fused_analysis);
+    return GroupConfig(best_tile_config, fused_analysis);
 }
 
 int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
@@ -1677,7 +1684,7 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &nofuse,
 }
 
 int64_t Partitioner::estimate_benefit(
-        const vector<pair<FusionChoice, EvalConfig>> &choices,
+        const vector<pair<FusionChoice, GroupConfig>> &choices,
         bool no_redundant_work, bool ensure_parallelism) {
     GroupAnalysis fused_analysis;
     fused_analysis.cost = Cost(0, 0);
