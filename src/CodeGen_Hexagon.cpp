@@ -205,6 +205,8 @@ void CodeGen_Hexagon::init_module() {
     Type u16v2 = u16v1.with_lanes(u16v1.lanes() * 2);
     Type u32v2 = u32v1.with_lanes(u32v1.lanes() * 2);
 
+    Value *negative_one = ConstantInt::get(i32_t, -1);
+
     // LLVM's HVX vector intrinsics don't include the type of the
     // operands, they all operate on vectors of 32 bit integers. To make
     // it easier to generate code, we define wrapper intrinsics with
@@ -218,6 +220,7 @@ void CodeGen_Hexagon::init_module() {
         const char *name;
         vector<Type> arg_types;
         int flags;
+        vector<Value *> extra_args;
     };
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
@@ -435,6 +438,11 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u16v1, "not.vh",     {u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32v1, "not.vw",     {u32v1} },
 
+        // These are used to convert the result of a comparison to a vector register.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vandqrt), u8v1,  "predicate_to_mask.vb",  {u8v1}, 0, {negative_one} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vandqrt), u16v1, "predicate_to_mask.vh",  {u16v1}, 0, {negative_one} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vandqrt), u32v1, "predicate_to_mask.vw",  {u32v1}, 0, {negative_one} },
+
         // Broadcasts
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
 
@@ -452,21 +460,25 @@ void CodeGen_Hexagon::init_module() {
     // need to be implemented in the runtime module, or via
     // fall-through to CodeGen_LLVM.
     for (HvxIntrinsic &i : intrinsic_wrappers) {
-        define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types,
+        define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types, i.extra_args,
                              i.flags & HvxIntrinsic::BroadcastScalarsToWords);
     }
 }
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(int id, Type ret_ty, const string &name,
-                                                      const vector<Type> &arg_types, bool broadcast_scalar_word) {
+                                                      const vector<Type> &arg_types,
+                                                      const vector<Value *> &extra_args,
+                                                      bool broadcast_scalar_word) {
     internal_assert(id != Intrinsic::not_intrinsic);
     // Get the real intrinsic.
     llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
-    return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar_word);
+    return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, extra_args, broadcast_scalar_word);
 }
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const string &name,
-                                                      vector<Type> arg_types, bool broadcast_scalar_word) {
+                                                      vector<Type> arg_types,
+                                                      const vector<Value *> &extra_args,
+                                                      bool broadcast_scalar_word) {
     internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
 
@@ -490,6 +502,9 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
     vector<Value *> args;
     for (Value &arg : wrapper->args()) {
         args.push_back(&arg);
+    }
+    for (Value *arg : extra_args) {
+        args.push_back(arg);
     }
 
     if (args.size() + 1 == intrin_ty->getNumParams()) {
@@ -1297,8 +1312,17 @@ void CodeGen_Hexagon::visit(const Div *op) {
 }
 
 void CodeGen_Hexagon::visit(const Cast *op) {
-    // TODO: Do we need to handle same-sized vector casts before LLVM sees them?
-    CodeGen_Posix::visit(op);
+    if (op->value.type().bits() == 1 && op->type.bits() > 1) {
+        // If left to LLVM, this maps true to one. However,
+        // eliminate_bool_vectors assumes that it maps to negative
+        // one. This will map true to negative one instead.
+        value = call_intrin(op->type,
+                            "halide.hexagon.predicate_to_mask" + type_suffix(op->type, false),
+                            {op->value});
+    } else {
+        // TODO: Do we need to handle same-sized vector casts before LLVM sees them?
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_Hexagon::visit(const Call *op) {
