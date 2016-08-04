@@ -139,7 +139,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Optimizing shuffles...\n";
-    body = optimize_hexagon_shuffles(body);
+    // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
+    const int lut_alignment = 64;
+    body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";

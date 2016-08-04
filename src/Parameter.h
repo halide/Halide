@@ -91,27 +91,6 @@ public:
         *((T *)(get_scalar_address())) = val;
     }
 
-    /** If the parameter is a scalar parameter, get its default
-     * value. */
-    template<typename T>
-    NO_INLINE T get_default() const {
-        user_assert(type() == type_of<T>())
-            << "Can't get default for Param<" << type()
-            << "> to scalar of type " << type_of<T>() << "\n";
-        return *((T *)(get_default_address()));
-    }
-
-    /** If the parameter is a scalar parameter, set its default
-     * value. Useful when jitting and for introspection on code
-     * written in Halide. */
-    template<typename T>
-    NO_INLINE T set_default(const T &val) const {
-        user_assert(type() == type_of<T>())
-            << "Can't set default for Param<" << type()
-            << "> to scalar of type " << type_of<T>() << "\n";
-        *((T *)(get_default_address())) = val;
-    }
-
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
     EXPORT Buffer get_buffer() const;
@@ -125,7 +104,6 @@ public:
      * change. Only relevant when jitting. */
 
     EXPORT void *get_scalar_address() const;
-    EXPORT void *get_default_address() const;
 
     /** Tests if this handle is the same as another handle */
     EXPORT bool same_as(const Parameter &other) const;

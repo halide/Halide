@@ -73,15 +73,24 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt stmt = Provide::make(func_name, values, site);
 
-    // The dimensions for which we have a known static size.
-    map<string, Expr> known_size_dims;
+    // A map of the dimensions for which we know the extent is a
+    // multiple of some Expr. This can happen due to a bound, or
+    // align_bounds directive, or if a dim comes from the inside
+    // of a split.
+    map<string, Expr> dim_extent_alignment;
+
     // First hunt through the bounds for them.
     for (const Bound &i : s.bounds()) {
-        known_size_dims[i.var] = i.extent;
+        if (i.extent.defined()) {
+            dim_extent_alignment[i.var] = i.extent;
+        }
+        if (i.modulus.defined()) {
+            dim_extent_alignment[i.var] = i.modulus;
+        }
     }
     // Then use any reduction domain.
     for (const ReductionVariable &i : s.rvars()) {
-        known_size_dims[i.var] = i.extent;
+        dim_extent_alignment[i.var] = i.extent;
     }
 
     vector<Split> splits = s.splits();
@@ -96,7 +105,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
             Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
 
-            known_size_dims[split.inner] = split.factor;
+            dim_extent_alignment[split.inner] = split.factor;
 
             Expr base = outer * split.factor + old_min;
             string base_name = prefix + split.inner + ".base";
@@ -104,7 +113,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
             string old_var_name = prefix + split.old_var;
             Expr old_var = Variable::make(Int(32), old_var_name);
 
-            map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+            map<string, Expr>::iterator iter = dim_extent_alignment.find(split.old_var);
 
             if (is_update) {
                 user_assert(split.tail != TailStrategy::ShiftInwards)
@@ -132,12 +141,12 @@ Stmt build_provide_loop_nest_helper(string func_name,
                 }
             }
 
-            if ((iter != known_size_dims.end()) &&
+            if ((iter != dim_extent_alignment.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base or add an if
                 // statement.
-                known_size_dims[split.outer] = iter->second / split.factor;
+                dim_extent_alignment[split.outer] = iter->second / split.factor;
             } else if (is_negative_const(split.factor) || is_zero(split.factor)) {
                 user_error << "Can't split " << split.old_var << " by " << split.factor
                            << ". Split factors must be strictly positive\n";
@@ -207,11 +216,11 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
             // Maintain the known size of the fused dim if
             // possible. This is important for possible later splits.
-            map<string, Expr>::iterator inner_dim = known_size_dims.find(split.inner);
-            map<string, Expr>::iterator outer_dim = known_size_dims.find(split.outer);
-            if (inner_dim != known_size_dims.end() &&
-                outer_dim != known_size_dims.end()) {
-                known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
+            map<string, Expr>::iterator inner_dim = dim_extent_alignment.find(split.inner);
+            map<string, Expr>::iterator outer_dim = dim_extent_alignment.find(split.outer);
+            if (inner_dim != dim_extent_alignment.end() &&
+                outer_dim != dim_extent_alignment.end()) {
+                dim_extent_alignment[split.old_var] = inner_dim->second*outer_dim->second;
             }
         } else {
             // rename or purify
@@ -591,6 +600,10 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr max_var = Variable::make(Int(32), max_name);
             if (!b.min.defined()) {
                 b.min = min_var;
+            }
+            if (!b.extent.defined()) {
+                // This is just a bounds alignment, which always expands the region computed.
+                continue;
             }
 
             Expr max_val = (b.extent + b.min) - 1;

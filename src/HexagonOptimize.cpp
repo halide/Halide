@@ -271,6 +271,12 @@ private:
 
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
+            // Vector by scalar widening multiplies.
+            { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
+            { "halide.hexagon.mpy.vuh.uh", wild_u32x*bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vh.h",   wild_i32x*bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
+
             // Multiplication by powers of 2.
             { "halide.hexagon.shl.vub.ub", wild_u8x*bc(wild_u8), Pattern::ExactLog2Op1 },
             { "halide.hexagon.shl.vuh.uh", wild_u16x*bc(wild_u16), Pattern::ExactLog2Op1 },
@@ -278,12 +284,6 @@ private:
             { "halide.hexagon.shl.vb.b", wild_i8x*bc(wild_i8), Pattern::ExactLog2Op1 },
             { "halide.hexagon.shl.vh.h", wild_i16x*bc(wild_i16), Pattern::ExactLog2Op1 },
             { "halide.hexagon.shl.vw.w", wild_i32x*bc(wild_i32), Pattern::ExactLog2Op1 },
-
-            // Vector by scalar widening multiplies.
-            { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
-            { "halide.hexagon.mpy.vuh.uh", wild_u32x*bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vh.h",   wild_i32x*bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
 
             // Non-widening scalar multiplication.
             { "halide.hexagon.mul.vh.b", wild_i16x*bc(wild_i16), Pattern::NarrowOp1 },
@@ -329,16 +329,6 @@ private:
 
     void visit(const Add *op) {
         static vector<Pattern> adds = {
-            // Shift-accumulates.
-            { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x >> bc(wild_i32)) },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x << bc(wild_i32)) },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x << bc(wild_u32)) },
-            { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x/bc(wild_i32)), Pattern::ExactLog2Op2 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x*bc(wild_i32)), Pattern::ExactLog2Op2 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x*bc(wild_u32)), Pattern::ExactLog2Op2 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (bc(wild_i32)*wild_i32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (bc(wild_u32)*wild_u32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
-
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
             { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + wild_i16x*bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
@@ -355,13 +345,6 @@ private:
             { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + wild_i32x*bc(wild_i32), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
             { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + bc(wild_i32)*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
 
-            // Non-widening multiply-accumulates with a scalar.
-            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + wild_i16x*bc(wild_i16), Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + wild_i32x*bc(wild_i32), Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + bc(wild_i16)*wild_i16x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + bc(wild_i32)*wild_i32x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
-            // TODO: There's also a add_mul.vw.vw.b
-
             // Widening multiply-accumulates.
             { "halide.hexagon.add_mpy.vuh.vub.vub", wild_u16x + wild_u16x*wild_u16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
             { "halide.hexagon.add_mpy.vuw.vuh.vuh", wild_u32x + wild_u32x*wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
@@ -372,6 +355,23 @@ private:
             { "halide.hexagon.add_mpy.vw.vh.vuh",   wild_i32x + wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 },
             { "halide.hexagon.add_mpy.vh.vub.vb",   wild_i16x + wild_i16x*wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12 },
             { "halide.hexagon.add_mpy.vw.vh.vuh",   wild_i32x + wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
+
+            // Shift-accumulates.
+            { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x >> bc(wild_i32)) },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x << bc(wild_i32)) },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x << bc(wild_u32)) },
+            { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x/bc(wild_i32)), Pattern::ExactLog2Op2 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x*bc(wild_i32)), Pattern::ExactLog2Op2 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x*bc(wild_u32)), Pattern::ExactLog2Op2 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (bc(wild_i32)*wild_i32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (bc(wild_u32)*wild_u32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+
+            // Non-widening multiply-accumulates with a scalar.
+            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + wild_i16x*bc(wild_i16), Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + wild_i32x*bc(wild_i32), Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + bc(wild_i16)*wild_i16x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + bc(wild_i32)*wild_i32x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
+            // TODO: There's also a add_mul.vw.vw.b
 
             // This pattern is very general, so it must come last.
             { "halide.hexagon.add_mul.vh.vh.vh", wild_i16x + wild_i16x*wild_i16x },
@@ -1023,6 +1023,7 @@ Expr span_of_bounds(Interval bounds) {
 // Replace indirect loads with dynamic_shuffle intrinsics where
 // possible.
 class OptimizeShuffles : public IRMutator {
+    int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
 
@@ -1055,33 +1056,44 @@ class OptimizeShuffles : public IRMutator {
         }
 
         Expr index = mutate(op->index);
-        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
-        if (index_bounds.is_bounded()) {
-            Expr index_span = span_of_bounds(index_bounds);
-            index_span = common_subexpression_elimination(index_span);
-            index_span = simplify(index_span);
+        Interval unaligned_index_bounds = bounds_of_expr_in_scope(index, bounds);
+        if (unaligned_index_bounds.is_bounded()) {
+            // We want to try both the unaligned and aligned
+            // bounds. The unaligned bounds might fit in 256 elements,
+            // while the aligned bounds do not.
+            int align = lut_alignment / op->type.bytes();
+            Interval aligned_index_bounds = {
+                (unaligned_index_bounds.min / align) * align,
+                ((unaligned_index_bounds.max + align) / align) * align - 1
+            };
 
-            if (can_prove(index_span < 256)) {
-                // This is a lookup within an up to 256 element array. We
-                // can use dynamic_shuffle for this.
-                int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
-                Expr base = simplify(index_bounds.min);
+            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+                Expr index_span = span_of_bounds(index_bounds);
+                index_span = common_subexpression_elimination(index_span);
+                index_span = simplify(index_span);
 
-                // Load all of the possible indices loaded from the
-                // LUT. Note that for clamped ramps, this loads up to 1
-                // vector past the max. CodeGen_Hexagon::allocation_padding
-                // returns a native vector size to account for this.
-                Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
-                                      Ramp::make(base, 1, const_extent),
-                                      op->image, op->param);
+                if (can_prove(index_span < 256)) {
+                    // This is a lookup within an up to 256 element array. We
+                    // can use dynamic_shuffle for this.
+                    int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
+                    Expr base = simplify(index_bounds.min);
 
-                // We know the size of the LUT is not more than 256, so we
-                // can safely cast the index to 8 bit, which
-                // dynamic_shuffle requires.
-                index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
+                    // Load all of the possible indices loaded from the
+                    // LUT. Note that for clamped ramps, this loads up to 1
+                    // vector past the max. CodeGen_Hexagon::allocation_padding
+                    // returns a native vector size to account for this.
+                    Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
+                                          Ramp::make(base, 1, const_extent),
+                                          op->image, op->param);
 
-                expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
-                return;
+                    // We know the size of the LUT is not more than 256, so we
+                    // can safely cast the index to 8 bit, which
+                    // dynamic_shuffle requires.
+                    index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
+
+                    expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
+                    return;
+                }
             }
         }
         if (!index.same_as(op->index)) {
@@ -1090,14 +1102,17 @@ class OptimizeShuffles : public IRMutator {
             expr = op;
         }
     }
+
+public:
+    OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
 }  // namespace
 
-Stmt optimize_hexagon_shuffles(Stmt s) {
+Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
-    return OptimizeShuffles().mutate(s);
+    return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
 Stmt optimize_hexagon_instructions(Stmt s) {

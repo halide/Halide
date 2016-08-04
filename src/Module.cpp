@@ -20,13 +20,40 @@ namespace Internal {
 
 namespace {
 
-std::unique_ptr<TemporaryFile> make_temp_object_file(const std::string &base_path_name, 
-                                                     const std::string &suffix, 
-                                                     const Target &target) {
-    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-    std::string base_name = split_string(base_path_name, "/").back() + suffix;
-    return std::unique_ptr<TemporaryFile>(new TemporaryFile(base_name, ext));
-}
+class TemporaryObjectFileDir final {
+public:
+    TemporaryObjectFileDir() : dir_path(dir_make_temp()) {}
+    ~TemporaryObjectFileDir() { 
+        for (const auto &f : dir_files) {
+            debug(1) << "file_unlink: " << f << "\n";
+            file_unlink(f);
+        }
+        debug(1) << "dir_rmdir: " << dir_path << "\n";
+        dir_rmdir(dir_path); 
+    }
+    std::string add_temp_object_file(const std::string &base_path_name, 
+                                     const std::string &suffix, 
+                                     const Target &target,
+                                     bool in_front = false) {
+        const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
+        std::string name = dir_path + "/" + split_string(base_path_name, "/").back() + suffix + ext;
+        debug(1) << "add_temp_object_file: " << name << "\n";
+        if (in_front) {
+            dir_files.insert(dir_files.begin(), name);
+        } else {
+            dir_files.push_back(name);
+        }
+        return name;
+    }
+
+    const std::vector<std::string> &files() { return dir_files; }
+private:
+    const std::string dir_path;
+    std::vector<std::string> dir_files;
+    TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
+    void operator=(const TemporaryObjectFileDir &) = delete;
+};
+
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
 std::string add_suffix(const std::string &path, const std::string &suffix) {
@@ -69,6 +96,16 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
     delete f;
 }
 
+LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
+    : name(name), args(args), body(body), linkage(linkage) {}
+  
+LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
+    : name(name), body(body), linkage(linkage) {
+    for (const Argument &i : args) {
+        this->args.push_back(i);
+    }
+}
+  
 }  // namespace Internal
 
 using namespace Halide::Internal;
@@ -141,12 +178,12 @@ void Module::compile(const Outputs &output_files) const {
             // needed directly, or as temporary inputs to create a static library.
             // If they are just temporary inputs, we delete them when we're done,
             // to minimize the cruft left laying around in build products directory.
-            std::unique_ptr<TemporaryFile> temp_file;
+            std::unique_ptr<TemporaryObjectFileDir> temp_dir;
 
             std::string object_name = output_files.object_name;
             if (object_name.empty()) {
-                temp_file = make_temp_object_file(output_files.static_library_name, "", target());
-                object_name = temp_file->pathname();
+                temp_dir = std::unique_ptr<TemporaryObjectFileDir>(new TemporaryObjectFileDir());
+                object_name = temp_dir->add_temp_object_file(output_files.static_library_name, "", target());
             }
 
             {
@@ -258,7 +295,7 @@ void compile_multitarget(const std::string &fn_name,
         return;
     }
 
-    std::vector<std::unique_ptr<TemporaryFile>> all_temp_object_files;
+    TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     for (const Target &target : targets) {
@@ -292,8 +329,7 @@ void compile_multitarget(const std::string &fn_name,
         Module module = module_producer(sub_fn_name, target.with_feature(Target::NoRuntime));
         Outputs sub_out = add_suffixes(output_files, suffix);
         if (sub_out.object_name.empty()) {
-            all_temp_object_files.emplace_back(make_temp_object_file(output_files.static_library_name, suffix, target));
-            sub_out.object_name = all_temp_object_files.back()->pathname();
+            sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
         }
         module.compile(sub_out);
 
@@ -320,8 +356,8 @@ void compile_multitarget(const std::string &fn_name,
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
         const Target runtime_target = base_target.without_feature(Target::NoRuntime);
-        all_temp_object_files.emplace_back(make_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
-        compile_standalone_runtime(Outputs().object(all_temp_object_files.back()->pathname()), runtime_target);
+        compile_standalone_runtime(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target)), 
+            runtime_target);
     }
 
     Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
@@ -330,20 +366,25 @@ void compile_multitarget(const std::string &fn_name,
     Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
     wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
 
-    // Wrapper function is *always* built with NoRuntime;
-    // also build with NoRuntime and NoAsserts, since the underlying implementations
-    // will implement those (or not).
+    // Always build with NoRuntime: that's handled as a separate module.
+    //
+    // Always build with NoBoundsQuery: underlying code will implement that (or not).
+    //
+    // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
+    // only way to propagate a nonzero result code to our caller. (Note that this
+    // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
+    // arguments; this is regrettable but fairly minor in terms of both code size and speed,
+    // at least for real-world code.)
     const Target wrapper_target = base_target
         .with_feature(Target::NoRuntime)
-        .with_feature(Target::NoAsserts)
-        .with_feature(Target::NoBoundsQuery);
+        .with_feature(Target::NoBoundsQuery)
+        .without_feature(Target::NoAsserts);
     Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
     // The wrapper module must come *first* in the archive, otherwise libraries
     // that are dynamically found via register_metadata and halide_enumerate_registered_filters()
     // may get optimized away at link time.
-    all_temp_object_files.insert(all_temp_object_files.begin(), make_temp_object_file(output_files.static_library_name, "_wrapper", base_target));
-    wrapper_module.compile(Outputs().object(all_temp_object_files.front()->pathname()));
+    wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
     if (!output_files.c_header_name.empty()) { 
         debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
@@ -351,12 +392,7 @@ void compile_multitarget(const std::string &fn_name,
     }
     if (!output_files.static_library_name.empty()) {
         debug(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
-        std::vector<std::string> srcs;
-        for (const auto &output : all_temp_object_files) {
-            debug(1) << "   compile_multitarget: linking temp file: " << output->pathname() << "\n";
-            srcs.push_back(output->pathname());
-        }
-        create_static_library(srcs, base_target, output_files.static_library_name);
+        create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
     }
 }
 
