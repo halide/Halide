@@ -1379,6 +1379,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
                 Expr equiv = -Cast::make(op->type, op->args[0]);
                 equiv.accept(this);
             }
+            return;
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
