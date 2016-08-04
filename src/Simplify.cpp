@@ -96,6 +96,19 @@ Expr signed_integer_overflow_error(Type t) {
     return Call::make(t, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
+// Make a poison value used when a non-finite value is detected during constant folding.
+Expr non_finite_expression_error(Type t) {
+    // Mark each call with an atomic counter, so that the errors can't
+    // cancel against each other.
+    static std::atomic<int> counter;
+    return Call::make(t, Call::non_finite_expression, {counter++}, Call::Intrinsic);
+}
+
+bool is_error_call(const Call *call) {
+    return call && (call->is_intrinsic(Call::signed_integer_overflow) ||
+                    call->is_intrinsic(Call::non_finite_expression));
+}
+
 }
 
 class Simplify : public IRMutator {
@@ -525,7 +538,11 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
-        if (const_int(a, &ia) &&
+        if (is_error_call(call_a)) {
+            expr = a;
+        } else if (is_error_call(call_b)) {
+            expr = b;
+        } else if (const_int(a, &ia) &&
             const_int(b, &ib)) {
             if (no_overflow(a.type()) &&
                 add_would_overflow(a.type().bits(), ia, ib)) {
@@ -548,12 +565,6 @@ private:
         } else if (equal(a, b)) {
             // x + x = x*2
             expr = mutate(a * make_const(op->type, 2));
-        } else if (call_a &&
-                   call_a->is_intrinsic(Call::signed_integer_overflow)) {
-            expr = a;
-        } else if (call_b &&
-                   call_b->is_intrinsic(Call::signed_integer_overflow)) {
-            expr = b;
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -863,7 +874,11 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
-        if (is_zero(b)) {
+        if (is_error_call(call_a)) {
+            expr = a;
+        } else if (is_error_call(call_b)) {
+            expr = b;
+        } else if (is_zero(b)) {
             expr = a;
         } else if (equal(a, b)) {
             expr = make_zero(op->type);
@@ -882,12 +897,6 @@ private:
             expr = mutate(a + IntImm::make(a.type(), (-ib)));
         } else if (const_float(b, &fb)) {
             expr = mutate(a + FloatImm::make(a.type(), (-fb)));
-        } else if (call_a &&
-                   call_a->is_intrinsic(Call::signed_integer_overflow)) {
-            expr = a;
-        } else if (call_b &&
-                   call_b->is_intrinsic(Call::signed_integer_overflow)) {
-            expr = b;
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
@@ -1314,7 +1323,11 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        if (is_zero(a)) {
+        if (is_error_call(call_a)) {
+            expr = a;
+        } else if (is_error_call(call_b)) {
+            expr = b;
+        } else if (is_zero(a)) {
             expr = a;
         } else if (is_zero(b)) {
             expr = b;
@@ -1333,12 +1346,6 @@ private:
             expr = UIntImm::make(a.type(), ua * ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(a.type(), fa * fb);
-        } else if (call_a &&
-                   call_a->is_intrinsic(Call::signed_integer_overflow)) {
-            expr = a;
-        } else if (call_b &&
-                   call_b->is_intrinsic(Call::signed_integer_overflow)) {
-            expr = b;
         } else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
@@ -1388,6 +1395,8 @@ private:
         const Mul *mul_a_a_a = nullptr;
         const Mul *mul_a_b_a = nullptr;
         const Mul *mul_a_b_b = nullptr;
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
 
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1444,25 +1453,48 @@ private:
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
-        if (is_zero(a) && !is_zero(b)) {
+        if (is_error_call(call_a)) { 
             expr = a;
+        } else if (is_error_call(call_b)) {
+            expr = b;
+        } else if (is_zero(b)) {
+            // Divison-by-constant-zero is always an error, even
+            // if it would produce a value representable by the type
+            // (eg Inf in a float type).
+            expr = non_finite_expression_error(op->type);
+        } else if (is_zero(a)) {
+            if (const_float(b, &fb) && !std::isfinite(fb)) {
+                expr = non_finite_expression_error(op->type);
+            } else {
+                expr = a;
+            }
         } else if (is_one(b)) {
-            expr = a;
-        } else if (equal(a, b) &&
-                   !is_zero(b) &&
-                   // (n/0)/(n/0) should not be simplified to 1
-                   !(div_a && is_zero(div_a->b))) {
-            expr = make_one(op->type);
+            if (const_float(a, &fa) && !std::isfinite(fa)) {
+                expr = non_finite_expression_error(op->type);
+            } else {
+                expr = a;
+            }
+        } else if (equal(a, b)) {
+            if (is_zero(a) ||
+                (const_float(a, &fa) && !std::isfinite(fa)) ||
+                (const_float(b, &fb) && !std::isfinite(fb))) {
+                expr = non_finite_expression_error(op->type);
+            } else {
+                expr = make_one(op->type);
+            }
         } else if (const_int(a, &ia) &&
-                   const_int(b, &ib) && ib) {
+                   const_int(b, &ib)) {
             expr = IntImm::make(op->type, div_imp(ia, ib));
         } else if (const_uint(a, &ua) &&
-                   const_uint(b, &ub) && ub) {
+                   const_uint(b, &ub)) {
             expr = UIntImm::make(op->type, ua / ub);
         } else if (const_float(a, &fa) &&
-                   const_float(b, &fb) &&
-                   fb != 0.0f) {
-            expr = FloatImm::make(op->type, fa / fb);
+                   const_float(b, &fb)) {
+            if (!std::isfinite(fa) || !std::isfinite(fb)) {
+                expr = non_finite_expression_error(op->type);
+            } else {
+                expr = FloatImm::make(op->type, fa / fb);
+            }
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
         } else if (no_overflow_scalar_int(op->type) &&
@@ -4676,19 +4708,6 @@ void check_algebra() {
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
 
-    {
-        Expr z(0);
-        Expr n(1);
-
-        // (0/0)/(0/0) should not simplify to 1
-        check((z/z)/(z/z), (z/z)/(z/z));
-
-        // Nor should (n/0)/(n/0) for nonzero n
-        check((n/z)/(n/z), (n/z)/(n/z));
-
-        // But (0/n)/(0/n) -> 0/0 for nonzero n
-        check((z/n)/(z/n), z/z);
-    }
 }
 
 void check_vectors() {
@@ -5391,7 +5410,59 @@ void check_overflow() {
     }
 }
 
+void check_ind_expr(Expr e, bool expect_indeterminate) {
+    Expr e2 = simplify(e);
+    const Call *call = e2.as<Call>();
+    bool is_indeterminate = call && call->is_intrinsic(Call::non_finite_expression);
+    if (expect_indeterminate && !is_indeterminate)
+        internal_error << "Expression should be indeterminate: " << e << " but saw: " << e2 << "\n";
+    else if (!expect_indeterminate && is_indeterminate)
+        internal_error << "Expression should not be indeterminate: " << e << " but saw: " << e2 << "\n";
 }
+
+void check_indeterminate() {
+    const float values[] = { 
+        -std::numeric_limits<float>::infinity(),
+        -2.f, 
+        -1.f, 
+        0.f, 
+        1.f, 
+        2.f, 
+        std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::signaling_NaN() 
+    };
+
+    for (float f1 : values) {
+        for (float f2 : values) {
+            {
+                Expr e1(f1), e2(f2);
+                check_ind_expr(e1 / e2, !std::isfinite(f1) || !std::isfinite(f2) || !f2);
+                check_ind_expr((e1 / e2) / (e1 / e2), !std::isfinite(f1) || !std::isfinite(f2) || !f1 || !f2);
+                check_ind_expr((e2 / e1) / (e1 / e2), !std::isfinite(f1) || !std::isfinite(f2) || !f1 || !f2);
+            }
+            {
+                int32_t i1 = (int32_t)f1, i2 = (int32_t)f2;
+                // Avoid integer overflow errors
+                i1 = std::max(-2147483647, i1);
+                i2 = std::max(-2147483647, i2);
+                Expr e1(i1), e2(i2);
+                check_ind_expr(e1 / e2, !i2);
+                check_ind_expr((e1 / e2) / (e1 / e2), !i1 || !i2 || !div_imp(i1, i2));
+                check_ind_expr((e2 / e1) / (e1 / e2), !i1 || !i2 || !div_imp(i1, i2));
+            }
+            {
+                uint32_t u1 = (uint32_t)f1, u2 = (uint32_t)f2;
+                Expr e1(u1), e2(u2);
+                check_ind_expr(e1 / e2, !u2);
+                check_ind_expr((e1 / e2) / (e1 / e2), !u1 || !u2 || !div_imp(u1, u2));
+                check_ind_expr((e2 / e1) / (e1 / e2), !u1 || !u2 || !div_imp(u1, u2));
+            }
+        }
+    }
+}
+
+}  // namespace
 
 void simplify_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
@@ -5399,6 +5470,7 @@ void simplify_test() {
     Expr yf = cast<float>(y);
     Expr t = const_true(), f = const_false();
 
+    check_indeterminate();
     check_casts();
     check_algebra();
     check_vectors();
