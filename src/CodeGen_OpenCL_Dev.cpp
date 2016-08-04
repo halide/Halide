@@ -222,10 +222,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::bool_to_mask)) {
         if (op->args[0].type().is_vector()) {
-            // The argument is already some sort of mask. Just sign-extend
-            // to the expected type.
-            Expr equiv = Cast::make(op->type, op->args[0]);
-            equiv.accept(this);
+            // The argument is already a mask of the right width. Just
+            // sign-extend to the expected type.
+            op->args[0].accept(this);
         } else {
             // The argument is a scalar bool. Casting it to an int
             // produces zero or one. Convert it to -1 of the requested
