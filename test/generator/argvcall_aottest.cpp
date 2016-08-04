@@ -1,10 +1,10 @@
 #include "HalideRuntime.h"
+#include "halide_image.h"
 
 #include <math.h>
 #include <stdio.h>
 
 #include "argvcall.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
@@ -41,8 +41,7 @@ int main(int argc, char **argv) {
     // also produces the correct result
     float arg0 = 1.234f;
     float arg1 = 3.456f;
-    buffer_t arg2 = *output;
-    void* args[3] = { &arg0, &arg1, &arg2 };
+    void* args[3] = { &arg0, &arg1, (buffer_t *)output };
     result = argvcall_argv(args);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);

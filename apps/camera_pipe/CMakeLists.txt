@@ -8,7 +8,10 @@ set(curved_lib "${CMAKE_CURRENT_BINARY_DIR}/curved${CMAKE_STATIC_LIBRARY_SUFFIX}
 add_library(fcam fcam/Demosaic.cpp fcam/Demosaic_ARM.cpp)
 FIND_PACKAGE(OpenMP)
 if (OPENMP_FOUND)
-    target_compile_options(fcam PUBLIC "-fopenmp")
+  target_compile_options(fcam PUBLIC "-fopenmp")
+endif()
+if (NOT MSVC)
+  target_compile_options(fcam PRIVATE "-std=c++11")
 endif()
 
 # Final executable
