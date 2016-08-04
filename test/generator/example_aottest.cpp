@@ -1,10 +1,10 @@
 #include "HalideRuntime.h"
+#include "halide_image.h"
 
 #include <math.h>
 #include <stdio.h>
 
 #include "example.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 

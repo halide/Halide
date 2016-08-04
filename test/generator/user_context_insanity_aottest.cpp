@@ -33,7 +33,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
 }
 
 int main(int argc, char **argv) {
-    halide_set_custom_trace(&my_halide_trace);
+    halide_set_custom_trace(my_halide_trace);
 
     // Hijack halide's runtime to run a bunch of instances of this function
     // in parallel.

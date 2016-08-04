@@ -10,11 +10,12 @@ int main(int argc, char **argv) {
 
 #include <math.h>
 #include "HalideRuntime.h"
+#include "halide_image.h"
 #include <assert.h>
 #include <string.h>
 
 #include "acquire_release.h"
-#include "halide_image.h"
+
 
 using namespace Halide::Tools;
 
@@ -213,7 +214,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    input.set_host_dirty();
+    input.set_host_dirty(true);
 
     Image<float> output(W, H);
 
@@ -232,8 +233,8 @@ int main(int argc, char **argv) {
     }
 
     // We need to free our GPU buffers before destroying the context.
-    input.dev_free();
-    output.dev_free();
+    input.device_free();
+    output.device_free();
 
     // Free the context we created.
     destroy_context();
