@@ -39,12 +39,12 @@
 // properly on Windows: the return type isn't part of the name-mangling scheme
 // on *nix, but is for MSVC. Note also that this specialization must be in the
 // same (global) namespace as the others.
-template<> 
-struct halide_c_type_to_name<struct halide_filter_metadata_t> { 
-    static const bool known_type = true; 
-    static halide_cplusplus_type_name name() { 
-        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"}; 
-    } 
+template<>
+struct halide_c_type_to_name<struct halide_filter_metadata_t> {
+    static const bool known_type = true;
+    static halide_cplusplus_type_name name() {
+        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"};
+    }
 };
 
 
@@ -988,15 +988,7 @@ void CodeGen_LLVM::optimize_module() {
     public:
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         virtual void add(Pass *p) override {
-            // As of 2016/07/21 LLVM gets stuck inside Early GVN on some pipelines.
-            #if LLVM_VERSION >= 39
-            if (p->getPassName() == std::string("Early GVN Hoisting of Expressions")) {
-                // Use the older GVN pass instead
-                delete p;
-                p = llvm::createGVNPass();
-            }
-            #endif
-            debug(1) << "Adding function pass: " << p->getPassName() << "\n";
+            debug(2) << "Adding function pass: " << p->getPassName() << "\n";
             legacy::FunctionPassManager::add(p);
         }
     };
@@ -1004,7 +996,7 @@ void CodeGen_LLVM::optimize_module() {
     class MyModulePassManager : public legacy::PassManager {
     public:
         virtual void add(Pass *p) override {
-            debug(1) << "Adding module pass: " << p->getPassName() << "\n";
+            debug(2) << "Adding module pass: " << p->getPassName() << "\n";
             legacy::PassManager::add(p);
         }
     };
