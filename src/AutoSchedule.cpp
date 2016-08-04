@@ -98,22 +98,31 @@ struct DependenceAnalysis {
     const map<string, Function> &env;
     const FuncValueBounds &func_val_bounds;
 
-    // TODO: Build a cache for bounds queries
+    /* TODO: Auto scheduling for large benchmarks is bottlenecked by the bounds inference.
+       The bounds queries with the same parameters are common during the grouping process
+       it might be beneficial to build a cache for bounds queries. */
 
     DependenceAnalysis(map<string, Function> &env,
                        const FuncValueBounds &func_val_bounds):
                        env(env), func_val_bounds(func_val_bounds) {}
 
+    /* Returns the regions of the producers (prods) required to compute the region
+     * of the function stage (f, stage_num) specified by bounds.*/
     map<string, Box> regions_required(Function f, int stage_num,
                                       const DimBounds &bounds,
                                       const set<string> &prods,
                                       bool values_computed);
 
+    /* Returns the regions of the producers (prods) required to compute the region
+     * of the function specified by pure_bounds.*/
     map<string, Box> regions_required(Function f,
                                       const DimBounds &pure_bounds,
                                       const set<string> &prods,
                                       bool values_computed);
 
+    /* Returns redundantly computed regions of producers (prods) while computing a
+     * region of the function stage (f, stage_num) specified by bounds. var is the
+     * dimension along which redundant computation is accounted for.*/
     map<string, Box> redundant_regions(Function f, int stage_num, string var,
                                        const DimBounds &bounds,
                                        const set<string> &prods,
@@ -143,8 +152,7 @@ DependenceAnalysis::overlap_regions(Function f, int stage_num,
 }
 
 map<string, Box>
-DependenceAnalysis::regions_required(Function f,
-                                     const DimBounds &pure_bounds,
+DependenceAnalysis::regions_required(Function f, const DimBounds &pure_bounds,
                                      const set<string> &prods,
                                      bool values_computed) {
     map<string, Box> regions;
@@ -159,6 +167,7 @@ DependenceAnalysis::regions_required(Function f,
     return regions;
 }
 
+/* Helper function to queue regions that need to be traversed.*/
 void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
                         const Function &prod_func, Box &region) {
     DimBounds prod_pure_bounds;
@@ -170,6 +179,8 @@ void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
         prod_pure_bounds[args[v]] = region[v];
     }
 
+    // Get the bounds for all the stages in a function from the
+    // bounds on the pure dimensions.
     vector<DimBounds> prod_bounds =
             get_stage_bounds(prod_func, prod_pure_bounds);
 
@@ -177,12 +188,15 @@ void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
 
     internal_assert(prod_bounds.size() == num_stages);
 
+    // Add all the stages of a function into the queue.
     for (size_t prod_s = 0; prod_s < num_stages; prod_s++) {
         FStage prod_stage(prod_func, prod_s);
         f_queue.push_back(make_pair(prod_stage, prod_bounds[prod_s]));
     }
 }
 
+/* Helper function for merging curr_regions to the global map of regions
+ * and adding them to the queue of regions that need to be traversed.*/
 void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
                              map<string, Box> &regions,
                              map<string, Box> &curr_regions,
@@ -214,28 +228,37 @@ void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
     }
 }
 
+/* Returns the regions of the producers (prods) required to compute the region
+ * of the function stage (f, stage_num) specified by bounds.*/
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, int stage_num,
                                      const DimBounds &bounds,
                                      const set<string> &prods,
                                      bool values_computed) {
+    // Iteratively compute the required regions by doing a traversing the chain
+    // of dependencies.
+
+    // Map of all the regions that are required.
     map<string, Box> regions;
-    // Add the query function and its region to the queue
     deque<pair<FStage, DimBounds>> f_queue;
+
+    // Add the query function and its region to the queue
     FStage start(f, stage_num);
     f_queue.push_back(make_pair(start, bounds));
 
-    // Recursively compute the regions required
     while(!f_queue.empty()) {
 
         FStage s = f_queue.front().first;
         DimBounds curr_bounds = f_queue.front().second;
 
         Definition def = get_stage_definition(s.func, s.stage_num);
+        // Scope for containing all the estimates on parameters and intervals.
         Scope<Interval> curr_scope;
 
         const vector<Dim> &dims = def.schedule().dims();
 
+        // Substitute parameter estimates into the bounds and add them to the
+        // current scope.
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             string var_name = dims[d].var;
             internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
@@ -245,15 +268,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             Interval simple_bounds = Interval(simplify(lower), simplify(upper));
             curr_scope.push(var_name, simple_bounds);
         }
-
-        // Add parameter estimates to the current scope.
-        /*
-        GetVarEstimates collect_estimates;
-        def.accept(&collect_estimates);
-        for (auto &est : collect_estimates.var_estimates) {
-            curr_scope.push(est.first, Interval(est.second, est.second));
-        }
-        */
 
         // If the function has an extern definition there is no visibility into
         // the expression defining the function. So the regions required will be
@@ -265,6 +279,10 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         if (s.func.has_extern_definition()) {
             for (const ExternFuncArgument &arg : s.func.extern_arguments()) {
                 if (arg.is_func()) {
+                    // If the argument is an entire function the bounds of the
+                    // function required are unknown. Create an infinite region
+                    // of the correct dimension, update the region map, and
+                    // add it to the queue.
                     string prod_name = Function(arg.func).name();
                     const Function &prod_func = env.at(prod_name);
                     map<string, Box> prod_reg;
@@ -275,6 +293,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     merge_and_queue_regions(f_queue, regions, prod_reg, prods,
                                             env, values_computed, s.func.name());
                 } else if (arg.is_expr()) {
+                    // Find the boxes required for the expression and add the regions
+                    // to the queue.
                     Expr subs_arg = SubstituteVarEstimates().mutate(arg.expr);
                     map<string, Box> arg_regions =
                             boxes_required(subs_arg, curr_scope, func_val_bounds);
@@ -282,6 +302,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     merge_and_queue_regions(f_queue, regions, arg_regions, prods,
                                             env, values_computed, s.func.name());
                 } else if (arg.is_image_param() || arg.is_buffer()) {
+                    // If the argument is an image or a buffer the bounds
+                    // required are unknown. Create an infinite region of the
+                    // correct dimension and update the region map.
                     Buffer buf;
                     if (arg.is_image_param()) {
                         buf = arg.image_param.get_buffer();
@@ -297,11 +320,18 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             }
         }
 
+        // Find the regions required for each value of the current function stage,
+        // update the region map, and add them to the queue.
         for (auto &val : def.values()) {
+            // Substitute the parameter estimates into the expression and get
+            // the regions required for the expression.
             Expr subs_val = SubstituteVarEstimates().mutate(val);
             map<string, Box> curr_regions =
                     boxes_required(subs_val, curr_scope, func_val_bounds);
 
+            // Arguments to the definition may require regions of functions.
+            // For example, update definitions in histograms where the bin is
+            // based on the value of a function.
             Box left_reg;
             for (const Expr &arg : def.args()) {
                 Expr subs_arg = SubstituteVarEstimates().mutate(arg);
@@ -323,13 +353,17 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 merge_boxes(curr_regions[s.func.name()], left_reg);
             }
 
+            // Update the region map, and add curr_regions to the queue.
             merge_and_queue_regions(f_queue, regions, curr_regions,
                                     prods, env, values_computed, s.func.name());
         }
+        // Remove processed region from the queue.
         f_queue.pop_front();
     }
 
-    // Simplify
+    // Simplify the bounds on each of the regions and substitute global pipeline
+    // bounds for function regions where the lower and upper bounds could not be
+    // determined.
     map<string, Box> concrete_regions;
 
     for (auto &f_reg : regions) {
@@ -342,7 +376,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
             bool in_env = (env.find(f_reg.first) != env.end());
 
-            // Use the estimates if the lower and upper bounds cannot be determined
             if (!lower.as<IntImm>() && in_env) {
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
@@ -411,18 +444,17 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
         // The boxes should be of the same size.
         internal_assert(b.size() == b_shifted.size());
 
-        // The box used makes things complicated ignoring it for now
         Box b_intersect;
         for (uint32_t i = 0 ; i < b.size(); i++) {
             b_intersect.push_back(Interval::make_intersection(b[i], b_shifted[i]));
         }
         // A function should appear once in the regions and therefore cannot
-        // already be present in the overlaps map
+        // already be present in the overlaps map.
         internal_assert(overlaps.find(reg.first) == overlaps.end());
         overlaps[reg.first] = b_intersect;
     }
 
-    // Simplify
+    // Simplify the bounds of each of the overlap regions.
     for (auto &f : overlaps) {
         simplify_box(f.second);
     }
