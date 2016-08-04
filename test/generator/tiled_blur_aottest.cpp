@@ -1,10 +1,10 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
+#include "halide_image.h"
 #include <assert.h>
 
 #include "tiled_blur.h"
-#include "halide_image.h"
 
 using namespace Halide::Tools;
 
