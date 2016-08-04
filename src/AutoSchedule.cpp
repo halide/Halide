@@ -127,34 +127,21 @@ struct DependenceAnalysis {
                                        const DimBounds &bounds,
                                        const set<string> &prods,
                                        bool values_computed);
+
+    /* Returns overlapping regions of producers (prods) while computing a function
+     * stage along each of the dimensions.*/
     vector<map<string, Box>>
     overlap_regions(Function f, int stage_num, const DimBounds &bounds,
                     const set<string> &prods, bool values_computed);
 };
 
-vector<map<string, Box>>
-DependenceAnalysis::overlap_regions(Function f, int stage_num,
-                                    const DimBounds &bounds,
-                                    const set<string> &prods,
-                                    bool values_computed) {
-    vector<map<string, Box>> conc_overlaps;
-
-    Definition def = get_stage_definition(f, stage_num);
-    const vector<Dim> &dims = def.schedule().dims();
-
-    for (int d = 0; d < (int)dims.size(); d++) {
-        map<string, Box> conc_reg =
-                redundant_regions(f, stage_num, dims[d].var,
-                                  bounds, prods, values_computed);
-        conc_overlaps.push_back(conc_reg);
-    }
-    return conc_overlaps;
-}
-
+/* Returns the regions of the producers (prods) required to compute the region
+ * of the function specified by pure_bounds.*/
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, const DimBounds &pure_bounds,
                                      const set<string> &prods,
                                      bool values_computed) {
+    // Find the regions required for each stage and merge them.
     map<string, Box> regions;
     int num_stages = f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
@@ -406,14 +393,21 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
     return concrete_regions;
 }
 
+/* Returns redundantly computed regions of producers (prods) while computing a
+ * region of the function stage (f, stage_num) specified by bounds. var is the
+ * dimension along which redundant computation is accounted for.*/
 map<string, Box>
 DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
                                       const DimBounds &bounds,
                                       const set<string> &prods,
                                       bool values_computed) {
+    // Find the regions required to compute the region of f specified
+    // by bounds.
     map<string, Box> regions = regions_required(f, stage_num, bounds,
                                                 prods, values_computed);
 
+    // Shift the bounds by the size of the interval along the direction
+    // of var.
     DimBounds shifted_bounds;
 
     for (auto &b : bounds) {
@@ -427,10 +421,14 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
         }
     }
 
+    // Find the regions required to compute the region of f specified
+    // by shifted_bounds.
     map<string, Box> regions_shifted =
             regions_required(f, stage_num, shifted_bounds, prods,
                              values_computed);
 
+    // Compute the overlaps between the regions_shifted and the original
+    // regions required.
     map<string, Box> overlaps;
     for (auto &reg : regions) {
         if (regions_shifted.find(reg.first) == regions.end()) {
@@ -462,13 +460,40 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
     return overlaps;
 }
 
+/* Returns overlapping regions of producers (prods) while computing a function
+ * stage along each of the dimensions.*/
+vector<map<string, Box>>
+DependenceAnalysis::overlap_regions(Function f, int stage_num,
+                                    const DimBounds &bounds,
+                                    const set<string> &prods,
+                                    bool values_computed) {
+    vector<map<string, Box>> conc_overlaps;
+
+    Definition def = get_stage_definition(f, stage_num);
+    const vector<Dim> &dims = def.schedule().dims();
+
+    // Get the redundant regions along each dimension of f.
+    for (int d = 0; d < (int)dims.size(); d++) {
+        map<string, Box> conc_reg =
+                redundant_regions(f, stage_num, dims[d].var,
+                                  bounds, prods, values_computed);
+        conc_overlaps.push_back(conc_reg);
+    }
+    return conc_overlaps;
+}
+
+/* Returns the regions of each function required for computing the
+ * outputs of the pipeline.*/
 map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
                                      const vector<Function> &outputs) {
     map<string, Box> pipeline_bounds;
 
+    // Find the regions required for each of the outputs and merge them
+    // to compute the full pipeline_bounds.
     for (auto &out : outputs) {
         DimBounds pure_bounds;
         Box out_box;
+        // Use the estimates on the output for determining the output bounds.
         for (auto &arg : out.args()) {
             bool estimate_found = false;
             for (auto &est : out.schedule().estimates()) {
@@ -493,7 +518,7 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
         map<string, Box> regions =
                 analysis.regions_required(out, pure_bounds, prods, false);
 
-        // Add the output region to the pipeline bounds as well
+        // Add the output region to the pipeline bounds as well.
         regions[out.name()] = out_box;
 
         merge_regions(pipeline_bounds, regions);
