@@ -344,9 +344,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
             // Use the estimates if the lower and upper bounds cannot be determined
             if (!lower.as<IntImm>() && in_env) {
-                user_warning << "Bounds for " << lower << " could\
-                                 not be inferred might result in suboptimal\
-                                 scheduling decisions\n";
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
                     size_t num_pure_args = curr_f.args().size();
@@ -357,9 +354,6 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             }
 
             if (!upper.as<IntImm>() && in_env) {
-                user_warning << "Bounds for " << upper << " could\
-                                 not be inferred might result in suboptimal\
-                                 scheduling decisions\n";
                 const Function &curr_f = env.at(f_reg.first);
                 for (auto &b : curr_f.schedule().estimates()) {
                     size_t num_pure_args = curr_f.args().size();
@@ -1482,6 +1476,10 @@ Partitioner::analyze_group(const Group &g, bool show_analysis) {
                 per_tile_cost.memory += initial_factor * footprint;
             } else {
                 footprint = initial_footprint;
+            }
+
+            if (footprint == unknown) {
+                return g_analysis;
             }
         }
 
