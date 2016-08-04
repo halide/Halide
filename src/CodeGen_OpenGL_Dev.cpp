@@ -420,9 +420,9 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 void CodeGen_GLSL::visit(const Call *op) {
     ostringstream rhs;
     if (op->is_intrinsic(Call::glsl_texture_load)) {
-        // This intrinsic takes four arguments
-        // glsl_texture_load(<tex name>, <buffer>, <x>, <y>)
-        internal_assert(op->args.size() == 4);
+        // This intrinsic takes five arguments
+        // glsl_texture_load(<tex name>, <buffer>, <x>, <y>, <c>)
+        internal_assert(op->args.size() == 5);
 
         // The argument to the call is either a StringImm or a broadcasted
         // StringImm if this is part of a vectorized expression
@@ -440,12 +440,64 @@ void CodeGen_GLSL::visit(const Call *op) {
         internal_assert((op->type.code() == Type::UInt || op->type.code() == Type::Float) &&
                         (op->type.lanes() >= 1 && op->type.lanes() <= 4));
 
-        internal_assert(op->args[2].type().lanes() == 1) << "glsl_texture_load argument 2 is not scalar";
-        internal_assert(op->args[3].type().lanes() == 1) << "glsl_texture_load argument 3 is not scalar";
+        if (op->type.is_vector()) {
+            // The channel argument must be a ramp or a broadcast of a constant.
+            Expr c = op->args[4];
+            internal_assert(is_const(c));
 
-        rhs << "texture2D(" << print_name(buffername) << ", vec2("
-            << print_expr(op->args[2]) << ", "
-            << print_expr(op->args[3]) << "))";
+            const Ramp *rc = c.as<Ramp>();
+            const Broadcast *bx = op->args[2].as<Broadcast>();
+            const Broadcast *by = op->args[3].as<Broadcast>();
+            if (rc && is_zero(rc->base) && is_one(rc->stride) && bx && by) {
+                // If the x and y coordinates are broadcasts, and the c
+                // coordinate is a dense ramp, we can do a single
+                // texture2D call.
+                rhs << "texture2D(" << print_name(buffername) << ", vec2("
+                    << print_expr(bx->value) << ", "
+                    << print_expr(by->value) << "))";
+
+                // texture2D always returns a vec4. Swizzle out the lanes we want.
+                switch (op->type.lanes()) {
+                case 1:
+                    rhs << ".r";
+                    break;
+                case 2:
+                    rhs << ".rg";
+                    break;
+                case 3:
+                    rhs << ".rgb";
+                    break;
+                default:
+                    break;
+                }
+            } else {
+                // Otherwise do one load per lane and make a vector
+                string x = print_expr(op->args[2]), y = print_expr(op->args[3]);
+                rhs << "vec" << op->type.lanes() << "(";
+                for (int i = 0; i < op->type.lanes(); i++) {
+                    if (i > 0) {
+                        rhs << ", ";
+                    }
+                    Expr l = extract_lane(c, i);
+                    const int64_t *ic = as_const_int(l);
+                    internal_assert(ic && *ic >= 0 && *ic < 4) << c << "\n";
+                    char c_swizzle = "rgba"[*ic];
+                    char xy_swizzle = "rgba"[i];
+                    rhs << "texture2D(" << print_name(buffername) << ", vec2("
+                        << x << "." << xy_swizzle << ", "
+                        << y << "." << xy_swizzle << "))." << c_swizzle;
+                }
+                rhs << ")";
+            }
+        } else {
+            const int64_t *ic = as_const_int(op->args[4]);
+            internal_assert(ic && *ic >= 0 && *ic < 4);
+            rhs << "texture2D(" << print_name(buffername) << ", vec2("
+                << print_expr(op->args[2]) << ", "
+                << print_expr(op->args[3]) << "))."
+                << "rgba"[*ic];
+        }
+
         if (op->type.is_uint()) {
             rhs << " * " << print_expr(cast<float>(op->type.max()));
         }
@@ -709,11 +761,10 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
     }
 
     // Output additional builtin functions.
-    stream << R"EOF(
-    float _trunc_f32(float x) {
-      return floor(abs(x)) * sign(x);
-    }
-    )EOF";
+    stream <<
+        "float _trunc_f32(float x) {\n"
+        "  return floor(abs(x)) * sign(x);\n"
+        "}\n";
 
     stream << "void main() {\n";
     indent += 2;
@@ -897,7 +948,11 @@ void CodeGen_GLSL::test() {
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
-                            {string("buf"), 0, 0, 0},
+                            {string("buf"),
+                             0,
+                             Broadcast::make(0, 4),
+                             Broadcast::make(0, 4),
+                             Ramp::make(0, 1, 4)},
                             Call::Intrinsic);
     check(load4, "int $ = int(0);\n"
                  "vec4 $ = texture2D($buf, vec2($, $));\n");

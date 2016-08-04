@@ -3,8 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <vector>
-
-#include "halide_image.h"
+#include <cassert>
 
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.
 
