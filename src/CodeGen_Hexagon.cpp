@@ -1312,10 +1312,11 @@ void CodeGen_Hexagon::visit(const Div *op) {
 }
 
 void CodeGen_Hexagon::visit(const Cast *op) {
-    if (op->value.type().bits() == 1 && op->type.bits() > 1) {
-        // If left to LLVM, this maps true to one. However,
-        // eliminate_bool_vectors assumes that it maps to negative
-        // one. This will map true to negative one instead.
+    if (op->type.is_vector() && op->value.type().bits() == 1 && op->type.bits() > 1) {
+        // If left to LLVM, this maps true to a value that has each
+        // byte of the value set to 1. However, eliminate_bool_vectors
+        // assumes that it maps to negative one. This will map true to
+        // negative one instead.
         value = call_intrin(op->type,
                             "halide.hexagon.predicate_to_mask" + type_suffix(op->type, false),
                             {op->value});
