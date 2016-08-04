@@ -155,7 +155,7 @@ struct Dim {
 
 struct Bound {
     std::string var;
-    Expr min, extent;
+    Expr min, extent, modulus, remainder;
 };
 
 struct ScheduleContents;
@@ -243,8 +243,9 @@ public:
     std::vector<StorageDim> &storage_dims();
     // @}
 
-    /** You may explicitly bound some of the dimensions of a
-     * function. See \ref Func::bound */
+    /** You may explicitly bound some of the dimensions of a function,
+     * or constrain them to lie on multiples of a given factor. See
+     * \ref Func::bound and \ref Func::align_bounds */
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
