@@ -226,7 +226,7 @@ public:
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
         uint8_t *ptr;
-        if (Allocate) {
+        if (Allocate != nullptr) {
             ptr = (uint8_t *)Allocate(size + alignment - 1);
             alloc.reset(ptr, Deallocate);
         } else {
