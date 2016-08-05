@@ -54,8 +54,21 @@ function(halide_add_generator_dependency)
 
   # Parse arguments
   set(options )
-  set(oneValueArgs TARGET GENERATOR_TARGET TARGET_SUFFIX GENERATOR_NAME GENERATED_FUNCTION GENERATED_FUNCTION_NAMESPACE OUTPUT_LIB_VAR OUTPUT_TARGET_VAR)
+  set(oneValueArgs
+      TARGET
+      GENERATOR_TARGET
+      TARGET_SUFFIX
+      GENERATOR_NAME
+      GENERATOR_POSTPROCESS
+      GENERATOR_POSTPROCESS_COMMAND
+      GENERATED_FUNCTION
+      GENERATED_FUNCTION_NAMESPACE
+      OUTPUT_LIB_VAR
+      OUTPUT_SHARED_LIB_VAR
+      OUTPUT_TARGET_VAR)
+  
   set(multiValueArgs GENERATOR_ARGS)
+  
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN} )
 
   set(unique_generator_target "${args_GENERATOR_NAME}${args_TARGET_SUFFIX}")
@@ -66,7 +79,20 @@ function(halide_add_generator_dependency)
 
   # Determine the name of the output files
   set(FILTER_LIB "${args_GENERATED_FUNCTION}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+  set(FILTER_DYN "${args_GENERATED_FUNCTION}${CMAKE_SHARED_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${args_GENERATED_FUNCTION}.h")
+
+  if(NOT ${args_GENERATOR_POSTPROCESS})
+    set(generator_postprocess FALSE)
+  else()
+    set(generator_postprocess TRUE)
+  endif()
+
+  if(NOT ${args_GENERATOR_POSTPROCESS_COMMAND})
+    set(generator_postprocess_command "${CMAKE_CXX_COMPILER} -shared -o ${FILTER_DYN} ${FILTER_LIB} -L.")
+  else()
+    set(generator_postprocess_command "${args_GENERATOR_POSTPROCESS_COMMAND}")
+  endif()
 
   set(generator_exec_args 
       "-g" "${args_GENERATOR_NAME}" 
@@ -91,27 +117,61 @@ function(halide_add_generator_dependency)
     OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
     DEPENDS "${args_GENERATOR_TARGET}"
     COMMAND "${generator_exec}" ${generator_exec_args}
-    WORKING_DIRECTORY "${SCRATCH_DIR}"
-  )
+    WORKING_DIRECTORY "${SCRATCH_DIR}")
 
   # Use a custom target to force it to run the generator before the
   # object file for the runner. The target name will start with the prefix
   #  "exec_generator_"
-  set(exec_generator_target "exec_generator_${unique_generator_target}_${args_GENERATED_FUNCTION}")
+  set(exec_generator_target
+      "exec_generator_${unique_generator_target}_${args_GENERATED_FUNCTION}")
   add_custom_target(${exec_generator_target}
-                    DEPENDS "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
-                    )
+                    DEPENDS "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}")
 
   # Place the target in a special folder in IDEs
   set_target_properties(${exec_generator_target} PROPERTIES
-                        FOLDER "generator"
-                        )
+                        FOLDER "generator")
 
+  # Set the output vars
+  if (NOT ${args_OUTPUT_LIB_VAR} STREQUAL "")
+    set(${args_OUTPUT_LIB_VAR} "${SCRATCH_DIR}/${FILTER_LIB}" PARENT_SCOPE)
+  endif()
+
+  if (NOT ${args_OUTPUT_TARGET_VAR} STREQUAL "")
+    set(${args_OUTPUT_TARGET_VAR} ${exec_generator_target} PARENT_SCOPE)
+  endif()
+
+  # Post-process library, if called for
+  if(${generator_postprocess})
+    add_custom_command(
+      OUTPUT "${SCRATCH_DIR}/${FILTER_DYN}"
+      DEPENDS "${args_GENERATOR_TARGET}"
+      COMMAND "${generator_postprocess_command}"
+      WORKING_DIRECTORY "${SCRATCH_DIR}")
+
+      set(exec_generator_target_postprocess
+          "exec_generator_${unique_generator_target}_${args_GENERATED_FUNCTION}_postprocess")
+
+      add_custom_target(${exec_generator_target_postprocess}
+                        DEPENDS "${SCRATCH_DIR}/${FILTER_DYN}")
+      set_target_properties(${exec_generator_target_postprocess} PROPERTIES
+                            FOLDER "generator")
+      add_dependencies(${exec_generator_target_postprocess}
+                       ${exec_generator_target})
+
+      if (NOT ${args_OUTPUT_SHARED_LIB_VAR} STREQUAL "")
+        set(${args_OUTPUT_SHARED_LIB_VAR} "${SCRATCH_DIR}/${FILTER_DYN}" PARENT_SCOPE)
+      endif()
+  endif()
+  
   # Associate the generator invocation target with the main app target
   if (TARGET "${args_TARGET}")
 
     # Make the generator invocation target run before the app target is built
-    add_dependencies("${args_TARGET}" ${exec_generator_target})
+    if(${generator_postprocess})
+      add_dependencies("${args_TARGET}" ${exec_generator_target_postprocess})
+    else()
+      add_dependencies("${args_TARGET}" ${exec_generator_target})
+    endif()
 
     # Check if it is safe to call target_link_libraries on the target
     get_target_property(target_type "${args_TARGET}" TYPE)
@@ -124,15 +184,6 @@ function(halide_add_generator_dependency)
       target_include_directories("${args_TARGET}" PRIVATE "${SCRATCH_DIR}")
     endif()
 
-  endif()
-
-  # Set the output vars
-  if (NOT ${args_OUTPUT_LIB_VAR} STREQUAL "")
-    set(${args_OUTPUT_LIB_VAR} "${SCRATCH_DIR}/${FILTER_LIB}" PARENT_SCOPE)
-  endif()
-
-  if (NOT ${args_OUTPUT_TARGET_VAR} STREQUAL "")
-    set(${args_OUTPUT_TARGET_VAR} ${exec_generator_target} PARENT_SCOPE)
   endif()
 
 endfunction(halide_add_generator_dependency)
