@@ -726,6 +726,7 @@ class RenormalizeGPULoops : public IRMutator {
         if (op->device_api == DeviceAPI::GLSL) {
             // The partitioner did not enter GLSL loops
             stmt = op;
+            return;
         }
         
         if (ends_with(op->name, Var::gpu_threads().name())) {
