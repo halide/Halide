@@ -82,8 +82,8 @@ void verify_dimension_sizes() {
     compare_vectors(dimension_sizes(a4), v4);
 }
 
-template<typename T>
-void compare_extents(Image<T> const &img, int reference, int dimension) {
+template<typename Image>
+void compare_extents(const Image &img, int reference, int dimension) {
     if (img.dim(dimension).extent() == reference)
         return;
     cout << "Extent of dimension " << dimension << " of " << img.dimensions()
