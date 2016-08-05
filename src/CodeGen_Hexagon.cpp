@@ -1369,13 +1369,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
         } else if (op->is_intrinsic(Call::bool_to_mask)) {
             internal_assert(op->args.size() == 1);
             if (op->args[0].type().is_vector()) {
-                // The argument is already a mask of the right width. Just
-                // sign-extend to the expected type.
+                // The argument is already a mask of the right width.
                 op->args[0].accept(this);
             } else {
                 // The argument is a scalar bool. Converting it to
                 // all-ones or all-zeros is sufficient for HVX masks
-                // (mux just looks at the LSB).
+                // (mux just looks at the LSB of each byte).
                 Expr equiv = -Cast::make(op->type, op->args[0]);
                 equiv.accept(this);
             }
@@ -1424,8 +1423,14 @@ void CodeGen_Hexagon::visit(const Min *op) {
 void CodeGen_Hexagon::visit(const Select *op) {
     internal_assert(op->condition.type().is_scalar());
 
-    // Implement scalar conditions with if-then-else.
-    codegen(Call::make(op->type, Call::if_then_else, {op->condition, op->true_value, op->false_value}, Call::Intrinsic));
+    if (op->type.is_vector()) {
+        // Implement scalar conditions on vector values with if-then-else.
+        codegen(Call::make(op->type, Call::if_then_else,
+                           {op->condition, op->true_value, op->false_value},
+                           Call::Intrinsic));
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_Hexagon::visit(const GT *op) {
