@@ -1425,9 +1425,9 @@ void CodeGen_Hexagon::visit(const Select *op) {
 
     if (op->type.is_vector()) {
         // Implement scalar conditions on vector values with if-then-else.
-        codegen(Call::make(op->type, Call::if_then_else,
-                           {op->condition, op->true_value, op->false_value},
-                           Call::Intrinsic));
+        value = codegen(Call::make(op->type, Call::if_then_else,
+                                   {op->condition, op->true_value, op->false_value},
+                                   Call::Intrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }
