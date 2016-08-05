@@ -399,19 +399,47 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         // GLSL 1.0 Section 5.5 supports subscript based vector indexing
         std::string id = print_assignment(e.type(), print_expr(e));
         if (e.type() != Int(32)) {
-          id = "int(" + id + ")";
+            id = "int(" + id + ")";
         }
         return std::string("[" + id + "]");
     }
 }
 
-void CodeGen_GLSL::visit(const Load *) {
-    internal_error << "GLSL: unexpected Load node encountered.\n";
+void CodeGen_GLSL::visit(const Load *op) {
+    string idx = print_expr(op->index);
+    if (op->type.is_scalar()) {
+        print_assignment(op->type, op->name + "[" + idx + "]");
+    } else {
+        ostringstream rhs;
+        rhs << print_type(op->type) << "(";
+        for (int i = 0; i < op->type.lanes(); i++) {
+            char c = "rgba"[i];
+            if (i > 0) {
+                rhs << ", ";
+            }
+            rhs << op->name << "[" << idx << "." << c << "]";
+        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
+    }
 }
 
-void CodeGen_GLSL::visit(const Store *) {
-    internal_error << "GLSL: unexpected Store node encountered.\n";
+void CodeGen_GLSL::visit(const Store *op) {
+    string val = print_expr(op->value);
+    string idx = print_expr(op->index);
+    if (op->value.type().is_scalar()) {
+        do_indent();
+        stream << op->name << "[" << idx << "] = " << val << ";\n";
+    } else {
+        internal_assert(op->value.type().lanes() <= 4);
+        for (int i = 0; i < op->value.type().lanes(); i++) {
+            char l = "rgba"[i];
+            do_indent();
+            stream << op->name << "[" << idx << "." << l << "] = " << val << "." << l << ";\n";
+        }
+    }
 }
+
 
 void CodeGen_GLSL::visit(const Evaluate *op) {
     print_expr(op->value);
@@ -633,6 +661,17 @@ void CodeGen_GLSL::visit(const Call *op) {
         return;
     }
     print_assignment(op->type, rhs.str());
+}
+
+void CodeGen_GLSL::visit(const Allocate *op) {
+    int32_t size = op->constant_allocation_size();
+    user_assert(size) << "Allocations inside GLSL kernels must be constant-sized\n";
+    do_indent();
+    stream << print_type(op->type) << " " << op->name << "[" << size << "];\n";
+    op->body.accept(this);
+}
+
+void CodeGen_GLSL::visit(const Free *op) {
 }
 
 void CodeGen_GLSL::visit(const AssertStmt *) {

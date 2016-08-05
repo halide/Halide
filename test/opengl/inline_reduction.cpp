@@ -14,10 +14,23 @@ int main() {
     Func f;
     Var x, y, c;
     RDom r(0, 10);
-    f(x, y, c) = sum(r);
+    f(x, y, c) = sum(cast<float>(r));
     f.bound(c, 0, 3).glsl(x, y, c);
 
-    f.realize(100, 100, 3);
+    Image<float> result = f.realize(100, 100, 3);
+
+    for (int c = 0; c < result.channels(); c++) {
+        for (int y = 0; y < result.height(); y++) {
+            for (int x = 0; x < result.width(); x++) {
+                float correct = 45;
+                if (result(x, y, c) != correct) {
+                    printf("result(%d, %d, %d) = %f instead of %f\n",
+                           x, y, c, result(x, y, c), correct);
+                    return -1;
+                }
+            }
+        }
+    }
 
     printf("Success!\n");
 

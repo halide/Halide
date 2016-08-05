@@ -95,7 +95,9 @@ protected:
 
     void visit(const Load *);
     void visit(const Store *);
-
+    void visit(const Allocate *);
+    void visit(const Free *);    
+    
     void visit(const Call *);
     void visit(const AssertStmt *);
     void visit(const Ramp *op);
