@@ -798,11 +798,11 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type().is_handle()) {
-        // Handle is always emitted into metadata "undefined", regardless of
-        // what sort of Expr is provided.
+    if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -879,14 +879,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
+        Expr def = args[arg].def;
+        Expr min = args[arg].min;
+        Expr max = args[arg].max;
+        if (args[arg].type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            def = min = max = Expr();
+        }
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(args[arg].def),
-            embed_constant_expr(args[arg].min),
-            embed_constant_expr(args[arg].max)
+            embed_constant_expr(def),
+            embed_constant_expr(min),
+            embed_constant_expr(max)
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
