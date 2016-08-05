@@ -157,8 +157,7 @@ Expr Parameter::get_scalar_expr() const {
         case 32: return Expr(get_scalar<uint32_t>());
         case 64: return Expr(get_scalar<uint64_t>());
         }
-    }
-    else if (t.is_handle()) {
+    } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
         case 64: return Expr(get_scalar<uint64_t>());
