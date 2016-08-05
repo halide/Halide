@@ -281,10 +281,10 @@ public:
      * for a Func with multiple outputs. */
     EXPORT Stage operator=(const Tuple &);
 
-    /** Define this function as a sum reduction over the given
-     * expression. The expression should refer to some RDom to sum
-     * over. If the function does not already have a pure definition,
-     * this sets it to zero.
+    /** Define a stage that adds the given expression to this Func. If the
+     * expression refers to some RDom, this performs a sum reduction of the
+     * expression over the domain. If the function does not already have a
+     * pure definition, this sets it to zero.
      */
     // @{
     EXPORT Stage operator+=(Expr);
@@ -292,10 +292,10 @@ public:
     EXPORT Stage operator+=(const FuncRef &);
     // @}
 
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
+    /** Define a stage that adds the negative of the given expression to this
+     * Func. If the expression refers to some RDom, this performs a sum reduction
+     * of the negative of the expression over the domain. If the function does
+     * not already have a pure definition, this sets it to zero.
      */
     // @{
     EXPORT Stage operator-=(Expr);
@@ -303,10 +303,10 @@ public:
     EXPORT Stage operator-=(const FuncRef &);
     // @}
 
-    /** Define this function as a product reduction. The expression
-     * should refer to some RDom to take the product over. If the
-     * function does not already have a pure definition, this sets it
-     * to 1.
+    /** Define a stage that multiplies the given expression to this Func. If the
+     * expression refers to some RDom, this performs a product reduction of the
+     * expression over the domain. If the function does not already have a pure
+     * definition, this sets it to 1.
      */
     // @{
     EXPORT Stage operator*=(Expr);
@@ -314,10 +314,10 @@ public:
     EXPORT Stage operator*=(const FuncRef &);
     // @}
 
-    /** Define this function as the product reduction over the inverse
-     * of the expression. The expression should refer to some RDom to
-     * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1.
+    /** Define a stage that multiplies the inverse of the given expression to
+     * this Func. If the expression refers to some RDom, this performs a product
+     * reduction of the inverse of the expression over the domain. If the
+     * function does not already have a pure definition, this sets it to 1.
      */
     // @{
     EXPORT Stage operator/=(Expr);
@@ -364,35 +364,41 @@ class FuncTupleElementRef {
 public:
     FuncTupleElementRef(const FuncRef &ref, const std::vector<Expr>& args, int idx);
 
-    /** Use this as the left-hand-side of an update definition of a Func with
-     * multiple outputs indexed by 'idx' (see \ref RDom). The function must
+    /** Use this as the left-hand-side of an update definition of Tuple
+     * component 'idx' of a Func (see \ref RDom). The function must
      * already have an initial definition.
      */
     EXPORT Stage operator=(Expr e);
 
-    /** Define this function with multiple outputs indexed by 'idx' as a sum
-     * reduction over the given expression. The expression should refer to some
-     * RDom to sum over. The function must already have an initial definition.
+
+    /** Define a stage that adds the given expression to Tuple component 'idx'
+     * of this Func. The other Tuple components are unchanged. If the expression
+     * refers to some RDom, this performs a sum reduction of the expression over
+     * the domain. The function must already have an initial definition.
      */
     EXPORT Stage operator+=(Expr e);
 
-    /** Define this function with multiple outputs indexed by 'idx' as a sum
-     * reduction over the negative of the given expression. The expression
-     * should refer to some RDom to sum over. The function must already have
-     * an initial definition.
+    /** Define a stage that adds the negative of the given expression to Tuple
+     * component 'idx' of this Func. The other Tuple components are unchanged.
+     * If the expression refers to some RDom, this performs a sum reduction of
+     * the negative of the expression over the domain. The function must already
+     * have an initial definition.
      */
     EXPORT Stage operator-=(Expr e);
 
-    /** Define this function with multiple outputs indexed by 'idx' as a product
-     * reduction. The expression should refer to some RDom to take the product
-     * over. The function must already have an initial definition.
+    /** Define a stage that multiplies the given expression to Tuple component
+     * 'idx' of this Func. The other Tuple components are unchanged. If the
+     * expression refers to some RDom, this performs a product reduction of
+     * the expression over the domain. The function must already have an
+     * initial definition.
      */
     EXPORT Stage operator*=(Expr e);
 
-    /** Define this function with multiple outputs indexed by 'idx' as the
-     * product reduction over the inverse of the expression. The expression
-     * should refer to some RDom to take the product over. The function must
-     * already have an initial definition.
+    /** Define a stage that multiplies the inverse of the given expression to
+     * Tuple component 'idx' of this Func. The other Tuple components are
+     * unchanged. If the expression refers to some RDom, this performs a product
+     * reduction of the inverse of the expression over the domain. The function
+     * must already have an initial definition.
      */
     EXPORT Stage operator/=(Expr e);
 
@@ -401,8 +407,8 @@ public:
      */
     EXPORT Stage operator=(const FuncRef &e);
 
-    /** Use this as a call to the function with multiple outputs at
-     * index 'idx', and not the left-hand-side of a definition. */
+    /** Use this as a call to Tuple component 'idx' of a Func, and not the
+     * left-hand-side of a definition. */
     EXPORT operator Expr() const;
 
     /** What function is this calling? */
