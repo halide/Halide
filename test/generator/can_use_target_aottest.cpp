@@ -9,6 +9,7 @@
 
 #if TESTING_ON_X86
 #if defined(_MSC_VER)
+#include <intrin.h>
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
