@@ -324,9 +324,9 @@ private:
 
         for (size_t i = 1; i < args_predicates.size(); i++) {
             user_assert(equal(args_predicates[i-1], args_predicates[i]))
-                << "Non-undef args in a Tuple should have the same predicates\n  "
-                << "predicate " << i-1 << ": " << args_predicates[i-1] << " and "
-                << "predicate " << i << ": " << args_predicates[i] << "\n";
+                << "Conditionally-undef args in a Tuple should have the same conditions\n"
+                << "  Condition " << i-1 << ": " << args_predicates[i-1] << "\n"
+                << "  Condition " << i << ": " << args_predicates[i] << "\n";
         }
 
         bool all_values_undefined = true;
@@ -351,9 +351,9 @@ private:
 
         for (size_t i = 1; i < values_predicates.size(); i++) {
             user_assert(equal(values_predicates[i-1], values_predicates[i]))
-                << "Non-undef values in a Tuple should have the same predicates\n  "
-                << "predicate " << i-1 << ": " << values_predicates[i-1] << " and "
-                << "predicate " << i << ": " << values_predicates[i] << "\n";
+                << "Conditionally-undef values in a Tuple should have the same conditions\n"
+                << "  Condition " << i-1 << ": " << values_predicates[i-1] << "\n"
+                << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
         if (predicate.defined()) {
