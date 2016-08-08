@@ -1010,6 +1010,12 @@ void check_neon_all() {
         check(arm32 ? "vqneg.s32" : "sqneg", 2*w, -max(i32_1, -max_i32));
 
         // VQRDMULH I       -       Saturating Rounding Doubling Multiply Returning High Half
+        // Note: division in Halide always rounds down (not towards
+        // zero). Otherwise these patterns would be more complicated.
+        check(arm32 ? "vqrdmulh.s16" : "sqrdmulh", 4*w, i16_sat((i32(i16_1) * i32(i16_2) + (1<<14)) / (1 << 15)));
+        check(arm32 ? "vqrdmulh.s32" : "sqrdmulh", 2*w, i32_sat((i64(i32_1) * i64(i32_2) + (1<<30)) /
+                                                                (Expr(int64_t(1)) << 31)));
+
         // VQRSHL   I       -       Saturating Rounding Shift Left
         // VQRSHRN  I       -       Saturating Rounding Shift Right Narrow
         // VQRSHRUN I       -       Saturating Rounding Shift Right Unsigned Narrow
