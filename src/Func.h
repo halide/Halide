@@ -1523,6 +1523,10 @@ public:
      * to the version of compute_at that takes a Var. */
     EXPORT Func &compute_at(Func f, RVar var);
 
+    /** Schedule a function to be computed within the iteration over
+     * a given LoopLevel. */
+    EXPORT Func &compute_at(LoopLevel loop_level);
+
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :
      *
@@ -1666,6 +1670,11 @@ public:
      * schedules storage within the loop over a dimension of a
      * reduction domain */
     EXPORT Func &store_at(Func f, RVar var);
+
+
+    /** Equivalent to the version of store_at that takes a Var, but
+     * schedules storage at a given LoopLevel. */
+    EXPORT Func &store_at(LoopLevel loop_level);
 
     /** Equivalent to \ref Func::store_at, but schedules storage
      * outside the outermost loop. */

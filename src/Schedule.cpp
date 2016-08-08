@@ -1,8 +1,15 @@
+#include "Func.h"
 #include "IR.h"
 #include "IRMutator.h"
 #include "Schedule.h"
+#include "Var.h"
 
 namespace Halide {
+
+LoopLevel::LoopLevel(Func f, Var v) : func_(f.name()), var_(v.name()) {}
+
+LoopLevel::LoopLevel(Func f, RVar v) : func_(f.name()), var_(v.name()) {}
+
 namespace Internal {
 
 typedef std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
@@ -243,5 +250,6 @@ void Schedule::mutate(IRMutator *mutator) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
+

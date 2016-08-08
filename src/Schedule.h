@@ -11,6 +11,10 @@
 
 namespace Halide {
 
+class Func;
+class RVar;
+class Var;
+
 /** Different ways to handle a tail case in a split when the
  * factor does not provably divide the extent. */
 enum class TailStrategy {
@@ -56,30 +60,35 @@ enum class TailStrategy {
     Auto
 };
 
-namespace Internal {
-
-class IRMutator;
-struct ReductionVariable;
-
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
  * dimensions. We schedule the inputs to that function by
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
-struct LoopLevel {
-    std::string func, var;
-
+class LoopLevel {
+    std::string func_, var_;
+public:
     /** Identify the loop nest corresponding to some dimension of some function */
-    LoopLevel(std::string f, std::string v) : func(f), var(v) {}
+    // @{
+    LoopLevel(std::string f, std::string v) : func_(f), var_(v) {}
+    EXPORT LoopLevel(Func f, Var v);
+    EXPORT LoopLevel(Func f, RVar v);
+    // @}
 
     /** Construct an empty LoopLevel, which is interpreted as
      * 'inline'. This is a special LoopLevel value that implies
      * that a function should be inlined away */
     LoopLevel() {}
 
+    /** Return the name of the Func. (May be empty if root or inline.) */
+    std::string func() const {return func_;}
+
+    /** Return the name of the Var or RVar. (May be empty if root or inline.). */
+    std::string var() const {return var_;}
+
     /** Test if a loop level corresponds to inlining the function */
-    bool is_inline() const {return var.empty();}
+    bool is_inline() const {return var_.empty();}
 
     /** root is a special LoopLevel value which represents the
      * location outside of all for loops */
@@ -88,28 +97,33 @@ struct LoopLevel {
     }
     /** Test if a loop level is 'root', which describes the site
      * outside of all for loops */
-    bool is_root() const {return var == "__root";}
+    bool is_root() const {return var_ == "__root";}
 
     /** Compare this loop level against the variable name of a for
      * loop, to see if this loop level refers to the site
      * immediately inside this loop. */
     bool match(const std::string &loop) const {
-        return starts_with(loop, func + ".") && ends_with(loop, "." + var);
+        return Internal::starts_with(loop, func_ + ".") && 
+               Internal::ends_with(loop, "." + var_);
     }
 
     bool match(const LoopLevel &other) const {
-        return (func == other.func &&
-                (var == other.var ||
-                 ends_with(var, "." + other.var) ||
-                 ends_with(other.var, "." + var)));
+        return (func_ == other.func_ &&
+                (var_ == other.var_ ||
+                 Internal::ends_with(var_, "." + other.var_) ||
+                 Internal::ends_with(other.var_, "." + var_)));
     }
 
     /** Check if two loop levels are exactly the same. */
     bool operator==(const LoopLevel &other) const {
-        return func == other.func && var == other.var;
+        return func_ == other.func_ && var_ == other.var_;
     }
-
 };
+
+namespace Internal {
+
+class IRMutator;
+struct ReductionVariable;
 
 struct Split {
     std::string old_var, outer, inner;
