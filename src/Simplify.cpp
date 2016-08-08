@@ -96,17 +96,16 @@ Expr signed_integer_overflow_error(Type t) {
     return Call::make(t, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
-// Make a poison value used when a non-finite value is detected during constant folding.
-Expr non_finite_expression_error(Type t) {
+// Make a poison value used when an indeterminate value is detected during constant folding.
+Expr indeterminate_expression_error(Type t) {
     // Mark each call with an atomic counter, so that the errors can't
     // cancel against each other.
     static std::atomic<int> counter;
-    return Call::make(t, Call::non_finite_expression, {counter++}, Call::Intrinsic);
+    return Call::make(t, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
 }
 
-bool is_error_call(const Call *call) {
-    return call && (call->is_intrinsic(Call::signed_integer_overflow) ||
-                    call->is_intrinsic(Call::non_finite_expression));
+bool is_indeterminate_expression(const Call *call) {
+    return call && call->is_intrinsic(Call::indeterminate_expression);
 }
 
 }
@@ -538,9 +537,9 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
-        if (is_error_call(call_a)) {
+        if (is_indeterminate_expression(call_a)) {
             expr = a;
-        } else if (is_error_call(call_b)) {
+        } else if (is_indeterminate_expression(call_b)) {
             expr = b;
         } else if (const_int(a, &ia) &&
             const_int(b, &ib)) {
@@ -565,6 +564,12 @@ private:
         } else if (equal(a, b)) {
             // x + x = x*2
             expr = mutate(a * make_const(op->type, 2));
+        } else if (call_a &&
+                   call_a->is_intrinsic(Call::signed_integer_overflow)) {
+            expr = a;
+        } else if (call_b &&
+                   call_b->is_intrinsic(Call::signed_integer_overflow)) {
+            expr = b;
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -874,9 +879,9 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
-        if (is_error_call(call_a)) {
+        if (is_indeterminate_expression(call_a)) {
             expr = a;
-        } else if (is_error_call(call_b)) {
+        } else if (is_indeterminate_expression(call_b)) {
             expr = b;
         } else if (is_zero(b)) {
             expr = a;
@@ -897,6 +902,12 @@ private:
             expr = mutate(a + IntImm::make(a.type(), (-ib)));
         } else if (const_float(b, &fb)) {
             expr = mutate(a + FloatImm::make(a.type(), (-fb)));
+        } else if (call_a &&
+                   call_a->is_intrinsic(Call::signed_integer_overflow)) {
+            expr = a;
+        } else if (call_b &&
+                   call_b->is_intrinsic(Call::signed_integer_overflow)) {
+            expr = b;
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
@@ -1323,9 +1334,9 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        if (is_error_call(call_a)) {
+        if (is_indeterminate_expression(call_a)) {
             expr = a;
-        } else if (is_error_call(call_b)) {
+        } else if (is_indeterminate_expression(call_b)) {
             expr = b;
         } else if (is_zero(a)) {
             expr = a;
@@ -1346,6 +1357,12 @@ private:
             expr = UIntImm::make(a.type(), ua * ub);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = FloatImm::make(a.type(), fa * fb);
+        } else if (call_a &&
+                   call_a->is_intrinsic(Call::signed_integer_overflow)) {
+            expr = a;
+        } else if (call_b &&
+                   call_b->is_intrinsic(Call::signed_integer_overflow)) {
+            expr = b;
         } else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
@@ -1453,24 +1470,24 @@ private:
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
-        if (is_error_call(call_a)) { 
+        if (is_indeterminate_expression(call_a)) { 
             expr = a;
-        } else if (is_error_call(call_b)) {
+        } else if (is_indeterminate_expression(call_b)) {
             expr = b;
         } else if (is_zero(b)) {
             // Divison-by-constant-zero is always an error, even
             // if it would produce a value representable by the type
             // (eg Inf in a float type).
-            expr = non_finite_expression_error(op->type);
+            expr = indeterminate_expression_error(op->type);
         } else if (is_zero(a)) {
             if (const_float(b, &fb) && !std::isfinite(fb)) {
-                expr = non_finite_expression_error(op->type);
+                expr = indeterminate_expression_error(op->type);
             } else {
                 expr = a;
             }
         } else if (is_one(b)) {
             if (const_float(a, &fa) && !std::isfinite(fa)) {
-                expr = non_finite_expression_error(op->type);
+                expr = indeterminate_expression_error(op->type);
             } else {
                 expr = a;
             }
@@ -1478,7 +1495,7 @@ private:
             if (is_zero(a) ||
                 (const_float(a, &fa) && !std::isfinite(fa)) ||
                 (const_float(b, &fb) && !std::isfinite(fb))) {
-                expr = non_finite_expression_error(op->type);
+                expr = indeterminate_expression_error(op->type);
             } else {
                 expr = make_one(op->type);
             }
@@ -1491,7 +1508,7 @@ private:
         } else if (const_float(a, &fa) &&
                    const_float(b, &fb)) {
             if (!std::isfinite(fa) || !std::isfinite(fb)) {
-                expr = non_finite_expression_error(op->type);
+                expr = indeterminate_expression_error(op->type);
             } else {
                 expr = FloatImm::make(op->type, fa / fb);
             }
@@ -5413,7 +5430,7 @@ void check_overflow() {
 void check_ind_expr(Expr e, bool expect_indeterminate) {
     Expr e2 = simplify(e);
     const Call *call = e2.as<Call>();
-    bool is_indeterminate = call && call->is_intrinsic(Call::non_finite_expression);
+    bool is_indeterminate = call && call->is_intrinsic(Call::indeterminate_expression);
     if (expect_indeterminate && !is_indeterminate)
         internal_error << "Expression should be indeterminate: " << e << " but saw: " << e2 << "\n";
     else if (!expect_indeterminate && is_indeterminate)
