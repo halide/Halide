@@ -94,6 +94,8 @@ private:
                 map<string, Box> r;
                 r = boxes_required(op, scope);
 
+                scope.pop(op->name);
+
                 // Add prefetch to body on inputs
                 // Todo: For each input...
                 Expr tmp = Expr(0);
