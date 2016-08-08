@@ -10,6 +10,7 @@ void OpenGLHelpers::setup(float dpi_scale)
 {
     const int scaled_font_size = font_size * dpi_scale;
     dtx_use_font(dtx_open_font(DTX_FONT, scaled_font_size), scaled_font_size);
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 GLuint OpenGLHelpers::create_texture(int width, int height, const uint8_t *data)
