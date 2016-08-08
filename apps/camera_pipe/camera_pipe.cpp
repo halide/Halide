@@ -289,8 +289,8 @@ Func process(Func raw, Type result_type,
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
-        .prefetch(y, Expr(0x1020002000002))
-        .prefetch(x, Expr(0x1020002000003))
+        .prefetch(y, 2)
+        .prefetch(x, 3)
         .fold_storage(y, 8)
         .vectorize(x, vec);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)

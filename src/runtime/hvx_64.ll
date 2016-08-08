@@ -265,13 +265,13 @@ define weak_odr <64 x i8> @halide.hexagon.shr.vb.vb(<64 x i8> %a, <64 x i8> %b) 
   ret <64 x i8> %r
 }
 
-define weak_odr void @halide.hexagon.l2fetch.Rt(i32 %addr, i32 %param) nounwind uwtable readnone alwaysinline {
-  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %addr, i32 %param)
+define weak_odr void @halide.hexagon.l2fetch.Rt(i32 %addr, i32 %desc) nounwind uwtable readnone alwaysinline {
+  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %addr, i32 %desc)
   ret void
 }
 
-define weak_odr void @halide.hexagon.l2fetch.Rtt(i32 %addr, i64 %param) nounwind uwtable readnone alwaysinline {
-  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %addr, i64 %param)
+define weak_odr void @halide.hexagon.l2fetch.Rtt(i32 %addr, i64 %desc) nounwind uwtable readnone alwaysinline {
+  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i32 %addr, i64 %desc)
   ret void
 }
 

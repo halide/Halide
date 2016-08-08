@@ -1431,11 +1431,11 @@ Stage &Stage::hexagon(VarOrRVar x) {
     return *this;
 }
 
-Stage &Stage::prefetch(VarOrRVar var, Expr param) {
+Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
     std::cerr << "Stage::prefetch " << var.name() 
-                             << " " << param << "\n";
+                             << " " << offset << "\n";
 
-    Prefetch prefetch = {var.name(), param};
+    Prefetch prefetch = {var.name(), offset};
     definition.schedule().prefetches().push_back(prefetch);
 
     return *this;
@@ -1801,9 +1801,9 @@ Func &Func::hexagon(VarOrRVar x) {
     return *this;
 }
 
-Func &Func::prefetch(VarOrRVar var, Expr param) {
+Func &Func::prefetch(VarOrRVar var, Expr offset) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, param);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, offset);
     return *this;
 }
 

@@ -54,8 +54,8 @@ struct ScheduleContents {
             }
         }
         for (Prefetch &p : prefetches) {
-            if (p.param.defined()) {
-                p.param = mutator->mutate(p.param);
+            if (p.offset.defined()) {
+                p.offset = mutator->mutate(p.offset);
             }
         }
     }
@@ -240,10 +240,10 @@ void Schedule::accept(IRVisitor *visitor) const {
     }
     for (const Prefetch &p : prefetches()) {
         std::cerr << "Schedule::accept prefetches\n";
-        if (p.param.defined()) {
+        if (p.offset.defined()) {
             std::cerr << "Prefetch: " << p.var
-                               << " " << p.param << "\n";
-            p.param.accept(visitor);
+                               << " " << p.offset << "\n";
+            p.offset.accept(visitor);
         }
     }
 }
