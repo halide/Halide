@@ -479,6 +479,10 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            expr = hoist_slice_vector<Add>(Add::make(a, b));
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -1264,7 +1268,11 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (broadcast_a && broadcast_b) {
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            expr = hoist_slice_vector<Mul>(Mul::make(a, b));
+        }else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -3636,18 +3644,21 @@ private:
         const int64_t *start_lane_a = as_const_int(call_a->args[1]);
         const int64_t *start_lane_b = as_const_int(call_b->args[1]);
         if (*start_lane_a != *start_lane_b) {
+            debug(4) << " ...unable to hoist - differing start lanes\n";
             return e;
         }
 
         const int64_t *stride_a = as_const_int(call_a->args[2]);
         const int64_t *stride_b = as_const_int(call_b->args[2]);
         if (*stride_a != 1 || *stride_b != 1) {
+            debug(4) << " ...unable to hoist - differing strides\n";
             return e;
         }
 
         const Call *concat_a = call_a->args[0].as<Call>();
         const Call *concat_b = call_b->args[0].as<Call>();
         if (!concat_a || !concat_b) {
+            debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
             return e;
         }
 
@@ -3659,6 +3670,7 @@ private:
 
         for (size_t i = 0; i < slices_a.size(); i++) {
             if (slices_a[i].type() != slices_b[i].type()) {
+                debug(4) << " ...unable to hoist - type mismatch\n";
                 return e;
             }
         }
