@@ -2563,9 +2563,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         codegen(op->args[0]);
         value = codegen(op->args[1]);
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        if (op->type.is_vector()) {
+        Expr cond = op->args[0];
+        if (const Broadcast *b = cond.as<Broadcast>()) {
+            cond = b->value;
+        }
+        if (cond.type().is_vector()) {
             scalarize(op);
-
         } else {
 
             internal_assert(op->args.size() == 3);
@@ -2573,20 +2576,21 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+            builder->CreateCondBr(codegen(cond), true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
-
+            BasicBlock *true_pred = builder->GetInsertBlock();
+            
             builder->SetInsertPoint(false_bb);
             Value *false_value = codegen(op->args[2]);
             builder->CreateBr(after_bb);
+            BasicBlock *false_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(after_bb);
-
             PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-            phi->addIncoming(true_value, true_bb);
-            phi->addIncoming(false_value, false_bb);
+            phi->addIncoming(true_value, true_pred);
+            phi->addIncoming(false_value, false_pred);
 
             value = phi;
         }
