@@ -627,7 +627,7 @@ Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
-Call::ConstString Call::non_finite_expression = "non_finite_expression";
+Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 
 }
 }

@@ -499,7 +499,7 @@ struct Call : public ExprNode<Call> {
         slice_vector,
         call_cached_indirect_function,
         signed_integer_overflow,
-        non_finite_expression;
+        indeterminate_expression;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference
