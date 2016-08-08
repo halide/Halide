@@ -169,9 +169,7 @@ struct StorageDim {
 
 struct Prefetch {
     std::string var;
-    // Todo: replace param with higher level interface
-    // width, height, stride, direction, lookahead
-    Expr param;
+    Expr offset;
 };
 
 class ReductionDomain;

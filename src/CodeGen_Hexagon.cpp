@@ -1357,13 +1357,16 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
 
     if (op->is_intrinsic("prefetch")) {
-        user_warning << "CodeGen_Hexagon: saw prefetch intrinsic";
+        user_warning << "CodeGen_Hexagon: saw prefetch intrinsic\n";
         // Todo: select Rt or Rtt version based on higher level request params
-        string instr = "halide.hexagon.l2fetch.Rtt";
-        Expr addr  = op->args[1];
-        Expr param = op->args[2];
-        value = call_intrin(op->type,
-                            instr, {addr, param});
+        string fetch = "halide.hexagon.l2fetch.Rtt";
+
+        Value *addr = codegen(op->args[1]);
+        Value *desc = codegen(op->args[2]);
+
+        llvm::Function *fn = module->getFunction(fetch);
+        Value *ret = builder->CreateCall(fn, {addr, desc});
+        value = create_bitcast(ret, llvm::Type::getVoidTy(module->getContext()));
         return;
     }
 

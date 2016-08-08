@@ -233,7 +233,7 @@ public:
     EXPORT Stage &allow_race_conditions();
 
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
-    EXPORT Stage &prefetch(VarOrRVar var, Expr param);
+    EXPORT Stage &prefetch(VarOrRVar var, Expr offset);
     // @}
 };
 
@@ -1413,7 +1413,7 @@ public:
     /** Schedule for execution on Hexagon. When a loop is marked with
      * Hexagon, that loop is executed on a Hexagon DSP. */
     EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
-    EXPORT Func &prefetch(VarOrRVar var, Expr param);
+    EXPORT Func &prefetch(VarOrRVar var, Expr offset);
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For

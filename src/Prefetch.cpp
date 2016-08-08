@@ -7,6 +7,7 @@
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Bounds.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -24,13 +25,9 @@ class InjectPrefetch : public IRMutator {
 public:
     InjectPrefetch(const map<string, Function> &e)
         : env(e) { }
-    Scope<int> scope;
 private:
     const map<string, Function> &env;
-#if 0 // not currently using realize
-    Scope<int> realizations;
-    stack<Function> cs;
-#endif
+    Scope<Interval> scope;
 
 private:
     using IRMutator::visit;
@@ -55,13 +52,22 @@ private:
         return iter->second;
     }
 
-    void visit(const For *op) {
-        Stmt body = op->body;
+    void visit(const LetStmt *op) {
+        Interval in = bounds_of_expr_in_scope(op->value, scope);
+        scope.push(op->name, in);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
 
-#if 0 // not currently using realize
-        string func_name = cs.top().name();
-        vector<Prefetch> &prefetches = cs.top().schedule().prefetches();
-#endif
+    void visit(const For *op) {
+        // At this stage of lowering, loop_min and loop_max
+        // conveniently exist in scope.
+        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
+                    Variable::make(Int(32), op->name + ".loop_max"));
+
+        scope.push(op->name, in);
+
+        Stmt body = op->body;
 
         string func_name = tuple_func(op->name);
         string var_name  = tuple_var(op->name);
@@ -77,39 +83,32 @@ private:
         // Todo: Check to see if op->name is in prefetches
         for (const Prefetch &p : prefetches) {
             std::cerr << "Prefetch: " << p.var
-                               << " " << p.param << "\n";
+                               << " " << p.offset << "\n";
             if (p.var == var_name) {
                 std::cerr << " matched on " << var_name << "\n";
+                string fetch_func = "halide.hexagon.l2fetch.Rtt";
+
+                Interval prein(in.min + p.offset, in.max + p.offset);
+                scope.push(op->name, prein);
+
+                map<string, Box> r;
+                r = boxes_required(op, scope);
+
+                // Add prefetch to body on inputs
+                // Todo: For each input...
+                Expr tmp = Expr(0);
+                Stmt prefetch =
+                    Evaluate::make(Call::make(Int(32), fetch_func,
+                                      {tmp, p.offset}, Call::Extern));
+                body = Block::make({prefetch, body});
             }
         }
-#if 0
-        // Add prefetch to body on inputs
-        // Todo: For each input...
-        // Todo: support higher level param interface
-        Stmt prefetch =
-            Evaluate::make(Call::make(Int(32), Call::prefetch,
-                                      {p.var, p.param}, Call::Intrinsic));
-        body = Block::make({prefetch, body});
-#endif
 
         body = mutate(body);
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+
+        scope.pop(op->name);
     }
-
-#if 0 // not currently using realize
-    void visit(const Realize *realize) {
-        realizations.push(realize->name, 1);
-
-        map<string, Function>::const_iterator iter = env.find(realize->name);
-        internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-        cs.push(iter->second);
-
-        Stmt body = mutate(realize->body);
-
-        realizations.pop(realize->name);
-        cs.pop();
-    }
-#endif
 
 };
 
