@@ -15,7 +15,7 @@ In this example we use AOT compilation twice:  Once with `target=host` to produc
 
 The sample filter inverts the RGB channels of the input image.
 
-*This demo is known to work on OS X 10.11 and Ubuntu Linux 16.04. Windows has not yet been tested.*
+*This demo is known to work on OS X 10.11 and Ubuntu Linux 14.04 & 16.04. Windows has not yet been tested.*
 
 ### Instructions:
 
