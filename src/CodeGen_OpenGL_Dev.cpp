@@ -405,6 +405,11 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     }
 }
 
+char CodeGen_GLSL::get_lane_suffix(int i) {
+    internal_assert(i >= 0 && i < 4);
+    return "rgba"[i];
+}
+
 void CodeGen_GLSL::visit(const Load *op) {
     string idx = print_expr(op->index);
     if (op->type.is_scalar()) {
@@ -413,7 +418,7 @@ void CodeGen_GLSL::visit(const Load *op) {
         ostringstream rhs;
         rhs << print_type(op->type) << "(";
         for (int i = 0; i < op->type.lanes(); i++) {
-            char c = "rgba"[i];
+            char c = get_lane_suffix(i);
             if (i > 0) {
                 rhs << ", ";
             }
@@ -433,7 +438,7 @@ void CodeGen_GLSL::visit(const Store *op) {
     } else {
         internal_assert(op->value.type().lanes() <= 4);
         for (int i = 0; i < op->value.type().lanes(); i++) {
-            char l = "rgba"[i];
+            char l = get_lane_suffix(i);
             do_indent();
             stream << op->name << "[" << idx << "." << l << "] = " << val << "." << l << ";\n";
         }
@@ -509,8 +514,8 @@ void CodeGen_GLSL::visit(const Call *op) {
                     Expr l = extract_lane(c, i);
                     const int64_t *ic = as_const_int(l);
                     internal_assert(ic && *ic >= 0 && *ic < 4) << c << "\n";
-                    char c_swizzle = "rgba"[*ic];
-                    char xy_swizzle = "rgba"[i];
+                    char c_swizzle = get_lane_suffix(*ic);
+                    char xy_swizzle = get_lane_suffix(i);
                     rhs << "texture2D(" << print_name(buffername) << ", vec2("
                         << x << "." << xy_swizzle << ", "
                         << y << "." << xy_swizzle << "))." << c_swizzle;
@@ -523,7 +528,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr(op->args[2]) << ", "
                 << print_expr(op->args[3]) << "))."
-                << "rgba"[*ic];
+                << get_lane_suffix(*ic);
         }
 
         if (op->type.is_uint()) {
@@ -577,13 +582,11 @@ void CodeGen_GLSL::visit(const Call *op) {
         if (all_int) {
 
             // Create a swizzle expression for the shuffle
-            static const char* channels = "rgba";
             string swizzle;
-
             for (int i = 0; i != shuffle_lanes && all_int; ++i) {
                 int channel = op->args[1 + i].as<IntImm>()->value;
                 internal_assert(channel < 4) << "Shuffle of invalid channel";
-                swizzle += channels[channel];
+                swizzle += get_lane_suffix(channel);
             }
 
             rhs << expr << "." << swizzle;
