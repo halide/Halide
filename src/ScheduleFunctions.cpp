@@ -10,6 +10,7 @@
 #include "Inline.h"
 #include "CodeGen_GPU_Dev.h"
 #include "IRPrinter.h"
+#include "Func.h"
 
 namespace Halide {
 namespace Internal {
@@ -883,8 +884,8 @@ string schedule_to_source(Function f,
     if (compute_at.is_inline()) {
         ss << ".compute_inline()";
     } else {
-        string store_var_name = store_at.var;
-        string compute_var_name = compute_at.var;
+        string store_var_name = store_at.var();
+        string compute_var_name = compute_at.var();
         if (store_var_name == Var::outermost().name()) {
             store_var_name = "Var::outermost()";
         }
@@ -895,13 +896,13 @@ string schedule_to_source(Function f,
             if (store_at.is_root()) {
                 ss << ".store_root()";
             } else {
-                ss << ".store_at(" << store_at.func << ", " << store_var_name << ")";
+                ss << ".store_at(" << store_at.func() << ", " << store_var_name << ")";
             }
         }
         if (compute_at.is_root()) {
             ss << ".compute_root()";
         } else {
-            ss << ".compute_at(" << compute_at.func << ", " << compute_var_name << ")";
+            ss << ".compute_at(" << compute_at.func() << ", " << compute_var_name << ")";
         }
     }
     ss << ";";
@@ -938,7 +939,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const For *op) {
         if (ends_with(op->name, Var::outermost().name()) ||
-            ends_with(op->name, LoopLevel::root().var)) {
+            ends_with(op->name, LoopLevel::root().var())) {
             IRVisitor::visit(op);
         } else {
 
@@ -1100,7 +1101,7 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
                     << "\" is stored outside the parallel loop over "
-                    << sites[i].loop_level.func << "." << sites[i].loop_level.var
+                    << sites[i].loop_level.func() << "." << sites[i].loop_level.var()
                     << " but computed within it. This is a potential race condition.\n";
                 store_at_ok = compute_at_ok = false;
             }
@@ -1152,7 +1153,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
 
-    string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
+    string root_var = LoopLevel::root().func() + "." + LoopLevel::root().var();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
