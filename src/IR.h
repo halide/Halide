@@ -498,7 +498,10 @@ struct Call : public ExprNode<Call> {
         mod_round_to_zero,
         slice_vector,
         call_cached_indirect_function,
-        signed_integer_overflow;
+        signed_integer_overflow,
+        bool_to_mask,
+        cast_mask,
+        select_mask;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference
