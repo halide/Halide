@@ -76,13 +76,20 @@ class Inliner : public IRMutator {
         }
 
         for (size_t i = 0; i < s.bounds().size(); i++) {
-            user_warning << "It is meaningless to bound dimension "
-                         << s.bounds()[i].var << " of function "
-                         << f.name() << " to be within ["
-                         << s.bounds()[i].min << ", "
-                         << s.bounds()[i].extent << "] because the function is scheduled inline.\n";
+            if (s.bounds()[i].min.defined()) {
+                user_warning << "It is meaningless to bound dimension "
+                             << s.bounds()[i].var << " of function "
+                             << f.name() << " to be within ["
+                             << s.bounds()[i].min << ", "
+                             << s.bounds()[i].extent << "] because the function is scheduled inline.\n";
+            } else if (s.bounds()[i].modulus.defined()) {
+                user_warning << "It is meaningless to align the bounds of dimension "
+                             << s.bounds()[i].var << " of function "
+                             << f.name() << " to have modulus/remainder ["
+                             << s.bounds()[i].modulus << ", "
+                             << s.bounds()[i].remainder << "] because the function is scheduled inline.\n";
+            }
         }
-
     }
 
     void visit(const Call *op) {

@@ -54,14 +54,8 @@ struct LoweredFunc {
     /** The linkage of this function. */
     LinkageType linkage;
 
-    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
-        : name(name), args(args), body(body), linkage(linkage) {}
-    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
-        : name(name), body(body), linkage(linkage) {
-        for (const Argument &i : args) {
-            this->args.push_back(i);
-        }
-    }
+    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage);
+    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
 };
 
 }

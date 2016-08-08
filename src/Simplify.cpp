@@ -38,11 +38,43 @@ namespace {
 bool is_simple_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
-    if (e.as<FloatImm>()) return true;
+    // Don't consider NaN to be a "simple const", since it doesn't obey equality rules assumed elsewere
+    const FloatImm *f = e.as<FloatImm>();
+    if (f && !std::isnan(f->value)) return true;
     if (const Broadcast *b = e.as<Broadcast>()) {
         return is_simple_const(b->value);
     }
     return false;
+}
+
+// If the Expr is (var relop const) or (const relop var),
+// fill in the var name and return true.
+template<typename RelOp>
+bool is_var_relop_simple_const(Expr e, string* name) {
+    if (const RelOp *r = e.as<RelOp>()) {
+        if (is_simple_const(r->b)) {
+            const Variable *v = r->a.template as<Variable>();
+            if (v) {
+                *name = v->name;
+                return true;
+            }
+        }
+        else if (is_simple_const(r->a)) {
+            const Variable *v = r->b.template as<Variable>();
+            if (v) {
+                *name = v->name;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool is_var_simple_const_comparison(Expr e, string* name) {
+    // It's not clear if GT, LT, etc would be useful 
+    // here; leaving them out until proven otherwise.
+    return is_var_relop_simple_const<EQ>(e, name) ||
+           is_var_relop_simple_const<NE>(e, name);
 }
 
 // Returns true iff t is a scalar integral type where overflow is undefined
@@ -163,9 +195,7 @@ private:
     // expression is at least as complex as the expression, so
     // recursively mutating the bounds causes havoc.
     bool const_int_bounds(Expr e, int64_t *min_val, int64_t *max_val) {
-        if (!no_overflow_scalar_int(e.type())) {
-            return false;
-        }
+        Type t = e.type();
 
         if (const int64_t *i = as_const_int(e)) {
             *min_val = *max_val = *i;
@@ -177,13 +207,68 @@ private:
                 *max_val = b.second;
                 return true;
             }
+        } else if (const Broadcast *b = e.as<Broadcast>()) {
+            return const_int_bounds(b->value, min_val, max_val);
+        } else if (const Max *max = e.as<Max>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            // We only need to check the LHS for Min expr since simplify would
+            // canonicalize min/max to always be in the LHS.
+            if (const Min *min = max->a.as<Min>()) {
+                // Bound of max(min(x, a), b) : [min_b, max(max_a, max_b)].
+                // We need to check both LHS and RHS of the min, since if a is
+                // a min/max clamp instead of a constant, simplify would have
+                // reordered x and a.
+                if (const_int_bounds(max->b, &min_b, &max_b) &&
+                    (const_int_bounds(min->b, &min_a, &max_a) ||
+                     const_int_bounds(min->a, &min_a, &max_a))) {
+                    *min_val = min_b;
+                    *max_val = std::max(max_a, max_b);
+                    return true;
+                }
+            } else if (const_int_bounds(max->a, &min_a, &max_a) &&
+                       const_int_bounds(max->b, &min_b, &max_b)) {
+                *min_val = std::max(min_a, min_b);
+                *max_val = std::max(max_a, max_b);
+                return true;
+            }
+        } else if (const Min *min = e.as<Min>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            // We only need to check the LHS for Max expr since simplify would
+            // canonicalize min/max to always be in the LHS.
+            if (const Max *max = min->a.as<Max>()) {
+                // Bound of min(max(x, a), b) : [min(min_a, min_b), max_b].
+                // We need to check both LHS and RHS of the max, since if a is
+                // a min/max clamp instead of a constant, simplify would have
+                // reordered x and a.
+                if (const_int_bounds(min->b, &min_b, &max_b) &&
+                    (const_int_bounds(max->b, &min_a, &max_a) ||
+                     const_int_bounds(max->a, &min_a, &max_a))) {
+                    *min_val = std::min(min_a, min_b);
+                    *max_val = max_b;
+                    return true;
+                }
+            } else if (const_int_bounds(min->a, &min_a, &max_a) &&
+                       const_int_bounds(min->b, &min_b, &max_b)) {
+                *min_val = std::min(min_a, min_b);
+                *max_val = std::min(max_a, max_b);
+                return true;
+            }
+        } else if (const Select *sel = e.as<Select>()) {
+            int64_t min_a, min_b, max_a, max_b;
+            if (const_int_bounds(sel->true_value, &min_a, &max_a) &&
+                const_int_bounds(sel->false_value, &min_b, &max_b)) {
+                *min_val = std::min(min_a, min_b);
+                *max_val = std::max(max_a, max_b);
+                return true;
+            }
         } else if (const Add *add = e.as<Add>()) {
             int64_t min_a, min_b, max_a, max_b;
             if (const_int_bounds(add->a, &min_a, &max_a) &&
                 const_int_bounds(add->b, &min_b, &max_b)) {
                 *min_val = min_a + min_b;
                 *max_val = max_a + max_b;
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Sub *sub = e.as<Sub>()) {
             int64_t min_a, min_b, max_a, max_b;
@@ -191,23 +276,8 @@ private:
                 const_int_bounds(sub->b, &min_b, &max_b)) {
                 *min_val = min_a - max_b;
                 *max_val = max_a - min_b;
-                return true;
-            }
-        } else if (const Max *max = e.as<Max>()) {
-            int64_t min_a, min_b, max_a, max_b;
-            if (const_int_bounds(max->a, &min_a, &max_a) &&
-                const_int_bounds(max->b, &min_b, &max_b)) {
-                *min_val = std::max(min_a, min_b);
-                *max_val = std::max(max_a, max_b);
-                return true;
-            }
-        } else if (const Min *min = e.as<Min>()) {
-            int64_t min_a, min_b, max_a, max_b;
-            if (const_int_bounds(min->a, &min_a, &max_a) &&
-                const_int_bounds(min->b, &min_b, &max_b)) {
-                *min_val = std::min(min_a, min_b);
-                *max_val = std::min(max_a, max_b);
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Mul *mul = e.as<Mul>()) {
             int64_t min_a, min_b, max_a, max_b;
@@ -220,15 +290,8 @@ private:
                     t3 = max_a*max_b;
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
-                return true;
-            }
-        } else if (const Select *sel = e.as<Select>()) {
-            int64_t min_a, min_b, max_a, max_b;
-            if (const_int_bounds(sel->true_value, &min_a, &max_a) &&
-                const_int_bounds(sel->false_value, &min_b, &max_b)) {
-                *min_val = std::min(min_a, min_b);
-                *max_val = std::max(max_a, max_b);
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Mod *mod = e.as<Mod>()) {
             int64_t min_b, max_b;
@@ -236,7 +299,8 @@ private:
                 (min_b > 0 || max_b < 0)) {
                 *min_val = 0;
                 *max_val = std::abs(max_b) - 1;
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         } else if (const Div *div = e.as<Div>()) {
             int64_t min_a, min_b, max_a, max_b;
@@ -250,7 +314,19 @@ private:
                     t3 = div_imp(max_a, max_b);
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
-                return true;
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
+            }
+        } else if (const Ramp *r = e.as<Ramp>()) {
+            int64_t min_base, max_base, min_stride, max_stride;
+            if (const_int_bounds(r->base, &min_base, &max_base) &&
+                const_int_bounds(r->stride, &min_stride, &max_stride)) {
+                int64_t min_last_lane = min_base + min_stride * (r->lanes - 1);
+                int64_t max_last_lane = max_base + max_stride * (r->lanes - 1);
+                *min_val = std::min(min_base, min_last_lane);
+                *max_val = std::max(max_base, max_last_lane);
+                return no_overflow_scalar_int(t.element_of()) ||
+                       (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
         }
         return false;
@@ -333,6 +409,17 @@ private:
             // If this is a cast of a cast of the same type, where the
             // outer cast is narrower, the inner cast can be
             // eliminated.
+            expr = mutate(Cast::make(op->type, cast->value));
+        } else if (cast &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   (cast->type.is_int() || cast->type.is_uint()) &&
+                   op->type.bits() <= cast->type.bits() &&
+                   op->type.bits() <= op->value.type().bits()) {
+            // If this is a cast between integer types, where the
+            // outer cast is narrower than the inner cast and the
+            // inner cast's argument, the inner cast can be
+            // eliminated. The inner cast is either a sign extend
+            // or a zero extend, and the outer cast truncates the extended bits
             expr = mutate(Cast::make(op->type, cast->value));
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
@@ -1296,6 +1383,11 @@ private:
         const Mul *mul_a_b = nullptr;
         const Add *add_a_a = nullptr;
         const Add *add_a_b = nullptr;
+        const Sub *sub_a_a = nullptr;
+        const Sub *sub_a_b = nullptr;
+        const Mul *mul_a_a_a = nullptr;
+        const Mul *mul_a_b_a = nullptr;
+        const Mul *mul_a_b_b = nullptr;
 
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1307,9 +1399,29 @@ private:
             mul_a_b = add_a->b.as<Mul>();
             add_a_a = add_a->a.as<Add>();
             add_a_b = add_a->b.as<Add>();
+            sub_a_a = add_a->a.as<Sub>();
+            sub_a_b = add_a->b.as<Sub>();
         } else if (sub_a) {
             mul_a_a = sub_a->a.as<Mul>();
             mul_a_b = sub_a->b.as<Mul>();
+            add_a_a = sub_a->a.as<Add>();
+            add_a_b = sub_a->b.as<Add>();
+            sub_a_a = sub_a->a.as<Sub>();
+            sub_a_b = sub_a->b.as<Sub>();
+        }
+
+        if (add_a_a) {
+            mul_a_a_a = add_a_a->a.as<Mul>();
+        } else if (sub_a_a) {
+            mul_a_a_a = sub_a_a->a.as<Mul>();
+        }
+
+        if (add_a_b) {
+            mul_a_b_a = add_a_b->a.as<Mul>();
+            mul_a_b_b = add_a_b->b.as<Mul>();
+        } else if (sub_a_b) {
+            mul_a_b_a = sub_a_b->a.as<Mul>();
+            mul_a_b_b = sub_a_b->b.as<Mul>();
         }
 
         if (ramp_a) {
@@ -1351,10 +1463,6 @@ private:
             expr = FloatImm::make(op->type, fa / fb);
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
-        } else if (no_overflow_scalar_int(op->type) &&
-                   is_one(a)) {
-            // 1/x -> 0
-            expr = make_zero(op->type);
         } else if (no_overflow_scalar_int(op->type) &&
                    is_const(a, -1)) {
             // -1/x -> select(x < 0, 1, -1)
@@ -1444,9 +1552,9 @@ private:
                    ib > 0 &&
                    (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
-            // (x*4 - y) / 2 -> x*2 - y/2
+            // (x*4 - y) / 2 -> x*2 + (-y)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a->a * ratio) - (sub_a->b / b));
+            expr = mutate((mul_a_a->a * ratio) + (-sub_a->b) / b);
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    mul_a_b &&
@@ -1457,6 +1565,96 @@ private:
             // (y - x*4) / 2 -> y/2 - x*2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((sub_a->a / b) - (mul_a_b->a * ratio));
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // Pull terms that are a multiple of the divisor out
+            // ((x*4 + y) + z) / 2 -> x*2 + (y + z)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b  + add_a->b) / b);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   sub_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // ((x*4 - y) + z) / 2 -> x*2 + (z - y)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a->b - sub_a_a->b) / b);
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   add_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // ((x*4 + y) - z) / 2 -> x*2 + (y - z)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b - sub_a->b) / b);
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   sub_a_a &&
+                   mul_a_a_a &&
+                   const_int(mul_a_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // ((x*4 - y) - z) / 2 -> x*2 + (0 - y - z)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_a_a->a * ratio) + (- sub_a_a->b - sub_a->b) / b);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_a_b &&
+                   mul_a_b_a &&
+                   const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // (x + (y*4 + z)) / 2 -> y*2 + (x + z)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_b_a->a * ratio) + (add_a->a + add_a_b->b) / b);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   sub_a_b &&
+                   mul_a_b_a &&
+                   const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // (x + (y*4 - z)) / 2 -> y*2 + (x - z)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((mul_a_b_a->a * ratio) + (add_a->a - sub_a_b->b) / b);
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   add_a_b &&
+                   mul_a_b_a &&
+                   const_int(mul_a_b_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // (x - (y*4 + z)) / 2 -> (x - z)/2 - y*2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((sub_a->a - add_a_b->b) / b - (mul_a_b_a->a * ratio));
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   sub_a_b &&
+                   mul_a_b_b &&
+                   const_int(mul_a_b_b->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // (x - (z*4 - y)) / 2 -> (x + (y - z*4)) / 2  -- by a rule from Sub
+            // (x + (y - z*4)) / 2 -> (x + y)/2 - z*2  -- by this rule
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            expr = mutate((add_a->a + sub_a_b->a) / b - (mul_a_b_b->a * ratio));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    const_int(add_a->b, &ia) &&
@@ -1726,6 +1924,10 @@ private:
         // Move constants to the right to cut down on number of cases to check
         if (is_simple_const(a) && !is_simple_const(b)) {
             std::swap(a, b);
+        } else if (a.as<Broadcast>() && !b.as<Broadcast>()) {
+            std::swap(a, b);
+        } else if (!a.as<Max>() && b.as<Max>()) {
+            std::swap(a, b);
         }
 
         int64_t ia = 0, ib = 0, ic = 0;
@@ -1754,6 +1956,7 @@ private:
         const Call *call_b = b.as<Call>();
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
+        const Broadcast *broadcast_a_b = min_a ? min_a->b.as<Broadcast>() : nullptr;
 
         min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
 
@@ -1761,6 +1964,8 @@ private:
         int64_t a_round_up_factor = 0, b_round_up_factor = 0;
         Expr a_round_up = is_round_up(a, &a_round_up_factor);
         Expr b_round_up = is_round_up(b, &b_round_up_factor);
+
+        int64_t ramp_min, ramp_max;
 
         if (equal(a, b)) {
             expr = a;
@@ -1813,17 +2018,14 @@ private:
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    broadcast_b &&
-                   const_int(ramp_a->base, &ia) &&
-                   const_int(ramp_a->stride, &ib) &&
+                   const_int_bounds(ramp_a, &ramp_min, &ramp_max) &&
                    const_int(broadcast_b->value, &ic)) {
             // min(ramp(a, b, n), broadcast(c, n))
-            int ramp_start = ia;
-            int ramp_end = ia + ib * (ramp_a->lanes - 1);
-            if (ramp_start <= ic && ramp_end <= ic) {
+            if (ramp_min <= ic && ramp_max <= ic) {
                 // ramp dominates
                 expr = a;
                 return;
-            } if (ramp_start >= ic && ramp_end >= ic) {
+            } if (ramp_min >= ic && ramp_max >= ic) {
                 // broadcast dominates
                 expr = b;
                 return;
@@ -1907,6 +2109,11 @@ private:
             // min(y, min(x, y)) -> min(x, y)
             expr = b;
         } else if (min_a &&
+                   broadcast_a_b &&
+                   broadcast_b ) {
+            // min(min(x, broadcast(y, n)), broadcast(z, n))) -> min(x, broadcast(min(y, z), n))
+            expr = mutate(Min::make(min_a->a, Broadcast::make(Min::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
+        } else if (min_a &&
                    min_a_a &&
                    equal(min_a_a->b, b)) {
             // min(min(min(x, y), z), y) -> min(min(x, y), z)
@@ -1962,6 +2169,16 @@ private:
                    equal(min_a->b, min_b->b)) {
             // min(min(y, x), min(z, x)) -> min(min(y, z), x)
             expr = mutate(Min::make(Min::make(min_a->a, min_b->a), min_a->b));
+        } else if (max_a &&
+                   min_a_a &&
+                   equal(min_a_a->b, b)) {
+            // min(max(min(x, y), z), y) -> min(max(x, z), y)
+            expr = mutate(min(max(min_a_a->a, max_a->b), b));
+        } else if (max_a &&
+                   min_a_a &&
+                   equal(min_a_a->a, b)) {
+            // min(max(min(y, x), z), y) -> min(max(x, z), y)
+            expr = mutate(min(max(min_a_a->b, max_a->b), b));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
@@ -2071,8 +2288,11 @@ private:
         // Move constants to the right to cut down on number of cases to check
         if (is_simple_const(a) && !is_simple_const(b)) {
             std::swap(a, b);
+        } else if (a.as<Broadcast>() && !b.as<Broadcast>()) {
+            std::swap(a, b);
+        } else if (!a.as<Min>() && b.as<Min>()) {
+            std::swap(a, b);
         }
-
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
@@ -2100,6 +2320,11 @@ private:
         const Call *call_b = b.as<Call>();
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
+        const Broadcast *broadcast_a_b = max_a ? max_a->b.as<Broadcast>() : nullptr;
+
+        max_a_a = min_a ? min_a->a.as<Max>() : max_a_a;
+
+        int64_t ramp_min, ramp_max;
 
         if (equal(a, b)) {
             expr = a;
@@ -2151,18 +2376,15 @@ private:
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    broadcast_b &&
-                   const_int(ramp_a->base, &ia) &&
-                   const_int(ramp_a->stride, &ib) &&
+                   const_int_bounds(ramp_a, &ramp_min, &ramp_max) &&
                    const_int(broadcast_b->value, &ic)) {
             // max(ramp(a, b, n), broadcast(c, n))
-            int ramp_start = ia;
-            int ramp_end = ia + ib * (ramp_a->lanes - 1);
-            if (ramp_start >= ic && ramp_end >= ic) {
+            if (ramp_min >= ic && ramp_max >= ic) {
                 // ramp dominates
                 expr = a;
                 return;
             }
-            if (ramp_start <= ic && ramp_end <= ic) {
+            if (ramp_min <= ic && ramp_max <= ic) {
                 // broadcast dominates
                 expr = b;
                 return;
@@ -2225,7 +2447,13 @@ private:
                    (equal(max_b->b, a) || equal(max_b->a, a))) {
             // max(y, max(x, y)) -> max(x, y)
             expr = b;
-        } else if (max_a_a &&
+        } else if (max_a &&
+                   broadcast_a_b &&
+                   broadcast_b ) {
+            // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
+            expr = mutate(Max::make(max_a->a, Broadcast::make(Max::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
+        } else if (max_a &&
+                   max_a_a &&
                    equal(max_a_a->b, b)) {
             // max(max(max(x, y), z), y) -> max(max(x, y), z)
             expr = a;
@@ -2278,6 +2506,16 @@ private:
                    equal(min_a->b, min_b->b)) {
             // max(min(y, x), min(z, x)) -> min(max(y, z), x)
             expr = mutate(Min::make(Max::make(min_a->a, min_b->a), min_a->b));
+        } else if (min_a &&
+                   max_a_a &&
+                   equal(max_a_a->b, b)) {
+            // max(min(max(x, y), z), y) -> max(min(x, z), y)
+            expr = mutate(max(min(max_a_a->a, min_a->b), b));
+        } else if (min_a &&
+                   max_a_a &&
+                   equal(max_a_a->a, b)) {
+            // max(min(max(y, x), z), y) -> max(min(x, z), y)
+            expr = mutate(max(min(max_a_a->b, min_a->b), b));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_b &&
@@ -2479,11 +2717,11 @@ private:
         if (const_int_bounds(a, &a_min, &a_max) &&
             const_int_bounds(b, &b_min, &b_max)) {
             if (a_max < b_min) {
-                expr = const_true();
+                expr = const_true(op->type.lanes());
                 return;
             }
             if (a_min >= b_max) {
-                expr = const_false();
+                expr = const_false(op->type.lanes());
                 return;
             }
         }
@@ -2882,6 +3120,34 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.lanes());
+        } else if (eq_a &&
+                   neq_b &&
+                   equal(eq_a->a, neq_b->a) &&
+                   is_simple_const(eq_a->b) && 
+                   is_simple_const(neq_b->b)) {
+            // (a == k1) && (a != k2) -> (a == k1) && (k1 != k2)
+            // (second term always folds away)
+            expr = mutate(And::make(a, NE::make(eq_a->b, neq_b->b)));
+        } else if (neq_a &&
+                   eq_b &&
+                   equal(neq_a->a, eq_b->a) &&
+                   is_simple_const(neq_a->b) && 
+                   is_simple_const(eq_b->b)) {
+            // (a != k1) && (a == k2) -> (a == k2) && (k1 != k2)
+            // (second term always folds away)
+            expr = mutate(And::make(b, NE::make(neq_a->b, eq_b->b)));
+        } else if (eq_a &&
+                   eq_a->a.as<Variable>() &&
+                   is_simple_const(eq_a->b) &&
+                   expr_uses_var(b, eq_a->a.as<Variable>()->name)) {
+            // (somevar == k) && b -> (somevar == k) && substitute(somevar, k, b)
+            expr = mutate(And::make(a, substitute(eq_a->a.as<Variable>(), eq_a->b, b)));
+        } else if (eq_b &&
+                   eq_b->a.as<Variable>() &&
+                   is_simple_const(eq_b->b) &&
+                   expr_uses_var(a, eq_b->a.as<Variable>()->name)) {
+            // a && (somevar == k) -> substitute(somevar, k1, a) && (somevar == k)
+            expr = mutate(And::make(substitute(eq_b->a.as<Variable>(), eq_b->b, a), b));
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->lanes == broadcast_b->lanes) {
@@ -2916,6 +3182,9 @@ private:
         const LT *lt_b = b.as<LT>();
         const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
+        const And *and_a = a.as<And>();
+        const And *and_b = b.as<And>();
+        string name_a, name_b, name_c;
 
         if (is_one(a)) {
             expr = a;
@@ -2960,10 +3229,44 @@ private:
                    broadcast_a->lanes == broadcast_b->lanes) {
             // x8(a) || x8(b) -> x8(a || b)
             expr = Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value)), broadcast_a->lanes);
+        } else if (eq_a &&
+                   neq_b &&
+                   equal(eq_a->a, neq_b->a) &&
+                   is_simple_const(eq_a->b) && 
+                   is_simple_const(neq_b->b)) {
+            // (a == k1) || (a != k2) -> (a != k2) || (k1 == k2)
+            // (second term always folds away)
+            expr = mutate(Or::make(b, EQ::make(eq_a->b, neq_b->b)));
+        } else if (neq_a &&
+                   eq_b &&
+                   equal(neq_a->a, eq_b->a) &&
+                   is_simple_const(neq_a->b) && 
+                   is_simple_const(eq_b->b)) {
+            // (a != k1) || (a == k2) -> (a != k1) || (k1 == k2)
+            // (second term always folds away)
+            expr = mutate(Or::make(a, EQ::make(neq_a->b, eq_b->b)));
         } else if (var_a && expr_uses_var(b, var_a->name)) {
             expr = mutate(a || substitute(var_a->name, make_zero(a.type()), b));
         } else if (var_b && expr_uses_var(a, var_b->name)) {
             expr = mutate(substitute(var_b->name, make_zero(b.type()), a) || b);
+        } else if (is_var_simple_const_comparison(b, &name_c) &&
+                   and_a &&
+                   ((is_var_simple_const_comparison(and_a->a, &name_a) && name_a == name_c) ||
+                   (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
+            // (a && b) || (c) -> (a || c) && (b || c)
+            // iff c and at least one of a or b is of the form 
+            //     (var == const) or (var != const)
+            // (and the vars are the same)
+            expr = mutate(And::make(Or::make(and_a->a, b), Or::make(and_a->b, b)));
+        } else if (is_var_simple_const_comparison(a, &name_c) &&
+                   and_b &&
+                   ((is_var_simple_const_comparison(and_b->a, &name_a) && name_a == name_c) ||
+                   (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
+            // (c) || (a && b) -> (a || c) && (b || c)
+            // iff c and at least one of a or b is of the form 
+            //     (var == const) or (var != const)
+            // (and the vars are the same)
+            expr = mutate(And::make(Or::make(and_b->a, a), Or::make(and_b->b, a)));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -3873,8 +4176,8 @@ private:
 
         const Load *load = value.as<Load>();
 
-        if (load && load->name == op->name && equal(load->index, index)) {
-            // foo[x] = foo[x] is a no-op
+        if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
+            // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
         } else if (value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
@@ -4121,6 +4424,13 @@ void check_casts() {
     check(cast(Int(32), cast(Int(8), 3)), 3);
     check(cast(Int(32), cast(Int(8), 1232)), -48);
 
+    // Check redundant casts
+    check(cast(Float(32), cast(Float(64), x)), cast(Float(32), x));
+    check(cast(Int(16), cast(Int(32), x)), cast(Int(16), x));
+    check(cast(Int(16), cast(UInt(32), x)), cast(Int(16), x));
+    check(cast(UInt(16), cast(Int(32), x)), cast(UInt(16), x));
+    check(cast(UInt(16), cast(UInt(32), x)), cast(UInt(16), x));
+
     // Check evaluation of constant expressions involving casts
     check(cast(UInt(16), 53) + cast(UInt(16), 87), make_const(UInt(16), 140));
     check(cast(Int(8), 127) + cast(Int(8), 1), make_const(Int(8), -128));
@@ -4252,7 +4562,6 @@ void check_algebra() {
     check(0/x, 0);
     check(x/1, x);
     check(x/x, 1);
-    check(1/x, 0);
     check((-1)/x, select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
@@ -4261,13 +4570,23 @@ void check_algebra() {
     check((x*2)/4, x/2);
     check((x*4 + y)/2, x*2 + y/2);
     check((y + x*4)/2, y/2 + x*2);
-    check((x*4 - y)/2, x*2 - y/2);
+    check((x*4 - y)/2, x*2 + (0 - y)/2);
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
     check((x + 8)/2, x/2 + 4);
     check((x - y)*-2, (y - x)*2);
     check((xf - yf)*-2.0f, (yf - xf)*2.0f);
+
+    // Pull terms that are a multiple of the divisor out of a ternary expression
+    check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
+    check(((x*4 - y) + z) / 2, x*2 + (z - y)/2);
+    check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
+    check(((x*4 - y) - z) / 2, x*2 + (0 - y - z)/2);
+    check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
+    check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
+    check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
+    check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
 
     // Cancellations in non-const integer divisions
     check((x*y)/x, y);
@@ -4488,9 +4807,6 @@ void check_bounds() {
     check(min(x/(-4), y/(-4)), max(x, y)/(-4));
     check(max(x/(-4), y/(-4)), min(x, y)/(-4));
 
-    //check(max(x, 16) - 16, max(x + -16, 0));
-    //check(min(x, -4) + 7, min(x + 7, 3));
-
     // Min and max of clamped expressions
     check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
     check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
@@ -4518,10 +4834,6 @@ void check_bounds() {
 
     check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
     check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
-
-    // Pull constants all the way outside of a clamp
-    //check(clamp(x + 1, -10, 15), clamp(x, -11, 14) + 1);
-    //check(clamp(x + 1, y - 10, 15), clamp(x, y + (-11), 14) + 1);
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -4564,6 +4876,136 @@ void check_bounds() {
     check(min(2, x) - x, 2 - max(x, 2));
     check(max(2, x) - x, 2 - min(x, 2));
 
+    check(max(min(max(x, y), z), y), max(min(x, z), y));
+    check(max(min(z, max(x, y)), y), max(min(x, z), y));
+    check(max(y, min(max(x, y), z)), max(min(x, z), y));
+    check(max(y, min(z, max(x, y))), max(min(x, z), y));
+
+    check(max(min(max(y, x), z), y), max(min(x, z), y));
+    check(max(min(z, max(y, x)), y), max(min(x, z), y));
+    check(max(y, min(max(y, x), z)), max(min(x, z), y));
+    check(max(y, min(z, max(y, x))), max(min(x, z), y));
+
+    check(min(max(min(x, y), z), y), min(max(x, z), y));
+    check(min(max(z, min(x, y)), y), min(max(x, z), y));
+    check(min(y, max(min(x, y), z)), min(max(x, z), y));
+    check(min(y, max(z, min(x, y))), min(max(x, z), y));
+
+    check(min(max(min(y, x), z), y), min(max(x, z), y));
+    check(min(max(z, min(y, x)), y), min(max(x, z), y));
+    check(min(y, max(min(y, x), z)), min(max(x, z), y));
+    check(min(y, max(z, min(y, x))), min(max(x, z), y));
+
+    {
+        Expr one = broadcast(cast(Int(16), 1), 64);
+        Expr three = broadcast(cast(Int(16), 3), 64);
+        Expr four = broadcast(cast(Int(16), 4), 64);
+        Expr five = broadcast(cast(Int(16), 5), 64);
+        Expr v1 = Variable::make(Int(16).with_lanes(64), "x");
+        Expr v2 = Variable::make(Int(16).with_lanes(64), "y");
+
+        // Bound: [-4, 4]
+        std::vector<Expr> clamped = {
+            max(min(v1, four), -four),
+            max(-four, min(v1, four)),
+            min(max(v1, -four), four),
+            min(four, max(v1, -four)),
+            clamp(v1, -four, four)
+        };
+
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // min(v, 4) where v=[-4, 4] -> v
+            check(min(clamped[i], four), simplify(clamped[i]));
+            // min(v, 5) where v=[-4, 4] -> v
+            check(min(clamped[i], five), simplify(clamped[i]));
+            // min(v, 3) where v=[-4, 4] -> min(v, 3)
+            check(min(clamped[i], three), simplify(min(clamped[i], three)));
+            // min(v, -5) where v=[-4, 4] -> -5
+            check(min(clamped[i], -five), simplify(-five));
+        }
+
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // max(v, 4) where v=[-4, 4] -> 4
+            check(max(clamped[i], four), simplify(four));
+            // max(v, 5) where v=[-4, 4] -> 5
+            check(max(clamped[i], five), simplify(five));
+            // max(v, 3) where v=[-4, 4] -> max(v, 3)
+            check(max(clamped[i], three), simplify(max(clamped[i], three)));
+            // max(v, -5) where v=[-4, 4] -> v
+            check(max(clamped[i], -five), simplify(clamped[i]));
+        }
+
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // max(min(v, 5), -5) where v=[-4, 4] -> v
+            check(max(min(clamped[i], five), -five), simplify(clamped[i]));
+            // max(min(v, 5), 5) where v=[-4, 4] -> 5
+            check(max(min(clamped[i], five), five), simplify(five));
+
+            // max(min(v, -5), -5) where v=[-4, 4] -> -5
+            check(max(min(clamped[i], -five), -five), simplify(-five));
+            // max(min(v, -5), 5) where v=[-4, 4] -> 5
+            check(max(min(clamped[i], -five), five), simplify(five));
+            // max(min(v, -5), 3) where v=[-4, 4] -> 3
+            check(max(min(clamped[2], -five), three), simplify(three));
+        }
+
+        // max(min(v, 5), 3) where v=[-4, 4] -> max(v, 3)
+        check(max(min(clamped[2], five), three), simplify(max(clamped[2], three)));
+
+        // max(min(v, 5), 3) where v=[-4, 4] -> max(v, 3) -> v=[3, 4]
+        // There is simplification rule that will simplify max(max(min(x, 4), -4), 3)
+        // further into max(min(x, 4), 3)
+        check(max(min(clamped[0], five), three), simplify(max(min(v1, four), three)));
+
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // min(v + 1, 4) where v=[-4, 4] -> min(v + 1, 4)
+            check(min(clamped[i] + one, four), simplify(min(clamped[i] + one, four)));
+            // min(v + 1, 5) where v=[-4, 4] -> v + 1
+            check(min(clamped[i] + one, five), simplify(clamped[i] + one));
+            // min(v + 1, -4) where v=[-4, 4] -> -4
+            check(min(clamped[i] + one, -four), simplify(-four));
+            // max(min(v + 1, 4), -4) where v=[-4, 4] -> min(v + 1, 4)
+            check(max(min(clamped[i] + one, four), -four), simplify(min(clamped[i] + one, four)));
+        }
+        for (size_t i = 0; i < clamped.size(); ++i) {
+            // max(v + 1, 4) where v=[-4, 4] -> max(v + 1, 4)
+            check(max(clamped[i] + one, four), simplify(max(clamped[i] + one, four)));
+            // max(v + 1, 5) where v=[-4, 4] -> 5
+            check(max(clamped[i] + one, five), simplify(five));
+            // max(v + 1, -4) where v=[-4, 4] -> -v + 1
+            check(max(clamped[i] + one, -four), simplify(clamped[i] + one));
+            // min(max(v + 1, -4), 4) where v=[-4, 4] -> min(v + 1, 4)
+            check(min(max(clamped[i] + one, -four), four), simplify(min(clamped[i] + one, four)));
+        }
+
+        Expr t1 = clamp(v1, one, four);
+        Expr t2 = clamp(v1, -five, -four);
+        check(min(max(min(v2, t1), t2), five), simplify(max(min(t1, v2), t2)));
+    }
+
+    {
+        Expr xv = Variable::make(Int(16).with_lanes(64), "x");
+        Expr yv = Variable::make(Int(16).with_lanes(64), "y");
+        Expr zv = Variable::make(Int(16).with_lanes(64), "z");
+
+        // min(min(x, broadcast(y, n)), broadcast(z, n))) -> min(x, broadcast(min(y, z), n))
+        check(min(min(xv, broadcast(y, 64)), broadcast(z, 64)), min(xv, broadcast(min(y, z), 64)));
+        // min(min(broadcast(x, n), y), broadcast(z, n))) -> min(y, broadcast(min(x, z), n))
+        check(min(min(broadcast(x, 64), yv), broadcast(z, 64)), min(yv, broadcast(min(x, z), 64)));
+        // min(broadcast(x, n), min(y, broadcast(z, n)))) -> min(y, broadcast(min(x, z), n))
+        check(min(broadcast(x, 64), min(yv, broadcast(z, 64))), min(yv, broadcast(min(z, x), 64)));
+        // min(broadcast(x, n), min(broadcast(y, n), z))) -> min(z, broadcast(min(x, y), n))
+        check(min(broadcast(x, 64), min(broadcast(y, 64), zv)), min(zv, broadcast(min(y, x), 64)));
+
+        // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
+        check(max(max(xv, broadcast(y, 64)), broadcast(z, 64)), max(xv, broadcast(max(y, z), 64)));
+        // max(max(broadcast(x, n), y), broadcast(z, n))) -> max(y, broadcast(max(x, z), n))
+        check(max(max(broadcast(x, 64), yv), broadcast(z, 64)), max(yv, broadcast(max(x, z), 64)));
+        // max(broadcast(x, n), max(y, broadcast(z, n)))) -> max(y, broadcast(max(x, z), n))
+        check(max(broadcast(x, 64), max(yv, broadcast(z, 64))), max(yv, broadcast(max(z, x), 64)));
+        // max(broadcast(x, n), max(broadcast(y, n), z))) -> max(z, broadcast(max(x, y), n))
+        check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(y, x), 64)));
+    }
 }
 
 void check_boolean() {
@@ -4637,6 +5079,26 @@ void check_boolean() {
     check(broadcast(!b1, 4) && broadcast(b1, 4), broadcast(f, 4));
     check(broadcast(b1, 4) && broadcast(b1, 4), broadcast(b1, 4));
     check(broadcast(b1, 4) || broadcast(b1, 4), broadcast(b1, 4));
+
+    check((x == 1) && (x != 2), (x == 1));
+    check((x != 1) && (x == 2), (x == 2));
+    check((x == 1) && (x != 1), f);
+    check((x != 1) && (x == 1), f);
+
+    check((x == 1) || (x != 2), (x != 2));
+    check((x != 1) || (x == 2), (x != 1));
+    check((x == 1) || (x != 1), t);
+    check((x != 1) || (x == 1), t);
+
+    // check for substitution patterns
+    check((b1 == t) && (b1 && b2), (b1 == t) && b2);
+    check((b1 && b2) && (b1 == t), b2 && (b1 == t));
+
+    {
+        Expr i = Variable::make(Int(32), "i");
+        check((i!=2 && (i!=4 && (i!=8 && i!=16))) || (i==16), (i!=2 && (i!=4 && (i!=8))));
+        check((i==16) || (i!=2 && (i!=4 && (i!=8 && i!=16))), (i!=2 && (i!=4 && (i!=8))));
+    }
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
@@ -4971,10 +5433,18 @@ void simplify_test() {
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
     bounds_info.push("x", Interval(0,4));
-    check_in_bounds(ramp(x, 1,4) < broadcast(0,4),  const_false(4), bounds_info);
-    check_in_bounds(ramp(x, 1,4) < broadcast(8,4),  const_true(4),  bounds_info);
-    check_in_bounds(ramp(x,-1,4) < broadcast(-4,4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x,-1,4) < broadcast(5,4),  const_true(4),  bounds_info);
+    check_in_bounds(ramp(x,  1, 4) < broadcast( 0, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x,  1, 4) < broadcast( 8, 4), const_true(4),  bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast(-4, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast( 5, 4), const_true(4),  bounds_info);
+    check_in_bounds(min(ramp(x,  1, 4), broadcast( 0, 4)), broadcast(0, 4),  bounds_info);
+    check_in_bounds(min(ramp(x,  1, 4), broadcast( 8, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast(-4, 4)), broadcast(-4, 4), bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast( 5, 4)), ramp(x, -1, 4),   bounds_info);
+    check_in_bounds(max(ramp(x,  1, 4), broadcast( 0, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(max(ramp(x,  1, 4), broadcast( 8, 4)), broadcast(8, 4),  bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4),   bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast( 5, 4)), broadcast(5, 4),  bounds_info);
 
     // Collapse some vector interleaves
     check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));

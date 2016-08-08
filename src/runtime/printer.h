@@ -34,8 +34,13 @@ public:
     Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
         buf = mem ? mem : (char *)halide_malloc(user_context, length);
         dst = buf;
-        end = buf + (length-1);
-        *end = 0;
+        if (dst) {
+            end = buf + (length-1);
+            *end = 0;
+        } else {
+            // Pointers equal ensures no writes to buffer via formatting code
+            end = dst;
+        }
     }
 
     Printer &operator<<(const char *arg) {
@@ -86,29 +91,55 @@ public:
 
     // Use it like a stringstream.
     const char *str() {
-        return buf;
+        if (buf) {
+            return buf;
+        } else {
+            return allocation_error();
+        }
     }
 
     // Clear it. Useful for reusing a stringstream.
     void clear() {
         dst = buf;
-        dst[0] = 0;
+        if (dst) {
+            dst[0] = 0;
+        }
     }
 
     // Returns the number of characters in the buffer
     uint64_t size() const {
-        return (uint64_t)(dst-buf);
+        return (uint64_t)(dst - buf);
+    }
+
+    // Delete the last N characters
+    void erase(int n) {
+        if (dst) {
+            dst -= n;
+            if (dst < buf) {
+                dst = buf;
+            }
+            dst[0] = 0;
+        }
+    }
+
+    const char *allocation_error() {
+        return "Printer buffer allocation failed.\n";
     }
 
     ~Printer() {
-        if (type == ErrorPrinter) {
+        if (!buf) {
+            halide_error(user_context, allocation_error());
+        } else if (type == ErrorPrinter) {
             halide_error(user_context, buf);
         } else if (type == BasicPrinter) {
             halide_print(user_context, buf);
         } else {
             // It's a stringstream. Do nothing.
         }
-        if (own_mem) halide_free(user_context, buf);
+
+        if (own_mem) {
+            halide_free(user_context, buf);
+        }
     }
 };
 

@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "device_buffer_utils.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
@@ -34,7 +35,7 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     debug(user_context) << "Key for " << msg << "\n";
     char buf[1024];
     bool append_ellipses = false;
-    if (key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
+    if ((size_t)key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
         append_ellipses = true;
         key_size = (sizeof(buf) / 2) - 4; // room for NUL and "..."
     }
@@ -56,23 +57,6 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     debug(user_context) << buf << "\n";
 }
 #endif
-
-WEAK size_t full_extent(const buffer_t &buf) {
-    size_t result = 1;
-    for (int i = 0; i < 4; i++) {
-        int32_t stride = buf.stride[i];
-        size_t positive_stride;
-        if (stride < 0) {
-            positive_stride = (size_t)-stride;
-        } else {
-            positive_stride = (size_t)stride;
-        }
-        if ((buf.extent[i] * positive_stride) > result) {
-            result = buf.extent[i] * positive_stride;
-        }
-    }
-    return result;
-}
 
 WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
@@ -196,7 +180,7 @@ WEAK void validate_cache() {
                 << "current size " << current_cache_size
                 << " of maximum " << max_cache_size << "\n";
     int entries_in_hash_table = 0;
-    for (int i = 0; i < kHashTableSize; i++) {
+    for (size_t i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         while (entry != NULL) {
             entries_in_hash_table++;
@@ -280,7 +264,7 @@ WEAK void prune_cache() {
 
             // Decrease cache used amount.
             for (uint32_t i = 0; i < prune_candidate->tuple_count; i++) {
-                current_cache_size -= full_extent(prune_candidate->buffer(i));
+                current_cache_size -= buf_size(&prune_candidate->buffer(i));
             }
 
             // Deallocate the entry.
@@ -381,10 +365,9 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
     for (int32_t i = 0; i < tuple_count; i++) {
         buffer_t *buf = tuple_buffers[i];
-        size_t buffer_size = full_extent(*buf);
 
         // See documentation on extra_bytes_host_bytes
-        buf->host = ((uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size + extra_bytes_host_bytes));
+        buf->host = ((uint8_t *)halide_malloc(user_context, buf_size(buf) + extra_bytes_host_bytes));
         if (buf->host == NULL) {
             for (int32_t j = i; j > 0; j--) {
                 halide_free(user_context, get_pointer_to_header(tuple_buffers[j - 1]->host));
@@ -464,7 +447,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
     {
         for (int32_t i = 0; i < tuple_count; i++) {
             buffer_t *buf = tuple_buffers[i];
-            added_size += full_extent(*buf);
+            added_size += buf_size(buf);
         }
     }
     current_cache_size += added_size;
@@ -555,7 +538,7 @@ WEAK void halide_memoization_cache_cleanup() {
         }
     }
     current_cache_size = 0;
-    halide_mutex_cleanup(&memoization_lock);
+    halide_mutex_destroy(&memoization_lock);
 }
 
 namespace {
