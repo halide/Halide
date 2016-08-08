@@ -26,12 +26,14 @@ ifeq ($(UNAME),Darwin)
   # These are for OS X:
   DTX_FONT       = /Library/Fonts/Arial.ttf
   OPENGL_LIBS    = -lglfw3 -framework OpenGL -framework GLUT
+  GENERATOR_LIBS = -lHalide -lz -lcurses
 
 else
 
   # These are for Ubuntu Linux
   DTX_FONT       = /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
-  OPENGL_LIBS    = -lglfw -lGL -lglut -lX11 -lpthread -ldl
+  OPENGL_LIBS    = `pkg-config glfw3 --libs` -lGL -lglut -lX11 -lpthread -ldl -lXxf86vm -lXinerama -lXcursor -lXrandr
+  GENERATOR_LIBS = -lHalide -lz -lcurses -Wl,--rpath=$(HALIDE_LIB_PATH)
 
 endif
 
@@ -45,7 +47,7 @@ CXXFLAGS       = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
 .PHONY: run clean
 
 default:	run
-	
+
 run:	build/opengl_demo
 	build/opengl_demo image.png
 

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <GLFW/glfw3.h>
-
+#include <unistd.h>
 #include "glfw_helpers.h"
 
 using namespace GlfwHelpers;
@@ -26,6 +26,12 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         glfwSetWindowShouldClose(window, GL_TRUE);
 }
 
+static bool first_focus = false;
+static void focus_callback(GLFWwindow *window, int)
+{
+    first_focus = true;
+}
+
 struct info GlfwHelpers::setup(int width, int height)
 {
     struct info info;
@@ -36,7 +42,12 @@ struct info GlfwHelpers::setup(int width, int height)
     window = glfwCreateWindow(width, height, "opengl_halide_test", NULL, NULL);
     if (!window) die("couldn't create window!");
     glfwSetKeyCallback(window, key_callback);
+    glfwSetWindowFocusCallback(window, focus_callback);
     glfwMakeContextCurrent(window);
+
+    while (!first_focus) {
+        glfwWaitEvents();
+    }
 
     int framebuffer_width, framebuffer_height;
     glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
