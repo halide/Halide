@@ -12,8 +12,12 @@
 namespace Halide {
 
 class Func;
-class RVar;
-class Var;
+struct VarOrRVar;
+
+namespace Internal {
+class Function;
+struct FunctionContents;
+}  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
  * factor does not provably divide the extent. */
@@ -67,57 +71,58 @@ enum class TailStrategy {
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
 class LoopLevel {
-    std::string func_, var_;
+    // Note: func_ is nullptr for inline or root.
+    Internal::IntrusivePtr<Internal::FunctionContents> function_contents;
+    // TODO: these two fields should really be VarOrRVar, 
+    // but cyclical include dependencies make this challenging.
+    std::string var_name;
+    bool is_rvar;
+
+    EXPORT LoopLevel(Internal::IntrusivePtr<Internal::FunctionContents> f, const std::string &var_name, bool is_rvar);
+    EXPORT std::string func_name() const;
+
 public:
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    LoopLevel(std::string f, std::string v) : func_(f), var_(v) {}
-    EXPORT LoopLevel(Func f, Var v);
-    EXPORT LoopLevel(Func f, RVar v);
+    EXPORT LoopLevel(Internal::Function f, VarOrRVar v);
+    EXPORT LoopLevel(Func f, VarOrRVar v);
     // @}
 
     /** Construct an empty LoopLevel, which is interpreted as
      * 'inline'. This is a special LoopLevel value that implies
      * that a function should be inlined away */
-    LoopLevel() {}
+    LoopLevel() : function_contents(nullptr), var_name(""), is_rvar(false) {}
 
-    /** Return the name of the Func. (May be empty if root or inline.) */
-    std::string func() const {return func_;}
+    /** Return the Func. Asserts if the LoopLevel is_root() or is_inline(). */
+    EXPORT Func func() const;
 
-    /** Return the name of the Var or RVar. (May be empty if root or inline.). */
-    std::string var() const {return var_;}
+    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
+    EXPORT VarOrRVar var() const;
 
     /** Test if a loop level corresponds to inlining the function */
-    bool is_inline() const {return var_.empty();}
+    EXPORT bool is_inline() const;
 
     /** root is a special LoopLevel value which represents the
      * location outside of all for loops */
-    static LoopLevel root() {
-        return LoopLevel("", "__root");
-    }
+    EXPORT static LoopLevel root();
+
     /** Test if a loop level is 'root', which describes the site
      * outside of all for loops */
-    bool is_root() const {return var_ == "__root";}
+    EXPORT bool is_root() const;
+
+    /** Return a string of the form func.var -- note that this is safe
+     * to call for root or inline LoopLevels. */
+    EXPORT std::string to_string() const;
 
     /** Compare this loop level against the variable name of a for
      * loop, to see if this loop level refers to the site
      * immediately inside this loop. */
-    bool match(const std::string &loop) const {
-        return Internal::starts_with(loop, func_ + ".") && 
-               Internal::ends_with(loop, "." + var_);
-    }
+    EXPORT bool match(const std::string &loop) const;
 
-    bool match(const LoopLevel &other) const {
-        return (func_ == other.func_ &&
-                (var_ == other.var_ ||
-                 Internal::ends_with(var_, "." + other.var_) ||
-                 Internal::ends_with(other.var_, "." + var_)));
-    }
+    EXPORT bool match(const LoopLevel &other) const;
 
     /** Check if two loop levels are exactly the same. */
-    bool operator==(const LoopLevel &other) const {
-        return func_ == other.func_ && var_ == other.var_;
-    }
+    EXPORT bool operator==(const LoopLevel &other) const;
 };
 
 namespace Internal {
