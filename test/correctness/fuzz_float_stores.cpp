@@ -52,14 +52,8 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        // It should change the output about half the time. Assuming
-        // it's sum of 'size' coin flips...
-        int mean = size/2;
-        int variance = size/4;
-        int five_sigma = 5 * ceil(sqrt(variance));
-        if (differences < mean - five_sigma || differences > mean + five_sigma) {
-            printf("There were %d differences with floating point fuzzing on. Expected more like %d +/- %d.\n",
-                   differences, mean, five_sigma);
+        if (differences == size) {
+            printf("fuzzing float stores should not have changed every store\n");
             return -1;
         }
     }
