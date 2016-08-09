@@ -175,16 +175,6 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_/wild_i32x_), Pattern::RightShift));
     casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_/wild_i64x_), Pattern::RightShift));
 
-    casts.push_back(Pattern("vqshiftns.v8i8",  "sqshrn.v8i8",  8, i8_sat(wild_i16x_ >> wild_i16x_)));
-    casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ >> wild_i32x_)));
-    casts.push_back(Pattern("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ >> wild_i64x_)));
-    casts.push_back(Pattern("vqshiftnu.v8i8",  "uqshrn.v8i8",  8, u8_sat(wild_u16x_ >> wild_u16x_)));
-    casts.push_back(Pattern("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ >> wild_u32x_)));
-    casts.push_back(Pattern("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ >> wild_u64x_)));
-    casts.push_back(Pattern("vqshiftnsu.v8i8",  "sqshrun.v8i8",  8, u8_sat(wild_i16x_ >> wild_i16x_)));
-    casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ >> wild_i32x_)));
-    casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ >> wild_i64x_)));
-
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
     casts.push_back(Pattern("vqshifts.v8i8",  "sqshl.v8i8",  8, i8_sat(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
