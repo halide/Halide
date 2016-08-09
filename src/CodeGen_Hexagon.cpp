@@ -154,6 +154,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
+    body = hoist_slice_vector(body);
     debug(2) << "Lowering after forwarding stores:\n" << body << "\n\n";
 
     // We can't deal with bool vectors, convert them to integer vectors.
