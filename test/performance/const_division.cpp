@@ -76,7 +76,7 @@ bool test(int w, bool div) {
     double t_fast = benchmark(5, 200, [&]() { f.realize(fast); });
 
     Image<T> fast_dynamic = h.realize(input.width(), num_vals);
-    double t_fast_dynamic = benchmark(10, 200, [&]() { h.realize(fast_dynamic); });
+    double t_fast_dynamic = benchmark(5, 200, [&]() { h.realize(fast_dynamic); });
 
     printf("%6.3f                  %6.3f\n", t_correct / t_fast, t_correct / t_fast_dynamic);
 
