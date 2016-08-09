@@ -303,7 +303,7 @@ public:
     EXPORT Stage operator-=(const FuncRef &);
     // @}
 
-    /** Define a stage that multiplies the given expression to this Func. If the
+    /** Define a stage that multiplies this Func by the given expression. If the
      * expression refers to some RDom, this performs a product reduction of the
      * expression over the domain. If the function does not already have a pure
      * definition, this sets it to 1.
@@ -314,8 +314,8 @@ public:
     EXPORT Stage operator*=(const FuncRef &);
     // @}
 
-    /** Define a stage that multiplies the inverse of the given expression to
-     * this Func. If the expression refers to some RDom, this performs a product
+    /** Define a stage that divides this Func by the given expression.
+     * If the expression refers to some RDom, this performs a product
      * reduction of the inverse of the expression over the domain. If the
      * function does not already have a pure definition, this sets it to 1.
      */
@@ -386,17 +386,17 @@ public:
      */
     EXPORT Stage operator-=(Expr e);
 
-    /** Define a stage that multiplies the given expression to Tuple component
-     * 'idx' of this Func. The other Tuple components are unchanged. If the
+    /** Define a stage that multiplies Tuple component 'idx' of this Func by
+     * the given expression. The other Tuple components are unchanged. If the
      * expression refers to some RDom, this performs a product reduction of
      * the expression over the domain. The function must already have an
      * initial definition.
      */
     EXPORT Stage operator*=(Expr e);
 
-    /** Define a stage that multiplies the inverse of the given expression to
-     * Tuple component 'idx' of this Func. The other Tuple components are
-     * unchanged. If the expression refers to some RDom, this performs a product
+    /** Define a stage that divides Tuple component 'idx' of this Func by
+     * the given expression. The other Tuple components are unchanged.
+     * If the expression refers to some RDom, this performs a product
      * reduction of the inverse of the expression over the domain. The function
      * must already have an initial definition.
      */
