@@ -122,6 +122,7 @@
 /apps/fft/bench_fft
 /apps/fft/*.html
 bin/*
+build-64/*
 build-ios/*
 build-osx/*
 cmake_build/*

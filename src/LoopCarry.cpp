@@ -269,6 +269,7 @@ class LoopCarryOverLoop : public IRMutator {
             bool represented = false;
             for (vector<const Load *> &v : loads) {
                 if (graph_equal(Expr(load), Expr(v[0]))) {
+                    v.push_back(load);
                     represented = true;
                     v.push_back(load);
                 }

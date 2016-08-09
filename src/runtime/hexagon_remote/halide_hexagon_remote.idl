@@ -7,7 +7,14 @@ interface halide_hexagon_remote
     long initialize_kernels(in buffer code, rout handle_t module_ptr);
 
     // Get a symbol from the module.
-    handle_t get_symbol(in handle_t module_ptr, in sequence<char> name);
+    // v2: return the result as an output parameter instead of a return value.
+    long get_symbol_v2(in handle_t module_ptr, in sequence<char> name, rout handle_t sym_ptr);
+
+    // If running many short-running pipelines will be executed, the
+    // penalty for powering on HVX can be avoided by doing this
+    // explicitly around a collection of pipeline invocations.
+    long power_hvx_on();
+    long power_hvx_off();
 
     // Routine to run a pipeline on the remote side.
     long run(in handle_t module_ptr, in handle_t symbol,
@@ -20,4 +27,7 @@ interface halide_hexagon_remote
 
     // Retrive messages written by log_printf.
     long poll_log(rout sequence<char> log, rout long read_size);
+
+    // Retrieve the current profiling Func ID
+    long poll_profiler_state(rout long func, rout long threads);
 };

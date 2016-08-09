@@ -20,6 +20,50 @@ namespace Internal {
 
 class IRVisitor;
 
+/** All our IR node types get unique IDs for the purposes of RTTI */
+enum class IRNodeType {
+    IntImm,
+    UIntImm,
+    FloatImm,
+    StringImm,
+    Cast,
+    Variable,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Min,
+    Max,
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+    And,
+    Or,
+    Not,
+    Select,
+    Load,
+    Ramp,
+    Broadcast,
+    Call,
+    Let,
+    LetStmt,
+    AssertStmt,
+    ProducerConsumer,
+    For,
+    Store,
+    Provide,
+    Allocate,
+    Free,
+    Realize,
+    Block,
+    IfThenElse,
+    Evaluate
+};
+
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
 
@@ -37,13 +81,13 @@ struct IRNode {
        references to IR nodes. */
     mutable RefCount ref_count;
 
-    /** Each IR node subclass should return some unique int. We
-     * can compare these values to do runtime type
+    /** Each IR node subclass should return some unique pointer. We
+     * can compare these pointers to do runtime type
      * identification. We don't compile with rtti because that
      * injects run-time type identification stuff everywhere (and
      * often breaks when linking external libraries compiled
      * without it), and we only want it for IR nodes. */
-    virtual int type_info() const = 0;
+    virtual IRNodeType type_info() const = 0;
 };
 
 template<>
@@ -75,17 +119,16 @@ struct BaseExprNode : public IRNode {
    inheritance hierarchy. It provides an implementation of the
    accept function necessary for the visitor pattern to work, and
    a concrete instantiation of a unique IRNodeType per class. */
-template<typename T> struct ExprNode : public BaseExprNode {
+template<typename T>
+struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual int type_info() const {return static_type_info();}
-    static EXPORT int static_type_info();
+    virtual IRNodeType type_info() const {return T::_type_info;}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual int type_info() const {return static_type_info();}
-    static EXPORT int static_type_info();
+    virtual IRNodeType type_info() const {return T::_type_info;}
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -106,17 +149,18 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * Select). This returns nullptr if the node is not of the requested
      * type. Example usage:
      *
-     * if (const Add *add = expr.as<Add>()) {
+     * if (const Add *add = node->as<Add>()) {
      *   // This is an add node
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr && ptr->type_info() == T::static_type_info()) {
+        if (ptr && ptr->type_info() == T::_type_info) {
             return (const T *)ptr;
         }
         return nullptr;
     }
 };
+
 
 /** Integer constants */
 struct IntImm : public ExprNode<IntImm> {
@@ -138,6 +182,8 @@ struct IntImm : public ExprNode<IntImm> {
         node->value = value;
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::IntImm;
 };
 
 /** Unsigned integer constants */
@@ -159,6 +205,8 @@ struct UIntImm : public ExprNode<UIntImm> {
         node->value = value;
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::UIntImm;
 };
 
 /** Floating point constants */
@@ -186,6 +234,8 @@ struct FloatImm : public ExprNode<FloatImm> {
 
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::FloatImm;
 };
 
 /** String constants */
@@ -198,6 +248,8 @@ struct StringImm : public ExprNode<StringImm> {
         node->value = val;
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::StringImm;
 };
 
 }  // namespace Internal
@@ -270,7 +322,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::Renderscript,
                                      DeviceAPI::OpenGLCompute,
-                                     DeviceAPI::Metal};
+                                     DeviceAPI::Metal,
+                                     DeviceAPI::Hexagon};
 
 namespace Internal {
 

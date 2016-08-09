@@ -15,12 +15,12 @@ using namespace Halide;
 // even if overflow occurs.
 
 // Dimensions of the test data, and rate of salting with extreme values (1 in SALTRATE)
-#define WIDTH 2048
-#define HEIGHT 2048
+#define WIDTH 1024
+#define HEIGHT 1024
 #define SALTRATE 50
 // Portion of the test data to use for testing the simplifier
 # define SWIDTH 32
-# define SHEIGHT 2048
+# define SHEIGHT 1024
 
 // Generate poor quality pseudo random numbers.
 // For reproducibility, the array indices are used as the seed for each
@@ -50,7 +50,6 @@ uint64_t ubits(int unique, int i, int j) {
     bits = (bits ^ (bits >> 32)) * mu;
     return bits;
 }
-
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
 template <typename T>
 bool less_than_zero(T val) {
@@ -440,8 +439,8 @@ int main(int argc, char **argv) {
         scheduling = TiledGPU;
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         // TODO: Pranav, I think this still needs the size change and Makefile changes.
-        //maximum_vector_width = 1;
-        //scheduling = Hexagon;
+        maximum_vector_width = 1;
+        scheduling = Hexagon;
     }
 
     for (int vector_width = 1; vector_width <= maximum_vector_width; vector_width *= 2) {

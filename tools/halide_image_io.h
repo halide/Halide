@@ -199,7 +199,7 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     // convert the data to ImageType::ElemType
 
-    int c_stride = (im->channels() == 1) ? 0 : im->stride(2);
+    int c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
     typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
     if (bit_depth == 8) {
         for (int y = 0; y < im->height(); y++) {
@@ -285,7 +285,7 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     // im.copyToHost(); // in case the image is on the gpu
 
-    int c_stride = (im.channels() == 1) ? 0 : im.stride(2);
+    int c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
     typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
 
     for (int y = 0; y < im.height(); y++) {

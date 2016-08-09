@@ -135,7 +135,12 @@ bool function_takes_user_context(const std::string &name) {
         "halide_current_time_ns",
         "halide_debug_to_file",
         "halide_device_free",
+        "halide_device_host_nop_free",
+        "halide_device_free_as_destructor",
+        "halide_device_and_host_free",
+        "halide_device_and_host_free_as_destructor",
         "halide_device_malloc",
+        "halide_device_and_host_malloc",
         "halide_device_sync",
         "halide_do_par_for",
         "halide_do_task",
@@ -165,6 +170,9 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_run",
         "halide_hexagon_device_release",
         "halide_hexagon_host_get_symbol",
+        "halide_hexagon_power_hvx_on",
+        "halide_hexagon_power_hvx_off",
+        "halide_hexagon_power_hvx_off_as_destructor",
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
@@ -330,7 +338,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    #if LLVM_VERSION >= 39 && CAUGHTUP
+    #if LLVM_VERSION >= 39
     // Not supported by older linkers
     options.RelaxELFRelocations = false;
     #endif

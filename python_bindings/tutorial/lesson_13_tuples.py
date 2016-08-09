@@ -101,7 +101,7 @@ def main():
         assert type(im2) is Image_float32
         assert im1(30, 40) == 30 + 40
         assert numpy.isclose(im2(30, 40), math.sin(30 * 40))
-    
+
 
     # All Tuple elements are evaluated together over the same domain
     # in the same loop nest, but stored in distinct allocations. The
@@ -187,7 +187,7 @@ def main():
             # to the same Func.
             arg_max_0 = new_index
             arg_max_1 = new_max
-        
+
 
         # Let's verify that the Halide and C++ found the same maximum
         # value and index.
@@ -200,7 +200,7 @@ def main():
             assert type(r1) is Image_float32
             assert arg_max_0 == r0(0)
             assert numpy.isclose(arg_max_1, r1(0))
-        
+
 
         # Halide provides argmax and argmin as built-in reductions
         # similar to sum, product, maximum, and minimum. They return
@@ -208,7 +208,7 @@ def main():
         # corresponding to that value, and the value itself. In the
         # case of ties they return the first value found. We'll use
         # one of these in the following section.
-    
+
 
     # Tuples for user-defined types.
     if True:
@@ -239,8 +239,8 @@ def main():
                     self.real = tt[0]
                     self.imag = tt[1]
 
-                assert type(self.real) in [Expr, FuncRefExpr]
-                assert type(self.imag) in [Expr, FuncRefExpr]
+                assert type(self.real) in [Expr, FuncRef]
+                assert type(self.imag) in [Expr, FuncRef]
                 return
 
 
@@ -258,16 +258,16 @@ def main():
                 "Complex multiplication"
                 return Tuple(self.real * other.real - self.imag * other.imag,
                         self.real * other.imag + self.imag * other.real)
-            
+
 
             def magnitude(self):
                 "Complex magnitude"
                 return (self.real * self.real) + (self.imag * self.imag)
-            
+
 
             # Other complex operators would go here. The above are
             # sufficient for this example.
-        
+
 
         # Let's use the Complex struct to compute a Mandelbrot set.
         mandelbrot = Func()
@@ -317,7 +317,7 @@ def main():
                 else:
                     pass # is lesson 13 cpp version buggy ?
             print("\n")
-        
+
 
     print("Success!")
 

@@ -85,6 +85,8 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void halide_mutex_destroy(halide_mutex *) {}
+
 void *halide_get_symbol(const char *name) {
     return dlsym(RTLD_DEFAULT, name);
 }
@@ -193,6 +195,15 @@ int run(handle_t module_ptr, handle_t function,
 int release_kernels(handle_t module_ptr, int codeLen) {
     obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
     return 0;
+}
+
+extern "C" {
+halide_profiler_state profiler_state;
+int *profiler_current_func_addr = &profiler_state.current_func;
+}
+
+halide_profiler_state *halide_profiler_get_state() {
+    return (halide_profiler_state *)(&profiler_state);
 }
 
 extern "C" {
