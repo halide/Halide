@@ -55,42 +55,65 @@ inline Expr u8(Expr e) {
     return cast(UInt(8, e.type().lanes()), e);
 }
 
+namespace Internal {
+
+inline Expr signed_saturating_cast(Expr e, int bits) {
+    if (bits <= e.type().bits()) {
+        if (e.type().is_uint()) {
+            e = min(e, cast(e.type(), Int(bits).max()));
+        } else {
+            e = clamp(e, Int(bits).min(), Int(bits).max());
+        }
+    }
+    return cast(Int(bits, e.type().lanes()), e);
+}
+
+inline Expr unsigned_saturating_cast(Expr e, int bits) {
+    if (bits < e.type().bits()) {
+        if (e.type().is_uint()) {
+            e = min(e, UInt(bits).max());
+        } else {
+            e = clamp(e, 0, UInt(bits).max());
+        }
+    } else if (e.type().is_int()) {
+        e = max(e, 0);
+    }
+    return cast(UInt(bits, e.type().lanes()), e);
+}
+
+} // namepspace Internal
+
 inline Expr i8_sat(Expr e) {
-    return cast(Int(8, e.type().lanes()), clamp(e, -128, 127));
+    return Internal::signed_saturating_cast(e, 8);
 }
 
 inline Expr u8_sat(Expr e) {
-    if (e.type().is_uint()) {
-        return cast(UInt(8, e.type().lanes()), min(e, 255));
-    } else {
-        return cast(UInt(8, e.type().lanes()), clamp(e, 0, 255));
-    }
+    return Internal::unsigned_saturating_cast(e, 8);
 }
 
 inline Expr i16_sat(Expr e) {
-    return cast(Int(16, e.type().lanes()), clamp(e, -32768, 32767));
+    return Internal::signed_saturating_cast(e, 16);
 }
 
 inline Expr u16_sat(Expr e) {
-    if (e.type().is_uint()) {
-        return cast(UInt(16, e.type().lanes()), min(e, 65535));
-    } else {
-        return cast(UInt(16, e.type().lanes()), clamp(e, 0, 65535));
-    }
+    return Internal::unsigned_saturating_cast(e, 16);
 }
 
 inline Expr i32_sat(Expr e) {
-    return cast(Int(32, e.type().lanes()), clamp(e, Int(32).min(), Int(32).max()));
+    return Internal::signed_saturating_cast(e, 32);
 }
 
 inline Expr u32_sat(Expr e) {
-    if (e.type().is_uint()) {
-        return cast(UInt(32, e.type().lanes()), min(e, UInt(32).max()));
-    } else {
-        return cast(UInt(32, e.type().lanes()), clamp(e, 0, UInt(32).max()));
-    }
+    return Internal::unsigned_saturating_cast(e, 32);
 }
 
+inline Expr i64_sat(Expr e) {
+    return Internal::signed_saturating_cast(e, 64);
+}
+
+inline Expr u64_sat(Expr e) {
+    return Internal::unsigned_saturating_cast(e, 64);
+}
 
 };
 };
