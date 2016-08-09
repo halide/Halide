@@ -42,14 +42,14 @@ int main(int argc, char **argv) {
     g.realize(fast_result);
     h.realize(faster_result);
 
-    const int trials = 5;
-    const int iterations = 5;
+    const int trials = 10;
+    const int iterations = 10;
     pows_per_pixel.set(20);
 
     // All profiling runs are done into the same buffer, to avoid
     // cache weirdness.
     Image<float> timing_scratch(256, 256);
-    double t1 = 1e3 * benchmark(trials, iterations, [&]() { f.realize(timing_scratch); });
+    double t1 = 1e3 * benchmark(3, 3, [&]() { f.realize(timing_scratch); });
     double t2 = 1e3 * benchmark(trials, iterations, [&]() { g.realize(timing_scratch); });
     double t3 = 1e3 * benchmark(trials, iterations, [&]() { h.realize(timing_scratch); });
 
