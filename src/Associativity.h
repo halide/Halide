@@ -20,10 +20,10 @@ namespace Internal {
  * is the self-recurrence term, will be represented as:
  \code
  AssociativeOp assoc = {
-	min(x, y),
-	+inf,
-	{"x", f(x)},
-	{"y", g(r.x) + 2},
+        min(x, y),
+        +inf,
+        {"x", f(x)},
+        {"y", g(r.x) + 2},
  };
  \endcode
  *
@@ -32,20 +32,20 @@ namespace Internal {
  * this case. For example, min(g(r.x), 4), will be represented as:
  \code
  AssociativeOp assoc = {
-	y,
-	0,
-	{"", Expr()},
-	{"y", min(g(r.x), 4)},
+        y,
+        0,
+        {"", Expr()},
+        {"y", min(g(r.x), 4)},
  };
  \endcode
  * Since it is a unary operator, the identity does not matter. It can be
  * anything.
  */
 struct AssociativeOp {
-	Expr op; // op(x, y)
-	Expr identity;
-	std::pair<std::string, Expr> x;
-	std::pair<std::string, Expr> y;
+        Expr op; // op(x, y)
+        Expr identity;
+        std::pair<std::string, Expr> x;
+        std::pair<std::string, Expr> y;
 };
 
 /**
@@ -66,7 +66,7 @@ struct AssociativeOp {
  * particular update definition.
  */
 std::pair<bool, std::vector<AssociativeOp>> prove_associativity(
-	const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
+        const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
 EXPORT void associativity_test();
 

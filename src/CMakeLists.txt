@@ -66,7 +66,7 @@ set(RUNTIME_CPP
   posix_io
   posix_print
   posix_tempfile
-  posix_thread_pool
+  posix_threads
   powerpc_cpu_features
   profiler
   profiler_inlined
@@ -75,6 +75,7 @@ set(RUNTIME_CPP
   renderscript
   runtime_api
   ssp
+  thread_pool
   to_string
   tracing
   windows_clock
@@ -83,7 +84,7 @@ set(RUNTIME_CPP
   windows_io
   windows_opencl
   windows_tempfile
-  windows_thread_pool
+  windows_threads
   write_debug_image
   x86_cpu_features
 )
@@ -262,6 +263,8 @@ set(HEADER_FILES
   Float16.h
   Func.h
   Function.h
+  FuseGPUThreadLoops.h
+  FuzzFloatStores.h
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
@@ -422,6 +425,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Func.cpp
   Function.cpp
   FuseGPUThreadLoops.cpp
+  FuzzFloatStores.cpp
   Generator.cpp
   HexagonOffload.cpp
   HexagonOptimize.cpp

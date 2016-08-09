@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
         input_func(x) = sin(x);
         Image<float> input = input_func.realize(100);
 
-        // Then we define a 2-valued Tuple which tracks the maximum
-        // value and its index.
+        // Then we define a 2-valued Tuple which tracks the index of
+        // the maximum value and the value itself.
         Func arg_max;
 
         // Pure definition.
@@ -209,8 +209,7 @@ int main(int argc, char **argv) {
             Complex(Expr r, Expr i) : real(r), imag(i) {}
 
             // Construct from a call to a Func by treating it as a Tuple
-            Complex(FuncRefExpr t) : Complex(Tuple(t)) {}
-            Complex(FuncRefVar t) : Complex(Tuple(t)) {}
+            Complex(FuncRef t) : Complex(Tuple(t)) {}
 
             // Convert to a Tuple
             operator Tuple() const {

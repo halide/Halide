@@ -1,8 +1,5 @@
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "halide_image.h"
-
-using namespace Halide::Tools;
 
 #if defined(_MSC_VER) || defined(__x86_64__) || defined(__i386__)
 #define TESTING_ON_X86 1
@@ -12,6 +9,7 @@ using namespace Halide::Tools;
 
 #if TESTING_ON_X86
 #if defined(_MSC_VER)
+#include <intrin.h>
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }

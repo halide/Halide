@@ -102,6 +102,10 @@ extern "C" int __hexagon_divdf3;
 extern "C" int __hexagon_adddf3;
 extern "C" int __hexagon_divsf3;
 extern "C" int __hexagon_udivdi3;
+extern "C" int __hexagon_udivsi3;
+extern "C" int __hexagon_umodsi3;
+extern "C" int __hexagon_divsi3;
+extern "C" int __hexagon_modsi3;
 
 struct elf_t {
     // The object file in memory
@@ -513,6 +517,16 @@ struct elf_t {
                 // 1001 0ii0  101s ssss  PPii iiii  iiid dddd
                 // 1001 0ii1  000s ssss  PPii iiii  iiid dddd
                 mask = 0x06003fe0;
+            } else if ((inst >> 24) == 115 || (inst >> 24) == 124) {
+                // 0111 0011 -10sssss PP1iiiii iiiddddd
+                // 0111 0011 -11sssss PP1iiiii iiiddddd
+                // 0111 0011 0uusssss PP0iiiii iiiddddd
+                // 0111 0011 1uusssss PP0iiiii iiiddddd
+                // 0111 0011 -00sssss PP1iiiii iiiddddd
+                // 0111 0011 -01sssss PP1iiiii iiiddddd
+                // 0111 1100 0IIIIIII PPIiiiii iiiddddd
+                // 0111 0011 -11sssss PP1iiiii iiiddddd
+                mask = 0x00001fe0;
 
             } else {
                 log_printf("Unhandled!\n");
@@ -574,6 +588,8 @@ struct elf_t {
             {"abort", (char *)(&abort)},
             {"memcpy", (char *)(&memcpy)},
             {"memmove", (char *)(&memmove)},
+            {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
+            {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
             {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
             {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
             {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
@@ -581,6 +597,10 @@ struct elf_t {
             {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
             {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
             {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
+            {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
+            {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
+            {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
+            {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
             {NULL, NULL} // Sentinel
         };
 

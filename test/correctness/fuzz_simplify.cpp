@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "Halide.h"
 #include <time.h>
+#include <random>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
 
@@ -10,6 +11,9 @@ using namespace Halide::Internal;
 
 const int fuzz_var_count = 5;
 
+// use std::mt19937 instead of rand() to ensure consistent behavior on all systems
+std::mt19937 rng(0);
+
 Type fuzz_types[] = { UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
 const int fuzz_type_count = sizeof(fuzz_types)/sizeof(fuzz_types[0]);
 
@@ -18,11 +22,11 @@ std::string fuzz_var(int i) {
 }
 
 Expr random_var() {
-    return Variable::make(Int(0), fuzz_var(rand()%fuzz_var_count));
+    return Variable::make(Int(0), fuzz_var(rng()%fuzz_var_count));
 }
 
 Type random_type(int width) {
-    Type T = fuzz_types[rand()%fuzz_type_count];
+    Type T = fuzz_types[rng()%fuzz_type_count];
     if (width > 1) {
         T = T.with_lanes(width);
     }
@@ -34,7 +38,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
         overflow_undef = true;
     }
     if (T.is_scalar()) {
-        int var = rand()%fuzz_var_count + 1;
+        int var = rng()%fuzz_var_count + 1;
         if (!imm_only && var < fuzz_var_count) {
             return cast(T, random_var());
         } else {
@@ -42,13 +46,13 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
                 // For Int(32), we don't care about correctness during
                 // overflow, so just use numbers that are unlikely to
                 // overflow.
-                return cast(T, rand()%256 - 128);
+                return cast(T, (int)(rng()%256 - 128));
             } else {
-                return cast(T, rand() - RAND_MAX/2);
+                return cast(T, (int)(rng() - RAND_MAX/2));
             }
         }
     } else {
-        if (rand() % 2 == 0) {
+        if (rng() % 2 == 0) {
             return Ramp::make(random_leaf(T.element_of(), overflow_undef),
                               random_leaf(T.element_of(), overflow_undef),
                               T.lanes());
@@ -72,13 +76,13 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
     };
     const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
 
-    if (maybe_scalar && rand() % T.lanes() == 0) {
+    if (maybe_scalar && rng() % T.lanes() == 0) {
         T = T.element_of();
     }
 
     Expr a = random_expr(T, depth);
     Expr b = random_expr(T, depth);
-    int op = rand()%op_count;
+    int op = rng()%op_count;
     return make_bin_op[op](a, b);
 }
 
@@ -111,7 +115,7 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     const int bool_bin_op_count = sizeof(make_bool_bin_op) / sizeof(make_bool_bin_op[0]);
     const int op_count = bin_op_count + bool_bin_op_count + 5;
 
-    int op = rand() % op_count;
+    int op = rng() % op_count;
     switch(op) {
     case 0: return random_leaf(T);
     case 1: return Select::make(random_condition(T, depth, true),
@@ -258,7 +262,7 @@ int main(int argc, char **argv) {
     // We want different fuzz tests every time, to increase coverage.
     // We also report the seed to enable reproducing failures.
     int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
-    srand(fuzz_seed);
+    rng.seed(fuzz_seed);
     std::cout << "Simplify fuzz test seed: " << fuzz_seed << std::endl;
 
     int max_fuzz_vector_width = 4;

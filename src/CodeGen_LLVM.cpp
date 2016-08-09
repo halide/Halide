@@ -35,6 +35,19 @@
 
 #endif
 
+// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
+// properly on Windows: the return type isn't part of the name-mangling scheme
+// on *nix, but is for MSVC. Note also that this specialization must be in the
+// same (global) namespace as the others.
+template<>
+struct halide_c_type_to_name<struct halide_filter_metadata_t> {
+    static const bool known_type = true;
+    static halide_cplusplus_type_name name() {
+        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"};
+    }
+};
+
+
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
@@ -466,6 +479,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
     }
     return names;
 }
@@ -784,11 +798,11 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type().is_handle()) {
-        // Handle is always emitted into metadata "undefined", regardless of
-        // what sort of Expr is provided.
+    if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -865,14 +879,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
+        Expr def = args[arg].def;
+        Expr min = args[arg].min;
+        Expr max = args[arg].max;
+        if (args[arg].type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            def = min = max = Expr();
+        }
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(args[arg].def),
-            embed_constant_expr(args[arg].min),
-            embed_constant_expr(args[arg].max)
+            embed_constant_expr(def),
+            embed_constant_expr(min),
+            embed_constant_expr(max)
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
@@ -967,8 +989,28 @@ void CodeGen_LLVM::optimize_module() {
     FunctionPassManager function_pass_manager(module.get());
     PassManager module_pass_manager;
     #else
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
+
+    // We override PassManager::add so that we have an opportunity to
+    // blacklist problematic LLVM passes.
+    class MyFunctionPassManager : public legacy::FunctionPassManager {
+    public:
+        MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
+        virtual void add(Pass *p) override {
+            debug(2) << "Adding function pass: " << p->getPassName() << "\n";
+            legacy::FunctionPassManager::add(p);
+        }
+    };
+
+    class MyModulePassManager : public legacy::PassManager {
+    public:
+        virtual void add(Pass *p) override {
+            debug(2) << "Adding module pass: " << p->getPassName() << "\n";
+            legacy::PassManager::add(p);
+        }
+    };
+
+    MyFunctionPassManager function_pass_manager(module.get());
+    MyModulePassManager module_pass_manager;
     #endif
 
     #if (LLVM_VERSION >= 36) && (LLVM_VERSION < 37)
@@ -3289,6 +3331,9 @@ void CodeGen_LLVM::visit(const Store *op) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
+    } else if (const Let *let = op->index.as<Let>()) {
+        Stmt s = Store::make(op->name, op->value, let->body, op->param);
+        codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
