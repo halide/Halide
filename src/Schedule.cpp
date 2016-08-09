@@ -15,7 +15,7 @@ LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.get_conten
 LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().get_contents(), v.name(), v.is_rvar) {}
 
 std::string LoopLevel::func_name() const {
-    if (function_contents.get() != nullptr) {
+    if (function_contents.defined()) {
         return Internal::Function(function_contents).name();
     }
     return "";
@@ -23,7 +23,7 @@ std::string LoopLevel::func_name() const {
 
 Func LoopLevel::func() const {
     internal_assert(!is_inline() && !is_root());
-    internal_assert(function_contents.get() != nullptr);
+    internal_assert(function_contents.defined());
     return Func(Internal::Function(function_contents));
 }
 
@@ -46,7 +46,7 @@ bool LoopLevel::is_root() const {
 }
 
 std::string LoopLevel::to_string() const {
-    return (function_contents.get() ? Internal::Function(function_contents).name() : "") + "." + var_name;
+    return (function_contents.defined() ? Internal::Function(function_contents).name() : "") + "." + var_name;
 }
 
 bool LoopLevel::match(const std::string &loop) const {
