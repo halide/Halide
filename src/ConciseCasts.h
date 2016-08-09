@@ -58,6 +58,9 @@ inline Expr u8(Expr e) {
 namespace Internal {
 
 inline Expr signed_saturating_cast(Expr e, int bits) {
+    if (e.type().element_of() == Int(bits)) {
+        return e;
+    }
     if (bits <= e.type().bits()) {
         if (e.type().is_uint()) {
             e = min(e, cast(e.type(), Int(bits).max()));
@@ -69,6 +72,9 @@ inline Expr signed_saturating_cast(Expr e, int bits) {
 }
 
 inline Expr unsigned_saturating_cast(Expr e, int bits) {
+    if (e.type().element_of() == UInt(bits)) {
+        return e;
+    }
     if (bits < e.type().bits()) {
         if (e.type().is_uint()) {
             e = min(e, UInt(bits).max());
