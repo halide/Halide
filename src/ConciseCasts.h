@@ -55,70 +55,36 @@ inline Expr u8(Expr e) {
     return cast(UInt(8, e.type().lanes()), e);
 }
 
-namespace Internal {
-
-inline Expr signed_saturating_cast(Expr e, int bits) {
-    if (e.type().element_of() == Int(bits)) {
-        return e;
-    }
-    if (bits <= e.type().bits()) {
-        if (e.type().is_uint()) {
-            e = min(e, cast(e.type(), Int(bits).max()));
-        } else {
-            e = clamp(e, Int(bits).min(), Int(bits).max());
-        }
-    }
-    return cast(Int(bits, e.type().lanes()), e);
-}
-
-inline Expr unsigned_saturating_cast(Expr e, int bits) {
-    if (e.type().element_of() == UInt(bits)) {
-        return e;
-    }
-    if (bits < e.type().bits()) {
-        if (e.type().is_uint()) {
-            e = min(e, UInt(bits).max());
-        } else {
-            e = clamp(e, 0, UInt(bits).max());
-        }
-    } else if (e.type().is_int()) {
-        e = max(e, 0);
-    }
-    return cast(UInt(bits, e.type().lanes()), e);
-}
-
-} // namepspace Internal
-
 inline Expr i8_sat(Expr e) {
-    return Internal::signed_saturating_cast(e, 8);
+    return saturating_cast(Int(8, e.type().lanes()), e);
 }
 
 inline Expr u8_sat(Expr e) {
-    return Internal::unsigned_saturating_cast(e, 8);
+    return saturating_cast(UInt(8, e.type().lanes()), e);
 }
 
 inline Expr i16_sat(Expr e) {
-    return Internal::signed_saturating_cast(e, 16);
+    return saturating_cast(Int(16, e.type().lanes()), e);
 }
 
 inline Expr u16_sat(Expr e) {
-    return Internal::unsigned_saturating_cast(e, 16);
+    return saturating_cast(UInt(16, e.type().lanes()), e);
 }
 
 inline Expr i32_sat(Expr e) {
-    return Internal::signed_saturating_cast(e, 32);
+    return saturating_cast(Int(32, e.type().lanes()), e);
 }
 
 inline Expr u32_sat(Expr e) {
-    return Internal::unsigned_saturating_cast(e, 32);
+    return saturating_cast(UInt(32, e.type().lanes()), e);
 }
 
 inline Expr i64_sat(Expr e) {
-    return Internal::signed_saturating_cast(e, 64);
+    return saturating_cast(Int(64, e.type().lanes()), e);
 }
 
 inline Expr u64_sat(Expr e) {
-    return Internal::unsigned_saturating_cast(e, 64);
+    return saturating_cast(UInt(64, e.type().lanes()), e);
 }
 
 };

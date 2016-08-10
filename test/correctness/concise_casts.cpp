@@ -37,10 +37,18 @@ void test(cast_maker_t cast_maker, bool saturating) {
     for (int32_t i = 0; i < 7; i++) {
         bool source_signed = std::numeric_limits<source_t>::is_signed;
         bool target_signed = std::numeric_limits<target_t>::is_signed;
+        bool source_floating = !std::numeric_limits<source_t>::is_integer;
 
         target_t correct_result;
         if (saturating) {
-            if (source_signed == target_signed) {
+            if (source_floating) {
+                source_t bounded_lower = std::max(in(i), (source_t)target_min);
+                if (bounded_lower >= (source_t)target_max) {
+                    correct_result = target_max;
+                } else {
+                    correct_result = (target_t)bounded_lower;
+                }
+            } else if (source_signed == target_signed) {
                 if (sizeof(source_t) > sizeof(target_t)) {
                     correct_result = (target_t)std::min(std::max(in(i),
                                                                  (source_t)target_min),
@@ -67,13 +75,27 @@ void test(cast_maker_t cast_maker, bool saturating) {
 
             // Do a simpler verification as well if a 64-bit int will hold everything
             if ((sizeof(target_t) < 8 || target_signed) &&
-                (sizeof(source_t) < 8 || source_signed)) {
-                  int64_t simpler_correct_result = std::min(std::max((int64_t)in(i), (int64_t)target_min), (int64_t)target_max);
-                  if (simpler_correct_result != correct_result) {
-                      std::cout << "Simpler verification failed for index " << i << " correct_result is " << correct_result << " correct_result casted to int64_t is " << (int64_t)correct_result << " simpler_correct_result is " << simpler_correct_result << "\n";
-                      std::cout << "in(i) " << (int)in(i) << " target_min " << (int)target_min << " target_max " << (int)target_max << "\n";
-                  }
-                  assert(simpler_correct_result == correct_result);
+                (source_floating || (sizeof(source_t) < 8 || source_signed))) {
+                int64_t simpler_correct_result;
+
+                if (source_floating) {
+                    double bounded_lower = std::max((double)in(i), (double)target_min);
+                    if (bounded_lower >= (double)target_max) {
+                        simpler_correct_result = target_max;
+                    } else {
+                        simpler_correct_result = (int64_t)bounded_lower;
+                    }
+                } else {
+                  simpler_correct_result = std::min(std::max((int64_t)in(i),
+                                                             (int64_t)target_min),
+                                                    (int64_t)target_max);
+                }
+
+                if (simpler_correct_result != correct_result) {
+                    std::cout << "Simpler verification failed for index " << i << " correct_result is " << correct_result << " correct_result casted to int64_t is " << (int64_t)correct_result << " simpler_correct_result is " << simpler_correct_result << "\n";
+                    std::cout << "in(i) " << in(i) << " target_min " << target_min << " target_max " << target_max << "\n";
+                }
+                assert(simpler_correct_result == correct_result);
             }
 
         } else {
@@ -81,7 +103,7 @@ void test(cast_maker_t cast_maker, bool saturating) {
         }
 
         if (result(i) != correct_result) {
-            std::cout << "Match failure at index " << i << " got " << (int)result(i) << " expected " << (int)correct_result << " for input " << (int)in(i) << (saturating ? " saturating" : " nonsaturating") << std::endl;
+            std::cout << "Match failure at index " << i << " got " << result(i) << " expected " << correct_result << " for input " << in(i) << (saturating ? " saturating" : " nonsaturating") << std::endl;
         }
 
         assert(result(i) == correct_result);
@@ -120,6 +142,8 @@ int main(int argc, char **argv) {
     test_one<uint32_t>();
     test_one<int64_t>();
     test_one<uint64_t>();
+    test_one<float>();
+    test_one<double>();
 
     printf("Success!\n");
     return 0;
