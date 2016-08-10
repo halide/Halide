@@ -1497,11 +1497,28 @@ void CodeGen_LLVM::visit(const Div *op) {
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
+    // Detect if it's a small int modulus
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
+
     int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+        // We can use our fast signed integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+        // We can use our fast unsigned integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
     } else {
         // To match our definition of division, mod should be between 0
         // and |b|.
@@ -2581,7 +2598,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
             BasicBlock *true_pred = builder->GetInsertBlock();
-            
+
             builder->SetInsertPoint(false_bb);
             Value *false_value = codegen(op->args[2]);
             builder->CreateBr(after_bb);

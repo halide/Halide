@@ -1404,9 +1404,15 @@ void CodeGen_Hexagon::visit(const Max *op) {
                             "halide.hexagon.max" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->a, op->b}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Min *op) {
@@ -1415,13 +1421,19 @@ void CodeGen_Hexagon::visit(const Min *op) {
                             "halide.hexagon.min" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->b, op->a}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    internal_assert(op->condition.type().is_scalar());
+    internal_assert(op->condition.type().is_scalar()) << Expr(op) << "\n";
 
     if (op->type.is_vector()) {
         // Implement scalar conditions on vector values with if-then-else.
