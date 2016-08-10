@@ -77,7 +77,7 @@ public:
     EXPORT Function();
 
     /** Construct a new function with the given name */
-    EXPORT Function(const std::string &n);
+    EXPORT explicit Function(const std::string &n);
 
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     EXPORT explicit Function(const IntrusivePtr<FunctionContents> &);

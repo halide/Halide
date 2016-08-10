@@ -10,6 +10,7 @@
 #include "Inline.h"
 #include "CodeGen_GPU_Dev.h"
 #include "IRPrinter.h"
+#include "Func.h"
 
 namespace Halide {
 namespace Internal {
@@ -812,7 +813,7 @@ public:
     };
     vector<Site> sites_allowed;
 
-    ComputeLegalSchedules(Function f) : func(f), found(false) {}
+    ComputeLegalSchedules(Function f, const map<string, Function> &env) : func(f), found(false), env(env) {}
 
 private:
     using IRVisitor::visit;
@@ -820,6 +821,7 @@ private:
     vector<Site> sites;
     Function func;
     bool found;
+    const map<string, Function> &env;
 
     void visit(const For *f) {
         f->min.accept(this);
@@ -829,9 +831,18 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
+        LoopLevel loop_level;
+        if (func.empty()) {
+            internal_assert(!var.empty());
+            loop_level = LoopLevel::root();
+        } else {
+            auto it = env.find(func);
+            internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
+            loop_level = LoopLevel(it->second, Var(var));
+        }
         Site s = {f->for_type == ForType::Parallel ||
                   f->for_type == ForType::Vectorized,
-                  LoopLevel(func, var)};
+                  loop_level};
         sites.push_back(s);
         f->body.accept(this);
         sites.pop_back();
@@ -883,8 +894,8 @@ string schedule_to_source(Function f,
     if (compute_at.is_inline()) {
         ss << ".compute_inline()";
     } else {
-        string store_var_name = store_at.var;
-        string compute_var_name = compute_at.var;
+        string store_var_name = store_at.var().name();
+        string compute_var_name = compute_at.var().name();
         if (store_var_name == Var::outermost().name()) {
             store_var_name = "Var::outermost()";
         }
@@ -895,13 +906,13 @@ string schedule_to_source(Function f,
             if (store_at.is_root()) {
                 ss << ".store_root()";
             } else {
-                ss << ".store_at(" << store_at.func << ", " << store_var_name << ")";
+                ss << ".store_at(" << store_at.func().name() << ", " << store_var_name << ")";
             }
         }
         if (compute_at.is_root()) {
             ss << ".compute_root()";
         } else {
-            ss << ".compute_at(" << compute_at.func << ", " << compute_var_name << ")";
+            ss << ".compute_at(" << compute_at.func().name() << ", " << compute_var_name << ")";
         }
     }
     ss << ";";
@@ -938,7 +949,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const For *op) {
         if (ends_with(op->name, Var::outermost().name()) ||
-            ends_with(op->name, LoopLevel::root().var)) {
+            ends_with(op->name, LoopLevel::root().to_string())) {
             IRVisitor::visit(op);
         } else {
 
@@ -989,7 +1000,7 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, const Target &target, bool is_output) {
+void validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -1075,7 +1086,7 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
     }
 
     // Otherwise inspect the uses to see what's ok.
-    ComputeLegalSchedules legal(f);
+    ComputeLegalSchedules legal(f, env);
     s.accept(&legal);
 
     bool store_at_ok = false, compute_at_ok = false;
@@ -1100,7 +1111,7 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
                     << "\" is stored outside the parallel loop over "
-                    << sites[i].loop_level.func << "." << sites[i].loop_level.var
+                    << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
                 store_at_ok = compute_at_ok = false;
             }
@@ -1152,7 +1163,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
 
-    string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
+    string root_var = LoopLevel::root().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
@@ -1165,7 +1176,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, target, is_output);
+        validate_schedule(f, s, target, is_output, env);
 
         if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {
