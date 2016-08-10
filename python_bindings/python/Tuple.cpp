@@ -5,7 +5,7 @@
 
 #include "../../src/Tuple.h"
 #include "../../src/Expr.h"
-#include "../../src/Func.h" // for FuncRef
+#include "../../src/Func.h" // for FuncTupleElementRef, FuncRef
 
 #include <vector>
 #include <string>

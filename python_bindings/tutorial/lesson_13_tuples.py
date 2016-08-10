@@ -138,8 +138,8 @@ def main():
     # the individual Exprs:
     integer_part = multi_valued_2[x, y][0]
     floating_part = multi_valued_2[x, y][1]
-    assert type(integer_part) is Expr
-    assert type(floating_part) is Expr
+    assert type(integer_part) is FuncTupleElementRef
+    assert type(floating_part) is FuncTupleElementRef
 
     consumer = Func()
     consumer[x, y] = Tuple(integer_part + 10, floating_part + 10.0)
