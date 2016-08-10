@@ -271,7 +271,6 @@ class LoopCarryOverLoop : public IRMutator {
                 if (graph_equal(Expr(load), Expr(v[0]))) {
                     v.push_back(load);
                     represented = true;
-                    v.push_back(load);
                 }
             }
             if (!represented) {
