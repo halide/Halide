@@ -71,7 +71,8 @@ public:
      * bound value. Only relevant when jitting */
     template<typename T>
     NO_INLINE T get_scalar() const {
-        user_assert(type() == type_of<T>())
+        // Allow get_scalar<uint64_t>() for all Handle types
+        user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't get Param<" << type()
             << "> as scalar of type " << type_of<T>() << "\n";
         return *((const T *)(get_scalar_address()));
@@ -85,7 +86,8 @@ public:
      * value. Only relevant when jitting */
     template<typename T>
     NO_INLINE void set_scalar(T val) {
-        user_assert(type() == type_of<T>())
+        // Allow set_scalar<uint64_t>() for all Handle types
+        user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't set Param<" << type()
             << "> to scalar of type " << type_of<T>() << "\n";
         *((T *)(get_scalar_address())) = val;

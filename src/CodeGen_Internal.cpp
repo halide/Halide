@@ -240,10 +240,12 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // Match this non-overflowing C code
         /*
           T r = a % b;
-          r = r + (r < 0 ? abs(b) : 0);
+          T sign_mask = (r >> (sizeof(r)*8 - 1));
+          r = r + sign_mask & abs(b);
         */
 
-        r = select(r < 0, r + abs(b), r);
+        Expr sign_mask = r >> (a.type().bits()-1);
+        r += sign_mask & abs(b);
         return common_subexpression_elimination(r);
     } else {
         return r;
