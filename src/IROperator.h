@@ -731,8 +731,10 @@ inline Expr max(Expr a, float b) {return max(a, Expr(b));}
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
-    min_val = cast(a.type(), min_val);
-    max_val = cast(a.type(), max_val);
+    min_val = lossless_cast(a.type(), min_val);
+    user_assert(min_val.defined()) << "clamp with possibly out of range minimum bound.\n";
+    max_val = lossless_cast(a.type(), max_val);
+    user_assert(max_val.defined()) << "clamp with possibly out of range maximum bound.\n";
     return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
 }
 
@@ -1919,7 +1921,14 @@ Expr saturating_cast(Expr e) {
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
 inline Expr saturating_cast(Type t, Expr e) {
-    if (e.type() != t) {
+    // For float to float, guarantee infinities are always pinned to range.
+    if (t.is_float() && e.type().is_float()) {
+        if (t.bits() < e.type().bits()) {
+            e = cast(t, clamp(e, t.min(), t.max()));
+        } else {
+            e = clamp(cast(t, e), t.min(), t.max());
+        }
+    } else if (e.type() != t) {
         // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
         if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
             e = max(e, t.min()); // min values turn out to be always representable
