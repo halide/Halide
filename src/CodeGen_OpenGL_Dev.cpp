@@ -413,7 +413,7 @@ char CodeGen_GLSL::get_lane_suffix(int i) {
 void CodeGen_GLSL::visit(const Load *op) {
     string idx = print_expr(op->index);
     if (op->type.is_scalar()) {
-        print_assignment(op->type, op->name + "[" + idx + "]");
+        print_assignment(op->type, print_name(op->name) + "[" + idx + "]");
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "(";
@@ -422,7 +422,7 @@ void CodeGen_GLSL::visit(const Load *op) {
             if (i > 0) {
                 rhs << ", ";
             }
-            rhs << op->name << "[" << idx << "." << c << "]";
+            rhs << print_name(op->name) << "[" << idx << "." << c << "]";
         }
         rhs << ")";
         print_assignment(op->type, rhs.str());
@@ -434,13 +434,13 @@ void CodeGen_GLSL::visit(const Store *op) {
     string idx = print_expr(op->index);
     if (op->value.type().is_scalar()) {
         do_indent();
-        stream << op->name << "[" << idx << "] = " << val << ";\n";
+        stream << print_name(op->name) << "[" << idx << "] = " << val << ";\n";
     } else {
         internal_assert(op->value.type().lanes() <= 4);
         for (int i = 0; i < op->value.type().lanes(); i++) {
             char l = get_lane_suffix(i);
             do_indent();
-            stream << op->name << "[" << idx << "." << l << "] = " << val << "." << l << ";\n";
+            stream << print_name(op->name) << "[" << idx << "." << l << "] = " << val << "." << l << ";\n";
         }
     }
 }
@@ -670,7 +670,7 @@ void CodeGen_GLSL::visit(const Allocate *op) {
     int32_t size = op->constant_allocation_size();
     user_assert(size) << "Allocations inside GLSL kernels must be constant-sized\n";
     do_indent();
-    stream << print_type(op->type) << " " << op->name << "[" << size << "];\n";
+    stream << print_type(op->type) << " " << print_name(op->name) << "[" << size << "];\n";
     op->body.accept(this);
 }
 
