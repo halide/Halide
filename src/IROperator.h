@@ -1907,6 +1907,44 @@ inline Expr likely_if_innermost(Expr e) {
                                 {e}, Internal::Call::PureIntrinsic);
 }
 
+
+/** Cast an expression to the halide type corresponding to the C++
+ * type T clamping to the minimum and maximum values of the result
+ * type. */
+template <typename T>
+Expr saturating_cast(Expr e) {
+    return saturating_cast(type_of<T>(), e);
+}
+
+/** Cast an expression to a new type, clamping to the minimum and
+ * maximum values of the result type. */
+inline Expr saturating_cast(Type t, Expr e) {
+    if (e.type() != t) {
+        // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
+        if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
+            e = max(e, t.min()); // min values turn out to be always representable
+            // Return here as it is already casted to the target type.
+            // This line depends on t.max() rounding upward, which should always
+            // be the case as it is one less than a representable value, thus
+            // the one large is always the closest.
+            e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
+        } else {
+            Expr min_bound = lossless_cast(e.type(), t.min());
+            Expr max_bound = lossless_cast(e.type(), t.max());
+
+            if (min_bound.defined() && max_bound.defined()) {
+                e = clamp(e, min_bound, max_bound);
+            } else if (min_bound.defined()) {
+                e = max(e, min_bound);
+            } else if (max_bound.defined()) {
+                e = min(e, max_bound);
+            }
+            e = cast(t, e);
+        }
+    }
+    return e;
+}
+
 }
 
 #endif
