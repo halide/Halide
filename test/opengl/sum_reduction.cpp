@@ -1,12 +1,3 @@
-// Fails during realization with the following message:
-// ---
-// Could not compile shader:
-// ERROR: 0:25: '<' : syntax error: syntax error
-// Error: OpenGL error GL_INVALID_VALUE(1281) at halide_opengl_run UseProgram.
-//
-//
-
-
 #include "Halide.h"
 #include <stdio.h>
 
