@@ -414,7 +414,7 @@ public:
     /** What function is this calling? */
     EXPORT Internal::Function function() const {return func_ref.function();}
 
-    /** Return index to the function outputs */
+    /** Return index to the function outputs. */
     EXPORT int index() const {return idx;}
 };
 
