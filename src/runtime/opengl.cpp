@@ -337,6 +337,17 @@ WEAK char *strndup(const char *s, size_t n) {
     return p;
 }
 
+WEAK char *strstrip(char *str, size_t n) {
+
+  char *pos = str;
+  while (pos != str+n
+         && *pos != '\n'
+         && *pos != ' ')
+    pos++;
+  *pos = '\0';
+  return str;
+}
+
 WEAK void debug_buffer(void *user_context, buffer_t *buf) {
     debug(user_context)
         << "  dev: " << buf->dev << "\n"
@@ -466,13 +477,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
             // set name
-            kernel->name = strndup(args, next_line - args);
-            size_t i;
-            for (i=0; i < (size_t)(next_line-args)
-                      && kernel->name[i]!='\n'
-                      && kernel->name[i]!=' '; i++);
-            kernel->name[i] = '\0';
-            debug(0) << "Setting kernel name to " << kernel->name << "\n";
+            kernel->name = strstrip(strndup(args, next_line - args), next_line - args);
         } else if ((args = match_prefix(line, uniform_marker))) {
             if (Argument *arg =
                 parse_argument(user_context, args, next_line - 1)) {
@@ -1392,9 +1397,9 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 using namespace Halide::Runtime::Internal::OpenGL;
 
 // Find the correct module for the called function
-// FIXME: This currently takes O(# of GLSL'd stages) and can
+// TODO: This currently takes O(# of GLSL'd stages) and can
 // be optimized
-ModuleState* find_module(const char *stage_name) {
+WEAK ModuleState* find_module(const char *stage_name) {
   ModuleState* state_ptr = state_list;
 
   while (state_ptr != NULL) {
@@ -1432,19 +1437,6 @@ WEAK int halide_opengl_run(void *user_context,
     GLStateSaver state_saver;
 
     // Find the right module
-   /* 
-    ModuleState *mod = (ModuleState *)state_ptr;
-    if (!mod) {
-        error(user_context) << "Internal error: module state is NULL";
-        return -1;
-    }
-
-    KernelInfo *kernel = mod->kernel;
-    if (!kernel) {
-        error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
-        return 1;
-    }
-    */
     ModuleState *mod = find_module(entry_name);
     if (!mod) {
       error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
@@ -1452,8 +1444,6 @@ WEAK int halide_opengl_run(void *user_context,
     }
 
     KernelInfo *kernel = mod->kernel;
-
-    debug(0) << "CALLING " << entry_name << " AND mod->kernel is " << kernel->source << "\n";
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
@@ -1921,8 +1911,10 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
     return 0;
 }
 
-// Copy a string up to the next kernel sentinel
-bool get_kernel_src(const char *src, char** dst, size_t* len) {
+// Copy a string up to the next kernel sentinel.
+// This is used by halide_opengl_initialize_kernels() to cut the
+// full kernel source into per-stage bits
+WEAK bool get_kernel_src(const char *src, char** dst, size_t* len) {
 
   const char* sentinel = strstr(src+1, kernel_marker);
   bool done = false;
@@ -1936,7 +1928,7 @@ bool get_kernel_src(const char *src, char** dst, size_t* len) {
 
   char* ret = (char*)malloc(sizeof(char) * (*len + 1));
   strncpy(ret, src, *len);
-  *(ret+*len) = '\0';
+  *(ret + *len) = '\0';
   *dst = ret;
   return done;
 }
@@ -1957,17 +1949,16 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     ModuleState *module = *state;
 
     while (true) {
+      // Get the source for a single stage from the string that contains
+      // kernel source for all stages
       bool done = get_kernel_src(src+len, &single_kernel_src, &len);
-      debug(0) << "SLKDFJLKDJSFLKDJFLKSJFLKDS:\n" <<
-        single_kernel_src << "\nSDLFKJSDLFKJDSLFKJDSLK!!!!!\n";
 
-//      if (!module) {
-          module = (ModuleState *)malloc(sizeof(ModuleState));
-          module->kernel = NULL;
-          module->next = state_list;
-          state_list = module;
-          *state = module;
-//      }
+      // Construct a new ModuleState and add it to the global list
+      module = (ModuleState *)malloc(sizeof(ModuleState));
+      module->kernel = NULL;
+      module->next = state_list;
+      state_list = module;
+      *state = module;
 
       KernelInfo *kernel = module->kernel;
       if (!kernel) {
@@ -1979,100 +1970,97 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
           module->kernel = kernel;
       }
 
-      //if (kernel->program_id == 0) {
-      if (true) {
+      // Create the vertex shader. The runtime will output boilerplate for the
+      // vertex shader based on a fixed program plus arguments obtained from
+      // the comment header passed in the fragment shader. Since there are a
+      // relatively small number of vertices (i.e. usually only four), per-vertex
+      // expressions interpolated by varying attributes are evaluated
+      // by host code on the CPU and passed to the GPU as values in the
+      // vertex buffer.
+      enum { PrinterLength = 1024*4 };
+      Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
 
-          // Create the vertex shader. The runtime will output boilerplate for the
-          // vertex shader based on a fixed program plus arguments obtained from
-          // the comment header passed in the fragment shader. Since there are a
-          // relatively small number of vertices (i.e. usually only four), per-vertex
-          // expressions interpolated by varying attributes are evaluated
-          // by host code on the CPU and passed to the GPU as values in the
-          // vertex buffer.
-          enum { PrinterLength = 1024*4 };
-          Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
+      // Count the number of varying attributes, this is 2 for the spatial
+      // x and y coordinates, plus the number of scalar varying attribute
+      // expressions pulled out of the fragment shader.
+      int num_varying_float = 2;
 
-          // Count the number of varying attributes, this is 2 for the spatial
-          // x and y coordinates, plus the number of scalar varying attribute
-          // expressions pulled out of the fragment shader.
-          int num_varying_float = 2;
-
-          for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
-              if (arg->kind == Argument::Varying)
-                  ++num_varying_float;
-          }
-
-          int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
-
-          for (int i = 0; i != num_packed_varying_float; ++i) {
-              vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
-              vertex_src << "varying   vec4 _varyingf" << i << ";\n";
-          }
-
-          vertex_src << "uniform ivec2 output_min;\n"
-                     << "uniform ivec2 output_extent;\n"
-                     << "void main() {\n"
-
-                     // Host codegen always passes the spatial vertex coordinates
-                     // in the first two elements of the _varyingf0_attrib
-                     << "    vec2 position = vec2(_varyingf0_attrib[0], _varyingf0_attrib[1]);\n"
-                     << "    gl_Position = vec4(position, 0.0, 1.0);\n"
-                     << "    vec2 texcoord = 0.5 * position + 0.5;\n"
-                     << "    vec2 pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
-
-          // Copy through all of the varying attributes
-          for (int i = 0; i != num_packed_varying_float; ++i) {
-              vertex_src << "    _varyingf" << i << " = _varyingf" << i << "_attrib;\n";
-          }
-
-          vertex_src << "    _varyingf0.xy = pixcoord;\n";
-
-          vertex_src << "}\n";
-
-          // Check to see if there was sufficient storage for the vertex program.
-          if (vertex_src.size() >= PrinterLength) {
-              error(user_context) << "Vertex shader source truncated";
-              return 1;
-          }
-
-          // Initialize vertex shader.
-          GLuint vertex_shader_id = make_shader(user_context,
-                                                GL_VERTEX_SHADER, vertex_src.buf, NULL);
-          if (vertex_shader_id == 0) {
-              halide_error(user_context, "Failed to create vertex shader");
-              return 1;
-          }
-
-          // Create the fragment shader
-          GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                  kernel->source, NULL);
-          // Link GLSL program
-          GLuint program = global_state.CreateProgram();
-          global_state.AttachShader(program, vertex_shader_id);
-          global_state.AttachShader(program, fragment_shader_id);
-          global_state.LinkProgram(program);
-
-          // Release the individual shaders
-          global_state.DeleteShader(vertex_shader_id);
-          global_state.DeleteShader(fragment_shader_id);
-
-          GLint status;
-          global_state.GetProgramiv(program, GL_LINK_STATUS, &status);
-          if (!status) {
-              GLint log_len;
-              global_state.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
-              HalideMalloc log_tmp(user_context, log_len);
-              if (log_tmp.ptr) {
-                  char *log = (char*) log_tmp.ptr;
-                  global_state.GetProgramInfoLog(program, log_len, NULL, log);
-                  debug(user_context) << "Could not link GLSL program:\n" << log << "\n";
-              }
-              global_state.DeleteProgram(program);
-              return -1;
-          }
-          kernel->program_id = program;
+      for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
+          if (arg->kind == Argument::Varying)
+              ++num_varying_float;
       }
-      if (done)
+
+      int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
+
+      for (int i = 0; i != num_packed_varying_float; ++i) {
+          vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
+          vertex_src << "varying   vec4 _varyingf" << i << ";\n";
+      }
+
+      vertex_src << "uniform ivec2 output_min;\n"
+                 << "uniform ivec2 output_extent;\n"
+                 << "void main() {\n"
+
+                 // Host codegen always passes the spatial vertex coordinates
+                 // in the first two elements of the _varyingf0_attrib
+                 << "    vec2 position = vec2(_varyingf0_attrib[0], _varyingf0_attrib[1]);\n"
+                 << "    gl_Position = vec4(position, 0.0, 1.0);\n"
+                 << "    vec2 texcoord = 0.5 * position + 0.5;\n"
+                 << "    vec2 pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
+
+      // Copy through all of the varying attributes
+      for (int i = 0; i != num_packed_varying_float; ++i) {
+          vertex_src << "    _varyingf" << i << " = _varyingf" << i << "_attrib;\n";
+      }
+
+      vertex_src << "    _varyingf0.xy = pixcoord;\n";
+
+      vertex_src << "}\n";
+
+      // Check to see if there was sufficient storage for the vertex program.
+      if (vertex_src.size() >= PrinterLength) {
+          error(user_context) << "Vertex shader source truncated";
+          return 1;
+      }
+
+      // Initialize vertex shader.
+      GLuint vertex_shader_id = make_shader(user_context,
+                                            GL_VERTEX_SHADER, vertex_src.buf, NULL);
+      if (vertex_shader_id == 0) {
+          halide_error(user_context, "Failed to create vertex shader");
+          return 1;
+      }
+
+      // Create the fragment shader
+      GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
+                                              kernel->source, NULL);
+      // Link GLSL program
+      GLuint program = global_state.CreateProgram();
+      global_state.AttachShader(program, vertex_shader_id);
+      global_state.AttachShader(program, fragment_shader_id);
+      global_state.LinkProgram(program);
+
+      // Release the individual shaders
+      global_state.DeleteShader(vertex_shader_id);
+      global_state.DeleteShader(fragment_shader_id);
+
+      GLint status;
+      global_state.GetProgramiv(program, GL_LINK_STATUS, &status);
+      if (!status) {
+          GLint log_len;
+          global_state.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
+          HalideMalloc log_tmp(user_context, log_len);
+          if (log_tmp.ptr) {
+              char *log = (char*) log_tmp.ptr;
+              global_state.GetProgramInfoLog(program, log_len, NULL, log);
+              debug(user_context) << "Could not link GLSL program:\n" << log << "\n";
+          }
+          global_state.DeleteProgram(program);
+          return -1;
+      }
+      kernel->program_id = program;
+
+      if (done) // i.e. no more kernels to compile
           break;
     }
     return 0;
