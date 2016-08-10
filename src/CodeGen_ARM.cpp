@@ -41,6 +41,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     user_assert(target.os != Target::NaCl) << "llvm build not configured with native client enabled\n.";
     #endif
 
+
     // Generate the cast patterns that can take vector types.  We need
     // to iterate over all 64 and 128 bit integer types relevant for
     // neon.
@@ -150,6 +151,19 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
             casts.push_back(p);
         }
     }
+
+    casts.push_back(Pattern("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
+                            i16_sat((wild_i32x4 * wild_i32x4 + (1<<14)) / (1 << 15)),
+                            Pattern::NarrowArgs));
+    casts.push_back(Pattern("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
+                            i16_sat((wild_i32x_ * wild_i32x_ + (1<<14)) / (1 << 15)),
+                            Pattern::NarrowArgs));
+    casts.push_back(Pattern("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
+                            i32_sat((wild_i64x2 * wild_i64x2 + (1<<30)) / Expr(int64_t(1) << 31)),
+                            Pattern::NarrowArgs));
+    casts.push_back(Pattern("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
+                            i32_sat((wild_i64x_ * wild_i64x_ + (1<<30)) / Expr(int64_t(1) << 31)),
+                            Pattern::NarrowArgs));
 
     casts.push_back(Pattern("vqshiftns.v8i8",  "sqshrn.v8i8",  8, i8_sat(wild_i16x_/wild_i16x_),  Pattern::RightShift));
     casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_/wild_i32x_), Pattern::RightShift));

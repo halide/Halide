@@ -347,6 +347,17 @@ public:
     }
     // @}
 
+    /** Get a pointer to the address of the min coordinate. */
+    // @{
+    T *data() {
+        return (T *)buf.host;
+    }
+
+    const T *data() const {
+        return (const T *)buf.host;
+    }
+    // @}
+    
     /** Provide a cast operator to buffer_t *, so that instances can
      * be passed directly to Halide filters. */
     operator buffer_t *() {
