@@ -23,14 +23,17 @@ int main() {
     Image<uint8_t> result = f.realize(10, 10, 3);
     result.copy_to_host();
 
-    for (int i=0; i<10; i++)
-      for (int j=0; j<10; j++)
-        for (int k=0; k<3; k++)
-          if (result(i,j,k) != i+j+1) {
-            printf("FAILED: expected %d but got %d\n",
-                i+j+1, result(i,j,k));
-            return 1;
-          }
+    for (int i=0; i<10; i++) {
+        for (int j=0; j<10; j++) {
+            for (int k=0; k<3; k++) {
+                if (result(i,j,k) != i+j+1) {
+                    printf("FAILED: expected %d but got %d\n",
+                      i+j+1, result(i,j,k));
+                  return 1;
+                }
+            }
+        }
+    }
 
     Func f2, g2;
     f2(x, y, c) = cast<float>(x);
@@ -41,17 +44,19 @@ int main() {
 
     Image<float> result2 = g2.realize(10, 10, 3);
 
-    for (int i=0; i<10; i++)
-      for (int j=0; j<10; j++)
-        for (int k=0; k<3; k++) {
-          float diff = (result2(i,j,k) - (float)(i+j));
-          diff *= diff;
-          if (diff > 0.0001) {
-            printf("FAILED: expected %f but got %f (diff is %f)\n",
-                (float)(i+j), result2(i,j,k), diff);
-            return 1;
-          }
+    for (int i=0; i<10; i++) {
+        for (int j=0; j<10; j++) {
+            for (int k=0; k<3; k++) {
+                float diff = (result2(i,j,k) - (float)(i+j));
+                diff *= diff;
+                if (diff > 0.0001) {
+                    printf("FAILED: expected %f but got %f (diff is %f)\n",
+                      (float)(i+j), result2(i,j,k), diff);
+                    return 1;
+                }
+            }
         }
+    }
 
     printf("Success!\n");
 

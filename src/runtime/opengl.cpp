@@ -337,15 +337,18 @@ WEAK char *strndup(const char *s, size_t n) {
     return p;
 }
 
+// Strip whitespace from the right side of
+// a string
 WEAK char *strstrip(char *str, size_t n) {
-
-  char *pos = str;
-  while (pos != str+n
-         && *pos != '\n'
-         && *pos != ' ')
-    pos++;
-  *pos = '\0';
-  return str;
+    char *pos = str;
+    while (pos != str+n
+           && *pos != '\0'
+           && *pos != '\n'
+           && *pos != ' ') {
+        pos++;
+    }
+    *pos = '\0';
+    return str;
 }
 
 WEAK void debug_buffer(void *user_context, buffer_t *buf) {
@@ -557,6 +560,7 @@ WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
         arg = next;
     }
     free(kernel->source);
+    free(kernel->name);
     free(kernel);
 }
 
@@ -1400,18 +1404,17 @@ using namespace Halide::Runtime::Internal::OpenGL;
 // TODO: This currently takes O(# of GLSL'd stages) and can
 // be optimized
 WEAK ModuleState* find_module(const char *stage_name) {
-  ModuleState* state_ptr = state_list;
+    ModuleState* state_ptr = state_list;
 
-  while (state_ptr != NULL) {
-    KernelInfo *kernel = state_ptr->kernel;
+    while (state_ptr != NULL) {
+        KernelInfo *kernel = state_ptr->kernel;
     if (kernel && strcmp(stage_name, kernel->name) == 0) {
-      return state_ptr;
+        return state_ptr;
     }
-      debug(0) << "Looking for kernel |" << stage_name << "| and found |" << kernel->name << "|\n";
-      state_ptr = state_ptr->next;
-  }
+        state_ptr = state_ptr->next;
+    }
 
-  return NULL;
+    return NULL;
 }
 
 //  Create wrappers that satisfy old naming conventions
