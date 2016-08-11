@@ -557,7 +557,7 @@ private:
         } else if (call_a && call_b &&
                    call_a->is_intrinsic(Call::slice_vector) &&
                    call_b->is_intrinsic(Call::slice_vector)) {
-            expr = hoist_slice_vector<Add>(Add::make(a, b));
+            expr = hoist_slice_vector<Add>(a, b);
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -1346,7 +1346,7 @@ private:
         } else if (call_a && call_b &&
                    call_a->is_intrinsic(Call::slice_vector) &&
                    call_b->is_intrinsic(Call::slice_vector)) {
-            expr = hoist_slice_vector<Mul>(Mul::make(a, b));
+            expr = hoist_slice_vector<Mul>(a, b);
         }else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
@@ -2274,7 +2274,7 @@ private:
         } else if (call_a && call_b &&
                    call_a->is_intrinsic(Call::slice_vector) &&
                    call_b->is_intrinsic(Call::slice_vector)) {
-            expr = hoist_slice_vector<Min>(min(a, b));
+            expr = hoist_slice_vector<Min>(a, b);
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2614,7 +2614,7 @@ private:
         } else if (call_a && call_b &&
                    call_a->is_intrinsic(Call::slice_vector) &&
                    call_b->is_intrinsic(Call::slice_vector)) {
-            expr = hoist_slice_vector<Max>(max(a, b));
+            expr = hoist_slice_vector<Max>(a, b);
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -3925,50 +3925,39 @@ private:
         }
     }
     template <typename T>
-    Expr hoist_slice_vector(Expr e) {
-        const T *op = e.as<T>();
-        internal_assert(op);
+    Expr hoist_slice_vector(Expr a, Expr b) {
+        debug(4) << "Trying to hoist slice vector:\n... a = " << a << "\n... b = " << b << "\n";
 
-        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
-
-        const Call *call_a = op->a.template as<Call>();
-        const Call *call_b = op->b.template as<Call>();
+        const Call *call_a = a.as<Call>();
+        const Call *call_b = b.as<Call>();
 
         internal_assert(call_a && call_b &&
                         call_a->is_intrinsic(Call::slice_vector) &&
                         call_b->is_intrinsic(Call::slice_vector));
 
-        const int64_t *start_lane_a = as_const_int(call_a->args[1]);
-        const int64_t *start_lane_b = as_const_int(call_b->args[1]);
-        if (*start_lane_a != *start_lane_b) {
-            debug(4) << " ...unable to hoist - differing start lanes\n";
-            return e;
-        }
-
-        const int64_t *stride_a = as_const_int(call_a->args[2]);
-        const int64_t *stride_b = as_const_int(call_b->args[2]);
-        if (*stride_a != 1 || *stride_b != 1) {
-            debug(4) << " ...unable to hoist - differing strides\n";
-            return e;
+        if (!equal(call_a->args[1], call_b->args[1]) ||
+            !equal(call_a->args[2], call_b->args[2])) {
+            debug(4) << " ...unable to hoist - slice vector arguments don't match\n";
+            return T::make(a, b);
         }
 
         const Call *concat_a = call_a->args[0].as<Call>();
         const Call *concat_b = call_b->args[0].as<Call>();
         if (!concat_a || !concat_b) {
             debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
-            return e;
+            return T::make(a, b);
         }
 
         const std::vector<Expr> &slices_a = concat_a->args;
         const std::vector<Expr> &slices_b = concat_b->args;
         if (slices_a.size() != slices_b.size()) {
-            return e;
+            return T::make(a, b);
         }
 
         for (size_t i = 0; i < slices_a.size(); i++) {
             if (slices_a[i].type() != slices_b[i].type()) {
                 debug(4) << " ...unable to hoist - type mismatch\n";
-                return e;
+                return T::make(a, b);
             }
         }
 
@@ -3980,8 +3969,8 @@ private:
         Expr start_lane = call_a->args[1];
         Expr result_lanes = call_a->args[3];
         Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
-        Expr ret_expr = Call::make(op->type, Call::slice_vector,
-                                   { concat_v, start_lane, 1 /*for now, we only deal with stride 1 */, result_lanes },
+        Expr ret_expr = Call::make(a.type(), Call::slice_vector,
+                                   {concat_v, start_lane, call_a->args[2], result_lanes},
                                    Call::PureIntrinsic);
         debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
         return ret_expr;
@@ -4081,7 +4070,7 @@ private:
                 new_value = call->args[0];
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
-                                                              { new_var, call->args[1], call->args[2], call->args[3]},
+                                                              {new_var, call->args[1], call->args[2], call->args[3]},
                                                               Call::PureIntrinsic), replacement);
             } else if (call && call->is_intrinsic(Call::concat_vectors) &&
                        ((var_a && !var_b) || (!var_a && var_b))) {
@@ -4089,9 +4078,9 @@ private:
                 Expr op_a = var_a ? call->args[0] : new_var;
                 Expr op_b = var_a ? new_var : call->args[1];
                 replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
-                                                              { op_a, op_b }, Call::PureIntrinsic), replacement);
+                                                              {op_a, op_b}, Call::PureIntrinsic), replacement);
                 new_value = var_a ? call->args[1] : call->args[0];
-            }else {
+            } else {
                 break;
             }
         }
