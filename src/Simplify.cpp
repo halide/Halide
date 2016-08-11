@@ -104,8 +104,33 @@ Expr indeterminate_expression_error(Type t) {
     return Call::make(t, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
 }
 
-bool is_indeterminate_expression(const Call *call) {
-    return call && call->is_intrinsic(Call::indeterminate_expression);
+// If 'e' is indeterminate_expression of type t, 
+//      set *expr to it and return true.
+// If 'e' is indeterminate_expression of other type, 
+//      make a new indeterminate_expression of the proper type, set *expr to it and return true.
+// Otherwise, leave *expr untouched and return false.
+bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
+    const Call *call = e.as<Call>();
+    if (call && call->is_intrinsic(Call::indeterminate_expression)) {
+        if (call->type != t) {
+            *expr = indeterminate_expression_error(t);
+        } else {
+            *expr = e;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool propagate_indeterminate_expression(Expr e0, Expr e1, Type t, Expr *expr) {
+    return propagate_indeterminate_expression(e0, t, expr) ||
+           propagate_indeterminate_expression(e1, t, expr);
+}
+
+bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr *expr) {
+    return propagate_indeterminate_expression(e0, t, expr) ||
+           propagate_indeterminate_expression(e1, t, expr) ||
+           propagate_indeterminate_expression(e2, t, expr);
 }
 
 }
@@ -370,6 +395,9 @@ private:
 
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
+        if (propagate_indeterminate_expression(value, op->type, &expr)) {
+            return;
+        }
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
@@ -379,9 +407,6 @@ private:
         uint64_t u = 0;
         if (value.type() == op->type) {
             expr = value;
-        } else if (is_indeterminate_expression(value.as<Call>())) {
-            // Propagate the indeterminate expression under the new type
-            expr = indeterminate_expression_error(op->type);
         } else if (op->type.is_int() &&
                    const_float(value, &f)) {
             // float -> int
@@ -490,6 +515,9 @@ private:
 
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         // Rearrange a few patterns to cut down on the number of cases
         // to check later.
@@ -540,11 +568,7 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
-        if (is_indeterminate_expression(call_a)) {
-            expr = a;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-        } else if (const_int(a, &ia) &&
+        if (const_int(a, &ia) &&
             const_int(b, &ib)) {
             if (no_overflow(a.type()) &&
                 add_would_overflow(a.type().bits(), ia, ib)) {
@@ -831,6 +855,9 @@ private:
     void visit(const Sub *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         int64_t ia = 0, ib = 0;
         uint64_t ua = 0, ub = 0;
@@ -882,11 +909,7 @@ private:
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
-        if (is_indeterminate_expression(call_a)) {
-            expr = a;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-        } else if (is_zero(b)) {
+        if (is_zero(b)) {
             expr = a;
         } else if (equal(a, b)) {
             expr = make_zero(op->type);
@@ -1319,6 +1342,9 @@ private:
     void visit(const Mul *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         if (is_simple_const(a)) std::swap(a, b);
 
@@ -1337,11 +1363,7 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        if (is_indeterminate_expression(call_a)) {
-            expr = a;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-        } else if (is_zero(a)) {
+        if (is_zero(a)) {
             expr = a;
         } else if (is_zero(b)) {
             expr = b;
@@ -1396,6 +1418,9 @@ private:
     void visit(const Div *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
@@ -1415,8 +1440,6 @@ private:
         const Mul *mul_a_a_a = nullptr;
         const Mul *mul_a_b_a = nullptr;
         const Mul *mul_a_b_b = nullptr;
-        const Call *call_a = a.as<Call>();
-        const Call *call_b = b.as<Call>();
 
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1473,11 +1496,7 @@ private:
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
-        if (is_indeterminate_expression(call_a)) { 
-            expr = a;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-        } else if (is_zero(b) && !op->type.is_float()) {
+        if (is_zero(b) && !op->type.is_float()) {
             expr = indeterminate_expression_error(op->type);
         } else if (is_zero(a)) {
             expr = a;
@@ -1821,6 +1840,9 @@ private:
     void visit(const Mod *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         int64_t ia = 0, ib = 0;
         uint64_t ua = 0, ub = 0;
@@ -1832,8 +1854,6 @@ private:
         const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : nullptr;
         const Ramp *ramp_a = a.as<Ramp>();
-        const Call *call_a = a.as<Call>();
-        const Call *call_b = b.as<Call>();
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
@@ -1863,11 +1883,7 @@ private:
             mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
-        if (is_indeterminate_expression(call_a)) {
-            expr = a;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-        } else if (is_zero(b) && !op->type.is_float()) {
+        if (is_zero(b) && !op->type.is_float()) {
             expr = indeterminate_expression_error(op->type);
         } else if (is_zero(a)) {
             expr = a;
@@ -1961,6 +1977,9 @@ private:
     void visit(const Min *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         // Move constants to the right to cut down on number of cases to check
         if (is_simple_const(a) && !is_simple_const(b)) {
@@ -2008,13 +2027,7 @@ private:
 
         int64_t ramp_min, ramp_max;
 
-        if (is_indeterminate_expression(call_a)) {
-            expr = a;
-            return;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-            return;
-        } else if (equal(a, b)) {
+        if (equal(a, b)) {
             expr = a;
             return;
         } else if (const_int(a, &ia) &&
@@ -2331,6 +2344,9 @@ private:
 
     void visit(const Max *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         // Move constants to the right to cut down on number of cases to check
         if (is_simple_const(a) && !is_simple_const(b)) {
@@ -2373,13 +2389,7 @@ private:
 
         int64_t ramp_min, ramp_max;
 
-        if (is_indeterminate_expression(call_a)) {
-            expr = a;
-            return;
-        } else if (is_indeterminate_expression(call_b)) {
-            expr = b;
-            return;
-        } else if (equal(a, b)) {
+        if (equal(a, b)) {
             expr = a;
             return;
         } else if (const_int(a, &ia) &&
@@ -2673,6 +2683,9 @@ private:
 
     void visit(const EQ *op) {
         Expr delta = mutate(op->a - op->b);
+        if (propagate_indeterminate_expression(delta, op->type, &expr)) {
+            return;
+        }
 
         const Broadcast *broadcast = delta.as<Broadcast>();
         const Add *add = delta.as<Add>();
@@ -2682,10 +2695,7 @@ private:
 
         Expr zero = make_zero(delta.type());
 
-        if (is_indeterminate_expression(expr.as<Call>())) {
-            expr = delta;
-            return;
-        } else if (is_zero(delta)) {
+        if (is_zero(delta)) {
             expr = const_true(op->type.lanes());
             return;
         } else if (is_const(delta)) {
@@ -2768,6 +2778,9 @@ private:
 
     void visit(const LT *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         int64_t a_min, a_max, b_min, b_max;
         if (const_int_bounds(a, &a_min, &a_max) &&
@@ -2818,11 +2831,7 @@ private:
         // ia and/or ib are large unsigned integer constants, especially when
         // int is 32 bits on the machine.
         // Explicit comparison is preferred.
-        if (is_indeterminate_expression(a.as<Call>())) {
-            expr = a;
-        } else if (is_indeterminate_expression(b.as<Call>())) {
-            expr = b;
-        } else if (const_int(a, &ia) &&
+        if (const_int(a, &ia) &&
             const_int(b, &ib)) {
             expr = make_bool(ia < ib, op->type.lanes());
         } else if (const_uint(a, &ua) &&
@@ -3105,6 +3114,9 @@ private:
     void visit(const And *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
@@ -3121,11 +3133,7 @@ private:
         const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
 
-        if (is_indeterminate_expression(a.as<Call>())) {
-            expr = a;
-        } else if (is_indeterminate_expression(b.as<Call>())) {
-            expr = b;
-        } else if (is_one(a)) {
+        if (is_one(a)) {
             expr = b;
         } else if (is_one(b)) {
             expr = a;
@@ -3231,6 +3239,9 @@ private:
 
     void visit(const Or *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
+        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+            return;
+        }
 
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
@@ -3250,11 +3261,7 @@ private:
         const And *and_b = b.as<And>();
         string name_a, name_b, name_c;
 
-        if (is_indeterminate_expression(a.as<Call>())) {
-            expr = a;
-        } else if (is_indeterminate_expression(b.as<Call>())) {
-            expr = b;
-        } else if (is_one(a)) {
+        if (is_one(a)) {
             expr = a;
         } else if (is_one(b)) {
             expr = b;
@@ -3344,10 +3351,11 @@ private:
 
     void visit(const Not *op) {
         Expr a = mutate(op->a);
+        if (propagate_indeterminate_expression(a, op->type, &expr)) {
+            return;
+        }
 
-        if (is_indeterminate_expression(a.as<Call>())) {
-            expr = a;
-        } else if (is_one(a)) {
+        if (is_one(a)) {
             expr = make_zero(a.type());
         } else if (is_zero(a)) {
             expr = make_one(a.type());
@@ -3379,6 +3387,9 @@ private:
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
+        if (propagate_indeterminate_expression(condition, true_value, false_value, op->type, &expr)) {
+            return;
+        }
 
         const Call *ct = true_value.as<Call>();
         const Call *cf = false_value.as<Call>();
@@ -3391,13 +3402,7 @@ private:
         const Mul *mul_t = true_value.as<Mul>();
         const Mul *mul_f = false_value.as<Mul>();
 
-        if (is_indeterminate_expression(condition.as<Call>())) {
-            expr = condition;
-        } else if (is_indeterminate_expression(ct)) {
-            expr = true_value;
-        } else if (is_indeterminate_expression(cf)) {
-            expr = false_value;
-        } else if (is_zero(condition)) {
+        if (is_zero(condition)) {
             expr = false_value;
         } else if (is_one(condition)) {
             expr = true_value;
@@ -3690,12 +3695,7 @@ private:
         if (op->is_intrinsic(Call::shift_left) ||
             op->is_intrinsic(Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-
-            if (is_indeterminate_expression(a.as<Call>())) {
-                expr = a;
-                return;
-            } else if (is_indeterminate_expression(b.as<Call>())) {
-                expr = b;
+            if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
                 return;
             }
 
@@ -3734,17 +3734,13 @@ private:
             }
         } else if (op->is_intrinsic(Call::bitwise_and)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+            if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+                return;
+            }
+
             int64_t ib = 0;
             uint64_t ub = 0;
             int bits;
-
-            if (is_indeterminate_expression(a.as<Call>())) {
-                expr = a;
-                return;
-            } else if (is_indeterminate_expression(b.as<Call>())) {
-                expr = b;
-                return;
-            }
 
             if (const_int(b, &ib) &&
                 !b.type().is_max(ib) &&
@@ -3763,12 +3759,10 @@ private:
             }
         } else if (op->is_intrinsic(Call::bitwise_or)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-
-            if (is_indeterminate_expression(a.as<Call>())) {
-                expr = a;
-            } else if (is_indeterminate_expression(b.as<Call>())) {
-                expr = b;
-            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+                return;
+            }
+            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
             } else {
                 expr = a | b;
@@ -3776,12 +3770,13 @@ private:
         } else if (op->is_intrinsic(Call::abs)) {
             // Constant evaluate abs(x).
             Expr a = mutate(op->args[0]);
+            if (propagate_indeterminate_expression(a, op->type, &expr)) {
+                return;
+            }
             Type ta = a.type();
             int64_t ia = 0;
             double fa = 0;
-            if (is_indeterminate_expression(a.as<Call>())) {
-                expr = a;
-            } else if (ta.is_int() && const_int(a, &ia)) {
+            if (ta.is_int() && const_int(a, &ia)) {
                 if (ia < 0 && !(Int(64).is_min(ia))) {
                     ia = -ia;
                 }
@@ -3943,9 +3938,10 @@ private:
         } else if (op->call_type == Call::PureExtern &&
                    op->name == "sqrt_f32") {
             Expr arg = mutate(op->args[0]);
-            if (is_indeterminate_expression(arg.as<Call>())) {
-                expr = arg;
-            } else if (const double *f = as_const_float(arg)) {
+            if (propagate_indeterminate_expression(arg, op->type, &expr)) {
+                return;
+            }
+            if (const double *f = as_const_float(arg)) {
                 expr = FloatImm::make(arg.type(), std::sqrt(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
@@ -3955,9 +3951,10 @@ private:
         } else if (op->call_type == Call::PureExtern &&
                    op->name == "log_f32") {
             Expr arg = mutate(op->args[0]);
-            if (is_indeterminate_expression(arg.as<Call>())) {
-                expr = arg;
-            } else if (const double *f = as_const_float(arg)) {
+            if (propagate_indeterminate_expression(arg, op->type, &expr)) {
+                return;
+            }
+            if (const double *f = as_const_float(arg)) {
                 expr = FloatImm::make(arg.type(), std::log(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
@@ -3967,9 +3964,10 @@ private:
         } else if (op->call_type == Call::PureExtern &&
                    op->name == "exp_f32") {
             Expr arg = mutate(op->args[0]);
-            if (is_indeterminate_expression(arg.as<Call>())) {
-                expr = arg;
-            } else if (const double *f = as_const_float(arg)) {
+            if (propagate_indeterminate_expression(arg, op->type, &expr)) {
+                return;
+            }
+            if (const double *f = as_const_float(arg)) {
                 expr = FloatImm::make(arg.type(), std::exp(*f));
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
@@ -3980,11 +3978,7 @@ private:
                    op->name == "pow_f32") {
             Expr arg0 = mutate(op->args[0]);
             Expr arg1 = mutate(op->args[1]);
-            if (is_indeterminate_expression(arg0.as<Call>())) {
-                expr = arg0;
-                return;
-            } else if (is_indeterminate_expression(arg1.as<Call>())) {
-                expr = arg1;
+            if (propagate_indeterminate_expression(arg0, arg1, op->type, &expr)) {
                 return;
             }
             const double *f0 = as_const_float(arg0);
@@ -4001,11 +3995,10 @@ private:
                     op->name == "round_f32" || op->name == "trunc_f32")) {
             internal_assert(op->args.size() == 1);
             Expr arg = mutate(op->args[0]);
-            const Call *call = arg.as<Call>();
-            if (is_indeterminate_expression(call)) {
-                expr = arg;
+            if (propagate_indeterminate_expression(arg, op->type, &expr)) {
                 return;
             }
+            const Call *call = arg.as<Call>();
             if (const double *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") {
                     expr = FloatImm::make(arg.type(), std::floor(*f));
@@ -5531,6 +5524,10 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
     check_ind_expr(one == e, e_is_indeterminate);
     check_ind_expr(e < one, e_is_indeterminate);
     check_ind_expr(one < e, e_is_indeterminate);
+    check_ind_expr(!(e == one), e_is_indeterminate);
+    check_ind_expr(!(one == e), e_is_indeterminate);
+    check_ind_expr(!(e < one), e_is_indeterminate);
+    check_ind_expr(!(one < e), e_is_indeterminate);
     check_ind_expr(b && t, e_is_indeterminate);
     check_ind_expr(t && b, e_is_indeterminate);
     check_ind_expr(b || t, e_is_indeterminate);
