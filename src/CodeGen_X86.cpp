@@ -214,52 +214,64 @@ void CodeGen_X86::visit(const Cast *op) {
     vector<Expr> matches;
 
     struct Pattern {
-        bool needs_sse_41;
+        Target::Feature feature;
         bool wide_op;
         Type type;
+        int min_lanes;
         string intrin;
         Expr pattern;
     };
 
     static Pattern patterns[] = {
-        {false, true, Int(8, 16), "llvm.x86.sse2.padds.b",
+        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
          i8_sat(wild_i16x_ + wild_i16x_)},
-        {false, true, Int(8, 16), "llvm.x86.sse2.psubs.b",
+        {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
          i8_sat(wild_i16x_ - wild_i16x_)},
-        {false, true, UInt(8, 16), "llvm.x86.sse2.paddus.b",
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.paddus.b",
          u8_sat(wild_u16x_ + wild_u16x_)},
-        {false, true, UInt(8, 16), "llvm.x86.sse2.psubus.b",
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.psubus.b",
          u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {false, true, Int(16, 8), "llvm.x86.sse2.padds.w",
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.padds.w",
          i16_sat(wild_i32x_ + wild_i32x_)},
-        {false, true, Int(16, 8), "llvm.x86.sse2.psubs.w",
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.psubs.w",
          i16_sat(wild_i32x_ - wild_i32x_)},
-        {false, true, UInt(16, 8), "llvm.x86.sse2.paddus.w",
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.paddus.w",
          u16_sat(wild_u32x_ + wild_u32x_)},
-        {false, true, UInt(16, 8), "llvm.x86.sse2.psubus.w",
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.psubus.w",
          u16(max(wild_i32x_ - wild_i32x_, 0))},
-        {false, true, Int(16, 8), "llvm.x86.sse2.pmulh.w",
+
+        // Only use the avx2 version if we have > 8 lanes
+        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
          i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {false, true, UInt(16, 8), "llvm.x86.sse2.pmulhu.w",
+        {Target::AVX2, true, UInt(16, 16), 9, "llvm.x86.avx2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {false, true, UInt(8, 16), "llvm.x86.sse2.pavg.b",
+
+        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
+         i16((wild_i32x_ * wild_i32x_) / 65536)},
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
+         u16((wild_u32x_ * wild_u32x_) / 65536)},
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.pavg.b",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {false, true, UInt(16, 8), "llvm.x86.sse2.pavg.w",
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pavg.w",
          u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {false, false, Int(16, 8), "packssdwx8",
+        {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
          i16_sat(wild_i32x_)},
-        {false, false, Int(8, 16), "packsswbx16",
+        {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",
          i8_sat(wild_i16x_)},
-        {false, false, UInt(8, 16), "packuswbx16",
+        {Target::FeatureEnd, false, UInt(8, 16), 0, "packuswbx16",
          u8_sat(wild_i16x_)},
-        {true, false, UInt(16, 8), "packusdwx8",
+        {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
          u16_sat(wild_i32x_)}
     };
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
 
-        if (!target.has_feature(Target::SSE41) && pattern.needs_sse_41) {
+        if (!target.has_feature(pattern.feature)) {
+            continue;
+        }
+
+        if (op->type.lanes() < pattern.min_lanes) {
             continue;
         }
 
@@ -312,7 +324,12 @@ Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
     Type ty = a.type();
     if (ty.is_vector() && ty.bits() == 16) {
         // We can use pmulhu for this op.
-        Expr p = u16(u32(a) * u32(b) / 65536);
+        Expr p;
+        if (ty.is_uint()) {
+            p = u16(u32(a) * u32(b) / 65536);
+        } else {
+            p = i16(i32(a) * i32(b) / 65536);
+        }
         if (shr) {
             p = p >> shr;
         }

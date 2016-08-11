@@ -144,7 +144,7 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 extern void halide_join_thread(struct halide_thread *);
 
 /** Set the number of threads used by Halide's thread pool. Returns
- * the old number. 
+ * the old number.
  *
  * n < 0  : error condition
  * n == 0 : use a reasonable system default (typically, number of cpus online).
@@ -251,7 +251,7 @@ struct halide_type_t {
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; }
+    size_t bytes() const { return (bits + 7) / 8; }
 #endif
 };
 
@@ -688,8 +688,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_64 = 33, ///< Enable HVX 64 byte mode.
     halide_target_feature_hvx_128 = 34, ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62 = 35, ///< Enable Hexagon v62 architecture.
-
-    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_fuzz_float_stores = 36, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_end = 37 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

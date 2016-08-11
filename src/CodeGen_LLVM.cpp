@@ -798,11 +798,11 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type().is_handle()) {
-        // Handle is always emitted into metadata "undefined", regardless of
-        // what sort of Expr is provided.
+    if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -879,14 +879,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
+        Expr def = args[arg].def;
+        Expr min = args[arg].min;
+        Expr max = args[arg].max;
+        if (args[arg].type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            def = min = max = Expr();
+        }
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(args[arg].def),
-            embed_constant_expr(args[arg].min),
-            embed_constant_expr(args[arg].max)
+            embed_constant_expr(def),
+            embed_constant_expr(min),
+            embed_constant_expr(max)
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
@@ -1489,11 +1497,28 @@ void CodeGen_LLVM::visit(const Div *op) {
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
+    // Detect if it's a small int modulus
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
+
     int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+        // We can use our fast signed integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+        // We can use our fast unsigned integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
     } else {
         // To match our definition of division, mod should be between 0
         // and |b|.
@@ -2555,9 +2580,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         codegen(op->args[0]);
         value = codegen(op->args[1]);
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        if (op->type.is_vector()) {
+        Expr cond = op->args[0];
+        if (const Broadcast *b = cond.as<Broadcast>()) {
+            cond = b->value;
+        }
+        if (cond.type().is_vector()) {
             scalarize(op);
-
         } else {
 
             internal_assert(op->args.size() == 3);
@@ -2565,20 +2593,21 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+            builder->CreateCondBr(codegen(cond), true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
+            BasicBlock *true_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(false_bb);
             Value *false_value = codegen(op->args[2]);
             builder->CreateBr(after_bb);
+            BasicBlock *false_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(after_bb);
-
             PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-            phi->addIncoming(true_value, true_bb);
-            phi->addIncoming(false_value, false_bb);
+            phi->addIncoming(true_value, true_pred);
+            phi->addIncoming(false_value, false_pred);
 
             value = phi;
         }

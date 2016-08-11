@@ -207,6 +207,11 @@ bool is_negative_negatable_const(Expr e) {
     return is_negative_negatable_const(e, e.type());
 }
 
+bool is_undef(Expr e) {
+    if (const Call *c = e.as<Call>()) return c->is_intrinsic(Call::undef);
+    return false;
+}
+
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
     if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 0;

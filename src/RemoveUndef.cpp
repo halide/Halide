@@ -2,6 +2,7 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "IROperator.h"
+#include "IREquality.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -303,29 +304,56 @@ private:
 
         vector<Expr> new_args(op->args.size());
         vector<Expr> new_values(op->values.size());
+        vector<Expr> args_predicates;
+        vector<Expr> values_predicates;
         bool changed = false;
 
         // Mutate the args
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
+            predicate = Expr();
             Expr new_arg = mutate(old_arg);
             if (!expr.defined()) {
                 stmt = Stmt();
                 return;
             }
+            args_predicates.push_back(predicate);
             if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
 
+        for (size_t i = 1; i < args_predicates.size(); i++) {
+            user_assert(equal(args_predicates[i-1], args_predicates[i]))
+                << "Conditionally-undef args in a Tuple should have the same conditions\n"
+                << "  Condition " << i-1 << ": " << args_predicates[i-1] << "\n"
+                << "  Condition " << i << ": " << args_predicates[i] << "\n";
+        }
+
+        bool all_values_undefined = true;
         for (size_t i = 0; i < op->values.size(); i++) {
             Expr old_value = op->values[i];
+            predicate = Expr();
             Expr new_value = mutate(old_value);
             if (!expr.defined()) {
-                stmt = Stmt();
-                return;
+                new_value = undef(old_value.type());
+            } else {
+                all_values_undefined = false;
+                values_predicates.push_back(predicate);
             }
             if (!new_value.same_as(old_value)) changed = true;
             new_values[i] = new_value;
+        }
+
+        if (all_values_undefined) {
+            stmt = Stmt();
+            return;
+        }
+
+        for (size_t i = 1; i < values_predicates.size(); i++) {
+            user_assert(equal(values_predicates[i-1], values_predicates[i]))
+                << "Conditionally-undef values in a Tuple should have the same conditions\n"
+                << "  Condition " << i-1 << ": " << values_predicates[i-1] << "\n"
+                << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
         if (predicate.defined()) {

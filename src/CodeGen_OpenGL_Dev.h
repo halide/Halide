@@ -95,6 +95,8 @@ protected:
 
     void visit(const Load *);
     void visit(const Store *);
+    void visit(const Allocate *);
+    void visit(const Free *);
 
     void visit(const Call *);
     void visit(const AssertStmt *);
@@ -105,6 +107,7 @@ protected:
 
 private:
     std::string get_vector_suffix(Expr e);
+    char get_lane_suffix(int i);
 
     const Target target;
 };
