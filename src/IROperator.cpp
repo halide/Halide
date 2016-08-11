@@ -715,10 +715,10 @@ Expr saturating_cast(Type t, Expr e) {
         // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
         if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
             e = max(e, t.min()); // min values turn out to be always representable
-            // Return here as it is already casted to the target type.
+
             // This line depends on t.max() rounding upward, which should always
             // be the case as it is one less than a representable value, thus
-            // the one large is always the closest.
+            // the one larger is always the closest.
             e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
         } else {
             Expr min_bound;
