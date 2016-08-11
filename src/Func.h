@@ -239,6 +239,9 @@ public:
 // For backwards compatibility, keep the ScheduleHandle name.
 typedef Stage ScheduleHandle;
 
+
+class FuncTupleElementRef;
+
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
  * z are Vars or Exprs. If could be the left hand side of a definition or
  * an update definition, or it could be a call to a function. We don't know
@@ -278,10 +281,10 @@ public:
      * for a Func with multiple outputs. */
     EXPORT Stage operator=(const Tuple &);
 
-    /** Define this function as a sum reduction over the given
-     * expression. The expression should refer to some RDom to sum
-     * over. If the function does not already have a pure definition,
-     * this sets it to zero.
+    /** Define a stage that adds the given expression to this Func. If the
+     * expression refers to some RDom, this performs a sum reduction of the
+     * expression over the domain. If the function does not already have a
+     * pure definition, this sets it to zero.
      */
     // @{
     EXPORT Stage operator+=(Expr);
@@ -289,10 +292,10 @@ public:
     EXPORT Stage operator+=(const FuncRef &);
     // @}
 
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
+    /** Define a stage that adds the negative of the given expression to this
+     * Func. If the expression refers to some RDom, this performs a sum reduction
+     * of the negative of the expression over the domain. If the function does
+     * not already have a pure definition, this sets it to zero.
      */
     // @{
     EXPORT Stage operator-=(Expr);
@@ -300,10 +303,10 @@ public:
     EXPORT Stage operator-=(const FuncRef &);
     // @}
 
-    /** Define this function as a product reduction. The expression
-     * should refer to some RDom to take the product over. If the
-     * function does not already have a pure definition, this sets it
-     * to 1.
+    /** Define a stage that multiplies this Func by the given expression. If the
+     * expression refers to some RDom, this performs a product reduction of the
+     * expression over the domain. If the function does not already have a pure
+     * definition, this sets it to 1.
      */
     // @{
     EXPORT Stage operator*=(Expr);
@@ -311,10 +314,10 @@ public:
     EXPORT Stage operator*=(const FuncRef &);
     // @}
 
-    /** Define this function as the product reduction over the inverse
-     * of the expression. The expression should refer to some RDom to
-     * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1.
+    /** Define a stage that divides this Func by the given expression.
+     * If the expression refers to some RDom, this performs a product
+     * reduction of the inverse of the expression over the domain. If the
+     * function does not already have a pure definition, this sets it to 1.
      */
     // @{
     EXPORT Stage operator/=(Expr);
@@ -335,13 +338,84 @@ public:
      * outputs, you can access each output as an Expr using
      * operator[].
      */
-    EXPORT Expr operator[](int) const;
+    EXPORT FuncTupleElementRef operator[](int) const;
 
     /** How many outputs does the function this refers to produce. */
     EXPORT size_t size() const;
 
     /** What function is this calling? */
     EXPORT Internal::Function function() const {return func;}
+};
+
+/** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
+ * z are Vars or Exprs. If could be the left hand side of an update
+ * definition, or it could be a call to a function. We don't know
+ * until we see how this object gets used.
+ */
+class FuncTupleElementRef {
+    FuncRef func_ref;
+    std::vector<Expr> args; // args to the function
+    int idx;                // Index to function outputs
+
+    /** Helper function that generates a Tuple where element at 'idx' is set
+     * to 'e' and the rests are undef. */
+    Tuple values_with_undefs(Expr e) const;
+
+public:
+    FuncTupleElementRef(const FuncRef &ref, const std::vector<Expr>& args, int idx);
+
+    /** Use this as the left-hand-side of an update definition of Tuple
+     * component 'idx' of a Func (see \ref RDom). The function must
+     * already have an initial definition.
+     */
+    EXPORT Stage operator=(Expr e);
+
+
+    /** Define a stage that adds the given expression to Tuple component 'idx'
+     * of this Func. The other Tuple components are unchanged. If the expression
+     * refers to some RDom, this performs a sum reduction of the expression over
+     * the domain. The function must already have an initial definition.
+     */
+    EXPORT Stage operator+=(Expr e);
+
+    /** Define a stage that adds the negative of the given expression to Tuple
+     * component 'idx' of this Func. The other Tuple components are unchanged.
+     * If the expression refers to some RDom, this performs a sum reduction of
+     * the negative of the expression over the domain. The function must already
+     * have an initial definition.
+     */
+    EXPORT Stage operator-=(Expr e);
+
+    /** Define a stage that multiplies Tuple component 'idx' of this Func by
+     * the given expression. The other Tuple components are unchanged. If the
+     * expression refers to some RDom, this performs a product reduction of
+     * the expression over the domain. The function must already have an
+     * initial definition.
+     */
+    EXPORT Stage operator*=(Expr e);
+
+    /** Define a stage that divides Tuple component 'idx' of this Func by
+     * the given expression. The other Tuple components are unchanged.
+     * If the expression refers to some RDom, this performs a product
+     * reduction of the inverse of the expression over the domain. The function
+     * must already have an initial definition.
+     */
+    EXPORT Stage operator/=(Expr e);
+
+    /* Override the usual assignment operator, so that
+     * f(x, y)[index] = g(x, y) defines f.
+     */
+    EXPORT Stage operator=(const FuncRef &e);
+
+    /** Use this as a call to Tuple component 'idx' of a Func, and not the
+     * left-hand-side of a definition. */
+    EXPORT operator Expr() const;
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func_ref.function();}
+
+    /** Return index to the function outputs. */
+    EXPORT int index() const {return idx;}
 };
 
 namespace Internal {
@@ -1523,6 +1597,10 @@ public:
      * to the version of compute_at that takes a Var. */
     EXPORT Func &compute_at(Func f, RVar var);
 
+    /** Schedule a function to be computed within the iteration over
+     * a given LoopLevel. */
+    EXPORT Func &compute_at(LoopLevel loop_level);
+
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :
      *
@@ -1666,6 +1744,11 @@ public:
      * schedules storage within the loop over a dimension of a
      * reduction domain */
     EXPORT Func &store_at(Func f, RVar var);
+
+
+    /** Equivalent to the version of store_at that takes a Var, but
+     * schedules storage at a given LoopLevel. */
+    EXPORT Func &store_at(LoopLevel loop_level);
 
     /** Equivalent to \ref Func::store_at, but schedules storage
      * outside the outermost loop. */

@@ -166,7 +166,7 @@ LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\/
 
 UNAME = $(shell uname)
 
-TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
+TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
@@ -317,6 +317,7 @@ SOURCE_FILES = \
   Func.cpp \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
+  FuzzFloatStores.cpp \
   Generator.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
@@ -452,6 +453,7 @@ HEADER_FILES = \
   Func.h \
   Function.h \
   FuseGPUThreadLoops.h \
+  FuzzFloatStores.h \
   Generator.h \
   HexagonOffload.h \
   HexagonOptimize.h \

@@ -560,6 +560,25 @@ private:
             // that they generate.
             internal_assert(op->args.size() == 3);
             expr = mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if (op->is_intrinsic(Call::cast_mask)) {
+            internal_assert(op->args.size() == 1);
+            Type src_type = op->args[0].type();
+            Type dst_type = op->type;
+            if (dst_type.bits() < src_type.bits()) {
+                // For narrowing, we can truncate
+                expr = mutate(Cast::make(dst_type, op->args[0]));
+            } else {
+                // Hexagon masks only use the bottom bit in each byte,
+                // so duplicate each lane until we're wide enough.
+                Expr e = op->args[0];
+                while (src_type.bits() < dst_type.bits()) {
+                    e = Call::make(src_type.with_lanes(src_type.lanes()*2),
+                                   Call::interleave_vectors, {e, e}, Call::PureIntrinsic);
+                    src_type = src_type.with_bits(src_type.bits()*2);
+                    e = reinterpret(src_type, e);
+                }
+                expr = mutate(e);
+            }
         } else {
             IRMutator::visit(op);
         }
@@ -712,54 +731,22 @@ private:
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
 
-        if (op->condition.type().is_vector()) {
-            // We need to be careful here; the condition is a boolean
-            // vector, so we need to use mutate_with_interleave so we
-            // don't attempt to interleave it directly. However, if
-            // mutate_with_interleave indicates that it wants to
-            // interleave the result, we *must* interleave the result of
-            // the select. To avoid being forced to unnecessarily
-            // deinterleave the true/false values, we check if they both
-            // yield a removable interleave, and then only proceed to
-            // mutate_with_interleave the condition if so.
-            Expr cond;
-            if (yields_interleave(true_value) && yields_interleave(false_value)) {
-                bool interleave;
-                std::tie(cond, interleave) = mutate_with_interleave(op->condition);
-                if (interleave) {
-                    true_value = remove_interleave(true_value);
-                    false_value = remove_interleave(false_value);
-                    expr = native_interleave(Select::make(cond, true_value, false_value));
-                    return;
-                }
-            } else {
-                cond = mutate(op->condition);
-            }
+        internal_assert(op->condition.type().is_scalar());
 
-            if (!cond.same_as(op->condition) ||
-                !true_value.same_as(op->true_value) ||
-                !false_value.same_as(op->false_value)) {
-                expr = Select::make(cond, true_value, false_value);
-            } else {
-                expr = op;
-            }
+        Expr cond = mutate(op->condition);
+
+        // The condition isn't a vector, so we can just check if we
+        // should move an interleave from the true/false values.
+        if (yields_removable_interleave({true_value, false_value})) {
+            true_value = remove_interleave(true_value);
+            false_value = remove_interleave(false_value);
+            expr = native_interleave(Select::make(cond, true_value, false_value));
+        } else if (!cond.same_as(op->condition) ||
+                   !true_value.same_as(op->true_value) ||
+                   !false_value.same_as(op->false_value)) {
+            expr = Select::make(cond, true_value, false_value);
         } else {
-            Expr cond = mutate(op->condition);
-
-            // If the condition isn't a vector, we can just check if
-            // we should move an interleave from the true/false
-            // values.
-            if (yields_removable_interleave({true_value, false_value})) {
-                true_value = remove_interleave(true_value);
-                false_value = remove_interleave(false_value);
-                expr = native_interleave(Select::make(cond, true_value, false_value));
-            } else if (!cond.same_as(op->condition) ||
-                       !true_value.same_as(op->true_value) ||
-                       !false_value.same_as(op->false_value)) {
-                expr = Select::make(cond, true_value, false_value);
-            } else {
-                expr = op;
-            }
+            expr = op;
         }
     }
 
@@ -854,6 +841,7 @@ private:
             Call::shift_right,
             Call::abs,
             Call::absd,
+            Call::select_mask
         };
         if (interleavable.count(op->name) != 0) return true;
 

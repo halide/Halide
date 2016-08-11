@@ -34,10 +34,10 @@ private:
 
             t = t.with_bits(std::max(t.bits(), b.type().bits()));
             if (t != a.type()) {
-                a = Cast::make(t, a);
+                a = Call::make(t, Call::cast_mask, {a}, Call::PureIntrinsic);
             }
             if (t != b.type()) {
-                b = Cast::make(t, b);
+                b = Call::make(t, Call::cast_mask, {b}, Call::PureIntrinsic);
             }
         }
 
@@ -50,8 +50,7 @@ private:
         if (t.lanes() > 1) {
             // To represent bool vectors, OpenCL uses vectors of signed
             // integers with the same width as the types being compared.
-            t = t.with_code(Type::Int);
-            expr = Cast::make(t, expr);
+            expr = Call::make(t.with_code(Type::Int), Call::bool_to_mask, {expr}, Call::PureIntrinsic);
         }
     }
 
@@ -73,13 +72,13 @@ private:
             // Ensure that both a and b have the same type.
             Type t = ta.with_bits(std::max(ta.bits(), tb.bits()));
             if (t != a.type()) {
-                a = Cast::make(t, a);
+                a = Call::make(t, Call::cast_mask, {a}, Call::PureIntrinsic);
             }
             if (t != b.type()) {
-                b = Cast::make(t, b);
+                b = Call::make(t, Call::cast_mask, {b}, Call::PureIntrinsic);
             }
             // Replace logical operation with bitwise operation.
-            expr = Call::make(t, bitwise_op, {a, b}, Call::Intrinsic);
+            expr = Call::make(t, bitwise_op, {a, b}, Call::PureIntrinsic);
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
         } else {
@@ -99,11 +98,43 @@ private:
         Expr a = mutate(op->a);
         if (a.type().lanes() > 1) {
             // Replace logical operation with bitwise operation.
-            expr = Call::make(a.type(), Call::bitwise_not, {a}, Call::Intrinsic);
+            expr = Call::make(a.type(), Call::bitwise_not, {a}, Call::PureIntrinsic);
         } else if (!a.same_as(op->a)) {
             expr = Not::make(a);
         } else {
             expr = op;
+        }
+    }
+
+    void visit(const Cast *op) {
+        if (op->value.type().is_bool() && op->value.type().is_vector()) {
+            // Casting from bool
+            expr = mutate(Select::make(op->value,
+                                       make_one(op->type),
+                                       make_zero(op->type)));
+        } else if (op->type.is_bool() && op->type.is_vector()) {
+            // Cast to bool
+            expr = mutate(op->value != make_zero(op->value.type()));
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Store *op) {
+        Expr value = op->value;
+        if (op->value.type().is_bool()) {
+            Type ty = UInt(8, op->value.type().lanes());
+            value = Select::make(value,
+                                 make_one(ty),
+                                 make_zero(ty));
+        }
+        value = mutate(value);
+        Expr index = mutate(op->index);
+
+        if (value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index, op->param);
         }
     }
 
@@ -112,22 +143,20 @@ private:
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
         Type cond_ty = cond.type();
-        if (cond_ty.lanes() > 1) {
+        if (cond_ty.is_vector()) {
             // If the condition is a vector, it should be a vector of
-            // ints, so rewrite it to compare to 0.
+            // ints.
             internal_assert(cond_ty.code() == Type::Int);
 
-            // OpenCL's select function requires that all 3 operands
-            // have the same width.
+            // select_mask requires that all 3 operands have the same
+            // width.
             internal_assert(true_value.type().bits() == false_value.type().bits());
             if (true_value.type().bits() != cond_ty.bits()) {
                 cond_ty = cond_ty.with_bits(true_value.type().bits());
-                cond = Cast::make(cond_ty, cond);
+                cond = Call::make(cond_ty, Call::cast_mask, {cond}, Call::PureIntrinsic);
             }
 
-            // To make the Select op legal, convert it back to a
-            // vector of bool by comparing with zero.
-            expr = Select::make(NE::make(cond, make_zero(cond_ty)), true_value, false_value);
+            expr = Call::make(true_value.type(), Call::select_mask, {cond, true_value, false_value}, Call::PureIntrinsic);
         } else if (!cond.same_as(op->condition) ||
                    !true_value.same_as(op->true_value) ||
                    !false_value.same_as(op->false_value)) {
@@ -140,7 +169,7 @@ private:
     void visit(const Broadcast *op) {
         Expr value = mutate(op->value);
         if (op->type.bits() == 1) {
-            expr = Broadcast::make(-Cast::make(Int(8), value), op->lanes);
+            expr = Broadcast::make(Call::make(Int(8), Call::bool_to_mask, {value}, Call::PureIntrinsic), op->lanes);
         } else if (!value.same_as(op->value)) {
             expr = Broadcast::make(value, op->lanes);
         } else {

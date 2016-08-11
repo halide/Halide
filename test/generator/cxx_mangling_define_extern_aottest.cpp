@@ -1,9 +1,10 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
+#include "halide_image.h"
+
 #include <assert.h>
 #include <string.h>
-#include "halide_image.h"
 
 #include "cxx_mangling_define_extern.h"
 

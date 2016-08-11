@@ -14,9 +14,9 @@ int main(int argc, char **argv) {
             input(x, y) = sinf(x * y + 1);
         }
     }
-    Image<float> output(10, 10, 3);
+    Image<float> output(10, 10);
 
-    fancy_buffer_t fancy_input(input);
+    fancy_buffer_t fancy_input(input.raw_buffer());
     fancy_input.extra_field = 17;
 
     extended_buffer_t(&fancy_input, output);
