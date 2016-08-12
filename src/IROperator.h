@@ -731,8 +731,10 @@ inline Expr max(Expr a, float b) {return max(a, Expr(b));}
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
-    min_val = cast(a.type(), min_val);
-    max_val = cast(a.type(), max_val);
+    min_val = lossless_cast(a.type(), min_val);
+    user_assert(min_val.defined()) << "clamp with possibly out of range minimum bound.\n";
+    max_val = lossless_cast(a.type(), max_val);
+    user_assert(max_val.defined()) << "clamp with possibly out of range maximum bound.\n";
     return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
 }
 
@@ -1906,6 +1908,19 @@ inline Expr likely_if_innermost(Expr e) {
     return Internal::Call::make(e.type(), Internal::Call::likely_if_innermost,
                                 {e}, Internal::Call::PureIntrinsic);
 }
+
+
+/** Cast an expression to the halide type corresponding to the C++
+ * type T clamping to the minimum and maximum values of the result
+ * type. */
+template <typename T>
+Expr saturating_cast(Expr e) {
+    return saturating_cast(type_of<T>(), e);
+}
+
+/** Cast an expression to a new type, clamping to the minimum and
+ * maximum values of the result type. */
+Expr saturating_cast(Type t, Expr e);
 
 }
 
