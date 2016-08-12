@@ -580,7 +580,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
     llvm::IRBuilder<> builder(m->getContext());
     // For every function prototype...
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
-        llvm::Function *f = (llvm::Function *)(iter);
+        llvm::Function *f = &*iter;
         string n = f->getName();
         // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
         if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
