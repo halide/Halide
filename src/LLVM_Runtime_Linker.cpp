@@ -580,11 +580,11 @@ void undo_win32_name_mangling(llvm::Module *m) {
     llvm::IRBuilder<> builder(m->getContext());
     // For every function prototype...
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
-        llvm::Function *f = (llvm::Function *)(iter);
-        string n = f->getName();
+        llvm::Function &f = *iter;
+        string n = f.getName();
         // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
-        if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
-            f->empty() &&
+        if (f.getCallingConv() == llvm::CallingConv::X86_StdCall &&
+            f.empty() &&
             n.size() > 2 && n[0] == 1 && n[1] == '_') {
 
             // Unmangle the name.
@@ -593,22 +593,22 @@ void undo_win32_name_mangling(llvm::Module *m) {
             unmangled_name = unmangled_name.substr(0, at);
 
             // Extern declare the unmangled version.
-            llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
-            unmangled->setCallingConv(f->getCallingConv());
+            llvm::Function *unmangled = llvm::Function::Create(f.getFunctionType(), f.getLinkage(), unmangled_name, m);
+            unmangled->setCallingConv(f.getCallingConv());
 
             // Add a body to the mangled version that calls the unmangled version.
-            llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
+            llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", &f);
             builder.SetInsertPoint(block);
 
             vector<llvm::Value *> args;
-            for (auto &arg : f->args()) {
+            for (auto &arg : f.args()) {
                 args.push_back(&arg);
             }
 
             llvm::CallInst *c = builder.CreateCall(unmangled, args);
-            c->setCallingConv(f->getCallingConv());
+            c->setCallingConv(f.getCallingConv());
 
-            if (f->getReturnType()->isVoidTy()) {
+            if (f.getReturnType()->isVoidTy()) {
                 builder.CreateRetVoid();
             } else {
                 builder.CreateRet(c);
@@ -991,7 +991,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     // For now, the PTX backend does not handle calling functions. So mark all functions
     // AvailableExternally to ensure they are inlined or deleted.
     for (llvm::Module::iterator iter = modules[0]->begin(); iter != modules[0]->end(); iter++) {
-        llvm::Function *f = (llvm::Function *)(iter);
+        llvm::Function &f = *iter;
 
         // This is intended to set all definitions (not extern declarations)
         // to "available externally" which should guarantee they do not exist
@@ -1004,14 +1004,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
         // keeping these routines out-of-line and hence called by
         // not marking them AvailableExternally.
 
-        if (!f->isDeclaration() && !f->hasFnAttribute(llvm::Attribute::NoInline)) {
-            f->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
+        if (!f.isDeclaration() && !f.hasFnAttribute(llvm::Attribute::NoInline)) {
+            f.setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
         }
 
         // Also mark the halide_gpu_thread_barrier as noduplicate.
         #if LLVM_VERSION > 32
-        if (f->getName() == "halide_gpu_thread_barrier") {
-            f->addFnAttr(llvm::Attribute::NoDuplicate);
+        if (f.getName() == "halide_gpu_thread_barrier") {
+            f.addFnAttr(llvm::Attribute::NoDuplicate);
         }
         #endif
     }
