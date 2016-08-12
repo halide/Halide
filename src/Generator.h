@@ -506,8 +506,9 @@ protected:
     using Expr = Halide::Expr;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
-    using Pipeline = Halide::Pipeline;
     using ImageParam = Halide::ImageParam;
+    using LoopLevel = Halide::LoopLevel;
+    using Pipeline = Halide::Pipeline;
     using RDom = Halide::RDom;
     using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
