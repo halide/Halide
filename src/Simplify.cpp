@@ -1511,7 +1511,8 @@ private:
                    const_uint(b, &ub)) {
             expr = UIntImm::make(op->type, ua / ub);
         } else if (const_float(a, &fa) &&
-                   const_float(b, &fb)) {
+                   const_float(b, &fb) &&
+                   fb != 0.0f) {
             expr = FloatImm::make(op->type, fa / fb);
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
