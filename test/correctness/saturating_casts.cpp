@@ -48,13 +48,15 @@ void test_saturating() {
             } else {
                 correct_result = (target_t)bounded_lower;
             }
+        } else if (target_floating) {
+            correct_result = (target_t)std::min((double)in(i), (double)target_max);
         } else if (source_signed == target_signed) {
             if (sizeof(source_t) > sizeof(target_t)) {
                 correct_result = (target_t)std::min(std::max(in(i),
                                                              (source_t)target_min),
                                                     (source_t)target_max);
             } else {
-              correct_result = (target_t)in(i);
+                correct_result = (target_t)in(i);
             }
         } else {
             if (source_signed) {
@@ -83,14 +85,22 @@ void test_saturating() {
                                               (int64_t)target_max);
 
             if (simpler_correct_result != (int64_t)correct_result) {
-                std::cout << "Simpler verification failed for index " << i << " correct_result is " << correct_result << " correct_result casted to int64_t is " << (int64_t)correct_result << " simpler_correct_result is " << simpler_correct_result << "\n";
-                std::cout << "in(i) " << in(i) << " target_min " << target_min << " target_max " << target_max << "\n";
+                std::cout << "Simpler verification failed for index " << i
+			  << " correct_result is " << correct_result
+			  << " correct_result casted to int64_t is " << (int64_t)correct_result
+			  << " simpler_correct_result is " << simpler_correct_result << "\n";
+                std::cout << "in(i) " << in(i)
+			  << " target_min " << target_min
+			  << " target_max " << target_max << "\n";
             }
             assert(simpler_correct_result == (int64_t)correct_result);
         }
 
         if (result(i) != correct_result) {
-            std::cout << "Match failure at index " << i << " got " << result(i) << " expected " << correct_result << " for input " << in(i) << std::endl;
+            std::cout << "Match failure at index " << i
+		      << " got " << result(i)
+		      << " expected " << correct_result
+		      << " for input " << in(i) << std::endl;
         }
 
         assert(result(i) == correct_result);
@@ -265,8 +275,12 @@ int main(int argc, char **argv) {
     test_one_source<uint32_t>();
     test_one_source<int64_t>();
     test_one_source<uint64_t>();
-    test_one_source<float>();
-    test_one_source<double>();
+
+    // Casting out of range values from floating-point
+    // to integer types is undefined behavior so only
+    // do the saturating casts.
+    test_one_source_saturating<float>();
+    test_one_source_saturating<double>();
 
     printf("Success!\n");
     return 0;
