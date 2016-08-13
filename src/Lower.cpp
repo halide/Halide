@@ -19,6 +19,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
@@ -243,7 +244,13 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     if (t.has_feature(Target::Profile)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+        debug(2) << "Lowering after injecting profiling:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::FuzzFloatStores)) {
+        debug(1) << "Fuzzing floating point stores...\n";
+        s = fuzz_float_stores(s);
+        debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";

@@ -81,6 +81,7 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
