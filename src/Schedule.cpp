@@ -239,9 +239,9 @@ void Schedule::accept(IRVisitor *visitor) const {
         }
     }
     for (const Prefetch &p : prefetches()) {
-        std::cerr << "Schedule::accept prefetches\n";
+        debug(4) << "Schedule::accept prefetches\n";
         if (p.offset.defined()) {
-            std::cerr << "Prefetch: " << p.var
+            debug(4) << "Prefetch: " << p.var
                                << " " << p.offset << "\n";
             p.offset.accept(visitor);
         }

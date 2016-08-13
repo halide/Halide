@@ -21,6 +21,9 @@ using std::string;
 using std::vector;
 using std::stack;
 
+int dbg_prefetch  = 1;
+int dbg_prefetch2 = 2;
+
 class InjectPrefetch : public IRMutator {
 public:
     InjectPrefetch(const map<string, Function> &e)
@@ -52,20 +55,30 @@ private:
         return iter->second;
     }
 
+    void visit(const Let *op) {
+        Interval in = bounds_of_expr_in_scope(op->value, scope);
+        scope.push(op->name, in);
+        IRMutator::visit(op);
+        scope.pop(op->name);
+    }
     void visit(const LetStmt *op) {
         Interval in = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, in);
-        op->body.accept(this);
+        IRMutator::visit(op);
         scope.pop(op->name);
     }
 
     void visit(const For *op) {
+#if 0  // not currently pushing a new scope on For 
         // At this stage of lowering, loop_min and loop_max
         // conveniently exist in scope.
         Interval in(Variable::make(Int(32), op->name + ".loop_min"),
                     Variable::make(Int(32), op->name + ".loop_max"));
-
+        //  --> produces boxes which represent entire loop
+        // Interval in(op->name, op->name);
+        //  --> Can't do arithmetic on opaque pointer types
         scope.push(op->name, in);
+#endif
 
         Stmt body = op->body;
 
@@ -73,49 +86,80 @@ private:
         string var_name  = tuple_var(op->name);
         vector<Prefetch> &prefetches = get_func(func_name).schedule().prefetches();
 
-        std::cerr << "Prefetch: " << op->name << " " << func_name << " " << var_name;
         if (prefetches.empty()) {
-            std::cerr << " No prefetches in schedule\n";
+            debug(dbg_prefetch2) << "InjectPrefetch: " << op->name << " " << func_name << " " << var_name;
+            debug(dbg_prefetch2) << " No prefetch\n";
         } else {
-            std::cerr << " Checking prefetches\n";
+            debug(dbg_prefetch) << "InjectPrefetch: " << op->name << " " << func_name << " " << var_name;
+            debug(dbg_prefetch) << " Found prefetch directive(s)\n";
         }
 
         // Todo: Check to see if op->name is in prefetches
         for (const Prefetch &p : prefetches) {
-            std::cerr << "Prefetch: " << p.var
-                               << " " << p.offset << "\n";
+            debug(dbg_prefetch) << "InjectPrefetch: check var:" << p.var
+                               << " offset:" << p.offset << "\n";
             if (p.var == var_name) {
-                std::cerr << " matched on " << var_name << "\n";
+                debug(dbg_prefetch) << " prefetch on " << var_name << "\n";
                 string fetch_func = "halide.hexagon.l2fetch.Rtt";
 
-                Interval prein(in.min + p.offset, in.max + p.offset);
+                // Interval prein(op->name, op->name);
+                // Add in prefetch offset
+                Expr var = Variable::make(Int(32), op->name);
+                Interval prein(var + p.offset, var + p.offset);
                 scope.push(op->name, prein);
 
-                map<string, Box> r;
-                r = boxes_required(op, scope);
+                map<string, Box> boxes;
+                boxes = boxes_required(op, scope);
+
+                debug(dbg_prefetch) << "  boxes required:\n";
+                for (auto &i : boxes) {
+                    Box &box = i.second;
+                    for (size_t k = 0; k < box.size(); k++) {
+                        debug(dbg_prefetch) << "    ---\n";
+                        debug(dbg_prefetch) << "    box[" << k << "].min: " << box[k].min << "\n";
+                        debug(dbg_prefetch) << "    box[" << k << "].max: " << box[k].max << "\n";
+                    }
+                    debug(dbg_prefetch) << "    ---------\n";
+                }
 
                 scope.pop(op->name);
 
+#if 0 // todo create_buffer_t from box (see BoundsInference.cpp)
+                Expr prefetch_buf_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                                                  output_buffer_t_args, Call::Intrinsic);
                 // Add prefetch to body on inputs
                 // Todo: For each input...
                 Expr tmp = Expr(0);
                 Stmt prefetch =
                     Evaluate::make(Call::make(Int(32), fetch_func,
-                                      {tmp, p.offset}, Call::Extern));
+                                      {tmp, prefetch_buf_t}, Call::Extern));
                 body = Block::make({prefetch, body});
+#endif
             }
         }
 
         body = mutate(body);
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
 
+#if 0  // not currently pushing a new scope on For 
         scope.pop(op->name);
+#endif
     }
 
 };
 
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
 {
+    if (char *dbg = getenv("HL_DBG_PREFETCH")) {
+        dbg_prefetch  -= atoi(dbg);
+        dbg_prefetch2 -= atoi(dbg);
+        if (dbg_prefetch < 0) {
+            dbg_prefetch = 0;
+        }
+        if (dbg_prefetch2 < 0) {
+            dbg_prefetch2 = 0;
+        }
+    }
     return InjectPrefetch(env).mutate(s);
 }
 

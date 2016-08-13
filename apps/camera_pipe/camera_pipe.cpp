@@ -361,6 +361,9 @@ int main(int argc, char **argv) {
                                   input, matrix_3200, matrix_7000};
     // TODO: it would be more efficient to call compile_to() a single time with the right arguments
     processed.compile_to_static_library("curved", args, target);
+    if (getenv("HL_PRINT_LOOP_NEST")) {
+        processed.print_loop_nest();
+    }
     processed.compile_to_assembly("curved.s", args, target);
 
     return 0;
