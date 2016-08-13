@@ -250,6 +250,13 @@ struct halide_type_t {
      * instances. */
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
+    /** Compare two types for equality. */
+    bool operator==(const halide_type_t &other) const {
+        return (code == other.code &&
+                bits == other.bits &&
+                lanes == other.lanes);
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     size_t bytes() const { return (bits + 7) / 8; }
 #endif
