@@ -105,6 +105,9 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
+    if (getenv("HL_NO_PREFETCH")) {
+        any_prefetch = false;
+    }
     if (any_prefetch) {
         debug(1) << "Injecting prefetches...\n";
         s = inject_prefetch(s, env);
