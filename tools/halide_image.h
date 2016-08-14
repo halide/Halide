@@ -32,9 +32,9 @@ void for_each_element(const buffer_t &buf, Fn f);
  * number of dimensions. It must be less than or equal to 4 for now.
  *
  * The class optionally allocates and owns memory for the image using
- * a std::shared_ptr allocated with the provided allocator, which
- * defaults to malloc/free. Any device-side allocation is not owned,
- * and must be freed manually using device_free.
+ * a std::shared_ptr allocated with the provided allocator. If they
+ * are null, malloc and free are used.  Any device-side allocation is
+ * not owned, and must be freed manually using device_free.
  *
  * For accessing the shape and type, this class provides both the
  * buffer_t interface (extent[i], min[i], and stride[i] arrays, the
@@ -43,7 +43,7 @@ void for_each_element(const buffer_t &buf, Fn f);
  * allow a gradual transition to halide_buffer_t. New code should
  * access the shape via dim[i].extent, dim[i].min, dim[i].stride, and
  * the type via the 'type' field. */
-template<typename T, int D = 4, void *(*Allocate)(size_t) = malloc, void (*Deallocate)(void *) = free>
+template<typename T, int D = 4, void *(*Allocate)(size_t) = nullptr, void (*Deallocate)(void *) = nullptr>
 class Image {
     static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
 
@@ -225,9 +225,15 @@ public:
         size_t size = size_in_bytes();
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
-        uint8_t *ptr = (uint8_t *)Allocate(sizeof(T)*size + alignment - 1);
+        uint8_t *ptr;
+        if (Allocate != nullptr) {
+            ptr = (uint8_t *)Allocate(size + alignment - 1);
+            alloc.reset(ptr, Deallocate);
+        } else {
+            ptr = (uint8_t *)malloc(size + alignment - 1);
+            alloc.reset(ptr, free);
+        }
         buf.host = (uint8_t *)((uintptr_t)(ptr + alignment - 1) & ~(alignment - 1));
-        alloc.reset(ptr, Deallocate);
     }
 
     /** Allocate a new image of the given size. Pass zeroes to make a
@@ -341,6 +347,17 @@ public:
     }
     // @}
 
+    /** Get a pointer to the address of the min coordinate. */
+    // @{
+    T *data() {
+        return (T *)buf.host;
+    }
+
+    const T *data() const {
+        return (const T *)buf.host;
+    }
+    // @}
+    
     /** Provide a cast operator to buffer_t *, so that instances can
      * be passed directly to Halide filters. */
     operator buffer_t *() {
@@ -547,7 +564,8 @@ struct for_each_element_helpers {
      * SFINAE. */
     template<typename ...Args>
     static void for_each_element_variadic(double, int d, Fn f, const buffer_t &buf, Args... args) {
-        for (int i = 0; i < std::max(1, buf.extent[d]); i++) {
+        int e = buf.extent[d] == 0 ? 1 : buf.extent[d];
+        for (int i = 0; i < e; i++) {
             for_each_element_variadic(0, d-1, f, buf, buf.min[d] + i, args...);
         }
     }
