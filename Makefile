@@ -317,6 +317,7 @@ SOURCE_FILES = \
   Func.cpp \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
+  FuzzFloatStores.cpp \
   Generator.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
@@ -452,6 +453,7 @@ HEADER_FILES = \
   Func.h \
   Function.h \
   FuseGPUThreadLoops.h \
+  FuzzFloatStores.h \
   Generator.h \
   HexagonOffload.h \
   HexagonOptimize.h \
