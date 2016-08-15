@@ -499,6 +499,7 @@ struct Call : public ExprNode<Call> {
         slice_vector,
         call_cached_indirect_function,
         signed_integer_overflow,
+        indeterminate_expression,
         bool_to_mask,
         cast_mask,
         select_mask;
