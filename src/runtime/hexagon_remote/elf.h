@@ -106,6 +106,49 @@ extern "C" int __hexagon_udivsi3;
 extern "C" int __hexagon_umodsi3;
 extern "C" int __hexagon_divsi3;
 extern "C" int __hexagon_modsi3;
+extern "C" int __hexagon_subdf3;
+extern "C" int __hexagon_sqrtf;
+extern "C" int sqrt;
+extern "C" int expf;
+extern "C" int exp;
+extern "C" int logf;
+extern "C" int log;
+extern "C" int powf;
+extern "C" int pow;
+extern "C" int sinf;
+extern "C" int sin;
+extern "C" int cosf;
+extern "C" int cos;
+extern "C" int tanf;
+extern "C" int tan;
+extern "C" int asinf;
+extern "C" int asin;
+extern "C" int acosf;
+extern "C" int acos;
+extern "C" int atanf;
+extern "C" int atan;
+extern "C" int atan2f;
+extern "C" int atan2;
+extern "C" int sinhf;
+extern "C" int sinh;
+extern "C" int coshf;
+extern "C" int cosh;
+extern "C" int tanhf;
+extern "C" int tanh;
+extern "C" int asinhf;
+extern "C" int asinh;
+extern "C" int acoshf;
+extern "C" int acosh;
+extern "C" int atanhf;
+extern "C" int atanh;
+extern "C" int nearbyintf;
+extern "C" int nearbyint;
+extern "C" int truncf;
+extern "C" int trunc;
+extern "C" int floorf;
+extern "C" int floor;
+extern "C" int ceilf;
+extern "C" int ceil;
 
 struct elf_t {
     // The object file in memory
@@ -601,6 +644,49 @@ struct elf_t {
             {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
             {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
             {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
+            {"__hexagon_subdf3", (char *)(&__hexagon_subdf3)},
+            {"__hexagon_sqrtf", (char *)(&__hexagon_sqrtf)},
+            {"sqrt", (char *)(&sqrt)},
+            {"sinf", (char *)(&sinf)},
+            {"expf", (char *)(&expf)},
+            {"exp", (char *)(&exp)},
+            {"logf", (char *)(&logf)},
+            {"log", (char *)(&log)},
+            {"powf", (char *)(&powf)},
+            {"pow", (char *)(&pow)},
+            {"sin", (char *)(&sin)},
+            {"cosf", (char *)(&cosf)},
+            {"cos", (char *)(&cos)},
+            {"tanf", (char *)(&tanf)},
+            {"tan", (char *)(&tan)},
+            {"asinf", (char *)(&asinf)},
+            {"asin", (char *)(&asin)},
+            {"acosf", (char *)(&acosf)},
+            {"acos", (char *)(&acos)},
+            {"atanf", (char *)(&atanf)},
+            {"atan", (char *)(&atan)},
+            {"atan2f", (char *)(&atan2f)},
+            {"atan2", (char *)(&atan2)},
+            {"sinhf", (char *)(&sinhf)},
+            {"sinh", (char *)(&sinh)},
+            {"coshf", (char *)(&coshf)},
+            {"cosh", (char *)(&cosh)},
+            {"tanhf", (char *)(&tanhf)},
+            {"tanh", (char *)(&tanh)},
+            {"asinhf", (char *)(&asinhf)},
+            {"asinh", (char *)(&asinh)},
+            {"acoshf", (char *)(&acoshf)},
+            {"acosh", (char *)(&acosh)},
+            {"atanhf", (char *)(&atanhf)},
+            {"atanh", (char *)(&atanh)},
+            {"nearbyintf", (char *)(&nearbyintf)},
+            {"nearbyint", (char *)(&nearbyint)},
+            {"truncf", (char *)(&truncf)},
+            {"trunc", (char *)(&trunc)},
+            {"floorf", (char *)(&floorf)},
+            {"floor", (char *)(&floor)},
+            {"ceilf", (char *)(&ceilf)},
+            {"ceil", (char *)(&ceil)},
             {NULL, NULL} // Sentinel
         };
 
