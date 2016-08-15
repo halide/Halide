@@ -234,13 +234,6 @@ void set_rpc_return(int value) {
 }
 
 int main(int argc, const char **argv) {
-    // The simulator needs this call to enable dlopen to work...
-    char libgcc[] = "libgcc.so";
-    char libc[] = "libc.so";
-    char libstdcpp[] = "libstdc++.so";
-    char *builtin[] = {libgcc, libc, libstdcpp};
-    dlinit(3, builtin);
-
     while(true) {
         switch (rpc_call) {
         case Message::None:
