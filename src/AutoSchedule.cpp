@@ -1988,7 +1988,6 @@ void reorder_dims(Stage f_handle, Definition def,
         var_order += ',' + ordering[o].name();
     }
 
-    debug(0) << f_handle.name() + ".reorder(" + var_order + ");\n"; 
     f_handle.reorder(ordering);
     sched += f_handle.name() + ".reorder(" + var_order + ");\n";
 }
@@ -2513,7 +2512,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         }
     }*/
 
-    // Show the current pipeline graph.
+    // Display the current pipeline graph.
     // TODO: Output the graph in dot format.
     part.disp_pipeline_graph();
     part.disp_pipeline_bounds();
