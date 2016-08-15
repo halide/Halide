@@ -16,7 +16,7 @@ extern "C" {
 #if !USE_AGL
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-WEAK halide_mutex cgl_functions_mutex;
+WEAK halide_mutex cgl_functions_mutex = { { 0 } };
 WEAK bool cgl_initialized = false;
 WEAK int (*CGLChoosePixelFormat)(int *attributes, void **pixel_format_result, int *num_formats);
 WEAK int (*CGLCreateContext)(void *pixel_format, void *share_context, void **context_Result);
