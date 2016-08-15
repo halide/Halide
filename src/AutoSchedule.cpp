@@ -978,7 +978,7 @@ Partitioner::choose_candidate_fuse(const vector<pair<string, string>> &cands,
         Function prod_f = dep_analysis.env.at(p.first);
         int final_stage = prod_f.updates().size();
 
-        FStage prod(prod_f.name(), final_stage);
+        FStage prod(prod_f, final_stage);
 
         for (const FStage &c : children[prod]) {
 
@@ -1852,7 +1852,7 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
     const vector<Dim> &dims = f_handle.get_schedule().dims();
     int vec_dim_index = -1;
 
-    // Set the vector length as the maximum of the natural vector size for all
+    // Set the vector length as the maximum of the natural vector size of all
     // the values produced by the function.
     int vec_len = 0;
     for (auto &type : func.output_types()) {
@@ -1903,6 +1903,11 @@ void vectorize_stage(Stage f_handle, Definition def, Function func,
     }
 }
 
+/* Reorder the dimensions to preserve spatial locality. This function 
+ * checks the stride of the access for each access. The dimensions of
+ * the loop are reordered such that the dimension with the smallest
+ * access strides is innermost. Takes the strides along each dimension
+ * as input.*/
 void reorder_dims(Stage f_handle, Definition def,
                   map<string, int64_t> strides, string &sched) {
     vector<Dim> &dims = def.schedule().dims();
@@ -1912,9 +1917,9 @@ void reorder_dims(Stage f_handle, Definition def,
         internal_assert(strides.find(dims[d].var) != strides.end());
     }
 
-    // Order dims by spatial locality
+    // Iterate until all the dimensions have been assigned an order
     while (strides.size() > 0) {
-        // Find pure dimension with smallest stride
+        // Find the pure dimension with smallest stride
         int64_t min_pure_stride = std::numeric_limits<int64_t>::max();
         string min_pure_var;
         for (int d = 0; d < (int)dims.size() - 1; d++) {
@@ -1929,6 +1934,9 @@ void reorder_dims(Stage f_handle, Definition def,
             }
         }
 
+        // Check if the stride of the pure dimension is smaller than
+        // the first reduction dimension that has not been assigned 
+        // an order yet.
         int64_t min_impure_stride = std::numeric_limits<int64_t>::max();
         string min_impure_var;
         for (int d = 0; d < (int)dims.size() - 1; d++) {
@@ -1940,6 +1948,10 @@ void reorder_dims(Stage f_handle, Definition def,
                     min_impure_stride = dim_stride;
                     min_impure_var = var_name;
                 }
+                // Reduction dimensions cannot be reordered relative to
+                // each other. Stop after encountering the first reduction 
+                // dimension.
+                break;
             }
         }
 
@@ -1976,6 +1988,7 @@ void reorder_dims(Stage f_handle, Definition def,
         var_order += ',' + ordering[o].name();
     }
 
+    debug(0) << f_handle.name() + ".reorder(" + var_order + ");\n"; 
     f_handle.reorder(ordering);
     sched += f_handle.name() + ".reorder(" + var_order + ");\n";
 }
