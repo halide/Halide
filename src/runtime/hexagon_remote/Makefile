@@ -98,7 +98,7 @@ bin/%/halide_host.o: halide_host.cpp
 # Build rules for the hexagon implementation.
 bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o
 	mkdir -p $(@D)
-	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -lc -o $@ \
+	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -lc -lm -o $@ \
 	    -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	    -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail \
 	    -Wl,-soname=libhalide_hexagon_remote_skel.so \
@@ -130,7 +130,8 @@ LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
 bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 	mkdir -p $(@D)
 	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o $(LIBDL) \
-	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --whole-archive $(LIB_QURT) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
+	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --whole-archive $(LIB_QURT) \
+	    --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	    --dynamic-linker= -E --force-dynamic
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
