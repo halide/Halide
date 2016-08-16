@@ -8,7 +8,7 @@ struct list_head_t {
     _halide_runtime_internal_registered_filter_t *next;
 };
 
-WEAK list_head_t list_head;
+WEAK list_head_t list_head  = { { { 0 } }, 0 };
 
 } } }
 

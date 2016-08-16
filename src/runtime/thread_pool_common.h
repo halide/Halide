@@ -57,7 +57,18 @@ struct work_queue_t {
     }
 
 };
-WEAK work_queue_t work_queue;
+WEAK work_queue_t work_queue = { 
+    { { 0 } },      // mutex
+    NULL,           // jobs
+    0, 0,           // a_team_size, target_a_team_size
+    { { 0 } },      // wakeup_owners
+    { { 0 } },      // wakeup_a_team
+    { { 0 } },      // wakeup_b_team
+    { 0 },          // threads
+    0,              // threads_created
+    0,              // desired_num_threads
+    false, false    // shutdown, initialized
+};
 
 WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure) {

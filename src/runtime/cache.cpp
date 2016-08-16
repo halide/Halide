@@ -161,7 +161,7 @@ WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
     return h;
 }
 
-WEAK halide_mutex memoization_lock;
+WEAK halide_mutex memoization_lock = { { 0 } };
 
 const size_t kHashTableSize = 256;
 

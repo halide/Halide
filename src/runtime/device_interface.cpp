@@ -24,7 +24,7 @@ struct device_handle_wrapper {
 // respect to each other. halide_device_malloc and halide_device_free
 // are also candidates, but to do so they likely need to be able to do
 // a copy internaly as well.
-WEAK halide_mutex device_copy_mutex;
+WEAK halide_mutex device_copy_mutex = { { 0 } };
 
 WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
     int result = 0;
