@@ -867,12 +867,12 @@ class SolveForInterval : public IRVisitor {
 
         const Variable *v = le->a.as<Variable>();
         if (!already_solved) {
-            pair<bool, Expr> solved = solve_expression(le, var, scope);
-            if (!solved.first) {
+            SolverResult solved = solve_expression(le, var, scope);
+            if (!solved.fully_solved) {
                 fail();
             } else {
                 already_solved = true;
-                solved.second.accept(this);
+                solved.result.accept(this);
                 already_solved = false;
             }
         } else if (v && v->name == var) {
@@ -924,12 +924,12 @@ class SolveForInterval : public IRVisitor {
 
         const Variable *v = ge->a.as<Variable>();
         if (!already_solved) {
-            pair<bool, Expr> solved = solve_expression(ge, var, scope);
-            if (!solved.first) {
+            SolverResult solved = solve_expression(ge, var, scope);
+            if (!solved.fully_solved) {
                 fail();
             } else {
                 already_solved = true;
-                solved.second.accept(this);
+                solved.result.accept(this);
                 already_solved = false;
             }
         } else if (v && v->name == var) {
@@ -1261,7 +1261,7 @@ public:
 
 } // Anonymous namespace
 
-pair<bool, Expr> solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
+SolverResult solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
     Expr new_e = solver.mutate(e);
     // The process has expanded lets. Re-collect them.
@@ -1269,7 +1269,7 @@ pair<bool, Expr> solve_expression(Expr e, const std::string &variable, const Sco
     debug(3) << "Solved expr for " << variable << " :\n"
              << "  " << e << "\n"
              << "  " << new_e << "\n";
-    return std::make_pair(!solver.failed, new_e);
+    return {new_e, !solver.failed};
 }
 
 
@@ -1311,10 +1311,10 @@ Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
 namespace {
 
 void check_solve(Expr a, Expr b) {
-    pair<bool, Expr> solved = solve_expression(a, "x");
-    internal_assert(equal(solved.second, b))
+    SolverResult solved = solve_expression(a, "x");
+    internal_assert(equal(solved.result, b))
         << "Expression: " << a << "\n"
-        << " solved to " << solved.second << "\n"
+        << " solved to " << solved.result << "\n"
         << " instead of " << b << "\n";
 }
 
@@ -1381,8 +1381,8 @@ void solve_test() {
         for (int i = 0; i < 10; i++) {
             e *= (e + 1);
         }
-        pair<bool, Expr> solved = solve_expression(x + e < e*e, "x");
-        internal_assert(solved.second.as<Let>());
+        SolverResult solved = solve_expression(x + e < e*e, "x");
+        internal_assert(solved.fully_solved && solved.result.as<Let>());
     }
 
     // Solving inequalities for integers is a pain to get right with
@@ -1394,9 +1394,9 @@ void solve_test() {
             Expr in[] = {x*den < num, x*den <= num, x*den == num, x*den != num, x*den >= num, x*den > num,
                          x/den < num, x/den <= num, x/den == num, x/den != num, x/den >= num, x/den > num};
             for (int j = 0; j < 12; j++) {
-                pair<bool, Expr> solved = solve_expression(in[j], "x");
-                internal_assert(solved.first) << "Error: failed to solve for x in " << in[j] << "\n";
-                Expr out = simplify(solved.second);
+                SolverResult solved = solve_expression(in[j], "x");
+                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << in[j] << "\n";
+                Expr out = simplify(solved.result);
                 for (int i = -10; i < 10; i++) {
                     Expr in_val = substitute("x", i, in[j]);
                     Expr out_val = substitute("x", i, out);
@@ -1416,13 +1416,13 @@ void solve_test() {
     for (int i = 0; i < 20; i++) {
         e += (e + 1) * y;
     }
-    pair<bool, Expr> solved = solve_expression(e, "x");
-    internal_assert(solved.first && solved.second.defined());
+    SolverResult solved = solve_expression(e, "x");
+    internal_assert(solved.fully_solved && solved.result.defined());
 
     // Check some things that we don't expect to work.
 
     // Quadratics:
-    internal_assert(!solve_expression(x*x < 4, "x").first);
+    internal_assert(!solve_expression(x*x < 4, "x").fully_solved);
 
     // Function calls, cast nodes, or multiplications by unknown sign
     // don't get inverted, but the bit containing x still gets moved
