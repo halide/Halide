@@ -46,9 +46,12 @@ public:
             debug(4) << "Mutating " << e << " (" << uses_var << ")\n";
             bool old_uses_var = uses_var;
             uses_var = false;
+            bool old_failed = failed;
+            failed = false;
             Expr new_e = IRMutator::mutate(e);
             CacheEntry entry = {new_e, uses_var};
             uses_var = old_uses_var || uses_var;
+            failed = old_failed || failed;
             cache[e] = entry;
             debug(4) << "(Miss) Rewrote " << e << " -> " << new_e << " (" << uses_var << ")\n";
             return new_e;
@@ -114,13 +117,19 @@ private:
     void visit(const Add *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -193,13 +202,19 @@ private:
     void visit(const Sub *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
@@ -269,15 +284,21 @@ private:
     void visit(const Mul *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         internal_assert(!is_const(op->a) || !a_uses_var) << op->a << ", " << uses_var << "\n";
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -334,13 +355,19 @@ private:
     void visit_min_max_op(const T *op, bool is_min) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -440,13 +467,19 @@ private:
     void visit_and_or_op(const T *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -504,13 +537,19 @@ private:
     void visit_cmp(const Cmp *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             expr = mutate(Opp::make(b, a));
@@ -667,12 +706,17 @@ private:
     void visit(const Let *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr value = mutate(op->value);
         CacheEntry e = {value, uses_var};
+        bool value_failed = failed;
 
         uses_var = old_uses_var;
+        failed = false;
         scope.push(op->name, e);
         expr = mutate(op->body);
+        failed = old_failed || value_failed || failed;
         scope.pop(op->name);
     }
 
@@ -1519,6 +1563,9 @@ void solve_test() {
     check_solve(max(min(y, x), x), max(min(x, y), x));
     check_solve(min(y, x) + max(y, 2*x), min(x, y) + max(x*2, y));
     check_solve((min(x, y) + min(y, x))*max(y, x), (min(x, y)*2)*max(x, y));
+
+    check_solve(max((min((x*y), x) + min((x + y), y)), (y + 2*x)),
+                max((min((x*y), x) + min((x + y), y)), (x*2 + y)));
 
     debug(0) << "Solve test passed\n";
 
