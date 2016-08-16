@@ -455,32 +455,5 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     compile_module_to_filter(build_module(function_name), base_path, options);
 }
 
-Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                std::string function_name){
-    Pipeline p = build_pipeline();
-    user_assert(p.outputs().size() == 1) \
-        << "Can only call_extern Pipelines with a single output Func\n";
-    Func f = p.outputs()[0];
-    Func f_extern;
-    if (function_name.empty()) {
-        function_name = generator_name();
-        user_assert(!function_name.empty())
-            << "call_extern: generator_name is empty\n";
-    }
-    f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
-    return f_extern;
-}
-
-Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
-                                        std::initializer_list<ExternFuncArgument> function_arguments,
-                                        const std::string &function_name,
-                                        const GeneratorParamValues &generator_params) {
-    std::unique_ptr<GeneratorBase> extern_gen = GeneratorRegistry::create(generator_name, generator_params);
-    user_assert(extern_gen != nullptr) << "Unknown generator: " << generator_name << "\n";
-    // Note that the Generator's target is not set; at present, this shouldn't matter for
-    // define_extern() functions, since none of the linkage should vary by Target.
-    return extern_gen->call_extern(function_arguments, function_name);
-}
-
 }  // namespace Internal
 }  // namespace Halide
