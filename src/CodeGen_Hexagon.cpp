@@ -66,7 +66,8 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
         std::vector<const char *> options = {
             // Don't put small objects into .data sections, it causes
             // issues with position independent code.
-            "-hexagon-small-data-threshold=0"
+            "-hexagon-small-data-threshold=0",
+            "-hexagon-long-calls"
         };
         cl::ParseCommandLineOptions(options.size(), options.data());
     }
