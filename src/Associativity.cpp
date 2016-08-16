@@ -200,9 +200,8 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
 
         expr = common_subexpression_elimination(expr);
         expr = simplify(expr);
-        bool success;
-        std::tie(success, expr) = solve_expression(expr, op_x); // Move 'x' to the left as possible
-        if (!success) {
+        expr = solve_expression(expr, op_x).second; // Move 'x' to the left as possible
+        if (!expr.defined()) {
             return std::make_pair(false, vector<AssociativeOp>());
         }
         expr = substitute_in_all_lets(expr);
