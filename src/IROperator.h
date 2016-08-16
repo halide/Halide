@@ -1920,7 +1920,7 @@ Expr saturating_cast(Expr e) {
 
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
-Expr saturating_cast(Type t, Expr e);
+EXPORT Expr saturating_cast(Type t, Expr e);
 
 }
 
