@@ -31,10 +31,10 @@ typedef handle_t handle_t;
 
 const int hvx_alignment = 128;
 
-// Provide an implementation of qurt to redirect to the appropriate
-// simulator calls.
 extern "C" {
 
+// Provide an implementation of qurt to redirect to the appropriate
+// simulator calls.
 int qurt_hvx_lock(int mode) {
     SIM_ACQUIRE_HVX;
     if (mode == 0) {
@@ -49,6 +49,17 @@ int qurt_hvx_unlock() {
     SIM_RELEASE_HVX;
     return 0;
 }
+
+// More symbols we need to support from halide_get_symbol.
+extern int __hexagon_muldf3;
+extern int __hexagon_divdf3;
+extern int __hexagon_adddf3;
+extern int __hexagon_divsf3;
+extern int __hexagon_udivdi3;
+extern int __hexagon_udivsi3;
+extern int __hexagon_umodsi3;
+extern int __hexagon_divsi3;
+extern int __hexagon_modsi3;
 
 }  // extern "C"
 
@@ -88,6 +99,39 @@ int halide_do_par_for(void *user_context, halide_task_t f,
 void halide_mutex_destroy(halide_mutex *) {}
 
 void *halide_get_symbol(const char *name) {
+    // dlsym is just a stub on the simulator, so we need to support
+    // the symbols we need manually.
+    struct known_sym {
+        const char *name;
+        char *addr;
+    };
+    static known_sym known_syms[] = {
+        {"close", (char *)(&close)},
+        {"abort", (char *)(&abort)},
+        {"memcpy", (char *)(&memcpy)},
+        {"memmove", (char *)(&memmove)},
+        {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
+        {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
+        {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
+        {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
+        {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
+        {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
+        {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
+        {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
+        {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
+        {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
+        {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
+        {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
+        {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
+        {NULL, NULL} // Null terminator.
+    };
+
+    for (int i = 0; known_syms[i].name; i++) {
+        if (strncmp(name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
+            return known_syms[i].addr;
+        }
+    }
+
     return dlsym(RTLD_DEFAULT, name);
 }
 
