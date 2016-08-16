@@ -44,9 +44,7 @@ public:
     //@{
     template<typename ...Args>
     Tuple(Expr a, Expr b, Args&&... args) {
-        exprs.push_back(a);
-        exprs.push_back(b);
-        Internal::collect_args(exprs, std::forward<Args>(args)...);
+        exprs = std::vector<Expr>{a, b, std::forward<Args>(args)...};
     }
     //@}
 
@@ -94,8 +92,8 @@ public:
     /** Construct a Realization from some Buffers. */
     //@{
     template<typename ...Args>
-    Realization(Buffer a, Buffer b, Args&&... args) : buffers({a, b}) {
-        Internal::collect_args(buffers, std::forward<Args>(args)...);
+    Realization(Buffer a, Buffer b, Args&&... args) {
+        buffers = std::vector<Buffer>{a, b, std::forward<Args>(args)...};
     }
     //@}
 
