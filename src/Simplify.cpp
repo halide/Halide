@@ -2192,6 +2192,18 @@ private:
             // min(max(a, 4), ((a + 3)/4)*4) -> max(a, 4)
             expr = a;
         } else if (max_a &&
+                   min_b &&
+                   equal(max_a->a, min_b->a) &&
+                   equal(max_a->b, min_b->b)) {
+            // min(max(x, y), min(x, y)) -> min(x, y)
+            expr = mutate(min(max_a->a, max_a->b));
+        } else if (max_a &&
+                   min_b &&
+                   equal(max_a->a, min_b->b) &&
+                   equal(max_a->b, min_b->a)) {
+            // min(max(x, y), min(y, x)) -> min(x, y)
+            expr = mutate(min(max_a->a, max_a->b));
+        } else if (max_a &&
                    equal(max_a->b, b)) {
             // min(max(x, y), y) -> y
             expr = b;
@@ -2533,6 +2545,18 @@ private:
             } else {
                 expr = b;
             }
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // max(min(x, y), max(x, y)) -> max(x, y)
+            expr = mutate(max(min_a->a, min_a->b));
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // max(min(x, y), max(y, x)) -> max(x, y)
+            expr = mutate(max(min_a->a, min_a->b));
         } else if (min_a &&
                    equal(min_a->b, b)) {
             // max(min(x, y), y) -> y
@@ -5719,6 +5743,18 @@ void simplify_test() {
     check(min(x, y) + max(y, x), x + y);
     check(max(x, y) + min(x, y), x + y);
     check(max(y, x) + min(x, y), x + y);
+
+    // Check max(min(x, y), max(x, y)) gets simplified into max(x, y)
+    check(max(min(x, y), max(x, y)), max(x, y));
+    check(max(min(x, y), max(y, x)), max(x, y));
+    check(max(max(x, y), min(x, y)), max(x, y));
+    check(max(max(y, x), min(x, y)), max(x, y));
+
+    // Check min(max(x, y), min(x, y)) gets simplified into min(x, y)
+    check(min(max(x, y), min(x, y)), min(x, y));
+    check(min(max(x, y), min(y, x)), min(x, y));
+    check(min(min(x, y), max(x, y)), min(x, y));
+    check(min(min(y, x), max(x, y)), min(x, y));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
