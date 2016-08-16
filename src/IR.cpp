@@ -627,6 +627,7 @@ Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
+Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
