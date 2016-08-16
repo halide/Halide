@@ -184,7 +184,7 @@ class RDom {
     EXPORT void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
 
     template <typename... Args>
-    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args... args) {
+    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, const Args &... args) {
         ranges.push_back(std::make_pair(min, extent));
         initialize_from_ranges(ranges, args...);
     }
@@ -201,7 +201,7 @@ public:
     }
 
     template <typename... Args>
-    NO_INLINE RDom(Expr min, Expr extent, Args... args) {
+    NO_INLINE RDom(Expr min, Expr extent, const Args &... args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         std::vector<std::pair<Expr, Expr>> ranges;
