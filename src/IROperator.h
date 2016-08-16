@@ -1776,15 +1776,15 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, const Args &... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
     args.push_back(Expr(std::string(arg)));
-    collect_print_args(args, more_args...);
+    collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, const Args &... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
     args.push_back(arg);
-    collect_print_args(args, more_args...);
+    collect_print_args(args, std::forward<Args>(more_args)...);
 }
 }
 
@@ -1796,9 +1796,9 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, cons
 EXPORT Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
-inline NO_INLINE Expr print(Expr a, const Args &... args) {
+inline NO_INLINE Expr print(Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
-    Internal::collect_print_args(collected_args, args...);
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
 }
 //@}
@@ -1809,9 +1809,9 @@ inline NO_INLINE Expr print(Expr a, const Args &... args) {
 EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr print_when(Expr condition, Expr a, const Args &... args) {
+inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
-    Internal::collect_print_args(collected_args, args...);
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(condition, collected_args);
 }
 
@@ -1877,9 +1877,9 @@ inline Expr undef() {
 EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
 
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, const Args &... args) {
+inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
     std::vector<Expr> collected_args;
-    Internal::collect_args(collected_args, args...);
+    Internal::collect_args(collected_args, std::forward<Args>(args)...);
     return memoize_tag(result, collected_args);
 }
 // @}

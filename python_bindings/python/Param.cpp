@@ -389,12 +389,12 @@ void defineParam_impl(const std::string suffix, const h::Type type)
 
 
 template<typename T, typename ...Args>
-p::object create_param_object(const Args &...args)
+p::object create_param_object(Args&&...args)
 {
     typedef h::Param<T> ParamType;
     typedef typename p::manage_new_object::apply<ParamType *>::type converter_t;
     converter_t converter;
-    PyObject* obj = converter( new ParamType(args...) );
+    PyObject* obj = converter( new ParamType(std::forward<Args>(args)...) );
     return p::object( p::handle<>( obj ) );
 }
 
@@ -505,7 +505,7 @@ float, double> pixel_types_t;
 template<typename PixelTypes, typename ...Args>
 struct create_param1_impl_t
 {
-    p::object operator()(h::Type type, p::object val, const Args &... args)
+    p::object operator()(h::Type type, p::object val, Args&&... args)
     {
         typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
         if(h::type_of<pixel_t>() == type)
@@ -514,7 +514,7 @@ struct create_param1_impl_t
             if(val_extract.check())
             {
                 pixel_t true_val = val_extract();
-                return call_create_param_object<pixel_t>(true_val, args ...);
+                return call_create_param_object<pixel_t>(true_val, std::forward<Args>(args)...);
             }
             else
             {
@@ -528,7 +528,7 @@ struct create_param1_impl_t
         else
         { // keep recursing
             typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
-            return create_param1_impl_t<pixels_types_tail_t, Args...>()(type, val, args...);
+            return create_param1_impl_t<pixels_types_tail_t, Args...>()(type, val, std::forward<Args>(args)...);
         }
     }
 
@@ -568,7 +568,7 @@ struct create_param1_impl_t
 template<typename ...Args>
 struct create_param1_impl_t<boost::mpl::l_end::type, Args...>
 {
-    p::object operator()(h::Type type, p::object val, const Args &... args)
+    p::object operator()(h::Type type, p::object val, Args&&... args)
     {
         // end of recursion, did not find a matching type
         printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
