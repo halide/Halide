@@ -222,9 +222,9 @@ class SimplifyUsingBounds : public IRMutator {
                 Scope<Interval> s;
                 // Rearrange the expression if possible so that the
                 // loop var only occurs once.
-                pair<bool, Expr> solved = solve_expression(test, loop.var);
-                if (solved.first) {
-                    test = solved.second;
+                SolverResult solved = solve_expression(test, loop.var);
+                if (solved.fully_solved) {
+                    test = solved.result;
                 }
                 s.push(loop.var, loop.i);
                 test = and_condition_over_domain(test, s);
