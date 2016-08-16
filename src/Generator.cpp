@@ -299,11 +299,6 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
                                               this, nullptr);
 }
 
-GeneratorParamBase::GeneratorParamBase(const GeneratorParamBase &that) : name(that.name) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this, nullptr);
-}
-
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 /* static */
@@ -453,6 +448,28 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
                                 const EmitOptions &options) {
     std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
     compile_module_to_filter(build_module(function_name), base_path, options);
+}
+
+void generator_test() {
+    GeneratorParam<int> gp("gp", 1);
+
+    // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
+    RDom rdom(0, gp, 0, gp);
+
+    // Verify that Func parameter-pack variants can convert GeneratorParam to Expr
+    Var x, y;
+    Func f, g;
+    f(x, y) = x + y;
+    g(x, y) = f(gp, gp);                            // check Func::operator() overloads
+    g(rdom.x, rdom.y) += f(rdom.x, rdom.y);
+    g.update(0).reorder(rdom.y, rdom.x);            // check Func::reorder() overloads for RDom::operator RVar()
+
+    // Verify that print() parameter-pack variants can convert GeneratorParam to Expr
+    print(f(0, 0), g(1, 1), gp);
+    print_when(true, f(0, 0), g(1, 1), gp);
+
+    // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
+    Tuple t(gp, gp, gp);
 }
 
 }  // namespace Internal

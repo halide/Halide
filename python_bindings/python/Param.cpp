@@ -389,7 +389,7 @@ void defineParam_impl(const std::string suffix, const h::Type type)
 
 
 template<typename T, typename ...Args>
-p::object create_param_object(Args ...args)
+p::object create_param_object(const Args &...args)
 {
     typedef h::Param<T> ParamType;
     typedef typename p::manage_new_object::apply<ParamType *>::type converter_t;
@@ -505,7 +505,7 @@ float, double> pixel_types_t;
 template<typename PixelTypes, typename ...Args>
 struct create_param1_impl_t
 {
-    p::object operator()(h::Type type, p::object val, Args... args)
+    p::object operator()(h::Type type, p::object val, const Args &... args)
     {
         typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
         if(h::type_of<pixel_t>() == type)
@@ -568,7 +568,7 @@ struct create_param1_impl_t
 template<typename ...Args>
 struct create_param1_impl_t<boost::mpl::l_end::type, Args...>
 {
-    p::object operator()(h::Type type, p::object val, Args... args)
+    p::object operator()(h::Type type, p::object val, const Args &... args)
     {
         // end of recursion, did not find a matching type
         printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
