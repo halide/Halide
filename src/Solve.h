@@ -13,8 +13,11 @@ namespace Internal {
 /** Attempts to collect all instances of a variable in an expression
  * tree and place it as far to the left as possible, and as far up the
  * tree as possible (i.e. outside most parentheses). If the expression
- * is an equality or comparison, this 'solves' the equation. Returns
- * a boolen False and partially solved expression on failure. */
+ * is an equality or comparison, this 'solves' the equation. Returns a
+ * pair of bool and Expr. The Expr is the mutated expression, and the
+ * bool indicates whether there is a single instance of the variable
+ * in the result. If it is false, the expression has only been partially
+ * solved, and there are still multiple instances of the variable. */
 EXPORT std::pair<bool, Expr> solve_expression(
 	Expr e, const std::string &variable,
 	const Scope<Expr> &scope = Scope<Expr>::empty_scope());
