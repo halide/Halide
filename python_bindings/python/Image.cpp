@@ -721,12 +721,12 @@ bn::ndarray image_to_ndarray(p::object image_object)
 
 
 template<typename T, typename ...Args>
-p::object create_image_object(const Args &...args)
+p::object create_image_object(Args&&...args)
 {
     typedef h::Image<T> ImageType;
     typedef typename p::manage_new_object::apply<ImageType *>::type converter_t;
     converter_t converter;
-    PyObject* obj = converter( new ImageType(args...) );
+    PyObject* obj = converter( new ImageType(std::forward<Args>(args)...) );
     return p::object( p::handle<>( obj ) );
 }
 
@@ -763,7 +763,7 @@ p::object create_image0_impl<boost::mpl::l_end::type>(h::Type type)
 template<typename PixelTypes, typename ...Args>
 struct create_image1_impl_t
 {
-    p::object operator()(h::Type type, Args... args)
+    p::object operator()(h::Type type, Args&&... args)
     {
         typedef typename boost::mpl::empty<PixelTypes>::type pixels_types_list_is_empty_t;
         if(pixels_types_list_is_empty_t::value == true)
@@ -777,12 +777,12 @@ struct create_image1_impl_t
         typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
         if(h::type_of<pixel_t>() == type)
         {
-            return create_image_object<pixel_t, Args...>(args...);
+            return create_image_object<pixel_t, Args...>(std::forward<Args>(args)...);
         }
         else
         { // keep recursing
             typedef typename boost::mpl::pop_front<PixelTypes>::type pixels_types_tail_t;
-            return create_image1_impl_t<pixels_types_tail_t, Args...>()(type, args...);
+            return create_image1_impl_t<pixels_types_tail_t, Args...>()(type, std::forward<Args>(args)...);
         }
     }
 };
@@ -791,7 +791,7 @@ struct create_image1_impl_t
 template<typename ...Args>
 struct create_image1_impl_t<boost::mpl::l_end::type, Args...>
 {
-    p::object operator()(h::Type type, Args... args)
+    p::object operator()(h::Type type, Args&&... args)
     {
         // end of recursion, did not find a matching type
         printf("create_image1_impl<boost::mpl::l_end::type> received %s\n", type_repr(type).c_str());
