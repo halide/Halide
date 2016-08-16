@@ -695,13 +695,17 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::PureIntrinsic);
 }
 
-Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
+namespace Internal {
+
+Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) {
     std::vector<Expr> args;
     args.push_back(result);
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
     return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
                                 args, Internal::Call::PureIntrinsic);
 }
+
+}  // namespace Internal
 
 Expr saturating_cast(Type t, Expr e) {
     // For float to float, guarantee infinities are always pinned to range.

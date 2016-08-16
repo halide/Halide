@@ -1847,6 +1847,10 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+namespace Internal {
+EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+}  // namespace Internal
+
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
  * automatically inferred and added to the cache key. The memoize_tag
@@ -1874,13 +1878,11 @@ inline Expr undef() {
  * digest, memoize_tag can be used to key computations using that image
  * on the digest. */
 // @{
-EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
-
 template<typename ...Args>
 inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
     std::vector<Expr> collected_args;
     Internal::collect_args(collected_args, std::forward<Args>(args)...);
-    return memoize_tag(result, collected_args);
+    return Internal::memoize_tag_helper(result, collected_args);
 }
 // @}
 
