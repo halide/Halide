@@ -43,7 +43,7 @@ public:
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename ...Args>
-    Tuple(Expr a, Expr b, Args... args) {
+    Tuple(Expr a, Expr b, const Args &... args) {
         exprs.push_back(a);
         exprs.push_back(b);
         Internal::collect_args(exprs, args...);
@@ -94,7 +94,7 @@ public:
     /** Construct a Realization from some Buffers. */
     //@{
     template<typename ...Args>
-    Realization(Buffer a, Buffer b, Args... args) : buffers({a, b}) {
+    Realization(Buffer a, Buffer b, const Args &... args) : buffers({a, b}) {
         Internal::collect_args(buffers, args...);
     }
     //@}
