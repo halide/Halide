@@ -14,9 +14,10 @@ namespace Internal {
  * tree and place it as far to the left as possible, and as far up the
  * tree as possible (i.e. outside most parentheses). If the expression
  * is an equality or comparison, this 'solves' the equation. Returns
- * an undefined expression on failure. */
-EXPORT Expr solve_expression(Expr e, const std::string &variable,
-                             const Scope<Expr> &scope = Scope<Expr>::empty_scope());
+ * a boolen False and partially solved expression on failure. */
+EXPORT std::pair<bool, Expr> solve_expression(
+	Expr e, const std::string &variable,
+	const Scope<Expr> &scope = Scope<Expr>::empty_scope());
 
 /** Find the smallest interval such that the condition is either true
  * or false inside of it, but definitely false outside of it. Never
