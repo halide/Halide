@@ -1921,6 +1921,7 @@ WEAK bool get_kernel_src(const char *src, char** dst, size_t* len) {
 
   const char* sentinel = strstr(src+1, kernel_marker);
   bool done = false;
+  char *ret = (char*)src;
 
   if (sentinel == NULL) {
     *len = strlen(src);
@@ -1929,9 +1930,7 @@ WEAK bool get_kernel_src(const char *src, char** dst, size_t* len) {
   else
     *len = sentinel-src;
 
-  char* ret = (char*)malloc(sizeof(char) * (*len + 1));
-  strncpy(ret, src, *len);
-  *(ret + *len) = '\0';
+  *(ret + *len-1) = '\0';
   *dst = ret;
   return done;
 }
