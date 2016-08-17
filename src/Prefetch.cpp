@@ -69,17 +69,6 @@ private:
     }
 
     void visit(const For *op) {
-#if 0  // not currently pushing a new scope on For 
-        // At this stage of lowering, loop_min and loop_max
-        // conveniently exist in scope.
-        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
-                    Variable::make(Int(32), op->name + ".loop_max"));
-        //  --> produces boxes which represent entire loop
-        // Interval in(op->name, op->name);
-        //  --> Can't do arithmetic on opaque pointer types
-        scope.push(op->name, in);
-#endif
-
         Stmt body = op->body;
 
         string func_name = tuple_func(op->name);
@@ -109,41 +98,39 @@ private:
                 scope.push(op->name, prein);
 
                 map<string, Box> boxes;
-                boxes = boxes_required(op, scope);
+                boxes = boxes_required(body, scope);
 
                 debug(dbg_prefetch) << "  boxes required:\n";
                 for (auto &i : boxes) {
+                    const string &varname = i.first;
                     Box &box = i.second;
+                    debug(dbg_prefetch) << "  var:" << varname << ":\n";
                     for (size_t k = 0; k < box.size(); k++) {
                         debug(dbg_prefetch) << "    ---\n";
                         debug(dbg_prefetch) << "    box[" << k << "].min: " << box[k].min << "\n";
                         debug(dbg_prefetch) << "    box[" << k << "].max: " << box[k].max << "\n";
                     }
                     debug(dbg_prefetch) << "    ---------\n";
+
+#if 0 // todo create_buffer_t from box (see BoundsInference.cpp)
+                    Expr prefetch_buf_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                                                      output_buffer_t_args, Call::Intrinsic);
+                    // Add prefetch to body on inputs
+                    // Todo: For each input...
+                    Expr tmp = Expr(0);
+                    Stmt prefetch =
+                        Evaluate::make(Call::make(Int(32), fetch_func,
+                                          {tmp, prefetch_buf_t}, Call::Extern));
+                    body = Block::make({prefetch, body});
+#endif
                 }
 
                 scope.pop(op->name);
-
-#if 0 // todo create_buffer_t from box (see BoundsInference.cpp)
-                Expr prefetch_buf_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                                  output_buffer_t_args, Call::Intrinsic);
-                // Add prefetch to body on inputs
-                // Todo: For each input...
-                Expr tmp = Expr(0);
-                Stmt prefetch =
-                    Evaluate::make(Call::make(Int(32), fetch_func,
-                                      {tmp, prefetch_buf_t}, Call::Extern));
-                body = Block::make({prefetch, body});
-#endif
             }
         }
 
         body = mutate(body);
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
-
-#if 0  // not currently pushing a new scope on For 
-        scope.pop(op->name);
-#endif
     }
 
 };
