@@ -109,6 +109,10 @@ private:
     std::string get_vector_suffix(Expr e);
     char get_lane_suffix(int i);
 
+    std::vector<std::string> print_lanes(Expr expr);
+
+    Scope<int> scalar_vars, vector_vars;
+
     const Target target;
 };
 
