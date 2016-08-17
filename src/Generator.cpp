@@ -299,11 +299,6 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
                                               this, nullptr);
 }
 
-GeneratorParamBase::GeneratorParamBase(const GeneratorParamBase &that) : name(that.name) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this, nullptr);
-}
-
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 /* static */
@@ -455,31 +450,26 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     compile_module_to_filter(build_module(function_name), base_path, options);
 }
 
-Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                std::string function_name){
-    Pipeline p = build_pipeline();
-    user_assert(p.outputs().size() == 1) \
-        << "Can only call_extern Pipelines with a single output Func\n";
-    Func f = p.outputs()[0];
-    Func f_extern;
-    if (function_name.empty()) {
-        function_name = generator_name();
-        user_assert(!function_name.empty())
-            << "call_extern: generator_name is empty\n";
-    }
-    f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
-    return f_extern;
-}
+void generator_test() {
+    GeneratorParam<int> gp("gp", 1);
 
-Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
-                                        std::initializer_list<ExternFuncArgument> function_arguments,
-                                        const std::string &function_name,
-                                        const GeneratorParamValues &generator_params) {
-    std::unique_ptr<GeneratorBase> extern_gen = GeneratorRegistry::create(generator_name, generator_params);
-    user_assert(extern_gen != nullptr) << "Unknown generator: " << generator_name << "\n";
-    // Note that the Generator's target is not set; at present, this shouldn't matter for
-    // define_extern() functions, since none of the linkage should vary by Target.
-    return extern_gen->call_extern(function_arguments, function_name);
+    // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
+    RDom rdom(0, gp, 0, gp);
+
+    // Verify that Func parameter-pack variants can convert GeneratorParam to Expr
+    Var x, y;
+    Func f, g;
+    f(x, y) = x + y;
+    g(x, y) = f(gp, gp);                            // check Func::operator() overloads
+    g(rdom.x, rdom.y) += f(rdom.x, rdom.y);
+    g.update(0).reorder(rdom.y, rdom.x);            // check Func::reorder() overloads for RDom::operator RVar()
+
+    // Verify that print() parameter-pack variants can convert GeneratorParam to Expr
+    print(f(0, 0), g(1, 1), gp);
+    print_when(true, f(0, 0), g(1, 1), gp);
+
+    // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
+    Tuple t(gp, gp, gp);
 }
 
 }  // namespace Internal

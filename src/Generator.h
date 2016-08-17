@@ -114,12 +114,15 @@ EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
-    EXPORT explicit GeneratorParamBase(const GeneratorParamBase &that);
     EXPORT virtual ~GeneratorParamBase();
     virtual void from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
 
     const std::string name;
+
+private:
+    explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
+    void operator=(const GeneratorParamBase &) = delete;
 };
 
 }  // namespace Internal
@@ -553,24 +556,6 @@ public:
 
     EXPORT virtual ~GeneratorBase();
 
-    /** Return a Func that calls a previously-generated instance of this Generator.
-     * This is (essentially) a smart wrapper around define_extern(), but uses the
-     * output types and dimensionality of the Func returned by build. It is
-     * expected that the previously-generated instance will be available (at link time)
-     * as extern "C" function_name (if function_name is empty, it is assumed to
-     * match generator_name()). */
-    EXPORT Func call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                            std::string function_name = "");
-
-    /** Similar to call_extern(), but first creates a new Generator
-     * (from the current Registry) with the given name and params;
-     * this is more convenient to use if you don't have access to the C++
-     * Generator class definition at compile-time. */
-    EXPORT static Func call_extern_by_name(const std::string &generator_name,
-                                           std::initializer_list<ExternFuncArgument> function_arguments,
-                                           const std::string &function_name = "",
-                                           const GeneratorParamValues &generator_params = GeneratorParamValues());
-
     Target get_target() const { return target; }
 
     EXPORT GeneratorParamValues get_generator_param_values();
@@ -667,6 +652,8 @@ private:
     GeneratorRegistry(const GeneratorRegistry &) = delete;
     void operator=(const GeneratorRegistry &) = delete;
 };
+
+EXPORT void generator_test();
 
 }  // namespace Internal
 
