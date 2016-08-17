@@ -46,6 +46,20 @@ int main(int argc, char **argv) {
                            x, y, c, im(x, y, c), correct);
                     abort();
                 }
+                im(x, y, c) *= 2;
+            }
+        }
+    }
+
+    for (int c : im.dim(2)) {
+        for (int y : im.dim(1)) {
+            for (int x : im.dim(0)) {
+                int correct = (10*x + 5*y + c)*12;
+                if (im(x, y, c) != correct) {
+                    printf("im(%d, %d, %d) = %d instead of %d\n",
+                           x, y, c, im(x, y, c), correct);
+                    abort();
+                }
             }
         }
     }
