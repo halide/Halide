@@ -95,8 +95,12 @@ bin/%/halide_host.o: halide_host.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_host.cpp -o $@
 
+bin/%/nearbyint.o: nearbyint.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
+
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -o $@
 
