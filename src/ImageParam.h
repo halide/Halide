@@ -48,11 +48,10 @@ public:
      * (see \ref Var::implicit)
      */
     // @{
-    EXPORT Expr operator()() const;
-    EXPORT Expr operator()(Expr x) const;
-    EXPORT Expr operator()(Expr x, Expr y) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    template <typename... Args>
+    Expr operator()(Args&&... args) const {
+        return func(std::forward<Args>(args)...);
+    }
     EXPORT Expr operator()(std::vector<Expr>) const;
     EXPORT Expr operator()(std::vector<Var>) const;
     // @}
