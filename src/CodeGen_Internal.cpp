@@ -77,7 +77,7 @@ void unpack_closure(const Closure& closure,
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            LLVMMDNodeArgumentType md_args[] = {MDString::get(context, nm[i])};
+            llvm::Metadata *md_args[] = {MDString::get(context, nm[i])};
             load->setMetadata("tbaa", MDNode::get(context, md_args));
         }
         dst.push(nm[i], load);
@@ -236,7 +236,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     }
 }
 
-bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
     }
@@ -252,7 +252,7 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
     return true;
 }
 
-bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
         result = "";
         return false;
