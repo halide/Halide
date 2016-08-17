@@ -109,13 +109,19 @@ private:
     void visit(const Add *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -132,26 +138,26 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (sub_a && !expr_uses_var(sub_a->b, var)) {
+            if (sub_a && !a_failed) {
                 // (f(x) - a) + b -> f(x) + (b - a)
                 expr = mutate(sub_a->a + (b - sub_a->b));
-            } else if (add_a && !expr_uses_var(add_a->b, var)) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) + b -> f(x) + (a + b)
                 expr = mutate(add_a->a + (add_a->b + b));
             }
         } else if (a_uses_var && b_uses_var) {
             if (equal(a, b)) {
                 expr = mutate(a*2);
-            } else if (add_a && !expr_uses_var(add_a->b, var)) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
                 expr = mutate((add_a->a + b) + add_a->b);
-            } else if (add_b && !expr_uses_var(add_b->b, var)) {
+            } else if (add_b && !b_failed) {
                 // f(x) + (g(x) + a) -> (f(x) + g(x)) + a
                 expr = mutate((a + add_b->a) + add_b->b);
-            } else if (sub_a && !expr_uses_var(sub_a->b, var)) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) + g(x) -> (f(x) + g(x)) - a
                 expr = mutate((sub_a->a + b) - sub_a->b);
-            } else if (sub_b && !expr_uses_var(sub_b->b, var)) {
+            } else if (sub_b && !b_failed) {
                 // f(x) + (g(x) - a) -> (f(x) + g(x)) - a
                 expr = mutate((a + sub_b->a) - sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -188,13 +194,19 @@ private:
     void visit(const Sub *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
@@ -206,34 +218,34 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (sub_a && !expr_uses_var(sub_a->b, var)) {
+            if (sub_a && !a_failed) {
                 // (f(x) - a) - b -> f(x) - (a + b)
                 expr = mutate(sub_a->a - (sub_a->b + b));
-            } else if (add_a && !expr_uses_var(add_a->b, var)) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) - b -> f(x) + (a - b)
                 expr = mutate(add_a->a + (add_a->b - b));
             }
         } else if (b_uses_var && !a_uses_var) {
-            if (sub_b && !expr_uses_var(sub_b->b, var)) {
+            if (sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
                 expr = mutate(negate(sub_b->a) + (a + sub_b->b));
-            } else if (add_b && !expr_uses_var(add_b->b, var)) {
+            } else if (add_b && !b_failed) {
                 // a - (f(x) + b) -> -f(x) + (a - b)
                 expr = mutate(negate(add_b->a) + (a - add_b->b));
             } else {
                 expr = mutate(negate(b) + a);
             }
         } else if (a_uses_var && b_uses_var) {
-            if (add_a && !expr_uses_var(add_a->b, var)) {
+            if (add_a && !a_failed) {
                 // (f(x) + a) - g(x) -> (f(x) - g(x)) + a
                 expr = mutate(add_a->a - b + add_a->b);
-            } else if (add_b && !expr_uses_var(add_b->b, var)) {
+            } else if (add_b && !b_failed) {
                 // f(x) - (g(x) + a) -> (f(x) - g(x)) - a
                 expr = mutate(a - add_b->a - add_b->b);
-            } else if (sub_a && !expr_uses_var(sub_a->b, var)) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) - g(x) -> (f(x) - g(x)) - a
                 expr = mutate(sub_a->a - b - sub_a->b);
-            } else if (sub_b && !expr_uses_var(sub_b->b, var)) {
+            } else if (sub_b && !b_failed) {
                 // f(x) - (g(x) - a) -> (f(x) - g(x)) - a
                 expr = mutate(a - sub_b->a - sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -264,15 +276,21 @@ private:
     void visit(const Mul *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         internal_assert(!is_const(op->a) || !a_uses_var) << op->a << ", " << uses_var << "\n";
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -285,13 +303,13 @@ private:
 
         expr = Expr();
         if (a_uses_var && !b_uses_var) {
-            if (add_a && !expr_uses_var(add_a->b, var)) {
+            if (add_a && !a_failed) {
                 // (f(x) + a) * b -> f(x) * b + a * b
                 expr = mutate(add_a->a * b + add_a->b * b);
-            } else if (sub_a && !expr_uses_var(sub_a->b, var)) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) * b -> f(x) * b - a * b
                 expr = mutate(sub_a->a * b - sub_a->b * b);
-            } else if (mul_a && !expr_uses_var(mul_a->b, var)) {
+            } else if (mul_a && !a_failed) {
                 // (f(x) * a) * b -> f(x) * (a * b)
                 expr = mutate(mul_a->a * (mul_a->b * b));
             }
@@ -329,13 +347,19 @@ private:
     void visit_min_max_op(const T *op, bool is_min) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -354,7 +378,7 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (t_a && !expr_uses_var(t_a->b, var)) {
+            if (t_a && !a_failed) {
                 // op(op(f(x), a), b) -> op(f(x), op(a, b))
                 expr = mutate(T::make(t_a->a, T::make(t_a->b, b)));
             }
@@ -362,10 +386,10 @@ private:
             if (equal(a, b)) {
                 // op(f(x), f(x)) -> f(x)
                 expr = a;
-            } else if (t_a && !expr_uses_var(t_a->b, var)) {
+            } else if (t_a && !a_failed) {
                 // op(op(f(x), a), g(x)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(t_a->a, b), t_a->b));
-            } else if (t_b && !expr_uses_var(t_b->b, var)) {
+            } else if (t_b && !b_failed) {
                 // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
             } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
@@ -435,13 +459,19 @@ private:
     void visit_and_or_op(const T *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -454,7 +484,7 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (t_a && !expr_uses_var(t_a->b, var)) {
+            if (t_a && !a_failed) {
                 // op(op(f(x), a), b) -> op(f(x), op(a, b))
                 expr = mutate(T::make(t_a->a, T::make(t_a->b, b)));
             }
@@ -462,10 +492,10 @@ private:
             if (equal(a, b)) {
                 // op(f(x), f(x)) -> f(x)
                 expr = a;
-            } else if (t_a && !expr_uses_var(t_a->b, var)) {
+            } else if (t_a && !a_failed) {
                 // op(op(f(x), a), g(x)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(t_a->a, b), t_a->b));
-            } else if (t_b && !expr_uses_var(t_b->b, var)) {
+            } else if (t_b && !b_failed) {
                 // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
             } else {
@@ -499,13 +529,19 @@ private:
     void visit_cmp(const Cmp *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             expr = mutate(Opp::make(b, a));
@@ -528,10 +564,10 @@ private:
 
         if (a_uses_var && !b_uses_var) {
             // We have f(x) < y. Try to unwrap f(x)
-            if (add_a && !expr_uses_var(add_a->b, var)) {
+            if (add_a && !a_failed) {
                 // f(x) + b < c -> f(x) < c - b
                 expr = mutate(Cmp::make(add_a->a, (b - add_a->b)));
-            } else if (sub_a && !expr_uses_var(sub_a->b, var)) {
+            } else if (sub_a && !a_failed) {
                 // f(x) - b < c -> f(x) < c + b
                 expr = mutate(Cmp::make(sub_a->a, (b + sub_a->b)));
             } else if (mul_a) {
