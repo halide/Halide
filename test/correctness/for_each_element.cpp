@@ -50,6 +50,19 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Test a zero-dimensional image too.
+    Image<int, 0> scalar_im = Image<int, 0>::make_scalar();
+    scalar_im() = 5;
+
+    // Not sure why you'd ever do this, but it verifies that
+    // for_each_element does the right thing even in a corner case.
+    scalar_im.for_each_element([&]() {scalar_im()++;});
+
+    if (scalar_im() != 6) {
+        printf("scalar_im() == %d instead of 6\n", scalar_im());
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;
 }

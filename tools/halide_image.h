@@ -838,6 +838,11 @@ public:
         return im;
     }
 
+    /** Make a zero-dimensional Image */
+    static Image<T, D> make_scalar() {
+        return Image<T, 1>(1).sliced(0, 0);
+    }
+
 private:
     template<typename ...Args>
      __attribute__((always_inline))
