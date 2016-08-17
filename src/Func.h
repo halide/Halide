@@ -127,7 +127,7 @@ public:
      f_intm(x, y, u) += g(r.x, u);
 
      f(x, y) = 0;
-     f(x, y) = f_intm(x, y, r.y);
+     f(x, y) += f_intm(x, y, r.y);
      \endcode
      *
      * This has a variety of uses. You can use it to split computation of an associative reduction:
