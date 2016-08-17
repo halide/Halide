@@ -150,6 +150,14 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
     builtin["isnan"] = "isnan";
     builtin["round_f32"] = "roundEven";
     builtin["trunc_f32"] = "_trunc_f32";
+
+    // functions that produce bvecs
+    builtin["equal"] = "equal";
+    builtin["notEqual"] = "notEqual";
+    builtin["lessThan"] = "lessThan";
+    builtin["lessThanEqual"] = "lessThanEqual";
+    builtin["greaterThan"] = "greaterThan";
+    builtin["greaterThanEqual"] = "greaterThanEqual";
 }
 
 void CodeGen_GLSLBase::visit(const Max *op) {
@@ -223,6 +231,69 @@ string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option)
     }
 
     return oss.str();
+}
+
+// The following comparisons are defined for ivec and vec
+// types, so we don't use call_builtin
+void CodeGen_GLSLBase::visit(const EQ *op) {
+    if (op->type.is_vector()) {
+        Type bool_type = Bool(op->type.lanes());
+        print_expr(Call::make(bool_type, "equal", {op->a, op->b}, Call::Extern));
+    }
+    else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const NE *op) {
+    if (op->type.is_vector()) {
+        Type bool_type = Bool(op->type.lanes());
+        print_expr(Call::make(bool_type, "notEqual", {op->a, op->b}, Call::Extern));
+    }
+    else {
+        CodeGen_C::visit(op);
+    }
+
+}
+
+void CodeGen_GLSLBase::visit(const LT *op) {
+    if (op->type.is_vector()) {
+        Type bool_type = Bool(op->type.lanes());
+        print_expr(Call::make(bool_type, "lessThan", {op->a, op->b}, Call::Extern));
+    }
+    else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const LE *op) {
+    if (op->type.is_vector()) {
+        Type bool_type = Bool(op->type.lanes());
+        print_expr(Call::make(bool_type, "lessThanEqual", {op->a, op->b}, Call::Extern));
+    }
+    else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const GT *op) {
+    if (op->type.is_vector()) {
+        Type bool_type = Bool(op->type.lanes());
+        print_expr(Call::make(bool_type, "greaterThan", {op->a, op->b}, Call::Extern));
+    }
+    else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const GE *op) {
+    if (op->type.is_vector()) {
+        Type bool_type = Bool(op->type.lanes());
+        print_expr(Call::make(bool_type, "greaterThanEqual", {op->a, op->b}, Call::Extern));
+    }
+    else {
+        CodeGen_C::visit(op);
+    }
 }
 
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
