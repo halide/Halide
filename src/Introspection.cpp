@@ -884,7 +884,7 @@ private:
 
         obj = maybe_obj.get().getBinary();
 
-        #elif LLVM_VERSION >= 36
+        #else
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -895,31 +895,11 @@ private:
         }
 
         obj = maybe_obj.get().getBinary();
-
-        #elif LLVM_VERSION >= 35
-
-        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> maybe_obj =
-            llvm::object::ObjectFile::createObjectFile(binary);
-
-        if (!maybe_obj) {
-            debug(1) << "Failed to load binary:" << binary << "\n";
-            return;
-        }
-
-        obj = maybe_obj.get().get();
-
-        #else
-        obj = llvm::object::ObjectFile::createObjectFile(binary);
         #endif
 
         if (obj) {
             working = true;
             parse_object_file(obj);
-
-            #if LLVM_VERSION < 35
-            // It's not memory-managed in older LLVMs.
-            delete obj;
-            #endif
         } else {
             debug(1) << "Could not load object file: " << binary << "\n";
             working = false;
@@ -936,14 +916,8 @@ private:
         std::string prefix = ".";
 #endif
 
-#if LLVM_VERSION > 34
         for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
-#else
-        llvm::error_code err;
-        for (llvm::object::section_iterator iter = obj->begin_sections();
-             iter != obj->end_sections(); iter.increment(err)) {
-#endif
             llvm::StringRef name;
             iter->getName(name);
             debug(2) << "Section: " << name.str() << "\n";
