@@ -117,10 +117,10 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function.
-    LLVMMDNodeArgumentType md_args[] = {
-        value_as_metadata_type(function),
+    llvm::Metadata *md_args[] = {
+        llvm::ValueAsMetadata::get(function),
         MDString::get(*context, "kernel"),
-        value_as_metadata_type(ConstantInt::get(i32_t, 1))
+        llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1))
     };
 
     MDNode *md_node = MDNode::get(*context, md_args);
