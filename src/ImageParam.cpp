@@ -43,29 +43,6 @@ Buffer ImageParam::get() const {
     return param.get_buffer();
 }
 
-Expr ImageParam::operator()() const {
-    user_assert(dimensions() == 0)
-        << "Zero-argument access to Buffer " << name()
-        << ", which has " << dimensions() << "dimensions.\n";
-    return func();
-}
-
-Expr ImageParam::operator()(Expr x) const {
-    return func(x);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y) const {
-    return func(x, y);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y, Expr z) const {
-    return func(x, y, z);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y, Expr z, Expr w) const {
-    return func(x, y, z, w);
-}
-
 Expr ImageParam::operator()(std::vector<Expr> args_passed) const {
     return func(args_passed);
 }
