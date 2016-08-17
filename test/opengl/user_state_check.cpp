@@ -1,3 +1,13 @@
+// Test doesn't build on windows, because OpenGL on windows is a nightmare.
+#ifdef _WIN32
+#include <stdio.h>
+int main() {
+    printf("Skipping test on Windows\n");
+    return 0;
+}
+#else // not _WIN32
+
+
 #include <csetjmp>
 #include <unistd.h>
 
@@ -80,3 +90,5 @@ int main()
     printf("Success!\n");
     return 0;
 }
+
+#endif // not _WIN32
