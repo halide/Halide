@@ -26,7 +26,7 @@ namespace Halide {
 namespace Tools {
 
 template<typename Fn>
-void for_each_element(const buffer_t &buf, Fn f);
+void for_each_element(const buffer_t &buf, Fn &&f);
 
 /** A class that wraps buffer_t and adds functionality. Acts as a base
  * class for the typed version below. Templated on the maximum
@@ -157,6 +157,12 @@ public:
         }
         __attribute__((always_inline)) int max() const {
             return min() + extent() - 1;
+        }
+        __attribute__((always_inline)) int begin() const {
+            return min();
+        }
+        __attribute__((always_inline)) int end() const {
+            return min() + extent();
         }
         Dimension(const buffer_t &buf, int idx) : buf(buf), idx(idx) {}
     };
@@ -309,13 +315,13 @@ public:
    /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
     template<typename ...Args>
-    Buffer(halide_type_t t, int first, Args... rest) : ty(t) {
+    Buffer(halide_type_t t, int first, Args&&... rest) : ty(t) {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
-        initialize_shape(0, first, rest...);
+        initialize_shape(0, first, int(rest)...);
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
-        if (!any_zero(first, rest...)) {
+        if (!any_zero(first, int(rest)...)) {
             allocate();
         }
     }
@@ -335,11 +341,11 @@ public:
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data. */
     template<typename T, typename ...Args>
-    explicit Buffer(T *data, int first, Args... rest) {
+    explicit Buffer(T *data, int first, Args&&... rest) {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
         ty = halide_type_of<typename std::remove_cv<T>::type>();
-        initialize_shape(0, first, rest...);
+        initialize_shape(0, first, int(rest)...);
         buf.elem_size = sizeof(T);
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
@@ -420,7 +426,6 @@ public:
     }
     // @}
 
-
     /** Make a new image which is a deep copy of this image. Use crop
      * or slice followed by copy to make a copy of only a portion of
      * the image. The new image uses the same memory layout as the
@@ -488,8 +493,10 @@ public:
 
     /** Crop an image in-place along the given dimension. */
     void crop(int d, int min, int extent) {
-        assert(buf.dev == 0);
+        // assert(dim(d).min() <= min);
+        // assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
+        assert(buf.dev == 0 || shift == 0);
         buf.host += shift * dim(d).stride() * buf.elem_size;
         buf.min[d] = min;
         buf.extent[d] = extent;
@@ -511,7 +518,6 @@ public:
 
     /** Crop an image in-place along the first N dimensions. */
     void crop(const std::vector<std::pair<int, int>> &rect) {
-        assert(buf.dev == 0);
         for (int i = 0; i < rect.size(); i++) {
             crop(i, rect[i].first, rect[i].second);
         }
@@ -575,15 +581,17 @@ public:
 
     /** Slice an image in-place */
     void slice(int d, int pos) {
-        assert(buf.dev == 0);
+        // assert(pos >= dim(d).min() && pos <= dim(d).max());
         dims--;
         int shift = pos - dim(d).min();
+        assert(buf.dev == 0 || shift == 0);
         buf.host += shift * dim(d).stride() * buf.elem_size;
         for (int i = d; i < dimensions(); i++) {
             buf.stride[i] = buf.stride[i+1];
             buf.extent[i] = buf.extent[i+1];
             buf.min[i] = buf.min[i+1];
         }
+        buf.stride[dims] = buf.extent[dims] = buf.min[dims] = 0;
     }
 
     /** Make a new image that views this image as a single slice in a
@@ -724,18 +732,21 @@ public:
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
     template<typename ...Args>
-    Image(int first, Args... rest) : Buffer<D>(halide_type_of<typename std::remove_cv<T>::type>(), first, rest...) {}
+    Image(int first, Args&&... rest) :
+        Buffer<D>(halide_type_of<typename std::remove_cv<T>::type>(), first, int(rest)...) {}
 
     /** Make an image that refers to a statically sized array. Does not
      * take ownership of the data. */
     template<typename Array, size_t N>
-    explicit Image(Array (&vals)[N]) : Buffer<D>(vals) {}
+    explicit Image(Array (&vals)[N]) :
+        Buffer<D>(vals) {}
 
     /** Initialize an Image from a pointer and some sizes. Assumes
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data. */
     template<typename ...Args>
-    explicit Image(T *data, int first, Args... rest) : Buffer<D>(data, first, rest...) {}
+    explicit Image(T *data, int first, Args&&... rest) :
+        Buffer<D>(data, first, int(rest)...) {}
 
     /** Initialize an Image from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
@@ -748,7 +759,8 @@ public:
      * data. This version exists so that there's a non-templated
      * version to use in case the Image is a derived type and so N
      * can't be inferred in the version above. */
-    explicit Image(T *data, halide_dimension_t shape[D]) : Buffer<D>(data, shape) {}
+    explicit Image(T *data, halide_dimension_t shape[D]) :
+        Buffer<D>(data, shape) {}
 
     /** Construct a typed Image from an untyped Buffer. Asserts at
      * runtime if there's a type mismatch, or if the dimensionality of
@@ -768,18 +780,29 @@ public:
 
     /** Construct an Image from an Image of a different
      * dimensionality. Asserts at runtime the other dimensionality is
-     * greater than D.
+     * greater than D. Asserts at compile-time if the element type
+     * doesn't match. This constructor is templated on the element
+     * type of the argument so that the Buffer constructor above is
+     * not used for Images with mismatched types.
      */
-    template<int D2>
-    Image(const Image<T, D2> &buf) : Buffer<D>(buf) {}
+    template<typename T2, int D2>
+    Image(const Image<T2, D2> &buf) : Buffer<D>(buf) {
+        static_assert(std::is_same<typename std::remove_cv<T>::type, T2>::value,
+                      "Can't construct an Image from an Image of different element type, "
+                      "with the exception of casting an Image<T> to an Image<const T>.");
+    }
 
     /** Move-construct an Image from an Image of a different
      * dimensionality. Asserts at runtime the other dimensionality is
-     * greater than D.
+     * greater than D. Asserts at compile-time if the element type
+     * doesn't match.
      */
-    template<int D2>
-    Image(const Image<T, D2> &&buf) : Buffer<D>(buf) {}
-
+    template<typename T2, int D2>
+    Image(const Image<T2, D2> &&buf) : Buffer<D>(buf) {
+        static_assert(std::is_same<typename std::remove_cv<T>::type, T2>::value,
+                      "Can't construct an Image from an Image of different element type, "
+                      "with the exception of casting an Image<T> to an Image<const T>.");
+    }
 
     /** Assign an Image from an Image of a different
      * dimensionality. Asserts at runtime the other dimensionality is
@@ -817,15 +840,18 @@ public:
 
 private:
     template<typename ...Args>
-     __attribute__((always_inline)) T *address_of(int d, int first, Args... rest) const {
+     __attribute__((always_inline))
+    T *address_of(int d, int first, Args... rest) const {
         return address_of(d+1, rest...) + this->buf.stride[d] * (first - this->buf.min[d]);
     }
 
-    __attribute__((always_inline)) T *address_of(int d) const {
+    __attribute__((always_inline))
+    T *address_of(int d) const {
         return (T *)(this->buf.host);
     }
 
-    __attribute__((always_inline)) T *address_of(const int *pos) const {
+    __attribute__((always_inline))
+    T *address_of(const int *pos) const {
         T *ptr = (T *)(this->buf.host);
         for (int i = this->dimensions() - 1; i >= 0; i--) {
             ptr += this->buf.stride[i] * (pos[i] - this->buf.min[i]);
@@ -845,46 +871,69 @@ public:
     }
     // @}
 
-    /** Access elements. Use im(...) to get a reference to an element, and
-     * use &im(...) to get the address of an element.
+    /** Access elements. Use im(...) to get a reference to an element,
+     * and use &im(...) to get the address of an element. If you pass
+     * fewer arguments than the buffer has dimensions, the rest are
+     * treated as their min coordinate.
      */
     //@{
     template<typename ...Args>
-    __attribute__((always_inline)) const T &operator()(int first, Args... rest) const {
-        return *(address_of(0, first, rest...));
+    __attribute__((always_inline))
+    const T &operator()(int first, Args... rest) const {
+        return *(address_of(0, first, int(rest)...));
     }
 
-    template<typename ...Args>
-    __attribute__((always_inline)) const T &operator()() const {
-        return *((T *)this->buf.host);
+    __attribute__((always_inline))
+    const T &operator()() const {
+        return *(address_of(0));
     }
 
-    __attribute__((always_inline)) const T &operator()(const int *pos) const {
+    __attribute__((always_inline))
+    const T &operator()(const int *pos) const {
         return *((T *)address_of(pos));
     }
 
     template<typename ...Args>
-    __attribute__((always_inline)) T &operator()(int first, Args... rest) {
-        return *(address_of(0, first, rest...));
+    __attribute__((always_inline))
+    T &operator()(int first, Args... rest) {
+        return *(address_of(0, first, int(rest)...));
     }
 
-    template<typename ...Args>
-    __attribute__((always_inline)) T &operator()() {
-        return *((T *)this->buf.host);
+    __attribute__((always_inline))
+    T &operator()() {
+        return *(address_of(0));
     }
 
-    __attribute__((always_inline)) T &operator()(const int *pos) {
+    __attribute__((always_inline))
+    T &operator()(const int *pos) {
         return *((T *)address_of(pos));
     }
     // @}
 
+private:
+    // Helper functions for fill that call for_each_element with a
+    // lambda of the correct dimensionality.
+    template<typename ...Args>
+    typename std::enable_if<(sizeof...(Args) < D)>::type
+    fill_helper(T val, Args... args) {
+        if (sizeof...(Args) == Buffer<D>::dimensions()) {
+            Buffer<D>::for_each_element([&](Args... args) {(*this)(args...) = val;});
+        } else {
+            fill_helper(val, 0, args...);
+        }
+    }
+
+    template<typename ...Args>
+    typename std::enable_if<(sizeof...(Args) == D)>::type
+    fill_helper(T val, Args...) {
+        Buffer<D>::for_each_element([&](Args... args) {(*this)(args...) = val;});
+    }
+
+public:
+
     /** Set every value in the buffer to the given value */
     void fill(T val) {
-        if (D <= 4) {
-            Buffer<D>::for_each_element([&](int a, int b, int c, int d) {(*this)(a, b, c, d) = val;});
-        } else {
-            Buffer<D>::for_each_element([&](const int *pos) {(*this)(pos) = val;});
-        }
+        fill_helper(val);
     }
 
     /** Make a new image which is a deep copy of this image. Use crop
@@ -943,6 +992,7 @@ public:
     Image<T, D+1> embedded(int d, int pos) const {
         return Image<T, D+1>(Buffer<D>::embedded(d, pos));
     }
+
 };
 
 /** Some helpers for for_each_element. */
@@ -955,7 +1005,7 @@ struct for_each_element_helpers {
      * the function is not callable with this many args. */
     template<typename ...Args>
     __attribute__((always_inline))
-    static auto for_each_element_variadic(int, int d, Fn f, const buffer_t &buf, Args... args)
+    static auto for_each_element_variadic(int, int d, Fn &&f, const buffer_t &buf, Args... args)
         -> decltype(f(args...)) {
         f(args...);
     }
@@ -965,34 +1015,43 @@ struct for_each_element_helpers {
      * SFINAE. */
     template<typename ...Args>
     __attribute__((always_inline))
-    static void for_each_element_variadic(double, int d, Fn f, const buffer_t &buf, Args... args) {
+    static void for_each_element_variadic(double, int d, Fn &&f, const buffer_t &buf, Args... args) {
         int e = buf.extent[d] == 0 ? 1 : buf.extent[d];
         for (int i = 0; i < e; i++) {
-            for_each_element_variadic(0, d-1, f, buf, buf.min[d] + i, args...);
+            for_each_element_variadic(0, d-1, std::forward<Fn>(f), buf, buf.min[d] + i, args...);
         }
     }
+
+    /** A sink function used to suppress compiler warnings in
+     * compilers that don't think decltype counts as a use. */
+    template<typename ...Args>
+    static void sink(Args... ) {}
 
     /** Determine the minimum number of arguments a callable can take
      * using the same trick. */
     template<typename ...Args>
-    __attribute__((always_inline)) static auto num_args(int, int *result, Fn f, Args... args) -> decltype(f(args...)) {
+    __attribute__((always_inline))
+    static auto num_args(int, int *result, Fn &&f, Args... args) -> decltype(f(args...)) {
         *result = sizeof...(args);
+        sink(std::forward<Fn>(f), args...);
     }
 
     /** The recursive version is only enabled up to a recursion limit
      * of 256. This catches callables that aren't callable with any
      * number of ints. */
     template<typename ...Args>
-    __attribute__((always_inline)) static void num_args(double, int *result, Fn f, Args... args) {
+    __attribute__((always_inline))
+    static void num_args(double, int *result, Fn &&f, Args... args) {
         static_assert(sizeof...(args) <= 256,
                       "Callable passed to for_each_element must accept either a const int *,"
                       " or up to 256 ints. No such operator found. Expect infinite template recursion.");
-        return num_args(0, result, f, 0, args...);
+        return num_args(0, result, std::forward<Fn>(f), 0, args...);
     }
 
-    __attribute__((always_inline)) static int get_number_of_args(Fn f) {
+    __attribute__((always_inline))
+    static int get_number_of_args(Fn &&f) {
         int result;
-        num_args(0, &result, f);
+        num_args(0, &result, std::forward<Fn>(f));
         return result;
     }
 
@@ -1002,16 +1061,18 @@ struct for_each_element_helpers {
      * double trick as above, but is impossible once d hits -1 using
      * std::enable_if. */
     template<int d>
+    __attribute__((always_inline))
     static typename std::enable_if<d >= 0, void>::type
-    __attribute__((always_inline)) for_each_element_array_helper(int, Fn f, const buffer_t &buf, int *pos) {
+    for_each_element_array_helper(int, Fn &&f, const buffer_t &buf, int *pos) {
         for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
-            for_each_element_array_helper<d - 1>(0, f, buf, pos);
+            for_each_element_array_helper<d - 1>(0, std::forward<Fn>(f), buf, pos);
         }
     }
 
     /** Base case for recursion above. */
     template<int d>
-    __attribute__((always_inline)) static void for_each_element_array_helper(double, Fn f, const buffer_t &buf, int *pos) {
+    __attribute__((always_inline))
+    static void for_each_element_array_helper(double, Fn &&f, const buffer_t &buf, int *pos) {
         f(pos);
     }
 
@@ -1021,23 +1082,23 @@ struct for_each_element_helpers {
      * pointer to a position array instead. Dispatches to the
      * compile-time-recursive version once the dimensionality gets
      * small. */
-    static void for_each_element_array(int d, Fn f, const buffer_t &buf, int *pos) {
+    static void for_each_element_array(int d, Fn &&f, const buffer_t &buf, int *pos) {
         if (d == -1) {
             f(pos);
         } else if (d == 0) {
             // Once the dimensionality gets small enough, dispatch to
             // a compile-time-recursive version for better codegen of
             // the inner loops.
-            for_each_element_array_helper<0>(0, f, buf, pos);
+            for_each_element_array_helper<0>(0, std::forward<Fn>(f), buf, pos);
         } else if (d == 1) {
-            for_each_element_array_helper<1>(0, f, buf, pos);
+            for_each_element_array_helper<1>(0, std::forward<Fn>(f), buf, pos);
         } else if (d == 2) {
-            for_each_element_array_helper<2>(0, f, buf, pos);
+            for_each_element_array_helper<2>(0, std::forward<Fn>(f), buf, pos);
         } else if (d == 3) {
-            for_each_element_array_helper<3>(0, f, buf, pos);
+            for_each_element_array_helper<3>(0, std::forward<Fn>(f), buf, pos);
         } else {
             for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
-                for_each_element_array(d - 1, f, buf, pos);
+                for_each_element_array(d - 1, std::forward<Fn>(f), buf, pos);
             }
         }
     }
@@ -1046,22 +1107,23 @@ struct for_each_element_helpers {
      * triggers if the callable takes a const int *.
      */
     template<typename Fn2>
-    static auto for_each_element(int, const buffer_t &buf, Fn2 f)
+    static auto for_each_element(int, const buffer_t &buf, Fn2 &&f)
         -> decltype(f((const int *)0)) {
         int pos[4] = {0, 0, 0, 0};
         int dimensions = 0;
         while (buf.extent[dimensions] != 0 && dimensions < 4) {
             dimensions++;
         }
-        for_each_element_array(dimensions - 1, f, buf, pos);
+        for_each_element_array(dimensions - 1, std::forward<Fn2>(f), buf, pos);
     }
 
     /** This one triggers otherwise. It treats the callable as
      * something that takes some number of ints. */
     template<typename Fn2>
-    __attribute__((always_inline)) static void for_each_element(double, const buffer_t &buf, Fn2 f) {
-        int num_args = get_number_of_args(f);
-        for_each_element_variadic(0, num_args-1, f, buf);
+    __attribute__((always_inline))
+    static void for_each_element(double, const buffer_t &buf, Fn2 &&f) {
+        int num_args = get_number_of_args(std::forward<Fn2>(f));
+        for_each_element_variadic(0, num_args-1, std::forward<Fn2>(f), buf);
     }
 };
 
@@ -1123,8 +1185,8 @@ for_each_element(im.sliced(0, 0), [&](int y, int c) {
 
 */
 template<typename Fn>
-void for_each_element(const buffer_t &buf, Fn f) {
-    for_each_element_helpers<Fn>::for_each_element(0, buf, f);
+void for_each_element(const buffer_t &buf, Fn &&f) {
+    for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
 }
 
 }  // namespace Tools
