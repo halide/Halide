@@ -6,16 +6,6 @@
 #include <stdio.h>
 #include <dlfcn.h>
 
-extern "C" {
-
-// elf.h expects these to be declared.
-typedef int qurt_hvx_mode_t;
-int qurt_hvx_lock(qurt_hvx_mode_t mode);
-int qurt_hvx_unlock();
-
-}  // extern "C"
-
-
 #include "elf.h"
 #include "hexagon_standalone.h"
 
