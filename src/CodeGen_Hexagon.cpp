@@ -66,8 +66,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
         std::vector<const char *> options = {
             // Don't put small objects into .data sections, it causes
             // issues with position independent code.
-            "-hexagon-small-data-threshold=0",
-            "-hexagon-long-calls"
+            "-hexagon-small-data-threshold=0"
         };
         cl::ParseCommandLineOptions(options.size(), options.data());
     }
@@ -1169,11 +1168,12 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
+    std::stringstream attrs("+hvx");
     if (target.has_feature(Halide::Target::HVX_128)) {
-        return "+hvx,+hvx-double";
-    } else {
-        return "+hvx";
+        attrs << ",+hvx-double";
     }
+    attrs << ",+long-calls";
+    return attrs.str();
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
