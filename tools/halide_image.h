@@ -158,12 +158,21 @@ public:
         __attribute__((always_inline)) int max() const {
             return min() + extent() - 1;
         }
-        __attribute__((always_inline)) int begin() const {
-            return min();
+
+        // Support for iterating over all coordinates in the dimension.
+        struct iterator {
+            int val;
+            int operator*() const {return val;}
+            bool operator!=(const iterator &other) const {return val != other.val;}
+            iterator &operator++() {val++; return *this;}
+        };
+        __attribute__((always_inline)) iterator begin() const {
+            return {min()};
         }
-        __attribute__((always_inline)) int end() const {
-            return min() + extent();
+        __attribute__((always_inline)) iterator end() const {
+            return {min() + extent()};
         }
+
         Dimension(const buffer_t &buf, int idx) : buf(buf), idx(idx) {}
     };
 
