@@ -21,8 +21,10 @@ using std::string;
 using std::vector;
 using std::stack;
 
+// Prefetch debug levels
 int dbg_prefetch  = 1;
 int dbg_prefetch2 = 2;
+int dbg_prefetch3 = 10;
 
 class InjectPrefetch : public IRMutator {
 public:
@@ -31,6 +33,7 @@ public:
 private:
     const map<string, Function> &env;
     Scope<Interval> scope;
+    unsigned long ptmp = 0;   // ID for all tmp vars in a prefetch op
 
 private:
     using IRMutator::visit;
@@ -83,13 +86,11 @@ private:
             debug(dbg_prefetch) << " Found prefetch directive(s)\n";
         }
 
-        // Todo: Check to see if op->name is in prefetches
         for (const Prefetch &p : prefetches) {
             debug(dbg_prefetch) << "InjectPrefetch: check var:" << p.var
                                << " offset:" << p.offset << "\n";
             if (p.var == var_name) {
                 debug(dbg_prefetch) << " prefetch on " << var_name << "\n";
-                string fetch_func = "halide.hexagon.l2fetch.Rtt";
 
                 // Interval prein(op->name, op->name);
                 // Add in prefetch offset
@@ -101,28 +102,76 @@ private:
                 boxes = boxes_required(body, scope);
 
                 debug(dbg_prefetch) << "  boxes required:\n";
-                for (auto &i : boxes) {
-                    const string &varname = i.first;
-                    Box &box = i.second;
+                for (auto &b : boxes) {
+                    const string &varname = b.first;
+                    Box &box = b.second;
+                    int dims = box.size();
                     debug(dbg_prefetch) << "  var:" << varname << ":\n";
-                    for (size_t k = 0; k < box.size(); k++) {
+                    for (int i = 0; i < dims; i++) {
                         debug(dbg_prefetch) << "    ---\n";
-                        debug(dbg_prefetch) << "    box[" << k << "].min: " << box[k].min << "\n";
-                        debug(dbg_prefetch) << "    box[" << k << "].max: " << box[k].max << "\n";
+                        debug(dbg_prefetch) << "    box[" << i << "].min: " << box[i].min << "\n";
+                        debug(dbg_prefetch) << "    box[" << i << "].max: " << box[i].max << "\n";
                     }
                     debug(dbg_prefetch) << "    ---------\n";
 
-#if 0 // todo create_buffer_t from box (see BoundsInference.cpp)
-                    Expr prefetch_buf_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                                      output_buffer_t_args, Call::Intrinsic);
-                    // Add prefetch to body on inputs
-                    // Todo: For each input...
-                    Expr tmp = Expr(0);
-                    Stmt prefetch =
+                    string pstr = std::to_string(ptmp++);
+                    string varname_prefetch_buf = varname + ".prefetch_" + pstr + "_buf";
+                    Expr var_prefetch_buf = Variable::make(Int(32), varname_prefetch_buf);
+
+                    // Make the names for accessing the buffer strides
+                    vector<Expr> stride_var(dims);
+                    for (int i = 0; i < dims; i++) {
+                        string istr = std::to_string(i);
+                        string stride_name = varname + ".stride." + istr;
+                        stride_var[i] = Variable::make(Int(32), stride_name);
+                    }
+
+                    // Make the names for the prefetch box mins & maxes
+                    vector<string> min_name(dims), max_name(dims);
+                    for (int i = 0; i < dims; i++) {
+                        string istr = std::to_string(i);
+                        min_name[i] = varname + ".prefetch_" + pstr + "_min_" + istr;
+                        max_name[i] = varname + ".prefetch_" + pstr + "_max_" + istr;
+                    }
+                    vector<Expr> min_var(dims), max_var(dims);
+                    for (int i = 0; i < dims; i++) {
+                        min_var[i] = Variable::make(Int(32), min_name[i]);
+                        max_var[i] = Variable::make(Int(32), max_name[i]);
+                    }
+
+                    // Create a buffer_t object for this prefetch.
+                    Type t = Int(8);  // FIXME (need type of box...or extract elem_size)
+                    vector<Expr> args(dims*3 + 2);
+                    Expr first_elem = Load::make(t, varname, 0, Buffer(), Parameter());
+                    args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+                    args[1] = make_zero(t);
+                    for (int i = 0; i < dims; i++) {
+                        args[3*i+2] = min_var[i];
+                        args[3*i+3] = max_var[i] - min_var[i] + 1;
+                        args[3*i+4] = stride_var[i];
+                    }
+
+                    // Inject the prefetch call
+                    string fetch_func = "halide_prefetch_buffer_t";
+                    Stmt stmt_prefetch =
                         Evaluate::make(Call::make(Int(32), fetch_func,
-                                          {tmp, prefetch_buf_t}, Call::Extern));
-                    body = Block::make({prefetch, body});
-#endif
+                                          {dims, var_prefetch_buf}, Call::Extern));
+                    body = Block::make({stmt_prefetch, body});
+
+                    // Inject the create_buffer_t call
+                    Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                                          args, Call::Intrinsic);
+                    body = LetStmt::make(varname_prefetch_buf, prefetch_buf, body);
+
+                    // Inject bounds variable assignments
+                    for (int i = dims-1; i >= 0; i--) {
+                        body = LetStmt::make(max_name[i], box[i].max, body);
+                        body = LetStmt::make(min_name[i], box[i].min, body);
+                        // stride already defined by input buffer
+                    }
+
+                    debug(dbg_prefetch3) << "    prefetch body:\n";
+                    debug(dbg_prefetch3) << body << "\n";
                 }
 
                 scope.pop(op->name);
@@ -137,14 +186,21 @@ private:
 
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
 {
-    if (char *dbg = getenv("HL_DBG_PREFETCH")) {
-        dbg_prefetch  -= atoi(dbg);
-        dbg_prefetch2 -= atoi(dbg);
+    size_t read;
+    std::string lvl = get_env_variable("HL_DEBUG_PREFETCH", read);
+    if (read) {
+        int dbg_level = atoi(lvl.c_str());
+        dbg_prefetch  -= dbg_level;
+        dbg_prefetch2 -= dbg_level;
+        dbg_prefetch3 -= dbg_level;
         if (dbg_prefetch < 0) {
             dbg_prefetch = 0;
         }
         if (dbg_prefetch2 < 0) {
             dbg_prefetch2 = 0;
+        }
+        if (dbg_prefetch3 < 0) {
+            dbg_prefetch3 = 0;
         }
     }
     return InjectPrefetch(env).mutate(s);
