@@ -28,6 +28,43 @@ namespace Tools {
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn &&f);
 
+// Forward-declare our Image class
+template<typename T, int D> class Image;
+
+// This template exists so that Image is extensible with custom
+// operator()(Args...) methods.
+template<typename T, int D, typename ...Args> struct ImageAccessor;
+
+// A helper to check if a parameter pack is entirely implicitly
+// int-convertible to use with std::enable_if
+template<typename ...Args>
+struct AllInts {
+    static const bool value = false;
+};
+
+template<>
+struct AllInts<> {
+    static const bool value = true;
+};
+
+template<typename T, typename ...Args>
+struct AllInts<T, Args...> {
+    static const bool value = std::is_convertible<T, int>::value && AllInts<Args...>::value;
+};
+
+// Floats and doubles are technically implicitly int-convertible, but
+// doing so produces a warning we treat as an error, so just disallow
+// it here.
+template<typename ...Args>
+struct AllInts<float, Args...> {
+    static const bool value = false;
+};
+
+template<typename ...Args>
+struct AllInts<double, Args...> {
+    static const bool value = false;
+};
+
 /** A class that wraps buffer_t and adds functionality. Acts as a base
  * class for the typed version below. Templated on the maximum
  * dimensionality it supports. Use it only when the the element type
@@ -872,6 +909,7 @@ private:
         }
         return ptr;
     }
+
 public:
 
     /** Get a pointer to the address of the min coordinate. */
@@ -893,8 +931,9 @@ public:
     //@{
     template<typename ...Args>
     __attribute__((always_inline))
-    const T &operator()(int first, Args... rest) const {
-        return *(address_of(0, first, int(rest)...));
+    typename std::enable_if<AllInts<Args...>::value, const T &>::type
+    operator()(int first, Args... rest) const {
+        return *(address_of(0, first, rest...));
     }
 
     __attribute__((always_inline))
@@ -909,8 +948,9 @@ public:
 
     template<typename ...Args>
     __attribute__((always_inline))
-    T &operator()(int first, Args... rest) {
-        return *(address_of(0, first, int(rest)...));
+    typename std::enable_if<AllInts<Args...>::value, T &>::type
+    operator()(int first, Args... rest) {
+        return *(address_of(0, first, rest...));
     }
 
     __attribute__((always_inline))
@@ -923,6 +963,26 @@ public:
         return *((T *)address_of(pos));
     }
     // @}
+
+    /** Other calls to operator()(Args...) get redirected to a call to
+     * ImageAccessor<T, D, Args...>::operator(const Image<T, D> &,
+     * Args...).  This makes it possible for later code to add new
+     * Image access methods for types not convertible to int
+     * (e.g. Exprs). To add a custom accessor, define a template
+     * specialization of ImageAccessor with an operator() method that
+     * takes the expected arguments. See
+     * test/correctness/custom_image_accessor.cpp for an example. */
+    template<typename ...Args>
+    auto operator()(Args... args) const ->
+        decltype(ImageAccessor<T, D, Args...>()(*this, args...)) {
+        return ImageAccessor<T, D, Args...>()(*this, args...);
+    }
+
+    template<typename ...Args>
+    auto operator()(Args... args) ->
+        decltype(ImageAccessor<T, D, Args...>()(*this, args...)) {
+        return ImageAccessor<T, D, Args...>()(*this, args...);
+    }
 
 private:
     // Helper functions for fill that call for_each_element with a
