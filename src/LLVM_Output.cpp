@@ -95,6 +95,11 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
             << src << ": " << llvm::toString(new_member.takeError()) << "\n";
         new_members.push_back(std::move(*new_member));
     }
+#elif LLVM_VERSION == 38
+    std::vector<llvm::NewArchiveIterator> new_members;
+    for (auto &src : src_files) {
+        new_members.push_back(llvm::NewArchiveIterator(src));
+    }
 #else
     std::vector<llvm::NewArchiveIterator> new_members;
     for (auto &src : src_files) {
