@@ -109,30 +109,30 @@ int write_memory(int dest, const void *src, int size) {
         // WriteMemory only works with powers of 2, so align down. It
         // also only writes up to 8 bytes, so we need to do this
         // repeatedly until we've finished copying the buffer.
-        HEX_8u_t src_next;
-        int size_next;
+        HEX_8u_t src_chunk;
+        int chunk_size;
         if (size >= 8) {
-            src_next = *reinterpret_cast<const HEX_8u_t*>(src);
-            size_next = 8;
+            src_chunk = *reinterpret_cast<const HEX_8u_t*>(src);
+            chunk_size = 8;
         } else if (size >= 4) {
-            src_next = *reinterpret_cast<const HEX_4u_t*>(src);
-            size_next = 4;
+            src_chunk = *reinterpret_cast<const HEX_4u_t*>(src);
+            chunk_size = 4;
         } else if (size >= 2) {
-            src_next = *reinterpret_cast<const HEX_2u_t*>(src);
-            size_next = 2;
+            src_chunk = *reinterpret_cast<const HEX_2u_t*>(src);
+            chunk_size = 2;
         } else {
-            src_next = *reinterpret_cast<const HEX_1u_t*>(src);
-            size_next = 1;
+            src_chunk = *reinterpret_cast<const HEX_1u_t*>(src);
+            chunk_size = 1;
         }
-        HEXAPI_Status status = sim->WriteMemory(dest, size_next, src_next);
+        HEXAPI_Status status = sim->WriteMemory(dest, chunk_size, src_chunk);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::WriteMemory failed: %d\n", status);
             return -1;
         }
 
-        size -= size_next;
-        dest += size_next;
-        src = reinterpret_cast<const char *>(src) + size_next;
+        size -= chunk_size;
+        dest += chunk_size;
+        src = reinterpret_cast<const char *>(src) + chunk_size;
     }
     return 0;
 }
