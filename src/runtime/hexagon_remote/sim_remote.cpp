@@ -50,6 +50,49 @@ extern int __hexagon_udivsi3;
 extern int __hexagon_umodsi3;
 extern int __hexagon_divsi3;
 extern int __hexagon_modsi3;
+extern int __hexagon_subdf3;
+extern int sqrtf;
+extern int sqrt;
+extern int expf;
+extern int exp;
+extern int logf;
+extern int log;
+extern int powf;
+extern int pow;
+extern int sinf;
+extern int sin;
+extern int cosf;
+extern int cos;
+extern int tanf;
+extern int tan;
+extern int asinf;
+extern int asin;
+extern int acosf;
+extern int acos;
+extern int atanf;
+extern int atan;
+extern int atan2f;
+extern int atan2;
+extern int sinhf;
+extern int sinh;
+extern int coshf;
+extern int cosh;
+extern int tanhf;
+extern int tanh;
+extern int asinhf;
+extern int asinh;
+extern int acoshf;
+extern int acosh;
+extern int atanhf;
+extern int atanh;
+extern int nearbyintf;
+extern int nearbyint;
+extern int truncf;
+extern int trunc;
+extern int floorf;
+extern int floor;
+extern int ceilf;
+extern int ceil;
 
 }  // extern "C"
 
@@ -107,12 +150,56 @@ void *halide_get_symbol(const char *name) {
         {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
         {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
         {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
+        {"__hexagon_subdf3", (char *)(&__hexagon_subdf3)},
         {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
         {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
         {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
         {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
         {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
         {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
+        {"__hexagon_sqrtf", (char *)(&sqrtf)},
+        {"sqrtf", (char *)(&sqrtf)},
+        {"sqrt", (char *)(&sqrt)},
+        {"sinf", (char *)(&sinf)},
+        {"expf", (char *)(&expf)},
+        {"exp", (char *)(&exp)},
+        {"logf", (char *)(&logf)},
+        {"log", (char *)(&log)},
+        {"powf", (char *)(&powf)},
+        {"pow", (char *)(&pow)},
+        {"sin", (char *)(&sin)},
+        {"cosf", (char *)(&cosf)},
+        {"cos", (char *)(&cos)},
+        {"tanf", (char *)(&tanf)},
+        {"tan", (char *)(&tan)},
+        {"asinf", (char *)(&asinf)},
+        {"asin", (char *)(&asin)},
+        {"acosf", (char *)(&acosf)},
+        {"acos", (char *)(&acos)},
+        {"atanf", (char *)(&atanf)},
+        {"atan", (char *)(&atan)},
+        {"atan2f", (char *)(&atan2f)},
+        {"atan2", (char *)(&atan2)},
+        {"sinhf", (char *)(&sinhf)},
+        {"sinh", (char *)(&sinh)},
+        {"coshf", (char *)(&coshf)},
+        {"cosh", (char *)(&cosh)},
+        {"tanhf", (char *)(&tanhf)},
+        {"tanh", (char *)(&tanh)},
+        {"asinhf", (char *)(&asinhf)},
+        {"asinh", (char *)(&asinh)},
+        {"acoshf", (char *)(&acoshf)},
+        {"acosh", (char *)(&acosh)},
+        {"atanhf", (char *)(&atanhf)},
+        {"atanh", (char *)(&atanh)},
+        {"nearbyintf", (char *)(&nearbyintf)},
+        {"nearbyint", (char *)(&nearbyint)},
+        {"truncf", (char *)(&truncf)},
+        {"trunc", (char *)(&trunc)},
+        {"floorf", (char *)(&floorf)},
+        {"floor", (char *)(&floor)},
+        {"ceilf", (char *)(&ceilf)},
+        {"ceil", (char *)(&ceil)},
         {NULL, NULL} // Null terminator.
     };
 
