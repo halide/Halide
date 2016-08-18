@@ -99,7 +99,11 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module.getTargetTriple())));
 
     // Make sure things marked as always-inline get inlined
+    #if LLVM_VERSION < 40
     pass_manager.add(llvm::createAlwaysInlinerPass());
+    #else
+    pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
+    #endif
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;

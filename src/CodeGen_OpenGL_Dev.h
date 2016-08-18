@@ -65,6 +65,15 @@ protected:
     void visit(const Mod *op);
     void visit(const Call *op);
 
+    // these have specific functions
+    // in GLSL that operate on vectors
+    void visit(const EQ *);
+    void visit(const NE *);
+    void visit(const LT *);
+    void visit(const LE *);
+    void visit(const GT *);
+    void visit(const GE *);
+
 private:
     std::map<std::string, std::string> builtin;
 };
@@ -108,6 +117,10 @@ protected:
 private:
     std::string get_vector_suffix(Expr e);
     char get_lane_suffix(int i);
+
+    std::vector<std::string> print_lanes(Expr expr);
+
+    Scope<int> scalar_vars, vector_vars;
 
     const Target target;
 };
