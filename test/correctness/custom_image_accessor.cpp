@@ -90,15 +90,15 @@ struct ImageAccessor<typename std::enable_if<AllFloatConvertible<Args...>::value
 int main(int argc, char **argv) {
     Image<float> im(10, 10, 10);
 
-    im(3, 2) = 0.0f;
+    im(3, 2, 5) = 0.0f;
 
-    im(Coord{3, 2}) = 45.0f;
+    im(Coord{3, 2, 5}) = 45.0f;
 
-    if (im(3, 2) != 45.0f) {
+    if (im(3, 2, 5) != 45.0f) {
         printf("Assigning using Coord didn't work\n");
         return -1;
     }
-    if (im(Coord{3, 2}) != 45.0f) {
+    if (im(Coord{3, 2, 5}) != 45.0f) {
         printf("Loading using Coord didn't work\n");
     }
 
