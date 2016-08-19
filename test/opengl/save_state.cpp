@@ -244,7 +244,7 @@ class KnownState
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, initial_bound_textures[i]);
         }
-	    glActiveTexture(initial_active_texture = GL_TEXTURE3);
+        glActiveTexture(initial_active_texture = GL_TEXTURE3);
 
         for (int i=0; i<nvertex_attribs; i++) {
             if ( (initial_vertex_attrib_array_enabled[i] = boolval ) )
