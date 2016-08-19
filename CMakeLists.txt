@@ -86,6 +86,20 @@ option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 option(HALIDE_ENABLE_RTTI "Build with RTTI enabled" OFF)
 
+# Define a library that uses libHalide. This is useful for building
+# multiple Generators into a single executable.
+function(halide_library name libtype folder)
+  add_library("${name}" ${libtype} ${ARGN})
+  target_link_libraries("${name}" PRIVATE Halide)
+  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
+  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
+  target_include_directories("${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+  set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
+  if (MSVC)
+    target_compile_definitions("${name}" PRIVATE _CRT_SECURE_NO_WARNINGS)
+  endif()
+endfunction(halide_library)
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   target_link_libraries("${name}" PRIVATE Halide)
