@@ -125,6 +125,7 @@ void halide_hexagon_host_malloc_init() {
 
 void halide_hexagon_host_malloc_deinit() {
     close(ion_fd);
+    ion_fd = -1;
     pthread_mutex_destroy(&allocations_mutex);
 }
 
