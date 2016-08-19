@@ -31,7 +31,13 @@ typedef handle_t handle_t;
 
 const int hvx_alignment = 128;
 qurt_hvx_mode_t master_thread_hvx_mode = 0;
-
+#define SINGLE_VECTOR_MODE 0
+#define DOUBLE_VECTOR_MODE 1
+#define MAX_WORKER_THREADS 3
+#define STACK_SIZE 256*1024
+char stack [MAX_WORKER_THREADS][STACK_SIZE] __attribute__ ((__aligned__(128))); ;
+#define HEXAGON_T1_MASK 2
+#define HEXAGON_T1T2T3_MASK 14
 // Provide an implementation of qurt to redirect to the appropriate
 // simulator calls.
 extern "C" {
@@ -65,6 +71,36 @@ int get_hvx_mode() {
     return mode;
 }
 
+struct work {
+    void *user_context;
+    uint8_t *closure;
+    halide_task_t f;
+    int min;
+    int max;
+    int result;
+};
+typedef struct work work;
+work work_queue[MAX_WORKER_THREADS];
+
+void thread_server(void *Arg) {
+
+    unsigned indx = (unsigned) Arg;
+    halide_task_t f = work_queue[indx].f;
+    int min = work_queue[indx].min;
+    int max = work_queue[indx].max;
+    uint8_t *closure = work_queue[indx].closure;
+    void *user_context = work_queue[indx].user_context;
+    qurt_hvx_lock(master_thread_hvx_mode);
+    for (int x = min; x < max; x++) {
+        int result = halide_do_task(user_context, f, x, closure);
+        if (result) {
+            work_queue[indx].result = result;
+            break;
+        }
+    }
+    qurt_hvx_unlock();
+    return;
+}
 }  // extern "C"
 
 void halide_print(void *user_context, const char *str) {
@@ -91,11 +127,45 @@ int halide_do_task(void *user_context, halide_task_t f, int idx,
 
 int halide_do_par_for(void *user_context, halide_task_t f,
                       int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
+
+    master_thread_hvx_mode = get_hvx_mode();
+    int num_worker_threads = 1;
+    if (master_thread_hvx_mode == DOUBLE_VECTOR_MODE) {
+        num_worker_threads = 3;
+    }
+    int start_min = min;
+    int chunk_size = size / (num_worker_threads + 1);
+    int hw_thread = 1;
+    for (int i = 0; i < num_worker_threads; i++) {
+        work_queue[i].user_context = user_context;
+        work_queue[i].closure = closure;
+        work_queue[i].min = start_min;
+        work_queue[i].max = start_min + chunk_size;
+        work_queue[i].result = 0;
+        work_queue[i].f = f;
+        start_min += chunk_size;
+        thread_create(thread_server, &stack[i][STACK_SIZE], hw_thread++, (void *)i);
+    }
+
+    int result = 0;
+    for (int x = start_min; x < min + size; x++) {
+        result = halide_do_task(user_context, f, x, closure);
         if (result) {
-            return result;
+            break;
         }
+    }
+    if (master_thread_hvx_mode == DOUBLE_VECTOR_MODE) {
+        thread_join(HEXAGON_T1T2T3_MASK);
+    } else {
+        thread_join(HEXAGON_T1_MASK);
+    }
+
+    if (result)
+        return result;
+
+    for (int i = 1; i < num_worker_threads; i++) {
+        if (work_queue[i].result)
+            return work_queue[i].result;
     }
     return 0;
 }
