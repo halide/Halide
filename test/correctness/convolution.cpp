@@ -80,11 +80,9 @@ int main(int argc, char **argv) {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
         blur1.hexagon().tile(x, y, xi, yi, 6, 6);
-        // TODO: Add parallel to the schedule.
-        blur1.update().hexagon().tile(x, y, xi, yi, 32, 4).vectorize(xi);
+        blur1.update().hexagon().tile(x, y, xi, yi, 32, 4).vectorize(xi).parallel(y);
 
-        // TODO: Add parallel to the schedule.
-        blur2.hexagon().vectorize(x, 32);
+        blur2.hexagon().vectorize(x, 32).parallel(y);
     } else if (target.has_feature(Target::HVX_128)) {
         Var xi("xi"), yi("yi");
 
