@@ -30,6 +30,7 @@ typedef unsigned int handle_t;
 typedef handle_t handle_t;
 
 const int hvx_alignment = 128;
+qurt_hvx_mode_t master_thread_hvx_mode = 0;
 
 // Provide an implementation of qurt to redirect to the appropriate
 // simulator calls.
@@ -48,6 +49,20 @@ int qurt_hvx_lock(int mode) {
 int qurt_hvx_unlock() {
     SIM_RELEASE_HVX;
     return 0;
+}
+
+int get_hvx_mode() {
+    unsigned int mode;
+    __asm volatile (
+                    " %0 = syscfg\n"
+                    " %0 = and(%0, #128) // v2x\n"
+                    : "=r"(mode)
+                    );
+    __asm volatile (
+                    "isync\n"
+                    );
+
+    return mode;
 }
 
 }  // extern "C"
