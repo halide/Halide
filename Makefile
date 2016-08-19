@@ -169,10 +169,11 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -f
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS)
-TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz
+TEST_LD_LIBS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz
+TEST_LD_RPATHS = 
 
 ifeq ($(UNAME), Linux)
-TEST_LD_FLAGS += -rdynamic -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
+TEST_LD_RPATHS += -rdynamic -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
 endif
 
 ifneq ($(WITH_PTX), )
@@ -642,11 +643,13 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
 ifeq ($(UNAME), Linux)
 ifneq (,$(WITH_HEXAGON))
 ifneq (,$(HL_HEXAGON_TOOLS))
-TEST_LD_FLAGS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
-TEST_LD_FLAGS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
+TEST_LD_RPATHS += -Wl,--rpath=$(ROOT_DIR)/src/runtime/hexagon_remote/bin/host
+TEST_LD_RPATHS += -Wl,--rpath=$(HL_HEXAGON_TOOLS)/lib/iss
 endif
 endif
 endif
+
+TEST_LD_FLAGS = $(TEST_LD_LIBS) $(TEST_LD_RPATHS)
 
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
@@ -880,7 +883,7 @@ $(BIN_DIR)/renderscript_%: $(ROOT_DIR)/test/renderscript/%.cpp $(BIN_DIR)/libHal
 # usage can just add deps later.
 $(BIN_DIR)/lib%.generator.$(SHARED_EXT): $(ROOT_DIR)/test/generator/%_generator.cpp $(INCLUDE_DIR)/Halide.h
 	@mkdir -p $(BIN_DIR)
-	$(CXX) $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) $(TEST_LD_RPATHS) -c $< -o $@
 
 $(BIN_DIR)/%.generator: $(BIN_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/lib%.generator.$(SHARED_EXT)
 	@mkdir -p $(BIN_DIR)
