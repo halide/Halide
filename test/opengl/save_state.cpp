@@ -178,6 +178,10 @@ class KnownState
         }
     }
 
+    // version of OpenGL
+    int gl_major_version;
+    int gl_minor_version;
+
     GLenum initial_active_texture;
     GLint initial_viewport[4];
     GLuint initial_array_buffer_binding;
@@ -220,11 +224,6 @@ class KnownState
     GLuint initial_vertex_array_binding;
 
     public:
-
-    // version of OpenGL
-    int gl_major_version;
-    int gl_minor_version;
-
 
     bool errors;
 
