@@ -58,7 +58,7 @@ function(halide_add_generator_dependency)
   set(multiValueArgs GENERATOR_ARGS)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN} )
 
-  set(unique_generator_target "${args_GENERATOR_NAME}${args_TARGET_SUFFIX}")
+  set(unique_generator_target "${args_GENERATED_FUNCTION}${args_TARGET_SUFFIX}")
 
   # Determine a scratch directory to build and execute the generator. ${args_TARGET}
   # will include the generated header from this directory.
@@ -68,11 +68,18 @@ function(halide_add_generator_dependency)
   set(FILTER_LIB "${args_GENERATED_FUNCTION}${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${args_GENERATED_FUNCTION}.h")
 
-  set(generator_exec_args 
-      "-g" "${args_GENERATOR_NAME}" 
-      "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" 
-      "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS}
-  )
+  if (NOT ${args_GENERATOR_NAME} STREQUAL "")
+    set(generator_exec_args 
+        "-g" "${args_GENERATOR_NAME}" 
+        "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" 
+        "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS}
+    )
+  else()
+    set(generator_exec_args 
+        "-f" "${args_GENERATED_FUNCTION_NAMESPACE}${args_GENERATED_FUNCTION}" 
+        "-o" "${SCRATCH_DIR}" ${args_GENERATOR_ARGS}
+    )
+  endif()
   if(MSVC)
     # In MSVC, the generator executable will be placed in a configuration specific
     # directory specified by ${CMAKE_CFG_INTDIR}.
