@@ -132,34 +132,17 @@ T fold_right(const std::vector<T> &vec, Fn f) {
     return result;
 }
 
-template <typename T>
-inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
-}
-
-template <typename T, typename T2>
-inline NO_INLINE void collect_args(std::vector<T> &collected_args,
-                                   T2 arg) {
-    collected_args.push_back(arg);
-}
-
-template <typename T, typename T2, typename ...Args>
-inline NO_INLINE void collect_args(std::vector<T> &collected_args,
-                                   T2 arg, Args... args) {
-    collected_args.push_back(arg);
-    collect_args(collected_args, args...);
-}
-
 template <typename T1, typename T2, typename T3, typename T4 >
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                     T3 a1, T4 a2) {
+                                     const T3 &a1, const T4 &a2) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
 }
 
 template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                   T3 a1, T4 a2, Args... args) {
+                                   const T3 &a1, const T4 &a2, Args&&... args) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
-    collect_paired_args(collected_args, args...);
+    collect_paired_args(collected_args, std::forward<Args>(args)...);
 }
 
 template<typename... T>

@@ -183,6 +183,20 @@ extern halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc);
 extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 //@}
 
+/** Halide calls these functions to interact with the underlying
+ * system runtime functions. To replace in AOT code on platforms that
+ * support weak linking, define these functions yourself.
+ *
+ * halide_load_library and halide_get_library_symbol are equivalent to
+ * dlopen and dlsym. halide_get_symbol(sym) is equivalent to
+ * dlsym(RTLD_DEFAULT, sym).
+ */
+//@{
+extern void *halide_get_symbol(const char *name);
+extern void *halide_load_library(const char *name);
+extern void *halide_get_library_symbol(void *lib, const char *name);
+//@}
+
 /** Called when debug_to_file is used inside %Halide code.  See
  * Func::debug_to_file for how this is called
  *

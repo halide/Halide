@@ -65,10 +65,10 @@ Type map_type(const Type &type) {
 
 // Most GLSL builtins are only defined for float arguments, so we may have to
 // introduce type casts around the arguments and the entire function call.
-Expr call_builtin(const Type &result_type, const std::string &func,
-                  const std::vector<Expr> &args) {
+Expr call_builtin(const Type &result_type, const string &func,
+                  const vector<Expr> &args) {
     Type float_type = Float(32, result_type.lanes());
-    std::vector<Expr> new_args(args.size());
+    vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (!args[i].type().is_float()) {
             new_args[i] = Cast::make(float_type, args[i]);
@@ -120,7 +120,7 @@ void CodeGen_OpenGL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
 
-std::string CodeGen_OpenGL_Dev::print_gpu_name(const std::string &name) {
+string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {
     return glc->print_name(name);
 }
 
@@ -150,6 +150,14 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
     builtin["isnan"] = "isnan";
     builtin["round_f32"] = "roundEven";
     builtin["trunc_f32"] = "_trunc_f32";
+
+    // functions that produce bvecs
+    builtin["equal"] = "equal";
+    builtin["notEqual"] = "notEqual";
+    builtin["lessThan"] = "lessThan";
+    builtin["lessThanEqual"] = "lessThanEqual";
+    builtin["greaterThan"] = "greaterThan";
+    builtin["greaterThanEqual"] = "greaterThanEqual";
 }
 
 void CodeGen_GLSLBase::visit(const Max *op) {
@@ -225,10 +233,60 @@ string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option)
     return oss.str();
 }
 
+// The following comparisons are defined for ivec and vec
+// types, so we don't use call_builtin
+void CodeGen_GLSLBase::visit(const EQ *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "equal", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const NE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "notEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const LT *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "lessThan", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const LE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "lessThanEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const GT *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "greaterThan", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_GLSLBase::visit(const GE *op) {
+    if (op->type.is_vector()) {
+        print_expr(Call::make(op->type, "greaterThanEqual", {op->a, op->b}, Call::Extern));
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
 // have to use a different name mangling scheme than in the C code generator.
-std::string CodeGen_GLSLBase::print_name(const std::string &name) {
-    const std::string mangled = CodeGen_C::print_name(name);
+string CodeGen_GLSLBase::print_name(const string &name) {
+    const string mangled = CodeGen_C::print_name(name);
     return replace_all(mangled, "__", "XX");
 }
 
@@ -251,11 +309,15 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSL::visit(const IntImm *op) {
-    print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
+    if (op->type == Int(32)) {
+        id = std::to_string(op->value);
+    } else {
+        id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
+    }
 }
 
 void CodeGen_GLSL::visit(const UIntImm *op) {
-    print_assignment(op->type, print_type(op->type) + "(" + std::to_string(op->value) + ")");
+    id = print_type(op->type) + "(" + std::to_string(op->value) + ")";
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {
@@ -285,7 +347,7 @@ void CodeGen_GLSL::visit(const Cast *op) {
 
 void CodeGen_GLSL::visit(const Let *op) {
 
-    if (op->name.find(".varying") != std::string::npos) {
+    if (op->name.find(".varying") != string::npos) {
 
         // Skip let statements for varying attributes
         op->body.accept(this);
@@ -316,9 +378,9 @@ void CodeGen_GLSL::visit(const For *loop) {
     }
 }
 
-std::vector<Expr> evaluate_vector_select(const Select *op) {
+vector<Expr> evaluate_vector_select(const Select *op) {
     const int lanes = op->type.lanes();
-    std::vector<Expr> result(lanes);
+    vector<Expr> result(lanes);
     for (int i = 0; i < lanes; i++) {
         Expr cond = extract_lane(op->condition, i);
         Expr true_value = extract_lane(op->true_value, i);
@@ -366,8 +428,8 @@ void CodeGen_GLSL::visit(const Select *op) {
         // directly without lowering to a sequence of "if" statements.
         internal_assert(op->condition.type().lanes() == op->type.lanes());
         int lanes = op->type.lanes();
-        std::vector<Expr> result = evaluate_vector_select(op);
-        std::vector<std::string> ids(lanes);
+        vector<Expr> result = evaluate_vector_select(op);
+        vector<string> ids(lanes);
         for (int i = 0; i < lanes; i++) {
             ids[i] = print_expr(result[i]);
         }
@@ -383,35 +445,109 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
-std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
-    std::vector<Expr> matches;
+string CodeGen_GLSL::get_vector_suffix(Expr e) {
+    vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
 
     // The vectorize pass will insert a ramp in the color dimension argument.
-    if (expr_match(Ramp::make(w, 1, 4), e, matches)) {
+    const Ramp *r = e.as<Ramp>();
+    if (r && is_zero(r->base) && is_one(r->stride) && r->lanes == 4) {
         // No suffix is needed when accessing a full RGBA vector.
         return "";
-    } else if (expr_match(Ramp::make(w, 1, 3), e, matches)) {
+    } else if (r && is_zero(r->base) && is_one(r->stride) && r->lanes == 3) {
         return ".rgb";
-    } else if (expr_match(Ramp::make(w, 1, 2), e, matches)) {
+    } else if (r && is_zero(r->base) && is_one(r->stride) && r->lanes == 2) {
         return ".rg";
     } else {
         // GLSL 1.0 Section 5.5 supports subscript based vector indexing
-        std::string id = print_assignment(e.type(), print_expr(e));
+        internal_assert(e.type().is_scalar());
+        string id = print_expr(e);
         if (e.type() != Int(32)) {
-          id = "int(" + id + ")";
+            id = "int(" + id + ")";
         }
-        return std::string("[" + id + "]");
+        return string("[" + id + "]");
     }
 }
 
-void CodeGen_GLSL::visit(const Load *) {
-    internal_error << "GLSL: unexpected Load node encountered.\n";
+char CodeGen_GLSL::get_lane_suffix(int i) {
+    internal_assert(i >= 0 && i < 4);
+    return "rgba"[i];
 }
 
-void CodeGen_GLSL::visit(const Store *) {
-    internal_error << "GLSL: unexpected Store node encountered.\n";
+vector<string> CodeGen_GLSL::print_lanes(Expr e) {
+    int l = e.type().lanes();
+    internal_assert(e.type().is_vector());
+    vector<string> result(l);
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        string val = print_expr(b->value);
+        for (int i = 0; i < l; i++) {
+            result[i] = val;
+        }
+    } else if (const Ramp *r = e.as<Ramp>()) {
+        for (int i = 0; i < l; i++) {
+            result[i] = print_expr(simplify(r->base + i * r->stride));
+        }
+    } else {
+        string val = print_expr(e);
+        for (int i = 0; i < l; i++) {
+            result[i] = val + "[" + std::to_string(i) + "]";
+        }
+    }
+    return result;
 }
+
+void CodeGen_GLSL::visit(const Load *op) {
+    if (scalar_vars.contains(op->name)) {
+        internal_assert(is_zero(op->index));
+        id = print_name(op->name);
+    } else if (vector_vars.contains(op->name)) {
+        id = print_name(op->name) + get_vector_suffix(op->index);
+    } else if (op->type.is_scalar()) {
+        string idx = print_expr(op->index);
+        print_assignment(op->type, print_name(op->name) + "[" + idx + "]");
+    } else {
+        vector<string> indices = print_lanes(op->index);
+        ostringstream rhs;
+        rhs << print_type(op->type) << "(";
+        for (int i = 0; i < op->type.lanes(); i++) {
+            if (i > 0) {
+                rhs << ", ";
+            }
+            rhs << print_name(op->name) << "[" + indices[i] + "]";
+        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
+    }
+}
+
+void CodeGen_GLSL::visit(const Store *op) {
+    if (scalar_vars.contains(op->name)) {
+        internal_assert(is_zero(op->index));
+        string val = print_expr(op->value);
+        do_indent();
+        stream << print_name(op->name) << " = " << val << ";\n";
+    } else if (vector_vars.contains(op->name)) {
+        string val = print_expr(op->value);
+        do_indent();
+        stream << print_name(op->name) << get_vector_suffix(op->index)
+               << " = " << val << ";\n";
+    } else if (op->value.type().is_scalar()) {
+        string val = print_expr(op->value);
+        string idx = print_expr(op->index);
+        do_indent();
+        stream << print_name(op->name) << "[" << idx << "] = " << val << ";\n";
+    } else {
+        vector<string> indices = print_lanes(op->index);
+        vector<string> values = print_lanes(op->value);
+        for (int i = 0; i < op->value.type().lanes(); i++) {
+            do_indent();
+            stream << print_name(op->name)
+                   << "[" << indices[i] << "] = "
+                   << values[i] << ";\n";
+        }
+    }
+}
+
 
 void CodeGen_GLSL::visit(const Evaluate *op) {
     print_expr(op->value);
@@ -472,30 +608,34 @@ void CodeGen_GLSL::visit(const Call *op) {
                 }
             } else {
                 // Otherwise do one load per lane and make a vector
+                vector<string> xs = print_lanes(op->args[2]);
+                vector<string> ys = print_lanes(op->args[3]);
+                vector<string> cs = print_lanes(op->args[4]);
+                string name = print_name(buffername);
+
                 string x = print_expr(op->args[2]), y = print_expr(op->args[3]);
-                rhs << "vec" << op->type.lanes() << "(";
+                rhs << print_type(op->type) << "(";
                 for (int i = 0; i < op->type.lanes(); i++) {
                     if (i > 0) {
                         rhs << ", ";
                     }
-                    Expr l = extract_lane(c, i);
-                    const int64_t *ic = as_const_int(l);
-                    internal_assert(ic && *ic >= 0 && *ic < 4) << c << "\n";
-                    char c_swizzle = "rgba"[*ic];
-                    char xy_swizzle = "rgba"[i];
-                    rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                        << x << "." << xy_swizzle << ", "
-                        << y << "." << xy_swizzle << "))." << c_swizzle;
+                    rhs << "texture2D(" << name << ", vec2("
+                        << xs[i] << ", " << ys[i] << "))[" << cs[i] << "]";
                 }
                 rhs << ")";
             }
-        } else {
-            const int64_t *ic = as_const_int(op->args[4]);
-            internal_assert(ic && *ic >= 0 && *ic < 4);
+        } else if (const int64_t *ic = as_const_int(op->args[4])) {
+            internal_assert(*ic >= 0 && *ic < 4);
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr(op->args[2]) << ", "
                 << print_expr(op->args[3]) << "))."
-                << "rgba"[*ic];
+                << get_lane_suffix(*ic);
+        } else {
+            rhs << "texture2D(" << print_name(buffername) << ", vec2("
+                << print_expr(op->args[2]) << ", "
+                << print_expr(op->args[3]) << "))["
+                << print_expr(op->args[4]) << "]";
+
         }
 
         if (op->type.is_uint()) {
@@ -504,8 +644,8 @@ void CodeGen_GLSL::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::glsl_texture_store)) {
         internal_assert(op->args.size() == 6);
-        std::string sval = print_expr(op->args[5]);
-        std::string suffix = get_vector_suffix(op->args[4]);
+        string sval = print_expr(op->args[5]);
+        string suffix = get_vector_suffix(op->args[4]);
         do_indent();
         stream << "gl_FragColor" << suffix
                << " = " << sval;
@@ -549,13 +689,11 @@ void CodeGen_GLSL::visit(const Call *op) {
         if (all_int) {
 
             // Create a swizzle expression for the shuffle
-            static const char* channels = "rgba";
             string swizzle;
-
             for (int i = 0; i != shuffle_lanes && all_int; ++i) {
                 int channel = op->args[1 + i].as<IntImm>()->value;
                 internal_assert(channel < 4) << "Shuffle of invalid channel";
-                swizzle += channels[channel];
+                swizzle += get_lane_suffix(channel);
             }
 
             rhs << expr << "." << swizzle;
@@ -635,6 +773,61 @@ void CodeGen_GLSL::visit(const Call *op) {
     print_assignment(op->type, rhs.str());
 }
 
+namespace {
+class AllAccessConstant : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Load *op) {
+        if (op->name == buf && !is_const(op->index)) {
+            result = false;
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) {
+        if (op->name == buf && !is_const(op->index)) {
+            result = false;
+        }
+        IRVisitor::visit(op);
+    }
+
+public:
+    bool result = true;
+    string buf;
+};
+}
+
+void CodeGen_GLSL::visit(const Allocate *op) {
+    int32_t size = op->constant_allocation_size();
+    user_assert(size) << "Allocations inside GLSL kernels must be constant-sized\n";
+
+    // Check if all access to the allocation uses a constant index
+    AllAccessConstant all_access_constant;
+    all_access_constant.buf = op->name;
+    op->body.accept(&all_access_constant);
+
+    do_indent();
+    if (size == 1) {
+        // We can use a variable
+        stream << print_type(op->type) << " " << print_name(op->name) << ";\n";
+        scalar_vars.push(op->name, 0);
+        op->body.accept(this);
+        scalar_vars.pop(op->name);
+    } else if (size <= 4 && all_access_constant.result) {
+        // We can just use a vector variable
+        stream << print_type(op->type.with_lanes(size)) << " " << print_name(op->name) << ";\n";
+        vector_vars.push(op->name, 0);
+        op->body.accept(this);
+        vector_vars.pop(op->name);
+    } else {
+        stream << print_type(op->type) << " " << print_name(op->name) << "[" << size << "];\n";
+        op->body.accept(this);
+    }
+}
+
+void CodeGen_GLSL::visit(const Free *op) {
+}
+
 void CodeGen_GLSL::visit(const AssertStmt *) {
     internal_error << "GLSL: unexpected Assertion node encountered.\n";
 }
@@ -694,7 +887,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
 
             user_assert(args[i].read != args[i].write) <<
                 "GLSL: buffers may only be read OR written inside a kernel loop.\n";
-            std::string type_name;
+            string type_name;
             if (t == UInt(8)) {
                 type_name = "uint8_t";
             } else if (t == UInt(16)) {
@@ -954,8 +1147,7 @@ void CodeGen_GLSL::test() {
                              Broadcast::make(0, 4),
                              Ramp::make(0, 1, 4)},
                             Call::Intrinsic);
-    check(load4, "int $ = int(0);\n"
-                 "vec4 $ = texture2D($buf, vec2($, $));\n");
+    check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
 
     check(log(1.0f), "float $ = log(1.0);\n");
     check(exp(1.0f), "float $ = exp(1.0);\n");

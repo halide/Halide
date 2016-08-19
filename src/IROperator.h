@@ -731,8 +731,10 @@ inline Expr max(Expr a, float b) {return max(a, Expr(b));}
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
-    min_val = cast(a.type(), min_val);
-    max_val = cast(a.type(), max_val);
+    min_val = lossless_cast(a.type(), min_val);
+    user_assert(min_val.defined()) << "clamp with possibly out of range minimum bound.\n";
+    max_val = lossless_cast(a.type(), max_val);
+    user_assert(max_val.defined()) << "clamp with possibly out of range maximum bound.\n";
     return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
 }
 
@@ -1774,15 +1776,15 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
     args.push_back(Expr(std::string(arg)));
-    collect_print_args(args, more_args...);
+    collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
     args.push_back(arg);
-    collect_print_args(args, more_args...);
+    collect_print_args(args, std::forward<Args>(more_args)...);
 }
 }
 
@@ -1794,9 +1796,9 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args
 EXPORT Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
-inline NO_INLINE Expr print(Expr a, Args... args) {
+inline NO_INLINE Expr print(Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
-    Internal::collect_print_args(collected_args, args...);
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
 }
 //@}
@@ -1807,9 +1809,9 @@ inline NO_INLINE Expr print(Expr a, Args... args) {
 EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr print_when(Expr condition, Expr a, Args... args) {
+inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
-    Internal::collect_print_args(collected_args, args...);
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(condition, collected_args);
 }
 
@@ -1845,6 +1847,10 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+namespace Internal {
+EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+}  // namespace Internal
+
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
  * automatically inferred and added to the cache key. The memoize_tag
@@ -1872,13 +1878,10 @@ inline Expr undef() {
  * digest, memoize_tag can be used to key computations using that image
  * on the digest. */
 // @{
-EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
-
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args... args) {
-    std::vector<Expr> collected_args;
-    Internal::collect_args(collected_args, args...);
-    return memoize_tag(result, collected_args);
+inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
+    std::vector<Expr> collected_args{std::forward<Args>(args)...};
+    return Internal::memoize_tag_helper(result, collected_args);
 }
 // @}
 
@@ -1906,6 +1909,19 @@ inline Expr likely_if_innermost(Expr e) {
     return Internal::Call::make(e.type(), Internal::Call::likely_if_innermost,
                                 {e}, Internal::Call::PureIntrinsic);
 }
+
+
+/** Cast an expression to the halide type corresponding to the C++
+ * type T clamping to the minimum and maximum values of the result
+ * type. */
+template <typename T>
+Expr saturating_cast(Expr e) {
+    return saturating_cast(type_of<T>(), e);
+}
+
+/** Cast an expression to a new type, clamping to the minimum and
+ * maximum values of the result type. */
+EXPORT Expr saturating_cast(Type t, Expr e);
 
 }
 

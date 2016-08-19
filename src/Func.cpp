@@ -1898,13 +1898,8 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
     return *this;
 }
 
-Func &Func::compute_at(Func f, RVar var) {
-    return compute_at(f, Var(var.name()));
-}
-
-Func &Func::compute_at(Func f, Var var) {
+Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
-    LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level() = loop_level;
     if (func.schedule().store_level().is_inline()) {
         func.schedule().store_level() = loop_level;
@@ -1912,36 +1907,38 @@ Func &Func::compute_at(Func f, Var var) {
     return *this;
 }
 
+Func &Func::compute_at(Func f, RVar var) {
+    return compute_at(LoopLevel(f, var));
+}
+
+Func &Func::compute_at(Func f, Var var) {
+    return compute_at(LoopLevel(f, var));
+}
+
 Func &Func::compute_root() {
+    return compute_at(LoopLevel::root());
+}
+
+Func &Func::store_at(LoopLevel loop_level) {
     invalidate_cache();
-    func.schedule().compute_level() = LoopLevel::root();
-    if (func.schedule().store_level().is_inline()) {
-        func.schedule().store_level() = LoopLevel::root();
-    }
+    func.schedule().store_level() = loop_level;
     return *this;
 }
 
 Func &Func::store_at(Func f, RVar var) {
-    return store_at(f, Var(var.name()));
+    return store_at(LoopLevel(f, var));
 }
 
 Func &Func::store_at(Func f, Var var) {
-    invalidate_cache();
-    func.schedule().store_level() = LoopLevel(f.name(), var.name());
-    return *this;
+    return store_at(LoopLevel(f, var));
 }
 
 Func &Func::store_root() {
-    invalidate_cache();
-    func.schedule().store_level() = LoopLevel::root();
-    return *this;
+    return store_at(LoopLevel::root());
 }
 
 Func &Func::compute_inline() {
-    invalidate_cache();
-    func.schedule().compute_level() = LoopLevel();
-    func.schedule().store_level() = LoopLevel();
-    return *this;
+    return compute_at(LoopLevel());
 }
 
 Func &Func::trace_loads() {
@@ -2264,7 +2261,7 @@ FuncRef::operator Expr() const {
     return Call::make(func, args);
 }
 
-Expr FuncRef::operator[](int i) const {
+FuncTupleElementRef FuncRef::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2275,11 +2272,60 @@ Expr FuncRef::operator[](int i) const {
     user_assert(i >= 0 && i < func.outputs())
         << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
 
-    return Call::make(func, args, i);
+    return FuncTupleElementRef(*this, args, i);
 }
 
 size_t FuncRef::size() const {
     return func.outputs();
+}
+
+FuncTupleElementRef::FuncTupleElementRef(
+        const FuncRef &ref, const std::vector<Expr>& args, int idx)
+        : func_ref(ref), args(args), idx(idx) {
+    internal_assert(func_ref.size() > 1)
+        << "Func " << ref.function().name() << " does not return a Tuple\n";
+    internal_assert(idx >= 0 && idx < (int)func_ref.size());
+}
+
+Tuple FuncTupleElementRef::values_with_undefs(Expr e) const {
+    vector<Expr> values(func_ref.size());
+    for (int i = 0; i < (int)values.size(); ++i) {
+        if (i == idx) {
+            values[i] = e;
+        } else {
+            Type t = func_ref.function().values()[i].type();
+            values[i] = undef(t);
+        }
+    }
+    return Tuple(values);
+}
+
+Stage FuncTupleElementRef::operator=(Expr e) {
+    return func_ref = values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator+=(Expr e) {
+    return func_ref += values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator*=(Expr e) {
+    return func_ref *= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator-=(Expr e) {
+    return func_ref -= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator/=(Expr e) {
+    return func_ref /= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator=(const FuncRef &e) {
+    return func_ref = values_with_undefs(e);
+}
+
+FuncTupleElementRef::operator Expr() const {
+    return Internal::Call::make(func_ref.function(), args, idx);
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {

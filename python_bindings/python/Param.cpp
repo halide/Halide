@@ -389,7 +389,7 @@ void defineParam_impl(const std::string suffix, const h::Type type)
 
 
 template<typename T, typename ...Args>
-p::object create_param_object(Args ...args)
+p::object create_param_object(Args...args)
 {
     typedef h::Param<T> ParamType;
     typedef typename p::manage_new_object::apply<ParamType *>::type converter_t;
@@ -514,7 +514,7 @@ struct create_param1_impl_t
             if(val_extract.check())
             {
                 pixel_t true_val = val_extract();
-                return call_create_param_object<pixel_t>(true_val, args ...);
+                return call_create_param_object<pixel_t>(true_val, args...);
             }
             else
             {

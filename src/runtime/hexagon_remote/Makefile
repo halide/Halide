@@ -95,18 +95,18 @@ bin/%/halide_host.o: halide_host.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_host.cpp -o $@
 
-# Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o
+bin/%/nearbyint.o: nearbyint.cpp
 	mkdir -p $(@D)
-	$(CC-$*) -m$* -O0 -mG0lib -G0 -fpic -shared -lc -o $@ \
-	    -Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
-	    -Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail \
-	    -Wl,-soname=libhalide_hexagon_remote_skel.so \
-	    -Wl,--start-group  bin/$*/halide_remote.o bin/$*/thread_pool.o bin/$*/halide_hexagon_remote_skel.o -Wl,--end-group
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
+
+# Build rules for the hexagon implementation.
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o
+	mkdir -p $(@D)
+	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -o $@
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
 	mkdir -p $(@D)
-	$(CC-$*) $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so $^ -shared -o $@
+	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h elf.h
@@ -117,24 +117,12 @@ bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
-
-CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
-CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
-INIT           =$(shell $(CXX-v60) -G0 -print-file-name=init.o)
-LIB_STANDALONE =$(shell $(CXX-v60) -G0 -print-file-name=libstandalone.a)
-LIB_C          =$(shell $(CXX-v60) -G0 -print-file-name=libc.a)
-LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
-FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
-LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
-
 bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o $(LIBDL) \
-	    --start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --whole-archive $(LIB_QURT) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
-	    --dynamic-linker= -E --force-dynamic
+	$(CC-$*) -m$* -mG0lib -G0 -lc -lstandalone -lgcc -ldl $^ -o $@
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
-	mkdir -p bin/host
+	mkdir -p $(@D)
 	$(CC-host) $^ $(CCFLAGS-host) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
 .PHONY: clean
