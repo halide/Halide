@@ -20,6 +20,7 @@ typedef unsigned int handle_t;
 typedef handle_t handle_t;
 
 const int hvx_alignment = 128;
+typedef int qurt_hvx_mode_t;
 qurt_hvx_mode_t master_thread_hvx_mode = 0;
 #define SINGLE_VECTOR_MODE 0
 #define DOUBLE_VECTOR_MODE 1
@@ -147,7 +148,7 @@ extern int floor;
 extern int ceilf;
 extern int ceil;
 
->>>>>>> master
+
 }  // extern "C"
 
 void halide_print(void *user_context, const char *str) {
