@@ -267,8 +267,9 @@ class KnownState
         // Vertex array objects are only used by Halide if the OpenGL version >=3
         if (gl_major_version >= 3) {
             glBindVertexArray(initial_vertex_array_binding = gl_gen(glGenVertexArrays));
-            check_error("known state");
         }
+
+        check_error("known state");
     }
 
     void check(const char *operation)
@@ -285,6 +286,8 @@ class KnownState
         // Vertex array objects are only used by Halide if the OpenGL version >=3
         if (gl_major_version >= 3) {
             check_value(operation, "vertex array binding", GL_VERTEX_ARRAY_BINDING, initial_vertex_array_binding);
+        } else {
+            fprintf(stderr, "Skipping vertex array binding tests because OpenGL version is %d.%d (<3.0)\n", gl_major_version, gl_minor_version);
         }
 
         for (int i=0; i<ntextures; i++) {
