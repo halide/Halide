@@ -96,14 +96,14 @@ if (WITH_TEST_GENERATORS)
   set(OBJ_GEN_EXE_SUFFIX ".generator")
   foreach(gen_src ${GENS})
     string(REPLACE "_generator.cpp" "" lib_name "${gen_src}")
-    halide_library(lib${lib_name}.generator SHARED "generator_libs"
+    halide_library(${lib_name}.generator_lib SHARED "generator_libs"
                    "generator/${gen_src}")
 
     string(REPLACE "_generator.cpp" "" gen_name "${gen_src}${OBJ_GEN_EXE_SUFFIX}")
     # CMake requires that we pass at least one source file to add_executable(),
     # so we might as well use GenGen.cpp here (rather than faking up an empty source file).
     halide_project(${gen_name} "generator" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/GenGen.cpp")
-    target_link_libraries(${gen_name} PRIVATE lib${lib_name}.generator)
+    target_link_libraries(${gen_name} PRIVATE ${lib_name}.generator_lib)
   endforeach()
 
   # Next create the test case targets. For each target
