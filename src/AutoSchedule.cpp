@@ -13,6 +13,8 @@ using std::deque;
 using std::pair;
 using std::make_pair;
 
+/* Helper function to simplify the upper and lower bounds
+ * of each dimension of a box.*/
 void simplify_box(Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
         b[i].min = simplify(b[i].min);
@@ -20,6 +22,8 @@ void simplify_box(Box &b) {
     }
 }
 
+/* Helper function to merge the partial region map into the result
+ * region map. */
 void merge_regions(map<string, Box> &result, map<string, Box> &partial) {
     // Merge regions from partial with an existing region if any in the result.
     for (auto &reg : partial) {
@@ -55,14 +59,14 @@ struct FStage {
     }
 };
 
-/* Set the compute and store level of all the function stages in the
- * environment as root. */
+/* Helper function to set the compute and store level of all the function
+ * stages in the environment as root. */
 void set_schedule_defaults(map<string, Function> &env) {
     for (auto &kv : env) {
         kv.second.schedule().store_level() = LoopLevel::root();
         kv.second.schedule().compute_level() = LoopLevel::root();
 
-        // Set schedules for update definitions.
+        // Set the schedule for each update definitions.
         for (size_t u = 0; u < kv.second.updates().size(); u++) {
             kv.second.update_schedule(u).store_level() = LoopLevel::root();
             kv.second.update_schedule(u).compute_level() = LoopLevel::root();
@@ -81,7 +85,7 @@ bool check_estimates_on_outputs(const vector<Function> &outputs) {
             break;
         }
         const vector<string> &vars = out.args();
-
+	// Check if the estimate for each dimension is available and it is an integer.
         for (uint32_t i = 0; i < estimates.size(); i++) {
             if (std::find(vars.begin(), vars.end(), estimates[i].var) == vars.end() ||
                 !((estimates[i].min.as<IntImm>()) && (estimates[i].extent.as<IntImm>()))) {
@@ -94,7 +98,7 @@ bool check_estimates_on_outputs(const vector<Function> &outputs) {
 }
 
 struct DependenceAnalysis {
-
+    // Map containing all the functions in the pipeline.
     const map<string, Function> &env;
     const FuncValueBounds &func_val_bounds;
 
@@ -111,14 +115,14 @@ struct DependenceAnalysis {
     map<string, Box> regions_required(Function f, int stage_num,
                                       const DimBounds &bounds,
                                       const set<string> &prods,
-                                      bool values_computed);
+                                      bool only_regions_computed);
 
     /* Returns the regions of the producers (prods) required to compute the region
      * of the function specified by pure_bounds.*/
     map<string, Box> regions_required(Function f,
                                       const DimBounds &pure_bounds,
                                       const set<string> &prods,
-                                      bool values_computed);
+                                      bool only_regions_computed);
 
     /* Returns redundantly computed regions of producers (prods) while computing a
      * region of the function stage (f, stage_num) specified by bounds. var is the
@@ -126,13 +130,13 @@ struct DependenceAnalysis {
     map<string, Box> redundant_regions(Function f, int stage_num, string var,
                                        const DimBounds &bounds,
                                        const set<string> &prods,
-                                       bool values_computed);
+                                       bool only_regions_computed);
 
     /* Returns overlapping regions of producers (prods) while computing a function
      * stage along each of the dimensions.*/
     vector<map<string, Box>>
     overlap_regions(Function f, int stage_num, const DimBounds &bounds,
-                    const set<string> &prods, bool values_computed);
+                    const set<string> &prods, bool only_regions_computed);
 };
 
 /* Returns the regions of the producers (prods) required to compute the region
@@ -140,21 +144,23 @@ struct DependenceAnalysis {
 map<string, Box>
 DependenceAnalysis::regions_required(Function f, const DimBounds &pure_bounds,
                                      const set<string> &prods,
-                                     bool values_computed) {
+                                     bool only_regions_computed) {
     // Find the regions required for each stage and merge them.
     map<string, Box> regions;
     int num_stages = f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
         DimBounds bounds = get_stage_bounds(f, s, pure_bounds);
         map<string, Box> stage_regions =
-                regions_required(f, s, bounds, prods, values_computed);
+                regions_required(f, s, bounds, prods, only_regions_computed);
 
         merge_regions(regions, stage_regions);
     }
     return regions;
 }
 
-/* Helper function to queue regions that need to be traversed.*/
+/* Helper function to queue regions that need to be traversed.
+ * f_queue is the queue into which the regions specified by
+ * prod_func and region will be added.*/
 void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
                         const Function &prod_func, Box &region) {
     DimBounds prod_pure_bounds;
@@ -162,6 +168,8 @@ void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
 
     internal_assert(region.size() == args.size());
 
+    // The region only specifies by the extent of each dimension
+    // by position. Populating a map which is keyed by name.
     for (size_t v = 0; v < args.size(); v++) {
         prod_pure_bounds[args[v]] = region[v];
     }
@@ -183,18 +191,19 @@ void queue_func_regions(deque<pair<FStage, DimBounds>> &f_queue,
 }
 
 /* Helper function for merging curr_regions to the global map of regions
- * and adding them to the queue of regions that need to be traversed.*/
+ * and adding them to the queue of regions that need to be traversed.
+ * prods is the set of producer functions that are under consideration.*/
 void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
                              map<string, Box> &regions,
                              map<string, Box> &curr_regions,
                              const set<string> &prods,
                              const map<string, Function> &env,
-                             bool values_computed, string curr_func_name) {
+                             bool only_regions_computed, string curr_func_name) {
     for (auto &reg : curr_regions) {
         // Merge region with an existing region for the function in the
         // global map. Do not merge the parent function itself to the region
         // when querying only for the values computed.
-        if (!values_computed || (values_computed && reg.first != curr_func_name)) {
+        if (!only_regions_computed || (only_regions_computed && reg.first != curr_func_name)) {
             if (regions.find(reg.first) == regions.end()) {
                 regions[reg.first] = reg.second;
             } else {
@@ -202,7 +211,8 @@ void merge_and_queue_regions(deque<pair<FStage, DimBounds>> &f_queue,
             }
         }
 
-        // Skip adding to the queue if not the set of producers
+        // Skip adding the current region into to the queue if the function
+	    // is not in prods.
         if (prods.find(reg.first) == prods.end()) {
             continue;
         }
@@ -221,7 +231,7 @@ map<string, Box>
 DependenceAnalysis::regions_required(Function f, int stage_num,
                                      const DimBounds &bounds,
                                      const set<string> &prods,
-                                     bool values_computed) {
+                                     bool only_regions_computed) {
     // Iteratively compute the required regions by doing a traversing the chain
     // of dependencies.
 
@@ -261,8 +271,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         // the entire domain of the inputs to the extern func. Use the estimates
         // on the inputs to the extern function if available.
         //
-        // TODO: Attempt to query the extern function for the input bounds by
-        // calling the extern func in the bounds query mode.
+        // TODO: Query the extern function for bounds of the functions which it
+	    // it depends on. This can be done by calling the extern func in the
+	    // bounds query mode.
         if (s.func.has_extern_definition()) {
             for (const ExternFuncArgument &arg : s.func.extern_arguments()) {
                 if (arg.is_func()) {
@@ -278,7 +289,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         prod_reg[prod_name].push_back(Interval());
                     }
                     merge_and_queue_regions(f_queue, regions, prod_reg, prods,
-                                            env, values_computed, s.func.name());
+                                            env, only_regions_computed, s.func.name());
                 } else if (arg.is_expr()) {
                     // Find the boxes required for the expression and add the regions
                     // to the queue.
@@ -287,7 +298,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                             boxes_required(subs_arg, curr_scope, func_val_bounds);
 
                     merge_and_queue_regions(f_queue, regions, arg_regions, prods,
-                                            env, values_computed, s.func.name());
+                                            env, only_regions_computed, s.func.name());
                 } else if (arg.is_image_param() || arg.is_buffer()) {
                     // If the argument is an image or a buffer the bounds
                     // required are unknown. Create an infinite region of the
@@ -342,7 +353,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
 
             // Update the region map, and add curr_regions to the queue.
             merge_and_queue_regions(f_queue, regions, curr_regions,
-                                    prods, env, values_computed, s.func.name());
+                                    prods, env, only_regions_computed, s.func.name());
         }
         // Remove processed region from the queue.
         f_queue.pop_front();
@@ -400,11 +411,11 @@ map<string, Box>
 DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
                                       const DimBounds &bounds,
                                       const set<string> &prods,
-                                      bool values_computed) {
+                                      bool only_regions_computed) {
     // Find the regions required to compute the region of f specified
     // by bounds.
     map<string, Box> regions = regions_required(f, stage_num, bounds,
-                                                prods, values_computed);
+                                                prods, only_regions_computed);
 
     // Shift the bounds by the size of the interval along the direction
     // of var.
@@ -425,7 +436,7 @@ DependenceAnalysis::redundant_regions(Function f, int stage_num, string var,
     // by shifted_bounds.
     map<string, Box> regions_shifted =
             regions_required(f, stage_num, shifted_bounds, prods,
-                             values_computed);
+                             only_regions_computed);
 
     // Compute the overlaps between the regions_shifted and the original
     // regions required.
@@ -466,7 +477,7 @@ vector<map<string, Box>>
 DependenceAnalysis::overlap_regions(Function f, int stage_num,
                                     const DimBounds &bounds,
                                     const set<string> &prods,
-                                    bool values_computed) {
+                                    bool only_regions_computed) {
     vector<map<string, Box>> conc_overlaps;
 
     Definition def = get_stage_definition(f, stage_num);
@@ -476,7 +487,7 @@ DependenceAnalysis::overlap_regions(Function f, int stage_num,
     for (int d = 0; d < (int)dims.size(); d++) {
         map<string, Box> conc_reg =
                 redundant_regions(f, stage_num, dims[d].var,
-                                  bounds, prods, values_computed);
+                                  bounds, prods, only_regions_computed);
         conc_overlaps.push_back(conc_reg);
     }
     return conc_overlaps;
@@ -530,8 +541,7 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
 /* Implements the grouping algorithm and the cost model for making the grouping
  * choices. */
 struct Partitioner {
-    /* FusionChoice encodes the choice of the prod_group being merged with
-       the cons_group. */
+    /* FusionChoice encodes the fusion of the prod function into the cons stage.*/
     struct FusionChoice {
         string prod;
         FStage cons;
@@ -566,7 +576,7 @@ struct Partitioner {
      * There are two approaches to extending the space of schedules considered:
      * 1) Recursive grouping: Treat the problem of determining the compute levels
      * within a group as a smaller instance of the grouping problem with
-     * different parameters for the input, output sizes, and cache behavior.
+     * different parameters for the input, output sizes, and cache model.
      *
      * 2) Tightening: Always compute a function at the lowest level possible
      * without introducing redundant work. This is a restricted form of recursive
@@ -596,23 +606,20 @@ struct Partitioner {
      * convolutional layers). The mechanism for realizing register tiling is
      * completely unrolling small tiles of the innermost kernels. Unrolling
      * interacts with vectorization, storage layout, and depends on the outer
-     * level tiling. The approach for doing register tiling is unclear at this
-     * point.
-     * */
+     * level tiling.*/
     struct Group {
         // The output stage representing the group.
         FStage output;
         // Functions that belong to the group.
         vector<FStage> members;
 
-        // Schedule information
         // Members of the group which are inlined.
         set<string> inlined;
         // Tile sizes along dimensions of the output function of the group.
         map<string, int> tile_sizes;
 
         Group(FStage output, vector<FStage> members):
-              output(output), members(members) { }
+              output(output), members(members) {}
 
         friend std::ostream& operator <<(std::ostream &stream, const Group &g) {
 
@@ -657,7 +664,9 @@ struct Partitioner {
         }
     };
 
-    /* Configuration of a group and the corresponding analysis.*/
+    /* Configuration of a group and the corresponding analysis. A group is the
+     * set of functions that are fused together and the group config specifies at
+     * what granularity they are fused together (tile_sizes).*/
     struct GroupConfig {
         map<string, int> tile_sizes;
         GroupAnalysis analysis;
@@ -665,26 +674,46 @@ struct Partitioner {
                    tile_sizes(tile_sizes), analysis(analysis) {}
     };
 
+    /* Cache for storing the best configuration for the fusion choice. During
+     * the grouping process the impact of fusing two groups together is only
+     * limited to the producers and consumers of the groups that are being fused
+     * together. The best fusion choices for the rest of the pipeline need not be
+     * re-evaluated and caching them improves performance significantly.*/
     map<FusionChoice, GroupConfig> fusion_cache;
 
+    /* Each group in the pipeline has a single output stage. groups is the mapping
+     * from the output stage of the group to the group.*/
     map<FStage, Group> groups;
+    /* The child stages of each stage in the pipeline.*/
     map<FStage, set<FStage>> children;
+    /* Map from the output stage of the group to the analysis of the group. The mapping
+     * needs to be updated whenever the grouping changes.*/
     map<FStage, GroupAnalysis> group_costs;
 
-    // Levels that are targeted by the grouping algorithm.
+    /* Levels that are targeted by the grouping algorithm. In the INLINE mode the grouping
+     * algorithm fuses the functions by inlining the expression for the producer function
+     * into the consumer stage. In the FAST_MEM mode the fusion is done at the level of tiles
+     * of the group output stage.*/
     enum Level {INLINE, FAST_MEM};
 
+    /* Bounds of each stage function in the pipeline. These bounds are inferred from the
+     * estimates of the outputs and other functions in the pipeline.*/
     const map<string, Box> &pipeline_bounds;
+    /* Parameters for the machine model used for estimating the cost of each group in
+     * the pipeline. */
     const MachineParams &arch_params;
+    /* Dependency analysis for the pipeline. Supports queries for regions accessed and
+     * computed for producing regions of functions.*/
     DependenceAnalysis &dep_analysis;
+    /* The arithmetic and memory costs of evaluating the expressions which define each
+     * function in the pipeline.*/
     RegionCosts &costs;
+    /* Output functions of the pipeline.*/
     const vector<Function> &outputs;
-
-    bool gpu_schedule;
 
     Partitioner(map<string, Box> &_pipeline_bounds, const MachineParams &_arch_params,
                 DependenceAnalysis &_dep_analysis, RegionCosts &_costs,
-                const vector<Function> &_outputs, bool _gpu_schedule);
+                const vector<Function> &_outputs);
 
     void merge_groups(const FusionChoice &choice, const GroupConfig &eval,
                       Partitioner::Level level);
@@ -743,11 +772,76 @@ struct Partitioner {
 
     Cost get_pipeline_cost();
 
-    void disp_pipeline_costs();
+    void disp_pipeline_costs(int dlevel);
     void disp_pipeline_bounds(int dlevel);
-    void disp_pipeline_graph();
-    void disp_grouping();
+    void disp_pipeline_graph(int dlevel);
+    void disp_grouping(int dlevel);
 };
+
+void Partitioner::disp_grouping(int dlevel = debug_level) {
+    debug(dlevel) << "\n=========" << '\n';
+    debug(dlevel) << "Grouping:" << '\n';
+    debug(dlevel) << "=========" << '\n';
+    for (auto &g : groups) {
+        debug(dlevel) << g.second << '\n';
+    }
+    debug(dlevel) << "=========" << '\n';
+}
+
+void Partitioner::disp_pipeline_graph(int dlevel = debug_level) {
+    debug(dlevel) << "\n================" << '\n';
+    debug(dlevel) << "Pipeline graph:" << '\n';
+    debug(dlevel) << "================" << '\n';
+    for (auto &f : children) {
+        debug(dlevel) << f.first << ": [";
+        for (auto &c : f.second) {
+            debug(dlevel) << c << ",";
+        }
+        debug(dlevel) << "]" << '\n';
+    }
+    debug(dlevel) << "================" << '\n';
+}
+
+void Partitioner::disp_pipeline_bounds(int dlevel = debug_level) {
+    debug(dlevel) << "\n================" << '\n';
+    debug(dlevel) << "Pipeline bounds:" << '\n';
+    debug(dlevel) << "================" << '\n';
+    disp_regions(pipeline_bounds, dlevel);
+    debug(dlevel) << "===============" << '\n';
+}
+
+Cost Partitioner::get_pipeline_cost() {
+    internal_assert(group_costs.size() > 0);
+
+    Cost total_cost(0, 0);
+    for (const pair<FStage, Group> &g : groups) {
+        GroupAnalysis analysis = group_costs.at(g.first);
+        total_cost.arith += analysis.cost.arith;
+        total_cost.memory += analysis.cost.memory;
+    }
+    return total_cost;
+}
+
+void Partitioner::disp_pipeline_costs(int dlevel = debug_level) {
+    internal_assert(group_costs.size() > 0);
+    Cost total_cost(0, 0);
+    debug(dlevel) << "\n===============" << '\n';
+    debug(dlevel) << "Pipeline costs:" << '\n';
+    debug(dlevel) << "===============" << '\n';
+    debug(dlevel) << "Group:(name) [arith cost, mem cost, parallelism]" << '\n';
+    for (const pair<FStage, Group> &g : groups) {
+        GroupAnalysis analysis = group_costs.at(g.first);
+        total_cost.arith += analysis.cost.arith;
+        total_cost.memory += analysis.cost.memory;
+
+        debug(dlevel) << "Group:" << g.first << "[";
+        debug(dlevel) << analysis.cost.arith << "," <<
+                    analysis.cost.memory << "," << analysis.parallelism << "]\n";
+    }
+    debug(dlevel) << "Total arithmetic cost:" << total_cost.arith << '\n';
+    debug(dlevel) << "Total memory cost:" << total_cost.memory << '\n';
+    debug(dlevel) << "===============" << '\n';
+}
 
 /* Constructs a partitioner and builds the pipeline graph the grouping
  * algorithm operates on. */
@@ -755,11 +849,9 @@ Partitioner::Partitioner(map<string, Box> &_pipeline_bounds,
                          const MachineParams &_arch_params,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs,
-                         const vector<Function> &_outputs,
-                         bool _gpu_schedule):
+                         const vector<Function> &_outputs):
     pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-    dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs),
-    gpu_schedule(_gpu_schedule) {
+    dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs) {
     // Place each stage of a function in its own group. Each stage
     // is a node in the pipeline graph.
     for (auto &f : dep_analysis.env) {
@@ -843,71 +935,6 @@ void Partitioner::merge_groups(const FusionChoice &choice, const GroupConfig &ev
     // TODO: check if this is necessary or if the analysis from eval can just
     // be reused.
     group_costs[child] = analyze_group(child_group, false);
-}
-
-void Partitioner::disp_grouping() {
-    debug(debug_level) << "\n=========" << '\n';
-    debug(debug_level) << "Grouping:" << '\n';
-    debug(debug_level) << "=========" << '\n';
-    for (auto &g : groups) {
-        debug(debug_level) << g.second << '\n';
-    }
-    debug(debug_level) << "=========" << '\n';
-}
-
-void Partitioner::disp_pipeline_graph() {
-    debug(debug_level) << "\n================" << '\n';
-    debug(debug_level) << "Pipeline graph:" << '\n';
-    debug(debug_level) << "================" << '\n';
-    for (auto &f : children) {
-        debug(debug_level) << f.first << ": [";
-        for (auto &c : f.second) {
-            debug(debug_level) << c << ",";
-        }
-        debug(debug_level) << "]" << '\n';
-    }
-    debug(debug_level) << "================" << '\n';
-}
-
-void Partitioner::disp_pipeline_bounds(int dlevel = debug_level) {
-    debug(dlevel) << "\n================" << '\n';
-    debug(dlevel) << "Pipeline bounds:" << '\n';
-    debug(dlevel) << "================" << '\n';
-    disp_regions(pipeline_bounds, dlevel);
-    debug(dlevel) << "===============" << '\n';
-}
-
-Cost Partitioner::get_pipeline_cost() {
-    internal_assert(group_costs.size() > 0);
-
-    Cost total_cost(0, 0);
-    for (const pair<FStage, Group> &g : groups) {
-        GroupAnalysis analysis = group_costs.at(g.first);
-        total_cost.arith += analysis.cost.arith;
-        total_cost.memory += analysis.cost.memory;
-    }
-    return total_cost;
-}
-
-void Partitioner::disp_pipeline_costs() {
-    internal_assert(group_costs.size() > 0);
-    Cost total_cost(0, 0);
-    debug(debug_level) << "\n===============" << '\n';
-    debug(debug_level) << "Pipeline costs:" << '\n';
-    debug(debug_level) << "===============" << '\n';
-    debug(debug_level) << "Group:(name) [arith cost, mem cost, parallelism]" << '\n';
-    for (const pair<FStage, Group> &g : groups) {
-        GroupAnalysis analysis = group_costs.at(g.first);
-        total_cost.arith += analysis.cost.arith;
-        total_cost.memory += analysis.cost.memory;
-
-        debug(debug_level) << "Group:" << g.first << "[";
-        debug(debug_level) << analysis.cost.arith << "," <<
-                    analysis.cost.memory << "," << analysis.parallelism << "]\n";
-    }
-    debug(debug_level) << "Total arithmetic cost:" << total_cost.arith << '\n';
-    debug(debug_level) << "Total memory cost:" << total_cost.memory << '\n';
-    debug(debug_level) << "===============" << '\n';
 }
 
 void Partitioner::initialize_groups() {
@@ -2491,7 +2518,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     costs.disp_func_costs();
 
     Partitioner part(pipeline_bounds, arch_params, dep_analysis,
-                     costs, outputs, false);
+                     costs, outputs);
 
     // Compute and display reuse
     /* TODO: Use the reuse estimates to reorder loops
