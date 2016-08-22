@@ -56,7 +56,7 @@ CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/pre
 CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 
-CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
+CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
