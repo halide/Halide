@@ -28,18 +28,6 @@ const int stack_size = 1024 * 1024;
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
-// Use a 64 KB circular buffer to store log messages.
-Log global_log(1024 * 64);
-
-void log_printf(const char *fmt, ...) {
-    char message[1024] = { 0, };
-    va_list ap;
-    va_start(ap, fmt);
-    int message_size = vsnprintf(message, sizeof(message) - 1, fmt, ap);
-    va_end(ap);
-    global_log.write(message, message_size);
-}
-
 extern "C" {
 
 // This is a basic implementation of the Halide runtime for Hexagon.
@@ -321,14 +309,6 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     halide_hexagon_remote_power_hvx_off();
 
     return result;
-}
-
-int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
-    // Read one line at a time.
-    // Leave room for appending a null terminator.
-    *read_size = global_log.read(out, size - 1, '\n');
-    out[*read_size] = 0;
-    return 0;
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
