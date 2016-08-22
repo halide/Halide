@@ -52,4 +52,22 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
     halide_qurt_hvx_unlock(user_context);
 }
 
+WEAK int halide_hexagon_prefetch_buffer_t(unsigned int dim, buffer_t *buf)
+{
+    // get starting position of box
+    unsigned char *addr = buf->host;
+    addr += buf->elem_size * ((buf->min[0]) * buf->stride[0] +
+                              (buf->min[1]) * buf->stride[1] +
+                              (buf->min[2]) * buf->stride[2] +
+                              (buf->min[3]) * buf->stride[3]);
+
+    // compute descriptor
+    unsigned long long desc = 0x1020002000002;
+
+    // perform prefetch
+    __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(desc));
+
+    return 0;
+}
+
 }
