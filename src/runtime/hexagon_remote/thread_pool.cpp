@@ -1,11 +1,6 @@
 #include <HalideRuntime.h>
-
-extern "C" {
 #include <qurt.h>
 #include <stdlib.h>
-}
-
-#include "log.h"
 
 int halide_host_cpu_count() {
     // Assume a Snapdragon 820
