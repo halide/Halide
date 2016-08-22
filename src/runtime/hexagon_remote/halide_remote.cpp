@@ -1,22 +1,15 @@
-extern "C" {
-
 #include "bin/src/halide_hexagon_remote.h"
-#include <memory.h>
+#include <HalideRuntime.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <qurt.h>
 
+extern "C" {
 #include "HAP_farf.h"
 #include "HAP_power.h"
-
 }
-
-#include <HalideRuntime.h>
-
-#include <qurt.h>
 
 #include "elf.h"
 #include "pipeline_context.h"

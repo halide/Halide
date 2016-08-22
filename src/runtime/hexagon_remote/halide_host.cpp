@@ -1,20 +1,12 @@
 #include <pthread.h>
-#include <assert.h>
-#include <stdint.h>
 #include <stdlib.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/mman.h>
-#include <linux/types.h>
+#include <fcntl.h>
 #include <android/log.h>
 
 #include "bin/src/halide_hexagon_remote.h"
-
-#include "stdio.h"
 
 namespace {
 
