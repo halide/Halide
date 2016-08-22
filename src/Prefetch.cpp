@@ -140,7 +140,7 @@ private:
                     }
 
                     // Create a buffer_t object for this prefetch.
-                    Type t = Int(8);  // FIXME (need type of box...or extract elem_size)
+                    Type t = Int(16);  // FIXME (need type of box...or extract elem_size)
                     vector<Expr> args(dims*3 + 2);
                     Expr first_elem = Load::make(t, varname, 0, Buffer(), Parameter());
                     args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
@@ -152,10 +152,13 @@ private:
                     }
 
                     // Inject the prefetch call
-                    string fetch_func = "halide_prefetch_buffer_t";
-                    Stmt stmt_prefetch =
-                        Evaluate::make(Call::make(Int(32), fetch_func,
-                                          {dims, var_prefetch_buf}, Call::Extern));
+                    vector<Expr> args_prefetch(2);
+                    args_prefetch[0] = dims;
+                    args_prefetch[1] = var_prefetch_buf;
+                    Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
+                                          args_prefetch, Call::Intrinsic));
+                                          // args_prefetch, Call::Extern));
+                                          // llvm/lib/IR/Instructions.cpp:263: void llvm::CallInst::init(llvm::FunctionType *, llvm::Value *, ArrayRef<llvm::Value *>, ArrayRef<OperandBundleDef>, const llvm::Twine &): Assertion `(i >= FTy->getNumParams() || FTy->getParamType(i) == Args[i]->getType()) && "Calling a function with a bad signature!"' 
                     body = Block::make({stmt_prefetch, body});
 
                     // Inject the create_buffer_t call

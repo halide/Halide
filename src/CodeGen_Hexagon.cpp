@@ -1356,19 +1356,21 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
     }
 
-    if (op->is_intrinsic("prefetch")) {
-        user_warning << "CodeGen_Hexagon: saw prefetch intrinsic\n";
-#if 0 // not currently using intrinsic, now expanded extern in Prefetch.cpp
-        // Todo: select Rt or Rtt version based on higher level request params
-        string fetch = "halide.hexagon.l2fetch.Rtt";
+    if (op->is_intrinsic(Call::prefetch_buffer_t)) {
+        // string fetch = "halide.hexagon.prefetch_buffer_t";
+        string fetch = "halide_hexagon_prefetch_buffer_t";
+        // debug(0) << "CodeGen_Hexagon: saw prefetch_buffer_t: adding call to " << fetch << "\n";
+        internal_assert(op->args.size() == 2);
 
-        Value *addr = codegen(op->args[1]);
-        Value *desc = codegen(op->args[2]);
+        Value *dim = codegen(op->args[0]);
+        Value *buf = codegen(op->args[1]);
 
         llvm::Function *fn = module->getFunction(fetch);
-        Value *ret = builder->CreateCall(fn, {addr, desc});
-        value = create_bitcast(ret, llvm::Type::getVoidTy(module->getContext()));
-#endif
+        Value *ret = builder->CreateCall(fn, {dim, buf});
+        value = ret;
+
+        // debug(0) << "value: " << value << "\n";
+        // value->dump();
         return;
     }
 
