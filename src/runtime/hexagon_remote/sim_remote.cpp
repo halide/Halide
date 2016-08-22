@@ -96,6 +96,13 @@ extern int ceil;
 
 }  // extern "C"
 
+void log_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
 void halide_print(void *user_context, const char *str) {
     log_printf("%s", str);
 }
