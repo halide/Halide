@@ -76,22 +76,14 @@ int main(int argc, char **argv) {
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.gpu_tile(x, y, 16, 16);
-    } else if (target.has_feature(Target::HVX_64)) {
+    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        int vector_size = target.has_feature(Target::HVX_128) ? 64 : 32;
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
         blur1.hexagon().tile(x, y, xi, yi, 6, 6);
-        // TODO: Add parallel to the schedule.
-        blur1.update().hexagon().tile(x, y, xi, yi, 32, 4).vectorize(xi);
+        blur1.update().hexagon().tile(x, y, xi, yi, vector_size, 4).vectorize(xi).parallel(y);
 
-        // TODO: Add parallel to the schedule.
-        blur2.hexagon().vectorize(x, 32);
-    } else if (target.has_feature(Target::HVX_128)) {
-        Var xi("xi"), yi("yi");
-
-        blur1.hexagon().tile(x, y, xi, yi, 6, 6);
-        blur1.update().hexagon().tile(x, y, xi, yi, 64, 4).vectorize(xi);
-
-        blur2.hexagon().vectorize(x, 64);
+        blur2.hexagon().vectorize(x, vector_size).parallel(y);
     } else {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");

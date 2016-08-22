@@ -34,6 +34,20 @@ int qurt_hvx_unlock() {
     return 0;
 }
 
+int qurt_hvx_get_mode() {
+    unsigned int mode;
+    __asm volatile (
+        " %0 = syscfg\n"
+        " %0 = and(%0, #128) // v2x\n"
+        : "=r"(mode)
+        );
+    __asm volatile (
+        "isync\n"
+        );
+
+    return mode;
+}
+
 // More symbols we need to support from halide_get_symbol.
 extern int __hexagon_muldf3;
 extern int __hexagon_divdf3;
@@ -113,24 +127,6 @@ void *halide_malloc(void *user_context, size_t x) {
 void halide_free(void *user_context, void *ptr) {
     free(ptr);
 }
-
-int halide_do_task(void *user_context, halide_task_t f, int idx,
-                   uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
-int halide_do_par_for(void *user_context, halide_task_t f,
-                      int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
-        if (result) {
-            return result;
-        }
-    }
-    return 0;
-}
-
-void halide_mutex_destroy(halide_mutex *) {}
 
 void *halide_get_symbol(const char *name) {
     // dlsym is just a stub on the simulator, so we need to support

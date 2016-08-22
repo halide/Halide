@@ -103,8 +103,16 @@ bin/%/log.o: log.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
 
+bin/%/qurt_thread.o: qurt_thread.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c qurt_thread.cpp -o $@
+
+bin/%/sim_thread.o: sim_thread.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c sim_thread.cpp -o $@
+
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/log.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/log.o bin/%/qurt_thread.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -o $@
 
@@ -121,7 +129,7 @@ bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
-bin/%/hexagon_sim_remote: bin/%/sim_remote.o
+bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/sim_thread.o bin/%/thread_pool.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -lc -lstandalone -lgcc -ldl $^ -o $@
 
