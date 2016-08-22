@@ -98,7 +98,7 @@ class Image {
 
     /** Initialize the shape from a parameter pack of ints */
     template<typename ...Args>
-    void initialize_shape(int next, int first, Args... rest) {
+    void initialize_shape(int next, int first, const Args &... rest) {
         buf.min[next] = 0;
         buf.extent[next] = first;
         if (next == 0) {
@@ -142,7 +142,7 @@ class Image {
 
     /** Check if any args in a parameter pack are zero */
     template<typename ...Args>
-    static bool any_zero(int first, Args... rest) {
+    static bool any_zero(int first, const Args &... rest) {
         if (first == 0) return true;
         return any_zero(rest...);
     }
@@ -239,7 +239,7 @@ public:
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
     template<typename ...Args>
-    Image(int first, Args... rest) {
+    Image(int first, const Args &... rest) {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
         initialize_shape(0, first, rest...);
@@ -264,7 +264,7 @@ public:
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data. */
     template<typename ...Args>
-    explicit Image(T *data, int first, Args... rest) {
+    explicit Image(T *data, int first, const Args &... rest) {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
         memset(&buf, 0, sizeof(buffer_t));
@@ -319,7 +319,7 @@ public:
 
 private:
     template<typename ...Args>
-    T *address_of(int d, int first, Args... rest) const {
+    T *address_of(int d, int first, const Args &... rest) const {
         return address_of(d+1, rest...) + buf.stride[d] * (first - buf.min[d]);
     }
 
@@ -369,7 +369,7 @@ public:
      */
     //@{
     template<typename ...Args>
-    const T &operator()(int first, Args... rest) const {
+    const T &operator()(int first, const Args &... rest) const {
         return *(address_of(0, first, rest...));
     }
 
@@ -383,7 +383,7 @@ public:
     }
 
     template<typename ...Args>
-    T &operator()(int first, Args... rest) {
+    T &operator()(int first, const Args &... rest) {
         return *(address_of(0, first, rest...));
     }
 
@@ -554,7 +554,7 @@ struct for_each_element_helpers {
      * resolution. The decltype is to make this version impossible if
      * the function is not callable with this many args. */
     template<typename ...Args>
-    static auto for_each_element_variadic(int, int d, Fn f, const buffer_t &buf, Args... args)
+    static auto for_each_element_variadic(int, int d, Fn f, const buffer_t &buf, const Args &... args)
         -> decltype(f(args...)) {
         f(args...);
     }
@@ -563,7 +563,7 @@ struct for_each_element_helpers {
      * an additional argument and try again. This trick is known as
      * SFINAE. */
     template<typename ...Args>
-    static void for_each_element_variadic(double, int d, Fn f, const buffer_t &buf, Args... args) {
+    static void for_each_element_variadic(double, int d, Fn f, const buffer_t &buf, const Args &... args) {
         int e = buf.extent[d] == 0 ? 1 : buf.extent[d];
         for (int i = 0; i < e; i++) {
             for_each_element_variadic(0, d-1, f, buf, buf.min[d] + i, args...);
@@ -573,7 +573,7 @@ struct for_each_element_helpers {
     /** Determine the minimum number of arguments a callable can take
      * using the same trick. */
     template<typename ...Args>
-    static auto num_args(int, int *result, Fn f, Args... args) -> decltype(f(args...)) {
+    static auto num_args(int, int *result, Fn f, const Args &... args) -> decltype(f(args...)) {
         *result = sizeof...(args);
     }
 
@@ -581,7 +581,7 @@ struct for_each_element_helpers {
      * of 256. This catches callables that aren't callable with any
      * number of ints. */
     template<typename ...Args>
-    static void num_args(double, int *result, Fn f, Args... args) {
+    static void num_args(double, int *result, Fn f, const Args &... args) {
         static_assert(sizeof...(args) <= 256,
                       "Callable passed to for_each_element must accept either a const int *,"
                       " or up to 256 ints. No such operator found. Expect infinite template recursion.");
