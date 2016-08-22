@@ -2367,10 +2367,10 @@ int64_t Partitioner::find_max_access_stride(const set<string> &vars,
 }
 
 /* Returns the sum of access strides along each of the loop variables of a stage.
- * The bounds of all the allocations accessed is specified in parent_bounds. */
+ * The bounds of all the allocations accessed is specified in allocation_bounds. */
 map<string, int64_t>
 Partitioner::analyze_spatial_locality(const FStage &stg,
-                                      const map<string, Box> &parent_bounds,
+                                      const map<string, Box> &allocation_bounds,
                                       const set<string> &inlines) {
     internal_assert(!stg.func.has_extern_definition());
     // Handle inlining. When a function is inlined into another the
@@ -2386,29 +2386,26 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     //
     // Computing the stride of a loop over x in the function h will be incorrect
     // if inlining is not taken into account.
-    // Get all the allocations accessed in the definition corresponding to stg.
 
+    // Get all the allocations accessed in the definition corresponding to stg.
     FindAllCalls find;
     Definition def = get_stage_definition(stg.func, stg.stage_num);
+    // Perform inlining on the all the values and the args in the stage.
     for (size_t v = 0; v < def.values().size(); v++) {
         def.values()[v] = perform_inline(def.values()[v], dep_analysis.env,
                                          inlines);
     }
+
     for (size_t arg = 0; arg < def.args().size(); arg++) {
         def.args()[arg] = perform_inline(def.args()[arg], dep_analysis.env,
                                          inlines);
     }
     def.accept(&find);
 
+    // Arguments on the left hand side might themselves involve accesses
+    // to allocations and they need to be accounted for computing the strides
+    // along each dimension.
     vector<pair<string, vector<Expr>>> call_args = find.call_args;
-
-    // TODO: remove debug code.
-    /*
-    debug(0) << "\nAnalyzing stage " << stg << '\n';
-    debug(0) << "Parent bounds " << '\n';
-    disp_regions(parent_bounds, 0);
-    */
-
     // Account for the spatial locality of the store. Add the access on the
     // left hand side to call_args.
     vector<Expr> left_arg_exprs;
@@ -2417,6 +2414,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     }
     call_args.push_back(make_pair(stg.func.name(), left_arg_exprs));
 
+    // Map for holding the strides across each dimension
     map<string, int64_t> var_strides;
     const vector<Dim> &dims = def.schedule().dims();
 
@@ -2429,8 +2427,8 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
         int total_stride = 0;
         for (const pair<string, vector<Expr>> &call : call_args) {
             Box call_alloc_reg;
-            if (parent_bounds.find(call.first) != parent_bounds.end()) {
-                call_alloc_reg = parent_bounds.at(call.first);
+            if (allocation_bounds.find(call.first) != allocation_bounds.end()) {
+                call_alloc_reg = allocation_bounds.at(call.first);
             } else {
                 call_alloc_reg = pipeline_bounds.at(call.first);
             }
