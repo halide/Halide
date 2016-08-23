@@ -387,7 +387,7 @@ inline Expr operator%(Expr a, Expr b) {
  * integer cannot be represented in the type of the expression. */
 inline Expr operator%(Expr a, int b) {
     user_assert(a.defined()) << "operator% of undefined Expr\n";
-    user_assert(b) << "operator% with constant 0 modulus\n";
+    user_assert(b != 0) << "operator% with constant 0 modulus\n";
     Internal::check_representable(a.type(), b);
     return Internal::Mod::make(a, Internal::make_const(a.type(), b));
 }
