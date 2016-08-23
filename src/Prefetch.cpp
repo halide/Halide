@@ -157,8 +157,6 @@ private:
                     args_prefetch[1] = var_prefetch_buf;
                     Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                                           args_prefetch, Call::Intrinsic));
-                                          // args_prefetch, Call::Extern));
-                                          // llvm/lib/IR/Instructions.cpp:263: void llvm::CallInst::init(llvm::FunctionType *, llvm::Value *, ArrayRef<llvm::Value *>, ArrayRef<OperandBundleDef>, const llvm::Twine &): Assertion `(i >= FTy->getNumParams() || FTy->getParamType(i) == Args[i]->getType()) && "Calling a function with a bad signature!"' 
                     body = Block::make({stmt_prefetch, body});
 
                     // Inject the create_buffer_t call

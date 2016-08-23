@@ -1366,7 +1366,10 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Value *buf = codegen(op->args[1]);
 
         llvm::Function *fn = module->getFunction(fetch);
-        Value *ret = builder->CreateCall(fn, {dim, buf});
+        vector<Value *> args;
+        args.push_back(dim);
+        args.push_back(buf);
+        Value *ret = builder->CreateCall(fn, args);
         value = ret;
 
         // debug(0) << "value: " << value << "\n";
