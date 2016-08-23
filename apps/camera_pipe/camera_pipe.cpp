@@ -293,11 +293,13 @@ Func process(Func raw, Type result_type,
         .fold_storage(y, 8)
         .vectorize(x, vec);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+//        .prefetch(y, 2)
         .fold_storage(y, 4)
         .vectorize(x, 2*vec, TailStrategy::RoundUp)
         .reorder(c, x, y)
         .unroll(c);
     corrected.compute_at(processed, x)
+//        .prefetch(y, 2)
         .vectorize(x, vec)
         .reorder(c, x, y)
         .unroll(c);
