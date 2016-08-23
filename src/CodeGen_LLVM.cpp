@@ -2830,7 +2830,8 @@ void CodeGen_LLVM::visit(const Call *op) {
 #endif
         value = call;
     } else if (op->is_intrinsic(Call::prefetch_buffer_t)) {
-        user_warning << "CodeGen_LLVM::visit Call: Unimplemented prefetch_buffer_t intrinsic.\n";
+        user_warning << "CodeGen_LLVM::visit Call: prefetch not supported by target.\n";
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
