@@ -101,6 +101,8 @@ private:
                 map<string, Box> boxes;
                 boxes = boxes_required(body, scope);
 
+                int cnt = 0;            // Number of prefetch ops generated
+                Stmt pstmts;            // Generated prefetch statements
                 debug(dbg_prefetch) << "  boxes required:\n";
                 for (auto &b : boxes) {
                     const string &varname = b.first;
@@ -157,22 +159,35 @@ private:
                     args_prefetch[1] = var_prefetch_buf;
                     Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                                           args_prefetch, Call::Intrinsic));
-                    body = Block::make({stmt_prefetch, body});
+                    if (cnt == 0) {
+                        pstmts = stmt_prefetch;
+                    } else {
+                        pstmts = Block::make({stmt_prefetch, pstmts});
+                    }
+                    cnt++;
 
                     // Inject the create_buffer_t call
                     Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                           args, Call::Intrinsic);
-                    body = LetStmt::make(varname_prefetch_buf, prefetch_buf, body);
+                    pstmts = LetStmt::make(varname_prefetch_buf, prefetch_buf, pstmts);
 
                     // Inject bounds variable assignments
                     for (int i = dims-1; i >= 0; i--) {
-                        body = LetStmt::make(max_name[i], box[i].max, body);
-                        body = LetStmt::make(min_name[i], box[i].min, body);
+                        pstmts = LetStmt::make(max_name[i], box[i].max, pstmts);
+                        pstmts = LetStmt::make(min_name[i], box[i].min, pstmts);
                         // stride already defined by input buffer
                     }
+                }
 
-                    debug(dbg_prefetch3) << "    prefetch body:\n";
-                    debug(dbg_prefetch3) << body << "\n";
+                if (cnt) {
+                    // Don't prefetch past the end of the iteration space
+                    Expr pcond = likely((Variable::make(Int(32), op->name) + p.offset)
+                                                        < (op->min + op->extent));
+                    Stmt pguard = IfThenElse::make(pcond, pstmts);
+                    body = Block::make({pguard, body});
+
+                    debug(dbg_prefetch3) << "    prefetch: (cnt:" << cnt << ")\n";
+                    debug(dbg_prefetch3) << pguard << "\n";
                 }
 
                 scope.pop(op->name);

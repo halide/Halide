@@ -98,7 +98,12 @@ WEAK int halide_hexagon_prefetch_buffer_t(unsigned int dim, buffer_t *buf)
     // uint64_t desc = 0x1020002000001; // col, 512 width, 1 row
     // uint64_t desc = 0x1144014400001; // col, 5184 width, 1 row
 
-    // FIXME: iterate over buffer_t 3rd & 4th dimensions
+    // debug(0) << "halide_hexagon_prefetch_buffer_t(" << dim << ", " << buf << ")"
+    //          << " addr:" << addr << " desc:" << desc << "\n";
+
+    // TODO: iterate over buffer_t 3rd & 4th dimensions
+    //       increment address by 3rd/4th stride and fetch same 2-D descriptor
+    // if (dim > 2) ...
 
     // Perform prefetch
     // notes:
