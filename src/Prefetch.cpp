@@ -180,14 +180,18 @@ private:
                 }
 
                 if (cnt) {
-                    // Don't prefetch past the end of the iteration space
+#if 1
+                    // Guard to not prefetch past the end of the iteration space
                     Expr pcond = likely((Variable::make(Int(32), op->name) + p.offset)
-                                                        < (op->min + op->extent));
+                                                        < (op->min + op->extent - 1));
                     Stmt pguard = IfThenElse::make(pcond, pstmts);
                     body = Block::make({pguard, body});
 
                     debug(dbg_prefetch3) << "    prefetch: (cnt:" << cnt << ")\n";
                     debug(dbg_prefetch3) << pguard << "\n";
+#else
+                    body = Block::make({pstmts, body});
+#endif
                 }
 
                 scope.pop(op->name);
