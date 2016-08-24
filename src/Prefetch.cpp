@@ -52,10 +52,30 @@ private:
         return v[v.size()-1];
     }
 
+    // Lookup a function in the environment
     Function get_func(const string &name) {
         map<string, Function>::const_iterator iter = env.find(name);
         internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
         return iter->second;
+    }
+
+    // Determine the type of a named buffer
+    Type get_type(string varname) {
+        debug(dbg_prefetch2) << "getType(" << varname << ")\n";
+        Type t = Int(8);
+        map<string, Function>::const_iterator varit = env.find(varname);
+        if (varit != env.end()) {
+            Function varf = varit->second;
+            debug(dbg_prefetch2) << "    found: " << varit->first << "\n";
+            if (varf.outputs()) {
+                vector<Type> varts = varf.output_types();
+                t = varts[0];
+                debug(dbg_prefetch2) << "    type: " << t << "\n";
+            }
+        } else {
+            debug(dbg_prefetch2) << "    could not determine type\n";
+        }
+        return t;
     }
 
     void visit(const Let *op) {
@@ -75,22 +95,22 @@ private:
         Stmt body = op->body;
 
         string func_name = tuple_func(op->name);
-        string var_name  = tuple_var(op->name);
+        string ivar_name = tuple_var(op->name);
         vector<Prefetch> &prefetches = get_func(func_name).schedule().prefetches();
 
         if (prefetches.empty()) {
-            debug(dbg_prefetch2) << "InjectPrefetch: " << op->name << " " << func_name << " " << var_name;
+            debug(dbg_prefetch2) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
             debug(dbg_prefetch2) << " No prefetch\n";
         } else {
-            debug(dbg_prefetch) << "InjectPrefetch: " << op->name << " " << func_name << " " << var_name;
+            debug(dbg_prefetch) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
             debug(dbg_prefetch) << " Found prefetch directive(s)\n";
         }
 
         for (const Prefetch &p : prefetches) {
-            debug(dbg_prefetch) << "InjectPrefetch: check var:" << p.var
+            debug(dbg_prefetch) << "InjectPrefetch: check ivar:" << p.var
                                << " offset:" << p.offset << "\n";
-            if (p.var == var_name) {
-                debug(dbg_prefetch) << " prefetch on " << var_name << "\n";
+            if (p.var == ivar_name) {
+                debug(dbg_prefetch) << " prefetch on " << ivar_name << "\n";
 
                 // Interval prein(op->name, op->name);
                 // Add in prefetch offset
@@ -108,7 +128,8 @@ private:
                     const string &varname = b.first;
                     Box &box = b.second;
                     int dims = box.size();
-                    debug(dbg_prefetch) << "  var:" << varname << ":\n";
+                    Type t = get_type(varname);
+                    debug(dbg_prefetch) << "  var: " << varname << " (" << t << "):\n";
                     for (int i = 0; i < dims; i++) {
                         debug(dbg_prefetch) << "    ---\n";
                         debug(dbg_prefetch) << "    box[" << i << "].min: " << box[i].min << "\n";
@@ -142,7 +163,6 @@ private:
                     }
 
                     // Create a buffer_t object for this prefetch.
-                    Type t = Int(16);  // FIXME (need type of box...or extract elem_size)
                     vector<Expr> args(dims*3 + 2);
                     Expr first_elem = Load::make(t, varname, 0, Buffer(), Parameter());
                     args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
