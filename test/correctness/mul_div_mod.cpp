@@ -5,7 +5,7 @@
 #include <algorithm>
 
 using namespace Halide;
-using namespace Halide::Internal;
+using Halide::Internal::Call;
 
 // Test program to check basic arithmetic.
 // Pseudo-random numbers are generated and arithmetic operations performed on them.
