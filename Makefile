@@ -916,12 +916,12 @@ $(FILTERS_DIR)/tiled_blur_blur_interleaved.a: $(BIN_DIR)/tiled_blur_blur.generat
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-register_metadata-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
 $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-no_runtime
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
