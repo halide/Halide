@@ -114,7 +114,7 @@ bool is_negative_one(unsigned char val) {
 }
 
 
-template<typename T,typename BIG>
+template<typename T, typename BIG>
 BIG maximum() {
     Type t = type_of<T>();
 
@@ -138,7 +138,7 @@ BIG maximum() {
     return (BIG) 1;
 }
 
-template<typename T,typename BIG>
+template<typename T, typename BIG>
 BIG minimum() {
     Type t = type_of<T>();
 
@@ -167,7 +167,7 @@ BIG minimum() {
 //  min  max              max  min
 // The left pattern occurs when unique is odd; the right pattern when unique is even.
 
-template<typename T,typename BIG>
+template<typename T, typename BIG>
 Image<T> init(Type t, int unique, int width, int height) {
     if (width < 2) width = 2;
     if (height < 2) height = 2;
@@ -177,8 +177,8 @@ Image<T> init(Type t, int unique, int width, int height) {
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
         int64_t max, min, neg, v, vsalt;
-        max = maximum<T,int64_t>();
-        min = minimum<T,int64_t>();
+        max = maximum<T, int64_t>();
+        min = minimum<T, int64_t>();
         neg = (~((int64_t) 0)) ^ max;  // The bits that should all be 1 for negative numbers.
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
@@ -206,7 +206,7 @@ Image<T> init(Type t, int unique, int width, int height) {
     }
     else if (t.is_uint()) {
         uint64_t max, v, vsalt;
-        max = maximum<T,BIG>();
+        max = maximum<T, BIG>();
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
                 v = ubits(unique,i,j) & max;
@@ -266,7 +266,7 @@ enum ScheduleVariant {
 };
 
 // Test multiplication of T1 x T2 -> RT
-template<typename T1,typename T2,typename RT,typename BIG>
+template<typename T1, typename T2, typename RT, typename BIG>
 bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
     std::cout << "Test multiplication of "
               << type_of<T1>() << 'x' << vector_width << '*'
@@ -280,8 +280,8 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
     bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Image<T1> a = init<T1,BIG>(t1, 1, WIDTH, HEIGHT);
-    Image<T2> b = init<T2,BIG>(t2, 2, WIDTH, HEIGHT);
+    Image<T1> a = init<T1, BIG>(t1, 1, WIDTH, HEIGHT);
+    Image<T2> b = init<T2, BIG>(t2, 2, WIDTH, HEIGHT);
 
     // Compute the multiplication, check that the results match.
     Func f;
@@ -341,18 +341,18 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
 // division tests division and mod operations.
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
-template<typename T,typename BIG>
+template<typename T, typename BIG>
 bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target) {
     std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
 
     int i, j;
     Type t = type_of<T>();
-    BIG minval = minimum<T,BIG>();
+    BIG minval = minimum<T, BIG>();
     bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Image<T> a = init<T,BIG>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T,BIG>(t, 2, WIDTH, HEIGHT);
+    Image<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
+    Image<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
@@ -443,7 +443,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
 // f_mod tests floating mod operations.
 // BIG should be double.
 // T should be a type known to Halide.
-template<typename T,typename BIG>
+template<typename T, typename BIG>
 bool f_mod() {
     std::cout << "Test mod of " << type_of<T>() << '\n';
 
@@ -451,8 +451,8 @@ bool f_mod() {
     Type t = type_of<T>();
     bool success = true;
 
-    Image<T> a = init<T,BIG>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T,BIG>(t, 2, WIDTH, HEIGHT);
+    Image<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
+    Image<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
     Image<T> out(WIDTH,HEIGHT);
 
     // Filter the input values for the operation to be tested.
@@ -473,7 +473,7 @@ bool f_mod() {
     // Explicit checks of the simplifier for consistency with runtime computation
     int ecount = 0;
     for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
-        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
+        for (j = 0; j < std::min(SHEIGHT, HEIGHT); j++) {
             T arg_a = a(i,j);
             T arg_b = b(i,j);
             T v = out(i,j);
@@ -497,7 +497,7 @@ bool f_mod() {
 
 int main(int argc, char **argv) {
     bool success = true;
-    success &= f_mod<float,double>();
+    success &= f_mod<float, double>();
 
     Target target = get_jit_target_from_environment();
 
@@ -558,15 +558,15 @@ int main(int argc, char **argv) {
     }
 
     for (int vector_width : vector_widths) {
-        success &= div_mod<uint8_t,uint64_t>(vector_width, scheduling, target);
-        success &= div_mod<uint16_t,uint64_t>(vector_width, scheduling, target);
-        success &= div_mod<uint32_t,uint64_t>(vector_width, scheduling, target);
-        success &= div_mod<int8_t,int64_t>(vector_width, scheduling, target);
-        success &= div_mod<int16_t,int64_t>(vector_width, scheduling, target);
-        success &= div_mod<int32_t,int64_t>(vector_width, scheduling, target);
+        success &= div_mod<uint8_t, uint64_t>(vector_width, scheduling, target);
+        success &= div_mod<uint16_t, uint64_t>(vector_width, scheduling, target);
+        success &= div_mod<uint32_t, uint64_t>(vector_width, scheduling, target);
+        success &= div_mod<int8_t, int64_t>(vector_width, scheduling, target);
+        success &= div_mod<int16_t, int64_t>(vector_width, scheduling, target);
+        success &= div_mod<int32_t, int64_t>(vector_width, scheduling, target);
     }
 
-    if (! success) {
+    if (!success) {
         printf ("Failure!\n");
         return -1;
     }
