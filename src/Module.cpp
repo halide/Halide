@@ -325,13 +325,11 @@ void compile_multitarget(const std::string &fn_name,
         auto suffix = "_" + replace_all(target.to_string(), "-", "_");
         std::string sub_fn_name = fn_name + suffix;
 
-        Target sub_fn_target = target;
-
         // We always produce the runtime separately, so add NoRuntime explicitly.
-        sub_fn_target = sub_fn_target.with_feature(Target::NoRuntime);
-
-        // Matlab should be added to the wrapper pipeline, instead of each sub-pipeline.
-        sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
+        // Matlab should be added to the wrapper pipeline below, instead of each sub-pipeline.
+        Target sub_fn_target = target
+            .with_feature(Target::NoRuntime)
+            .without_feature(Target::Matlab);
 
         Module module = module_producer(sub_fn_name, sub_fn_target);
         Outputs sub_out = add_suffixes(output_files, suffix);
