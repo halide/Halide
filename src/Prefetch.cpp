@@ -22,9 +22,13 @@ using std::vector;
 using std::stack;
 
 // Prefetch debug levels
-int dbg_prefetch  = 1;
-int dbg_prefetch2 = 2;
+int dbg_prefetch0 = 1;
+int dbg_prefetch1 = 2;
+int dbg_prefetch2 = 3;
 int dbg_prefetch3 = 10;
+
+#define MIN(x,y)        (((x)<(y)) ? (x) : (y))
+#define MAX(x,y)        (((x)>(y)) ? (x) : (y))
 
 class InjectPrefetch : public IRMutator {
 public:
@@ -61,19 +65,19 @@ private:
 
     // Determine the type of a named buffer
     Type get_type(string varname) {
-        debug(dbg_prefetch2) << "getType(" << varname << ")\n";
+        debug(dbg_prefetch2) << "    getType(" << varname << ")\n";
         Type t = Int(8);
         map<string, Function>::const_iterator varit = env.find(varname);
         if (varit != env.end()) {
             Function varf = varit->second;
-            debug(dbg_prefetch2) << "    found: " << varit->first << "\n";
+            debug(dbg_prefetch2) << "      found: " << varit->first << "\n";
             if (varf.outputs()) {
                 vector<Type> varts = varf.output_types();
                 t = varts[0];
-                debug(dbg_prefetch2) << "    type: " << t << "\n";
+                debug(dbg_prefetch2) << "      type: " << t << "\n";
             }
         } else {
-            debug(dbg_prefetch2) << "    could not determine type\n";
+            debug(dbg_prefetch2) << "      could not determine type\n";
         }
         return t;
     }
@@ -102,15 +106,15 @@ private:
             debug(dbg_prefetch2) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
             debug(dbg_prefetch2) << " No prefetch\n";
         } else {
-            debug(dbg_prefetch) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
-            debug(dbg_prefetch) << " Found prefetch directive(s)\n";
+            debug(dbg_prefetch1) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
+            debug(dbg_prefetch1) << " Found prefetch directive(s)\n";
         }
 
         for (const Prefetch &p : prefetches) {
-            debug(dbg_prefetch) << "InjectPrefetch: check ivar:" << p.var
-                               << " offset:" << p.offset << "\n";
+            debug(dbg_prefetch1) << "InjectPrefetch: check ivar:" << p.var << "\n";
             if (p.var == ivar_name) {
-                debug(dbg_prefetch) << " prefetch on " << ivar_name << "\n";
+                debug(dbg_prefetch0) << " " << func_name
+                                     << " prefetch(" << ivar_name << ", " << p.offset << ")\n";
 
                 // Interval prein(op->name, op->name);
                 // Add in prefetch offset
@@ -123,19 +127,25 @@ private:
 
                 int cnt = 0;            // Number of prefetch ops generated
                 Stmt pstmts;            // Generated prefetch statements
-                debug(dbg_prefetch) << "  boxes required:\n";
+                debug(dbg_prefetch1) << "  boxes required:\n";
                 for (auto &b : boxes) {
                     const string &varname = b.first;
                     Box &box = b.second;
                     int dims = box.size();
                     Type t = get_type(varname);
-                    debug(dbg_prefetch) << "  var: " << varname << " (" << t << "):\n";
+                    debug(dbg_prefetch0) << "  prefetch" << ptmp << ": "
+                                         << varname << " (" << t << ", dims:" << dims << ")\n";
                     for (int i = 0; i < dims; i++) {
-                        debug(dbg_prefetch) << "    ---\n";
-                        debug(dbg_prefetch) << "    box[" << i << "].min: " << box[i].min << "\n";
-                        debug(dbg_prefetch) << "    box[" << i << "].max: " << box[i].max << "\n";
+                        debug(dbg_prefetch1) << "    ---\n";
+                        debug(dbg_prefetch1) << "    box[" << i << "].min: " << box[i].min << "\n";
+                        debug(dbg_prefetch1) << "    box[" << i << "].max: " << box[i].max << "\n";
                     }
-                    debug(dbg_prefetch) << "    ---------\n";
+                    debug(dbg_prefetch1) << "    ---------\n";
+
+                    // TODO: Opt: check box if it should be prefetched? 
+                    // TODO       - Only prefetch if varying by ivar_name? 
+                    // TODO       - Don't prefetch if "small" all constant dimensions?
+                    // TODO         e.g. see: camera_pipe.cpp corrected matrix(4,3)
 
                     string pstr = std::to_string(ptmp++);
                     string varname_prefetch_buf = varname + ".prefetch_" + pstr + "_buf";
@@ -177,6 +187,10 @@ private:
                     vector<Expr> args_prefetch(2);
                     args_prefetch[0] = dims;
                     args_prefetch[1] = var_prefetch_buf;
+                    // TODO: Opt: Inline prefetch_buffer_t? (to avoid some of ~30 stores/loads through buffer_t)
+                    // TODO: Opt: Keep running sum of bytes prefetched on this sequence
+                    // TODO: Opt: Keep running sum of number of prefetch instructions issued
+                    // TODO       on this sequence? (to not exceed MAX_PREFETCH)
                     Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                                           args_prefetch, Call::Intrinsic));
                     if (cnt == 0) {
@@ -187,6 +201,7 @@ private:
                     cnt++;
 
                     // Inject the create_buffer_t call
+                    // TODO: Opt: Don't pass box info through buffer_t? (to avoid some of ~30 stores/loads through buffer_t)
                     Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                           args, Call::Intrinsic);
                     pstmts = LetStmt::make(varname_prefetch_buf, prefetch_buf, pstmts);
@@ -230,18 +245,10 @@ Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
     std::string lvl = get_env_variable("HL_DEBUG_PREFETCH", read);
     if (read) {
         int dbg_level = atoi(lvl.c_str());
-        dbg_prefetch  -= dbg_level;
-        dbg_prefetch2 -= dbg_level;
-        dbg_prefetch3 -= dbg_level;
-        if (dbg_prefetch < 0) {
-            dbg_prefetch = 0;
-        }
-        if (dbg_prefetch2 < 0) {
-            dbg_prefetch2 = 0;
-        }
-        if (dbg_prefetch3 < 0) {
-            dbg_prefetch3 = 0;
-        }
+        dbg_prefetch0 = MAX(dbg_prefetch0 - dbg_level, 0);
+        dbg_prefetch1 = MAX(dbg_prefetch1 - dbg_level, 0);
+        dbg_prefetch2 = MAX(dbg_prefetch2 - dbg_level, 0);
+        dbg_prefetch3 = MAX(dbg_prefetch3 - dbg_level, 0);
     }
     return InjectPrefetch(env).mutate(s);
 }
