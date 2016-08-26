@@ -154,6 +154,28 @@ define weak_odr <64 x i32> @halide.hexagon.mul.vuw.vuh(<64 x i32> %a, <64 x i16>
   ret <64 x i32> %ab
 }
 
+define weak_odr <64 x i32> @halide.hexagon.mul.vuw.vuw(<64 x i32> %a, <64 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %a)
+  %a_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %a)
+  %b_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %b)
+  %b_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %b)
+  %a_e = call <32 x i32> @llvm.hexagon.V6.vshufeh.128B(<32 x i32> %a_hi, <32 x i32> %a_lo)
+  %a_o = call <32 x i32> @llvm.hexagon.V6.vshufoh.128B(<32 x i32> %a_hi, <32 x i32> %a_lo)
+  %b_e = call <32 x i32> @llvm.hexagon.V6.vshufeh.128B(<32 x i32> %b_hi, <32 x i32> %b_lo)
+  %b_o = call <32 x i32> @llvm.hexagon.V6.vshufoh.128B(<32 x i32> %b_hi, <32 x i32> %b_lo)
+  %ab_e = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_e, <32 x i32> %b_e)
+  %ab_o1 = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_o, <32 x i32> %b_e)
+  %ab_o2 = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_e, <32 x i32> %b_o)
+  %ab_o = call <64 x i32> @llvm.hexagon.V6.vaddw.dv.128B(<64 x i32> %ab_o1, <64 x i32> %ab_o2)
+  %ab_o_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %ab_o)
+  %ab_o_shifted_lo = call <32 x i32> @llvm.hexagon.V6.vaslw.128B(<32 x i32> %ab_o_lo, i32 16)
+  %ab_o_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %ab_o)
+  %ab_o_shifted_hi = call <32 x i32> @llvm.hexagon.V6.vaslw.128B(<32 x i32> %ab_o_hi, i32 16)
+  %ab_o_shifted = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %ab_o_shifted_hi, <32 x i32> %ab_o_shifted_lo)
+  %ab = call <64 x i32> @llvm.hexagon.V6.vaddw.dv.128B(<64 x i32> %ab_e, <64 x i32> %ab_o_shifted)
+  ret <64 x i32> %ab
+}
+
 ; Hexagon is missing shifts for byte sized operands.
 declare <32 x i32> @llvm.hexagon.V6.vaslh.128B(<32 x i32>, i32)
 declare <32 x i32> @llvm.hexagon.V6.vasrh.128B(<32 x i32>, i32)
