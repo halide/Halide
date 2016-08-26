@@ -11,7 +11,6 @@ namespace {
 
 struct spawned_thread {
     void *stack;
-    void *stack_end;
     halide_thread handle;
 };
 
