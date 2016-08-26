@@ -538,9 +538,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         if (f.linkage == LoweredFunc::External) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
-            if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(names.simple_name, metadata_getter, wrapper);
-            }
 
             if (target.has_feature(Target::Matlab)) {
                 define_matlab_wrapper(module.get(), wrapper, metadata_getter);
@@ -935,39 +932,6 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     llvm::verifyFunction(*metadata_getter);
 
     return metadata_getter;
-}
-
-void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper) {
-    llvm::Function *register_metadata = module->getFunction("halide_runtime_internal_register_metadata");
-    internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
-
-    llvm::StructType *register_t_type = module->getTypeByName("struct._halide_runtime_internal_registered_filter_t");
-    internal_assert(register_t_type) << "Could not find register_t_type in initial module\n";
-
-    Constant *list_node_fields[] = {
-        Constant::getNullValue(i8_t->getPointerTo()),
-        metadata_getter,
-        argv_wrapper
-    };
-
-    GlobalVariable *list_node = new GlobalVariable(
-        *module,
-        register_t_type,
-        /*isConstant*/ false,
-        GlobalValue::PrivateLinkage,
-        ConstantStruct::get(register_t_type, list_node_fields));
-
-    llvm::FunctionType *func_t = llvm::FunctionType::get(void_t, false);
-    llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", ctor);
-    builder->SetInsertPoint(block);
-    llvm::Value *call_args[] = {list_node};
-    llvm::CallInst *call = builder->CreateCall(register_metadata, call_args);
-    call->setDoesNotThrow();
-    builder->CreateRet(call);
-    llvm::verifyFunction(*ctor);
-
-    llvm::appendToGlobalCtors(*module, ctor, 0);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
