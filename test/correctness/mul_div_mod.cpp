@@ -528,10 +528,7 @@ int main(int argc, char **argv) {
         // Non-widening multiplication.
         success &= mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target);
         success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
-        if (vector_width == 1 || scheduling != Hexagon) {
-            // This is not supported on Hexagon yet.
-            success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-        }
+        success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
         success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
         success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
         success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
