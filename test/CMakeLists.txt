@@ -176,11 +176,11 @@ if (WITH_TEST_GENERATORS)
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
                                GENERATED_FUNCTION "${FUNC_NAME}"
-                               GENERATOR_ARGS "target=host-register_metadata")
+                               GENERATOR_ARGS "target=host")
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
                                GENERATED_FUNCTION "${FUNC_NAME}_ucon"
-                               GENERATOR_ARGS "target=host-register_metadata-user_context")
+                               GENERATOR_ARGS "target=host-user_context")
     elseif(TEST_SRC STREQUAL "cxx_mangling_aottest.cpp")
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "${GEN_NAME}${OBJ_GEN_EXE_SUFFIX}"
