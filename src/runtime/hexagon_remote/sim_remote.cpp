@@ -45,7 +45,7 @@ int qurt_hvx_get_mode() {
         "isync\n"
         );
 
-    return mode;
+    return mode == 128 ? 1 : 0;
 }
 
 // More symbols we need to support from halide_get_symbol.
