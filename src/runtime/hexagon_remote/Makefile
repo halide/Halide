@@ -56,7 +56,7 @@ CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/pre
 CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 
-CCFLAGS-host := ${CCFLAGS} -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
+CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
@@ -99,8 +99,12 @@ bin/%/nearbyint.o: nearbyint.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
 
+bin/%/log.o: log.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
+
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/log.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -o $@
 
@@ -111,7 +115,7 @@ bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/hali
 # Build rules for the simulator implementation.
 bin/%/sim_remote.o: sim_remote.cpp sim_protocol.h elf.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -DSIMULATOR -c sim_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -c sim_remote.cpp -o $@
 
 bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)

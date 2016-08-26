@@ -1,11 +1,12 @@
-#include "../HalideRuntime.h"
-#include "HexagonWrapper.h"
-#include "sim_protocol.h"
-
 #include <vector>
 #include <sstream>
 #include <cassert>
 #include <memory>
+
+#include <HalideRuntime.h>
+#include <HexagonWrapper.h>
+
+#include "sim_protocol.h"
 
 typedef unsigned int handle_t;
 
