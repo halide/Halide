@@ -311,7 +311,6 @@ void compile_multitarget(const std::string &fn_name,
             Target::JIT,
             Target::Matlab,
             Target::NoRuntime,
-            Target::RegisterMetadata,
             Target::UserContext,
         }};
         for (auto f : must_match_features) {
@@ -393,9 +392,6 @@ void compile_multitarget(const std::string &fn_name,
 
     Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
-    // The wrapper module must come *first* in the archive, otherwise libraries
-    // that are dynamically found via register_metadata and halide_enumerate_registered_filters()
-    // may get optimized away at link time.
     wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
     if (!output_files.c_header_name.empty()) {
