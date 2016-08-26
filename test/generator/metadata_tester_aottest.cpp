@@ -408,25 +408,10 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     }
 }
 
-int EnumerateFunc(void* enumerate_context,
-    const halide_filter_metadata_t *metadata,
-    int (*argv_func)(void **args)) {
-  std::map<std::string, int> &enum_results = *reinterpret_cast<std::map<std::string, int>*>(enumerate_context);
-  enum_results[metadata->name] = metadata->num_arguments;
-  return 0;
-}
-
 int main(int argc, char **argv) {
     void* user_context = nullptr;
 
     int result;
-
-    std::map<std::string, int> enum_results;
-    result = halide_enumerate_registered_filters(user_context, &enum_results, EnumerateFunc);
-    EXPECT_EQ(0, result);
-    EXPECT_EQ(2, enum_results.size());
-    EXPECT_EQ(15, enum_results["metadata_tester"]);
-    EXPECT_EQ(16, enum_results["metadata_tester_ucon"]);
 
     Image<uint8_t> input = make_image<uint8_t>();
 
