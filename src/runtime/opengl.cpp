@@ -158,6 +158,7 @@ struct Argument {
 };
 
 struct KernelInfo {
+    char *name;
     char *source;
     Argument *arguments;
     GLuint shader_id;
@@ -336,6 +337,20 @@ WEAK char *strndup(const char *s, size_t n) {
     return p;
 }
 
+// Strip whitespace from the right side of
+// a string
+WEAK char *strstrip(char *str, size_t n) {
+    char *pos = str;
+    while (pos != str+n
+           && *pos != '\0'
+           && *pos != '\n'
+           && *pos != ' ') {
+        pos++;
+    }
+    *pos = '\0';
+    return str;
+}
+
 WEAK void debug_buffer(void *user_context, buffer_t *buf) {
     debug(user_context)
         << "  dev: " << buf->dev << "\n"
@@ -464,7 +479,8 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
 
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
-            // ignore
+            // set name
+            kernel->name = strstrip(strndup(args, next_line - args), next_line - args);
         } else if ((args = match_prefix(line, uniform_marker))) {
             if (Argument *arg =
                 parse_argument(user_context, args, next_line - 1)) {
@@ -544,6 +560,7 @@ WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
         arg = next;
     }
     free(kernel->source);
+    free(kernel->name);
     free(kernel);
 }
 
@@ -1383,6 +1400,23 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
 using namespace Halide::Runtime::Internal::OpenGL;
 
+// Find the correct module for the called function
+// TODO: This currently takes O(# of GLSL'd stages) and can
+// be optimized
+WEAK ModuleState* find_module(const char *stage_name) {
+    ModuleState* state_ptr = state_list;
+
+    while (state_ptr != NULL) {
+        KernelInfo *kernel = state_ptr->kernel;
+        if (kernel && strcmp(stage_name, kernel->name) == 0) {
+            return state_ptr;
+        }
+        state_ptr = state_ptr->next;
+    }
+
+    return NULL;
+}
+
 //  Create wrappers that satisfy old naming conventions
 
 extern "C" {
@@ -1405,17 +1439,14 @@ WEAK int halide_opengl_run(void *user_context,
 
     GLStateSaver state_saver;
 
-    ModuleState *mod = (ModuleState *)state_ptr;
+    // Find the right module
+    ModuleState *mod = find_module(entry_name);
     if (!mod) {
-        error(user_context) << "Internal error: module state is NULL";
-        return -1;
+      error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
+      return 1;
     }
 
     KernelInfo *kernel = mod->kernel;
-    if (!kernel) {
-        error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
-        return 1;
-    }
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
@@ -1888,32 +1919,46 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
 // code into a fragment shader.
 WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
                                           const char *src, int size) {
+    debug(user_context) << "In initialize_kernels\n";
+    
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
 
+    const char *this_kernel = src;
+
     ModuleState **state = (ModuleState **)state_ptr;
     ModuleState *module = *state;
-    if (!module) {
+
+    while (this_kernel) {
+        // Find the start of the next kernel
+        const char *next_kernel = strstr(this_kernel+1, kernel_marker);        
+
+        // Use that to compute the length of this kernel
+        int len = 0;
+        if (!next_kernel) {
+            len = strlen(this_kernel);
+        } else {
+            len = next_kernel - this_kernel;
+        }
+        
+        // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
         module->kernel = NULL;
         module->next = state_list;
         state_list = module;
         *state = module;
-    }
-
-    KernelInfo *kernel = module->kernel;
-    if (!kernel) {
-        kernel = create_kernel(user_context, src, size);
+        
+        KernelInfo *kernel = module->kernel;
         if (!kernel) {
-            error(user_context) << "Invalid kernel: " << src;
-            return -1;
+            kernel = create_kernel(user_context, this_kernel, len);
+            if (!kernel) {
+                error(user_context) << "Invalid kernel: " << this_kernel;
+                return -1;
+            }
+            module->kernel = kernel;
         }
-        module->kernel = kernel;
-    }
-
-    if (kernel->program_id == 0) {
-
+        
         // Create the vertex shader. The runtime will output boilerplate for the
         // vertex shader based on a fixed program plus arguments obtained from
         // the comment header passed in the fragment shader. Since there are a
@@ -1923,50 +1968,50 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         // vertex buffer.
         enum { PrinterLength = 1024*4 };
         Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
-
+        
         // Count the number of varying attributes, this is 2 for the spatial
         // x and y coordinates, plus the number of scalar varying attribute
         // expressions pulled out of the fragment shader.
         int num_varying_float = 2;
-
+        
         for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
             if (arg->kind == Argument::Varying)
                 ++num_varying_float;
         }
-
+        
         int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
-
+        
         for (int i = 0; i != num_packed_varying_float; ++i) {
             vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
             vertex_src << "varying   vec4 _varyingf" << i << ";\n";
         }
-
+        
         vertex_src << "uniform ivec2 output_min;\n"
                    << "uniform ivec2 output_extent;\n"
                    << "void main() {\n"
-
+            
                    // Host codegen always passes the spatial vertex coordinates
                    // in the first two elements of the _varyingf0_attrib
                    << "    vec2 position = vec2(_varyingf0_attrib[0], _varyingf0_attrib[1]);\n"
                    << "    gl_Position = vec4(position, 0.0, 1.0);\n"
                    << "    vec2 texcoord = 0.5 * position + 0.5;\n"
                    << "    vec2 pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
-
+        
         // Copy through all of the varying attributes
         for (int i = 0; i != num_packed_varying_float; ++i) {
             vertex_src << "    _varyingf" << i << " = _varyingf" << i << "_attrib;\n";
         }
-
+        
         vertex_src << "    _varyingf0.xy = pixcoord;\n";
-
+        
         vertex_src << "}\n";
-
+        
         // Check to see if there was sufficient storage for the vertex program.
         if (vertex_src.size() >= PrinterLength) {
             error(user_context) << "Vertex shader source truncated";
             return 1;
         }
-
+        
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,
                                               GL_VERTEX_SHADER, vertex_src.buf, NULL);
@@ -1974,7 +2019,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
         }
-
+        
         // Create the fragment shader
         GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
                                                 kernel->source, NULL);
@@ -1983,11 +2028,11 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         global_state.AttachShader(program, vertex_shader_id);
         global_state.AttachShader(program, fragment_shader_id);
         global_state.LinkProgram(program);
-
+        
         // Release the individual shaders
         global_state.DeleteShader(vertex_shader_id);
         global_state.DeleteShader(fragment_shader_id);
-
+        
         GLint status;
         global_state.GetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
@@ -2003,6 +2048,8 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             return -1;
         }
         kernel->program_id = program;
+        
+        this_kernel = next_kernel;
     }
     return 0;
 }

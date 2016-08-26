@@ -1,13 +1,6 @@
 #include <HalideRuntime.h>
-
-extern "C" {
 #include <qurt.h>
 #include <stdlib.h>
-#include <memory.h>
-}
-
-#include "log.h"
-
 
 struct halide_thread {
     qurt_thread_t val;
