@@ -1,23 +1,17 @@
-#include "sim_protocol.h"
-#include "../HalideRuntime.h"
-#include "log.h"
+#include "bin/src/halide_hexagon_remote.h"
+#include <HalideRuntime.h>
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
+#include <hexagon_standalone.h>
 
+#include "sim_protocol.h"
+#include "log.h"
 #include "elf.h"
-#include "hexagon_standalone.h"
 
-typedef struct _buffer__seq_octet _buffer__seq_octet;
-typedef _buffer__seq_octet buffer;
-struct _buffer__seq_octet {
-   unsigned char* data;
-   int dataLen;
-};
-typedef unsigned int handle_t;
-
-typedef handle_t handle_t;
+typedef halide_hexagon_remote_handle_t handle_t;
+typedef halide_hexagon_remote_buffer buffer;
 
 const int hvx_alignment = 128;
 
@@ -95,6 +89,13 @@ extern int ceilf;
 extern int ceil;
 
 }  // extern "C"
+
+void log_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
 
 void halide_print(void *user_context, const char *str) {
     log_printf("%s", str);

@@ -71,7 +71,7 @@ bool is_var_relop_simple_const(Expr e, string* name) {
 }
 
 bool is_var_simple_const_comparison(Expr e, string* name) {
-    // It's not clear if GT, LT, etc would be useful 
+    // It's not clear if GT, LT, etc would be useful
     // here; leaving them out until proven otherwise.
     return is_var_relop_simple_const<EQ>(e, name) ||
            is_var_relop_simple_const<NE>(e, name);
@@ -104,9 +104,9 @@ Expr indeterminate_expression_error(Type t) {
     return Call::make(t, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
 }
 
-// If 'e' is indeterminate_expression of type t, 
+// If 'e' is indeterminate_expression of type t,
 //      set *expr to it and return true.
-// If 'e' is indeterminate_expression of other type, 
+// If 'e' is indeterminate_expression of other type,
 //      make a new indeterminate_expression of the proper type, set *expr to it and return true.
 // Otherwise, leave *expr untouched and return false.
 bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
@@ -526,6 +526,9 @@ private:
             (b.as<Max>() && !a.as<Max>())) {
             std::swap(a, b);
         }
+        if ((b.as<Min>() && a.as<Max>())) {
+            std::swap(a, b);
+        }
 
         const Call *call_a = a.as<Call>();
         const Call *call_b = b.as<Call>();
@@ -551,6 +554,8 @@ private:
         const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): nullptr;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): nullptr;
         const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): nullptr;
+
+        const Max *max_b = b.as<Max>();
 
         const Min *min_a = a.as<Min>();
         const Max *max_a = a.as<Max>();
@@ -597,6 +602,14 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Add>(op);
+            } else {
+                expr = hoist_slice_vector<Add>(Add::make(a, b));
+            }
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -766,6 +779,18 @@ private:
                    ia + ib == 0) {
             // max(a + (-2), b) + 2 -> max(a, b + 2)
             expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // min(x, y) + max(x, y) -> x + y
+            expr = mutate(min_a->a + min_a->b);
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // min(x, y) + max(y, x) -> x + y
+            expr = mutate(min_a->a + min_a->b);
         } else if (no_overflow(op->type) &&
                    div_a &&
                    add_a_a &&
@@ -1346,7 +1371,10 @@ private:
             return;
         }
 
-        if (is_simple_const(a)) std::swap(a, b);
+        if (is_simple_const(a) ||
+            (b.as<Min>() && a.as<Max>())) {
+            std::swap(a, b);
+        }
 
         int64_t ia = 0, ib = 0;
         uint64_t ua = 0, ub = 0;
@@ -1361,7 +1389,9 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
+        const Min *min_a = a.as<Min>();
         const Mul *mul_b = b.as<Mul>();
+        const Max *max_b = b.as<Max>();
 
         if (is_zero(a)) {
             expr = a;
@@ -1388,7 +1418,15 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (broadcast_a && broadcast_b) {
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Mul>(op);
+            } else {
+                expr = hoist_slice_vector<Mul>(Mul::make(a, b));
+            }
+        }else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -1408,6 +1446,18 @@ private:
         } else if (mul_b && is_simple_const(mul_b->b)) {
             // Pull constants outside
             expr = mutate((a * mul_b->a) * mul_b->b);
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // min(x, y) * max(x, y) -> x*y
+            expr = mutate(min_a->a * min_a->b);
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // min(x, y) * max(y, x) -> x*y
+            expr = mutate(min_a->a * min_a->b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2158,6 +2208,18 @@ private:
             // min(max(a, 4), ((a + 3)/4)*4) -> max(a, 4)
             expr = a;
         } else if (max_a &&
+                   min_b &&
+                   equal(max_a->a, min_b->a) &&
+                   equal(max_a->b, min_b->b)) {
+            // min(max(x, y), min(x, y)) -> min(x, y)
+            expr = mutate(min(max_a->a, max_a->b));
+        } else if (max_a &&
+                   min_b &&
+                   equal(max_a->a, min_b->b) &&
+                   equal(max_a->b, min_b->a)) {
+            // min(max(x, y), min(y, x)) -> min(x, y)
+            expr = mutate(min(max_a->a, max_a->b));
+        } else if (max_a &&
                    equal(max_a->b, b)) {
             // min(max(x, y), y) -> y
             expr = b;
@@ -2324,6 +2386,14 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Min>(op);
+            } else {
+                expr = hoist_slice_vector<Min>(min(a, b));
+            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2500,6 +2570,18 @@ private:
                 expr = b;
             }
         } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // max(min(x, y), max(x, y)) -> max(x, y)
+            expr = mutate(max(min_a->a, min_a->b));
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // max(min(x, y), max(y, x)) -> max(x, y)
+            expr = mutate(max(min_a->a, min_a->b));
+        } else if (min_a &&
                    equal(min_a->b, b)) {
             // max(min(x, y), y) -> y
             expr = b;
@@ -2663,6 +2745,14 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Max>(op);
+            } else {
+                expr = hoist_slice_vector<Max>(max(a, b));
+            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -3196,7 +3286,7 @@ private:
         } else if (eq_a &&
                    neq_b &&
                    equal(eq_a->a, neq_b->a) &&
-                   is_simple_const(eq_a->b) && 
+                   is_simple_const(eq_a->b) &&
                    is_simple_const(neq_b->b)) {
             // (a == k1) && (a != k2) -> (a == k1) && (k1 != k2)
             // (second term always folds away)
@@ -3204,7 +3294,7 @@ private:
         } else if (neq_a &&
                    eq_b &&
                    equal(neq_a->a, eq_b->a) &&
-                   is_simple_const(neq_a->b) && 
+                   is_simple_const(neq_a->b) &&
                    is_simple_const(eq_b->b)) {
             // (a != k1) && (a == k2) -> (a == k2) && (k1 != k2)
             // (second term always folds away)
@@ -3308,7 +3398,7 @@ private:
         } else if (eq_a &&
                    neq_b &&
                    equal(eq_a->a, neq_b->a) &&
-                   is_simple_const(eq_a->b) && 
+                   is_simple_const(eq_a->b) &&
                    is_simple_const(neq_b->b)) {
             // (a == k1) || (a != k2) -> (a != k2) || (k1 == k2)
             // (second term always folds away)
@@ -3316,7 +3406,7 @@ private:
         } else if (neq_a &&
                    eq_b &&
                    equal(neq_a->a, eq_b->a) &&
-                   is_simple_const(neq_a->b) && 
+                   is_simple_const(neq_a->b) &&
                    is_simple_const(eq_b->b)) {
             // (a != k1) || (a == k2) -> (a != k1) || (k1 == k2)
             // (second term always folds away)
@@ -3330,7 +3420,7 @@ private:
                    ((is_var_simple_const_comparison(and_a->a, &name_a) && name_a == name_c) ||
                    (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
             // (a && b) || (c) -> (a || c) && (b || c)
-            // iff c and at least one of a or b is of the form 
+            // iff c and at least one of a or b is of the form
             //     (var == const) or (var != const)
             // (and the vars are the same)
             expr = mutate(And::make(Or::make(and_a->a, b), Or::make(and_a->b, b)));
@@ -3339,7 +3429,7 @@ private:
                    ((is_var_simple_const_comparison(and_b->a, &name_a) && name_a == name_c) ||
                    (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
             // (c) || (a && b) -> (a || c) && (b || c)
-            // iff c and at least one of a or b is of the form 
+            // iff c and at least one of a or b is of the form
             //     (var == const) or (var != const)
             // (and the vars are the same)
             expr = mutate(And::make(Or::make(and_b->a, a), Or::make(and_b->b, a)));
@@ -4025,6 +4115,59 @@ private:
             IRMutator::visit(op);
         }
     }
+    template <typename T>
+    Expr hoist_slice_vector(Expr e) {
+        const T *op = e.as<T>();
+        internal_assert(op);
+        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
+
+        const Call *call_a = op->a.template as<Call>();
+        const Call *call_b = op->b.template as<Call>();
+
+        internal_assert(call_a && call_b &&
+                        call_a->is_intrinsic(Call::slice_vector) &&
+                        call_b->is_intrinsic(Call::slice_vector));
+
+        if (!equal(call_a->args[1], call_b->args[1]) ||
+            !equal(call_a->args[2], call_b->args[2])) {
+            debug(4) << " ...unable to hoist - slice vector arguments don't match\n";
+            return e;
+        }
+
+        const Call *concat_a = call_a->args[0].as<Call>();
+        const Call *concat_b = call_b->args[0].as<Call>();
+        if (!concat_a || !concat_b) {
+            debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
+            return e;
+        }
+
+        const std::vector<Expr> &slices_a = concat_a->args;
+        const std::vector<Expr> &slices_b = concat_b->args;
+        if (slices_a.size() != slices_b.size()) {
+            return e;
+        }
+
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            if (slices_a[i].type() != slices_b[i].type()) {
+                debug(4) << " ...unable to hoist - type mismatch\n";
+                return e;
+            }
+        }
+
+        vector<Expr> new_slices;
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            new_slices.push_back(T::make(slices_a[i], slices_b[i]));
+        }
+
+        Expr start_lane = call_a->args[1];
+        Expr result_lanes = call_a->args[3];
+        Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
+        Expr ret_expr = Call::make(op->type, Call::slice_vector,
+                                   {concat_v, start_lane, call_a->args[2], result_lanes},
+                                   Call::PureIntrinsic);
+        debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
+        return ret_expr;
+    }
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
@@ -4056,14 +4199,19 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
-
+            const Call *call = new_value.as<Call>();
             const Variable *var_b = nullptr;
+            const Variable *var_a = nullptr;
             if (add) {
                 var_b = add->b.as<Variable>();
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       (call->args.size() == 2)) {
+                var_a = call->args[0].as<Variable>();
+                var_b = call->args[1].as<Variable>();
             }
 
             if (is_const(new_value)) {
@@ -4111,6 +4259,20 @@ private:
                 new_value = cast->value;
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
+            } else if (call && call->is_intrinsic(Call::slice_vector)) {
+                new_value = call->args[0];
+                new_var = Variable::make(new_value.type(), new_name);
+                replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
+                                                              {new_var, call->args[1], call->args[2], call->args[3]},
+                                                              Call::PureIntrinsic), replacement);
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       ((var_a && !var_b) || (!var_a && var_b))) {
+                new_var = Variable::make(var_a ? call->args[1].type() : call->args[0].type(), new_name);
+                Expr op_a = var_a ? call->args[0] : new_var;
+                Expr op_b = var_a ? new_var : call->args[1];
+                replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
+                                                              {op_a, op_b}, Call::PureIntrinsic), replacement);
+                new_value = var_a ? call->args[1] : call->args[0];
             } else {
                 break;
             }
@@ -5567,14 +5729,14 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
 }
 
 void check_indeterminate() {
-    const int32_t values[] = { 
+    const int32_t values[] = {
         -2147483648,
         -2147483647,
-        -2, 
-        -1, 
-        0, 
-        1, 
-        2, 
+        -2,
+        -1,
+        0,
+        1,
+        2,
         2147483647,
     };
 
@@ -5583,7 +5745,7 @@ void check_indeterminate() {
         check_indeterminate_ops(Expr(i1), !i1, false);
         for (int32_t i2 : values) {
             {
-                Expr e1(i1), e2(i2); 
+                Expr e1(i1), e2(i2);
                 Expr r = (e1 / e2);
                 bool r_is_zero = !i1 || (i2 != 0 && !div_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
                 bool r_is_ind = !i2;
@@ -5600,7 +5762,7 @@ void check_indeterminate() {
             {
                 uint32_t u1 = (uint32_t)i1;
                 uint32_t u2 = (uint32_t)i2;
-                Expr e1(u1), e2(u2); 
+                Expr e1(u1), e2(u2);
                 Expr r = (e1 / e2);
                 bool r_is_zero = !u1 || (u2 != 0 && !div_imp(u1, u2));
                 bool r_is_ind = !u2;
@@ -5673,6 +5835,30 @@ void simplify_test() {
 
     check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
           Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+
+    // Check min(x, y)*max(x, y) gets simplified into x*y
+    check(min(x, y)*max(x, y), x*y);
+    check(min(x, y)*max(y, x), x*y);
+    check(max(x, y)*min(x, y), x*y);
+    check(max(y, x)*min(x, y), x*y);
+
+    // Check min(x, y) + max(x, y) gets simplified into x + y
+    check(min(x, y) + max(x, y), x + y);
+    check(min(x, y) + max(y, x), x + y);
+    check(max(x, y) + min(x, y), x + y);
+    check(max(y, x) + min(x, y), x + y);
+
+    // Check max(min(x, y), max(x, y)) gets simplified into max(x, y)
+    check(max(min(x, y), max(x, y)), max(x, y));
+    check(max(min(x, y), max(y, x)), max(x, y));
+    check(max(max(x, y), min(x, y)), max(x, y));
+    check(max(max(y, x), min(x, y)), max(x, y));
+
+    // Check min(max(x, y), min(x, y)) gets simplified into min(x, y)
+    check(min(max(x, y), min(x, y)), min(x, y));
+    check(min(max(x, y), min(y, x)), min(x, y));
+    check(min(min(x, y), max(x, y)), min(x, y));
+    check(min(min(y, x), max(x, y)), min(x, y));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
