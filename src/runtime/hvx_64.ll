@@ -139,15 +139,15 @@ define weak_odr <32 x i32> @halide.hexagon.mul.vw.vuh(<32 x i32> %a, <32 x i16> 
 }
 
 ; Do vaslw.acc on double vectors.
-define private <32 x i32> @vaslw.acc.dv(<32 x i32> %ab_o, <32 x i32> %ab_e, i32 %shift) nounwind uwtable readnone alwaysinline {
-  %ab_e_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %ab_e)
-  %ab_o_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %ab_o)
-  %ab_lo = call <16 x i32> @llvm.hexagon.V6.vaslw.acc(<16 x i32> %ab_e_lo, <16 x i32> %ab_o_lo, i32 %shift)
-  %ab_e_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %ab_e)
-  %ab_o_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %ab_o)
-  %ab_hi = call <16 x i32> @llvm.hexagon.V6.vaslw.acc(<16 x i32> %ab_e_hi, <16 x i32> %ab_o_hi, i32 %shift)
-  %ab = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %ab_hi, <16 x i32> %ab_lo)
-  ret <32 x i32> %ab
+define private <32 x i32> @vaslw.acc.dv(<32 x i32> %a, <32 x i32> %l, i32 %r) nounwind uwtable readnone alwaysinline {
+  %a_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %a)
+  %l_lo = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %l)
+  %s_lo = call <16 x i32> @llvm.hexagon.V6.vaslw.acc(<16 x i32> %a_lo, <16 x i32> %l_lo, i32 %r)
+  %a_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %a)
+  %l_hi = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %l)
+  %s_hi = call <16 x i32> @llvm.hexagon.V6.vaslw.acc(<16 x i32> %a_hi, <16 x i32> %l_hi, i32 %r)
+  %s = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %s_hi, <16 x i32> %s_lo)
+  ret <32 x i32> %s
 }
 
 define weak_odr <32 x i32> @halide.hexagon.mul.vuw.vuh(<32 x i32> %a, <32 x i16> %b) nounwind uwtable readnone alwaysinline {
@@ -158,7 +158,7 @@ define weak_odr <32 x i32> @halide.hexagon.mul.vuw.vuh(<32 x i32> %a, <32 x i16>
   %b_32 = bitcast <32 x i16> %b to <16 x i32>
   %ab_e = call <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32> %a_e, <16 x i32> %b_32)
   %ab_o = call <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32> %a_o, <16 x i32> %b_32)
-  %ab = call <32 x i32> @vaslw.acc.dv(<32 x i32> %ab_o, <32 x i32> %ab_e, i32 16)
+  %ab = call <32 x i32> @vaslw.acc.dv(<32 x i32> %ab_e, <32 x i32> %ab_o, i32 16)
   ret <32 x i32> %ab
 }
 
@@ -174,7 +174,7 @@ define weak_odr <32 x i32> @halide.hexagon.mul.vuw.vuw(<32 x i32> %a, <32 x i32>
   %ab_e = call <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32> %a_e, <16 x i32> %b_e)
   %ab_o1 = call <32 x i32> @llvm.hexagon.V6.vmpyuhv(<16 x i32> %a_o, <16 x i32> %b_e)
   %ab_o = call <32 x i32> @llvm.hexagon.V6.vmpyuhv.acc(<32 x i32> %ab_o1, <16 x i32> %a_e, <16 x i32> %b_o)
-  %ab = call <32 x i32> @vaslw.acc.dv(<32 x i32> %ab_o, <32 x i32> %ab_e, i32 16)
+  %ab = call <32 x i32> @vaslw.acc.dv(<32 x i32> %ab_e, <32 x i32> %ab_o, i32 16)
   ret <32 x i32> %ab
 }
 
