@@ -5,10 +5,10 @@
 #include "daubechies_x.h"
 #include "inverse_daubechies_x.h"
 
-#include "halide_image.h"
+#include "HalideImage.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 namespace {
 

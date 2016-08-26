@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     buf.stride[3] = 1000;
     buf.elem_size = 4;
 
-    Image<int> im(&buf);
+    Image<int> im(buf);
 
     ((int *)buf.host)[0] = 17;
     buf.host[0] = 17;

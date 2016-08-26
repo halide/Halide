@@ -8,7 +8,7 @@ using namespace Halide;
 #include "benchmark.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 using std::vector;
 

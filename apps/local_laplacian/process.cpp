@@ -4,10 +4,10 @@
 #include "local_laplacian.h"
 
 #include "benchmark.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
     if (argc < 7) {

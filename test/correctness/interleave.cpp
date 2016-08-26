@@ -145,23 +145,19 @@ int main(int argc, char **argv) {
             .set_stride(1, 1)
             .set_extent(1, 3);
 
-        Buffer buff3;
-        buff3 = Buffer(Float(32), 16, 3, 0, 0, (uint8_t *)0);
-        buff3.raw_buffer()->stride[0] = 3;
-        buff3.raw_buffer()->stride[1] = 1;
+        Image<float> buff3(3, 16);
+        buff3.transpose(0, 1);
 
-        Realization r3({buff3});
-        interleaved.realize(r3);
+        interleaved.realize(buff3);
 
         check_interleave_count(interleaved, 1);
 
-        Image<float> result3 = r3[0];
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 3; y++) {
                 float correct = 3*x + y;
-                float delta = result3(x,y) - correct;
+                float delta = buff3(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result3(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff3(x,y), correct);
                     return -1;
                 }
             }
@@ -197,21 +193,17 @@ int main(int argc, char **argv) {
 
         check_interleave_count(output4, 1);
 
-        Buffer buff4;
-        buff4 = Buffer(Float(32), 16, 4, 0, 0, (uint8_t *)0);
-        buff4.raw_buffer()->stride[0] = 4;
-        buff4.raw_buffer()->stride[1] = 1;
+        Image<float> buff4(4, 16);
+        buff4.transpose(0, 1);
 
-        Realization r4({buff4});
-        output4.realize(r4);
+        output4.realize(buff4);
 
-        Image<float> result4 = r4[0];
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 4; y++) {
                 float correct = sin((y+1)*x);
-                float delta = result4(x,y) - correct;
+                float delta = buff4(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result4(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff4(x,y), correct);
                     return -1;
                 }
             }
@@ -240,21 +232,17 @@ int main(int argc, char **argv) {
 
         check_interleave_count(output5, 1);
 
-        Buffer buff5;
-        buff5 = Buffer(Float(32), 16, 5, 0, 0, (uint8_t *)0);
-        buff5.raw_buffer()->stride[0] = 5;
-        buff5.raw_buffer()->stride[1] = 1;
+        Image<float> buff5(5, 16);
+        buff5.transpose(0, 1);
 
-        Realization r5({buff5});
-        output5.realize(r5);
+        output5.realize(buff5);
 
-        Image<float> result5 = r5[0];
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 5; y++) {
                 float correct = sin((y+1)*x);
-                float delta = result5(x,y) - correct;
+                float delta = buff5(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result5(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff5(x,y), correct);
                     return -1;
                 }
             }
@@ -382,8 +370,8 @@ int main(int argc, char **argv) {
             .set_stride(0,1).set_stride(1,8)
             .set_extent(0,8).set_extent(1,8);
 
-        Image<uint16_t> result6(8,8);
-        Image<uint16_t> result7(8,8);
+        Image<uint16_t> result6(8, 8);
+        Image<uint16_t> result7(8, 8);
         trans1.realize(result6);
         trans2.realize(result7);
 

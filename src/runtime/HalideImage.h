@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include <cassert>
+#include <atomic>
 #include <stdint.h>
 #include <string.h>
 
@@ -21,9 +22,7 @@ struct halide_dimension_t {
     int min, extent, stride;
 };
 
-
 namespace Halide {
-namespace Tools {
 
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn &&f);
@@ -31,9 +30,12 @@ void for_each_element(const buffer_t &buf, Fn &&f);
 // Forward-declare our Image class
 template<typename T, int D> class Image;
 
-// This template exists so that Image is extensible with custom
-// operator()(Args...) methods.
-template<typename T, int D, typename ...Args> struct ImageAccessor;
+// This declaration exists so that Image is extensible with custom
+// operator()(Args...) methods. Add implementations of it for whatever
+// types you like. Use enable_if if necessary to stop the overloads
+// being ambiguous.
+template<typename Ret, typename T, int D, typename ...Args>
+Ret image_accessor(const Image<T, D> &, Args...);
 
 // A helper to check if a parameter pack is entirely implicitly
 // int-convertible to use with std::enable_if
@@ -65,16 +67,50 @@ struct AllInts<double, Args...> {
     static const bool value = false;
 };
 
-/** A class that wraps buffer_t and adds functionality. Acts as a base
- * class for the typed version below. Templated on the maximum
- * dimensionality it supports. Use it only when the the element type
- * is unknown, or generic. See the comments on the Image class below
- * for more details. */
-template<int D = 4>
-class Buffer {
-    static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
+/** A struct acting as a header for allocations owned by the Image
+ * class itself. */
+struct AllocationHeader {
+    void (*deallocate_fn)(void *);
+    std::atomic<int> ref_count;
+};
 
-protected:
+/** A templated Image class that wraps buffer_t and adds
+ * functionality. When using Halide from C++, this is the preferred
+ * way to create input and output buffers. The overhead of using this
+ * class relative to a naked buffer_t is minimal - it uses another
+ * ~100 bytes on the stack, and does no dynamic allocations when using
+ * it to represent existing memory. This overhead will shrink further
+ * in the future once buffer_t is deprecated.
+ *
+ * The template parameter T is the element type, and D is the maximum
+ * number of dimensions. It must be less than or equal to 4 for now.
+ *
+ * The class optionally allocates and owns memory for the image using
+ * a shared pointer allocated with the provided allocator. If they are
+ * null, malloc and free are used.  Any device-side allocation is
+ * considered as owned if and only if the host-side allocation is
+ * owned.
+ *
+ * For accessing the shape and type, this class provides both the
+ * buffer_t interface (extent[i], min[i], and stride[i] arrays, the
+ * elem_size field), and also the interface of the yet-to-come
+ * halide_buffer_t, which will replace buffer_t. This is intended to
+ * allow a gradual transition to halide_buffer_t. New code should
+ * access the shape via dim[i].extent, dim[i].min, dim[i].stride, and
+ * the type via the 'type' field. */
+template<typename T, int D = 4>
+class Image {
+    // Some helpers for checking properties of T
+    static const bool T_is_void = std::is_same<T, void>::value;
+    using not_void_T = typename std::conditional<T_is_void, uint8_t, T>::type;
+
+    // Get the Halide type of T. Callers should not use the result if
+    // T is void.
+    static halide_type_t static_halide_type() {
+        return halide_type_of<not_void_T>();
+    }
+
+    static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
 
     buffer_t buf = {0};
 
@@ -88,7 +124,30 @@ protected:
 
     /** The allocation owned by this Image. NULL if the Image does not
      * own the memory. */
-    std::shared_ptr<uint8_t> alloc;
+    AllocationHeader *alloc = nullptr;
+
+    /** Increment the reference count of any allocation */
+    void incref() {
+        if (alloc) {
+            alloc->ref_count++;
+        }
+    }
+
+    /** Decrement the reference count of any allocation and free host
+     * and device memory if it hits zero. Sets alloc to nullptr. */
+    void decref() {
+        if (alloc) {
+            int result = --(alloc->ref_count);
+            if (result == 0) {
+                if (buf.dev) {
+                    device_free();
+                }
+                void (*fn)(void *) = alloc->deallocate_fn;
+                fn(alloc);
+            }
+            alloc = nullptr;
+        }
+    }
 
     /** A temporary helper function to get the number of dimensions in
      * a buffer_t. Will disappear when halide_buffer_t is merged. */
@@ -125,6 +184,19 @@ protected:
     void initialize_shape(int) {
     }
 
+    /** Initialize the shape from a vector of extents */
+    void initialize_shape(const std::vector<int> &sizes) {
+        for (size_t i = 0; i < sizes.size(); i++) {
+            buf.min[i] = 0;
+            buf.extent[i] = sizes[i];
+            if (i == 0) {
+                buf.stride[i] = 1;
+            } else {
+                buf.stride[i] = buf.stride[i-1] * buf.extent[i-1];
+            }
+        }
+    }
+
     /** Initialize the shape from the static shape of an array */
     template<typename Array, size_t N>
     void initialize_shape_from_array_shape(int next, Array (&vals)[N]) {
@@ -139,30 +211,30 @@ protected:
     }
 
     /** Base case for the template recursion above. */
-    template<typename T>
-    void initialize_shape_from_array_shape(int, const T &) {
+    template<typename T2>
+    void initialize_shape_from_array_shape(int, const T2 &) {
     }
 
     /** Get the dimensionality of a multi-dimensional C array */
     template<typename Array, size_t N>
     static int dimensionality_of_array(Array (&vals)[N]) {
-        return Buffer<D>::dimensionality_of_array(vals[0]) + 1;
+        return dimensionality_of_array(vals[0]) + 1;
     }
 
-    template<typename T>
-    static int dimensionality_of_array(const T &) {
+    template<typename T2>
+    static int dimensionality_of_array(const T2 &) {
         return 0;
     }
 
     /** Get the underlying halide_type_t of an array's element type. */
     template<typename Array, size_t N>
     static halide_type_t scalar_type_of_array(Array (&vals)[N]) {
-        return Buffer<D>::scalar_type_of_array(vals[0]);
+        return scalar_type_of_array(vals[0]);
     }
 
-    template<typename T>
-    static halide_type_t scalar_type_of_array(const T &) {
-        return halide_type_of<typename std::remove_cv<T>::type>();
+    template<typename T2>
+    static halide_type_t scalar_type_of_array(const T2 &) {
+        return halide_type_of<typename std::remove_cv<T2>::type>();
     }
 
     /** Check if any args in a parameter pack are zero */
@@ -176,7 +248,16 @@ protected:
         return false;
     }
 
+    static bool any_zero(const std::vector<int> &v) {
+        for (int i : v) {
+            if (i == 0) return true;
+        }
+        return false;
+    }
+
 public:
+
+    typedef T ElemType;
 
     /** Read-only access to the shape */
     class Dimension {
@@ -218,6 +299,13 @@ public:
         return Dimension(buf, i);
     }
 
+    /** Access to the mins, strides, extents. Will be deprecated. Do not use. */
+    // @{
+    int min(int i) const { return dim(i).min(); }
+    int extent(int i) const { return dim(i).extent(); }
+    int stride(int i) const { return dim(i).stride(); }
+    // @}
+
     /** The total number of elements this buffer represents. Equal to
      * the product of the extents */
     size_t number_of_elements() const {
@@ -240,18 +328,18 @@ public:
 
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
-    uint8_t *begin() const {
+    T *begin() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
                 index += dim(i).stride() * (dim(i).extent() - 1);
             }
         }
-        return buf.host + index * buf.elem_size;
+        return (T *)(buf.host + index * buf.elem_size);
     }
 
     /** A pointer to one beyond the element with the highest address. */
-    uint8_t *end() const {
+    T *end() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
@@ -259,87 +347,167 @@ public:
             }
         }
         index += 1;
-        return buf.host + index * buf.elem_size;
+        return (T *)(buf.host + index * buf.elem_size);
     }
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)(end() - begin());
+        return (size_t)((uint8_t *)end() - (uint8_t *)begin());
     }
 
-    Buffer() {}
+    Image() {}
 
     /** Make a buffer from a buffer_t */
-    Buffer(const buffer_t &buf) {
+    Image(const buffer_t &buf) : ty(static_halide_type()) {
+        static_assert(!T_is_void, "Can't construct an Image<void> from a buffer_t. Type is unknown.");
         initialize_from_buffer(buf);
     }
 
-    /** Give Buffers access to the members of Buffers of different dimensionalities. */
-    template<int D2> friend class Buffer;
+    Image(halide_type_t t, const buffer_t &buf) : ty(t) {
+        initialize_from_buffer(buf);
+    }
 
-    /** Make a Buffer from another Buffer of possibly-different
-     * dimensionality. Asserts if D is less than the dimensionality of
-     * the argument. */
-    template<int D2>
-    Buffer(const Buffer<D2> &other) : buf(other.buf),
+    /** Give Images access to the members of Images of different dimensionalities and types. */
+    template<typename T2, int D2> friend class Image;
+
+    /** Fail an assertion at runtime or compile-time if an Image<T, D>
+     * cannot be constructed from some other Image type. */
+    template<typename T2, int D2>
+    void assert_can_convert_from(const Image<T2, D2> &other) {
+        static_assert((std::is_same<typename std::remove_const<T>::type, T2>::value ||
+                       T_is_void ||
+                       std::is_same<T2, void>::value),
+                      "type mismatch constructing Image");
+        if (D < D2) {
+            assert(other.dimensions() <= D);
+        }
+        if (std::is_same<T2, void>::value && !T_is_void) {
+            assert(other.ty == static_halide_type());
+        }
+    }
+
+    /** Make a Image<T> from another Image<T> of possibly-different
+     * dimensionality and type. Asserts if D is less than the
+     * dimensionality of the argument, or if there's a type
+     * mismatch. */
+    template<typename T2, int D2>
+    Image(const Image<T2, D2> &other) : buf(other.buf),
+                                        dims(other.dims),
+                                        ty(other.ty),
+                                        alloc(other.alloc) {
+        incref();
+        assert_can_convert_from(other);
+    }
+
+    Image(const Image<T, D> &other) : buf(other.buf),
                                       dims(other.dims),
                                       ty(other.ty),
                                       alloc(other.alloc) {
-        if (D < D2) {
-            assert(other.dimensions() <= D);
-        }
+        incref();
     }
 
-    /** Move-construct a Buffer from another Buffer of
+    /** Move-construct an Image from another Image of
      * possibly-different dimensionality. Asserts if D is less than
-     * the dimensionality of the argument. */
-    template<int D2>
-    Buffer(const Buffer<D2> &&other) : buf(other.buf),
-                                       dims(other.dims),
-                                       ty(other.ty),
-                                       alloc(std::move(other.alloc)) {
-        if (D < D2) {
-            assert(other.dimensions() <= D);
-        }
+     * the dimensionality of the argument, or if there's a type
+     * mismatch. */
+    template<typename T2, int D2>
+    Image(Image<T2, D2> &&other) : buf(other.buf),
+                                   dims(other.dims),
+                                   ty(other.ty),
+                                   alloc(other.alloc) {
+        other.alloc = nullptr;
+        assert_can_convert_from(other);
     }
 
+    Image(Image<T, D> &&other) : buf(other.buf),
+                                   dims(other.dims),
+                                   ty(other.ty),
+                                   alloc(other.alloc) {
+        other.alloc = nullptr;
+    }
 
-    /** Assign from another Buffer of possibly-different
-     * dimensionality. Asserts if D is less than the dimensionality of
-     * the argument. */
-    template<int D2>
-    Buffer<D> &operator=(const Buffer<D2> &other) {
-        if (D < D2) {
-            assert(other.dimensions() <= D);
-        }
+    /** Assign from another Image of possibly-different dimensionality
+     * and type. Asserts if D is less than the dimensionality of the
+     * argument, or if there's a type mismatch. */
+    template<typename T2, int D2>
+    Image<T, D> &operator=(const Image<T2, D2> &other) {
+        assert_can_convert_from(other);
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
-        alloc = other.alloc;
+        if (alloc != other.alloc) {
+            // Drop existing allocation
+            decref();
+            // Share other allocation
+            alloc = other.alloc;
+            incref();
+        }
         return *this;
     }
 
-    /** Move from another Buffer of possibly-different
-     * dimensionality. Asserts if D is less than the dimensionality of
-     * the argument. */
-    template<int D2>
-    Buffer<D> &operator=(const Buffer<D2> &&other) {
-        if (D < D2) {
-            assert(other.dimensions() <= D);
-        }
+    Image<T, D> &operator=(const Image<T, D> &other) {
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
-        alloc = std::move(other.alloc);
+        if (alloc != other.alloc) {
+            // Drop existing allocation
+            decref();
+            // Share other allocation
+            alloc = other.alloc;
+            incref();
+        }
         return *this;
+    }
+
+    /** Move from another Image of possibly-different dimensionality
+     * and type. Asserts if D is less than the dimensionality of the
+     * argument, or if there's a type mismatch. */
+    template<typename T2, int D2>
+    Image<T, D> &operator=(Image<T2, D2> &&other) {
+        assert_can_convert_from(other);
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
+        if (alloc != other.alloc) {
+            // Drop existing allocation
+            decref();
+            // Steal other allocation
+            alloc = other.alloc;
+            other.alloc = nullptr;
+        }
+        return *this;
+    }
+
+    Image<T, D> &operator=(Image<T, D> &&other) {
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
+        if (alloc != other.alloc) {
+            // Drop existing allocation
+            decref();
+            // Steal other allocation
+            alloc = other.alloc;
+            other.alloc = nullptr;
+        }
+        return *this;
+    }
+
+    /** Check the product of the extents fits in memory. */
+    void check_overflow() {
+        size_t size = 1;
+        for (int i = 0; i < dimensions(); i++) {
+            size *= dim(i).extent();
+        }
+        for (int i = 0; i < dimensions(); i++) {
+            size /= dim(i).extent();
+        }
+        assert(size == 1 && "Error: Overflow computing total size of buffer.");
     }
 
     /** Allocate memory for this Image. Drops the reference to any
      * existing memory. */
     void allocate(void *(*allocate_fn)(size_t) = nullptr,
                   void (*deallocate_fn)(void *) = nullptr) {
-        assert(buf.dev == 0);
-
         if (!allocate_fn) {
             allocate_fn = malloc;
         }
@@ -347,35 +515,80 @@ public:
             deallocate_fn = free;
         }
 
+        // Drop any existing allocation
+        decref();
+
         // Conservatively align images to 128 bytes. This is enough
         // alignment for all the platforms we might use.
         size_t size = size_in_bytes();
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
-        uint8_t *ptr;
-        ptr = (uint8_t *)allocate_fn(size + alignment - 1);
-        alloc.reset(ptr, deallocate_fn);
-        buf.host = (uint8_t *)((uintptr_t)(ptr + alignment - 1) & ~(alignment - 1));
+        alloc = (AllocationHeader *)allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
+        alloc->deallocate_fn = deallocate_fn;
+        alloc->ref_count = 1;
+        uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
+        buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
 
-   /** Allocate a new image of the given size. Pass zeroes to make a
-     * buffer suitable for bounds query calls. */
+    /** Allocate a new image of the given size with a runtime
+     * type. Only used when you do know what size you want but you
+     * don't know statically what type the elements are. Pass zeroes
+     * to make a buffer suitable for bounds query calls. */
     template<typename ...Args>
-    Buffer(halide_type_t t, int first, Args&&... rest) : ty(t) {
+    Image(halide_type_t t, int first, Args&&... rest) : ty(t) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
         static_assert(sizeof...(rest) < D,
-                      "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
+                      "Too many arguments to constructor. Use Image<T, D>, "
+                      "where D is at least the desired number of dimensions");
         initialize_shape(0, first, int(rest)...);
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         if (!any_zero(first, int(rest)...)) {
+            check_overflow();
             allocate();
         }
     }
 
-    /** Make a Buffer that refers to a statically sized array. Does not
+
+    /** Allocate a new image of the given size. Pass zeroes to make a
+     * buffer suitable for bounds query calls. */
+    template<typename ...Args>
+    Image(int first, Args&&... rest) : ty(static_halide_type()) {
+        static_assert(!T_is_void,
+                      "To construct an Image<void>, pass a halide_type_t as the first argument to the constructor");
+        static_assert(sizeof...(rest) < D,
+                      "Too many arguments to constructor. Use Image<T, D>, "
+                      "where D is at least the desired number of dimensions");
+        initialize_shape(0, first, int(rest)...);
+        buf.elem_size = ty.bytes();
+        dims = 1 + (int)(sizeof...(rest));
+        if (!any_zero(first, int(rest)...)) {
+            check_overflow();
+            allocate();
+        }
+    }
+
+    /** Allocate a new image of unknown type using a vector of ints as the size. */
+    Image(halide_type_t t, const std::vector<int> &sizes) : ty(t) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        assert(sizes.size() <= D);
+        initialize_shape(sizes);
+        buf.elem_size = ty.bytes();
+        dims = (int)sizes.size();
+        if (!any_zero(sizes)) {
+            check_overflow();
+            allocate();
+        }
+    }
+
+    /** Make an Image that refers to a statically sized array. Does not
      * take ownership of the data. */
     template<typename Array, size_t N>
-    explicit Buffer(Array (&vals)[N]) {
+    explicit Image(Array (&vals)[N]) {
         dims = dimensionality_of_array(vals);
         initialize_shape_from_array_shape(dims - 1, vals);
         ty = scalar_type_of_array(vals);
@@ -383,13 +596,32 @@ public:
         buf.host = (uint8_t *)vals;
     }
 
-    /** Initialize a Buffer from a pointer and some sizes. Assumes
+    /** Initialize an Image of runtime type from a pointer and some
+     * sizes. Assumes dense row-major packing and a min coordinate of
+     * zero. Does not take ownership of the data. */
+    template<typename ...Args>
+    explicit Image(halide_type_t t, void *data, int first, Args&&... rest) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        static_assert(sizeof...(rest) < D,
+                      "Too many arguments to constructor. Use Image<T, D>, "
+                      "where D is at least the desired number of dimensions");
+        ty = t;
+        initialize_shape(0, first, int(rest)...);
+        buf.elem_size = ty.bytes();
+        dims = 1 + (int)(sizeof...(rest));
+        buf.host = (uint8_t *)data;
+    }
+
+    /** Initialize an Image from a pointer and some sizes. Assumes
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data. */
-    template<typename T, typename ...Args>
-    explicit Buffer(T *data, int first, Args&&... rest) {
+    template<typename ...Args>
+    explicit Image(T *data, int first, Args&&... rest) {
         static_assert(sizeof...(rest) < D,
-                      "Too many arguments to constructor. Use Image<T, D>, where D is at least the desired number of dimensions");
+                      "Too many arguments to constructor. Use Image<T, D>, "
+                      "where D is at least the desired number of dimensions");
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         initialize_shape(0, first, int(rest)...);
         buf.elem_size = sizeof(T);
@@ -400,8 +632,27 @@ public:
     /** Initialize an Image from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data. */
-    template<typename T, int N, typename std::enable_if<N < D>::type>
-    explicit Buffer(T *data, halide_dimension_t shape[N]) {
+    template<int N, typename std::enable_if<N < D>::type>
+    explicit Image(halide_type_t t, void *data, halide_dimension_t shape[N]) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        ty = t;
+        dims = N;
+        for (int i = 0; i < N; i++) {
+            buf.min[i]    = shape[i].min;
+            buf.extent[i] = shape[i].extent;
+            buf.stride[i] = shape[i].stride;
+        }
+        buf.elem_size = ty.bytes();
+        buf.host = (uint8_t *)data;
+    }
+
+    /** Initialize an Image from a pointer to the min coordinate and
+     * an array describing the shape.  Does not take ownership of the
+     * data. */
+    template<int N, typename std::enable_if<N < D>::type>
+    explicit Image(T *data, halide_dimension_t shape[N]) {
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         dims = N;
         for (int i = 0; i < N; i++) {
@@ -413,8 +664,10 @@ public:
         buf.host = (uint8_t *)data;
     }
 
-    template<typename T>
-    explicit Buffer(T *data, halide_dimension_t shape[D]) {
+    explicit Image(halide_type_t t, void *data, halide_dimension_t shape[D]) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         dims = 0;
         for (int i = 0; i < D; i++) {
@@ -428,18 +681,22 @@ public:
         buf.host = (uint8_t *)data;
     }
 
-    /** If you use the (x, y, c) indexing convention, then Halide
-     * Images are stored planar by default. This function constructs
-     * an interleaved RGB or RGBA image that can still be indexed
-     * using (x, y, c). Passing it to a generator requires that the
-     * generator has been compiled with support for interleaved (also
-     * known as packed or chunky) memory layouts. */
-    static Buffer<D> make_interleaved(halide_type_t t, int width, int height, int channels) {
-        static_assert(D >= 3, "Not enough dimensions to make an interleaved image");
-        Buffer<D> im(t, channels, width, height);
-        im.transpose(0, 1);
-        im.transpose(1, 2);
-        return im;
+    explicit Image(T *data, halide_dimension_t shape[D]) {
+        ty = halide_type_of<typename std::remove_cv<T>::type>();
+        dims = 0;
+        for (int i = 0; i < D; i++) {
+            if (!shape[i].extent) break;
+            dims++;
+            buf.min[i]    = shape[i].min;
+            buf.extent[i] = shape[i].extent;
+            buf.stride[i] = shape[i].stride;
+        }
+        buf.elem_size = sizeof(T);
+        buf.host = (uint8_t *)data;
+    }
+
+    ~Image() {
+        decref();
     }
 
     /** Get a pointer to the raw buffer_t this wraps. */
@@ -450,6 +707,16 @@ public:
 
     const buffer_t *raw_buffer() const {
         return &buf;
+    }
+    // @}
+
+    /** Access to the untyped host pointer */
+    // @{
+    const void *host_ptr() const {
+        return buf.host;
+    }
+    void *host_ptr() {
+        return buf.host;
     }
     // @}
 
@@ -476,9 +743,9 @@ public:
      * or slice followed by copy to make a copy of only a portion of
      * the image. The new image uses the same memory layout as the
      * original, with holes compacted away. */
-    Buffer<D> copy(void *(*allocate_fn)(size_t) = nullptr,
-                   void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<D> src = *this;
+    Image<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
+                     void (*deallocate_fn)(void *) = nullptr) const {
+        Image<T, D> src = *this;
 
         // Reorder the dimensions of src to have strides in increasing order
         int swaps[(D*(D+1))/2];
@@ -493,12 +760,12 @@ public:
         }
 
         // Make a copy of it using this dimension ordering
-        Buffer<D> dst = src;
+        Image<T, D> dst = src;
         dst.allocate(allocate_fn, deallocate_fn);
 
         // Concatenate dense inner dimensions into contiguous memcpy tasks
-        Buffer<D> src_slice = src;
-        Buffer<D> dst_slice = dst;
+        Image<T, D> src_slice = src;
+        Image<T, D> dst_slice = dst;
         int64_t slice_size = 1;
         while (src_slice.dimensions && src_slice.dim(0).stride() == slice_size) {
             assert(dst_slice.dim(0).stride() == slice_size);
@@ -526,10 +793,10 @@ public:
      * the given dimension. Does not assert the crop region is within
      * the existing bounds. The cropped image drops any device
      * handle. */
-    Buffer<D> cropped(int d, int min, int extent) const {
+    Image<T, D> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
-        Buffer<D> im = *this;
+        Image<T, D> im = *this;
         // Drop the reference to any device allocation. It won't be
         // valid for the cropped image.
         im.buf.dev = 0;
@@ -551,10 +818,10 @@ public:
     /** Make an image that refers to a sub-rectangle of this image along
      * the first N dimensions. Does not assert the crop region is within
      * the existing bounds. The cropped image drops any device handle. */
-    Buffer<D> cropped(const std::vector<std::pair<int, int>> &rect) const {
+    Image<T, D> cropped(const std::vector<std::pair<int, int>> &rect) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
-        Buffer<D> im = *this;
+        Image<T, D> im = *this;
         // Drop the reference to any device allocation. It won't be
         // valid for the cropped image.
         im.buf.dev = 0;
@@ -573,8 +840,8 @@ public:
      * translated coordinates in the given dimension. Positive values
      * move the image data to the right or down relative to the
      * coordinate system. Drops any device handle. */
-    Buffer<D> translated(int d, int dx) const {
-        Buffer<D> im = *this;
+    Image<T, D> translated(int d, int dx) const {
+        Image<T, D> im = *this;
         im.buf.dev = 0;
         im.translate(d, dx);
         return im;
@@ -588,7 +855,7 @@ public:
     /** Make an image which refers to the same data translated along
      * the first N dimensions. */
     void translated(const std::vector<int> &delta) {
-        Buffer<D> im = *this;
+        Image<T, D> im = *this;
         im.buf.dev = 0;
         im.translate(delta);
         return im;
@@ -601,10 +868,21 @@ public:
         }
     }
 
+    /** Set the min coordinate of an image in the first N dimensions */
+    template<typename ...Args>
+    void set_min(Args... args) {
+        static_assert(sizeof...(args) <= D, "Too many arguments for dimensionality of Image");
+        assert(sizeof...(args) <= (size_t)dimensions());
+        const int x[] = {args...};
+        for (size_t i = 0; i < sizeof...(args); i++) {
+            buf.min[i] = x[i];
+        }
+    }
+
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
-    Buffer<D> transposed(int d1, int d2) const {
-        Buffer<D> im = *this;
+    Image<T, D> transposed(int d1, int d2) const {
+        Image<T, D> im = *this;
         im.transpose(d1, d2);
         return im;
     }
@@ -618,11 +896,11 @@ public:
 
     /** Make a lower-dimensional image that refers to one slice of this
      * image. Drops any device handle. */
-    Buffer<D-1> sliced(int d, int pos) const {
-        Buffer<D> im = *this;
+    Image<T, D-1> sliced(int d, int pos) const {
+        Image<T, D> im = *this;
         im.buf.dev = 0;
         im.slice(d, pos);
-        return Buffer<D-1>(std::move(im));
+        return Image<T, D-1>(std::move(im));
     }
 
     /** Slice an image in-place */
@@ -651,9 +929,9 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<D+1> embedded(int d, int pos) const {
+    Image<T, D+1> embedded(int d, int pos) const {
         assert(d >= 0 && d <= dimensions());
-        Buffer<D+1> im(*this);
+        Image<T, D+1> im(*this);
         im.buf.dev = 0;
         im.add_dimension();
         im.translate(im.dimensions() - 1, pos);
@@ -696,7 +974,7 @@ public:
      * for_each_element below for more details. */
     template<typename Fn>
     void for_each_element(Fn f) const {
-        Halide::Tools::for_each_element(buf, f);
+        Halide::for_each_element(buf, f);
     }
 
     /** Methods for managing any GPU allocation. */
@@ -717,157 +995,39 @@ public:
         buf.dev_dirty = v;
     }
 
-    void copy_to_host() {
+    void copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
-            halide_copy_to_host(NULL, &buf);
+            halide_copy_to_host(ctx, &buf);
         }
     }
 
-    void copy_to_device(const struct halide_device_interface *device_interface) {
+    void copy_to_device(const struct halide_device_interface *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
-            halide_copy_to_device(NULL, &buf, device_interface);
+            halide_copy_to_device(ctx, &buf, device_interface);
         }
     }
 
-    void device_free() {
-        halide_device_free(nullptr, &buf);
+    void device_free(void *ctx = nullptr) {
+        halide_device_free(ctx, &buf);
+    }
+
+    void device_sync(void *ctx = nullptr) {
+        halide_device_sync(ctx, &buf);
     }
     // @}
-};
 
-/** A templated Image class that wraps buffer_t and adds
- * functionality. When using Halide from C++, this is the preferred
- * way to create input and output buffers. The overhead of using this
- * class relative to a naked buffer_t is minimal - it uses another
- * ~100 bytes on the stack, and does no dynamic allocations when using
- * it to represent existing memory. This overhead will shrink further
- * in the future once buffer_t is deprecated.
- *
- * The template parameter T is the element type, and D is the maximum
- * number of dimensions. It must be less than or equal to 4 for now.
- *
- * The class optionally allocates and owns memory for the image using
- * a std::shared_ptr allocated with the provided allocator. If they
- * are null, malloc and free are used.  Any device-side allocation is
- * not owned, and must be freed manually using device_free.
- *
- * For accessing the shape and type, this class provides both the
- * buffer_t interface (extent[i], min[i], and stride[i] arrays, the
- * elem_size field), and also the interface of the yet-to-come
- * halide_buffer_t, which will replace buffer_t. This is intended to
- * allow a gradual transition to halide_buffer_t. New code should
- * access the shape via dim[i].extent, dim[i].min, dim[i].stride, and
- * the type via the 'type' field. */
-template<typename T, int D = 4>
-class Image : public Buffer<D> {
-    static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
-
-public:
-    typedef T ElemType;
-
-    /** Get the type of the elements. Overridden here because we
-     * statically know the type. */
-    halide_type_t type() const {
-        return halide_type_of<std::remove_cv<T>::type>();
-    }
-
-    Image() {}
-
-    Image(const buffer_t &buf) : Buffer<D>(buf) {}
-
-    /** Allocate a new image of the given size. Pass zeroes to make a
-     * buffer suitable for bounds query calls. */
-    template<typename ...Args>
-    Image(int first, Args&&... rest) :
-        Buffer<D>(halide_type_of<typename std::remove_cv<T>::type>(), first, int(rest)...) {}
-
-    /** Make an image that refers to a statically sized array. Does not
-     * take ownership of the data. */
-    template<typename Array, size_t N>
-    explicit Image(Array (&vals)[N]) :
-        Buffer<D>(vals) {}
-
-    /** Initialize an Image from a pointer and some sizes. Assumes
-     * dense row-major packing and a min coordinate of zero. Does not
-     * take ownership of the data. */
-    template<typename ...Args>
-    explicit Image(T *data, int first, Args&&... rest) :
-        Buffer<D>(data, first, int(rest)...) {}
-
-    /** Initialize an Image from a pointer to the min coordinate and
-     * an array describing the shape.  Does not take ownership of the
-     * data. */
-    template<int N, typename std::enable_if<N < D>::type>
-    explicit Image(T *data, halide_dimension_t shape[N]) : Buffer<D>(data, shape) {}
-
-    /** Initialize an Image from a pointer to the min coordinate and
-     * an array describing the shape.  Does not take ownership of the
-     * data. This version exists so that there's a non-templated
-     * version to use in case the Image is a derived type and so N
-     * can't be inferred in the version above. */
-    explicit Image(T *data, halide_dimension_t shape[D]) :
-        Buffer<D>(data, shape) {}
-
-    /** Construct a typed Image from an untyped Buffer. Asserts at
-     * runtime if there's a type mismatch, or if the dimensionality of
-     * the buffer is less than D. */
-    template<int D2>
-    Image(const Buffer<D2> &buf) : Buffer<D>(buf) {
-        assert(halide_type_of<typename std::remove_cv<T>::type>() == buf.type());
-    }
-
-    /** Move-construct a typed Image from an untyped Buffer. Asserts
-     * at runtime if there's a type mismatch, or if the dimensionality
-     * of the buffer is less than D. */
-    template<int D2>
-    Image(const Buffer<D2> &&buf) : Buffer<D>(buf) {
-        assert(halide_type_of<typename std::remove_cv<T>::type>() == buf.type());
-    }
-
-    /** Construct an Image from an Image of a different
-     * dimensionality. Asserts at runtime the other dimensionality is
-     * greater than D. Asserts at compile-time if the element type
-     * doesn't match. This constructor is templated on the element
-     * type of the argument so that the Buffer constructor above is
-     * not used for Images with mismatched types.
-     */
-    template<typename T2, int D2>
-    Image(const Image<T2, D2> &buf) : Buffer<D>(buf) {
-        static_assert(std::is_same<typename std::remove_cv<T>::type, T2>::value,
-                      "Can't construct an Image from an Image of different element type, "
-                      "with the exception of casting an Image<T> to an Image<const T>.");
-    }
-
-    /** Move-construct an Image from an Image of a different
-     * dimensionality. Asserts at runtime the other dimensionality is
-     * greater than D. Asserts at compile-time if the element type
-     * doesn't match.
-     */
-    template<typename T2, int D2>
-    Image(const Image<T2, D2> &&buf) : Buffer<D>(buf) {
-        static_assert(std::is_same<typename std::remove_cv<T>::type, T2>::value,
-                      "Can't construct an Image from an Image of different element type, "
-                      "with the exception of casting an Image<T> to an Image<const T>.");
-    }
-
-    /** Assign an Image from an Image of a different
-     * dimensionality. Asserts at runtime the other dimensionality is
-     * greater than D.
-     */
-    template<int D2>
-    Image<T, D> &operator=(const Image<T, D2> &other) {
-        Buffer<D>::operator=(other);
-        return *this;
-    }
-
-    /** Move-assign an Image from an Image of a different
-     * dimensionality. Asserts at runtime the other dimensionality is
-     * greater than D.
-     */
-    template<int D2>
-    Image<T, D> &operator=(const Image<T, D2> &&other) {
-        Buffer<D>::operator=(other);
-        return *this;
+    /** If you use the (x, y, c) indexing convention, then Halide
+     * Images are stored planar by default. This function constructs
+     * an interleaved RGB or RGBA image that can still be indexed
+     * using (x, y, c). Passing it to a generator requires that the
+     * generator has been compiled with support for interleaved (also
+     * known as packed or chunky) memory layouts. */
+    static Image<void, D> make_interleaved(halide_type_t t, int width, int height, int channels) {
+        static_assert(D >= 3, "Not enough dimensions to make an interleaved image");
+        Image<void, D> im(t, channels, width, height);
+        im.transpose(0, 1);
+        im.transpose(1, 2);
+        return im;
     }
 
     /** If you use the (x, y, c) indexing convention, then Halide
@@ -884,12 +1044,36 @@ public:
         return im;
     }
 
+    /** Wrap an existing interleaved image. */
+    static Image<void, D> make_interleaved(halide_type_t t, T *data, int width, int height, int channels) {
+        static_assert(D >= 3, "Not enough dimensions to make an interleaved image");
+        Image<void, D> im(t, data, channels, width, height);
+        im.transpose(0, 1);
+        im.transpose(1, 2);
+        return im;
+    }
+
+    /** Wrap an existing interleaved image. */
+    static Image<T, D> make_interleaved(T *data, int width, int height, int channels) {
+        static_assert(D >= 3, "Not enough dimensions to make an interleaved image");
+        Image<T, D> im(data, channels, width, height);
+        im.transpose(0, 1);
+        im.transpose(1, 2);
+        return im;
+    }
+
+    /** Make a zero-dimensional Image */
+    static Image<void, D> make_scalar(halide_type_t t) {
+        return Image<void, 1>(t, 1).sliced(0, 0);
+    }
+
     /** Make a zero-dimensional Image */
     static Image<T, D> make_scalar() {
         return Image<T, 1>(1).sliced(0, 0);
     }
 
 private:
+
     template<typename ...Args>
      __attribute__((always_inline))
     T *address_of(int d, int first, Args... rest) const {
@@ -931,57 +1115,72 @@ public:
     //@{
     template<typename ...Args>
     __attribute__((always_inline))
-    typename std::enable_if<AllInts<Args...>::value, const T &>::type
+    typename std::enable_if<AllInts<Args...>::value, const not_void_T &>::type
     operator()(int first, Args... rest) const {
-        return *(address_of(0, first, rest...));
+        static_assert(!T_is_void,
+                      "Cannot use operator() on Image<void> types");
+        return *((const not_void_T *)(address_of(0, first, rest...)));
     }
 
     __attribute__((always_inline))
-    const T &operator()() const {
-        return *(address_of(0));
+    const not_void_T &
+    operator()() const {
+        static_assert(!T_is_void,
+                      "Cannot use operator() on Image<void> types");
+        return *((const not_void_T *)(data()));
     }
 
     __attribute__((always_inline))
-    const T &operator()(const int *pos) const {
-        return *((T *)address_of(pos));
+    const not_void_T &
+    operator()(const int *pos) const {
+        static_assert(!T_is_void,
+                      "Cannot use operator() on Image<void> types");
+        return *((const not_void_T *)(address_of(pos)));
     }
 
     template<typename ...Args>
     __attribute__((always_inline))
-    typename std::enable_if<AllInts<Args...>::value, T &>::type
+    typename std::enable_if<AllInts<Args...>::value, not_void_T &>::type
     operator()(int first, Args... rest) {
-        return *(address_of(0, first, rest...));
+        static_assert(!T_is_void,
+                      "Cannot use operator() on Image<void> types");
+        return *((not_void_T *)(address_of(0, first, rest...)));
     }
 
     __attribute__((always_inline))
-    T &operator()() {
-        return *(address_of(0));
+    not_void_T &
+    operator()() {
+        static_assert(!T_is_void,
+                      "Cannot use operator() on Image<void> types");
+        return *((not_void_T *)(data()));
     }
 
     __attribute__((always_inline))
-    T &operator()(const int *pos) {
-        return *((T *)address_of(pos));
+    not_void_T &
+    operator()(const int *pos) {
+        static_assert(!T_is_void,
+                      "Cannot use operator() on Image<void> types");
+        return *((not_void_T *)(address_of(pos)));
     }
     // @}
 
     /** Other calls to operator()(Args...) get redirected to a call to
-     * ImageAccessor<T, D, Args...>::operator(const Image<T, D> &,
-     * Args...).  This makes it possible for later code to add new
-     * Image access methods for types not convertible to int
-     * (e.g. Exprs). To add a custom accessor, define a template
-     * specialization of ImageAccessor with an operator() method that
-     * takes the expected arguments. See
+     * image_accessor(const Image<T, D> &, Args...). This makes it
+     * possible for later code to add new Image access methods for
+     * types not convertible to int (e.g. Exprs). To add a custom
+     * accessor, define an overload of image_accessor that takes the
+     * expected arguments. See
      * test/correctness/custom_image_accessor.cpp for an example. */
     template<typename ...Args>
     auto operator()(Args... args) const ->
-        decltype(ImageAccessor<T, D, Args...>()(*this, args...)) {
-        return ImageAccessor<T, D, Args...>()(*this, args...);
+        decltype(image_accessor(*this, args...)) {
+        return image_accessor(*this, args...);
     }
 
     template<typename ...Args>
     auto operator()(Args... args) ->
-        decltype(ImageAccessor<T, D, Args...>()(*this, args...)) {
-        return ImageAccessor<T, D, Args...>()(*this, args...);
+        decltype(image_accessor(*this, args...)) {
+        return image_accessor(*this, args...);
     }
 
 private:
@@ -989,9 +1188,9 @@ private:
     // lambda of the correct dimensionality.
     template<typename ...Args>
     typename std::enable_if<(sizeof...(Args) < D)>::type
-    fill_helper(T val, Args... args) {
-        if (sizeof...(Args) == Buffer<D>::dimensions()) {
-            Buffer<D>::for_each_element([&](Args... args) {(*this)(args...) = val;});
+    fill_helper(not_void_T val, Args... args) {
+        if (sizeof...(Args) == dimensions()) {
+            for_each_element([&](Args... args) {(*this)(args...) = val;});
         } else {
             fill_helper(val, 0, args...);
         }
@@ -999,72 +1198,16 @@ private:
 
     template<typename ...Args>
     typename std::enable_if<(sizeof...(Args) == D)>::type
-    fill_helper(T val, Args...) {
-        Buffer<D>::for_each_element([&](Args... args) {(*this)(args...) = val;});
+    fill_helper(not_void_T val, Args...) {
+        for_each_element([&](Args... args) {(*this)(args...) = val;});
     }
 
 public:
 
     /** Set every value in the buffer to the given value */
-    void fill(T val) {
+    template<typename = std::enable_if<(!T_is_void)>>
+    void fill(not_void_T val) {
         fill_helper(val);
-    }
-
-    /** Make a new image which is a deep copy of this image. Use crop
-     * or slice followed by copy to make a copy of only a portion of
-     * the image. The new image uses the same memory layout as the
-     * original, with holes compacted away. */
-    Image<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
-                     void (*deallocate_fn)(void *) = nullptr) const {
-        return Image<T, D>(Buffer<D>::copy(allocate_fn, deallocate_fn));
-    }
-
-    /** Make an image that refers to a sub-range of this image along
-     * the given dimension. Does not assert the crop region is within
-     * the existing bounds. */
-    Image<T, D> cropped(int d, int min, int extent) const {
-        return Image<T, D>(Buffer<D>::cropped(d, min, extent));
-    }
-
-    /** Make an image that refers to a sub-rectangle of this image along
-     * the first N dimensions. Does not assert the crop region is within
-     * the existing bounds. The cropped image drops any device handle. */
-    Image<T, D> cropped(const std::vector<std::pair<int, int>> &rect) const {
-        return Image<T, D>(Buffer<D>::cropped(rect));
-    }
-
-    /** Make an image which refers to the same data with using
-     * translated coordinates in the given dimension. Positive values
-     * move the image data to the right or down relative to the
-     * coordinate system. */
-    Image<T, D> translated(int d, int dx) const {
-        return Image<T, D>(Buffer<D>::translated(d, dx));
-    }
-
-    /** Make an image which refers to the same data with using
-     * translated coordinates along the first N dimensions. Positive
-     * values move the image data to the right or down relative to the
-     * coordinate system. */
-    Image<T, D> translated(const std::vector<int> &delta) const {
-        return Image<T, D>(Buffer<D>::translated(delta));
-    }
-
-    /** Make an image which refers to the same data using a different
-     * ordering of the dimensions. */
-    Image<T, D> transposed(int d1, int d2) const {
-        return Image<T, D>(Buffer<D>::transposed(d1, d2));
-    }
-
-    /** Make a lower-dimensional image that refers to one slice of this
-     * image. */
-    Image<T, D-1> sliced(int d, int pos) const {
-        return Image<T, D-1>(Buffer<D>::sliced(d, pos));
-    }
-
-    /** Make a higher-dimensional image in which this image is one
-     * slice. The opposite of sliced. */
-    Image<T, D+1> embedded(int d, int pos) const {
-        return Image<T, D+1>(Buffer<D>::embedded(d, pos));
     }
 
 };
@@ -1263,7 +1406,8 @@ void for_each_element(const buffer_t &buf, Fn &&f) {
     for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
 }
 
-}  // namespace Tools
+
+
 }  // namespace Halide
 
 #endif  // HALIDE_RUNTIME_IMAGE_H

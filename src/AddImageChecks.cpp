@@ -387,7 +387,7 @@ Stmt add_image_checks(Stmt s,
 
                     stride_constrained = param.stride_constraint(i);
                 } else if (image.defined() && (int)i < image.dimensions()) {
-                    stride_constrained = image.stride(i);
+                    stride_constrained = image.dim(i).stride();
                 }
 
                 std::string min0_name = buffer_name + ".0.min." + dim;
@@ -404,9 +404,9 @@ Stmt add_image_checks(Stmt s,
                     extent_constrained = Variable::make(Int(32), extent0_name);
                 }
             } else if (image.defined() && (int)i < image.dimensions()) {
-                stride_constrained = image.stride(i);
-                extent_constrained = image.extent(i);
-                min_constrained = image.min(i);
+                stride_constrained = image.dim(i).stride();
+                extent_constrained = image.dim(i).extent();
+                min_constrained = image.dim(i).min();
             } else if (param.defined()) {
                 stride_constrained = param.stride_constraint(i);
                 extent_constrained = param.extent_constraint(i);

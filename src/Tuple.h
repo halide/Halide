@@ -89,9 +89,16 @@ public:
         return buffers[0];
     }
 
+    /** Single-element realizations are implicitly castable to Images. */
+    template<typename T, int D>
+    operator Image<T, D>() const {
+        return buffers[0];
+    }
+
     /** Construct a Realization from some Buffers. */
     //@{
-    template<typename ...Args>
+    template<typename ...Args,
+             typename = std::enable_if<Internal::all_are_convertible<Buffer, Args...>::value>>
     Realization(Buffer a, Buffer b, Args&&... args) {
         buffers = std::vector<Buffer>{a, b, std::forward<Args>(args)...};
     }

@@ -261,7 +261,7 @@ void Pipeline::compile_to_static_library(const string &filename_prefix,
     m.compile(outputs);
 }
 
-void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix, 
+void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                      const std::vector<Argument> &args,
                                                      const std::vector<Target> &targets) {
     auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
@@ -940,16 +940,14 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         Type type = output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func \"" << func.name()
+            << "\" into Buffer at " << (void *)dst[i].host_ptr()
+            << " because Buffer is " << dst[i].dimensions()
+            << "-dimensional, but Func \"" << func.name()
             << "\" is " << dims << "-dimensional.\n";
         user_assert(dst[i].type() == type)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" has type " << dst[i].type()
+            << "\" into Buffer at " << (void *)dst[i].host_ptr()
+            << " because Buffer has type " << Type(dst[i].type())
             << ", but Func \"" << func.name()
             << "\" has type " << type << ".\n";
     }
@@ -983,12 +981,10 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (Buffer buf : dst.as_vector()) {
-        internal_assert(buf.defined()) << "Can't realize into an undefined Buffer\n";
+    for (const Buffer &buf : dst.as_vector()) {
         arg_values.push_back(buf.raw_buffer());
         const void *ptr = arg_values.back();
-        debug(1) << "JIT output buffer " << buf.name()
-                 << " @ " << ptr << "\n";
+        debug(1) << "JIT output buffer @ " << ptr << "\n";
     }
 
     return arg_values;
@@ -1237,42 +1233,24 @@ void Pipeline::infer_input_bounds(Realization dst) {
                            << buf.min[2] + buf.extent[2] << ","
                            << buf.min[3] + buf.extent[3] << ")\n";
 
-        // Figure out how much memory to allocate for this buffer
-        size_t min_idx = 0, max_idx = 0;
-        for (int d = 0; d < 4; d++) {
-            if (buf.stride[d] > 0) {
-                min_idx += buf.min[d] * buf.stride[d];
-                max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-            } else {
-                max_idx += buf.min[d] * buf.stride[d];
-                min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-            }
-        }
-        size_t total_size = (max_idx - min_idx);
-        while (total_size & 0x1f) total_size++;
-
-        // Allocate enough memory with the right dimensionality.
-        Buffer buffer(ia.param.type(), total_size,
-                      buf.extent[1] > 0 ? 1 : 0,
-                      buf.extent[2] > 0 ? 1 : 0,
-                      buf.extent[3] > 0 ? 1 : 0);
-
-        // Rewrite the buffer fields to match the ones returned
-        for (int d = 0; d < 4; d++) {
-            buffer.raw_buffer()->min[d] = buf.min[d];
-            buffer.raw_buffer()->stride[d] = buf.stride[d];
-            buffer.raw_buffer()->extent[d] = buf.extent[d];
-        }
-        ia.param.set_buffer(buffer);
+        Image<void> im(ia.param.type(), buf);
+        im.allocate();
+        ia.param.set_buffer(im);
     }
 }
 
 void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
+    vector<int> size;
+    if (x_size) size.push_back(x_size);
+    if (y_size) size.push_back(y_size);
+    if (z_size) size.push_back(z_size);
+    if (w_size) size.push_back(w_size);
+
     vector<Buffer> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, x_size, y_size, z_size, w_size));
+        bufs.push_back(Buffer(t, size));
     }
     Realization r(bufs);
     infer_input_bounds(r);

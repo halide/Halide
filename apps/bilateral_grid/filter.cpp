@@ -5,10 +5,10 @@
 #include "bilateral_grid.h"
 
 #include "benchmark.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
 
