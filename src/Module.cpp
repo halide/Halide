@@ -23,16 +23,16 @@ namespace {
 class TemporaryObjectFileDir final {
 public:
     TemporaryObjectFileDir() : dir_path(dir_make_temp()) {}
-    ~TemporaryObjectFileDir() { 
+    ~TemporaryObjectFileDir() {
         for (const auto &f : dir_files) {
             debug(1) << "file_unlink: " << f << "\n";
             file_unlink(f);
         }
         debug(1) << "dir_rmdir: " << dir_path << "\n";
-        dir_rmdir(dir_path); 
+        dir_rmdir(dir_path);
     }
-    std::string add_temp_object_file(const std::string &base_path_name, 
-                                     const std::string &suffix, 
+    std::string add_temp_object_file(const std::string &base_path_name,
+                                     const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
         const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
@@ -254,7 +254,7 @@ void Module::compile(const Outputs &output_files) const {
 Outputs compile_standalone_runtime(const Outputs &output_files, Target t) {
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
     // For runtime, it only makes sense to output object files or static_library, so ignore
-    // everything else. 
+    // everything else.
     Outputs actual_outputs = Outputs().object(output_files.object_name).static_library(output_files.static_library_name);
     empty.compile(actual_outputs);
     return actual_outputs;
@@ -264,9 +264,9 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
     compile_standalone_runtime(Outputs().object(object_filename), t);
 }
 
-void compile_multitarget(const std::string &fn_name, 
+void compile_multitarget(const std::string &fn_name,
                          const Outputs &output_files,
-                         const std::vector<Target> &targets, 
+                         const std::vector<Target> &targets,
                          ModuleProducer module_producer) {
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
@@ -356,7 +356,7 @@ void compile_multitarget(const std::string &fn_name,
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
         const Target runtime_target = base_target.without_feature(Target::NoRuntime);
-        compile_standalone_runtime(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target)), 
+        compile_standalone_runtime(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target)),
             runtime_target);
     }
 
@@ -386,7 +386,7 @@ void compile_multitarget(const std::string &fn_name,
     // may get optimized away at link time.
     wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
-    if (!output_files.c_header_name.empty()) { 
+    if (!output_files.c_header_name.empty()) {
         debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
         wrapper_module.compile(Outputs().c_header(output_files.c_header_name));
     }

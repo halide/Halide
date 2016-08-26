@@ -180,27 +180,13 @@ public:
     ValidateInterleavedVectorizedPipeline(int _channels) : ValidateInterleavedPipeline(_channels) {}
 };
 
-Image<uint8_t> make_interleaved_image(uint8_t *host, int W, int H, int channels) {
-    buffer_t buf = { 0 };
-    buf.host = host;
-    buf.extent[0] = W;
-    buf.stride[0] = channels;
-    buf.extent[1] = H;
-    buf.stride[1] = buf.stride[0] * buf.extent[0];
-    buf.extent[2] = channels;
-    buf.stride[2] = 1;
-    buf.elem_size = 1;
-    return Image<uint8_t>(&buf);
-}
-
 void copy_interleaved(bool vectorized = false, int channels = 4) {
     ImageParam input8(UInt(8), 3, "input");
     input8.set_stride(0, channels)
         .set_stride(1, Halide::Expr())
         .set_stride(2, 1)
         .set_bounds(2, 0, channels);  // expecting interleaved image
-    uint8_t *in_buf = new uint8_t[128 * 128 * channels];
-    Image<uint8_t> in = make_interleaved_image(in_buf, 128, 128, channels);
+    Image<uint8_t> in = Image<uint8_t>::make_interleaved(128, 128, channels);
     input8.set(in);
 
     Var x, y, c;
@@ -214,16 +200,16 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
 
     result.bound(c, 0, channels);
     result.shader(x, y, c, DeviceAPI::Renderscript);
-    if (vectorized) result.vectorize(c);
+    if (vectorized) {
+        result.vectorize(c);
+    }
 
     result.add_custom_lowering_pass(
-        vectorized?
+        vectorized ?
             new ValidateInterleavedVectorizedPipeline(channels):
             new ValidateInterleavedPipeline(channels));
 
     result.compile_jit();
-
-    delete[] in_buf;
 }
 
 int main(int argc, char **argv) {

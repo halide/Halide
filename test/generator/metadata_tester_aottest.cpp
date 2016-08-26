@@ -1,5 +1,5 @@
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -10,7 +10,7 @@
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int kSize = 32;
 

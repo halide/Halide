@@ -11,7 +11,6 @@
 
 #include "Buffer.h"
 #include "IntrusivePtr.h"
-#include "Image.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Tuple.h"
@@ -363,8 +362,8 @@ public:
     EXPORT void realize(Realization dst, const Target &target = Target());
     EXPORT void realize(Buffer dst, const Target &target = Target());
 
-    template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = Target()) {
+    template<typename T, int D>
+    NO_INLINE void realize(Image<T, D> dst, const Target &target = Target()) {
         // Images are expected to exist on-host.
         realize(Buffer(dst), target);
         dst.copy_to_host();
@@ -380,6 +379,17 @@ public:
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
     EXPORT void infer_input_bounds(Buffer dst);
+
+    template<typename T, int D>
+    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
+        // It's possible for bounds inference to also manipulate
+        // output buffers if their host pointer is null, so we must
+        // take Images by reference and communicate the bounds query
+        // result by modifying the argument.
+        Buffer b(im);
+        infer_input_bounds(b);
+        im = b.get();
+    }
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

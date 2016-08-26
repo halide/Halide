@@ -1527,12 +1527,13 @@ void bounds_test() {
     vector<Expr> input_site_2 = {2*x+1};
     vector<Expr> output_site = {x+1};
 
-    Buffer in(Int(32), {10}, nullptr, "input");
+    Image<int32_t, 1> in(10);
+    Buffer in_buf(in, "input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",
-                                        {Add::make(Call::make(in, input_site_1),
-                                                   Call::make(in, input_site_2))},
+                                        {Add::make(Call::make(in_buf, input_site_1),
+                                                   Call::make(in_buf, input_site_2))},
                                         output_site));
 
     map<string, Box> r;

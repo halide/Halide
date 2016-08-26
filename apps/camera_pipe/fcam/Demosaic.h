@@ -3,7 +3,7 @@
 
 /** \file
  * Converting RAW data to RGB24 by demosiacking and gamma correcting. */
-#include "halide_image.h"
+#include "HalideImage.h"
 
 namespace FCam {
 

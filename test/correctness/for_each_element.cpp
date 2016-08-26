@@ -1,6 +1,6 @@
-#include "halide_image.h"
+#include "Halide.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
     // Try several different ways of accessing a the pixels of an image,

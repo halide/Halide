@@ -72,6 +72,9 @@ struct Argument {
             << "Scalar max must not be defined for Buffer Arguments";
     }
 
+    template<typename T, int D>
+    Argument(const Image<T, D> &im) : kind(InputBuffer), dimensions(im.dimensions()), type(im.type()) {}
+
     bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
     bool is_scalar() const { return kind == InputScalar; }
 

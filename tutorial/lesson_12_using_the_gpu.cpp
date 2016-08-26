@@ -162,7 +162,7 @@ public:
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
         padded.gpu_threads(x, y);
-        
+
         // JIT-compile the pipeline for the GPU. CUDA, OpenCL, or
         // Metal are not enabled by default. We have to construct a
         // Target object, enable one of them, and then pass that
@@ -201,14 +201,7 @@ public:
     void test_performance() {
         // Test the performance of the scheduled MyPipeline.
 
-        // If we realize curved into a Halide::Image, that will
-        // unfairly penalize GPU performance by including a GPU->CPU
-        // copy in every run. Halide::Image objects always exist on
-        // the CPU.
-
-        // Halide::Buffer, however, represents a buffer that may
-        // exist on either CPU or GPU or both.
-        Buffer output(UInt(8), input.width(), input.height(), input.channels());
+        Image<uint8_t> output(input.width(), input.height(), input.channels());
 
         // Run the filter once to initialize any GPU runtime state.
         curved.realize(output);
@@ -241,6 +234,13 @@ public:
     void test_correctness(Image<uint8_t> reference_output) {
         Image<uint8_t> output =
             curved.realize(input.width(), input.height(), input.channels());
+
+        // Halide by default does not copy the data back from the GPU
+        // (you might want to keep it there if you're going to feed it
+        // into another GPU pipeline). We can request that it be
+        // copied back like so:
+        printf("%llx\n", output.raw_buffer()->dev);
+        output.copy_to_host();
 
         // Check against the reference output.
         for (int c = 0; c < input.channels(); c++) {

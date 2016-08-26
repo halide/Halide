@@ -312,7 +312,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             f.compute_root().hexagon();
             break;
     };
-     
+
     Realization R = f.realize(WIDTH, HEIGHT, target);
     Image<T> q(R[0]);
     Image<T> r(R[1]);
@@ -395,7 +395,7 @@ bool f_mod() {
 
     // Compute modulus result and check it.
     Func f;
-    f(_) = a % b;  // Using Halide mod operation.
+    f(_) = a(_) % b(_);  // Using Halide mod operation.
     f.realize(out);
 
     // Explicit checks of the simplifier for consistency with runtime computation

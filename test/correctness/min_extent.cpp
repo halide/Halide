@@ -21,12 +21,8 @@ int main(int argc, char **argv) {
     // but we initialize them anyway.
     Image<int> input(5);
     Image<int> out(10);
-    for (int i = 0; i < input.width(); i++) {
-        input(i) = 0;
-    }
-    for (int i = 0; i < out.width(); i++) {
-        out(i) = 0;
-    }
+    input.fill(0);
+    out.fill(0);
 
     // Change coordinate origin of input and output buffer so that they are
     // aligned as follows:
@@ -34,14 +30,14 @@ int main(int argc, char **argv) {
     // out     |-----------------|
     const int INOFF = 4;
     const int OUTOFF = 1;
-    in.set(input);
     input.set_min(INOFF);
     out.set_min(OUTOFF);
+    in.set(input);
     f.realize(out);
 
     // Check correctness of result
     int expected[] = { -10, -20, -30, 4, 5, 6, 7, 8, 90, 100 };
-    for (int i=0; i<out.width(); i++) {
+    for (int i = 0; i < out.width(); i++) {
         if (out(i + OUTOFF) != expected[i]) {
             printf("Unexpected output: %d != %d\n", out(i + OUTOFF), expected[i]);
             return -1;

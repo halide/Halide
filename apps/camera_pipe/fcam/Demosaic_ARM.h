@@ -2,7 +2,7 @@
 #define FCAM_DEMOSAIC_ARM_H
 //#ifdef FCAM_ARCH_ARM
 
-#include "halide_image.h"
+#include "HalideImage.h"
 
 // Arm-specific optimized post-processing routines
 

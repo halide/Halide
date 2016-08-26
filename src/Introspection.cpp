@@ -712,7 +712,7 @@ public:
 
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
-
+        return "";
         debug(5) << "Finding source location\n";
 
         if (!source_lines.size()) {

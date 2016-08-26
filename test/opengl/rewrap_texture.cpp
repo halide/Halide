@@ -37,9 +37,9 @@ int main() {
     const int height = 10;
 
     Image<uint8_t> input(width, height, 3);
-    Buffer out1(UInt(8), width, height, 3);
-    Buffer out2(UInt(8), width, height, 3);
-    Buffer out3(UInt(8), width, height, 3);
+    Image<uint8_t> out1(width, height, 3);
+    Image<uint8_t> out2(width, height, 3);
+    Image<uint8_t> out3(width, height, 3);
 
     Var x, y, c;
     Func g;

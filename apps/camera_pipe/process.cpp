@@ -3,7 +3,7 @@
 
 #include "benchmark.h"
 #include "curved.h"
-#include "halide_image.h"
+#include "HalideImage.h"
 #include "halide_image_io.h"
 #include "halide_malloc_trace.h"
 
@@ -12,7 +12,7 @@
 #include <cstdlib>
 #include <cassert>
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
