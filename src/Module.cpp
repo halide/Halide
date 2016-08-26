@@ -98,14 +98,14 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
 
 LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
     : name(name), args(args), body(body), linkage(linkage) {}
-  
+
 LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
     : name(name), body(body), linkage(linkage) {
     for (const Argument &i : args) {
         this->args.push_back(i);
     }
 }
-  
+
 }  // namespace Internal
 
 using namespace Halide::Internal;
@@ -311,7 +311,6 @@ void compile_multitarget(const std::string &fn_name,
             Target::JIT,
             Target::Matlab,
             Target::NoRuntime,
-            Target::RegisterMetadata,
             Target::UserContext,
         }};
         for (auto f : must_match_features) {
@@ -326,7 +325,12 @@ void compile_multitarget(const std::string &fn_name,
         std::string sub_fn_name = fn_name + suffix;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
-        Module module = module_producer(sub_fn_name, target.with_feature(Target::NoRuntime));
+        // Matlab should be added to the wrapper pipeline below, instead of each sub-pipeline.
+        Target sub_fn_target = target
+            .with_feature(Target::NoRuntime)
+            .without_feature(Target::Matlab);
+
+        Module module = module_producer(sub_fn_name, sub_fn_target);
         Outputs sub_out = add_suffixes(output_files, suffix);
         if (sub_out.object_name.empty()) {
             sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
@@ -375,15 +379,19 @@ void compile_multitarget(const std::string &fn_name,
     // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
     // arguments; this is regrettable but fairly minor in terms of both code size and speed,
     // at least for real-world code.)
-    const Target wrapper_target = base_target
+    Target wrapper_target = base_target
         .with_feature(Target::NoRuntime)
         .with_feature(Target::NoBoundsQuery)
         .without_feature(Target::NoAsserts);
+
+    // If the base target specified the Matlab target, we want the Matlab target
+    // on the wrapper instead.
+    if (base_target.has_feature(Target::Matlab)) {
+        wrapper_target = wrapper_target.with_feature(Target::Matlab);
+    }
+
     Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
-    // The wrapper module must come *first* in the archive, otherwise libraries
-    // that are dynamically found via register_metadata and halide_enumerate_registered_filters()
-    // may get optimized away at link time.
     wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
     if (!output_files.c_header_name.empty()) {

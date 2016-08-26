@@ -387,7 +387,7 @@ inline Expr operator%(Expr a, Expr b) {
  * integer cannot be represented in the type of the expression. */
 inline Expr operator%(Expr a, int b) {
     user_assert(a.defined()) << "operator% of undefined Expr\n";
-    user_assert(b) << "operator% with constant 0 modulus\n";
+    user_assert(b != 0) << "operator% with constant 0 modulus\n";
     Internal::check_representable(a.type(), b);
     return Internal::Mod::make(a, Internal::make_const(a.type(), b));
 }
@@ -731,11 +731,13 @@ inline Expr max(Expr a, float b) {return max(a, Expr(b));}
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
-    min_val = lossless_cast(a.type(), min_val);
-    user_assert(min_val.defined()) << "clamp with possibly out of range minimum bound.\n";
-    max_val = lossless_cast(a.type(), max_val);
-    user_assert(max_val.defined()) << "clamp with possibly out of range maximum bound.\n";
-    return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
+    Expr n_min_val = lossless_cast(a.type(), min_val);
+    user_assert(n_min_val.defined())
+        << "clamp with possibly out of range minimum bound: " << min_val << "\n";
+    Expr n_max_val = lossless_cast(a.type(), max_val);
+    user_assert(n_max_val.defined())
+        << "clamp with possibly out of range maximum bound: " << max_val << "\n";
+    return Internal::Max::make(Internal::Min::make(a, n_max_val), n_min_val);
 }
 
 /** Returns the absolute value of a signed integer or floating-point

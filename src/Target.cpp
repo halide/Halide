@@ -238,7 +238,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
-    {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
