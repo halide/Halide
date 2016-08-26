@@ -15,6 +15,7 @@ struct spawned_thread {
     void (*f)(void *);
     void *closure;
     void *stack;
+    void *stack_end;
     halide_thread handle;
 };
 
@@ -33,10 +34,10 @@ struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
-    t->stack = memalign(128, STACK_SIZE);
     t->handle.id = __sync_add_and_fetch(&next_id, 1);
-    thread_create(f, t->stack, t->handle.id, closure);
-
+    t->stack = memalign(128, STACK_SIZE);
+    t->stack_end = (void *) ((char *) t->stack + STACK_SIZE);
+    thread_create(f, t->stack_end, t->handle.id, closure);
     return (halide_thread *)t;
 }
 
