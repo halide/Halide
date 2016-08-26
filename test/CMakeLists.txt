@@ -134,7 +134,6 @@ if (WITH_TEST_GENERATORS)
                                GENERATED_FUNCTION "tiled_blur_blur_interleaved"
                                GENERATOR_ARGS "target=host" "is_interleaved=true")
     elseif(TEST_SRC STREQUAL "nested_externs_aottest.cpp")
-
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
                                GENERATOR_TARGET "nested_externs${OBJ_GEN_EXE_SUFFIX}"
                                GENERATOR_NAME "nested_externs_root"
@@ -201,7 +200,7 @@ if (WITH_TEST_GENERATORS)
                                GENERATED_FUNCTION "${FUNC_NAME}"
                                GENERATED_FUNCTION_NAMESPACE "HalideTest::"
                                GENERATOR_ARGS "target=host-c_plus_plus_name_mangling-user_context")
-      target_link_libraries("${TEST_RUNNER}" ${LIB_cxx_mangling})
+      target_link_libraries("${TEST_RUNNER}" PRIVATE ${LIB_cxx_mangling})
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       halide_add_generator_dependency(TARGET "${TEST_RUNNER}"
@@ -227,7 +226,7 @@ if (WITH_TEST_GENERATORS)
         set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "-Wl,--allow-multiple-definition")
       endif()
     else()
-      target_link_libraries("${TEST_RUNNER}" dl pthread z)
+      target_link_libraries("${TEST_RUNNER}" PRIVATE dl pthread z)
       set_target_properties("${TEST_RUNNER}" PROPERTIES LINK_FLAGS "-L ${SCRATCH_DIR}")
     endif()
   endforeach()
