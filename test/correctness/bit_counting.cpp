@@ -54,7 +54,7 @@ Var x("x");
 void schedule(Func f, const Target &t) {
     // TODO: Add GPU schedule where supported.
     if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        f.hexagon().vectorize(x, 64);
+        f.hexagon().vectorize(x, 128);
     } else {
         f.vectorize(x, 16);
     }
