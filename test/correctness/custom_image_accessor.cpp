@@ -12,21 +12,7 @@ struct Coord {
 
 namespace Halide {
 
-/*
-template<typename T, int D>
-struct ImageAccessor<T, D, Coord> {
-    // We want to use this accessor to assign to locations too, so
-    // we'll define const and non-const versions.
-    T operator()(const Image<T, D> &im, Coord c) {
-        return im(c.x, c.y, c.z);
-    }
-    T &operator()(Image<T, D> &im, Coord c) {
-        return im(c.x, c.y, c.z);
-    }
-};
-*/
 
-template<typename T, int D>
 T image_accessor(const Image<T, D> &im, Coord c) {
     return im(c.x, c.y, c.z);
 }
@@ -84,19 +70,7 @@ struct AllFloatConvertible<T, Args...> {
 
 namespace Halide {
 
-// Then we define a partial specialization of
-// Halide::Tools::ImageAccessor that catches any access where the all
-// args are float-convertible.
-/*
-template<int D, typename ...Args>
-struct ImageAccessor<typename std::enable_if<AllFloatConvertible<Args...>::value, float>::type, D, Args...>  {
-    float operator()(const Image<float, D> &im, Args... args) {
-        float coords[] = {float(args)...};
-        return MultiLinearSampler<D, sizeof...(args)>()(im, coords);
-    }
-};
-*/
-
+// Now define an accessor (for float images only) that does multilinear sampling. 
 template<int D, typename ...Args>
 typename std::enable_if<AllFloatConvertible<Args...>::value, float>::type
 image_accessor(const Image<float, D> &im, Args... args) {
