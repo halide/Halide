@@ -12,7 +12,7 @@ struct Coord {
 
 namespace Halide {
 
-
+template<typename T, int D>
 T image_accessor(const Image<T, D> &im, Coord c) {
     return im(c.x, c.y, c.z);
 }
