@@ -83,7 +83,9 @@ struct AllocationHeader {
  * in the future once buffer_t is deprecated.
  *
  * The template parameter T is the element type, and D is the maximum
- * number of dimensions. It must be less than or equal to 4 for now.
+ * number of dimensions. It must be less than or equal to 4 for
+ * now. For buffers where the element type is not known at compile
+ * time, use void for T.
  *
  * The class optionally allocates and owns memory for the image using
  * a shared pointer allocated with the provided allocator. If they are
@@ -92,30 +94,18 @@ struct AllocationHeader {
  * owned.
  *
  * For accessing the shape and type, this class provides both the
- * buffer_t interface (extent[i], min[i], and stride[i] arrays, the
- * elem_size field), and also the interface of the yet-to-come
- * halide_buffer_t, which will replace buffer_t. This is intended to
- * allow a gradual transition to halide_buffer_t. New code should
- * access the shape via dim[i].extent, dim[i].min, dim[i].stride, and
- * the type via the 'type' field. */
+ * buffer_t-style interface (extent(i), min(i), and stride(i)), and
+ * also the interface of the yet-to-come halide_buffer_t, which will
+ * replace buffer_t. This is intended to allow a gradual transition to
+ * halide_buffer_t. New code should access the shape via
+ * dim(i).extent(), dim(i).min(), and dim(i).stride() */
 template<typename T, int D = 4>
 class Image {
-    // Some helpers for checking properties of T
-    static const bool T_is_void = std::is_same<T, void>::value;
-    using not_void_T = typename std::conditional<T_is_void, uint8_t, T>::type;
-
-    // Get the Halide type of T. Callers should not use the result if
-    // T is void.
-    static halide_type_t static_halide_type() {
-        return halide_type_of<not_void_T>();
-    }
-
     static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
 
+    /** The underlying buffer_t */
     buffer_t buf = {0};
-
-    /** Fields that halide_buffer_t has that buffer_t does not have. */
-
+    
     /** The dimensionality of the buffer */
     int dims = 0;
 
@@ -125,20 +115,33 @@ class Image {
     /** The allocation owned by this Image. NULL if the Image does not
      * own the memory. */
     AllocationHeader *alloc = nullptr;
+    
+    /** True if T is of type void */
+    static const bool T_is_void = std::is_same<T, void>::value;
 
-    /** Increment the reference count of any allocation */
+    /** T unless T is void, in which case uint8_t. Useful for
+     * providing return types for operator() */
+    using not_void_T = typename std::conditional<T_is_void, uint8_t, T>::type;
+
+    /** Get the Halide type of T. Callers should not use the result if
+     * T is void. */
+    static halide_type_t static_halide_type() {
+        return halide_type_of<not_void_T>();
+    }
+
+    /** Increment the reference count of any owned allocation */
     void incref() {
         if (alloc) {
             alloc->ref_count++;
         }
     }
 
-    /** Decrement the reference count of any allocation and free host
+    /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
     void decref() {
         if (alloc) {
-            int result = --(alloc->ref_count);
-            if (result == 0) {
+            int new_count = --(alloc->ref_count);
+            if (new_count == 0) {
                 if (buf.dev) {
                     device_free();
                 }
@@ -264,29 +267,42 @@ public:
         const buffer_t &buf;
         const int idx;
     public:
+        /** The lowest coordinate in this dimension */
         __attribute__((always_inline)) int min() const {
             return buf.min[idx];
         }
+
+        /** The number of elements in memory you have to step over to
+         * increment this coordinate by one. */
         __attribute__((always_inline)) int stride() const {
             return buf.stride[idx];
         }
+
+        /** The extent of the image along this dimension */
         __attribute__((always_inline)) int extent() const {
             return buf.extent[idx];
         }
+
+        /** The highest coordinate in this dimension */
         __attribute__((always_inline)) int max() const {
             return min() + extent() - 1;
         }
 
-        // Support for iterating over all coordinates in the dimension.
+        /** An iterator class, so that you can iterate over
+         * coordinates in a dimensions using a range-based for loop. */
         struct iterator {
             int val;
             int operator*() const {return val;}
             bool operator!=(const iterator &other) const {return val != other.val;}
             iterator &operator++() {val++; return *this;}
         };
+
+        /** An iterator that points to the min coordinate */
         __attribute__((always_inline)) iterator begin() const {
             return {min()};
         }
+
+        /** An iterator that points to one past the max coordinate */
         __attribute__((always_inline)) iterator end() const {
             return {min() + extent()};
         }
@@ -494,18 +510,20 @@ public:
 
     /** Check the product of the extents fits in memory. */
     void check_overflow() {
-        size_t size = 1;
+        size_t size = ty.bytes();
         for (int i = 0; i < dimensions(); i++) {
             size *= dim(i).extent();
         }
+        // We allow 2^31 or 2^63 bytes, so drop the top bit.
+        size = (size << 1) >> 1;
         for (int i = 0; i < dimensions(); i++) {
             size /= dim(i).extent();
         }
-        assert(size == 1 && "Error: Overflow computing total size of buffer.");
+        assert(size == ty.bytes() && "Error: Overflow computing total size of buffer.");
     }
 
     /** Allocate memory for this Image. Drops the reference to any
-     * existing memory. */
+     * owned memory. */
     void allocate(void *(*allocate_fn)(size_t) = nullptr,
                   void (*deallocate_fn)(void *) = nullptr) {
         if (!allocate_fn) {
@@ -664,6 +682,8 @@ public:
         buf.host = (uint8_t *)data;
     }
 
+    /** Make an image referring to existing data, with the memory layout
+     * described by an array of halide_dimension_t */
     explicit Image(halide_type_t t, void *data, halide_dimension_t shape[D]) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
@@ -681,6 +701,9 @@ public:
         buf.host = (uint8_t *)data;
     }
 
+    /** Make an image referring to existing data of known type, with
+     * the memory layout described by an array of
+     * halide_dimension_t */
     explicit Image(T *data, halide_dimension_t shape[D]) {
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         dims = 0;
@@ -695,6 +718,8 @@ public:
         buf.host = (uint8_t *)data;
     }
 
+    /** Destructor. Will release any underlying owned allocation if
+     * this is the last reference to it. */
     ~Image() {
         decref();
     }
@@ -1171,6 +1196,7 @@ public:
      * accessor, define an overload of image_accessor that takes the
      * expected arguments. See
      * test/correctness/custom_image_accessor.cpp for an example. */
+    // @{
     template<typename ...Args>
     auto operator()(Args... args) const ->
         decltype(image_accessor(*this, args...)) {
@@ -1182,10 +1208,12 @@ public:
         decltype(image_accessor(*this, args...)) {
         return image_accessor(*this, args...);
     }
+    // @}
 
 private:
-    // Helper functions for fill that call for_each_element with a
-    // lambda of the correct dimensionality.
+    /** Helper functions for fill that call for_each_element with a
+     * lambda of the correct dimensionality. */
+    // @{
     template<typename ...Args>
     typename std::enable_if<(sizeof...(Args) < D)>::type
     fill_helper(not_void_T val, Args... args) {
@@ -1201,6 +1229,7 @@ private:
     fill_helper(not_void_T val, Args...) {
         for_each_element([&](Args... args) {(*this)(args...) = val;});
     }
+    // @}
 
 public:
 
