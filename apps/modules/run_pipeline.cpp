@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint8_t> input = load_image(argv[1]);
+    Image<uint8_t> input = Tools::load_image(argv[1]);
     Image<uint8_t> output(input.width(), input.height(), 1);
 
     if (pipeline(input, output) != 0) {
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    save_image(output, argv[2]);
+    Tools::save_image(output, argv[2]);
 
     printf("Success!\n");
 
