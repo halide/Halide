@@ -437,7 +437,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IROperator.cpp
   IRPrinter.cpp
   IRVisitor.cpp
-  Image.cpp
   ImageParam.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
