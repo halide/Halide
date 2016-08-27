@@ -1,11 +1,11 @@
 include ../support/Makefile.inc
 
-CXXFLAGS += -O3 -Wall -std=c++11 -march=native
+CXXFLAGS += -O3 -fopenmp -Wall -std=c++11 -march=native
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
 EMIT_OPTIONS = stmt,assembly,o,h
 
-EIGEN_INCLUDES ?= -I/usr/include/eigen3 -I/Users/abadams/projects/Eigen
+EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
 OPENBLAS_FLAGS ?= -DUSE_OPENBLAS
 OPENBLAS_LIBS ?= -lopenblas
