@@ -235,13 +235,6 @@ public:
         Image<uint8_t> output =
             curved.realize(input.width(), input.height(), input.channels());
 
-        // Halide by default does not copy the data back from the GPU
-        // (you might want to keep it there if you're going to feed it
-        // into another GPU pipeline). We can request that it be
-        // copied back like so:
-        printf("%llx\n", output.raw_buffer()->dev);
-        output.copy_to_host();
-
         // Check against the reference output.
         for (int c = 0; c < input.channels(); c++) {
             for (int y = 0; y < input.height(); y++) {
