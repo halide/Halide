@@ -34,7 +34,7 @@ class GEMMGenerator :
         const Expr sum_size = A_.height();
 
         const int vec = natural_vector_size(a_.type());
-        const int s = vec * 3;
+        const int s = vec * 2;
 
         ImageParam A_in, B_in;
 
@@ -81,7 +81,7 @@ class GEMMGenerator :
 
         // Reduce the products along k.
         Func AB("AB");
-        RDom rv(0, (sum_size/4)*4);
+        RDom rv(0, sum_size);
         AB(i, j) += prod(rv, i, j);
 
         Func ABt("ABt");
@@ -95,7 +95,7 @@ class GEMMGenerator :
         // Do the part that makes it a 'general' matrix multiply.
         result(i, j) = (a_ * ABt(i, j) + b_ * C_(i, j));
 
-        result.tile(i, j, ti[1], tj[1], i, j, s, s, TailStrategy::GuardWithIf);
+        result.tile(i, j, ti[1], tj[1], i, j, 2*s, 2*s, TailStrategy::GuardWithIf);
         if (transpose_AB) {
             result
                 .tile(i, j, ii, ji, 4, s)
@@ -107,7 +107,6 @@ class GEMMGenerator :
                 .tile(i, j, ti[0], tj[0], i, j, 1, s/4);
         }
 
-        /*
         // If we have enough work per task, parallelize over these tiles.
         result.specialize(num_rows >= 512 && num_cols >= 512)
             .fuse(tj[1], ti[1], t).parallel(t);
@@ -117,7 +116,6 @@ class GEMMGenerator :
         result.specialize(num_rows >= 128 && num_cols >= 128)
             .tile(ti[1], tj[1], ti[2], tj[2], ti[1], tj[1], 2, 2)
             .fuse(tj[2], ti[2], t).parallel(t);
-        */
 
         result.rename(tj[0], t);
 
@@ -126,7 +124,7 @@ class GEMMGenerator :
         As.compute_root()
             .split(j, jo, ji, s).reorder(i, ji, io, jo)
             .unroll(i).vectorize(ji)
-            .specialize(A_.width() >= 256 && A_.height() >= 256);//.parallel(jo, 4);
+            .specialize(A_.width() >= 256 && A_.height() >= 256).parallel(jo, 4);
 
         Atmp.compute_at(As, io)
             .vectorize(i).unroll(j);
@@ -146,7 +144,7 @@ class GEMMGenerator :
             .bound_extent(j, 4).unroll(j)
             .bound_extent(i, s).vectorize(i)
             .update()
-            .reorder(i, j, rv).unroll(j).unroll(rv, 4).vectorize(i);
+            .reorder(i, j, rv).unroll(j).unroll(rv, 2).vectorize(i);
         if (transpose_AB) {
             ABt.compute_at(result, i)
                 .bound_extent(i, 4).unroll(i)
