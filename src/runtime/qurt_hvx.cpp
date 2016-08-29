@@ -63,6 +63,8 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 #define MASK16          0xFFFF
 #define MAX_PREFETCH    3
 
+// TODO: Opt: Generate control code for prefetch_buffer_t in Prefetch.cpp
+// TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
 WEAK int halide_hexagon_prefetch_buffer_t(unsigned int dim, const buffer_t *buf)
 {
     // Extract needed fields from buffer_t
