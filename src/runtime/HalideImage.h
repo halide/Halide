@@ -99,7 +99,7 @@ struct AllocationHeader {
  * replace buffer_t. This is intended to allow a gradual transition to
  * halide_buffer_t. New code should access the shape via
  * dim(i).extent(), dim(i).min(), and dim(i).stride() */
-template<typename T, int D = 4>
+template<typename T = void, int D = 4>
 class Image {
     static_assert(D <= 4, "buffer_t supports a maximum of four dimensions");
 
@@ -371,7 +371,7 @@ public:
         return (size_t)((uint8_t *)end() - (uint8_t *)begin());
     }
 
-    Image() {}
+    Image() : ty(static_halide_type()) {}
 
     /** Make a buffer from a buffer_t */
     Image(const buffer_t &buf) : ty(static_halide_type()) {
@@ -1217,7 +1217,7 @@ private:
     template<typename ...Args>
     typename std::enable_if<(sizeof...(Args) < D)>::type
     fill_helper(not_void_T val, Args... args) {
-        if (sizeof...(Args) == dimensions()) {
+       if (sizeof...(Args) == dimensions()) {
             for_each_element([&](Args... args) {(*this)(args...) = val;});
         } else {
             fill_helper(val, 0, args...);

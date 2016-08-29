@@ -23,6 +23,8 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
+    EXPORT void set(Internal::Buffer b);
+    
 public:
 
     /** Construct a nullptr image parameter handle. */
@@ -36,18 +38,23 @@ public:
      * dimensionality, with the given name */
     EXPORT ImageParam(Type t, int d, const std::string &n);
 
-    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
+    /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    EXPORT void set(Buffer b);
     template<typename T, int D>
     NO_INLINE void set(const Image<T, D> &im) {
-        set(Buffer(im));
+        set(Internal::Buffer(im));
     }
     // @}
 
-    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
-    EXPORT Buffer get() const;
+    /** Get the Image bound to this ImageParam. Only relevant for jitting */
+    // @{
+    EXPORT const Image<> &get() const;
+    EXPORT Image<> &get();
+    // @}
 
+    /** Unbind any bound Image */
+    EXPORT void reset();
+    
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
      * variables to match the dimensionality of the image

@@ -26,7 +26,6 @@ template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
     delete p;
 }
-}
 
 namespace {
 std::string make_buffer_name(const std::string &n, Buffer *b) {
@@ -116,4 +115,5 @@ Expr Buffer::operator()(const std::vector<Expr> &args) const {
     return Internal::Call::make(*this, int_args);
 }
 
+}
 }

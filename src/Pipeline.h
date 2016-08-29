@@ -58,7 +58,7 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<Buffer> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
+    std::vector<Internal::Buffer> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -341,6 +341,7 @@ public:
     /** Get the custom lowering passes. */
     EXPORT const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
+    /** See Func::realize */
     // @{
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
@@ -349,24 +350,14 @@ public:
                                const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = Target());
-    EXPORT Realization realize(int x_size = 0,
+    EXPORT Realization realize(int x_size,
                                const Target &target = Target());
-    // @}
-
-    /** Evaluate this function into an existing allocated buffer or
-     * buffers. If the buffer is also one of the arguments to the
-     * function, strange things may happen, as the pipeline isn't
-     * necessarily safe to run in-place. If you pass multiple buffers,
-     * they must have matching sizes. */
-    // @{
+    EXPORT Realization realize(const Target &target = Target());    
     EXPORT void realize(Realization dst, const Target &target = Target());
-    EXPORT void realize(Buffer dst, const Target &target = Target());
 
     template<typename T, int D>
     NO_INLINE void realize(Image<T, D> dst, const Target &target = Target()) {
-        // Images are expected to exist on-host.
-        realize(Buffer(dst), target);
-        dst.copy_to_host();
+        realize(Realization(dst), target);
     }
     // @}
 
@@ -378,7 +369,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-    EXPORT void infer_input_bounds(Buffer dst);
 
     template<typename T, int D>
     NO_INLINE void infer_input_bounds(Image<T, D> &im) {
@@ -386,9 +376,9 @@ public:
         // output buffers if their host pointer is null, so we must
         // take Images by reference and communicate the bounds query
         // result by modifying the argument.
-        Buffer b(im);
-        infer_input_bounds(b);
-        im = b.get();
+        Realization r(im);
+        infer_input_bounds(r);
+        im = r[0];
     }
     // @}
 

@@ -762,19 +762,18 @@ const JITHandlers &Pipeline::jit_handlers() {
     return contents->jit_handlers;
 }
 
-void Pipeline::realize(Buffer b, const Target &target) {
-    realize(Realization({b}), target);
-}
-
 Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    vector<Buffer> bufs;
+    vector<Image<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, sizes));
+        bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     realize(r, target);
+    for (Image<void> &im : r) {
+        im.copy_to_host();
+    }
     return r;
 }
 
@@ -799,6 +798,10 @@ Realization Pipeline::realize(int x_size,
     // as a scalar initializer
     vector<int32_t> v = {x_size};
     return realize(v, target);
+}
+
+Realization Pipeline::realize(const Target &target) {
+    return realize(vector<int32_t>(), target);
 }
 
 namespace {
@@ -906,7 +909,7 @@ struct JITFuncCallContext {
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
-// params. Unbound image params produce null values.
+// params. 
 vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -981,7 +984,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (const Buffer &buf : dst.as_vector()) {
+    for (const Image<> &buf : dst) {
         arg_values.push_back(buf.raw_buffer());
         const void *ptr = arg_values.back();
         debug(1) << "JIT output buffer @ " << ptr << "\n";
@@ -1248,17 +1251,12 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
     if (z_size) size.push_back(z_size);
     if (w_size) size.push_back(w_size);
 
-    vector<Buffer> bufs;
+    vector<Image<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, size));
+        bufs.emplace_back(t, size);
     }
     Realization r(bufs);
     infer_input_bounds(r);
-}
-
-
-void Pipeline::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization({dst}));
 }
 
 void Pipeline::invalidate_cache() {

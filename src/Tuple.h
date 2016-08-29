@@ -62,57 +62,76 @@ public:
     }
 };
 
-/** Funcs with Tuple values return multiple buffers when you realize
- * them. Tuples are to Exprs as Realizations are to Buffers. */
+/** Funcs with Tuple values return multiple images when you realize
+ * them. Tuples are to Exprs as Realizations are to Images. */
 class Realization {
 private:
-    std::vector<Buffer> buffers;
+    std::vector<Internal::Buffer> images;
 public:
-    /** The number of buffers in the Realization. */
-    size_t size() const { return buffers.size(); }
+    /** The number of images in the Realization. */
+    size_t size() const { return images.size(); }
 
-    /** Get a reference to one of the buffers. */
-    Buffer &operator[](size_t x) {
-        user_assert(x < buffers.size()) << "Realization access out of bounds\n";
-        return buffers[x];
+    /** Get a reference to one of the images. */
+    Image<> &operator[](size_t x) {
+        user_assert(x < images.size()) << "Realization access out of bounds\n";
+        return images[x].get();
     }
 
-    /** Get one of the buffers. */
-    Buffer operator[](size_t x) const {
-        user_assert(x < buffers.size()) << "Realization access out of bounds\n";
-        return buffers[x];
-    }
-
-    /** Single-element realizations are implicitly castable to Buffers. */
-    operator Buffer() const {
-        user_assert(buffers.size() == 1) << "Can only cast single-element realizations to buffers or images\n";
-        return buffers[0];
+    /** Get one of the images. */
+    const Image<> &operator[](size_t x) const {
+        user_assert(x < images.size()) << "Realization access out of bounds\n";
+        return images[x].get();
     }
 
     /** Single-element realizations are implicitly castable to Images. */
     template<typename T, int D>
     operator Image<T, D>() const {
-        return buffers[0];
+        return images[0];
     }
 
-    /** Construct a Realization from some Buffers. */
+    /** Construct a Realization from some Images. */
     //@{
-    template<typename ...Args,
-             typename = std::enable_if<Internal::all_are_convertible<Buffer, Args...>::value>>
-    Realization(Buffer a, Buffer b, Args&&... args) {
-        buffers = std::vector<Buffer>{a, b, std::forward<Args>(args)...};
+    template<typename T,
+             int D,
+             typename ...Args,
+             typename = std::enable_if<Internal::all_are_convertible<Image<>, Args...>::value>>
+    Realization(Image<T, D> a, Args&&... args) {
+        images = std::vector<Internal::Buffer>{a, std::forward<Args>(args)...};
     }
     //@}
 
-    /** Construct a Realization from a vector of Buffers */
-    explicit Realization(const std::vector<Buffer> &e) : buffers(e) {
+    /** Construct a Realization from a vector of Image<> */
+    explicit Realization(const std::vector<Image<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
+        for (const Image<> &im : e) {
+            images.push_back(Internal::Buffer(im));
+        }       
     }
 
-    /** Treat the Realization as a vector of Buffers */
-    const std::vector<Buffer> &as_vector() const {
-        return buffers;
+    /** Support for iterating over a the Images in a Realization */
+    struct iterator {
+        std::vector<Internal::Buffer>::iterator iter;
+
+        Image<> &operator*() {
+            return iter->get();
+        };
+        iterator &operator++() {
+            iter++;
+            return *this;
+        }
+        bool operator!=(const iterator &other) const {
+            return iter != other.iter;
+        }
+    };
+
+    iterator begin() {
+        return {images.begin()};
     }
+
+    iterator end() {
+        return {images.end()};
+    }    
+    
 };
 
 /** Equivalents of some standard operators for tuples. */

@@ -13,7 +13,6 @@
 namespace Halide {
 namespace Internal {
 struct BufferContents;
-}
 
 /** A named reference-counted handle on an Image of unknown type and dimensionality */
 class Buffer {
@@ -91,11 +90,13 @@ public:
     // @}
 };
 
+}
+
 /** An adaptor so that it's possible to access a Halide::Image using Exprs. */
 template<typename T, int D, typename ...Args,
          typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
 NO_INLINE Expr image_accessor(const Image<T, D> &im, Expr first, Args... rest) {
-    return Buffer(im)(first, rest...);
+    return Internal::Buffer(im)(first, rest...);
 }
 
 }
