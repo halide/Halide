@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
 
     halide_thread *t = halide_spawn_thread(&mess_with_num_threads, NULL);
 
-    Image<float> out(64, 64);
+    Buffer<float> out(64, 64);
 
     for (int i = 0; i < 1000; i++) {
         // The number of threads will oscilate randomly, but the range

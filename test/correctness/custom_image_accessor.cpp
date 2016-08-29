@@ -13,26 +13,26 @@ struct Coord {
 namespace Halide {
 
 template<typename T, int D>
-T image_accessor(const Image<T, D> &im, Coord c) {
+T image_accessor(const Buffer<T, D> &im, Coord c) {
     return im(c.x, c.y, c.z);
 }
 
 template<typename T, int D>
-T &image_accessor(Image<T, D> &im, Coord c) {
+T &image_accessor(Buffer<T, D> &im, Coord c) {
     return im(c.x, c.y, c.z);
 }
 
 }
 
 // Next we'll use a more complex variadic example. We'll extend
-// Halide::Tools::Image<float, D> so that using operator() with floats
+// Halide::Tools::Buffer<float, D> so that using operator() with floats
 // does multi-linear interpolation into it.
 
 // First we define a fancy multi-linear interpolator that uses
 // template recursion to touch 2^D samples.
 template<int D, int C, typename ...Args>
 struct MultiLinearSampler {
-    float operator()(const Image<float, D> &im, float *float_args, Args... int_args) {
+    float operator()(const Buffer<float, D> &im, float *float_args, Args... int_args) {
         float f = *float_args;
         int i = (int)(std::floor(f));
         f -= i;
@@ -45,7 +45,7 @@ struct MultiLinearSampler {
 
 template<int D, typename ...Args>
 struct MultiLinearSampler<D, 0, Args...> {
-    float operator()(const Image<float, D> &im, float *float_args, Args... int_args) {
+    float operator()(const Buffer<float, D> &im, float *float_args, Args... int_args) {
         return im(int_args...);
     }
 };
@@ -73,7 +73,7 @@ namespace Halide {
 // Now define an accessor (for float images only) that does multilinear sampling. 
 template<int D, typename ...Args>
 typename std::enable_if<AllFloatConvertible<Args...>::value, float>::type
-image_accessor(const Image<float, D> &im, Args... args) {
+image_accessor(const Buffer<float, D> &im, Args... args) {
     float coords[] = {float(args)...};
     return MultiLinearSampler<D, sizeof...(args)>()(im, coords);
 }
@@ -81,7 +81,7 @@ image_accessor(const Image<float, D> &im, Args... args) {
 }
 
 int main(int argc, char **argv) {
-    Image<float> im(10, 10, 10);
+    Buffer<float> im(10, 10, 10);
 
     im(3, 2, 5) = 0.0f;
 

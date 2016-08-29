@@ -342,7 +342,7 @@ set(HEADER_FILES
   VectorizeLoops.h
   WrapCalls.h
   runtime/HalideRuntime.h
-  runtime/HalideImage.h  
+  runtime/HalideBuffer.h  
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -361,7 +361,7 @@ configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYO
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideImage.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideBuffer.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
 IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))

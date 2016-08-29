@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     int w = 16;
     int h = 16;
-    Image<float> im = f.realize(w, h);
+    Buffer<float> im = f.realize(w, h);
     for (int x = 0; x < w; x++) {
         for (int y = 0; y < h; y++) {
             if ((x - y) < 0) {

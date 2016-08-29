@@ -83,7 +83,7 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
              cast<value_t>((one_val + one_min) * one_scale_p + one_offset_p),
              cast<weight_t>((weight + weight_min) * weight_scale_p + weight_offset_p));
 
-    Image<value_t> result(zero_extent, one_extent, weight_extent);
+    Buffer<value_t> result(zero_extent, one_extent, weight_extent);
     lerp_test.realize(result);
 
     for (int32_t i = 0; i < result.extent(0); i++) {
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
     // Check constant and constant case:
     Func lerp_constants("lerp_constants");
     lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
-    Image<uint32_t> result = lerp_constants.realize();
+    Buffer<uint32_t> result = lerp_constants.realize();
 
     uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
     if (result(0) != expected)
@@ -227,8 +227,8 @@ int main(int argc, char **argv) {
     // Add a little more coverage for uint32_t as this was failing
     // without being detected for a long time.
 
-    Image<uint8_t> input_a_img(16, 16);
-    Image<uint8_t> input_b_img(16, 16);
+    Buffer<uint8_t> input_a_img(16, 16);
+    Buffer<uint8_t> input_b_img(16, 16);
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
@@ -250,9 +250,9 @@ int main(int argc, char **argv) {
     input_b.set(input_b_img);
 
     w.set(0.0f);
-    Image<int32_t> result_should_be_a = lerp_with_casts.realize(16, 16);
+    Buffer<int32_t> result_should_be_a = lerp_with_casts.realize(16, 16);
     w.set(1.0f);
-    Image<int32_t> result_should_be_b = lerp_with_casts.realize(16, 16);
+    Buffer<int32_t> result_should_be_b = lerp_with_casts.realize(16, 16);
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {

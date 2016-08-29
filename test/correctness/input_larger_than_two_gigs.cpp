@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     buf.stride[2] = 0;
     buf.elem_size = 1;
 
-    Image<uint8_t> param_buf(buf);
+    Buffer<uint8_t> param_buf(buf);
     ImageParam input(UInt(8), 3);
     input.set(param_buf);
 
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
     Target t = get_jit_target_from_environment();
 
-    Image<uint64_t> result;
+    Buffer<uint64_t> result;
     if (t.bits != 32) {
         grand_total.compile_jit(t.with_feature(Target::LargeBuffers));
         result = grand_total.realize();

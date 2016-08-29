@@ -12,7 +12,7 @@ namespace Halide {
 namespace Internal {
 
 struct BufferContents {
-    Image<void> image;
+    Buffer<> image;
     std::string name;
     mutable RefCount ref_count;
 };
@@ -37,24 +37,24 @@ std::string make_buffer_name(const std::string &n, BufferPtr *b) {
 }
 }
 
-BufferPtr::BufferPtr(const Image<void> &buf, std::string name) :
-    contents(new Internal::BufferContents {Image<void>(buf), make_buffer_name(name, this)}) {}
+BufferPtr::BufferPtr(const Buffer<> &buf, std::string name) :
+    contents(new Internal::BufferContents {Buffer<>(buf), make_buffer_name(name, this)}) {}
 
 BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
-    contents(new Internal::BufferContents {Image<void>(t, buf), make_buffer_name(name, this)}) {}
+    contents(new Internal::BufferContents {Buffer<>(t, buf), make_buffer_name(name, this)}) {}
 
 BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
-    contents(new Internal::BufferContents {Image<void>(t, size), make_buffer_name(name, this)}) {}
+    contents(new Internal::BufferContents {Buffer<>(t, size), make_buffer_name(name, this)}) {}
 
 bool BufferPtr::same_as(const BufferPtr &other) const {
     return contents.same_as(other.contents);
 }
 
-Image<void> &BufferPtr::get() {
+Buffer<> &BufferPtr::get() {
     return contents->image;
 }
 
-const Image<void> &BufferPtr::get() const {
+const Buffer<> &BufferPtr::get() const {
     return contents->image;
 }
 
@@ -78,7 +78,7 @@ int BufferPtr::dimensions() const {
     return contents->image.dimensions();
 }
 
-Image<void>::Dimension BufferPtr::dim(int i) const {
+Buffer<>::Dimension BufferPtr::dim(int i) const {
     return contents->image.dim(i);
 }
 
