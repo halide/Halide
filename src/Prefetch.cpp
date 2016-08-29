@@ -187,10 +187,11 @@ private:
                     vector<Expr> args_prefetch(2);
                     args_prefetch[0] = dims;
                     args_prefetch[1] = var_prefetch_buf;
-                    // TODO: Opt: Inline prefetch_buffer_t? (to avoid some of ~30 stores/loads through buffer_t)
                     // TODO: Opt: Keep running sum of bytes prefetched on this sequence
                     // TODO: Opt: Keep running sum of number of prefetch instructions issued
                     // TODO       on this sequence? (to not exceed MAX_PREFETCH)
+                    // TODO: Opt: Generate control code for prefetch_buffer_t in Prefetch.cpp
+                    // TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
                     Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                                           args_prefetch, Call::Intrinsic));
                     if (cnt == 0) {
@@ -201,7 +202,6 @@ private:
                     cnt++;
 
                     // Inject the create_buffer_t call
-                    // TODO: Opt: Don't pass box info through buffer_t? (to avoid some of ~30 stores/loads through buffer_t)
                     Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                                           args, Call::Intrinsic);
                     pstmts = LetStmt::make(varname_prefetch_buf, prefetch_buf, pstmts);
@@ -217,6 +217,7 @@ private:
                 if (cnt) {
 #if 1
                     // Guard to not prefetch past the end of the iteration space
+                    // TODO: Opt: Use original extent of loop for guard (avoid conservative guard when stripmined)
                     Expr pcond = likely((Variable::make(Int(32), op->name) + p.offset)
                                                         < (op->min + op->extent - 1));
                     Stmt pguard = IfThenElse::make(pcond, pstmts);
