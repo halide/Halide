@@ -79,7 +79,7 @@ inline NO_INLINE Func func_like_to_func(T func_like) {
  *  constant, though the code currently allows accessing the arguments
  *  of source.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -126,7 +126,7 @@ inline NO_INLINE Func constant_exterior(T func_like, Expr value,
 /** Impose a boundary condition such that the nearest edge sample is returned
  *  everywhere outside the given region.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -161,7 +161,7 @@ inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -195,7 +195,7 @@ inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
  *  tiled with copies of the image abutted against each other, but mirror
  *  them such that adjacent edges are the same.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -232,7 +232,7 @@ inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
  *
  *  This produces an error if any extent is 1 or less. (TODO: check this.)
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *

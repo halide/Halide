@@ -5,7 +5,7 @@
  * Defines BufferPtr - A c++ wrapper around a buffer_t.
  */
 
-#include "runtime/HalideImage.h"
+#include "runtime/HalideBuffer.h"
 #include "Expr.h"
 #include "Util.h"
 #include "Argument.h"
@@ -21,11 +21,11 @@ private:
 
 public:
     BufferPtr() : contents(nullptr) {}
-    EXPORT BufferPtr(const Image<void> &buf, std::string name = "");
+    EXPORT BufferPtr(const Buffer<> &buf, std::string name = "");
     EXPORT BufferPtr(Type t, const buffer_t &buf, std::string name = "");
 
-    template<typename T, int D> BufferPtr(const Image<T, D> &buf, std::string name = "") :
-        BufferPtr(Image<void>(buf), name) {}
+    template<typename T, int D> BufferPtr(const Buffer<T, D> &buf, std::string name = "") :
+        BufferPtr(Buffer<>(buf), name) {}
 
     EXPORT BufferPtr(Type t, const std::vector<int> &size, std::string name = "");
 
@@ -33,8 +33,8 @@ public:
     bool same_as(const BufferPtr &other) const;
 
     /** Get the underlying Image */
-    EXPORT Image<void> &get();
-    EXPORT const Image<void> &get() const;
+    EXPORT Buffer<> &get();
+    EXPORT const Buffer<> &get() const;
 
     /** Check if this buffer handle actually points to data. */
     EXPORT bool defined() const;
@@ -52,7 +52,7 @@ public:
     EXPORT int dimensions() const;
 
     /** Get a dimension from the underlying buffer. */
-    EXPORT Image<void>::Dimension dim(int i) const;
+    EXPORT Buffer<>::Dimension dim(int i) const;
 
     /** Access to the mins, strides, extents. Will be deprecated. Do not use. */
     // @{
@@ -73,8 +73,8 @@ public:
     /** Convert a buffer to a typed and dimensioned Image. Does
      * runtime type checks. */
     template<typename T, int D>
-    operator Image<T, D>() const {
-        return Image<T, D>(get());
+    operator Buffer<T, D>() const {
+        return Buffer<T, D>(get());
     }
 
     /** Make a Call node to a specific site in this buffer. */
@@ -95,7 +95,7 @@ public:
 /** An adaptor so that it's possible to access a Halide::Image using Exprs. */
 template<typename T, int D, typename ...Args,
          typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
-NO_INLINE Expr image_accessor(const Image<T, D> &im, Expr first, Args... rest) {
+NO_INLINE Expr image_accessor(const Buffer<T, D> &im, Expr first, Args... rest) {
     return Internal::BufferPtr(im)(first, rest...);
 }
 

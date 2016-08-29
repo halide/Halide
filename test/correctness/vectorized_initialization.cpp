@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     f.update();
 
     g(x) = f(x);
-    Image<int> result = g.realize(4);
+    Buffer<int> result = g.realize(4);
 
 
     // The sequence generated should be:

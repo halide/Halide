@@ -10,7 +10,7 @@ using namespace Halide;
 
 const int kSize = 32;
 
-void verify(const Image<int> &img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Buffer<int> &img, float compiletime_factor, float runtime_factor, int channels) {
     for (int i = 0; i < kSize; i++) {
         for (int j = 0; j < kSize; j++) {
             for (int c = 0; c < channels; c++) {
@@ -26,7 +26,7 @@ void verify(const Image<int> &img, float compiletime_factor, float runtime_facto
 
 int main(int argc, char **argv) {
 
-  Image<int32_t> output(kSize, kSize, 3);
+  Buffer<int32_t> output(kSize, kSize, 3);
 
   // For Ahead-of-time compilation, we don't get to customize any GeneratorParams:
   // they were baked into the object code by our build system. These are the default values

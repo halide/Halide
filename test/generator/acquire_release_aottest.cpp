@@ -207,7 +207,7 @@ int main(int argc, char **argv) {
     // Everything else is a normal Halide program. The GPU runtime will call
     // the above acquire/release functions to get the context instead of using
     // its own internal context.
-    Image<float> input(W, H);
+    Buffer<float> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = (float)(x * y);
@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
 
     input.set_host_dirty(true);
 
-    Image<float> output(W, H);
+    Buffer<float> output(W, H);
 
     acquire_release(input, output);
 

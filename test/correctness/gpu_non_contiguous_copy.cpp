@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     Var x, y, z, w;
-    Image<int> full(80, 60, 10, 10);
+    Buffer<int> full(80, 60, 10, 10);
 
     const int x_off = 4, y_off = 8, z_off = 2, w_off = 4;
     const int x_size = 16, y_size = 16, z_size = 3, w_size = 3;
@@ -26,10 +26,10 @@ int main(int argc, char **argv) {
     cropped.stride[1] *= 2;
     cropped.stride[2] *= 2;
     cropped.stride[3] *= 2;
-    Image<int32_t> out(cropped);
+    Buffer<int32_t> out(cropped);
 
     // Make a bitmask representing the region inside the crop.
-    Image<bool> in_subregion(80, 60, 10, 10);
+    Buffer<bool> in_subregion(80, 60, 10, 10);
     Expr test = ((x >= x_off) && (x < x_off + x_size*2) &&
                  (y >= y_off) && (y < y_off + y_size*2) &&
                  (z >= z_off) && (z < z_off + z_size*2) &&

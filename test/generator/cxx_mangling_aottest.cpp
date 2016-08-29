@@ -22,13 +22,13 @@ int32_t extract_value_ns(const int32_t *arg) {
 }
 
 int main(int argc, char **argv) {
-    Image<uint8_t> input(100);
+    Buffer<uint8_t> input(100);
 
     for (int32_t i = 0; i < 100; i++) {
         input(i) = i;
     }
 
-    Image<double> result(100);
+    Buffer<double> result(100);
 
     const halide_filter_metadata_t *m = HalideTest::cxx_mangling_metadata();
     assert(m != NULL);

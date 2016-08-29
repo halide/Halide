@@ -7,7 +7,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<float> input(10, 10, 3);
+    Buffer<float> input(10, 10, 3);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
             input(x, y, 0) = sinf(x * y + 1);
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
             input(x, y, 2) = sqrtf(x * x + y * y);
         }
     }
-    Image<float> output(10, 10, 3);
+    Buffer<float> output(10, 10, 3);
 
     embed_image(input, output);
 

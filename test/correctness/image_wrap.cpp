@@ -88,7 +88,7 @@ int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
     return 0;
 }
 
-int check_image(const Image<int> &im, const std::function<int(int,int)> &func) {
+int check_image(const Buffer<int> &im, const std::function<int(int,int)> &func) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = func(x, y);
@@ -161,7 +161,7 @@ int func_wrap_test() {
 
     source(x) = x;
     ImageParam img(Int(32), 1, "img");
-    Image<int> buf = source.realize(200);
+    Buffer<int> buf = source.realize(200);
     img.set(buf);
 
     g(x, y) = img(x);
@@ -185,7 +185,7 @@ int func_wrap_test() {
         return -1;
     }
 
-    Image<int> im = g.realize(200, 200);
+    Buffer<int> im = g.realize(200, 200);
     auto func = [](int x, int y) { return x; };
     if (check_image(im, func)) {
         return -1;
@@ -199,7 +199,7 @@ int multiple_funcs_sharing_wrapper_test() {
 
     source(x) = x;
     ImageParam img(Int(32), 1, "img");
-    Image<int> buf = source.realize(200);
+    Buffer<int> buf = source.realize(200);
     img.set(buf);
 
     g1(x, y) = img(x);
@@ -226,7 +226,7 @@ int multiple_funcs_sharing_wrapper_test() {
             return -1;
         }
 
-        Image<int> im = g1.realize(200, 200);
+        Buffer<int> im = g1.realize(200, 200);
         auto func = [](int x, int y) { return x; };
         if (check_image(im, func)) {
             return -1;
@@ -249,7 +249,7 @@ int multiple_funcs_sharing_wrapper_test() {
             return -1;
         }
 
-        Image<int> im = g2.realize(200, 200);
+        Buffer<int> im = g2.realize(200, 200);
         auto func = [](int x, int y) { return x; };
         if (check_image(im, func)) {
             return -1;
@@ -272,7 +272,7 @@ int multiple_funcs_sharing_wrapper_test() {
             return -1;
         }
 
-        Image<int> im = g3.realize(200, 200);
+        Buffer<int> im = g3.realize(200, 200);
         auto func = [](int x, int y) { return x; };
         if (check_image(im, func)) {
             return -1;
@@ -287,7 +287,7 @@ int global_wrap_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Buffer<int> buf = source.realize(200, 200);
     img.set(buf);
 
     g(x, y) = img(x, y);
@@ -318,7 +318,7 @@ int global_wrap_test() {
         return -1;
     }
 
-    Image<int> im = h.realize(200, 200);
+    Buffer<int> im = h.realize(200, 200);
     auto func = [](int x, int y) { return 2*(x + y); };
     if (check_image(im, func)) {
         return -1;
@@ -332,7 +332,7 @@ int update_defined_after_wrap_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Buffer<int> buf = source.realize(200, 200);
     img.set(buf);
 
     g(x, y) = img(x, y);
@@ -375,7 +375,7 @@ int update_defined_after_wrap_test() {
             return -1;
         }
 
-        Image<int> im = g.realize(200, 200);
+        Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
             return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
         };
@@ -404,7 +404,7 @@ int update_defined_after_wrap_test() {
             return -1;
         }
 
-        Image<int> im = g.realize(200, 200);
+        Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
             return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
         };
@@ -422,7 +422,7 @@ int rdom_wrapper_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Buffer<int> buf = source.realize(200, 200);
     img.set(buf);
 
     g(x, y) = 10;
@@ -453,7 +453,7 @@ int rdom_wrapper_test() {
         return -1;
     }
 
-    Image<int> im = wrapper.realize(200, 200);
+    Buffer<int> im = wrapper.realize(200, 200);
     auto func = [](int x, int y) { return 4*x + 6* y + 10; };
     if (check_image(im, func)) {
         return -1;
@@ -467,7 +467,7 @@ int global_and_custom_wrap_test() {
 
     source(x) = x;
     ImageParam img(Int(32), 1, "img");
-    Image<int> buf = source.realize(200);
+    Buffer<int> buf = source.realize(200);
     img.set(buf);
 
     g(x, y) = img(x);
@@ -497,7 +497,7 @@ int global_and_custom_wrap_test() {
         return -1;
     }
 
-    Image<int> im = result.realize(200, 200);
+    Buffer<int> im = result.realize(200, 200);
     auto func = [](int x, int y) { return 2*x; };
     if (check_image(im, func)) {
         return -1;
@@ -512,7 +512,7 @@ int wrapper_depend_on_mutated_func_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Buffer<int> buf = source.realize(200, 200);
     img.set(buf);
 
     f(x, y) = img(x, y);
@@ -548,7 +548,7 @@ int wrapper_depend_on_mutated_func_test() {
         return -1;
     }
 
-    Image<int> im = h.realize(200, 200);
+    Buffer<int> im = h.realize(200, 200);
     auto func = [](int x, int y) { return x + y; };
     if (check_image(im, func)) {
         return -1;
@@ -562,7 +562,7 @@ int wrapper_on_wrapper_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Buffer<int> buf = source.realize(200, 200);
     img.set(buf);
 
     g(x, y) = img(x, y) + img(x, y);
@@ -594,7 +594,7 @@ int wrapper_on_wrapper_test() {
         return -1;
     }
 
-    Image<int> im = h.realize(200, 200);
+    Buffer<int> im = h.realize(200, 200);
     auto func = [](int x, int y) { return 4*(x + y); };
     if (check_image(im, func)) {
         return -1;
@@ -608,7 +608,7 @@ int wrapper_on_rdom_predicate_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(200, 200);
+    Buffer<int> buf = source.realize(200, 200);
     img.set(buf);
 
     g(x, y) = 10;
@@ -644,7 +644,7 @@ int wrapper_on_rdom_predicate_test() {
         return -1;
     }
 
-    Image<int> im = g.realize(200, 200);
+    Buffer<int> im = g.realize(200, 200);
     auto func = [](int x, int y) {
         return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x + y + 5 < 50)) ? 15 : 10;
     };
@@ -660,7 +660,7 @@ int two_fold_wrapper_test() {
 
     source(x, y) = 2*x + 3*y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(1024, 1024);
+    Buffer<int> buf = source.realize(1024, 1024);
     img.set(buf);
 
     Func img_f = img;
@@ -689,7 +689,7 @@ int two_fold_wrapper_test() {
         return -1;
     }
 
-    Image<int> im = output.realize(1024, 1024);
+    Buffer<int> im = output.realize(1024, 1024);
     auto func = [](int x, int y) { return 3*x + 2*y; };
     if (check_image(im, func)) {
         return -1;
@@ -703,7 +703,7 @@ int multi_folds_wrapper_test() {
 
     source(x, y) = 2*x + 3*y;
     ImageParam img(Int(32), 2, "img");
-    Image<int> buf = source.realize(1024, 1024);
+    Buffer<int> buf = source.realize(1024, 1024);
     img.set(buf);
 
     Func img_f = img;
@@ -738,7 +738,7 @@ int multi_folds_wrapper_test() {
             return -1;
         }
 
-        Image<int> im = g.realize(1024, 1024);
+        Buffer<int> im = g.realize(1024, 1024);
         auto func = [](int x, int y) { return 3*x + 2*y; };
         if (check_image(im, func)) {
             return -1;
@@ -763,7 +763,7 @@ int multi_folds_wrapper_test() {
             return -1;
         }
 
-        Image<int> im = h.realize(1024, 1024);
+        Buffer<int> im = h.realize(1024, 1024);
         auto func = [](int x, int y) { return 3*x + 2*y; };
         if (check_image(im, func)) {
             return -1;

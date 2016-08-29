@@ -50,9 +50,9 @@ int main(int argc, char **argv) {
 
     const int iterations = 50;
 
-    Image<float> mat_A(matrix_size, matrix_size);
-    Image<float> mat_B(matrix_size, matrix_size);
-    Image<float> output(matrix_size, matrix_size);
+    Buffer<float> mat_A(matrix_size, matrix_size);
+    Buffer<float> mat_B(matrix_size, matrix_size);
+    Buffer<float> output(matrix_size, matrix_size);
 
     // init randomly
     for (int iy = 0; iy < matrix_size; iy++) {
@@ -72,8 +72,8 @@ int main(int argc, char **argv) {
     });
 
     // check results
-    Image<float> output_ref(matrix_size, matrix_size);
-    Image<float> output_halide(matrix_size, matrix_size);
+    Buffer<float> output_ref(matrix_size, matrix_size);
+    Buffer<float> output_halide(matrix_size, matrix_size);
 
     simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
     matrix_mul.realize(output_halide);

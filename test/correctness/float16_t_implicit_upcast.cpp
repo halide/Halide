@@ -21,7 +21,7 @@ int main() {
     f(x, y) = 0.25f + Expr(float16_t(0.75));
 
     // Use JIT for computation
-    Image<float> simple = f.realize(10, 3);
+    Buffer<float> simple = f.realize(10, 3);
 
     // Assert some basic properties of the image
     h_assert(simple.extent(0) == 10, "invalid width");

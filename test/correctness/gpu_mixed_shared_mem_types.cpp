@@ -4,7 +4,7 @@
 using namespace Halide;
 
 template <typename T>
-int check_result(Image<T> output, int n_types, int offset) {
+int check_result(Buffer<T> output, int n_types, int offset) {
     for (int x = 0; x < output.width(); x++) {
         T correct = n_types * (static_cast<uint16_t>(x) / 16) + offset;
         if (output(x) != correct) {
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     out(x) = e;
     out.gpu_tile(x, 23);
 
-    Image<> output = out.realize(23*5);
+    Buffer<> output = out.realize(23*5);
 
     int result;
     if (t.has_feature(Target::Metal)) {

@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image<int> out = f[K-1].realize(32, 32);
+    Buffer<int> out = f[K-1].realize(32, 32);
 
     printf("Success!\n");
     return 0;
