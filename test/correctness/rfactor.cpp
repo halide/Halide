@@ -456,7 +456,7 @@ int histogram_rfactor_test(bool compile_module) {
         }
     }
     // Wrap the image in a buffer, so that we know its name.
-    Buffer in_buf(in);
+    BufferPtr in_buf(in);
 
     Func hist("hist"), g("g");
     Var x("x");
