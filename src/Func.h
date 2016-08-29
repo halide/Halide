@@ -477,20 +477,14 @@ public:
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer or buffers. Performs compilation if the
      * Func has not previously been realized and jit_compile has not
-     * been called. The returned Buffer should probably be instantly
-     * wrapped in an Image class of the appropriate type. That is, do
-     * this:
+     * been called. If the final stage of the pipeline is on the GPU,
+     * data is copied back to the host before being returned. The
+     * returned Realization should probably be instantly converted to
+     * an Image class of the appropriate type. That is, do this:
      *
      \code
      f(x) = sin(x);
      Image<float> im = f.realize(...);
-     \endcode
-     *
-     * not this:
-     *
-     \code
-     f(x) = sin(x)
-     Buffer im = f.realize(...)
      \endcode
      *
      * If your Func has multiple values, because you defined it using
@@ -515,7 +509,7 @@ public:
     EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = Target());
     EXPORT Realization realize(int x_size,
-                               const Target &target = Target());
+                               const Target &target = Target());    
     EXPORT Realization realize(const Target &target = Target());
     // @}
 
@@ -523,14 +517,14 @@ public:
      * buffers. If the buffer is also one of the arguments to the
      * function, strange things may happen, as the pipeline isn't
      * necessarily safe to run in-place. If you pass multiple buffers,
-     * they must have matching sizes. */
+     * they must have matching sizes. This form of realize does *not*
+     * automatically copy data back from the GPU. */
     // @{
     EXPORT void realize(Realization dst, const Target &target = Target());
-    EXPORT void realize(Buffer dst, const Target &target = Target());
 
     template<typename T, int D>
     NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
-        realize(Buffer(dst), target);
+        realize(Realization{dst}, target);
     }
     // @}
 
@@ -542,7 +536,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-    EXPORT void infer_input_bounds(Buffer dst);
 
     template<typename T, int D>
     NO_INLINE void infer_input_bounds(Image<T, D> &im) {
@@ -550,9 +543,9 @@ public:
         // output buffers if their host pointer is null, so we must
         // take Images by reference and communicate the bounds query
         // result by modifying the argument.
-        Buffer b(im);
-        infer_input_bounds(b);
-        im = b.get();
+        Realization r(im);
+        infer_input_bounds(r);
+        im = r[0];
     }
     // @}
 

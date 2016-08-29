@@ -1874,7 +1874,7 @@ int main(int argc, char **argv) {
     if (can_run_code()) {
         for (ImageParam p : image_params) {
             // Make a buffer filled with noise to use as a sample input.
-            Buffer b(p.type(), {W*4+H, H});
+            Image<> b(p.type(), {W*4+H, H});
             Expr r;
             if (p.type().is_float()) {
                 r = cast(p.type(), random_float() * 1024 - 512);

@@ -26,13 +26,13 @@ struct ExternFuncArgument {
     enum ArgType {UndefinedArg = 0, FuncArg, BufferArg, ExprArg, ImageParamArg};
     ArgType arg_type;
     Internal::IntrusivePtr<Internal::FunctionContents> func;
-    Buffer buffer;
+    Internal::Buffer buffer;
     Expr expr;
     Internal::Parameter image_param;
 
     ExternFuncArgument(Internal::IntrusivePtr<Internal::FunctionContents> f): arg_type(FuncArg), func(f) {}
 
-    ExternFuncArgument(Buffer b): arg_type(BufferArg), buffer(b) {}
+    ExternFuncArgument(Internal::Buffer b): arg_type(BufferArg), buffer(b) {}
 
     template<typename T, int D>
     ExternFuncArgument(const Image<T, D> &im) : arg_type(BufferArg), buffer(im) {}
