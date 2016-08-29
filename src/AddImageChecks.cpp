@@ -16,7 +16,7 @@ using std::pair;
 class FindBuffers : public IRGraphVisitor {
 public:
     struct Result {
-        Buffer image;
+        BufferPtr image;
         Parameter param;
         Type type;
         int dimensions;
@@ -146,7 +146,7 @@ Stmt add_image_checks(Stmt s,
 
     for (pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
-        Buffer &image = buf.second.image;
+        BufferPtr &image = buf.second.image;
         Parameter &param = buf.second.param;
         Type type = buf.second.type;
         int dimensions = buf.second.dimensions;
@@ -251,7 +251,7 @@ Stmt add_image_checks(Stmt s,
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
             if (!touched[j].is_bounded()) {
-                user_error << "Buffer " << name
+                user_error << "BufferPtr " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
             }

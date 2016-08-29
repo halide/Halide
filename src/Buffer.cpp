@@ -28,73 +28,73 @@ EXPORT void destroy<BufferContents>(const BufferContents *p) {
 }
 
 namespace {
-std::string make_buffer_name(const std::string &n, Buffer *b) {
+std::string make_buffer_name(const std::string &n, BufferPtr *b) {
     if (n.empty()) {
-        return Internal::make_entity_name(b, "Halide::Internal::Buffer", 'b');
+        return Internal::make_entity_name(b, "Halide::Internal::BufferPtr", 'b');
     } else {
         return n;
     }
 }
 }
 
-Buffer::Buffer(const Image<void> &buf, std::string name) :
+BufferPtr::BufferPtr(const Image<void> &buf, std::string name) :
     contents(new Internal::BufferContents {Image<void>(buf), make_buffer_name(name, this)}) {}
 
-Buffer::Buffer(Type t, const buffer_t &buf, std::string name) :
+BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
     contents(new Internal::BufferContents {Image<void>(t, buf), make_buffer_name(name, this)}) {}
 
-Buffer::Buffer(Type t, const std::vector<int> &size, std::string name) :
+BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
     contents(new Internal::BufferContents {Image<void>(t, size), make_buffer_name(name, this)}) {}
 
-bool Buffer::same_as(const Buffer &other) const {
+bool BufferPtr::same_as(const BufferPtr &other) const {
     return contents.same_as(other.contents);
 }
 
-Image<void> &Buffer::get() {
+Image<void> &BufferPtr::get() {
     return contents->image;
 }
 
-const Image<void> &Buffer::get() const {
+const Image<void> &BufferPtr::get() const {
     return contents->image;
 }
 
-bool Buffer::defined() const {
+bool BufferPtr::defined() const {
     return contents->image;
 }
 
-const std::string &Buffer::name() const {
+const std::string &BufferPtr::name() const {
     return contents->name;
 }
 
-Buffer::operator Argument() const {
+BufferPtr::operator Argument() const {
     return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 
-Type Buffer::type() const {
+Type BufferPtr::type() const {
     return contents->image.type();
 }
 
-int Buffer::dimensions() const {
+int BufferPtr::dimensions() const {
     return contents->image.dimensions();
 }
 
-Image<void>::Dimension Buffer::dim(int i) const {
+Image<void>::Dimension BufferPtr::dim(int i) const {
     return contents->image.dim(i);
 }
 
-buffer_t *Buffer::raw_buffer() const {
+buffer_t *BufferPtr::raw_buffer() const {
     return contents->image.raw_buffer();
 }
 
-size_t Buffer::size_in_bytes() const {
+size_t BufferPtr::size_in_bytes() const {
     return contents->image.size_in_bytes();
 }
 
-uint8_t *Buffer::host_ptr() const {
+uint8_t *BufferPtr::host_ptr() const {
     return raw_buffer()->host;
 }
 
-Expr Buffer::operator()(const std::vector<Expr> &args) const {
+Expr BufferPtr::operator()(const std::vector<Expr> &args) const {
     // Cast the inputs to int32
     std::vector<Expr> int_args;
     for (Expr e : args) {

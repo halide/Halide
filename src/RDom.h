@@ -210,8 +210,8 @@ public:
     // @}
 
     /** Construct a reduction domain that iterates over all points in
-     * a given Buffer, Image, or ImageParam. Has the same
-     * dimensionality as the argument. */
+     * a given Buffer or ImageParam. Has the same dimensionality as
+     * the argument. */
     // @{
     EXPORT RDom(const Image<> &);
     EXPORT RDom(ImageParam);

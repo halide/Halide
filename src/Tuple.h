@@ -66,7 +66,7 @@ public:
  * them. Tuples are to Exprs as Realizations are to Images. */
 class Realization {
 private:
-    std::vector<Internal::Buffer> images;
+    std::vector<Internal::BufferPtr> images;
 public:
     /** The number of images in the Realization. */
     size_t size() const { return images.size(); }
@@ -96,7 +96,7 @@ public:
              typename ...Args,
              typename = std::enable_if<Internal::all_are_convertible<Image<>, Args...>::value>>
     Realization(Image<T, D> a, Args&&... args) {
-        images = std::vector<Internal::Buffer>{a, std::forward<Args>(args)...};
+        images = std::vector<Internal::BufferPtr>{a, std::forward<Args>(args)...};
     }
     //@}
 
@@ -104,13 +104,13 @@ public:
     explicit Realization(const std::vector<Image<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
         for (const Image<> &im : e) {
-            images.push_back(Internal::Buffer(im));
+            images.push_back(Internal::BufferPtr(im));
         }       
     }
 
     /** Support for iterating over a the Images in a Realization */
     struct iterator {
-        std::vector<Internal::Buffer>::iterator iter;
+        std::vector<Internal::BufferPtr>::iterator iter;
 
         Image<> &operator*() {
             return iter->get();
