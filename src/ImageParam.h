@@ -23,7 +23,7 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
-    EXPORT void set(Internal::Buffer b);
+    EXPORT void set(Internal::BufferPtr b);
     
 public:
 
@@ -42,7 +42,7 @@ public:
     // @{
     template<typename T, int D>
     NO_INLINE void set(const Image<T, D> &im) {
-        set(Internal::Buffer(im));
+        set(Internal::BufferPtr(im));
     }
     // @}
 

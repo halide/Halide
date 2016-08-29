@@ -50,7 +50,7 @@ Outputs static_library_outputs(const string &filename_prefix, const Target &targ
 struct InferredArgument {
     Argument arg;
     Parameter param;
-    Buffer buffer;
+    BufferPtr buffer;
 
     bool operator<(const InferredArgument &other) const {
         if (arg.is_buffer() && !other.arg.is_buffer()) {
@@ -373,11 +373,11 @@ private:
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                      p.type(), p.dimensions(), def, min, max),
             p,
-            Buffer()};
+            BufferPtr()};
         args.push_back(a);
     }
 
-    void include_buffer(Buffer b) {
+    void include_buffer(BufferPtr b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
 
@@ -450,10 +450,10 @@ vector<Argument> Pipeline::infer_arguments() {
 
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+vector<BufferPtr> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
     infer_arguments(body);
 
-    vector<Buffer> images_to_embed;
+    vector<BufferPtr> images_to_embed;
 
     for (const InferredArgument &arg : contents->inferred_args) {
 
@@ -581,7 +581,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<Buffer> global_images = validate_arguments(public_args, private_body);
+    vector<BufferPtr> global_images = validate_arguments(public_args, private_body);
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -589,7 +589,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
     vector<Argument> private_args = public_args;
-    for (Buffer buf : global_images) {
+    for (BufferPtr buf : global_images) {
         module.append(buf);
         private_args.push_back(Argument(buf.name(),
                                         Argument::InputBuffer,
@@ -963,7 +963,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (InferredArgument arg : input_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer buf = arg.param.get_buffer();
+            BufferPtr buf = arg.param.get_buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {

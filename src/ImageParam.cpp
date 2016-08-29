@@ -28,7 +28,7 @@ void ImageParam::init_func() {
     func(args) = Internal::Call::make(param, args_expr);
 }
 
-void ImageParam::set(Internal::Buffer b) {
+void ImageParam::set(Internal::BufferPtr b) {
     if (b.defined()) {
         user_assert(b.type() == type())
             << "Can't bind ImageParam " << name()
@@ -48,7 +48,7 @@ Image<> &ImageParam::get() {
 }
 
 void ImageParam::reset() {
-    set(Internal::Buffer());
+    set(Internal::BufferPtr());
 }
 
 Expr ImageParam::operator()(std::vector<Expr> args_passed) const {

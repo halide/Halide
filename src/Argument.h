@@ -65,11 +65,11 @@ struct Argument {
         user_assert(!(is_scalar() && dimensions != 0))
             << "Scalar Arguments must specify dimensions of 0";
         user_assert(!(is_buffer() && def.defined()))
-            << "Scalar default must not be defined for Buffer Arguments";
+            << "Scalar default must not be defined for BufferPtr Arguments";
         user_assert(!(is_buffer() && min.defined()))
-            << "Scalar min must not be defined for Buffer Arguments";
+            << "Scalar min must not be defined for BufferPtr Arguments";
         user_assert(!(is_buffer() && max.defined()))
-            << "Scalar max must not be defined for Buffer Arguments";
+            << "Scalar max must not be defined for BufferPtr Arguments";
     }
 
     template<typename T, int D>

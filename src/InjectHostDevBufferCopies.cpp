@@ -405,7 +405,7 @@ class InjectBufferCopies : public IRMutator {
             if (l->index.same_as(new_index)) {
                 expr = op;
             } else {
-                Expr new_load = Load::make(l->type, l->name, new_index, Buffer(), Parameter());
+                Expr new_load = Load::make(l->type, l->name, new_index, BufferPtr(), Parameter());
                 expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
             }
         } else if (op->is_intrinsic(Call::image_load)) {

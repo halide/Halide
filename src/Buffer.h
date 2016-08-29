@@ -2,7 +2,7 @@
 #define HALIDE_BUFFER_H
 
 /** \file
- * Defines Buffer - A c++ wrapper around a buffer_t.
+ * Defines BufferPtr - A c++ wrapper around a buffer_t.
  */
 
 #include "runtime/HalideImage.h"
@@ -15,22 +15,22 @@ namespace Internal {
 struct BufferContents;
 
 /** A named reference-counted handle on an Image of unknown type and dimensionality */
-class Buffer {
+class BufferPtr {
 private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
 public:
-    Buffer() : contents(nullptr) {}
-    EXPORT Buffer(const Image<void> &buf, std::string name = "");
-    EXPORT Buffer(Type t, const buffer_t &buf, std::string name = "");
+    BufferPtr() : contents(nullptr) {}
+    EXPORT BufferPtr(const Image<void> &buf, std::string name = "");
+    EXPORT BufferPtr(Type t, const buffer_t &buf, std::string name = "");
 
-    template<typename T, int D> Buffer(const Image<T, D> &buf, std::string name = "") :
-        Buffer(Image<void>(buf), name) {}
+    template<typename T, int D> BufferPtr(const Image<T, D> &buf, std::string name = "") :
+        BufferPtr(Image<void>(buf), name) {}
 
-    EXPORT Buffer(Type t, const std::vector<int> &size, std::string name = "");
+    EXPORT BufferPtr(Type t, const std::vector<int> &size, std::string name = "");
 
     /** Compare two buffers for identity (not equality of data). */
-    bool same_as(const Buffer &other) const;
+    bool same_as(const BufferPtr &other) const;
 
     /** Get the underlying Image */
     EXPORT Image<void> &get();
@@ -96,7 +96,7 @@ public:
 template<typename T, int D, typename ...Args,
          typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
 NO_INLINE Expr image_accessor(const Image<T, D> &im, Expr first, Args... rest) {
-    return Internal::Buffer(im)(first, rest...);
+    return Internal::BufferPtr(im)(first, rest...);
 }
 
 }
