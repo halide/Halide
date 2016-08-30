@@ -1,5 +1,5 @@
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 // Grab the internal device_interface functions
 #define WEAK

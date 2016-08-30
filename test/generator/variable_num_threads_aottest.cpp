@@ -1,5 +1,5 @@
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>

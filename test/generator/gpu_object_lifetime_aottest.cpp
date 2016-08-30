@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 
 #if COMPILING_FOR_CUDA

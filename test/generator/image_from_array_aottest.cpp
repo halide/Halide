@@ -1,4 +1,4 @@
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 #include <stdint.h>
 #include <iostream>

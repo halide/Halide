@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include "memory_profiler_mandelbrot.h"
 
 using namespace Halide;

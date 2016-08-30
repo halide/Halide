@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #include "pyramid.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 #include <vector>
 using std::vector;

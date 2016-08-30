@@ -3,7 +3,7 @@
 
 #include "extended_buffer_t_common.h"
 #include "extended_buffer_t.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 using namespace Halide;
 

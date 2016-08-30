@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "mandelbrot.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 using namespace Halide;
 
