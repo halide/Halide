@@ -5,7 +5,7 @@
 #include "bilateral_grid.h"
 
 #include "benchmark.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include "halide_image_io.h"
 
 using namespace Halide;
@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
 
     int timing_iterations = atoi(argv[4]);
 
-    Image<float> input = Tools::load_image(argv[1]);
-    Image<float> output(input.width(), input.height(), 1);
+    Buffer<float> input = Tools::load_image(argv[1]);
+    Buffer<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(atof(argv[3]), input, output);
 
