@@ -73,9 +73,9 @@ int main(int argc, char **argv) {
     // also need to tell Halide the domain over which to evaluate the
     // Func, which determines the range of x and y above, and the
     // resolution of the output image. Halide.h also provides a basic
-    // templatized Image type we can use. We'll make an 800 x 600
+    // templatized image type we can use. We'll make an 800 x 600
     // image.
-    Halide::Image<int32_t> output = gradient.realize(800, 600);
+    Halide::Buffer<int32_t> output = gradient.realize(800, 600);
 
     // Halide does type inference for you. Var objects represent
     // 32-bit integers, so the Expr object 'x + y' also represents a
