@@ -65,14 +65,14 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 
 // TODO: Opt: Generate control code for prefetch_buffer_t in Prefetch.cpp
 // TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
-WEAK int halide_hexagon_prefetch_buffer_t(unsigned int dim, const buffer_t *buf)
+WEAK int halide_hexagon_prefetch_buffer_t(uint32_t dim, int32_t elem_size, const buffer_t *buf)
 {
     // Extract needed fields from buffer_t
-    const int32_t elem_size_bytes = buf->elem_size;
+    unsigned char *addr   = buf->host;
     const int32_t *min    = buf->min;
     const int32_t *stride = buf->stride;
     const int32_t *extent = buf->extent;
-    unsigned char *addr   = buf->host;
+    const int32_t elem_size_bytes = elem_size;  // element size in bytes
     unsigned int boxdim   = dim;  // dimensions of entire box to prefetch
     unsigned int iterdim  = 2;    // dimension to iterate over
 
@@ -128,7 +128,8 @@ WEAK int halide_hexagon_prefetch_buffer_t(unsigned int dim, const buffer_t *buf)
     // uint64_t pdesc = 0x1020002000001; // col, 512 width, 1 row
     // uint64_t pdesc = 0x1144014400001; // col, 5184 width, 1 row
 
-    // debug(0) << "halide_hexagon_prefetch_buffer_t(" << dim << ", " << buf << ")"
+    // debug(0) << "halide_hexagon_prefetch_buffer_t("
+    //          << dim << ", " << elem_size ", " << buf << ")"
     //          << " addr:" << addr << " pdesc:" << pdesc << "\n";
 
     if (boxdim <= 2) {  // 2-D box, perform a single prefetch
