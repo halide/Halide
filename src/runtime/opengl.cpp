@@ -726,6 +726,8 @@ WEAK int halide_opengl_init(void *user_context) {
         << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
         << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
 
+    GLStateSaver state_saver;
+
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_init GenFramebuffers")) {
@@ -1440,7 +1442,7 @@ WEAK int halide_opengl_run(void *user_context,
     GLStateSaver state_saver;
 
     // Find the right module
-    ModuleState *mod = find_module(entry_name);
+    ModuleState *mod = (ModuleState*)state_ptr;
     if (!mod) {
       error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
       return 1;
@@ -1930,7 +1932,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     ModuleState **state = (ModuleState **)state_ptr;
     ModuleState *module = *state;
 
-    while (this_kernel) {
+    while (this_kernel && !module) {
         // Find the start of the next kernel
         const char *next_kernel = strstr(this_kernel+1, kernel_marker);        
 
