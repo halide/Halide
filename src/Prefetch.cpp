@@ -141,7 +141,7 @@ private:
                     Type t = get_type(varname, has_static_type);
                     debug(dbg_prefetch0) << "  prefetch" << ptmp << ": "
                                          << varname << " (" << t
-                                         << (has_static_type ? "" : "dynamic_type")
+                                         << (has_static_type ? "" : ":dynamic_type")
                                          << ", dims:" << dims << ")\n";
                     for (int i = 0; i < dims; i++) {
                         debug(dbg_prefetch1) << "    ---\n";
@@ -224,9 +224,10 @@ private:
                     // TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
                     Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                                           args_prefetch, Call::Intrinsic));
-                    if (cnt == 0) {
+
+                    if (cnt == 0) {     // First prefetch in sequence
                         pstmts = stmt_prefetch;
-                    } else {
+                    } else {            // Add to existing sequence
                         pstmts = Block::make({stmt_prefetch, pstmts});
                     }
                     cnt++;
