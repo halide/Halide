@@ -20,6 +20,7 @@ using std::map;
 using std::string;
 using std::vector;
 using std::stack;
+using std::pair;
 
 // Prefetch debug levels
 int dbg_prefetch0 = 1;
@@ -129,8 +130,8 @@ private:
                 map<string, Box> boxes;
                 boxes = boxes_required(body, scope);
 
-                int cnt = 0;            // Number of prefetch ops generated
-                Stmt pstmts;            // Generated prefetch statements
+                vector<pair<string, Expr>> plets;  // Prefetch let assignments
+                vector<Stmt> pstmts;               // Prefetch stmt sequence
                 debug(dbg_prefetch1) << "  boxes required:\n";
                 for (auto &b : boxes) {
                     bool do_prefetch = true;
@@ -159,12 +160,17 @@ private:
                     string varname_prefetch_buf = varname + ".prefetch_" + pstr + "_buf";
                     Expr var_prefetch_buf = Variable::make(Int(32), varname_prefetch_buf);
 
-                    // Make the names for accessing the buffer strides
+                    // Establish the variables for buffer strides, box min & max
                     vector<Expr> stride_var(dims);
+                    vector<Expr> min_var(dims);
+                    vector<Expr> max_var(dims);
                     for (int i = 0; i < dims; i++) {
                         string istr = std::to_string(i);
                         string stride_name = varname + ".stride." + istr;
-#if 0                   // TODO: Determine if the stride varname is defined - check not yet working
+                        string min_name = varname + ".prefetch_" + pstr + "_min_" + istr;
+                        string max_name = varname + ".prefetch_" + pstr + "_max_" + istr;
+
+#if 0  // TODO: Determine if the stride varname is defined - check not yet working
                         // if (!scope.contains(stride_name)) [
                         if (env.find(stride_name) == env.end()) {
                             do_prefetch = false;
@@ -173,25 +179,19 @@ private:
                         }
 #endif
                         stride_var[i] = Variable::make(Int(32), stride_name);
+                        min_var[i] = Variable::make(Int(32), min_name);
+                        max_var[i] = Variable::make(Int(32), max_name);
+
+                        // Record let assignments
+                        // except for stride, already defined by buffer
+                        plets.push_back(make_pair(min_name, box[i].min));
+                        plets.push_back(make_pair(max_name, box[i].max));
                     }
 
                     // This box should not be prefetched
                     if (!do_prefetch) {
                         debug(dbg_prefetch0) << "  not prefetching " << varname << "\n";
                         continue;
-                    }
-
-                    // Make the names for the prefetch box mins & maxes
-                    vector<string> min_name(dims), max_name(dims);
-                    for (int i = 0; i < dims; i++) {
-                        string istr = std::to_string(i);
-                        min_name[i] = varname + ".prefetch_" + pstr + "_min_" + istr;
-                        max_name[i] = varname + ".prefetch_" + pstr + "_max_" + istr;
-                    }
-                    vector<Expr> min_var(dims), max_var(dims);
-                    for (int i = 0; i < dims; i++) {
-                        min_var[i] = Variable::make(Int(32), min_name[i]);
-                        max_var[i] = Variable::make(Int(32), max_name[i]);
                     }
 
                     // Create a buffer_t object for this prefetch.
@@ -205,13 +205,18 @@ private:
                         args[3*i+4] = stride_var[i];
                     }
 
-                    // Inject the prefetch call
+                    // Create the create_buffer_t call
+                    Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                                          args, Call::Intrinsic);
+                    plets.push_back(make_pair(varname_prefetch_buf, prefetch_buf));
+
+                    // Create the prefetch call
                     vector<Expr> args_prefetch(3);
                     args_prefetch[0] = dims;
                     if (has_static_type) {
                         args_prefetch[1] = t.bytes();
                     } else {
-                        // Element size for inputs that don't have static types
+                        // Use element size for inputs that don't have static types
                         string elem_size_name = varname + ".elem_size";
                         Expr elem_size_var = Variable::make(Int(32), elem_size_name);
                         args_prefetch[1] = elem_size_var;
@@ -225,40 +230,30 @@ private:
                     Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                                           args_prefetch, Call::Intrinsic));
 
-                    if (cnt == 0) {     // First prefetch in sequence
-                        pstmts = stmt_prefetch;
-                    } else {            // Add to existing sequence
-                        pstmts = Block::make({stmt_prefetch, pstmts});
-                    }
-                    cnt++;
-
-                    // Inject the create_buffer_t call
-                    Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                          args, Call::Intrinsic);
-                    pstmts = LetStmt::make(varname_prefetch_buf, prefetch_buf, pstmts);
-
-                    // Inject bounds variable assignments
-                    for (int i = dims-1; i >= 0; i--) {
-                        pstmts = LetStmt::make(max_name[i], box[i].max, pstmts);
-                        pstmts = LetStmt::make(min_name[i], box[i].min, pstmts);
-                        // stride already defined by input buffer
-                    }
+                    pstmts.push_back(stmt_prefetch);
                 }
 
-                if (cnt) {
-#if 1
+                // Inject the generated prefetch code
+                if (pstmts.size() > 0) {
+                    Stmt pbody = pstmts.back();    // Initialize prefetch body
+                    pstmts.pop_back();
+                    for (size_t i = pstmts.size(); i > 0; i--) {
+                        pbody = Block::make(pstmts[i-1], pbody);
+                    }
+                    for (size_t i = plets.size(); i > 0; i--) {
+                        pbody = LetStmt::make(plets[i-1].first, plets[i-1].second, pbody);
+                    }
+
                     // Guard to not prefetch past the end of the iteration space
-                    // TODO: Opt: Use original extent of loop for guard (avoid conservative guard when stripmined)
+                    // TODO: Opt: Use original extent of loop in guard condition
+                    // TODO       to prefetch valid iterations that are skipped
+                    // TODO       with current extent when loop is stripmined
                     Expr pcond = likely((Variable::make(Int(32), op->name) + p.offset)
                                                         < (op->min + op->extent - 1));
-                    Stmt pguard = IfThenElse::make(pcond, pstmts);
+                    Stmt pguard = IfThenElse::make(pcond, pbody);
                     body = Block::make({pguard, body});
 
-                    debug(dbg_prefetch3) << "    prefetch: (cnt:" << cnt << ")\n";
                     debug(dbg_prefetch3) << pguard << "\n";
-#else
-                    body = Block::make({pstmts, body});
-#endif
                 }
 
                 scope.pop(op->name);
