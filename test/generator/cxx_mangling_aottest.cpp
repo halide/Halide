@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #include <string.h>
 

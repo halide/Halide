@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
 
 #include <math.h>
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #include <string.h>
 

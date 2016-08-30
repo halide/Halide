@@ -3,7 +3,7 @@
 #include <tuple>
 #include "HalideRuntime.h"
 #include "multitarget.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 using namespace Halide;
 

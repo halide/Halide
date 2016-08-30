@@ -3,7 +3,7 @@
 #include <assert.h>
 
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include "user_context_insanity.h"
 
 using namespace Halide;

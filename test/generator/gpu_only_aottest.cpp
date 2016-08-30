@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
