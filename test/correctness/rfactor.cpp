@@ -88,7 +88,7 @@ int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
     return 0;
 }
 
-int check_image(const Buffer<int> &im, const std::function<int(int,int,int)> &func) {
+int check_image(const Image<int> &im, const std::function<int(int,int,int)> &func) {
     for (int z = 0; z < im.channels(); z++) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
@@ -139,7 +139,7 @@ int simple_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(80, 80);
+        Image<int> im = g.realize(80, 80);
         auto func = [](int x, int y, int z) {
             return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
         };
@@ -191,7 +191,7 @@ int reorder_split_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(80, 80);
+        Image<int> im = g.realize(80, 80);
         auto func = [](int x, int y, int z) {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
@@ -243,7 +243,7 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(20, 20, 20);
+        Image<int> im = g.realize(20, 20, 20);
         auto func = [](int x, int y, int z) {
             return ((5 <= x && x <= 14) && (5 <= y && y <= 14) &&
                     (5 <= z && z <= 14)) ? x + y + z + 1 : 1;
@@ -269,7 +269,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
     b.compute_root();
     c.compute_root();
 
-    Buffer<int> im_ref(20, 20, 20);
+    Image<int> im_ref(20, 20, 20);
 
     {
         Func f("f"), g("g");
@@ -318,7 +318,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
                 return -1;
             }
         } else {
-            Buffer<int> im = g.realize(20, 20, 20);
+            Image<int> im = g.realize(20, 20, 20);
             auto func = [im_ref](int x, int y, int z) {
                 return im_ref(x, y, z);
             };
@@ -368,7 +368,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
     } else {
         {
             p.set(0);
-            Buffer<int> im = g.realize(80, 80);
+            Image<int> im = g.realize(80, 80);
             auto func = [](int x, int y, int z) {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
@@ -378,7 +378,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
         }
         {
             p.set(20);
-            Buffer<int> im = g.realize(80, 80);
+            Image<int> im = g.realize(80, 80);
             auto func = [](int x, int y, int z) {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
@@ -427,7 +427,7 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(20, 20, 20);
+        Image<int> im = g.realize(20, 20, 20);
         auto func = [](int x, int y, int z) {
             return (5 <= x && x <= 14) && (5 <= y && y <= 14) &&
                    (0 <= z && z <= 19) && (x < y) && (x + 2*y <= z) ? x + y + z + 1 : 1;
@@ -448,7 +448,7 @@ int histogram_rfactor_test(bool compile_module) {
         reference_hist[i] = 0;
     }
 
-    Buffer<float> in(W, H);
+    Image<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = float(rand() & 0x000000ff);
@@ -491,7 +491,7 @@ int histogram_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int32_t> histogram = g.realize(10); // buckets 10-20 only
+        Image<int32_t> histogram = g.realize(10); // buckets 10-20 only
         for (int i = 10; i < 20; i++) {
             if (histogram(i-10) != reference_hist[i]) {
                 printf("Error: bucket %d is %d instead of %d\n",
@@ -519,7 +519,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     Func dot_ref("dot");
     dot_ref() = 0;
     dot_ref() += a(r.x)*b(r.x);
-    Buffer<int32_t> ref = dot_ref.realize();
+    Image<int32_t> ref = dot_ref.realize();
 
     Func dot("dot");
     dot() = 0;
@@ -539,7 +539,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     intm2.compute_at(intm1, u);
     intm2.update(0).vectorize(v, 8);
 
-    Buffer<int32_t> im = dot.realize();
+    Image<int32_t> im = dot.realize();
 
     if (compile_module) {
         // Check the call graphs.
@@ -561,7 +561,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int32_t> im = dot.realize();
+        Image<int32_t> im = dot.realize();
         if (ref(0) != im(0)) {
             printf("result = %d instead of %d\n", im(0), ref(0));
             return -1;
@@ -626,11 +626,11 @@ int tuple_rfactor_test(bool compile_module) {
         }
     } else {
         Realization rn = g.realize(80, 80);
-        Buffer<int> im1(rn[0]);
-        Buffer<int> im2(rn[1]);
+        Image<int> im1(rn[0]);
+        Image<int> im2(rn[1]);
 
-        Buffer<int> ref_im1(ref_rn[0]);
-        Buffer<int> ref_im2(ref_rn[1]);
+        Image<int> ref_im1(ref_rn[0]);
+        Image<int> ref_im2(ref_rn[1]);
 
         auto func1 = [&ref_im1](int x, int y, int z) {
             return ref_im1(x, y);
@@ -718,11 +718,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(10);
             q.set(true);
             Realization rn = g.realize(10, 10);
-            Buffer<int> im1(rn[0]);
-            Buffer<int> im2(rn[1]);
+            Image<int> im1(rn[0]);
+            Image<int> im2(rn[1]);
 
-            Buffer<int> ref_im1(ref_rn[0]);
-            Buffer<int> ref_im2(ref_rn[1]);
+            Image<int> ref_im1(ref_rn[0]);
+            Image<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -741,11 +741,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(10);
             q.set(false);
             Realization rn = g.realize(10, 10);
-            Buffer<int> im1(rn[0]);
-            Buffer<int> im2(rn[1]);
+            Image<int> im1(rn[0]);
+            Image<int> im2(rn[1]);
 
-            Buffer<int> ref_im1(ref_rn[0]);
-            Buffer<int> ref_im2(ref_rn[1]);
+            Image<int> ref_im1(ref_rn[0]);
+            Image<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -764,11 +764,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(0);
             q.set(true);
             Realization rn = g.realize(10, 10);
-            Buffer<int> im1(rn[0]);
-            Buffer<int> im2(rn[1]);
+            Image<int> im1(rn[0]);
+            Image<int> im2(rn[1]);
 
-            Buffer<int> ref_im1(ref_rn[0]);
-            Buffer<int> ref_im2(ref_rn[1]);
+            Image<int> ref_im1(ref_rn[0]);
+            Image<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -787,11 +787,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(0);
             q.set(false);
             Realization rn = g.realize(10, 10);
-            Buffer<int> im1(rn[0]);
-            Buffer<int> im2(rn[1]);
+            Image<int> im1(rn[0]);
+            Image<int> im2(rn[1]);
 
-            Buffer<int> ref_im1(ref_rn[0]);
-            Buffer<int> ref_im2(ref_rn[1]);
+            Image<int> ref_im1(ref_rn[0]);
+            Image<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -836,8 +836,8 @@ int subtraction_rfactor_test() {
     intm.compute_root();
     intm.update(0).vectorize(u, 2);
 
-    Buffer<int> im_ref = ref.realize(80, 80);
-    Buffer<int> im = g.realize(80, 80);
+    Image<int> im_ref = ref.realize(80, 80);
+    Image<int> im = g.realize(80, 80);
     auto func = [&im_ref](int x, int y, int z) {
         return im_ref(x, y);
     };

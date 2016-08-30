@@ -18,12 +18,12 @@ int main(int argc, char **argv) {
 
     f.parallel(y);
 
-    Buffer<float> imf = f.realize(W, H);
+    Image<float> imf = f.realize(W, H);
 
     double parallelTime = benchmark(1, 1, [&]() { f.realize(imf); });
 
     printf("Realizing g\n");
-    Buffer<float> img = g.realize(W, H);
+    Image<float> img = g.realize(W, H);
     printf("Done realizing g\n");
 
     double serialTime = benchmark(1, 1, [&]() { g.realize(img); });

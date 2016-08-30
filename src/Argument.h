@@ -65,15 +65,15 @@ struct Argument {
         user_assert(!(is_scalar() && dimensions != 0))
             << "Scalar Arguments must specify dimensions of 0";
         user_assert(!(is_buffer() && def.defined()))
-            << "Scalar default must not be defined for BufferPtr Arguments";
+            << "Scalar default must not be defined for Buffer Arguments";
         user_assert(!(is_buffer() && min.defined()))
-            << "Scalar min must not be defined for BufferPtr Arguments";
+            << "Scalar min must not be defined for Buffer Arguments";
         user_assert(!(is_buffer() && max.defined()))
-            << "Scalar max must not be defined for BufferPtr Arguments";
+            << "Scalar max must not be defined for Buffer Arguments";
     }
 
     template<typename T, int D>
-    Argument(const Buffer<T, D> &im) : kind(InputBuffer), dimensions(im.dimensions()), type(im.type()) {}
+    Argument(const Image<T, D> &im) : kind(InputBuffer), dimensions(im.dimensions()), type(im.type()) {}
 
     bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
     bool is_scalar() const { return kind == InputScalar; }

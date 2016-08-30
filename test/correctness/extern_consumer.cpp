@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
         return -1;
 
     // Test ImageParam ExternFuncArgument via passed in image.
-    Buffer<int32_t> buf = source.realize(10);
+    Image<int32_t> buf = source.realize(10);
     ImageParam passed_in(Int(32), 1);
     passed_in.set(buf);
 

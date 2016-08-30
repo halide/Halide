@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     f.gpu_tile(x, 16).reorder(Var::gpu_blocks(), Var::gpu_threads());
 
     f.compile_jit(t);
-    Buffer<int> result = f.realize(16);
+    Image<int> result = f.realize(16);
 
     printf("There should have been an error\n");
     return 0;

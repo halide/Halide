@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Buffer<int8_t> im(1697);
+    Image<int8_t> im(1697);
 
     // A strided load with stride two loads a pair of vectors and
     // shuffles out the elements like so:

@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     f(x, y, dom / hard_to_reason_about) += 1;
     f.compile_jit();
 
-    Buffer<float> im(32, 32);
+    Image<float> im(32, 32);
     input.set(im);
 
     f.realize(100, 100, 16);

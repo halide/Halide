@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     }
 
     Target t = get_jit_target_from_environment().with_feature(Target::Profile);
-    Buffer<float> im = out.realize(10, 1000, t);
+    Image<float> im = out.realize(10, 1000, t);
 
     //out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
 

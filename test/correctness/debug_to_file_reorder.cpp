@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file("h2.tmp");
         }
 
-        Buffer<float> im = h.realize(size_x, size_y, target);
+        Image<float> im = h.realize(size_x, size_y, target);
     }
 
     FILE *f = fopen("f2.tmp", "rb");

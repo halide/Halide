@@ -113,8 +113,8 @@ void match_argument(const halide_filter_argument_t &e, const halide_filter_argum
 }
 
 template <typename Type>
-Buffer<Type> make_image() {
-    Buffer<Type> im(kSize, kSize, 3);
+Image<Type> make_image() {
+    Image<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -126,7 +126,7 @@ Buffer<Type> make_image() {
 }
 
 template <typename InputType, typename OutputType>
-void verify(const Buffer<InputType> &input, const Buffer<OutputType> &output0, const Buffer<OutputType> &output1) {
+void verify(const Image<InputType> &input, const Image<OutputType> &output0, const Image<OutputType> &output1) {
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -413,10 +413,10 @@ int main(int argc, char **argv) {
 
     int result;
 
-    Buffer<uint8_t> input = make_image<uint8_t>();
+    Image<uint8_t> input = make_image<uint8_t>();
 
-    Buffer<float> output0(kSize, kSize, 3);
-    Buffer<float> output1(kSize, kSize, 3);
+    Image<float> output0(kSize, kSize, 3);
+    Image<float> output1(kSize, kSize, 3);
 
     result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
     EXPECT_EQ(0, result);
