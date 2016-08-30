@@ -59,14 +59,15 @@ private:
     // Lookup a function in the environment
     Function get_func(const string &name) {
         map<string, Function>::const_iterator iter = env.find(name);
-        internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+        internal_assert(iter != env.end()) << "function not in environment.\n";
         return iter->second;
     }
 
-    // Determine the type of a named buffer
-    Type get_type(string varname) {
+    // Determine the static type of a named buffer (if available)
+    // Note: the type of input is only known at runtime (use input.elem_size)
+    Type get_type(string varname, bool &has_static_type) {
         debug(dbg_prefetch2) << "    getType(" << varname << ")\n";
-        Type t = Int(8);
+        Type t = UInt(8);
         map<string, Function>::const_iterator varit = env.find(varname);
         if (varit != env.end()) {
             Function varf = varit->second;
@@ -76,8 +77,11 @@ private:
                 t = varts[0];
                 debug(dbg_prefetch2) << "      type: " << t << "\n";
             }
+            has_static_type = true;
         } else {
-            debug(dbg_prefetch2) << "      could not determine type\n";
+            debug(dbg_prefetch2) << "      could not statically determine type of " << varname
+                                 << ", temporarily using: " << t << "\n";
+            has_static_type = false;
         }
         return t;
     }
@@ -129,12 +133,16 @@ private:
                 Stmt pstmts;            // Generated prefetch statements
                 debug(dbg_prefetch1) << "  boxes required:\n";
                 for (auto &b : boxes) {
+                    bool do_prefetch = true;
                     const string &varname = b.first;
                     Box &box = b.second;
                     int dims = box.size();
-                    Type t = get_type(varname);
+                    bool has_static_type = true;
+                    Type t = get_type(varname, has_static_type);
                     debug(dbg_prefetch0) << "  prefetch" << ptmp << ": "
-                                         << varname << " (" << t << ", dims:" << dims << ")\n";
+                                         << varname << " (" << t
+                                         << (has_static_type ? "" : "dynamic_type")
+                                         << ", dims:" << dims << ")\n";
                     for (int i = 0; i < dims; i++) {
                         debug(dbg_prefetch1) << "    ---\n";
                         debug(dbg_prefetch1) << "    box[" << i << "].min: " << box[i].min << "\n";
@@ -156,7 +164,21 @@ private:
                     for (int i = 0; i < dims; i++) {
                         string istr = std::to_string(i);
                         string stride_name = varname + ".stride." + istr;
+#if 0                   // TODO: Determine if the stride varname is defined - check not yet working
+                        // if (!scope.contains(stride_name)) [
+                        if (env.find(stride_name) == env.end()) {
+                            do_prefetch = false;
+                            debug(dbg_prefetch0) << "  " << stride_name << " undefined\n";
+                            break;
+                        }
+#endif
                         stride_var[i] = Variable::make(Int(32), stride_name);
+                    }
+
+                    // This box should not be prefetched
+                    if (!do_prefetch) {
+                        debug(dbg_prefetch0) << "  not prefetching " << varname << "\n";
+                        continue;
                     }
 
                     // Make the names for the prefetch box mins & maxes
@@ -184,9 +206,17 @@ private:
                     }
 
                     // Inject the prefetch call
-                    vector<Expr> args_prefetch(2);
+                    vector<Expr> args_prefetch(3);
                     args_prefetch[0] = dims;
-                    args_prefetch[1] = var_prefetch_buf;
+                    if (has_static_type) {
+                        args_prefetch[1] = t.bytes();
+                    } else {
+                        // Element size for inputs that don't have static types
+                        string elem_size_name = varname + ".elem_size";
+                        Expr elem_size_var = Variable::make(Int(32), elem_size_name);
+                        args_prefetch[1] = elem_size_var;
+                    }
+                    args_prefetch[2] = var_prefetch_buf;
                     // TODO: Opt: Keep running sum of bytes prefetched on this sequence
                     // TODO: Opt: Keep running sum of number of prefetch instructions issued
                     // TODO       on this sequence? (to not exceed MAX_PREFETCH)

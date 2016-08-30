@@ -1904,16 +1904,6 @@ inline Expr likely_if_innermost(Expr e) {
                                 {e}, Internal::Call::PureIntrinsic);
 }
 
-#if 0
-/** Expressions tagged with this intrinsic should be prefetched
- * if the target supports prefetching
- */
-inline Expr prefetch_buffer_t(Expr addr, Expr desc) {
-    return Internal::Call::make(addr.type(), Internal::Call::prefetch_buffer_t,
-                                {addr, desc}, Internal::Call::PureIntrinsic);
-}
-#endif
-
 }
 
 #endif
