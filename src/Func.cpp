@@ -1432,6 +1432,43 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
+Stage &Stage::shader(VarOrRVar x, VarOrRVar y, VarOrRVar c, DeviceAPI device_api) {
+    reorder(c, x, y);
+    // GLSL outputs must be stored interleaved
+    // No reorder_storage, so we manually reorder
+    vector<StorageDim> reordered_storage;
+    reordered_storage.push_back(storage_dims[2]);
+    reordered_storage.push_back(storage_dims[0]);
+    reordered_storage.push_back(storage_dims[1]);
+
+    // TODO: Set appropriate constraints if this is the output buffer?
+
+    Stage(definition, stage_name, dim_vars, reordered_storage).gpu_blocks(x, y, device_api);
+
+    // TODO: In a Stage, we can't access the actual schedule it looks like, only the definition's
+    // schedule.  We need some way to check that the channel dimension is constant.
+    /*
+    bool constant_bounds = false;
+    const Schedule &sched = get_schedule();
+
+    for (size_t i = 0; i < sched.bounds().size(); i++) {
+        debug(0) << c.name() << "\n";
+        if (c.name() == sched.bounds()[i].var) {
+            constant_bounds = is_const(sched.bounds()[i].min) &&
+                is_const(sched.bounds()[i].extent);
+            break;
+        }
+    }
+    user_assert(constant_bounds)
+        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
+    */
+    return *this;
+}
+
+Stage &Stage::glsl(VarOrRVar x, VarOrRVar y, VarOrRVar c) {
+    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
+}
+
 Stage &Stage::hexagon(VarOrRVar x) {
     set_dim_device_api(x, DeviceAPI::Hexagon);
     return *this;
@@ -1793,28 +1830,10 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
+
 Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
-
-    reorder(c, x, y);
-    // GLSL outputs must be stored interleaved
-    reorder_storage(c, x, y);
-
-    // TODO: Set appropriate constraints if this is the output buffer?
-
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_blocks(x, y, device_api);
-
-    bool constant_bounds = false;
-    Schedule &sched = func.schedule();
-    for (size_t i = 0; i < sched.bounds().size(); i++) {
-        if (c.name() == sched.bounds()[i].var) {
-            constant_bounds = is_const(sched.bounds()[i].min) &&
-                is_const(sched.bounds()[i].extent);
-            break;
-        }
-    }
-    user_assert(constant_bounds)
-        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     return *this;
 }
 

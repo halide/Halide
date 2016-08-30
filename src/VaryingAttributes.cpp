@@ -901,6 +901,29 @@ void IRFilter::visit(const Evaluate *op) {
     mutate_operator(this, op, op->value, &stmt);
 }
 
+// This visitor finds the gl_texture_store() call from within a GLSL'd loop
+// nest.  This is used when creating a vertex buffer to translate from loop
+// coordinates (i.e. texture coords) to vertex coordinates, which need to
+// map the loop's iteration space to [-1,1].
+class FindStoreBuffer : public IRVisitor {
+  public:
+    using IRVisitor::visit;
+
+    virtual void visit(const Call *op) {
+        if (op->name == Call::glsl_texture_store) {
+            const Broadcast *bc = op->args[1].as<Broadcast>();
+            if (bc) {
+                buffer_name = bc->value;
+            } else {
+                buffer_name = op->args[1];
+            }
+            // The found buffer must be a handle
+            internal_assert(buffer_name.type().is_handle());
+        }
+    }
+
+    Expr buffer_name;
+};
 
 // This visitor takes a IR tree containing a set of .glsl scheduled for-loops
 // and creates a matching set of serial for-loops to setup a vertex buffer on
@@ -1007,9 +1030,31 @@ public:
                 Expr coord0 = cast<float>(Variable::make(Int(32),for_loops[1]->name));
 
                 // Transform the vertex coordinates to GPU device coordinates on
-                // [-1,1]
-                coord1 = (coord1 / for_loops[0]->extent) * 2.0f - 1.0f;
-                coord0 = (coord0 / for_loops[1]->extent) * 2.0f - 1.0f;
+                // [-1,1].  To do this, we map the loop extent to the subset of the
+                // texture that corresponds to that portion of the output.
+
+                // First, we find the texture handle for the output of this
+                // stage
+                FindStoreBuffer store_buf_finder;
+                op->body.accept(&store_buf_finder);
+                Expr output_texture = store_buf_finder.buffer_name;
+
+                // Confirm that we found something reasonable
+                internal_assert(output_texture.type().is_handle()) 
+                  << "No output buffer found in loop: " << op;
+
+                // Find the total size of this texture in the two loop
+                // dimensions
+                Expr texture_extent_0 = Call::make(Int(32), "extract_buffer_max", {output_texture, 0}, Call::PureIntrinsic)
+                    - Call::make(Int(32), "extract_buffer_min", {output_texture, 0}, Call::PureIntrinsic)
+                    + 1;
+                Expr texture_extent_1 = Call::make(Int(32), "extract_buffer_max", {output_texture, 1}, Call::PureIntrinsic)
+                    - Call::make(Int(32), "extract_buffer_min", {output_texture, 1}, Call::PureIntrinsic)
+                    + 1;
+
+                // Now map from coordinate space to texture space
+                coord1 = (coord1 / texture_extent_1) * 2.0f - 1.0f;
+                coord0 = (coord0 / texture_extent_0) * 2.0f - 1.0f;
 
                 // Remove varying attribute intrinsics from the vertex setup IR
                 // tree.

@@ -49,7 +49,10 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        // For GLSL, we the loop bound is not transformed into
+        // zero
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) &&
+            op->device_api != DeviceAPI::GLSL) {
             internal_assert(is_zero(op->min));
         }
 

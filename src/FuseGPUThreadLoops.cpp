@@ -753,7 +753,8 @@ class ZeroGPULoopMins : public IRMutator {
           (op->device_api == DeviceAPI::Metal);
 
         IRMutator::visit(op);
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min) &&
+            in_non_glsl_gpu) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
