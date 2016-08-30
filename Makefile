@@ -631,7 +631,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
                             $(INCLUDE_DIR)/HalideRuntimeRenderscript.h \
-			    $(INCLUDE_DIR)/HalideBuffer.h
+                            $(INCLUDE_DIR)/HalideBuffer.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
