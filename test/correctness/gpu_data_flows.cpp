@@ -39,11 +39,11 @@ int main(int argc, char **argv) {
         }
         out.compute_root();
 
-        Buffer<int> input(1024);
+        Image<int> input(1024);
         lambda(x, x * 17 + 83).realize(input);
         in.set(input);
 
-        Buffer<int> output1(1024);
+        Image<int> output1(1024);
         out.realize(output1);
 
         for (int x = 0; x < 1024; x++) {
@@ -72,11 +72,11 @@ int main(int argc, char **argv) {
             out.compute_root().hexagon();
         }
 
-        Buffer<int> input(1024);
+        Image<int> input(1024);
         lambda(x, x * 17 + 83).realize(input);
         in.set(input);
 
-        Buffer<int> output2(1024);
+        Image<int> output2(1024);
         out.realize(output2);
 
         for (int x = 0; x < 1024; x++) {

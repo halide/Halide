@@ -75,7 +75,7 @@ int main() {
                       c == 1, p * 10.0f,        // Linear expression not in terms of a loop parameter
                       cast<float>(x) * 100.0f); // Linear expression in terms of x
 
-    Buffer<float> out0(8, 8, 3);
+    Image<float> out0(8, 8, 3);
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
 
@@ -148,7 +148,7 @@ int main() {
     f1.bound(c, 0, 3);
     f1.glsl(x, y, c);
 
-    Buffer<float> out1(8, 8, 3);
+    Image<float> out1(8, 8, 3);
 
     // Run the test
     varyings.clear();
@@ -207,7 +207,7 @@ int main() {
     f2.bound(c, 0, 3);
     f2.glsl(x, y, c);
 
-    Buffer<float> out2(8, 8, 3);
+    Image<float> out2(8, 8, 3);
 
     // Run the test
     varyings.clear();
@@ -278,7 +278,7 @@ int main() {
     f3.bound(c, 0, 3);
     f3.glsl(x, y, c);
 
-    Buffer<float> out3(8, 8, 3);
+    Image<float> out3(8, 8, 3);
 
     // Run the test
     varyings.clear();

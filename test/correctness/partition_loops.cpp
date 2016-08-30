@@ -4,7 +4,7 @@ using namespace Halide;
 
 
 int main(int argc, char *argv[]) {
-    Buffer<uint8_t> input(1024, 1024, 3);
+    Image<uint8_t> input(1024, 1024, 3);
 
     for (int c = 0; c < input.channels(); c++) {
         for (int y = 0; y < input.height(); y++) {
@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 
     Func output("output");
     output(x, y, c) = cast<float>(f(x, y, c));
-    Buffer<float> im = output.realize(1024, 1024, 3);
+    Image<float> im = output.realize(1024, 1024, 3);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {

@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     signal(SIGBUS, signal_handler);
 
     // Loads from this image will barf, because we've messed up the host pointer
-    Buffer<int> input(100, 100);
+    Image<int> input(100, 100);
     buffer_t *buf = input.raw_buffer();
     buf->host = (uint8_t *)17;
 

@@ -765,13 +765,13 @@ const JITHandlers &Pipeline::jit_handlers() {
 Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    vector<Buffer<>> bufs;
+    vector<Image<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     realize(r, target);
-    for (Buffer<> &im : r) {
+    for (Image<> &im : r) {
         im.copy_to_host();
     }
     return r;
@@ -984,7 +984,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (const Buffer<> &buf : dst) {
+    for (const Image<> &buf : dst) {
         arg_values.push_back(buf.raw_buffer());
         const void *ptr = arg_values.back();
         debug(1) << "JIT output buffer @ " << ptr << "\n";
@@ -1236,7 +1236,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
                            << buf.min[2] + buf.extent[2] << ","
                            << buf.min[3] + buf.extent[3] << ")\n";
 
-        Buffer<> im(ia.param.type(), buf);
+        Image<> im(ia.param.type(), buf);
         im.allocate();
         ia.param.set_buffer(im);
     }
@@ -1251,7 +1251,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
     if (z_size) size.push_back(z_size);
     if (w_size) size.push_back(w_size);
 
-    vector<Buffer<>> bufs;
+    vector<Image<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, size);
     }

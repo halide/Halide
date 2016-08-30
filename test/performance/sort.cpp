@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
 
     const int N = 1 << 10;
 
-    Buffer<int> data(N);
+    Image<int> data(N);
     for (int i = 0; i < N; i++) {
         data(i) = rand() & 0xfffff;
     }
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
     f.bound(x, 0, N);
     f.compile_jit();
     printf("Running...\n");
-    Buffer<int> bitonic_sorted(N);
+    Image<int> bitonic_sorted(N);
     f.realize(bitonic_sorted);
     double t_bitonic = benchmark(1, 10, [&]() {
         f.realize(bitonic_sorted);
@@ -165,13 +165,13 @@ int main(int argc, char **argv) {
     f.bound(x, 0, N);
     f.compile_jit();
     printf("Running...\n");
-    Buffer<int> merge_sorted(N);
+    Image<int> merge_sorted(N);
     f.realize(merge_sorted);
     double t_merge = benchmark(1, 10, [&]() {
         f.realize(merge_sorted);
     });
 
-    Buffer<int> correct(N);
+    Image<int> correct(N);
     for (int i = 0; i < N; i++) {
         correct(i) = data(i);
     }

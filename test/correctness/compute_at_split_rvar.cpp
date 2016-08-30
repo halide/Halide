@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2);
         f.compute_at(g, ri);
 
-        Buffer<int> im = g.realize(10);
+        Image<int> im = g.realize(10);
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2);
         f.compute_at(g, ro).unroll(x);
 
-        Buffer<int> im = g.realize(10);
+        Image<int> im = g.realize(10);
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2).unroll(ri);
         f.compute_at(g, ri);
 
-        Buffer<int> im = g.realize(10);
+        Image<int> im = g.realize(10);
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2).reorder(ro, ri);
         f.compute_at(g, ro);
 
-        Buffer<int> im = g.realize(10);
+        Image<int> im = g.realize(10);
 
         for (int i = 0; i < im.width(); i++) {
             int correct = (i / 2) + ((i % 2 == 0) ? 0 : 5);
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 4).split(ri, rio, rii, 2).fuse(rio, ro, fused);
         f.compute_at(g, fused);
 
-        Buffer<int> im = g.realize(20);
+        Image<int> im = g.realize(20);
 
         for (int i = 0; i < im.width(); i++) {
             int correct = i;

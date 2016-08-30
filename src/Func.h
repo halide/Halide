@@ -470,7 +470,7 @@ public:
 
     /** Construct a new Func to wrap an Image. */
     template<typename T, int D>
-    NO_INLINE explicit Func(const Buffer<T, D> &im) : Func() {
+    NO_INLINE explicit Func(const Image<T, D> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -484,7 +484,7 @@ public:
      *
      \code
      f(x) = sin(x);
-     Buffer<float> im = f.realize(...);
+     Image<float> im = f.realize(...);
      \endcode
      *
      * If your Func has multiple values, because you defined it using
@@ -495,8 +495,8 @@ public:
      \code
      f(x) = Tuple(x, sin(x));
      Realization r = f.realize(...);
-     Buffer<int> im0 = r[0];
-     Buffer<float> im1 = r[1];
+     Image<int> im0 = r[0];
+     Image<float> im1 = r[1];
      \endcode
      *
      */
@@ -523,7 +523,7 @@ public:
     EXPORT void realize(Realization dst, const Target &target = Target());
 
     template<typename T, int D>
-    NO_INLINE void realize(Buffer<T, D> &dst, const Target &target = Target()) {
+    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
         realize(Realization{dst}, target);
     }
     // @}
@@ -538,7 +538,7 @@ public:
     EXPORT void infer_input_bounds(Realization dst);
 
     template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
+    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
         // It's possible for bounds inference to also manipulate
         // output buffers if their host pointer is null, so we must
         // take Images by reference and communicate the bounds query
@@ -1841,7 +1841,7 @@ NO_INLINE T evaluate(Expr e) {
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Buffer<T> im = f.realize();
+    Image<T> im = f.realize();
     return im();
 }
 
@@ -1861,8 +1861,8 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b) {
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
 }
 
 template<typename A, typename B, typename C>
@@ -1883,9 +1883,9 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c) {
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
 }
 
 template<typename A, typename B, typename C, typename D>
@@ -1910,10 +1910,10 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
-    *d = Buffer<D>(r[3])();
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
+    *d = Image<D>(r[3])();
 }
  // @}
 
@@ -1945,7 +1945,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
     Func f;
     f() = e;
     Internal::schedule_scalar(f);
-    Buffer<T> im = f.realize();
+    Image<T> im = f.realize();
     return im();
 }
 
@@ -1967,8 +1967,8 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
 }
 
 template<typename A, typename B, typename C>
@@ -1989,9 +1989,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
 }
 
 template<typename A, typename B, typename C, typename D>
@@ -2017,10 +2017,10 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
-    *d = Buffer<D>(r[3])();
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
+    *d = Image<D>(r[3])();
 }
 // @}
 

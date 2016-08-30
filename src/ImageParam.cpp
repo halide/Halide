@@ -39,11 +39,11 @@ void ImageParam::set(Internal::BufferPtr b) {
     param.set_buffer(b);
 }
 
-const Buffer<> &ImageParam::get() const {
+const Image<> &ImageParam::get() const {
     return param.get_buffer().get();
 }
 
-Buffer<> &ImageParam::get() {
+Image<> &ImageParam::get() {
     return param.get_buffer().get();
 }
 
