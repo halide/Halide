@@ -54,7 +54,7 @@ h::Expr tuple_getitem0(h::Tuple &that, const size_t x)
     return that[x];
 }
 
-h::Buffer realization_getitem0(h::Realization &that, const size_t x)
+h::Image<> realization_getitem0(h::Realization &that, const size_t x)
 {
     return that[x];
 }
@@ -70,37 +70,16 @@ void defineRealization()
     p::class_<Realization>("Realization",
                            "Funcs with Tuple values return multiple buffers when you realize "
                            "them. Tuples are to Exprs as Realizations are to Buffers.",
-                           p::init< std::vector<h::Buffer> >
-                           ( // BuffersVector is defined in Buffer.cpp
-                             p::args("self", "buffers"),
-                             "Construct a Realization from a vector of Buffers"))
-
-            //    "Construct a Realization from some Buffers."
-            //    template<typename ...Args>
-            //    Realization(Buffer a, Buffer b, Args... args) : buffers({a, b})
-
-            //    "Single-element realizations are implicitly castable to Buffers."
-            //    Realization::operator Buffer() const
-
-            //            "Construct a Tuple from a function reference."
-            //            Tuple(const FuncRef &);
-
+                           p::init< std::vector<h::Image<>> >(
+                               p::args("self", "buffers"),
+                               "Construct a Realization from a vector of Buffers"))
             .def("size", &Realization::size, p::arg("self"),
                  "The number of buffers in the Realization.")
-
-            //.def("__getitem__", &Realization::Buffer &operator[], p::args("self", "x"),
-            //     "Get a reference to one of the buffers.")
-
             .def("__getitem__", &realization_getitem0, p::args("self", "x"),
-                 "Get one of the buffers.")
-
-            .def("as_vector", &Realization::as_vector, p::arg("self"),
-                 p::return_value_policy<p::copy_const_reference>(),
-                 "Treat the Realization as a vector of Buffers")
-            ;
+                 "Get one of the buffers.");
 
     // "Single-element realizations are implicitly castable to Buffers."
-    p::implicitly_convertible<Realization, h::Buffer>();
+    p::implicitly_convertible<Realization, h::Image<>>();
 
     return;
 }

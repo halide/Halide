@@ -5,13 +5,13 @@
 using Halide::Argument;
 using Halide::Expr;
 using Halide::Func;
-using Halide::Buffer;
+using Halide::Image;
 using Halide::Internal::GeneratorParamValues;
 
 const int kSize = 32;
 
 template<typename Type>
-Image<Type> MakeBuffer() {
+Image<Type> MakeImage() {
     Image<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {

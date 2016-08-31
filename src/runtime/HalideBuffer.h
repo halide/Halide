@@ -105,7 +105,7 @@ class Buffer {
 
     /** The underlying buffer_t */
     buffer_t buf = {0};
-    
+
     /** The dimensionality of the buffer */
     int dims = 0;
 
@@ -115,7 +115,7 @@ class Buffer {
     /** The allocation owned by this Buffer. NULL if the Buffer does not
      * own the memory. */
     AllocationHeader *alloc = nullptr;
-    
+
     /** True if T is of type void */
     static const bool T_is_void = std::is_same<T, void>::value;
 
@@ -761,6 +761,25 @@ public:
     }
     int channels() const {
         return (dimensions() > 2) ? dim(2).extent() : 1;
+    }
+    // @}
+
+    /** Conventional names for the min and max value of each dimension */
+    // @{
+    int left() const {
+        return dim(0).min();
+    }
+
+    int right() const {
+        return dim(0).max();
+    }
+
+    int top() const {
+        return dim(1).min();
+    }
+
+    int bottom() const {
+        return dim(1).max();
     }
     // @}
 
