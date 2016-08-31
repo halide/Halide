@@ -4,7 +4,7 @@
 // Yes, this is a little unusual, but it's recommended practice.
 #include "example_generator.cpp"
 
-using Halide::Buffer;
+using Halide::Image;
 
 const int kSize = 32;
 

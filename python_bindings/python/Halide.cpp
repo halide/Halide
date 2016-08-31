@@ -2,7 +2,6 @@
 
 #include "Argument.h"
 #include "BoundaryConditions.h"
-#include "Buffer.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Func.h"
@@ -47,7 +46,6 @@ BOOST_PYTHON_MODULE(halide)
     // we include all the pieces and bits from the Halide API
     defineArgument();
     defineBoundaryConditions();
-    defineBuffer();
     defineError();
     defineExpr();
     defineExternFuncArgument();

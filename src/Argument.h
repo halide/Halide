@@ -10,6 +10,7 @@
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 

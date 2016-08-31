@@ -99,6 +99,11 @@ NO_INLINE Expr image_accessor(const Image<T, D> &im, Expr first, Args... rest) {
     return Internal::BufferPtr(im)(first, rest...);
 }
 
+template<typename T, int D>
+NO_INLINE Expr image_accessor(const Image<T, D> &im, const std::vector<Expr> &args) {
+    return Internal::BufferPtr(im)(args);
+}
+
 }
 
 #endif

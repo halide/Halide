@@ -20,8 +20,7 @@ namespace h = Halide;
 namespace p = boost::python;
 
 
-h::Realization func_realize0(h::Func &that, std::vector<int32_t> sizes, const h::Target &target = h::Target())
-{
+h::Realization func_realize0(h::Func &that, std::vector<int32_t> sizes, const h::Target &target = h::Target()) {
     return that.realize(sizes, target);
 }
 
@@ -29,16 +28,14 @@ BOOST_PYTHON_FUNCTION_OVERLOADS( func_realize0_overloads, func_realize0, 2, 3)
 
 
 h::Realization func_realize1(h::Func &that, int x_size=0, int y_size=0, int z_size=0, int w_size=0,
-                             const h::Target &target = h::Target())
-{
+                             const h::Target &target = h::Target()) {
     return that.realize(x_size, y_size, z_size, w_size, target);
 }
 
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize1_overloads, func_realize1, 1, 6)
 
 
-void func_realize2(h::Func &that, h::Realization dst, const h::Target &target = h::Target())
-{
+void func_realize2(h::Func &that, h::Realization dst, const h::Target &target = h::Target()) {
     that.realize(dst, target);
     return;
 }
@@ -46,8 +43,8 @@ void func_realize2(h::Func &that, h::Realization dst, const h::Target &target = 
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize2_overloads, func_realize2, 2, 3)
 
 
-void func_realize3(h::Func &that, h::Buffer dst, const h::Target &target = h::Target())
-{
+template<typename T>
+void func_realize3(h::Func &that, h::Image<T> &dst, const h::Target &target = h::Target()) {
     that.realize(dst, target);
     return;
 }
@@ -55,14 +52,12 @@ void func_realize3(h::Func &that, h::Buffer dst, const h::Target &target = h::Ta
 BOOST_PYTHON_FUNCTION_OVERLOADS(func_realize3_overloads, func_realize3, 2, 3)
 
 
-void func_compile_jit0(h::Func &that)
-{
+void func_compile_jit0(h::Func &that) {
     that.compile_jit();
     return;
 }
 
-void func_compile_jit1(h::Func &that, const h::Target &target = h::get_target_from_environment())
-{
+void func_compile_jit1(h::Func &that, const h::Target &target = h::get_target_from_environment()) {
     that.compile_jit(target);
     return;
 }
@@ -71,8 +66,7 @@ void func_compile_jit1(h::Func &that, const h::Target &target = h::get_target_fr
 void func_compile_to_bitcode0(h::Func &that, const std::string &filename,
                               const std::vector<h::Argument> &args,
                               const std::string fn_name = "",
-                              const h::Target &target = h::get_target_from_environment())
-{
+                              const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_bitcode(filename, args, fn_name, target);
     return;
 }
@@ -83,8 +77,7 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_bitcode0_overloads, func_compile
 void func_compile_to_object0(h::Func &that, const std::string &filename,
                               const std::vector<h::Argument> &args,
                               const std::string fn_name = "",
-                              const h::Target &target = h::get_target_from_environment())
-{
+                              const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_object(filename, args, fn_name, target);
     return;
 }
@@ -95,8 +88,7 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_object0_overloads, func_compile_
 void func_compile_to_header0(h::Func &that, const std::string &filename,
                               const std::vector<h::Argument> &args,
                               const std::string fn_name = "",
-                              const h::Target &target = h::get_target_from_environment())
-{
+                              const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_header(filename, args, fn_name, target);
     return;
 }
@@ -107,8 +99,7 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_header0_overloads, func_compile_
 void func_compile_to_assembly0(h::Func &that, const std::string &filename,
                               const std::vector<h::Argument> &args,
                               const std::string fn_name = "",
-                              const h::Target &target = h::get_target_from_environment())
-{
+                              const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_assembly(filename, args, fn_name, target);
     return;
 }
@@ -119,8 +110,7 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_assembly0_overloads, func_compil
 void func_compile_to_c0(h::Func &that, const std::string &filename,
                         const std::vector<h::Argument> &args,
                         const std::string fn_name = "",
-                        const h::Target &target = h::get_target_from_environment())
-{
+                        const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_c(filename, args, fn_name, target);
     return;
 }
@@ -130,8 +120,7 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_c0_overloads, func_compile_to_c0
 
 void func_compile_to_file0(h::Func &that, const std::string &filename_prefix,
                            const std::vector<h::Argument> &args,
-                           const h::Target &target = h::get_target_from_environment())
-{
+                           const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_file(filename_prefix, args, target);
     return;
 }
@@ -143,8 +132,7 @@ void func_compile_to_lowered_stmt0(h::Func &that,
                                    const std::string &filename,
                                    const std::vector<h::Argument> &args,
                                    h::StmtOutputFormat fmt = h::Text,
-                                   const h::Target &target = h::get_target_from_environment())
-{
+                                   const h::Target &target = h::get_target_from_environment()) {
     that.compile_to_lowered_stmt(filename, args, fmt, target);
     return;
 }
@@ -154,23 +142,19 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_lowered_stmt0_overloads, func_co
 // parallel, vectorize, unroll, tile, and reorder methods are shared with Stage class
 // and thus defined as template functions in the header
 
-h::Func &func_store_at0(h::Func &that, h::Func f, h::Var var)
-{
+h::Func &func_store_at0(h::Func &that, h::Func f, h::Var var) {
     return that.store_at(f, var);
 }
 
-h::Func &func_store_at1(h::Func &that, h::Func f, h::RVar var)
-{
+h::Func &func_store_at1(h::Func &that, h::Func f, h::RVar var) {
     return that.store_at(f, var);
 }
 
-h::Func &func_compute_at0(h::Func &that, h::Func f, h::Var var)
-{
+h::Func &func_compute_at0(h::Func &that, h::Func f, h::Var var) {
     return that.compute_at(f, var);
 }
 
-h::Func &func_compute_at1(h::Func &that, h::Func f, h::RVar var)
-{
+h::Func &func_compute_at1(h::Func &that, h::Func f, h::RVar var) {
     return that.compute_at(f, var);
 }
 
@@ -180,8 +164,7 @@ void tuple_to_var_expr_vector(
         const std::string debug_name,
         const p::tuple &args_passed,
         std::vector<h::Var> &var_args,
-        std::vector<h::Expr> &expr_args)
-{
+        std::vector<h::Expr> &expr_args) {
     const size_t args_len = p::len(args_passed);
     for(size_t i=0; i < args_len; i+=1)
     {
@@ -234,8 +217,7 @@ void tuple_to_var_expr_vector(
     return;
 }
 
-p::object func_getitem_operator0(h::Func &that, p::tuple args_passed)
-{
+p::object func_getitem_operator0(h::Func &that, p::tuple args_passed) {
     std::vector<h::Var> var_args;
     std::vector<h::Expr> expr_args;
     const size_t args_len = p::len(args_passed);
@@ -410,7 +392,7 @@ void defineFunc()
                        "Evaluate this function over some rectangular domain and return"
                        "the resulting buffer. The buffer should probably be instantly"
                        "wrapped in an Image class.\n\n" \
-                       "One can use f.realize(Buffer) to realize into an existing buffer."))
+                       "One can use f.realize(Image) to realize into an existing buffer."))
             .def("realize", &func_realize0, func_realize0_overloads(
                      p::args("self", "sizes", "target")))
             .def("realize", &func_realize3, func_realize3_overloads(

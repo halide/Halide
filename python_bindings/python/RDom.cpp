@@ -41,9 +41,6 @@ void defineRVar()
             .def("domain", &RVar::domain, p::arg("self"),
                  "The reduction domain this is associated with.")
 
-            //"Reduction variables can be used as expressions."
-            //EXPORT operator Expr() const;
-
             .def("name", &RVar::name, p::arg("self"),
                  p::return_value_policy<p::copy_const_reference>(),
                  "The name of this reduction variable");
@@ -167,7 +164,7 @@ void defineRDom()
                     "The following global functions can be used for inline reductions::\n\n"
                     "    minimum, maximum, product, sum",
                     p::init<>(p::arg("self"), "Construct an undefined reduction domain."))
-            .def(p::init<h::Buffer>(p::args("self", "buffer"),
+            .def(p::init<h::Image<>>(p::args("self", "buffer"),
                                     "Construct a reduction domain that iterates over all points in "
                                     "a given Buffer, Image, or ImageParam. "
                                     "Has the same dimensionality as the argument."))
