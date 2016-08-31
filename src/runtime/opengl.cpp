@@ -1932,17 +1932,10 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     ModuleState **state = (ModuleState **)state_ptr;
     ModuleState *module = *state;
 
-    while (this_kernel && !module) {
-        // Find the start of the next kernel
-        const char *next_kernel = strstr(this_kernel+1, kernel_marker);        
+    while (!module && this_kernel) {
 
         // Use that to compute the length of this kernel
-        int len = 0;
-        if (!next_kernel) {
-            len = strlen(this_kernel);
-        } else {
-            len = next_kernel - this_kernel;
-        }
+        int len = size;
         
         // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
@@ -2051,7 +2044,6 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         }
         kernel->program_id = program;
         
-        this_kernel = next_kernel;
     }
     return 0;
 }
