@@ -81,6 +81,7 @@ int main(int argc, char **argv) {
 
         blur.compute_root()
             .parallel(y, 16)
+            .prefetch(y, 2)
             .vectorize(x, vector_size);
         blur_y.compute_at(blur, y)
             .vectorize(x, vector_size);
