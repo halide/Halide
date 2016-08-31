@@ -103,16 +103,15 @@ declare <32 x i32> @llvm.hexagon.V6.vlsrw.128B(<32 x i32>, i32)
 declare <32 x i32> @llvm.hexagon.V6.vmpyieoh.128B(<32 x i32>, <32 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.vmpyiowh.128B(<32 x i32>, <32 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.vmpyiewuh.128B(<32 x i32>, <32 x i32>)
-declare <32 x i32> @llvm.hexagon.V6.vaddw.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vmpyiewuh.acc.128B(<32 x i32>, <32 x i32>, <32 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.vshufeh.128B(<32 x i32>, <32 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.vshufoh.128B(<32 x i32>, <32 x i32>)
 declare <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32>, <32 x i32>)
 declare <64 x i32> @llvm.hexagon.V6.vmpyuhv.acc.128B(<64 x i32>, <32 x i32>, <32 x i32>)
 
 define weak_odr <32 x i32> @halide.hexagon.mul.vw.vw(<32 x i32> %a, <32 x i32> %b) nounwind uwtable readnone alwaysinline {
-  %ab_lo = call <32 x i32> @llvm.hexagon.V6.vmpyiewuh.128B(<32 x i32> %a, <32 x i32> %b)
-  %ab_hi = call <32 x i32> @llvm.hexagon.V6.vmpyieoh.128B(<32 x i32> %a, <32 x i32> %b)
-  %ab = call <32 x i32> @llvm.hexagon.V6.vaddw.128B(<32 x i32> %ab_hi, <32 x i32> %ab_lo)
+  %ab1 = call <32 x i32> @llvm.hexagon.V6.vmpyieoh.128B(<32 x i32> %a, <32 x i32> %b)
+  %ab = call <32 x i32> @llvm.hexagon.V6.vmpyiewuh.acc.128B(<32 x i32> %ab1, <32 x i32> %a, <32 x i32> %b)
   ret <32 x i32> %ab
 }
 
