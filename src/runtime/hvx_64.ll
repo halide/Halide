@@ -297,8 +297,3 @@ define weak_odr void @halide.hexagon.l2fetch.Rtt(i8* nocapture readonly %addr, i
   ret void
 }
 
-;define weak_odr i32 @prefetch_buffer_t(i32 %dim, i8* nocapture readonly %buf) nounwind uwtable readnone alwaysinline {
-;;  tail call void asm sideeffect "l2fetch($0,$1)", "r,r"(i8* %buf, i32 %dim)
-;  ret i32 0
-;}
-
