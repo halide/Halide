@@ -256,9 +256,15 @@ private:
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
+            Expr val;
+            if (is_undef(cv.value)) {
+                val = cv.value;
+            } else {
+                val = Variable::make(cv.value.type(), cv.name + ".value");
+            }
+
             Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Expr var = Variable::make(cv.value.type(), cv.name + ".value");
-            Stmt store = Store::make(cv.name, var, idx, is_output ? output_buffers[i] : Parameter());
+            Stmt store = Store::make(cv.name, val, idx, is_output ? output_buffers[i] : Parameter());
 
             if (result.defined()) {
                 result = Block::make(result, store);
@@ -269,8 +275,9 @@ private:
 
         for (size_t i = values.size(); i > 0; i--) {
             const ProvideValue &cv = values[i-1];
-
-            result = LetStmt::make(cv.name + ".value", cv.value, result);
+            if (!is_undef(cv.value)) {
+                result = LetStmt::make(cv.name + ".value", cv.value, result);
+            }
         }
         return result;
     }

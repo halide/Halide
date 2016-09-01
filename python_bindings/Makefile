@@ -4,13 +4,15 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 
 ifeq ($(UNAME), Linux)
-CCFLAGS=$(shell python3-config --cflags) -std=c++11 -fPIC
+# Disable some warnings that are pervasive in Boost
+CCFLAGS=$(shell python3-config --cflags) -std=c++11 -fPIC -Wno-unused-local-typedef -Wno-shorten-64-to-32
 LDFLAGS=$(shell python3-config --ldflags) -lboost_python-py34 -lz
 endif
 
 ifeq ($(UNAME), Darwin)
 # The /opt includes are in case this is a macports install of python and boost python
-CCFLAGS=$(shell python-config --cflags) -I /opt/local/include -std=c++11
+# Disable some warnings that are pervasive in Boost
+CCFLAGS=$(shell python-config --cflags) -I /opt/local/include -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
 LDFLAGS=$(shell python-config --ldflags) -L /opt/local/lib -lboost_python3-mt -lz
 endif
 

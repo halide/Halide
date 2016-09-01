@@ -327,125 +327,30 @@ class VectorSubs : public IRMutator {
     }
 
     void visit(const Call *op) {
+        // Widen the call by changing the lanes of all of its
+        // arguments and its return type
+        vector<Expr> new_args(op->args.size());
+        bool changed = false;
 
-        // The shuffle_vector intrinsic has a different argument passing
-        // convention than the rest of Halide. Instead of passing widened
-        // expressions, individual scalar expressions for each lane are
-        // passed as a variable number of arguments to the intrinisc.
-        if (op->is_intrinsic(Call::shuffle_vector)) {
+        // Mutate the args
+        int max_lanes = 0;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            Expr old_arg = op->args[i];
+            Expr new_arg = mutate(old_arg);
+            if (!new_arg.same_as(old_arg)) changed = true;
+            new_args[i] = new_arg;
+            max_lanes = std::max(new_arg.type().lanes(), max_lanes);
+        }
 
-            int replacement_lanes = replacement.type().lanes();
-            int shuffle_lanes = op->type.lanes();
-
-            internal_assert(shuffle_lanes == (int)op->args.size() - 1);
-
-            // To widen successfully, the intrinisic must either produce a
-            // vector width result or a scalar result that we can broadcast.
-            if (shuffle_lanes == 1) {
-
-                // Check to see if the shuffled expression contains the
-                // vectorized dimension variable. Since vectorization will
-                // change the vectorized dimension loop to a single value
-                // let, we need to eliminate any use of the vectorized
-                // dimension variable inside the shuffled expression
-                Expr shuffled_expr = op->args[0];
-
-                bool has_scalarized_expr = expr_uses_var(shuffled_expr,var);
-                if (has_scalarized_expr) {
-                    shuffled_expr = scalarize(op);
-                }
-
-                // Otherwise, the shuffle produces a scalar result and has
-                // only one channel selector argument which must be scalar
-                internal_assert(op->args.size() == 2);
-                internal_assert(op->args[1].type().lanes() == 1);
-                Expr mutated_channel = mutate(op->args[1]);
-                int mutated_lanes = mutated_channel.type().lanes();
-
-                // Determine how to mutate the intrinsic. If the mutated
-                // channel expression matches the for-loop variable
-                // replacement exactly, and is the same lanes as the
-                // existing vector expression, then we can remove the
-                // shuffle_vector intrinisic and return the vector
-                // expression it contains directly.
-                if (equal(replacement,mutated_channel) &&
-                    (shuffled_expr.type().lanes() == replacement_lanes)) {
-
-                    // Note that we stop mutating at this expression. Any
-                    // unvectorized variables inside this argument may
-                    // continue to refer to scalar expressions in the
-                    // enclosing lets whose names have not changed.
-                    expr = shuffled_expr;
-
-                } else if (mutated_lanes == replacement_lanes) {
-                    // Otherwise, if the mutated channel width matches the
-                    // vectorized width but the expression is not a simple
-                    // ramp across the whole width, then convert the channel
-                    // expression into shuffle_vector intrinsic arguments.
-                    vector<Expr> new_args(1+replacement_lanes);
-
-                    // Append the vector expression as the first argument
-                    new_args[0] = shuffled_expr;
-
-                    // Extract each channel of the mutated channel
-                    // expression, each is passed as a separate argument to
-                    // shuffle_vector
-                    for (int i = 0; i != replacement_lanes; ++i) {
-                        new_args[1 + i] = extract_lane(mutated_channel, i);
-                    }
-
-                    expr = Call::make(op->type.with_lanes(replacement_lanes),
-                                      op->name, new_args, op->call_type,
-                                      op->func, op->value_index, op->image,
-                                      op->param);
-
-                } else if (has_scalarized_expr) {
-                    internal_assert(mutated_lanes == 1);
-                    // Otherwise, the channel expression is independent of
-                    // the dimension being vectorized, but the shuffled
-                    // expression is not. Scalarize the whole node including
-                    // the independent channel expression.
-                    expr = scalarize(op);
-                } else {
-                    internal_assert(mutated_lanes == 1);
-                    // Otherwise, both the shuffled expression and the
-                    // channel expressions of this shuffle_vector is
-                    // independent of the dimension being vectorized
-                    expr = op;
-                }
-
-            } else {
-                // If the shuffle_vector result is not a scalar there are no
-                // rules for how to widen it.
-                internal_error << "Mismatched vector lanes in VectorSubs for shuffle_vector\n";
-            }
-
+        if (!changed) {
+            expr = op;
         } else {
-            // Otherwise, widen the call by changing the lanes of all of its
-            // arguments and its return type
-            vector<Expr> new_args(op->args.size());
-            bool changed = false;
-
-            // Mutate the args
-            int max_lanes = 0;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Expr old_arg = op->args[i];
-                Expr new_arg = mutate(old_arg);
-                if (!new_arg.same_as(old_arg)) changed = true;
-                new_args[i] = new_arg;
-                max_lanes = std::max(new_arg.type().lanes(), max_lanes);
+            // Widen the args to have the same lanes as the max lanes found
+            for (size_t i = 0; i < new_args.size(); i++) {
+                new_args[i] = widen(new_args[i], max_lanes);
             }
-
-            if (!changed) {
-                expr = op;
-            } else {
-                // Widen the args to have the same lanes as the max lanes found
-                for (size_t i = 0; i < new_args.size(); i++) {
-                    new_args[i] = widen(new_args[i], max_lanes);
-                }
-                expr = Call::make(op->type.with_lanes(max_lanes), op->name, new_args,
-                                  op->call_type, op->func, op->value_index, op->image, op->param);
-            }
+            expr = Call::make(op->type.with_lanes(max_lanes), op->name, new_args,
+                              op->call_type, op->func, op->value_index, op->image, op->param);
         }
     }
 
@@ -786,6 +691,8 @@ class VectorSubs : public IRMutator {
                 result = Select::make(cond, Broadcast::make(e, lanes), result);
             }
         }
+
+        debug(0) << e << " -> " << result << "\n";
 
         return result;
     }

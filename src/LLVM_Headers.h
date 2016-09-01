@@ -59,6 +59,14 @@
 #endif
 #include <llvm/Object/ObjectFile.h>
 
+#if LLVM_VERSION >= 39
+#include <llvm/Transforms/Scalar/GVN.h>
+#endif
+
+#if LLVM_VERSION >= 40
+#include <llvm/Transforms/IPO/AlwaysInliner.h>
+#endif
+
 // Temporary affordance to compile with both llvm 3.2 and 3.3+
 // Protected as at least one installation of llvm elides version macros.
 #if LLVM_VERSION < 33

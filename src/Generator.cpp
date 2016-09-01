@@ -1,3 +1,5 @@
+#include <set>
+
 #include "Generator.h"
 #include "Outputs.h"
 
@@ -299,11 +301,6 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
                                               this, nullptr);
 }
 
-GeneratorParamBase::GeneratorParamBase(const GeneratorParamBase &that) : name(that.name) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this, nullptr);
-}
-
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 /* static */
@@ -368,6 +365,7 @@ void GeneratorBase::rebuild_params() {
 
 void GeneratorBase::build_params() {
     if (!params_built) {
+        std::set<std::string> names;
         std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
             this, size, ObjectInstanceRegistry::FilterParam);
         for (size_t i = 0; i < vf.size(); ++i) {
@@ -375,9 +373,8 @@ void GeneratorBase::build_params() {
             internal_assert(param != nullptr);
             user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-            for (const Argument& arg : filter_arguments) {
-                user_assert(arg.name != param->name()) << "Duplicate Param name: " << param->name();
-            }
+            user_assert(!names.count(param->name())) << "Duplicate Param name: " << param->name();
+            names.insert(param->name());
             Expr def, min, max;
             if (!param->is_buffer()) {
                 def = param->get_scalar_expr();
@@ -395,9 +392,9 @@ void GeneratorBase::build_params() {
             GeneratorParamBase *param = static_cast<GeneratorParamBase *>(vg[i]);
             internal_assert(param != nullptr);
             user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
-            user_assert(generator_params.find(param->name) == generator_params.end())
-                << "Duplicate GeneratorParam name: " << param->name;
-            generator_params[param->name] = param;
+            user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
+            names.insert(param->name);
+            generator_params.push_back(param);
         }
         params_built = true;
     }
@@ -406,8 +403,7 @@ void GeneratorBase::build_params() {
 GeneratorParamValues GeneratorBase::get_generator_param_values() {
     build_params();
     GeneratorParamValues results;
-    for (auto key_value : generator_params) {
-        GeneratorParamBase *param = key_value.second;
+    for (auto param : generator_params) {
         results[param->name] = param->to_string();
     }
     return results;
@@ -415,13 +411,16 @@ GeneratorParamValues GeneratorBase::get_generator_param_values() {
 
 void GeneratorBase::set_generator_param_values(const GeneratorParamValues &params) {
     build_params();
+    std::map<std::string, GeneratorParamBase *> m;
+    for (auto param : generator_params) {
+        m[param->name] = param;
+    }
     for (auto key_value : params) {
         const std::string &key = key_value.first;
         const std::string &value = key_value.second;
-        auto param = generator_params.find(key);
-        user_assert(param != generator_params.end())
-            << "Generator has no GeneratorParam named: " << key;
-        param->second->from_string(value);
+        auto p = m.find(key);
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        p->second->from_string(value);
     }
 }
 
@@ -455,31 +454,26 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     compile_module_to_filter(build_module(function_name), base_path, options);
 }
 
-Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                std::string function_name){
-    Pipeline p = build_pipeline();
-    user_assert(p.outputs().size() == 1) \
-        << "Can only call_extern Pipelines with a single output Func\n";
-    Func f = p.outputs()[0];
-    Func f_extern;
-    if (function_name.empty()) {
-        function_name = generator_name();
-        user_assert(!function_name.empty())
-            << "call_extern: generator_name is empty\n";
-    }
-    f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
-    return f_extern;
-}
+void generator_test() {
+    GeneratorParam<int> gp("gp", 1);
 
-Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
-                                        std::initializer_list<ExternFuncArgument> function_arguments,
-                                        const std::string &function_name,
-                                        const GeneratorParamValues &generator_params) {
-    std::unique_ptr<GeneratorBase> extern_gen = GeneratorRegistry::create(generator_name, generator_params);
-    user_assert(extern_gen != nullptr) << "Unknown generator: " << generator_name << "\n";
-    // Note that the Generator's target is not set; at present, this shouldn't matter for
-    // define_extern() functions, since none of the linkage should vary by Target.
-    return extern_gen->call_extern(function_arguments, function_name);
+    // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
+    RDom rdom(0, gp, 0, gp);
+
+    // Verify that Func parameter-pack variants can convert GeneratorParam to Expr
+    Var x, y;
+    Func f, g;
+    f(x, y) = x + y;
+    g(x, y) = f(gp, gp);                            // check Func::operator() overloads
+    g(rdom.x, rdom.y) += f(rdom.x, rdom.y);
+    g.update(0).reorder(rdom.y, rdom.x);            // check Func::reorder() overloads for RDom::operator RVar()
+
+    // Verify that print() parameter-pack variants can convert GeneratorParam to Expr
+    print(f(0, 0), g(1, 1), gp);
+    print_when(true, f(0, 0), g(1, 1), gp);
+
+    // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
+    Tuple t(gp, gp, gp);
 }
 
 }  // namespace Internal

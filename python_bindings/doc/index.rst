@@ -44,9 +44,9 @@ Main classes                                      Description
 Helper Classes                          Description
 ====================================    ================================
 :py:class:`halide.buffer_t`             The raw representation of an image passed around by generated Halide code.
-:py:class:`halide.FuncRefExpr`
+:py:class:`halide.FuncRef`
 :py:class:`halide.InternalFunction`
-:py:class:`halide.FuncRefVar`
+:py:class:`halide.FuncTupleElementRef`
 :py:class:`halide.Stage`                A single definition of a Func.
 :py:class:`halide.VarOrRVar`
 ====================================    ================================
@@ -91,6 +91,6 @@ Indices and tables
 .. toctree::
    :hidden:
    :maxdepth: 2
-   
+
    self
 

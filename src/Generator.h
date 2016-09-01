@@ -114,12 +114,15 @@ EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
-    EXPORT explicit GeneratorParamBase(const GeneratorParamBase &that);
     EXPORT virtual ~GeneratorParamBase();
     virtual void from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
 
     const std::string name;
+
+private:
+    explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
+    void operator=(const GeneratorParamBase &) = delete;
 };
 
 }  // namespace Internal
@@ -506,8 +509,9 @@ protected:
     using Expr = Halide::Expr;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
-    using Pipeline = Halide::Pipeline;
     using ImageParam = Halide::ImageParam;
+    using LoopLevel = Halide::LoopLevel;
+    using Pipeline = Halide::Pipeline;
     using RDom = Halide::RDom;
     using TailStrategy = Halide::TailStrategy;
     using Target = Halide::Target;
@@ -551,24 +555,6 @@ public:
     };
 
     EXPORT virtual ~GeneratorBase();
-
-    /** Return a Func that calls a previously-generated instance of this Generator.
-     * This is (essentially) a smart wrapper around define_extern(), but uses the
-     * output types and dimensionality of the Func returned by build. It is
-     * expected that the previously-generated instance will be available (at link time)
-     * as extern "C" function_name (if function_name is empty, it is assumed to
-     * match generator_name()). */
-    EXPORT Func call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                            std::string function_name = "");
-
-    /** Similar to call_extern(), but first creates a new Generator
-     * (from the current Registry) with the given name and params;
-     * this is more convenient to use if you don't have access to the C++
-     * Generator class definition at compile-time. */
-    EXPORT static Func call_extern_by_name(const std::string &generator_name,
-                                           std::initializer_list<ExternFuncArgument> function_arguments,
-                                           const std::string &function_name = "",
-                                           const GeneratorParamValues &generator_params = GeneratorParamValues());
 
     Target get_target() const { return target; }
 
@@ -616,14 +602,9 @@ protected:
 private:
     const size_t size;
 
-    // Note that various sections of code rely on being able to iterate
-    // through these in a predictable order; do not change to unordered_map (etc)
-    // without considering that.
+    std::vector<Internal::GeneratorParamBase *> generator_params;
     std::vector<Argument> filter_arguments;
-    std::map<std::string, Internal::GeneratorParamBase *> generator_params;
-    bool params_built;
-
-    virtual const std::string &generator_name() const = 0;
+    bool params_built{false};
 
     EXPORT void build_params();
     EXPORT void rebuild_params();
@@ -667,9 +648,9 @@ private:
     void operator=(const GeneratorRegistry &) = delete;
 };
 
-}  // namespace Internal
+EXPORT void generator_test();
 
-template <class T> class RegisterGenerator;
+}  // namespace Internal
 
 template <class T> class Generator : public Internal::GeneratorBase {
 public:
@@ -680,28 +661,13 @@ protected:
     Pipeline build_pipeline() override {
         return ((T *)this)->build();
     }
-
-private:
-    friend class RegisterGenerator<T>;
-    // Must wrap the static member in a static method to avoid static-member
-    // initialization order fiasco
-    static std::string* generator_name_storage() {
-        static std::string name;
-        return &name;
-    }
-    const std::string &generator_name() const override final {
-        return *generator_name_storage();
-    }
-
-
 };
 
 template <class T> class RegisterGenerator {
 private:
     class TFactory : public Internal::GeneratorFactory {
     public:
-        virtual std::unique_ptr<Internal::GeneratorBase>
-        create(const Internal::GeneratorParamValues &params) const {
+        std::unique_ptr<Internal::GeneratorBase> create(const Internal::GeneratorParamValues &params) const override {
             std::unique_ptr<Internal::GeneratorBase> g(new T());
             g->set_generator_param_values(params);
             return g;
@@ -709,9 +675,7 @@ private:
     };
 
 public:
-    RegisterGenerator(const char* name) {
-        user_assert(Generator<T>::generator_name_storage()->empty());
-        *Generator<T>::generator_name_storage() = name;
+    RegisterGenerator(const std::string &name) {
         std::unique_ptr<Internal::GeneratorFactory> f(new TFactory());
         Internal::GeneratorRegistry::register_factory(name, std::move(f));
     }

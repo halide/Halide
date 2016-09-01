@@ -1010,6 +1010,12 @@ void check_neon_all() {
         check(arm32 ? "vqneg.s32" : "sqneg", 2*w, -max(i32_1, -max_i32));
 
         // VQRDMULH I       -       Saturating Rounding Doubling Multiply Returning High Half
+        // Note: division in Halide always rounds down (not towards
+        // zero). Otherwise these patterns would be more complicated.
+        check(arm32 ? "vqrdmulh.s16" : "sqrdmulh", 4*w, i16_sat((i32(i16_1) * i32(i16_2) + (1<<14)) / (1 << 15)));
+        check(arm32 ? "vqrdmulh.s32" : "sqrdmulh", 2*w, i32_sat((i64(i32_1) * i64(i32_2) + (1<<30)) /
+                                                                (Expr(int64_t(1)) << 31)));
+
         // VQRSHL   I       -       Saturating Rounding Shift Left
         // VQRSHRN  I       -       Saturating Rounding Shift Right Narrow
         // VQRSHRUN I       -       Saturating Rounding Shift Right Unsigned Narrow
@@ -1031,7 +1037,11 @@ void check_neon_all() {
 
         // VQSHRN   I       -       Saturating Shift Right Narrow
         // VQSHRUN  I       -       Saturating Shift Right Unsigned Narrow
+        check(arm32 ? "vqshrn.s16"  : "sqshrn",  8*w,  i8_sat(i16_1/16));
+        check(arm32 ? "vqshrn.s32"  : "sqshrn",  4*w, i16_sat(i32_1/16));
         check(arm32 ? "vqshrn.s64"  : "sqshrn",  2*w, i32_sat(i64_1/16));
+        check(arm32 ? "vqshrun.s16" : "sqshrun", 8*w,  u8_sat(i16_1/16));
+        check(arm32 ? "vqshrun.s32" : "sqshrun", 4*w, u16_sat(i32_1/16));
         check(arm32 ? "vqshrun.s64" : "sqshrun", 2*w, u32_sat(i64_1/16));
         check(arm32 ? "vqshrn.u16"  : "uqshrn", 8*w,  u8(min(u16_1/16, max_u8)));
         check(arm32 ? "vqshrn.u32"  : "uqshrn", 4*w, u16(min(u32_1/16, max_u16)));

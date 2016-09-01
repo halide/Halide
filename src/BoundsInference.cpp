@@ -409,26 +409,41 @@ public:
                     Expr min_required = Variable::make(Int(32), min_var);
                     Expr max_required = Variable::make(Int(32), max_var);
 
-                    // If the Func is compute_at some inner loop, and
-                    // only extent is bounded, then the min could
-                    // actually move around, which makes the extent
-                    // bound not actually useful for determining the
-                    // max required from the point of view of
-                    // producers.
-                    if (bound.min.defined() ||
-                        compute_at.is_root() ||
-                        (compute_at.match(loop_level) &&
-                         store_at.match(loop_level))) {
-                        if (!bound.min.defined()) {
-                            bound.min = min_required;
+                    if (bound.extent.defined()) {
+                        // If the Func is compute_at some inner loop, and
+                        // only extent is bounded, then the min could
+                        // actually move around, which makes the extent
+                        // bound not actually useful for determining the
+                        // max required from the point of view of
+                        // producers.
+                        if (bound.min.defined() ||
+                            compute_at.is_root() ||
+                            (compute_at.match(loop_level) &&
+                             store_at.match(loop_level))) {
+                            if (!bound.min.defined()) {
+                                bound.min = min_required;
+                            }
+                            s = LetStmt::make(min_var, bound.min, s);
+                            s = LetStmt::make(max_var, bound.min + bound.extent - 1, s);
                         }
-                        s = LetStmt::make(min_var, bound.min, s);
-                        s = LetStmt::make(max_var, bound.min + bound.extent - 1, s);
+
+                        // Save the unbounded values to use in bounds-checking assertions
+                        s = LetStmt::make(min_var + "_unbounded", min_required, s);
+                        s = LetStmt::make(max_var + "_unbounded", max_required, s);
                     }
 
-                    // Save the unbounded values to use in bounds-checking assertions
-                    s = LetStmt::make(min_var + "_unbounded", min_required, s);
-                    s = LetStmt::make(max_var + "_unbounded", max_required, s);
+                    if (bound.modulus.defined()) {
+                        min_required -= bound.remainder;
+                        min_required = (min_required / bound.modulus) * bound.modulus;
+                        min_required += bound.remainder;
+                        Expr max_plus_one = max_required + 1;
+                        max_plus_one -= bound.remainder;
+                        max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
+                        max_plus_one += bound.remainder;
+                        max_required = max_plus_one - 1;
+                        s = LetStmt::make(min_var, min_required, s);
+                        s = LetStmt::make(max_var, max_required, s);
+                    }
                 }
             }
 

@@ -42,6 +42,11 @@ EXPORT Image<uint32_t> integer_divide_table_s32();
  */
 EXPORT Expr fast_integer_divide(Expr numerator, Expr denominator);
 
+/** Use the fast integer division tables to implement a modulo
+ * operation via the Euclidean identity: a%b = a - (a/b)*b
+ */
+EXPORT Expr fast_integer_modulo(Expr numerator, Expr denominator);
+
 }
 
 #endif
