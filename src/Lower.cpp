@@ -101,6 +101,19 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Skipping injecting memoization...\n";
     }
 
+    size_t no_prefetch;
+    get_env_variable("HL_NO_PREFETCH", no_prefetch);
+    if (no_prefetch) {
+        any_prefetch = false;
+    }
+    if (any_prefetch) {
+        debug(1) << "Injecting prefetches...\n";
+        s = inject_prefetch(s, env);
+        debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
+    } else {
+        debug(1) << "Skipping injecting prefetches...\n";
+    }
+
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
@@ -166,17 +179,6 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Injecting image intrinsics...\n";
         s = inject_image_intrinsics(s, env);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
-    }
-
-    if (getenv("HL_NO_PREFETCH")) {
-        any_prefetch = false;
-    }
-    if (any_prefetch) {
-        debug(1) << "Injecting prefetches...\n";
-        s = inject_prefetch(s, env);
-        debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
-    } else {
-        debug(1) << "Skipping injecting prefetches...\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
