@@ -91,7 +91,7 @@ private:
         if (has_static_type) {
             debug(dbg_prefetch4) << ", type: " << t << "\n";
         } else {
-            debug(dbg_prefetch4) << ", no static type, defaulting to: " << t << "\n";
+            debug(dbg_prefetch4) << ", no static type\n";
         }
 
         return t;
@@ -107,10 +107,15 @@ private:
         int dims = box.size();
         bool has_static_type = true;
         Type t = get_type(varname, has_static_type);
+        string elem_size_name = varname + ".elem_size";
+
+        std::ostringstream ss; ss << t;
+        string type_name = ss.str();
         debug(dbg_prefetch1) << "  prefetch" << ptmp << ": "
-                             << varname << " (" << t
-                             << (has_static_type ? "" : ":dynamic_type")
+                             << varname << " (" 
+                             << (has_static_type ? type_name : elem_size_name)
                              << ", dims:" << dims << ")\n";
+
         for (int i = 0; i < dims; i++) {
             debug(dbg_prefetch3) << "    ---\n";
             debug(dbg_prefetch3) << "    box[" << i << "].min: " << box[i].min << "\n";
@@ -193,9 +198,7 @@ private:
         args_prefetch[0] = dims;
         if (has_static_type) {
             args_prefetch[1] = t.bytes();
-        } else {
-            // Use element size for inputs that don't have static types
-            string elem_size_name = varname + ".elem_size";
+        } else {   // Use element size for inputs that don't have static types
             Expr elem_size_var = Variable::make(Int(32), elem_size_name);
             args_prefetch[1] = elem_size_var;
         }
@@ -325,6 +328,7 @@ Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
         dbg_prefetch5 = MAX(dbg_prefetch5 - dbg_level, 0);
     }
 
+    debug(dbg_prefetch1) << "prefetch:\n";
     return InjectPrefetch(env).mutate(s);
 }
 
