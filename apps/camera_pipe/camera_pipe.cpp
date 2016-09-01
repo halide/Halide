@@ -155,16 +155,13 @@ Func demosaic(Func deinterleaved) {
     }
     g_r.compute_at(processed, yi)
         .store_at(processed, yo)
-        .prefetch(y, 2)
         .vectorize(x, vec, TailStrategy::RoundUp)
         .fold_storage(y, 2);
     g_b.compute_at(processed, yi)
         .store_at(processed, yo)
-        .prefetch(y, 2)
         .vectorize(x, vec, TailStrategy::RoundUp)
         .fold_storage(y, 2);
     output.compute_at(processed, x)
-        .prefetch(y, 2)
         .vectorize(x)
         .unroll(y)
         .reorder(c, x, y)
@@ -292,11 +289,9 @@ Func process(Func raw, Type result_type,
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
-        .prefetch(y, 2)
         .fold_storage(y, 8)
         .vectorize(x, vec);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
-        .prefetch(y, 2)
         .fold_storage(y, 4)
         .vectorize(x, 2*vec, TailStrategy::RoundUp)
         .reorder(c, x, y)
@@ -307,7 +302,6 @@ Func process(Func raw, Type result_type,
         .reorder(c, x, y)
         .unroll(c);
     processed.compute_root()
-        .prefetch(y, 2)
         .split(y, yo, yi, strip_size)
         .split(yi, yi, yii, 2)
         .split(x, x, xi, 2*vec, TailStrategy::RoundUp)
