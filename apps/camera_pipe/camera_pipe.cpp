@@ -297,11 +297,11 @@ Func process(Func raw, Type result_type,
         .reorder(c, x, y)
         .unroll(c);
     corrected.compute_at(processed, x)
-        .prefetch(y, 2)
         .vectorize(x, vec)
         .reorder(c, x, y)
         .unroll(c);
     processed.compute_root()
+        .prefetch(y, 2)
         .split(y, yo, yi, strip_size)
         .split(yi, yi, yii, 2)
         .split(x, x, xi, 2*vec, TailStrategy::RoundUp)
