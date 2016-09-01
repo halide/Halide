@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
             .hexagon()
             .split(x, xo, xi, vector_size*2, TailStrategy::RoundUp)
             .vectorize(xi, vector_size)
+            .prefetch(y, 2)
             .parallel(y, 16);
         blur_y.compute_at(blur, y)
             .vectorize(x, vector_size, TailStrategy::RoundUp);
@@ -81,7 +82,6 @@ int main(int argc, char **argv) {
 
         blur.compute_root()
             .parallel(y, 16)
-            .prefetch(y, 2)
             .vectorize(x, vector_size);
         blur_y.compute_at(blur, y)
             .vectorize(x, vector_size);

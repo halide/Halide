@@ -124,7 +124,7 @@ private:
         // TODO         e.g. see: camera_pipe.cpp corrected matrix(4,3)
 
         string pstr = std::to_string(ptmp++);
-        string varname_prefetch_buf = varname + ".prefetch_" + pstr + "_buf";
+        string varname_prefetch_buf = varname + "_prefetch_" + pstr + "_buf";
         Expr var_prefetch_buf = Variable::make(Int(32), varname_prefetch_buf);
 
         // Establish the variables for buffer strides, box min & max
@@ -135,8 +135,8 @@ private:
             string istr = std::to_string(i);
             // string extent_name = varname + ".extent." + istr;
             string stride_name = varname + ".stride." + istr;
-            string min_name = varname + ".prefetch_" + pstr + "_min_" + istr;
-            string max_name = varname + ".prefetch_" + pstr + "_max_" + istr;
+            string min_name = varname + "_prefetch_" + pstr + "_min_" + istr;
+            string max_name = varname + "_prefetch_" + pstr + "_max_" + istr;
 
 #if 0  // TODO: Determine if the stride varname is defined - check not yet working
             string stride_name_required = stride_name + ".required";
