@@ -67,27 +67,33 @@ private:
 
     // Determine the static type of a named buffer (if available)
     //
-    // Note: the type of input is only known at runtime (use input.elem_size)
-    //       and will be reported as not having a static type
+    // Note: If the type cannot be determined, the variable will
+    //       be flagged as not having a static type (e.g. the type
+    //       of input is only known at runtime, input.elem_size).
     //
     Type get_type(string varname, bool &has_static_type) {
-        debug(dbg_prefetch3) << "    getType(" << varname << ")\n";
-        Type t = UInt(8);
+        has_static_type = false;
+        debug(dbg_prefetch4) << "    getType(" << varname << ")";
+        Type t = UInt(8);       // default type
         map<string, Function>::const_iterator varit = env.find(varname);
         if (varit != env.end()) {
             Function varf = varit->second;
-            debug(dbg_prefetch2) << "      found: " << varit->first << "\n";
+            debug(dbg_prefetch4) << " found: " << varit->first;
             if (varf.outputs()) {
                 vector<Type> varts = varf.output_types();
                 t = varts[0];
-                debug(dbg_prefetch2) << "      type: " << t << "\n";
+                has_static_type = true;
             }
-            has_static_type = true;
         } else {
-            debug(dbg_prefetch2) << "      could not statically determine type of " << varname
-                                 << ", defaulting to: " << t << "\n";
-            has_static_type = false;
+            debug(dbg_prefetch4) << " not found";
         }
+
+        if (has_static_type) {
+            debug(dbg_prefetch4) << ", type: " << t << "\n";
+        } else {
+            debug(dbg_prefetch4) << ", no static type, defaulting to: " << t << "\n";
+        }
+
         return t;
     }
 
@@ -129,10 +135,12 @@ private:
             string istr = std::to_string(i);
             // string extent_name = varname + ".extent." + istr;
             string stride_name = varname + ".stride." + istr;
-            string stride_name_required = stride_name + ".required";
-            string stride_name_constrained = stride_name + ".constrained";
             string min_name = varname + ".prefetch_" + pstr + "_min_" + istr;
             string max_name = varname + ".prefetch_" + pstr + "_max_" + istr;
+
+#if 0  // TODO: Determine if the stride varname is defined - check not yet working
+            string stride_name_required = stride_name + ".required";
+            string stride_name_constrained = stride_name + ".constrained";
             if (scope.contains(stride_name_required)) {
                 stride_name = stride_name_required;
             }
@@ -140,7 +148,6 @@ private:
                 stride_name = stride_name_constrained;
             }
 
-#if 0  // TODO: Determine if the stride varname is defined - check not yet working
             if (scope.contains(stride_name)) {
                 debug(dbg_prefetch2) << "  Found: " << stride_name << "\n";
             } else {
