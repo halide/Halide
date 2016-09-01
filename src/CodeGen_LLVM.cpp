@@ -35,6 +35,19 @@
 
 #endif
 
+// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
+// properly on Windows: the return type isn't part of the name-mangling scheme
+// on *nix, but is for MSVC. Note also that this specialization must be in the
+// same (global) namespace as the others.
+template<>
+struct halide_c_type_to_name<struct halide_filter_metadata_t> {
+    static const bool known_type = true;
+    static halide_cplusplus_type_name name() {
+        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"};
+    }
+};
+
+
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
@@ -466,6 +479,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
     }
     return names;
 }
@@ -524,9 +538,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         if (f.linkage == LoweredFunc::External) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
-            if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(names.simple_name, metadata_getter, wrapper);
-            }
 
             if (target.has_feature(Target::Matlab)) {
                 define_matlab_wrapper(module.get(), wrapper, metadata_getter);
@@ -784,11 +795,11 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type().is_handle()) {
-        // Handle is always emitted into metadata "undefined", regardless of
-        // what sort of Expr is provided.
+    if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -865,14 +876,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
+        Expr def = args[arg].def;
+        Expr min = args[arg].min;
+        Expr max = args[arg].max;
+        if (args[arg].type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            def = min = max = Expr();
+        }
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(args[arg].def),
-            embed_constant_expr(args[arg].min),
-            embed_constant_expr(args[arg].max)
+            embed_constant_expr(def),
+            embed_constant_expr(min),
+            embed_constant_expr(max)
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
@@ -915,39 +934,6 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     return metadata_getter;
 }
 
-void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper) {
-    llvm::Function *register_metadata = module->getFunction("halide_runtime_internal_register_metadata");
-    internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
-
-    llvm::StructType *register_t_type = module->getTypeByName("struct._halide_runtime_internal_registered_filter_t");
-    internal_assert(register_t_type) << "Could not find register_t_type in initial module\n";
-
-    Constant *list_node_fields[] = {
-        Constant::getNullValue(i8_t->getPointerTo()),
-        metadata_getter,
-        argv_wrapper
-    };
-
-    GlobalVariable *list_node = new GlobalVariable(
-        *module,
-        register_t_type,
-        /*isConstant*/ false,
-        GlobalValue::PrivateLinkage,
-        ConstantStruct::get(register_t_type, list_node_fields));
-
-    llvm::FunctionType *func_t = llvm::FunctionType::get(void_t, false);
-    llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", ctor);
-    builder->SetInsertPoint(block);
-    llvm::Value *call_args[] = {list_node};
-    llvm::CallInst *call = builder->CreateCall(register_metadata, call_args);
-    call->setDoesNotThrow();
-    builder->CreateRet(call);
-    llvm::verifyFunction(*ctor);
-
-    llvm::appendToGlobalCtors(*module, ctor, 0);
-}
-
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
@@ -967,8 +953,28 @@ void CodeGen_LLVM::optimize_module() {
     FunctionPassManager function_pass_manager(module.get());
     PassManager module_pass_manager;
     #else
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
+
+    // We override PassManager::add so that we have an opportunity to
+    // blacklist problematic LLVM passes.
+    class MyFunctionPassManager : public legacy::FunctionPassManager {
+    public:
+        MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
+        virtual void add(Pass *p) override {
+            debug(2) << "Adding function pass: " << p->getPassName() << "\n";
+            legacy::FunctionPassManager::add(p);
+        }
+    };
+
+    class MyModulePassManager : public legacy::PassManager {
+    public:
+        virtual void add(Pass *p) override {
+            debug(2) << "Adding module pass: " << p->getPassName() << "\n";
+            legacy::PassManager::add(p);
+        }
+    };
+
+    MyFunctionPassManager function_pass_manager(module.get());
+    MyModulePassManager module_pass_manager;
     #endif
 
     #if (LLVM_VERSION >= 36) && (LLVM_VERSION < 37)
@@ -1455,11 +1461,28 @@ void CodeGen_LLVM::visit(const Div *op) {
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
+    // Detect if it's a small int modulus
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
+
     int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+        // We can use our fast signed integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+        // We can use our fast unsigned integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
     } else {
         // To match our definition of division, mod should be between 0
         // and |b|.
@@ -2521,9 +2544,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         codegen(op->args[0]);
         value = codegen(op->args[1]);
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        if (op->type.is_vector()) {
+        Expr cond = op->args[0];
+        if (const Broadcast *b = cond.as<Broadcast>()) {
+            cond = b->value;
+        }
+        if (cond.type().is_vector()) {
             scalarize(op);
-
         } else {
 
             internal_assert(op->args.size() == 3);
@@ -2531,20 +2557,21 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+            builder->CreateCondBr(codegen(cond), true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
+            BasicBlock *true_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(false_bb);
             Value *false_value = codegen(op->args[2]);
             builder->CreateBr(after_bb);
+            BasicBlock *false_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(after_bb);
-
             PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-            phi->addIncoming(true_value, true_bb);
-            phi->addIncoming(false_value, false_bb);
+            phi->addIncoming(true_value, true_pred);
+            phi->addIncoming(false_value, false_pred);
 
             value = phi;
         }
@@ -2837,6 +2864,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::indeterminate_expression)) {
+        user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";

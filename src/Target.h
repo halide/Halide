@@ -63,7 +63,6 @@ struct Target {
         OpenGLCompute = halide_target_feature_openglcompute,
         Renderscript = halide_target_feature_renderscript,
         UserContext = halide_target_feature_user_context,
-        RegisterMetadata = halide_target_feature_register_metadata,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
@@ -74,6 +73,7 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

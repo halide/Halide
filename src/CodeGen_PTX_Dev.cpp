@@ -406,7 +406,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     PM.add(createNVVMReflectPass(reflect_mapping));
 
     // Inlining functions is essential to PTX
+    #if LLVM_VERSION < 40
     PM.add(createAlwaysInlinerPass());
+    #else
+    PM.add(createAlwaysInlinerLegacyPass());
+    #endif
 
     // Override default to generate verbose assembly.
     #if LLVM_VERSION < 37

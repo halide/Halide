@@ -1,20 +1,12 @@
 #include <pthread.h>
-#include <assert.h>
-#include <stdint.h>
 #include <stdlib.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/mman.h>
-#include <linux/types.h>
+#include <fcntl.h>
 #include <android/log.h>
 
 #include "bin/src/halide_hexagon_remote.h"
-
-#include "stdio.h"
 
 namespace {
 
@@ -93,7 +85,6 @@ int ion_free(int ion_fd, ion_user_handle_t ion_handle) {
 // of allocations we can traverse later.
 struct allocation_record {
     allocation_record *next;
-    int ion_fd;
     ion_user_handle_t handle;
     int buf_fd;
     void *buf;
@@ -104,6 +95,8 @@ struct allocation_record {
 // head list node.
 allocation_record allocations = { NULL, };
 pthread_mutex_t allocations_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+int ion_fd = -1;
 
 }  // namespace
 
@@ -116,19 +109,19 @@ __attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
     pthread_mutex_init(&allocations_mutex, NULL);
+    ion_fd = open("/dev/ion", O_RDONLY, 0);
+    if (ion_fd < 0) {
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
+    }
 }
 
 void halide_hexagon_host_malloc_deinit() {
+    close(ion_fd);
+    ion_fd = -1;
     pthread_mutex_destroy(&allocations_mutex);
 }
 
 void *halide_hexagon_host_malloc(size_t size) {
-    int ion_fd = open("/dev/ion", O_RDONLY, 0);
-    if (ion_fd < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
-        return NULL;
-    }
-
     const int heap_id = system_heap_id;
     const int ion_flags = ion_flag_cached;
 
@@ -151,18 +144,16 @@ void *halide_hexagon_host_malloc(size_t size) {
 
     ion_user_handle_t handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
     if (handle < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(ion_fd, %d, %d, %d, %d) failed",
-                            size, alignment, 1 << heap_id, ion_flags);
-        close(ion_fd);
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %d, %d, %d, %d) failed",
+                            ion_fd, size, alignment, 1 << heap_id, ion_flags);
         return NULL;
     }
 
     // Map the ion handle to a file buffer.
     int buf_fd = ion_map(ion_fd, handle);
     if (buf_fd < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(ion_fd, %d) failed", handle);
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
         ion_free(ion_fd, handle);
-        close(ion_fd);
         return NULL;
     }
 
@@ -173,7 +164,6 @@ void *halide_hexagon_host_malloc(size_t size) {
                             size, buf_fd);
         close(buf_fd);
         ion_free(ion_fd, handle);
-        close(ion_fd);
         return NULL;
     }
 
@@ -189,12 +179,10 @@ void *halide_hexagon_host_malloc(size_t size) {
         munmap(buf, size);
         close(buf_fd);
         ion_free(ion_fd, handle);
-        close(ion_fd);
         return NULL;
     }
 
     rec->next = NULL;
-    rec->ion_fd = ion_fd;
     rec->handle = handle;
     rec->buf_fd = buf_fd;
     rec->buf = buf;
@@ -243,12 +231,9 @@ void halide_hexagon_host_free(void *ptr) {
 
     // free the ION allocation
     close(rec->buf_fd);
-    if (ion_free(rec->ion_fd, rec->handle) < 0) {
-        __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(ion_fd, %d) failed", rec->handle);
+    if (ion_free(ion_fd, rec->handle) < 0) {
+        __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(%d, %d) failed", ion_fd, rec->handle);
     }
-
-    // close the ion handle
-    close(rec->ion_fd);
 
     free(rec);
 }

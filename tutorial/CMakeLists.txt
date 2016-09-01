@@ -79,7 +79,7 @@ if (BUILD_AOT_TUTORIAL)
 
   # FIXME: Shouldn't halide_add_generator_dependency() add these??
   if (NOT WIN32)
-    target_link_libraries(lesson_10_aot_compilation_run dl pthread)
+    target_link_libraries(lesson_10_aot_compilation_run PRIVATE dl pthread)
   endif()
 
 endif()

@@ -12,8 +12,7 @@
 
 namespace Halide {
 
-class FuncRefVar;
-class FuncRefExpr;
+class FuncRef;
 
 /** Create a small array of Exprs for defining and calling functions
  * with multiple outputs. */
@@ -36,13 +35,16 @@ public:
         return exprs[x];
     }
 
+    /** Construct a Tuple of a single Expr */
+    explicit Tuple(Expr e) {
+        exprs.push_back(e);
+    }
+
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename ...Args>
-    Tuple(Expr a, Expr b, Args... args) {
-        exprs.push_back(a);
-        exprs.push_back(b);
-        Internal::collect_args(exprs, args...);
+    Tuple(Expr a, Expr b, Args&&... args) {
+        exprs = std::vector<Expr>{a, b, std::forward<Args>(args)...};
     }
     //@}
 
@@ -52,10 +54,7 @@ public:
     }
 
     /** Construct a Tuple from a function reference. */
-    // @{
-    EXPORT Tuple(const FuncRefVar &);
-    EXPORT Tuple(const FuncRefExpr &);
-    // @}
+    EXPORT Tuple(const FuncRef &);
 
     /** Treat the tuple as a vector of Exprs */
     const std::vector<Expr> &as_vector() const {
@@ -93,8 +92,8 @@ public:
     /** Construct a Realization from some Buffers. */
     //@{
     template<typename ...Args>
-    Realization(Buffer a, Buffer b, Args... args) : buffers({a, b}) {
-        Internal::collect_args(buffers, args...);
+    Realization(Buffer a, Buffer b, Args&&... args) {
+        buffers = std::vector<Buffer>{a, b, std::forward<Args>(args)...};
     }
     //@}
 

@@ -263,6 +263,8 @@ set(HEADER_FILES
   Float16.h
   Func.h
   Function.h
+  FuseGPUThreadLoops.h
+  FuzzFloatStores.h
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
@@ -424,6 +426,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Func.cpp
   Function.cpp
   FuseGPUThreadLoops.cpp
+  FuzzFloatStores.cpp
   Generator.cpp
   HexagonOffload.cpp
   HexagonOptimize.cpp

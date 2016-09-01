@@ -207,6 +207,11 @@ bool is_negative_negatable_const(Expr e) {
     return is_negative_negatable_const(e, e.type());
 }
 
+bool is_undef(Expr e) {
+    if (const Call *c = e.as<Call>()) return c->is_intrinsic(Call::undef);
+    return false;
+}
+
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
     if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 0;
@@ -690,12 +695,53 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::PureIntrinsic);
 }
 
-Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
+namespace Internal {
+
+Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) {
     std::vector<Expr> args;
     args.push_back(result);
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
     return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
                                 args, Internal::Call::PureIntrinsic);
+}
+
+}  // namespace Internal
+
+Expr saturating_cast(Type t, Expr e) {
+    // For float to float, guarantee infinities are always pinned to range.
+    if (t.is_float() && e.type().is_float()) {
+        if (t.bits() < e.type().bits()) {
+            e = cast(t, clamp(e, t.min(), t.max()));
+        } else {
+            e = clamp(cast(t, e), t.min(), t.max());
+        }
+    } else if (e.type() != t) {
+        // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
+        if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
+            e = max(e, t.min()); // min values turn out to be always representable
+
+            // This line depends on t.max() rounding upward, which should always
+            // be the case as it is one less than a representable value, thus
+            // the one larger is always the closest.
+            e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
+        } else {
+            Expr min_bound;
+            if (!e.type().is_uint()) {
+                min_bound = lossless_cast(e.type(), t.min());
+            }
+            Expr max_bound = lossless_cast(e.type(), t.max());
+
+            if (min_bound.defined() && max_bound.defined()) {
+                e = clamp(e, min_bound, max_bound);
+            } else if (min_bound.defined()) {
+                e = max(e, min_bound);
+            } else if (max_bound.defined()) {
+                e = min(e, max_bound);
+            }
+            e = cast(t, e);
+        }
+    }
+    return e;
 }
 
 }

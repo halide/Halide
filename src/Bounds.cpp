@@ -840,8 +840,9 @@ void merge_boxes(Box &a, const Box &b) {
                 } else {
                     a[i].min = Interval::make_min(a[i].min, b[i].min);
                 }
+                a[i].min = simplify(a[i].min);
             } else {
-                a[i].min = Expr();
+                a[i].min = Interval::neg_inf;
             }
         }
         if (!a[i].max.same_as(b[i].max)) {
@@ -861,8 +862,9 @@ void merge_boxes(Box &a, const Box &b) {
                 } else {
                     a[i].max = Interval::make_max(a[i].max, b[i].max);
                 }
+                a[i].max = simplify(a[i].max);
             } else {
-                a[i].max = Expr();
+                a[i].max = Interval::pos_inf;
             }
         }
     }

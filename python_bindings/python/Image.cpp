@@ -721,7 +721,7 @@ bn::ndarray image_to_ndarray(p::object image_object)
 
 
 template<typename T, typename ...Args>
-p::object create_image_object(Args ...args)
+p::object create_image_object(Args...args)
 {
     typedef h::Image<T> ImageType;
     typedef typename p::manage_new_object::apply<ImageType *>::type converter_t;
