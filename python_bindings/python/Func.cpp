@@ -184,7 +184,8 @@ std::string func_repr(const h::Func &func) {
 }
 
 
-void func_define_extern0(h::Func &that,const std::string &function_name,
+void func_define_extern0(h::Func &that,
+                         const std::string &function_name,
                          p::list params,
                          h::Type output_type,
                          int dimensionality) {
@@ -192,7 +193,8 @@ void func_define_extern0(h::Func &that,const std::string &function_name,
     return that.define_extern(function_name, params_vec, output_type, dimensionality);
 }
 
-void func_define_extern1(h::Func &that,const std::string &function_name,
+void func_define_extern1(h::Func &that,
+                         const std::string &function_name,
                          p::list params,
                          p::list types,
                          int dimensionality) {
@@ -201,9 +203,16 @@ void func_define_extern1(h::Func &that,const std::string &function_name,
     return that.define_extern(function_name, params_vec, types_vec, dimensionality);
 }
 
+p::tuple func_output_types(h::Func &func) {
+    p::list elts;
+    for (h::Type t : func.output_types()) {
+        elts.append(t);
+    }
+    return p::tuple(elts);
+}
 
-void defineFunc()
-{
+
+void defineFunc() {
 
     using Halide::Func;
     using namespace func_and_stage_implementation_details;
@@ -471,11 +480,10 @@ void defineFunc()
                    "Func that represents an external pipeline stage. You can, for "
                    "example, use it to wrap a call to an extern library such as "
                    "fftw.")
-            .def("define_extern", &func_define_extern1,
-                 p::args("self", "function_name", "params", "output_types", "dimensionality"));
+        .def("define_extern", &func_define_extern1,
+             p::args("self", "function_name", "params", "output_types", "dimensionality"));
 
-    func_class.def("output_types", &Func::output_types, p::arg("self"),
-                   p::return_value_policy<p::copy_const_reference>(),
+    func_class.def("output_types", &func_output_types, p::arg("self"),
                    "Get the types of the outputs of this Func.");
 
     func_class.def("outputs", &Func::outputs, p::arg("self"),
@@ -507,17 +515,6 @@ void defineFunc()
 
     func_class
         .def("__setitem__", &func_setitem_operator);
-
-    /*
-    &Func::__getitem__(self, *args):
-    """
-    Either calls to the function, or the left-hand-side of a
-    reduction definition (see \\ref RDom). If the function has
-    already been defined, and fewer arguments are given than the
-    function has dimensions, then enough implicit vars are added to
-    the end of the argument list to make up the difference.
-    """
-*/
 
     // FIXME should share these definitions with Stage instead of having copy and paste code
 

@@ -3,7 +3,6 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/format.hpp>
 #include <boost/python.hpp>
-#include "no_compare_indexing_suite.h"
 
 #include "../../src/Type.h"
 #include "../../src/Expr.h"
@@ -125,9 +124,6 @@ void defineType()
     p::def("Handle", make_handle,
            (p::arg("lanes")=1),
            "Construct a handle type");
-
-    p::class_< std::vector<Type> >("TypesVector")
-            .def( no_compare_indexing_suite< std::vector<Type> >() );
 
     return;
 }

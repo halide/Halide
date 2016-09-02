@@ -3,7 +3,6 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 #include "add_operators.h"
-#include "no_compare_indexing_suite.h"
 
 #include "../../src/Expr.h"
 #include "../../src/Var.h"
@@ -76,7 +75,7 @@ void defineExpr() {
 
             // constructor priority order is reverse from implicitly_convertible
             // it important to declare int after float, after double.
-            .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self"))) //Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
+            .def(p::init<const h::Internal::BaseExprNode *>(p::arg("self")))
             .def(p::init<double>(p::arg("self"), "Make an expression representing a const 32-bit float double. "
                                  "Also emits a warning due to truncation."))
             .def(p::init<float>(p::arg("self"), "Make an expression representing a const 32-bit float (i.e. a FloatImm)"))
@@ -99,11 +98,6 @@ void defineExpr() {
     p::implicitly_convertible<int, h::Expr>();
     p::implicitly_convertible<float, h::Expr>();
     p::implicitly_convertible<double, h::Expr>();
-
-    //p::implicitly_convertible<std::string, h::Expr>();
-
-    p::class_< std::vector<Expr> >("ExprsVector")
-            .def( no_compare_indexing_suite< std::vector<Expr> >() );
 
     p::enum_<h::DeviceAPI>("DeviceAPI",
                            "An enum describing a type of device API. "
