@@ -352,12 +352,14 @@ public:
                                const Target &target = Target());
     EXPORT Realization realize(int x_size,
                                const Target &target = Target());
-    EXPORT Realization realize(const Target &target = Target());    
+    EXPORT Realization realize(const Target &target = Target());
     EXPORT void realize(Realization dst, const Target &target = Target());
 
     template<typename T, int D>
-    NO_INLINE void realize(Image<T, D> dst, const Target &target = Target()) {
-        realize(Realization(dst), target);
+    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
+        Realization r(dst);
+        realize(r, target);
+        dst = r[0];
     }
     // @}
 

@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
 
         Image<int> output1(1024);
         out.realize(output1);
+        output1.copy_to_host();
 
         for (int x = 0; x < 1024; x++) {
             int correct = (input(x) + 1) * 2 + 3;
@@ -78,6 +79,7 @@ int main(int argc, char **argv) {
 
         Image<int> output2(1024);
         out.realize(output2);
+        output2.copy_to_host();
 
         for (int x = 0; x < 1024; x++) {
             int correct = (input(x) + 1) * 2;
