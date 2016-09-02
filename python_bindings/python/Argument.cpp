@@ -2,23 +2,12 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-#include "no_compare_indexing_suite.h"
 
 #include "../../src/Argument.h"
 
 #include <string>
 
 namespace h = Halide;
-//std::string argument_name(h::Argument &that)
-//{
-//    return that.name;
-//}
-
-//h::Argument::Kind argument_kind(h::Argument &that)
-//{
-//    return that.kind;
-//}
-
 
 void defineArgument()
 {
@@ -96,9 +85,6 @@ void defineArgument()
             .def("is_scalar", &Argument::is_scalar, p::arg("self"))
             .def("is_input", &Argument::is_input, p::arg("self"))
             .def("is_output", &Argument::is_output, p::arg("self"));
-
-    p::class_< std::vector<h::Argument> >("ArgumentsVector")
-            .def( no_compare_indexing_suite< std::vector<h::Argument> >() );
 
     return;
 }

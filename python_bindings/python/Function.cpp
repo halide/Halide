@@ -2,7 +2,6 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-#include "no_compare_indexing_suite.h"
 
 #include "../../src/Func.h" // includes everything needed here
 
@@ -34,7 +33,5 @@ void defineExternFuncArgument()
         .def("defined", &ExternFuncArgument::defined)
         ;
 
-    p::class_< std::vector<ExternFuncArgument> >("ExternFuncArgumentsVector")
-            .def( no_compare_indexing_suite< std::vector<ExternFuncArgument> >() );
     return;
 }
