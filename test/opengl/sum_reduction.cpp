@@ -45,7 +45,7 @@ int main() {
                     temp += input(std::min(x+r, input.width()-1), y, c);
                 }
                 float correct = temp / 10.0f * 255.0f;
-                if (fabs(result(x, y, c) - correct) > 1e-6) {
+                if (fabs(result(x, y, c) - correct) > 1e-3) {
                     fprintf(stderr, "result(%d, %d, %d) = %f instead of %f\n",
                             x, y, c, result(x, y, c), correct);
                     return 1;
