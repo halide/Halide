@@ -1040,21 +1040,23 @@ public:
                 Expr output_texture = store_buf_finder.buffer_name;
 
                 // Confirm that we found something reasonable
-                internal_assert(output_texture.type().is_handle()) 
+                internal_assert(output_texture.type().is_handle())
                   << "No output buffer found in loop: " << op;
 
                 // Find the total size of this texture in the two loop
                 // dimensions
+                Expr texture_min_0 = Call::make(Int(32), "extract_buffer_min", {output_texture, 0}, Call::PureIntrinsic);
+                Expr texture_min_1 = Call::make(Int(32), "extract_buffer_min", {output_texture, 1}, Call::PureIntrinsic);
                 Expr texture_extent_0 = Call::make(Int(32), "extract_buffer_max", {output_texture, 0}, Call::PureIntrinsic)
-                    - Call::make(Int(32), "extract_buffer_min", {output_texture, 0}, Call::PureIntrinsic)
+                    - texture_min_0
                     + 1;
                 Expr texture_extent_1 = Call::make(Int(32), "extract_buffer_max", {output_texture, 1}, Call::PureIntrinsic)
-                    - Call::make(Int(32), "extract_buffer_min", {output_texture, 1}, Call::PureIntrinsic)
+                    - texture_min_1
                     + 1;
 
                 // Now map from coordinate space to texture space
-                coord1 = (coord1 / texture_extent_1) * 2.0f - 1.0f;
-                coord0 = (coord0 / texture_extent_0) * 2.0f - 1.0f;
+                coord1 = ((coord1 - texture_min_1) / texture_extent_1) * 2.0f - 1.0f;
+                coord0 = ((coord0 - texture_min_0) / texture_extent_0) * 2.0f - 1.0f;
 
                 // Remove varying attribute intrinsics from the vertex setup IR
                 // tree.
