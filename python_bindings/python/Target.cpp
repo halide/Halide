@@ -2,18 +2,24 @@
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-#include "no_compare_indexing_suite.h"
 
 #include "../../src/Target.h"
+
+#include "Func.h"
 
 #include <vector>
 #include <string>
 
-void defineTarget()
-{
+namespace h = Halide;
+namespace p = boost::python;
+
+void target_set_features(h::Target &t, p::list features, bool value) {
+    auto features_vec = python_collection_to_vector<h::Target::Feature>(features);
+    t.set_features(features_vec, value);
+}
+
+void defineTarget() {
     using Halide::Target;
-    namespace h = Halide;
-    namespace p = boost::python;
 
     auto target_class =
             p::class_<Target>("Target",
@@ -48,7 +54,7 @@ void defineTarget()
 
             .def("set_feature", &Target::set_feature,
                  (p::arg("self"), p::arg("f"), p::arg("value")=true))
-            .def("set_features", &Target::set_features,
+            .def("set_features", &target_set_features,
                  (p::arg("self"), p::arg("features_to_set"), p::arg("value")=true))
 
             // not all methods (yet) exposed
@@ -134,9 +140,6 @@ void defineTarget()
            "get_host_target. Throws an error if the architecture, bit width, "
            "and OS of the target do not match the host target, so this is only "
            "useful for controlling the feature set.");
-
-    p::class_< std::vector<Target::Feature> >("FeaturesVector")
-            .def( no_compare_indexing_suite< std::vector<Target::Feature> >() );
 
     return;
 }

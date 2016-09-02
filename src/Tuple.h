@@ -105,7 +105,7 @@ public:
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
         for (const Image<> &im : e) {
             images.push_back(Internal::BufferPtr(im));
-        }       
+        }
     }
 
     /** Support for iterating over a the Images in a Realization */
@@ -130,8 +130,31 @@ public:
 
     iterator end() {
         return {images.end()};
-    }    
-    
+    }
+
+    struct const_iterator {
+        std::vector<Internal::BufferPtr>::const_iterator iter;
+
+        const Image<> &operator*() {
+            return iter->get();
+        };
+        const_iterator &operator++() {
+            iter++;
+            return *this;
+        }
+        bool operator!=(const const_iterator &other) const {
+            return iter != other.iter;
+        }
+    };
+
+    const_iterator begin() const {
+        return {images.begin()};
+    }
+
+    const_iterator end() const{
+        return {images.end()};
+    }
+
 };
 
 /** Equivalents of some standard operators for tuples. */

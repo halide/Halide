@@ -13,7 +13,6 @@
 #include "Param.h"
 #include "RDom.h"
 #include "Target.h"
-#include "Tuple.h"
 #include "Type.h"
 #include "Var.h"
 
@@ -57,7 +56,6 @@ BOOST_PYTHON_MODULE(halide)
     defineParam();
     defineRDom();
     defineTarget();
-    defineTuple();
     defineType();
     defineVar();
 

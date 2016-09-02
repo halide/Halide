@@ -7,9 +7,9 @@
 #include "internal.hpp"
 #include "dtype.hpp"
 
-namespace Halide 
+namespace Halide
 {
-namespace numpy 
+namespace numpy
 {
 
 #if PY_MAJOR_VERSION == 2
@@ -19,10 +19,11 @@ static void wrap_import_array() {
 #else
 static void * wrap_import_array() {
     import_array();
+    return nullptr;
 }
 #endif
 
-void initialize(bool register_scalar_converters) 
+void initialize(bool register_scalar_converters)
 {
   wrap_import_array();
   import_ufunc();

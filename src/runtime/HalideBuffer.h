@@ -650,14 +650,13 @@ public:
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data. */
-    template<int N, typename std::enable_if<N < D>::type>
-    explicit Buffer(halide_type_t t, void *data, halide_dimension_t shape[N]) {
+    explicit Buffer(halide_type_t t, void *data, int d, const halide_dimension_t *shape) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
         ty = t;
-        dims = N;
-        for (int i = 0; i < N; i++) {
+        dims = d;
+        for (int i = 0; i < d; i++) {
             buf.min[i]    = shape[i].min;
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
@@ -669,47 +668,10 @@ public:
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data. */
-    template<int N, typename std::enable_if<N < D>::type>
-    explicit Buffer(T *data, halide_dimension_t shape[N]) {
+    explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
         ty = halide_type_of<typename std::remove_cv<T>::type>();
-        dims = N;
-        for (int i = 0; i < N; i++) {
-            buf.min[i]    = shape[i].min;
-            buf.extent[i] = shape[i].extent;
-            buf.stride[i] = shape[i].stride;
-        }
-        buf.elem_size = sizeof(T);
-        buf.host = (uint8_t *)data;
-    }
-
-    /** Make an image referring to existing data, with the memory layout
-     * described by an array of halide_dimension_t */
-    explicit Buffer(halide_type_t t, void *data, halide_dimension_t shape[D]) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
-        ty = halide_type_of<typename std::remove_cv<T>::type>();
-        dims = 0;
-        for (int i = 0; i < D; i++) {
-            if (!shape[i].extent) break;
-            dims++;
-            buf.min[i]    = shape[i].min;
-            buf.extent[i] = shape[i].extent;
-            buf.stride[i] = shape[i].stride;
-        }
-        buf.elem_size = sizeof(T);
-        buf.host = (uint8_t *)data;
-    }
-
-    /** Make an image referring to existing data of known type, with
-     * the memory layout described by an array of
-     * halide_dimension_t */
-    explicit Buffer(T *data, halide_dimension_t shape[D]) {
-        ty = halide_type_of<typename std::remove_cv<T>::type>();
-        dims = 0;
-        for (int i = 0; i < D; i++) {
-            if (!shape[i].extent) break;
-            dims++;
+        dims = d;
+        for (int i = 0; i < d; i++) {
             buf.min[i]    = shape[i].min;
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
