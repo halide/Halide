@@ -30,7 +30,7 @@ public:
     EXPORT BufferPtr(Type t, const std::vector<int> &size, std::string name = "");
 
     /** Compare two buffers for identity (not equality of data). */
-    bool same_as(const BufferPtr &other) const;
+    EXPORT bool same_as(const BufferPtr &other) const;
 
     /** Get the underlying Image */
     EXPORT Image<> &get();
@@ -56,9 +56,9 @@ public:
 
     /** Access to the mins, strides, extents. Will be deprecated. Do not use. */
     // @{
-    int min(int i) const;
-    int extent(int i) const;
-    int stride(int i) const;
+    EXPORT int min(int i) const;
+    EXPORT int extent(int i) const;
+    EXPORT int stride(int i) const;
     // @}
 
     /** Get the size in bytes of the allocation */
@@ -79,11 +79,11 @@ public:
 
     /** Make a Call node to a specific site in this buffer. */
     // @{
-    Expr operator()(const std::vector<Expr> &loc) const;
+    EXPORT Expr operator()(const std::vector<Expr> &loc) const;
 
     template<typename ...Args,
              typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
-    Expr operator()(Expr first, Args... rest) const {
+    NO_INLINE Expr operator()(Expr first, Args... rest) const {
         const std::vector<Expr> vec = {first, rest...};
         return (*this)(vec);
     }
