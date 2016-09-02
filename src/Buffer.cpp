@@ -82,6 +82,18 @@ Image<>::Dimension BufferPtr::dim(int i) const {
     return contents->image.dim(i);
 }
 
+int BufferPtr::min(int i) const {
+    return dim(i).min();
+}
+
+int BufferPtr::extent(int i) const {
+    return dim(i).extent();
+}
+
+int BufferPtr::stride(int i) const {
+    return dim(i).stride();
+}
+
 buffer_t *BufferPtr::raw_buffer() const {
     return contents->image.raw_buffer();
 }

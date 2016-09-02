@@ -56,9 +56,9 @@ public:
 
     /** Access to the mins, strides, extents. Will be deprecated. Do not use. */
     // @{
-    int min(int i) const { return dim(i).min(); }
-    int extent(int i) const { return dim(i).extent(); }
-    int stride(int i) const { return dim(i).stride(); }
+    int min(int i) const;
+    int extent(int i) const;
+    int stride(int i) const;
     // @}
 
     /** Get the size in bytes of the allocation */
