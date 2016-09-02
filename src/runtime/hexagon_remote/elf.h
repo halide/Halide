@@ -96,17 +96,6 @@ struct rela_t {
 #endif
 };
 
-// Some external symbols we to resolve during relocations
-extern "C" int __hexagon_muldf3;
-extern "C" int __hexagon_divdf3;
-extern "C" int __hexagon_adddf3;
-extern "C" int __hexagon_divsf3;
-extern "C" int __hexagon_udivdi3;
-extern "C" int __hexagon_udivsi3;
-extern "C" int __hexagon_umodsi3;
-extern "C" int __hexagon_divsi3;
-extern "C" int __hexagon_modsi3;
-
 struct elf_t {
     // The object file in memory
     char *buf;
@@ -576,34 +565,6 @@ struct elf_t {
             return;
         }
 
-        struct known_sym {
-            const char *name;
-            char *addr;
-        };
-        // dlsym can't necessarily find symbols in the calling process
-        // (e.g. this happens on linux if it is not compiled with
-        // -rdynamic), so define a table of some important symbols.
-        static known_sym known_syms[] = {
-            {"close", (char *)(&close)},
-            {"abort", (char *)(&abort)},
-            {"memcpy", (char *)(&memcpy)},
-            {"memmove", (char *)(&memmove)},
-            {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
-            {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
-            {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
-            {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
-            {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
-            {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
-            {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
-            {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
-            {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
-            {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
-            {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
-            {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
-            {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
-            {NULL, NULL} // Sentinel
-        };
-
         // Read from the GP register for GP-relative relocations. We
         // need to do this with some inline assembly.
         char *GP = NULL;
@@ -632,17 +593,8 @@ struct elf_t {
             if (!symbol_is_defined(sym)) {
                 if (strncmp(sym_name, "_GLOBAL_OFFSET_TABLE_", 22) == 0) {
                     sym_addr = (char *)global_offset_table;
-                }
-                if (!sym_addr) {
-                    for (int i = 0; known_syms[i].name; i++) {
-                        if (strncmp(sym_name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
-                            sym_addr = known_syms[i].addr;
-                        }
-                    }
-                }
-                if (!sym_addr) {
-                    // Try dlsym
-                    sym_addr = (char *)dlsym(NULL, sym_name);
+                } else {
+                    sym_addr = (char *)halide_get_symbol(sym_name);
                 }
                 if (!sym_addr) {
                     log_printf("Failed to resolve external symbol: %s\n", sym_name);

@@ -5,6 +5,7 @@
 #include <algorithm>
 
 using namespace Halide;
+using Halide::Internal::Call;
 
 // Test program to check basic arithmetic.
 // Pseudo-random numbers are generated and arithmetic operations performed on them.
@@ -20,7 +21,7 @@ using namespace Halide;
 #define SALTRATE 50
 // Portion of the test data to use for testing the simplifier
 # define SWIDTH 32
-# define SHEIGHT 1024
+# define SHEIGHT HEIGHT
 
 // Generate poor quality pseudo random numbers.
 // For reproducibility, the array indices are used as the seed for each
@@ -50,6 +51,7 @@ uint64_t ubits(int unique, int i, int j) {
     bits = (bits ^ (bits >> 32)) * mu;
     return bits;
 }
+
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
 template <typename T>
 bool less_than_zero(T val) {
@@ -112,9 +114,9 @@ bool is_negative_one(unsigned char val) {
 }
 
 
-template<typename T,typename BIG,int bits>
+template<typename T, typename BIG>
 BIG maximum() {
-    Type t = type_of<T>().with_bits(bits);
+    Type t = type_of<T>();
 
     if (t.is_float()) {
         return (BIG) 1.0;
@@ -136,9 +138,9 @@ BIG maximum() {
     return (BIG) 1;
 }
 
-template<typename T,typename BIG,int bits>
+template<typename T, typename BIG>
 BIG minimum() {
-    Type t = type_of<T>().with_bits(bits);
+    Type t = type_of<T>();
 
     if (t.is_float()) {
         return (BIG) 0.0;
@@ -165,20 +167,18 @@ BIG minimum() {
 //  min  max              max  min
 // The left pattern occurs when unique is odd; the right pattern when unique is even.
 
-template<typename T,typename BIG,int bits>
+template<typename T, typename BIG>
 Image<T> init(Type t, int unique, int width, int height) {
     if (width < 2) width = 2;
     if (height < 2) height = 2;
 
     Image<T> result(width, height);
 
-    assert(t.bits() == bits);
-
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
         int64_t max, min, neg, v, vsalt;
-        max = maximum<T,int64_t,bits>();
-        min = minimum<T,int64_t,bits>();
+        max = maximum<T, int64_t>();
+        min = minimum<T, int64_t>();
         neg = (~((int64_t) 0)) ^ max;  // The bits that should all be 1 for negative numbers.
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
@@ -206,7 +206,7 @@ Image<T> init(Type t, int unique, int width, int height) {
     }
     else if (t.is_uint()) {
         uint64_t max, v, vsalt;
-        max = maximum<T,BIG,bits>();
+        max = maximum<T, BIG>();
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
                 v = ubits(unique,i,j) & max;
@@ -265,21 +265,94 @@ enum ScheduleVariant {
   Hexagon
 };
 
+// Test multiplication of T1 x T2 -> RT
+template<typename T1, typename T2, typename RT, typename BIG>
+bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
+    std::cout << "Test multiplication of "
+              << type_of<T1>() << 'x' << vector_width << '*'
+              << type_of<T2>() << 'x' << vector_width << "->"
+              << type_of<RT>() << 'x' << vector_width << '\n';
+
+    int i, j;
+    Type t1 = type_of<T1>();
+    Type t2 = type_of<T2>();
+    Type rt = type_of<RT>();
+    bool success = true;
+
+    // The parameter bits can be used to control the maximum data value.
+    Image<T1> a = init<T1, BIG>(t1, 1, WIDTH, HEIGHT);
+    Image<T2> b = init<T2, BIG>(t2, 2, WIDTH, HEIGHT);
+
+    // Compute the multiplication, check that the results match.
+    Func f;
+    Var x, y;
+    f(x, y) = cast(rt, a(x, y)) * cast(rt, b(x, y));
+    if (vector_width > 1) {
+        f.vectorize(x, vector_width);
+    }
+    switch (scheduling) {
+        case CPU:
+            break;
+        case TiledGPU:
+            f.compute_root().gpu_tile(x, y, 16, 16);
+            break;
+        case Hexagon:
+            f.compute_root().hexagon();
+            break;
+    };
+
+    Image<RT> r = f.realize(WIDTH, HEIGHT, target);
+
+    int ecount = 0;
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
+            T1 ai = a(i, j);
+            T2 bi = b(i, j);
+            RT ri = r(i, j);
+            RT correct = RT(ai)*RT(bi);
+            if (correct != ri && (ecount++) < 10) {
+                std::cout << ai << "*" << bi << " -> " << ri << " != " << correct << "\n";
+                success = false;
+            }
+
+            if (i < SWIDTH && j < SHEIGHT) {
+                Expr ae = cast<RT>(Expr(ai));
+                Expr be = cast<RT>(Expr(bi));
+                Expr re = simplify(ae*be);
+
+                if (re.as<Call>() && re.as<Call>()->is_intrinsic(Call::signed_integer_overflow)) {
+                    // Don't check correctness of signed integer overflow.
+                } else {
+                    if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
+                        std::cout << "Compiled a*b != simplified a*b: " << (int64_t)ai
+                                  << "*" << (int64_t)bi
+                                  << " = " << (int64_t)ri
+                                  << " != " << re << "\n";
+                        success = false;
+                    }
+                }
+            }
+        }
+    }
+
+    return success;
+}
+
 // division tests division and mod operations.
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
-template<typename T,typename BIG,int bits>
+template<typename T, typename BIG>
 bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target) {
     std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
 
     int i, j;
-    Type t = type_of<T>().with_bits(bits);
-    BIG minval = minimum<T,BIG,bits>();
+    Type t = type_of<T>();
+    BIG minval = minimum<T, BIG>();
     bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
+    Image<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
+    Image<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
@@ -312,7 +385,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             f.compute_root().hexagon();
             break;
     };
-     
+
     Realization R = f.realize(WIDTH, HEIGHT, target);
     Image<T> q(R[0]);
     Image<T> r(R[1]);
@@ -370,17 +443,16 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
 // f_mod tests floating mod operations.
 // BIG should be double.
 // T should be a type known to Halide.
-template<typename T,typename BIG,int bits>
+template<typename T, typename BIG>
 bool f_mod() {
     std::cout << "Test mod of " << type_of<T>() << '\n';
 
     int i, j;
-    Type t = type_of<T>().with_bits(bits);
+    Type t = type_of<T>();
     bool success = true;
 
-    // The parameter bits can be used to control the maximum data value.
-    Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
+    Image<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
+    Image<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
     Image<T> out(WIDTH,HEIGHT);
 
     // Filter the input values for the operation to be tested.
@@ -401,7 +473,7 @@ bool f_mod() {
     // Explicit checks of the simplifier for consistency with runtime computation
     int ecount = 0;
     for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
-        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
+        for (j = 0; j < std::min(SHEIGHT, HEIGHT); j++) {
             T arg_a = a(i,j);
             T arg_b = b(i,j);
             T v = out(i,j);
@@ -423,39 +495,77 @@ bool f_mod() {
     return success;
 }
 
-
 int main(int argc, char **argv) {
     bool success = true;
-    success &= f_mod<float,double,32>();
+    success &= f_mod<float, double>();
 
-    int maximum_vector_width = 16;
     Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::Metal)) {
-        maximum_vector_width = 4;
-    }
 
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        // TODO: Pranav, I think this still needs the size change and Makefile changes.
-        maximum_vector_width = 1;
         scheduling = Hexagon;
     }
 
-    for (int vector_width = 1; vector_width <= maximum_vector_width; vector_width *= 2) {
-        success &= div_mod<uint8_t,uint64_t,8>(vector_width, scheduling, target);
-        success &= div_mod<uint16_t,uint64_t,16>(vector_width, scheduling, target);
-        success &= div_mod<uint32_t,uint64_t,32>(vector_width, scheduling, target);
-        success &= div_mod<int8_t,int64_t,8>(vector_width, scheduling, target);
-        success &= div_mod<int16_t,int64_t,16>(vector_width, scheduling, target);
-        success &= div_mod<int32_t,int64_t,32>(vector_width, scheduling, target);
+    // Test multiplication
+    std::vector<int> vector_widths = { 1 };
+    if (target.has_feature(Target::Metal)) {
+        for (int i = 2; i <= 4; i *= 2) {
+            vector_widths.push_back(i);
+        }
+    } else if (target.has_feature(Target::HVX_64)) {
+        vector_widths.push_back(64);
+    } else if (target.has_feature(Target::HVX_128)) {
+        vector_widths.push_back(128);
+    } else {
+        for (int i = 2; i <= 16; i *= 2) {
+            vector_widths.push_back(i);
+        }
     }
 
-    if (! success) {
+    for (int vector_width : vector_widths) {
+        // Non-widening multiplication.
+        success &= mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
+        success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
+        success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
+
+        // Widening multiplication.
+        success &= mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<uint16_t, uint16_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<int8_t, int8_t, int16_t, int64_t>(vector_width, scheduling, target);
+        success &= mul<int16_t, int16_t, int32_t, int64_t>(vector_width, scheduling, target);
+
+        // Mixed multiplication. This isn't all of the possible mixed
+        // multiplications, but it covers all of the special cases we
+        // have in Halide.
+        success &= mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<int16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
+        success &= mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
+    }
+
+    // Test division.
+    if (scheduling == Hexagon) {
+        // Vectorized division is not supported on Hexagon.
+        vector_widths.clear();
+        vector_widths.push_back(1);
+    }
+
+    for (int vector_width : vector_widths) {
+        success &= div_mod<uint8_t, uint64_t>(vector_width, scheduling, target);
+        success &= div_mod<uint16_t, uint64_t>(vector_width, scheduling, target);
+        success &= div_mod<uint32_t, uint64_t>(vector_width, scheduling, target);
+        success &= div_mod<int8_t, int64_t>(vector_width, scheduling, target);
+        success &= div_mod<int16_t, int64_t>(vector_width, scheduling, target);
+        success &= div_mod<int32_t, int64_t>(vector_width, scheduling, target);
+    }
+
+    if (!success) {
         printf ("Failure!\n");
         return -1;
-        //return 0;
     }
     printf("Success!\n");
     return 0;
