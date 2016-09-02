@@ -38,13 +38,22 @@ std::string make_buffer_name(const std::string &n, BufferPtr *b) {
 }
 
 BufferPtr::BufferPtr(const Image<> &buf, std::string name) :
-    contents(new Internal::BufferContents {Image<>(buf), make_buffer_name(name, this)}) {}
+    contents(new Internal::BufferContents) {
+    contents->image = Image<>(buf);
+    contents->name = make_buffer_name(name, this);
+}
 
 BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
-    contents(new Internal::BufferContents {Image<>(t, buf), make_buffer_name(name, this)}) {}
+    contents(new Internal::BufferContents) {
+    contents->image = Image<>(t, buf);
+    contents->name = make_buffer_name(name, this);
+}
 
 BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
-    contents(new Internal::BufferContents {Image<>(t, size), make_buffer_name(name, this)}) {}
+    contents(new Internal::BufferContents) {
+    contents->image = Image<>(t, size);
+    contents->name = make_buffer_name(name, this);
+}
 
 bool BufferPtr::same_as(const BufferPtr &other) const {
     return contents.same_as(other.contents);
