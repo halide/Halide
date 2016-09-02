@@ -612,6 +612,7 @@ public:
         ty = scalar_type_of_array(vals);
         buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)vals;
+        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer of runtime type from a pointer and some
@@ -630,6 +631,7 @@ public:
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
+        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer from a pointer and some sizes. Assumes
@@ -645,6 +647,7 @@ public:
         buf.elem_size = sizeof(T);
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
+        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer from a pointer to the min coordinate and
@@ -663,6 +666,7 @@ public:
         }
         buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)data;
+        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer from a pointer to the min coordinate and
@@ -678,6 +682,7 @@ public:
         }
         buf.elem_size = sizeof(T);
         buf.host = (uint8_t *)data;
+        buf.host_dirty = true;
     }
 
     /** Destructor. Will release any underlying owned allocation if
@@ -1218,6 +1223,7 @@ public:
     template<typename = std::enable_if<(!T_is_void)>>
     void fill(not_void_T val) {
         fill_helper(val);
+        set_host_dirty();
     }
 
 };
