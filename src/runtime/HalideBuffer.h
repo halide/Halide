@@ -1155,6 +1155,7 @@ public:
     operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        set_host_dirty();
         return *((not_void_T *)(address_of(0, first, rest...)));
     }
 
@@ -1163,6 +1164,7 @@ public:
     operator()() {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        set_host_dirty();
         return *((not_void_T *)(data()));
     }
 
@@ -1171,6 +1173,7 @@ public:
     operator()(const int *pos) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        set_host_dirty();
         return *((not_void_T *)(address_of(pos)));
     }
     // @}
@@ -1223,7 +1226,6 @@ public:
     template<typename = std::enable_if<(!T_is_void)>>
     void fill(not_void_T val) {
         fill_helper(val);
-        set_host_dirty();
     }
 
 };
