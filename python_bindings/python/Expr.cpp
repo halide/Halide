@@ -17,8 +17,28 @@
 namespace h = Halide;
 namespace p = boost::python;
 
-std::string expr_repr(const h::Expr &expr)
-{
+p::object expr_vector_to_python_tuple(const std::vector<h::Expr> &t) {
+    if (t.size() == 1) {
+        return p::object(t[0]);
+    } else {
+        p::list elts;
+        for (const h::Expr &e : t) {
+            elts.append(e);
+        }
+        return p::tuple(elts);
+    }
+}
+
+std::vector<h::Expr> python_tuple_to_expr_vector(const p::object &obj) {
+    p::extract<h::Expr> expr_extract(obj);
+    if (expr_extract.check()) {
+        return {expr_extract()};
+    } else {
+        return python_collection_to_vector<h::Expr>(obj);
+    }
+}
+
+std::string expr_repr(const h::Expr &expr) {
     std::string repr;
     boost::format f("<halide.Expr of type '%s(%i)'>");
 
@@ -27,13 +47,11 @@ std::string expr_repr(const h::Expr &expr)
     return repr;
 }
 
-h::Expr *expr_from_var_constructor(h::Var &var)
-{
+h::Expr *expr_from_var_constructor(h::Var &var) {
     return new h::Expr(var);
 }
 
-void defineExpr()
-{
+void defineExpr() {
     using Halide::Expr;
 
 

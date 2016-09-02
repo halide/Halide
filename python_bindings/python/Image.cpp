@@ -40,68 +40,19 @@ namespace bn = Halide::numpy;
 #endif
 #endif // USE_NUMPY
 
-template<typename T>
-h::Expr image_to_expr_operator1(h::Image<T> &that, h::Expr x) {
-    return that(x);
+template<typename Ret, typename T, typename ...Args>
+Ret image_call_operator(h::Image<T> &that, Args... args) {
+    return that(args...);
 }
 
 template<typename T>
-h::Expr image_to_expr_operator2(h::Image<T> &that, h::Expr x, h::Expr y) {
-    return that(x, y);
-}
-
-template<typename T>
-h::Expr image_to_expr_operator3(h::Image<T> &that, h::Expr x, h::Expr y, h::Expr z) {
-    return that(x, y, z);
-}
-
-template<typename T>
-h::Expr image_to_expr_operator4(h::Image<T> &that, h::Expr x, h::Expr y, h::Expr z, h::Expr w) {
-    return that(x, y, z, w);
-}
-
-template<typename T>
-h::Expr image_to_expr_operator5(h::Image<T> &that, std::vector<h::Expr> args_passed) {
-    return that(args_passed);
-}
-
-template<typename T>
-h::Expr image_to_expr_operator6(h::Image<T> &that, p::tuple &args_passed) {
-    std::vector<h::Var> var_args;
+h::Expr image_call_operator_tuple(h::Image<T> &that, p::tuple &args_passed) {
     std::vector<h::Expr> expr_args;
-    const size_t args_len = p::len(args_passed);
-    tuple_to_var_expr_vector("Image<T>", args_passed, var_args, expr_args);
-
-    user_assert(expr_args.size() == args_len)
-        << "Not all image_to_expr_operator7 arguments were converted to Expr";
+    for (ssize_t i = 0; i < p::len(args_passed); i++) {
+        expr_args.push_back(p::extract<h::Expr>(args_passed[i]));
+    }
     return that(expr_args);
 }
-
-template<typename T>
-T image_call_operator0(h::Image<T> &that) {
-    return that();
-}
-
-template<typename T>
-T image_call_operator1(h::Image<T> &that, int x) {
-    return that(x);
-}
-
-template<typename T>
-T image_call_operator2(h::Image<T> &that, int x, int y) {
-    return that(x, y);
-}
-
-template<typename T>
-T image_call_operator3(h::Image<T> &that, int x, int y, int z) {
-    return that(x, y, z);
-}
-
-template<typename T>
-T image_call_operator4(h::Image<T> &that, int x, int y, int z, int w) {
-    return that(x, y, z, w);
-}
-
 
 template<typename T>
 T image_to_setitem_operator0(h::Image<T> &that, int x, T value) {
@@ -228,9 +179,15 @@ boost::python::object get_type_function_wrapper()
 }
 
 template<typename T>
+void image_copy_to_host(h::Image<T> &im) {
+    im.copy_to_host();
+}
+
+template<typename T>
 void defineImage_impl(const std::string suffix, const h::Type type)
 {
     using h::Image;
+    using h::Expr;
 
     auto image_class =
         p::class_<Image<T>>(
@@ -278,7 +235,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
              p::return_value_policy< p::return_opaque_pointer >(), // not sure this will do what we want
              "Get a pointer to the element at the min location.")
 
-        .def("copy_to_host", &Image<T>::copy_to_host, p::arg("self"),
+        .def("copy_to_host", &image_copy_to_host<T>, p::arg("self"),
              "Manually copy-back data to the host, if it's on a device. This "
              "is done for you if you construct an image from a buffer, but "
              "you might need to call this if you realize a gpu kernel into an "
@@ -349,35 +306,45 @@ void defineImage_impl(const std::string suffix, const h::Type type)
              "is the bottom of the image. Returns zero for zero- or "
              "one-dimensional images.");
 
-    const std::string get_item_doc = "Construct an expression which loads from this image. "
-                                     "The location is extended with enough implicit variables to match "
-                                     "the dimensionality of the image (see \\ref Var::implicit)";
+    const char *get_item_doc =
+        "Construct an expression which loads from this image. "
+        "The location is extended with enough implicit variables to match "
+        "the dimensionality of the image (see \\ref Var::implicit)";
 
     // Access operators (to Expr, and to actual value)
     image_class
-        .def("__getitem__", &image_to_expr_operator1<T>, p::args("self", "x"),
-             get_item_doc.c_str())
-        .def("__getitem__", &image_to_expr_operator2<T>, p::args("self", "x", "y"),
-             get_item_doc.c_str())
-        .def("__getitem__", &image_to_expr_operator3<T>, p::args("self", "x", "y", "z"),
-             get_item_doc.c_str())
-        .def("__getitem__", &image_to_expr_operator4<T>, p::args("self", "x", "y", "z", "w"),
-             get_item_doc.c_str())
-        .def("__getitem__", &image_to_expr_operator5<T>, p::args("self", "args_passed"),
-             get_item_doc.c_str())
-        .def("__getitem__", &image_to_expr_operator6<T>, p::args("self", "tuple"),
-             get_item_doc.c_str())
-
-        // Note that for now we return copy values (not references like in the C++ API)
-        .def("__getitem__", &image_call_operator0<T>, p::arg("self"),
+        .def("__getitem__", &image_call_operator<Expr, T, Expr>,
+             p::args("self", "x"),
+             get_item_doc);
+    image_class
+        .def("__getitem__", &image_call_operator<Expr, T, Expr, Expr>,
+             p::args("self", "x", "y"),
+             get_item_doc);
+    image_class
+        .def("__getitem__", &image_call_operator<Expr, T, Expr, Expr, Expr>,
+             p::args("self", "x", "y", "z"),
+             get_item_doc)
+        .def("__getitem__", &image_call_operator<Expr, T, Expr, Expr, Expr, Expr>,
+             p::args("self", "x", "y", "z", "w"),
+             get_item_doc)
+        .def("__getitem__", &image_call_operator_tuple<T>,
+             p::args("self", "tuple"),
+             get_item_doc)
+        // Note that we return copy values (not references like in the C++ API)
+        .def("__getitem__", &image_call_operator<T, T>,
+             p::arg("self"),
              "Assuming this image is zero-dimensional, get its value")
-        .def("__call__", &image_call_operator1<T>, p::args("self", "x"),
+        .def("__call__", &image_call_operator<T, T, int>,
+             p::args("self", "x"),
              "Assuming this image is one-dimensional, get the value of the element at position x")
-        .def("__call__", &image_call_operator2<T>, p::args("self", "x", "y"),
+        .def("__call__", &image_call_operator<T, T, int, int>,
+             p::args("self", "x", "y"),
              "Assuming this image is two-dimensional, get the value of the element at position (x, y)")
-        .def("__call__", &image_call_operator3<T>, p::args("self", "x", "y", "z"),
+        .def("__call__", &image_call_operator<T, T, int, int, int>,
+             p::args("self", "x", "y", "z"),
              "Assuming this image is three-dimensional, get the value of the element at position (x, y, z)")
-        .def("__call__", &image_call_operator4<T>, p::args("self", "x", "y", "z", "w"),
+        .def("__call__", &image_call_operator<T, T, int, int, int, int>,
+             p::args("self", "x", "y", "z", "w"),
              "Assuming this image is four-dimensional, get the value of the element at position (x, y, z, w)")
 
         .def("__setitem__", &image_to_setitem_operator0<T>, p::args("self", "x", "value"),
@@ -394,62 +361,77 @@ void defineImage_impl(const std::string suffix, const h::Type type)
         ;
 
     p::implicitly_convertible<Image<T>, h::Argument>();
-    //p::implicitly_convertible<Image<T>, h::Image<>>();
-    //p::implicitly_convertible<Image<>, h::Image<T>>();
 
     return;
 }
 
+p::object image_to_python_object(const h::Image<> &im) {
+    PyObject *obj = nullptr;
+    if (im.type() == h::UInt(8)) {
+        p::manage_new_object::apply<h::Image<uint8_t> *>::type converter;
+        obj = converter(new h::Image<uint8_t>(im));
+    } else if (im.type() == h::UInt(16)) {
+        p::manage_new_object::apply<h::Image<uint16_t> *>::type converter;
+        obj = converter(new h::Image<uint16_t>(im));
+    } else if (im.type() == h::UInt(32)) {
+        p::manage_new_object::apply<h::Image<uint32_t> *>::type converter;
+        obj = converter(new h::Image<uint32_t>(im));
+    } else if (im.type() == h::Int(8)) {
+        p::manage_new_object::apply<h::Image<int8_t> *>::type converter;
+        obj = converter(new h::Image<int8_t>(im));
+    } else if (im.type() == h::Int(16)) {
+        p::manage_new_object::apply<h::Image<int16_t> *>::type converter;
+        obj = converter(new h::Image<int16_t>(im));
+    } else if (im.type() == h::Int(32)) {
+        p::manage_new_object::apply<h::Image<int32_t> *>::type converter;
+        obj = converter(new h::Image<int32_t>(im));
+    } else if (im.type() == h::Float(32)) {
+        p::manage_new_object::apply<h::Image<float> *>::type converter;
+        obj = converter(new h::Image<float>(im));
+    } else if (im.type() == h::Float(64)) {
+        p::manage_new_object::apply<h::Image<double> *>::type converter;
+        obj = converter(new h::Image<double>(im));
+    } else {
+        throw std::invalid_argument("image_to_python_object received an Image of unsupported type.");
+    }
+
+    return p::object(p::handle<>(obj));
+}
+
+h::Image<> python_object_to_image(p::object obj) {
+    p::extract<h::Image<uint8_t>>  image_extract_uint8(obj);
+    p::extract<h::Image<uint16_t>> image_extract_uint16(obj);
+    p::extract<h::Image<uint32_t>> image_extract_uint32(obj);
+    p::extract<h::Image<int8_t>>   image_extract_int8(obj);
+    p::extract<h::Image<int16_t>>  image_extract_int16(obj);
+    p::extract<h::Image<int32_t>>  image_extract_int32(obj);
+    p::extract<h::Image<float>>    image_extract_float(obj);
+    p::extract<h::Image<double>>   image_extract_double(obj);
+
+    if (image_extract_uint8.check()) {
+        return image_extract_uint8();
+    } else if (image_extract_uint16.check()) {
+        return image_extract_uint16();
+    } else if (image_extract_uint32.check()) {
+        return image_extract_uint32();
+    } else if (image_extract_int8.check()) {
+        return image_extract_int8();
+    } else if (image_extract_int16.check()) {
+        return image_extract_int16();
+    } else if (image_extract_int32.check()) {
+        return image_extract_int32();
+    } else if (image_extract_float.check()) {
+        return image_extract_float();
+    } else if (image_extract_double.check()) {
+        return image_extract_double();
+    } else {
+        throw std::invalid_argument("python_object_to_image received an object that is not an Image<T>");
+    }
+    return h::Image<>();
+}
+
 #ifdef USE_NUMPY
 
-/// Will create a Halide::Image object pointing to the array data
-p::object ndarray_to_image(bn::ndarray &array)
-{
-    const int dims = array.get_nd();
-    const int elem_size = array.get_dtype().get_itemsize();
-    uint8_t *host = reinterpret_cast<uint8_t *>(array.get_data());
-    halide_dimension_t shape[dims];
-    for (int i = 0; i < dims; i++) {
-        shape[i].min = 0;
-        shape[i].extent = array.shape(i);
-        shape[i].stride = array.strides(i) / elem_size;
-    }
-
-    PyObject* obj = nullptr;
-
-    if (array.get_dtype() == bn::dtype::get_builtin<boost::uint8_t>()) {
-        p::manage_new_object::apply<h::Image<uint8_t> *>::type converter;
-        obj = converter(new h::Image<uint8_t>((uint8_t *)host, shape));
-    } else if (array.get_dtype() == bn::dtype::get_builtin<boost::uint16_t>()) {
-        p::manage_new_object::apply<h::Image<uint16_t> *>::type converter;
-        obj = converter(new h::Image<uint16_t>((uint16_t *)host, shape));
-    } else if(array.get_dtype() == bn::dtype::get_builtin<boost::uint32_t>()) {
-        p::manage_new_object::apply<h::Image<uint32_t> *>::type converter;
-        obj = converter(new h::Image<uint32_t>((uint32_t *)host, shape));
-    } else if (array.get_dtype() == bn::dtype::get_builtin<boost::int8_t>()) {
-        p::manage_new_object::apply<h::Image<int8_t> *>::type converter;
-        obj = converter(new h::Image<int8_t>((int8_t *)host, shape));
-    } else if (array.get_dtype() == bn::dtype::get_builtin<boost::int16_t>()) {
-        p::manage_new_object::apply<h::Image<int16_t> *>::type converter;
-        obj = converter(new h::Image<int16_t>((int16_t *)host, shape));
-    } else if(array.get_dtype() == bn::dtype::get_builtin<boost::int32_t>()) {
-        p::manage_new_object::apply<h::Image<int32_t> *>::type converter;
-        obj = converter(new h::Image<int32_t>((int32_t *)host, shape));
-    } else if (array.get_dtype() == bn::dtype::get_builtin<float>()) {
-        p::manage_new_object::apply<h::Image<float> *>::type converter;
-        obj = converter(new h::Image<float>((float *)host, shape));
-    } else if (array.get_dtype() == bn::dtype::get_builtin<double>()) {
-        p::manage_new_object::apply<h::Image<double> *>::type converter;
-        obj = converter(new h::Image<double>((double *)host, shape));
-    } else {
-        const std::string type_repr = p::extract<std::string>(p::str(array.get_dtype()));
-        printf("numpy_to_image input array type: %s", type_repr.c_str());
-        throw std::invalid_argument("numpy_to_image received an array of type not managed in Halide.");
-    }
-
-    p::object return_object = p::object(p::handle<>(obj));
-    return return_object;
-}
 
 bn::dtype type_to_dtype(const h::Type &t) {
     if (t == h::UInt(8))   return bn::dtype::get_builtin<uint8_t>();
@@ -464,13 +446,39 @@ bn::dtype type_to_dtype(const h::Type &t) {
     return bn::dtype::get_builtin<uint8_t>();
 }
 
-bn::ndarray image_to_ndarray(p::object image_object) {
-    p::extract<h::Image<>> image_extract(image_object);
-    if (image_extract.check() == false) {
-        throw std::invalid_argument("image_to_ndarray received an object that is not an Image<T>");
+h::Type dtype_to_type(const bn::dtype &t) {
+    if (t == bn::dtype::get_builtin<uint8_t>())  return h::UInt(8);
+    if (t == bn::dtype::get_builtin<uint16_t>()) return h::UInt(16);
+    if (t == bn::dtype::get_builtin<uint32_t>()) return h::UInt(32);
+    if (t == bn::dtype::get_builtin<int8_t>())   return h::Int(8);
+    if (t == bn::dtype::get_builtin<int16_t>())  return h::Int(16);
+    if (t == bn::dtype::get_builtin<int32_t>())  return h::Int(32);
+    if (t == bn::dtype::get_builtin<float>())    return h::Float(32);
+    if (t == bn::dtype::get_builtin<double>())   return h::Float(64);
+    throw std::runtime_error("dtype_to_type received a numpy type with no known Halide type equivalent");
+    return h::Type();
+}
+
+/// Will create a Halide::Image object pointing to the array data
+p::object ndarray_to_image(bn::ndarray &array)
+{
+    h::Type t = dtype_to_type(array.get_dtype());
+    const int dims = array.get_nd();
+    void *host = reinterpret_cast<void *>(array.get_data());
+    halide_dimension_t shape[dims];
+    for (int i = 0; i < dims; i++) {
+        shape[i].min = 0;
+        shape[i].extent = array.shape(i);
+        shape[i].stride = array.strides(i) / t.bytes();
     }
 
-    h::Image<> im = image_extract();
+    return image_to_python_object(h::Image<>(t, host, dims, shape));
+}
+
+
+bn::ndarray image_to_ndarray(p::object image_object) {
+    h::Image<> im = python_object_to_image(image_object);
+
     user_assert(im.data() != nullptr)
         << "image_to_ndarray received an image without host data";
 

@@ -32,9 +32,7 @@ def main():
     # Declare the arguments.
     offset = Param(UInt(8))
     input = ImageParam(UInt(8), 2)
-    args = ArgumentsVector()
-    args.append(input)
-    args.append(offset)
+    args = [input, offset]
 
     # Define the Func.
     brighter[x, y] = input[x, y] + offset
@@ -60,10 +58,10 @@ def main():
     if create_android:
         # Let's use this to compile a 32-bit arm android version of this code:
         target = Target()
-        target.os = TargetOS.Android # The operating system
-        target.arch = TargetArch.ARM   # The CPU architecture
-        target.bits = 32            # The bit-width of the architecture
-        arm_features = FeaturesVector()  # A list of features to set
+        target.os = TargetOS.Android  # The operating system
+        target.arch = TargetArch.ARM  # The CPU architecture
+        target.bits = 32              # The bit-width of the architecture
+        arm_features = []             # A list of features to set
         target.set_features(arm_features)
         # Pass the target as the last argument.
         brighter.compile_to_file("lesson_11_arm_32_android", args, target)
@@ -74,10 +72,7 @@ def main():
         target.os = TargetOS.Windows
         target.arch = TargetArch.X86
         target.bits = 64
-        x86_features = FeaturesVector()
-        x86_features.append(TargetFeature.AVX)
-        x86_features.append(TargetFeature.SSE41)
-        target.set_features(x86_features)
+        target.set_features([TargetFeature.AVX, TargetFeature.SSE41])
         brighter.compile_to_file("lesson_11_x86_64_windows", args, target)
 
     if create_ios:
@@ -91,9 +86,7 @@ def main():
         target.os = TargetOS.IOS
         target.arch = TargetArch.ARM
         target.bits = 32
-        armv7s_features = FeaturesVector()
-        armv7s_features.append(TargetFeature.ARMv7s)
-        target.set_features(armv7s_features)
+        target.set_features([TargetFeature.ARMv7s])
         brighter.compile_to_file("lesson_11_arm_32_ios", args, target)
 
 
