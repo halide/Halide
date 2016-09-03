@@ -1,8 +1,4 @@
-#if LLVM_VERSION < 36
-#include "BitWriter_3_2.35/ReaderWriter_3_2.h"
-#else
 #include "BitWriter_3_2/ReaderWriter_3_2.h"
-#endif
 #include "CodeGen_Renderscript_Dev.h"
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
@@ -131,7 +127,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
             rs_argument_type = RS_BUFFER;
 
-            LLVMMDNodeArgumentType md_args[] = {
+            llvm::Metadata *md_args[] = {
                 MDString::get(*context, std::to_string(rs_export_var->getNumOperands()))
             };
             rs_objects_slots->addOperand(MDNode::get(*context, md_args));
@@ -141,7 +137,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
         rs_global_vars.insert(std::pair<std::string,GlobalVariable*>(arg_name, gvar));
 
         {
-            LLVMMDNodeArgumentType md_args[] = {
+            llvm::Metadata *md_args[] = {
                 MDString::get(*context, kernel_name + "_" + arg_name),
                 MDString::get(*context, std::to_string(rs_argument_type))
             };
@@ -237,13 +233,13 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
 
     // Generated kernels have to be added to the list kept in module's metadata.
     {
-        LLVMMDNodeArgumentType md_args[] = {MDString::get(*context, kernel_name)};
+        llvm::Metadata *md_args[] = {MDString::get(*context, kernel_name)};
         rs_export_foreach_name->addOperand(MDNode::get(*context, md_args));
     }
 
     {
         const char* kernel_signature = "57";
-        LLVMMDNodeArgumentType md_args[] = {MDString::get(*context, kernel_signature)};
+        llvm::Metadata *md_args[] = {MDString::get(*context, kernel_signature)};
         rs_export_foreach->addOperand(MDNode::get(*context, md_args));
     }
 
@@ -270,31 +266,31 @@ void CodeGen_Renderscript_Dev::init_module() {
     // Add Renderscript standard set of metadata.
     NamedMDNode *meta_llvm_module_flags = module->getOrInsertNamedMetadata("llvm.module.flags");
     {
-        LLVMMDNodeArgumentType md_args[] = {
-            value_as_metadata_type(ConstantInt::get(i32_t, 1)),
+        llvm::Metadata *md_args[] = {
+            llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1)),
             MDString::get(*context, "wchar_size"),
-            value_as_metadata_type(ConstantInt::get(i32_t, 4))
+            llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 4))
         };
         meta_llvm_module_flags->addOperand(MDNode::get(*context, md_args));
     }
 
     {
-        LLVMMDNodeArgumentType md_args[] = {
-            value_as_metadata_type(ConstantInt::get(i32_t, 1)),
+        llvm::Metadata *md_args[] = {
+            llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1)),
             MDString::get(*context, "min_enum_size"),
-            value_as_metadata_type(ConstantInt::get(i32_t, 4))
+            llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 4))
         };
         meta_llvm_module_flags->addOperand(MDNode::get(*context, md_args));
     }
 
     {
-        LLVMMDNodeArgumentType md_args[] = {MDString::get(*context, "clang version 3.6 ")};
+        llvm::Metadata *md_args[] = {MDString::get(*context, "clang version 3.6 ")};
         module->getOrInsertNamedMetadata("llvm.ident")->addOperand(MDNode::get(*context, md_args));
     }
 
     NamedMDNode *meta_pragma = module->getOrInsertNamedMetadata("#pragma");
     {
-        LLVMMDNodeArgumentType md_args[] = {
+        llvm::Metadata *md_args[] = {
             MDString::get(*context, "version"),
             MDString::get(*context, "1")
         };
@@ -302,7 +298,7 @@ void CodeGen_Renderscript_Dev::init_module() {
     }
 
     {
-        LLVMMDNodeArgumentType md_args[] = {
+        llvm::Metadata *md_args[] = {
             MDString::get(*context, "rs_fp_relaxed"),
             MDString::get(*context, "")
         };
@@ -310,13 +306,13 @@ void CodeGen_Renderscript_Dev::init_module() {
     }
 
     {
-        LLVMMDNodeArgumentType md_args[] = {MDString::get(*context, "root")};
+        llvm::Metadata *md_args[] = {MDString::get(*context, "root")};
         rs_export_foreach_name = module->getOrInsertNamedMetadata("#rs_export_foreach_name");
         rs_export_foreach_name->addOperand(MDNode::get(*context, md_args));
     }
 
     {
-        LLVMMDNodeArgumentType md_args[] = {MDString::get(*context, "0")};
+        llvm::Metadata *md_args[] = {MDString::get(*context, "0")};
         rs_export_foreach = module->getOrInsertNamedMetadata("#rs_export_foreach");
         rs_export_foreach->addOperand(MDNode::get(*context, md_args));
     }
