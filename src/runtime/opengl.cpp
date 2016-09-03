@@ -1457,14 +1457,10 @@ WEAK int halide_opengl_run(void *user_context,
         return 1;
     }
 
-    int kernel_id_location = 0;
-    // TODO(shoaibkamil) optimize
-    for (; args[kernel_id_location]; kernel_id_location++);
-    int* kernel_id = (int*)args[kernel_id_location-1];
+    // kernel id is passed in as the first argument
+    int* kernel_id = (int*)args[0];
 
-    debug(0) << "here1\n";
     KernelInfo *kernel = mod->kernel[*kernel_id];
-    debug(0) << "here2\n";
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
@@ -1483,7 +1479,7 @@ WEAK int halide_opengl_run(void *user_context,
     int num_uniform_ints = 0;
 
     Argument *kernel_arg = kernel->arguments;
-    for (int i = 0; args[i+1]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 1; args[i]; i++, kernel_arg = kernel_arg->next) {
 
         // Check for a mismatch between the number of arguments declared in the
         // fragment shader source header and the number passed to this function
@@ -1535,7 +1531,7 @@ WEAK int halide_opengl_run(void *user_context,
     int uniform_int_idx = 0;
 
     kernel_arg = kernel->arguments;
-    for (int i = 0; args[i+1]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 1; args[i]; i++, kernel_arg = kernel_arg->next) {
 
         if (kernel_arg->kind == Argument::Outbuf) {
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
@@ -1685,7 +1681,7 @@ WEAK int halide_opengl_run(void *user_context,
 
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
-    for (int i = 0; args[i+1]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 1; args[i]; i++, kernel_arg = kernel_arg->next) {
         if (kernel_arg->kind != Argument::Outbuf) continue;
 
         halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")

@@ -349,7 +349,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::PointerType *arg_t = i8_t->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
-        // for GLSL, we pass in the kernel ID as the last parameter
+        // for GLSL, we pass in the kernel ID as the first parameter
         if (loop->device_api == DeviceAPI::GLSL) {
             num_args++;
         }
@@ -383,9 +383,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             string name;
             int size_bits;
             bool is_buffer;
-
-            // for GLSL, we pass in the kernel ID as the last parameter
-            if (i == num_args-1 && loop->device_api == DeviceAPI::GLSL) {
+            // for GLSL, we pass in the kernel ID as the first parameter
+            if (i == 0 && loop->device_api == DeviceAPI::GLSL) {
                 CodeGen_OpenGL_Dev *glsl_codegen = static_cast<CodeGen_OpenGL_Dev*>(gpu_codegen);
                 val = ConstantInt::get(target_size_t_type, glsl_codegen->kernel_id[kernel_name]);
                 name = "kernel_id." + kernel_name;
@@ -394,14 +393,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 is_buffer = false;
             } else {
                 // get the closure argument
-                name = closure_args[i].name;
+                int which_arg = (loop->device_api == DeviceAPI::GLSL) ? (i-1) : i;
+                name = closure_args[which_arg].name;
 
                 // store the size of the argument. Buffer arguments get
                 // the dev field, which is 64-bits.
-                is_buffer = closure_args[i].is_buffer;
-                size_bits = (is_buffer) ? 64 : closure_args[i].type.bits();
+                is_buffer = closure_args[which_arg].is_buffer;
+                size_bits = (is_buffer) ? 64 : closure_args[which_arg].type.bits();
 
-                if (closure_args[i].is_buffer) {
+                if (is_buffer) {
                     // If it's a buffer, dereference the dev handle
                     val = buffer_dev(sym_get(name + ".buffer"));
                 } else if (ends_with(name, ".varying")) {
