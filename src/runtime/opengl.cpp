@@ -175,8 +175,10 @@ struct TextureInfo {
 };
 
 struct ModuleState {
-    KernelInfo *kernel;
+    KernelInfo **kernel;
     ModuleState *next;
+    int num_kernels;                   // total kernels in this module
+    int max_kernels;                   // max kernels
 };
 
 
@@ -726,8 +728,6 @@ WEAK int halide_opengl_init(void *user_context) {
         << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
         << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
 
-    GLStateSaver state_saver;
-
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_init GenFramebuffers")) {
@@ -771,7 +771,10 @@ WEAK int halide_opengl_device_release(void *user_context) {
 
     ModuleState *mod = state_list;
     while (mod) {
-        delete_kernel(user_context, mod->kernel);
+        for (int i=0; i<mod->num_kernels; i++) {
+            delete_kernel(user_context, mod->kernel[i]);
+        }
+        free(mod->kernel);
         mod->kernel = NULL;
         ModuleState *next = mod->next;
         // do not call free(mod) to avoid dangling pointers: the module state
@@ -1405,19 +1408,19 @@ using namespace Halide::Runtime::Internal::OpenGL;
 // Find the correct module for the called function
 // TODO: This currently takes O(# of GLSL'd stages) and can
 // be optimized
-WEAK ModuleState* find_module(const char *stage_name) {
-    ModuleState* state_ptr = state_list;
+//WEAK ModuleState* find_module(const char *stage_name) {
+    //ModuleState* state_ptr = state_list;
 
-    while (state_ptr != NULL) {
-        KernelInfo *kernel = state_ptr->kernel;
-        if (kernel && strcmp(stage_name, kernel->name) == 0) {
-            return state_ptr;
-        }
-        state_ptr = state_ptr->next;
-    }
+    //while (state_ptr != NULL) {
+        //KernelInfo *kernel = state_ptr->kernel;
+        //if (kernel && strcmp(stage_name, kernel->name) == 0) {
+            //return state_ptr;
+        //}
+        //state_ptr = state_ptr->next;
+    //}
 
-    return NULL;
-}
+    //return NULL;
+//}
 
 //  Create wrappers that satisfy old naming conventions
 
@@ -1442,18 +1445,32 @@ WEAK int halide_opengl_run(void *user_context,
     GLStateSaver state_saver;
 
     // Find the right module
+    //ModuleState *mod = find_module(entry_name);
+    //if (!mod) {
+      //error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
+      //return 1;
+    //}
+
     ModuleState *mod = (ModuleState*)state_ptr;
     if (!mod) {
-      error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
-      return 1;
+        error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
+        return 1;
     }
 
-    KernelInfo *kernel = mod->kernel;
+    int kernel_id_location = 0;
+    // TODO(shoaibkamil) optimize
+    for (; args[kernel_id_location]; kernel_id_location++);
+    int* kernel_id = (int*)args[kernel_id_location-1];
+
+    debug(0) << "here1\n";
+    KernelInfo *kernel = mod->kernel[*kernel_id];
+    debug(0) << "here2\n";
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
         return 1;
     }
+
 
     // TODO(abstephensg) it would be great to codegen these vec4 uniform buffers
     // directly, instead of passing an array of arguments and then copying them
@@ -1466,7 +1483,7 @@ WEAK int halide_opengl_run(void *user_context,
     int num_uniform_ints = 0;
 
     Argument *kernel_arg = kernel->arguments;
-    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 0; args[i+1]; i++, kernel_arg = kernel_arg->next) {
 
         // Check for a mismatch between the number of arguments declared in the
         // fragment shader source header and the number passed to this function
@@ -1501,6 +1518,7 @@ WEAK int halide_opengl_run(void *user_context,
         }
     }
 
+
     // Pad up to a multiple of four
     int num_padded_uniform_floats = (num_uniform_floats + 0x3) & ~0x3;
     int num_padded_uniform_ints   = (num_uniform_ints + 0x3) & ~0x3;
@@ -1517,7 +1535,7 @@ WEAK int halide_opengl_run(void *user_context,
     int uniform_int_idx = 0;
 
     kernel_arg = kernel->arguments;
-    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 0; args[i+1]; i++, kernel_arg = kernel_arg->next) {
 
         if (kernel_arg->kind == Argument::Outbuf) {
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
@@ -1667,7 +1685,7 @@ WEAK int halide_opengl_run(void *user_context,
 
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
-    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 0; args[i+1]; i++, kernel_arg = kernel_arg->next) {
         if (kernel_arg->kind != Argument::Outbuf) continue;
 
         halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
@@ -1932,26 +1950,55 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     ModuleState **state = (ModuleState **)state_ptr;
     ModuleState *module = *state;
 
-    while (!module && this_kernel) {
+    // Create a module if it doesn't exist yet.  We should only create one
+    // global module that contains multiple kernels
 
-        // Use that to compute the length of this kernel
-        int len = size;
-        
+    debug(0) << "HERE3\n";
+
+    if (!module) {
         // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
         module->kernel = NULL;
+        module->num_kernels = 0;
+        module->max_kernels = 16;
+        module->kernel = (KernelInfo**)malloc(sizeof(KernelInfo*) * 16);
         module->next = state_list;
         state_list = module;
         *state = module;
-        
-        KernelInfo *kernel = module->kernel;
-        if (!kernel) {
+    } else {
+        // there's only one initialize call per module.  if the module
+        // exists, we've already initialized the kernels.
+        return 0;
+    }
+
+    while (this_kernel) {
+        // Find the start of the next kernel
+        const char *next_kernel = strstr(this_kernel+1, kernel_marker);        
+
+        // Use that to compute the length of this kernel
+        int len = 0;
+        if (!next_kernel) {
+            len = strlen(this_kernel);
+        } else {
+            len = next_kernel - this_kernel;
+        }
+        if (module->num_kernels == module->max_kernels) {
+            // TODO
+            error(user_context) << "Too many kernels for one module";
+        }
+
+    debug(0) << "HERE4\n";
+        KernelInfo *kernel = module->kernel[module->num_kernels];
+        if (true) { //(!kernel) {
+    debug(0) << "HERE5\n";
             kernel = create_kernel(user_context, this_kernel, len);
             if (!kernel) {
                 error(user_context) << "Invalid kernel: " << this_kernel;
                 return -1;
             }
-            module->kernel = kernel;
+            module->kernel[module->num_kernels] = kernel;
+    debug(0) << "HERE6\n";
+            module->num_kernels++;
         }
         
         // Create the vertex shader. The runtime will output boilerplate for the
@@ -2044,6 +2091,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         }
         kernel->program_id = program;
         
+        this_kernel = next_kernel;
     }
     return 0;
 }
@@ -2064,9 +2112,12 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     if (!global_state.initialized) return;
 
     debug(user_context) << "halide_opengl_context_lost\n";
+    // TODO(shoaibkamil) will this actually trigger recompilation?
     for (ModuleState *mod = state_list; mod; mod = mod->next) {
         // Reset program handle to force recompilation.
-        mod->kernel->program_id = 0;
+        for (int i=0; i < mod->num_kernels; i++) {
+            mod->kernel[i]->program_id = 0;
+        }
     }
 
     TextureInfo *tex = global_state.textures;

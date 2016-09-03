@@ -349,6 +349,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::PointerType *arg_t = i8_t->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
+        // for GLSL, we pass in the kernel ID as the last parameter
+        if (loop->device_api == DeviceAPI::GLSL) {
+            num_args++;
+        }
+
         // nullptr-terminated list
         llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
@@ -373,28 +378,47 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 num_args+1, false,
                 kernel_name + "_arg_is_buffer");
 
-        for (int i = 0; i < num_args; i++) {
-            // get the closure argument
-            string name = closure_args[i].name;
+         for (int i = 0; i < num_args; i++) {
             Value *val;
+            string name;
+            int size_bits;
+            bool is_buffer;
 
-            if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
-            } else if (ends_with(name, ".varying")) {
-                // Expressions for varying attributes are passed in the
-                // expression mesh. Pass a non-nullptr value in the argument array
-                // to keep it in sync with the argument names encoded in the
-                // shader header
-                val = ConstantInt::get(target_size_t_type, 1);
-            } else if (name.compare(".rs_slot_offset") == 0) {
-                user_assert(target.has_feature(Target::Renderscript)) <<
-                    ".rs_slot_offset variable is used by Renderscript only.";
-                // First argument for Renderscript _run method is slot offset.
-                val = ConstantInt::get(target_size_t_type, slots_taken);
+            // for GLSL, we pass in the kernel ID as the last parameter
+            if (i == num_args-1 && loop->device_api == DeviceAPI::GLSL) {
+                CodeGen_OpenGL_Dev *glsl_codegen = static_cast<CodeGen_OpenGL_Dev*>(gpu_codegen);
+                val = ConstantInt::get(target_size_t_type, glsl_codegen->kernel_id[kernel_name]);
+                name = "kernel_id." + kernel_name;
+                // is this the right way to get the size?
+                size_bits = target_size_t_type->getPrimitiveSizeInBits();
+                is_buffer = false;
             } else {
-                // Otherwise just look up the symbol
-                val = sym_get(name);
+                // get the closure argument
+                name = closure_args[i].name;
+
+                // store the size of the argument. Buffer arguments get
+                // the dev field, which is 64-bits.
+                is_buffer = closure_args[i].is_buffer;
+                size_bits = (is_buffer) ? 64 : closure_args[i].type.bits();
+
+                if (closure_args[i].is_buffer) {
+                    // If it's a buffer, dereference the dev handle
+                    val = buffer_dev(sym_get(name + ".buffer"));
+                } else if (ends_with(name, ".varying")) {
+                    // Expressions for varying attributes are passed in the
+                    // expression mesh. Pass a non-nullptr value in the argument array
+                    // to keep it in sync with the argument names encoded in the
+                    // shader header
+                    val = ConstantInt::get(target_size_t_type, 1);
+                } else if (name.compare(".rs_slot_offset") == 0) {
+                    user_assert(target.has_feature(Target::Renderscript)) <<
+                        ".rs_slot_offset variable is used by Renderscript only.";
+                    // First argument for Renderscript _run method is slot offset.
+                    val = ConstantInt::get(target_size_t_type, slots_taken);
+                } else {
+                    // Otherwise just look up the symbol
+                    val = sym_get(name);
+                }
             }
 
             // allocate stack space to mirror the closure element. It
@@ -413,9 +437,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument. Buffer arguments get
-            // the dev field, which is 64-bits.
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(
                                     gpu_arg_sizes_arr_type,
@@ -423,7 +444,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
+            builder->CreateStore(ConstantInt::get(i8_t, is_buffer),
                                  builder->CreateConstGEP2_32(
                                     gpu_arg_is_buffer_arr_type,
                                     gpu_arg_is_buffer_arr,
@@ -462,6 +483,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
         debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
         debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
+
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
@@ -492,6 +514,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             gpu_num_coords_dim0,
             gpu_num_coords_dim1,
         };
+
         std::string run_fn_name = "halide_" + api_unique_name + "_run";
         llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";

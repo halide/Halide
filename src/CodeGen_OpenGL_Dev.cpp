@@ -95,6 +95,7 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
 void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
                                     const vector<DeviceArgument> &args) {
     cur_kernel_name = name;
+    kernel_id[name] = kernel_id.size();
     glc->add_kernel(s, name, args);
 }
 
@@ -102,6 +103,7 @@ void CodeGen_OpenGL_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
     cur_kernel_name = "";
+    kernel_id.clear();
 }
 
 vector<char> CodeGen_OpenGL_Dev::compile_to_src() {
