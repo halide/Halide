@@ -2655,8 +2655,8 @@ private:
             // max(min(y, x), min(z, x)) -> min(max(y, z), x)
             expr = mutate(Min::make(Max::make(min_a->a, min_b->a), min_a->b));
         } else if (min_a &&
-                 max_a_a &&
-                 equal(max_a_a->b, b)) {
+                   max_a_a &&
+                   equal(max_a_a->b, b)) {
             // max(min(max(x, y), z), y) -> max(min(x, z), y)
             expr = mutate(max(min(max_a_a->a, min_a->b), b));
         } else if (min_a &&
