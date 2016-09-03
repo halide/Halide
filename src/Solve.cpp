@@ -228,8 +228,14 @@ private:
             }
         } else if (b_uses_var && !a_uses_var) {
             if (op->type.is_uint()) {
-                // Negating unsigned is not legal
-                fail(a - b);
+                if (sub_b && b_failed) {
+                    // a - (b - f(x)) -> f(x) + (a - b)
+                    failed = old_failed || a_failed;
+                    expr = mutate(sub_b->b + (a - sub_b->a));
+                } else {
+                    // Negating unsigned is not legal
+                    fail(a - b);
+                }
             } else if (sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
                 expr = mutate(negate(sub_b->a) + (a + sub_b->b));
@@ -1562,6 +1568,15 @@ void solve_test() {
     check_solve((min(x, y) + min(y, x))*max(y, x), (min(x, y)*2)*max(x, y));
     check_solve(max((min((y*x), x) + min((1 + y), x)), (y + 2*x)),
                 max((min((x*y), x) + min(x, (1 + y))), (x*2 + y)));
+
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        Expr z = Variable::make(UInt(32), "z");
+        check_solve(5 - (4 - 4*x), x*(4) + 1);
+        check_solve(z - (y - x), x + (z - y));
+        check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+    }
 
     debug(0) << "Solve test passed\n";
 
