@@ -5918,6 +5918,12 @@ void simplify_test() {
     check(select(x < y, max(y, x), max(x, z)), max(x, select(x < y, y, z)));
     check(select(x < y, max(y, x), max(z, x)), max(select(x < y, y, z), x));
 
+    // Check select(c, min(x, y), min(x, z)) gets simplified into min(x, select(c, y, z))
+    check(select(x < y, min(x, y), min(x, z)), min(x, select(x < y, y, z)));
+    check(select(x < y, min(x, y), min(z, x)), min(x, select(x < y, y, z)));
+    check(select(x < y, min(y, x), min(x, z)), min(x, select(x < y, y, z)));
+    check(select(x < y, min(y, x), min(z, x)), min(select(x < y, y, z), x));
+
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
     bounds_info.push("x", Interval(0,4));
