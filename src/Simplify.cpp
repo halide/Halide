@@ -3494,6 +3494,10 @@ private:
         const Sub *sub_f = false_value.as<Sub>();
         const Mul *mul_t = true_value.as<Mul>();
         const Mul *mul_f = false_value.as<Mul>();
+        const Min *min_t = true_value.as<Min>();
+        const Min *min_f = false_value.as<Min>();
+        const Max *max_t = true_value.as<Max>();
+        const Max *max_f = false_value.as<Max>();
 
         if (is_zero(condition)) {
             expr = false_value;
@@ -3621,6 +3625,46 @@ private:
                    equal(mul_t->b, mul_f->b)) {
             // select(c, b*a, d*a) -> select(x, b, d) * a
             expr = mutate(Select::make(condition, mul_t->a, mul_f->a) * mul_t->b);
+        } else if (min_t &&
+                   min_f &&
+                   equal(min_t->a, min_f->a)) {
+            // select(c, min(a, b), min(a, d)) -> min(a, select(x, b, d))
+            expr = mutate(min(min_t->a, Select::make(condition, min_t->b, min_f->b)));
+        } else if (min_t &&
+                   min_f &&
+                   equal(min_t->a, min_f->b)) {
+            // select(c, min(a, b), min(d, a)) -> min(a, select(x, b, d))
+            expr = mutate(min(min_t->a, Select::make(condition, min_t->b, min_f->a)));
+        } else if (min_t &&
+                   min_f &&
+                   equal(min_t->b, min_f->a)) {
+            // select(c, min(b, a), min(a, d)) -> min(a, select(x, b, d))
+            expr = mutate(min(min_t->b, Select::make(condition, min_t->a, min_f->b)));
+        } else if (min_t &&
+                   min_f &&
+                   equal(min_t->b, min_f->b)) {
+            // select(c, min(b, a), min(d, a)) -> min(select(x, b, d), a)
+            expr = mutate(min(Select::make(condition, min_t->a, min_f->a), min_t->b));
+        } else if (max_t &&
+                   max_f &&
+                   equal(max_t->a, max_f->a)) {
+            // select(c, max(a, b), max(a, d)) -> max(a, select(x, b, d))
+            expr = mutate(max(max_t->a, Select::make(condition, max_t->b, max_f->b)));
+        } else if (max_t &&
+                   max_f &&
+                   equal(max_t->a, max_f->b)) {
+            // select(c, max(a, b), max(d, a)) -> max(a, select(x, b, d))
+            expr = mutate(max(max_t->a, Select::make(condition, max_t->b, max_f->a)));
+        } else if (max_t &&
+                   max_f &&
+                   equal(max_t->b, max_f->a)) {
+            // select(c, max(b, a), max(a, d)) -> max(a, select(x, b, d))
+            expr = mutate(max(max_t->b, Select::make(condition, max_t->a, max_f->b)));
+        } else if (max_t &&
+                   max_f &&
+                   equal(max_t->b, max_f->b)) {
+            // select(c, max(b, a), max(d, a)) -> max(select(x, b, d), a)
+            expr = mutate(max(Select::make(condition, max_t->a, max_f->a), max_t->b));
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -5867,6 +5911,18 @@ void simplify_test() {
     check(min(max(x, y), min(y, x)), min(x, y));
     check(min(min(x, y), max(x, y)), min(x, y));
     check(min(min(y, x), max(x, y)), min(x, y));
+
+    // Check select(c, max(x, y), max(x, z)) gets simplified into max(x, select(c, y, z))
+    check(select(x < y, max(x, y), max(x, z)), max(x, select(x < y, y, z)));
+    check(select(x < y, max(x, y), max(z, x)), max(x, select(x < y, y, z)));
+    check(select(x < y, max(y, x), max(x, z)), max(x, select(x < y, y, z)));
+    check(select(x < y, max(y, x), max(z, x)), max(select(x < y, y, z), x));
+
+    // Check select(c, min(x, y), min(x, z)) gets simplified into min(x, select(c, y, z))
+    check(select(x < y, min(x, y), min(x, z)), min(x, select(x < y, y, z)));
+    check(select(x < y, min(x, y), min(z, x)), min(x, select(x < y, y, z)));
+    check(select(x < y, min(y, x), min(x, z)), min(x, select(x < y, y, z)));
+    check(select(x < y, min(y, x), min(z, x)), min(select(x < y, y, z), x));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
