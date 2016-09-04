@@ -750,7 +750,8 @@ class ZeroGPULoopMins : public IRMutator {
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
-          (op->device_api == DeviceAPI::Metal);
+          (op->device_api == DeviceAPI::Renderscript) ||    // for this visitor only, consider
+          (op->device_api == DeviceAPI::Metal);             // Renderscript to be non-GLSL
 
         IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min) &&
