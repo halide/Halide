@@ -483,7 +483,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         debug(3) << "bounds.num_threads[0] = " << bounds.num_threads[0] << "\n";
         debug(3) << "bounds.num_threads[1] = " << bounds.num_threads[1] << "\n";
         debug(3) << "bounds.num_threads[2] = " << bounds.num_threads[2] << "\n";
-
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),
@@ -514,7 +513,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             gpu_num_coords_dim0,
             gpu_num_coords_dim1,
         };
-
         std::string run_fn_name = "halide_" + api_unique_name + "_run";
         llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";

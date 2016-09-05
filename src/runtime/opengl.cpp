@@ -1444,7 +1444,6 @@ WEAK int halide_opengl_run(void *user_context,
         return 1;
     }
 
-
     // TODO(abstephensg) it would be great to codegen these vec4 uniform buffers
     // directly, instead of passing an array of arguments and then copying them
     // out at runtime.
@@ -1490,7 +1489,6 @@ WEAK int halide_opengl_run(void *user_context,
             }
         }
     }
-
 
     // Pad up to a multiple of four
     int num_padded_uniform_floats = (num_uniform_floats + 0x3) & ~0x3;

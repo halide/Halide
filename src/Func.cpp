@@ -1830,7 +1830,6 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
-
 Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_blocks(x, y, device_api);
@@ -1848,7 +1847,6 @@ Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     }
     user_assert(constant_bounds)
         << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-
     return *this;
 }
 
