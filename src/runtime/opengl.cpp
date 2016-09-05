@@ -1405,22 +1405,6 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
 using namespace Halide::Runtime::Internal::OpenGL;
 
-// Find the correct module for the called function
-// TODO: This currently takes O(# of GLSL'd stages) and can
-// be optimized
-//WEAK ModuleState* find_module(const char *stage_name) {
-    //ModuleState* state_ptr = state_list;
-
-    //while (state_ptr != NULL) {
-        //KernelInfo *kernel = state_ptr->kernel;
-        //if (kernel && strcmp(stage_name, kernel->name) == 0) {
-            //return state_ptr;
-        //}
-        //state_ptr = state_ptr->next;
-    //}
-
-    //return NULL;
-//}
 
 //  Create wrappers that satisfy old naming conventions
 
@@ -1443,13 +1427,6 @@ WEAK int halide_opengl_run(void *user_context,
     }
 
     GLStateSaver state_saver;
-
-    // Find the right module
-    //ModuleState *mod = find_module(entry_name);
-    //if (!mod) {
-      //error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
-      //return 1;
-    //}
 
     ModuleState *mod = (ModuleState*)state_ptr;
     if (!mod) {
@@ -1936,7 +1913,9 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
 WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
                                           const char *src, int size) {
     debug(user_context) << "In initialize_kernels\n";
-    
+
+    const int max_kernel_increment = 16;
+
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -1949,15 +1928,19 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     // Create a module if it doesn't exist yet.  We should only create one
     // global module that contains multiple kernels
 
-    debug(0) << "HERE3\n";
-
     if (!module) {
         // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
         module->kernel = NULL;
         module->num_kernels = 0;
-        module->max_kernels = 16;
-        module->kernel = (KernelInfo**)malloc(sizeof(KernelInfo*) * 16);
+        module->max_kernels = max_kernel_increment;
+        module->kernel = (KernelInfo**)malloc(sizeof(KernelInfo*) *
+            max_kernel_increment);
+
+        if (!module->kernel) {
+            error(user_context) << "Unable to allocate memory for kernels";
+        }
+
         module->next = state_list;
         state_list = module;
         *state = module;
@@ -1979,23 +1962,33 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             len = next_kernel - this_kernel;
         }
         if (module->num_kernels == module->max_kernels) {
-            // TODO
-            error(user_context) << "Too many kernels for one module";
+            // allocate a new array
+            KernelInfo** new_kernels = (KernelInfo**)malloc(
+                sizeof(KernelInfo*) * (module->max_kernels + max_kernel_increment));
+
+            if (!module->kernel) {
+                error(user_context) << "Unable to allocate memory for more kernels";
+            }
+
+            // copy old kernel ptrs into new array
+            for (int i=0; i<module->num_kernels; i++) {
+                new_kernels[i] = module->kernel[i];
+            }
+            // dealloc old kernel array & replace in module
+            free(module->kernel);
+            module->kernel = new_kernels;
+            module->max_kernels += max_kernel_increment;
         }
 
-    debug(0) << "HERE4\n";
         KernelInfo *kernel = module->kernel[module->num_kernels];
-        if (true) { //(!kernel) {
-    debug(0) << "HERE5\n";
-            kernel = create_kernel(user_context, this_kernel, len);
-            if (!kernel) {
-                error(user_context) << "Invalid kernel: " << this_kernel;
-                return -1;
-            }
-            module->kernel[module->num_kernels] = kernel;
-    debug(0) << "HERE6\n";
-            module->num_kernels++;
+        kernel = create_kernel(user_context, this_kernel, len);
+
+        if (!kernel) {
+            error(user_context) << "Invalid kernel: " << this_kernel;
+            return -1;
         }
+        module->kernel[module->num_kernels] = kernel;
+        module->num_kernels++;
         
         // Create the vertex shader. The runtime will output boilerplate for the
         // vertex shader based on a fixed program plus arguments obtained from
