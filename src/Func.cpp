@@ -1834,6 +1834,21 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_blocks(x, y, device_api);
+
+    // Ensure the channel dimension is bounded
+    bool constant_bounds = false;
+    const Schedule &sched = func.schedule();
+
+    for (size_t i = 0; i < sched.bounds().size(); i++) {
+        if (c.name() == sched.bounds()[i].var) {
+            constant_bounds = is_const(sched.bounds()[i].min) &&
+                is_const(sched.bounds()[i].extent);
+            break;
+        }
+    }
+    user_assert(constant_bounds)
+        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
+
     return *this;
 }
 
