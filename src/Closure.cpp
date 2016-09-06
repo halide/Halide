@@ -43,7 +43,7 @@ void Closure::visit(const Load *op) {
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
-        ref.type = op->type; // TODO: Validate type is the same as existing refs?
+        ref.type = op->type.element_of(); // TODO: Validate type is the same as existing refs?
         ref.read = true;
 
         // If reading an image/buffer, compute the size.
@@ -68,7 +68,7 @@ void Closure::visit(const Store *op) {
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
-        ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
+        ref.type = op->value.type().element_of(); // TODO: Validate type is the same as existing refs?
         // TODO: do we need to set ref.dimensions?
         ref.write = true;
     } else {

@@ -35,11 +35,7 @@ StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_
     return struct_t;
 }
 
-void pack_closure(llvm::Type *
-#if LLVM_VERSION >= 37
-                  type
-#endif
-                  ,
+void pack_closure(llvm::Type *type,
                   Value *dst,
                   const Closure& closure,
                   const Scope<Value *> &src,
@@ -51,11 +47,7 @@ void pack_closure(llvm::Type *
     vector<string> nm = closure.names();
     vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
     for (size_t i = 0; i < nm.size(); i++) {
-#if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
-#else
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
-#endif
         Value *val;
         if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
             val = src.get(nm[i]);
@@ -73,11 +65,7 @@ void pack_closure(llvm::Type *
 
 void unpack_closure(const Closure& closure,
                     Scope<Value *> &dst,
-                    llvm::Type *
-#if LLVM_VERSION >= 37
-                    type
-#endif
-                    ,
+                    llvm::Type *type,
                     Value *src,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
@@ -85,15 +73,11 @@ void unpack_closure(const Closure& closure,
     LLVMContext &context = builder->getContext();
     vector<string> nm = closure.names();
     for (size_t i = 0; i < nm.size(); i++) {
-#if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-#else
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
-#endif
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            LLVMMDNodeArgumentType md_args[] = {MDString::get(context, nm[i])};
+            llvm::Metadata *md_args[] = {MDString::get(context, nm[i])};
             load->setMetadata("tbaa", MDNode::get(context, md_args));
         }
         dst.push(nm[i], load);
@@ -252,19 +236,15 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     }
 }
 
-bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
     }
-    #if LLVM_VERSION < 36
-    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
-    #else
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
     if (!cam) {
         return false;
     }
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
-    #endif
     if (!c) {
         return false;
     }
@@ -272,28 +252,16 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
     return true;
 }
 
-bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
         result = "";
         return false;
     }
-    #if LLVM_VERSION < 36
-    if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
-        result = "";
-        return true;
-    }
-    llvm::ConstantDataArray *c = llvm::cast<llvm::ConstantDataArray>(value);
-    if (c) {
-        result = c->getAsCString();
-        return true;
-    }
-    #else
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
         result = c->getString();
         return true;
     }
-    #endif
     return false;
 }
 
@@ -308,30 +276,18 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
-    #if LLVM_VERSION >= 37
     #ifndef WITH_NATIVE_CLIENT
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     options.Reciprocals.setDefaults("all", false, 0);
     #endif
-    #endif
 
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
-    #if LLVM_VERSION < 37
-    options.NoFramePointerElim = false;
-    options.UseSoftFloat = false;
-    #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-    #if LLVM_VERSION < 37
-    options.DisableTailCalls = false;
-    #endif
     options.StackAlignmentOverride = 0;
-    #if LLVM_VERSION < 37
-    options.TrapFuncName = "";
-    #endif
     options.FunctionSections = true;
     #ifdef WITH_NATIVE_CLIENT
     options.UseInitArray = true;
@@ -358,20 +314,12 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 
     std::string mcpu;
     if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
-        #if LLVM_VERSION < 36
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::ConstantDataArray::getString(context, mcpu));
-        #else
         to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
-        #endif
     }
 
     std::string mattrs;
     if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
-        #if LLVM_VERSION < 36
-        to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
-        #else
         to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
-        #endif
     }
 }
 
