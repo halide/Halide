@@ -128,24 +128,16 @@ set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    IF (LLVM_VERSION LESS 36)
-      IF (${j} EQUAL 32)
+    IF (${j} EQUAL 32)
+      IF (${i} MATCHES "windows_.*")
+        # win32 uses the stdcall calling convention, which is x86-specific
         set(TARGET "i386-unknown-unknown-unknown")
       ELSE()
-        set(TARGET "x86_64-unknown-unknown-unknown")
+        set(TARGET "le32-unknown-nacl-unknown")
       ENDIF()
     ELSE()
-      IF (${j} EQUAL 32)
-        IF (${i} MATCHES "windows_.*")
-          # win32 uses the stdcall calling convention, which is x86-specific
-          set(TARGET "i386-unknown-unknown-unknown")
-        ELSE()
-          set(TARGET "le32-unknown-nacl-unknown")
-        ENDIF()
-      ELSE()
-        # generic 64-bit code
-        set(TARGET "le64-unknown-unknown-unknown")
-      ENDIF()
+      # generic 64-bit code
+      set(TARGET "le64-unknown-unknown-unknown")
     ENDIF()
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
     set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
@@ -363,19 +355,11 @@ configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONL
 configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
-IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
-  set(BITWRITER_FILES
-    BitWriter_3_2.35/BitcodeWriter.cpp
-    BitWriter_3_2.35/BitcodeWriterPass.cpp
-    BitWriter_3_2.35/ValueEnumerator.cpp
-  )
-ELSE()
-  set(BITWRITER_FILES
-    BitWriter_3_2/BitcodeWriter.cpp
-    BitWriter_3_2/BitcodeWriterPass.cpp
-    BitWriter_3_2/ValueEnumerator.cpp
-  )
-ENDIF()
+set(BITWRITER_FILES
+  BitWriter_3_2/BitcodeWriter.cpp
+  BitWriter_3_2/BitcodeWriterPass.cpp
+  BitWriter_3_2/ValueEnumerator.cpp
+)
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
@@ -516,11 +500,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 # This list will be appended to depending on the targets we need to support
 # See the output of ``llvm-config --components`` for a list of possible components
 set(LLVM_COMPONENTS mcjit;bitwriter;linker)
-if (LLVM_VERSION GREATER 36)
-  list(APPEND LLVM_COMPONENTS passes)
-else()
-  list(APPEND LLVM_COMPONENTS ipo)
-endif()
+list(APPEND LLVM_COMPONENTS passes)
 
 # Set definitions and compiler flags
 
@@ -621,11 +601,7 @@ endif()
 target_link_libraries(Halide PRIVATE ${LIBS})
 
 if (NOT MSVC)
-  if (${LLVM_VERSION} GREATER 34)
-    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  else()
-    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  endif()
+  execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")

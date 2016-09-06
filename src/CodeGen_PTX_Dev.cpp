@@ -117,10 +117,10 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function.
-    LLVMMDNodeArgumentType md_args[] = {
-        value_as_metadata_type(function),
+    llvm::Metadata *md_args[] = {
+        llvm::ValueAsMetadata::get(function),
         MDString::get(*context, "kernel"),
-        value_as_metadata_type(ConstantInt::get(i32_t, 1))
+        llvm::ValueAsMetadata::get(ConstantInt::get(i32_t, 1))
     };
 
     MDNode *md_node = MDNode::get(*context, md_args);
@@ -250,14 +250,8 @@ string CodeGen_PTX_Dev::mcpu() const {
 string CodeGen_PTX_Dev::mattrs() const {
     if (target.features_any_of({Target::CUDACapability32,
                                 Target::CUDACapability50})) {
-        // Need ptx isa 4.0. llvm < 3.5 doesn't support it.
-        #if LLVM_VERSION < 35
-        user_error << "This version of Halide was linked against llvm 3.4 or earlier, "
-                   << "which does not support cuda compute capability 3.2 or 5.0\n";
-        return "";
-        #else
+        // Need ptx isa 4.0.
         return "+ptx40";
-        #endif
     } else {
         // Use the default. For llvm 3.5 it's ptx 3.2.
         return "";
@@ -300,26 +294,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.NoInfsFPMath = false;
     Options.NoNaNsFPMath = false;
     Options.HonorSignDependentRoundingFPMathOption = false;
-    #if LLVM_VERSION < 37
-    Options.NoFramePointerElim = false;
-    Options.UseSoftFloat = false;
-    #endif
     /* if (FloatABIForCalls != FloatABI::Default) */
         /* Options.FloatABIType = FloatABIForCalls; */
     Options.NoZerosInBSS = false;
-    #if LLVM_VERSION < 33
-    Options.JITExceptionHandling = false;
-    #endif
-    #if LLVM_VERSION < 37
-    Options.JITEmitDebugInfo = false;
-    Options.JITEmitDebugInfoToDisk = false;
-    #endif
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
     // Options.DisableJumpTables = false;
-    #if LLVM_VERSION < 37
-    Options.TrapFuncName = "";
-    #endif
 
     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
@@ -334,55 +314,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     TargetMachine &Target = *target.get();
 
     // Set up passes
-    #if LLVM_VERSION < 37
-    std::string outstr;
-    PassManager PM;
-    #else
     llvm::SmallString<8> outstr;
     raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
     legacy::PassManager PM;
-    #endif
 
-    #if LLVM_VERSION < 37
-    PM.add(new TargetLibraryInfo(triple));
-    #else
     PM.add(new TargetLibraryInfoWrapperPass(triple));
-    #endif
-
-    if (target.get()) {
-        #if LLVM_VERSION < 33
-        PM.add(new TargetTransformInfo(target->getScalarTargetTransformInfo(),
-                                       target->getVectorTargetTransformInfo()));
-        #elif LLVM_VERSION < 37
-        target->addAnalysisPasses(PM);
-        #endif
-    }
-
-    #if LLVM_VERSION < 37
-    #if LLVM_VERSION == 36
-    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
-    #else
-    const DataLayout *TD = Target.getDataLayout();
-    #endif
-
-    #if LLVM_VERSION < 35
-    if (TD) {
-        PM.add(new DataLayout(*TD));
-    } else {
-        PM.add(new DataLayout(module.get()));
-    }
-    #else
-    if (TD) {
-        module->setDataLayout(TD);
-    }
-    #if LLVM_VERSION == 35
-    PM.add(new DataLayoutPass(module.get()));
-    #else // llvm >= 3.6
-    PM.add(new DataLayoutPass);
-    #endif
-    #endif
-    #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
@@ -413,17 +350,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #endif
 
     // Override default to generate verbose assembly.
-    #if LLVM_VERSION < 37
-    Target.setAsmVerbosityDefault(true);
-    #else
     Target.Options.MCOptions.AsmVerbose = true;
-    #endif
 
     // Output string stream
-    #if LLVM_VERSION < 37
-    raw_string_ostream outs(outstr);
-    formatted_raw_ostream ostream(outs);
-    #endif
 
     // Ask the target to add backend passes as necessary.
     bool fail = Target.addPassesToEmitFile(PM, ostream,
