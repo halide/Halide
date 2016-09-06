@@ -3,12 +3,11 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
-#include "../../src/Func.h" // includes everything needed here
+#include "../../src/Func.h"  // includes everything needed here
 
 #include <vector>
 
-void defineExternFuncArgument()
-{
+void defineExternFuncArgument() {
     using Halide::ExternFuncArgument;
     namespace h = Halide;
     namespace p = boost::python;
@@ -30,8 +29,7 @@ void defineExternFuncArgument()
         .def("is_expr", &ExternFuncArgument::is_expr)
         .def("is_buffer", &ExternFuncArgument::is_buffer)
         .def("is_image_param", &ExternFuncArgument::is_image_param)
-        .def("defined", &ExternFuncArgument::defined)
-        ;
+        .def("defined", &ExternFuncArgument::defined);
 
     return;
 }

@@ -7,42 +7,34 @@
 
 namespace h = Halide;
 
-h::Func lambda0D(h::Expr e)
-{
+h::Func lambda0D(h::Expr e) {
     return lambda(e);
 }
 
-h::Func lambda1D(h::Var x, h::Expr e)
-{
+h::Func lambda1D(h::Var x, h::Expr e) {
     return lambda(x, e);
 }
 
-h::Func lambda2D(h::Var x, h::Var y, h::Expr e)
-{
+h::Func lambda2D(h::Var x, h::Var y, h::Expr e) {
     return lambda(x, y, e);
 }
 
-h::Func lambda3D(h::Var x, h::Var y, h::Var z, h::Expr e)
-{
+h::Func lambda3D(h::Var x, h::Var y, h::Var z, h::Expr e) {
     return lambda(x, y, z, e);
 }
 
-h::Func lambda4D(h::Var x, h::Var y, h::Var z, h::Var w, h::Expr e)
-{
+h::Func lambda4D(h::Var x, h::Var y, h::Var z, h::Var w, h::Expr e) {
     return lambda(x, y, z, w, e);
 }
 
-h::Func lambda5D(h::Var x, h::Var y, h::Var z, h::Var w, h::Var v, h::Expr e)
-{
+h::Func lambda5D(h::Var x, h::Var y, h::Var z, h::Var w, h::Var v, h::Expr e) {
     return lambda(x, y, z, w, v, e);
 }
-
 
 /// Convenience functions for creating small anonymous Halide functions.
 /// See test/lambda.cpp for example usage.
 /// lambda is a python keyword so we used lambda0D, lambda1D, ... lambda5D instead.
-void defineLambda()
-{
+void defineLambda() {
     namespace p = boost::python;
 
     p::def("lambda0D", &lambda0D, p::arg("e"),
@@ -82,5 +74,3 @@ void defineLambda()
 
     return;
 }
-
-

@@ -3,4 +3,4 @@
 
 void defineRDom();
 
-#endif // RDOM_H
+#endif  // RDOM_H

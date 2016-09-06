@@ -1,8 +1,8 @@
 #include "Image.h"
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
-#include <boost/python.hpp>
 #include <boost/format.hpp>
+#include <boost/python.hpp>
 
 #define USE_NUMPY
 
@@ -13,21 +13,20 @@
 // we use Halide::numpy
 #include "../numpy/numpy.hpp"
 #endif
-#endif // USE_NUMPY
+#endif  // USE_NUMPY
 
 #include <boost/cstdint.hpp>
-#include <boost/mpl/list.hpp>
 #include <boost/functional/hash/hash.hpp>
+#include <boost/mpl/list.hpp>
 
 #include "../../src/runtime/HalideBuffer.h"
-#include "../../src/Buffer.h"
-#include "Type.h"
 #include "Func.h"
+#include "Type.h"
 
-#include <vector>
-#include <unordered_map>
-#include <string>
 #include <functional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -38,14 +37,14 @@ namespace bn = boost::numpy;
 #else
 namespace bn = Halide::numpy;
 #endif
-#endif // USE_NUMPY
+#endif  // USE_NUMPY
 
-template<typename Ret, typename T, typename ...Args>
+template <typename Ret, typename T, typename... Args>
 Ret image_call_operator(h::Image<T> &that, Args... args) {
     return that(args...);
 }
 
-template<typename T>
+template <typename T>
 h::Expr image_call_operator_tuple(h::Image<T> &that, p::tuple &args_passed) {
     std::vector<h::Expr> expr_args;
     for (ssize_t i = 0; i < p::len(args_passed); i++) {
@@ -54,31 +53,31 @@ h::Expr image_call_operator_tuple(h::Image<T> &that, p::tuple &args_passed) {
     return that(expr_args);
 }
 
-template<typename T>
+template <typename T>
 T image_to_setitem_operator0(h::Image<T> &that, int x, T value) {
     return that(x) = value;
 }
 
-template<typename T>
+template <typename T>
 T image_to_setitem_operator1(h::Image<T> &that, int x, int y, T value) {
     return that(x, y) = value;
 }
 
-template<typename T>
+template <typename T>
 T image_to_setitem_operator2(h::Image<T> &that, int x, int y, int z, T value) {
     return that(x, y, z) = value;
 }
 
-template<typename T>
+template <typename T>
 T image_to_setitem_operator3(h::Image<T> &that, int x, int y, int z, int w, T value) {
     return that(x, y, z, w) = value;
 }
 
-template<typename T>
+template <typename T>
 T image_to_setitem_operator4(h::Image<T> &that, p::tuple &args_passed, T value) {
     std::vector<int> int_args;
     const size_t args_len = p::len(args_passed);
-    for (size_t i=0; i < args_len; i += 1) {
+    for (size_t i = 0; i < args_len; i += 1) {
         p::object o = args_passed[i];
         p::extract<int> int32_extract(o);
 
@@ -97,7 +96,7 @@ T image_to_setitem_operator4(h::Image<T> &that, p::tuple &args_passed, T value) 
                                     "a tuple of (convertible to) int.");
     }
 
-    switch(int_args.size()) {
+    switch (int_args.size()) {
     case 1:
         return that(int_args[0]) = value;
     case 2:
@@ -111,35 +110,35 @@ T image_to_setitem_operator4(h::Image<T> &that, p::tuple &args_passed, T value) 
         throw std::invalid_argument("image_to_setitem_operator4 only handles 1 to 4 dimensional tuples");
     }
 
-    return 0; // this line should never be reached
+    return 0;  // this line should never be reached
 }
 
-template<typename T>
+template <typename T>
 const T *image_data(const h::Image<T> &image) {
     return image.data();
 }
 
-template<typename T>
+template <typename T>
 void image_set_min1(h::Image<T> &im, int m0) {
     im.set_min(m0);
 }
 
-template<typename T>
+template <typename T>
 void image_set_min2(h::Image<T> &im, int m0, int m1) {
     im.set_min(m0, m1);
 }
 
-template<typename T>
+template <typename T>
 void image_set_min3(h::Image<T> &im, int m0, int m1, int m2) {
     im.set_min(m0, m1, m2);
 }
 
-template<typename T>
+template <typename T>
 void image_set_min4(h::Image<T> &im, int m0, int m1, int m2, int m3) {
     im.set_min(m0, m1, m2, m3);
 }
 
-template<typename T>
+template <typename T>
 std::string image_repr(const h::Image<T> &image) {
     std::string repr;
 
@@ -160,17 +159,13 @@ std::string image_repr(const h::Image<T> &image) {
     boost::format f("<halide.Image%s%i; element_size %i bytes; "
                     "extent (%i %i %i %i); min (%i %i %i %i); stride (%i %i %i %i)>");
 
-    repr = boost::str(f % suffix % t.bits() % t.bytes()
-                      % image.extent(0) % image.extent(1) % image.extent(2) % image.extent(3)
-                      % image.min(0) % image.min(1) % image.min(2) % image.min(3)
-                      % image.stride(0) % image.stride(1) % image.stride(2) % image.stride(3));
+    repr = boost::str(f % suffix % t.bits() % t.bytes() % image.extent(0) % image.extent(1) % image.extent(2) % image.extent(3) % image.min(0) % image.min(1) % image.min(2) % image.min(3) % image.stride(0) % image.stride(1) % image.stride(2) % image.stride(3));
 
     return repr;
 }
 
-template<typename T>
-boost::python::object get_type_function_wrapper()
-{
+template <typename T>
+boost::python::object get_type_function_wrapper() {
     std::function<h::Type(h::Image<T> &)> return_type_func =
         [&](h::Image<T> &that) -> h::Type { return halide_type_of<T>(); };
     auto call_policies = p::default_call_policies();
@@ -178,14 +173,13 @@ boost::python::object get_type_function_wrapper()
     return p::make_function(return_type_func, call_policies, p::arg("self"), func_sig());
 }
 
-template<typename T>
+template <typename T>
 void image_copy_to_host(h::Image<T> &im) {
     im.copy_to_host();
 }
 
-template<typename T>
-void defineImage_impl(const std::string suffix, const h::Type type)
-{
+template <typename T>
+void defineImage_impl(const std::string suffix, const h::Type type) {
     using h::Image;
     using h::Expr;
 
@@ -204,35 +198,35 @@ void defineImage_impl(const std::string suffix, const h::Type type)
     // Constructors
     image_class
         .def(p::init<int>(
-                 p::args("self", "x"),
-                 "Allocate an image with the given dimensions."))
+            p::args("self", "x"),
+            "Allocate an image with the given dimensions."))
 
         .def(p::init<int, int>(
-                 p::args("self", "x", "y"),
-                 "Allocate an image with the given dimensions."))
+            p::args("self", "x", "y"),
+            "Allocate an image with the given dimensions."))
 
         .def(p::init<int, int, int>(
-                 p::args("self", "x", "y", "z"),
-                 "Allocate an image with the given dimensions."))
+            p::args("self", "x", "y", "z"),
+            "Allocate an image with the given dimensions."))
 
         .def(p::init<int, int, int, int>(
-                 p::args("self", "x", "y", "z", "w"),
-                 "Allocate an image with the given dimensions."))
+            p::args("self", "x", "y", "z", "w"),
+            "Allocate an image with the given dimensions."))
 
         .def(p::init<h::Realization &>(
-                 p::args("self", "r"),
-                 "Wrap a single-element realization in an Image object."))
+            p::args("self", "r"),
+            "Wrap a single-element realization in an Image object."))
 
         .def(p::init<buffer_t>(
-                 p::args("self", "b"),
-                 "Wrap a buffer_t in an Image object, so that we can access its pixels."));
+            p::args("self", "b"),
+            "Wrap a buffer_t in an Image object, so that we can access its pixels."));
 
     image_class
         .def("__repr__", &image_repr<T>, p::arg("self"));
 
     image_class
         .def("data", &image_data<T>, p::arg("self"),
-             p::return_value_policy< p::return_opaque_pointer >(), // not sure this will do what we want
+             p::return_value_policy<p::return_opaque_pointer>(),  // not sure this will do what we want
              "Get a pointer to the element at the min location.")
 
         .def("copy_to_host", &image_copy_to_host<T>, p::arg("self"),
@@ -357,8 +351,7 @@ void defineImage_impl(const std::string suffix, const h::Type type)
              "Assuming this image is four-dimensional, set the value of the element at position (x, y, z, w)")
         .def("__setitem__", &image_to_setitem_operator4<T>, p::args("self", "tuple", "value"),
              "Assuming this image is one to four-dimensional, "
-             "set the value of the element at position indicated by tuple (x, y, z, w)")
-        ;
+             "set the value of the element at position indicated by tuple (x, y, z, w)");
 
     p::implicitly_convertible<Image<T>, h::Argument>();
 
@@ -399,14 +392,14 @@ p::object image_to_python_object(const h::Image<> &im) {
 }
 
 h::Image<> python_object_to_image(p::object obj) {
-    p::extract<h::Image<uint8_t>>  image_extract_uint8(obj);
+    p::extract<h::Image<uint8_t>> image_extract_uint8(obj);
     p::extract<h::Image<uint16_t>> image_extract_uint16(obj);
     p::extract<h::Image<uint32_t>> image_extract_uint32(obj);
-    p::extract<h::Image<int8_t>>   image_extract_int8(obj);
-    p::extract<h::Image<int16_t>>  image_extract_int16(obj);
-    p::extract<h::Image<int32_t>>  image_extract_int32(obj);
-    p::extract<h::Image<float>>    image_extract_float(obj);
-    p::extract<h::Image<double>>   image_extract_double(obj);
+    p::extract<h::Image<int8_t>> image_extract_int8(obj);
+    p::extract<h::Image<int16_t>> image_extract_int16(obj);
+    p::extract<h::Image<int32_t>> image_extract_int32(obj);
+    p::extract<h::Image<float>> image_extract_float(obj);
+    p::extract<h::Image<double>> image_extract_double(obj);
 
     if (image_extract_uint8.check()) {
         return image_extract_uint8();
@@ -432,14 +425,13 @@ h::Image<> python_object_to_image(p::object obj) {
 
 #ifdef USE_NUMPY
 
-
 bn::dtype type_to_dtype(const h::Type &t) {
-    if (t == h::UInt(8))   return bn::dtype::get_builtin<uint8_t>();
-    if (t == h::UInt(16))  return bn::dtype::get_builtin<uint16_t>();
-    if (t == h::UInt(32))  return bn::dtype::get_builtin<uint32_t>();
-    if (t == h::Int(8))    return bn::dtype::get_builtin<int8_t>();
-    if (t == h::Int(16))   return bn::dtype::get_builtin<int16_t>();
-    if (t == h::Int(32))   return bn::dtype::get_builtin<int32_t>();
+    if (t == h::UInt(8)) return bn::dtype::get_builtin<uint8_t>();
+    if (t == h::UInt(16)) return bn::dtype::get_builtin<uint16_t>();
+    if (t == h::UInt(32)) return bn::dtype::get_builtin<uint32_t>();
+    if (t == h::Int(8)) return bn::dtype::get_builtin<int8_t>();
+    if (t == h::Int(16)) return bn::dtype::get_builtin<int16_t>();
+    if (t == h::Int(32)) return bn::dtype::get_builtin<int32_t>();
     if (t == h::Float(32)) return bn::dtype::get_builtin<float>();
     if (t == h::Float(64)) return bn::dtype::get_builtin<double>();
     throw std::runtime_error("type_to_dtype received a Halide::Type with no known numpy dtype equivalent");
@@ -447,21 +439,20 @@ bn::dtype type_to_dtype(const h::Type &t) {
 }
 
 h::Type dtype_to_type(const bn::dtype &t) {
-    if (t == bn::dtype::get_builtin<uint8_t>())  return h::UInt(8);
+    if (t == bn::dtype::get_builtin<uint8_t>()) return h::UInt(8);
     if (t == bn::dtype::get_builtin<uint16_t>()) return h::UInt(16);
     if (t == bn::dtype::get_builtin<uint32_t>()) return h::UInt(32);
-    if (t == bn::dtype::get_builtin<int8_t>())   return h::Int(8);
-    if (t == bn::dtype::get_builtin<int16_t>())  return h::Int(16);
-    if (t == bn::dtype::get_builtin<int32_t>())  return h::Int(32);
-    if (t == bn::dtype::get_builtin<float>())    return h::Float(32);
-    if (t == bn::dtype::get_builtin<double>())   return h::Float(64);
+    if (t == bn::dtype::get_builtin<int8_t>()) return h::Int(8);
+    if (t == bn::dtype::get_builtin<int16_t>()) return h::Int(16);
+    if (t == bn::dtype::get_builtin<int32_t>()) return h::Int(32);
+    if (t == bn::dtype::get_builtin<float>()) return h::Float(32);
+    if (t == bn::dtype::get_builtin<double>()) return h::Float(64);
     throw std::runtime_error("dtype_to_type received a numpy type with no known Halide type equivalent");
     return h::Type();
 }
 
 /// Will create a Halide::Image object pointing to the array data
-p::object ndarray_to_image(bn::ndarray &array)
-{
+p::object ndarray_to_image(bn::ndarray &array) {
     h::Type t = dtype_to_type(array.get_dtype());
     const int dims = array.get_nd();
     void *host = reinterpret_cast<void *>(array.get_data());
@@ -474,7 +465,6 @@ p::object ndarray_to_image(bn::ndarray &array)
 
     return image_to_python_object(h::Image<>(t, host, dims, shape));
 }
-
 
 bn::ndarray image_to_ndarray(p::object image_object) {
     h::Image<> im = python_object_to_image(image_object);
@@ -496,30 +486,29 @@ bn::ndarray image_to_ndarray(p::object image_object) {
         image_object);
 }
 
-
 #endif
 
 struct ImageFactory {
 
-    template<typename T, typename ...Args>
-    static p::object create_image_object(Args...args) {
+    template <typename T, typename... Args>
+    static p::object create_image_object(Args... args) {
         typedef h::Image<T> ImageType;
         typedef typename p::manage_new_object::apply<ImageType *>::type converter_t;
         converter_t converter;
-        PyObject* obj = converter(new ImageType(args...));
+        PyObject *obj = converter(new ImageType(args...));
         return p::object(p::handle<>(obj));
     }
 
-    template<typename ...Args>
+    template <typename... Args>
     static p::object create_image_impl(h::Type t, Args... args) {
-        if (t == h::UInt(8))    return create_image_object<uint8_t>(args...);
-        if (t == h::UInt(16))   return create_image_object<uint16_t>(args...);
-        if (t == h::UInt(32))   return create_image_object<uint32_t>(args...);
-        if (t == h::Int(8))     return create_image_object<int8_t>(args...);
-        if (t == h::Int(16))    return create_image_object<int16_t>(args...);
-        if (t == h::Int(32))    return create_image_object<int32_t>(args...);
-        if (t == h::Float(32))  return create_image_object<float>(args...);
-        if (t == h::Float(64))  return create_image_object<double>(args...);
+        if (t == h::UInt(8)) return create_image_object<uint8_t>(args...);
+        if (t == h::UInt(16)) return create_image_object<uint16_t>(args...);
+        if (t == h::UInt(32)) return create_image_object<uint32_t>(args...);
+        if (t == h::Int(8)) return create_image_object<int8_t>(args...);
+        if (t == h::Int(16)) return create_image_object<int16_t>(args...);
+        if (t == h::Int(32)) return create_image_object<int32_t>(args...);
+        if (t == h::Float(32)) return create_image_object<float>(args...);
+        if (t == h::Float(64)) return create_image_object<double>(args...);
         throw std::invalid_argument("ImageFactory::create_image_impl received type not handled");
         return p::object();
     }
@@ -551,13 +540,9 @@ struct ImageFactory {
     static p::object create_image_from_buffer(h::Type type, buffer_t b) {
         return create_image_impl(type, b);
     }
-
 };
 
-
-
-void defineImage()
-{
+void defineImage() {
     defineImage_impl<uint8_t>("_uint8", h::UInt(8));
     defineImage_impl<uint16_t>("_uint16", h::UInt(16));
     defineImage_impl<uint32_t>("_uint32", h::UInt(32));
@@ -568,7 +553,6 @@ void defineImage()
 
     defineImage_impl<float>("_float32", h::Float(32));
     defineImage_impl<double>("_float64", h::Float(64));
-
 
     // "Image" will look as a class, but instead it will be simply a factory method
     p::def("Image", &ImageFactory::create_image0,
@@ -589,12 +573,12 @@ void defineImage()
 
     p::def("Image", &ImageFactory::create_image_from_realization,
            p::args("type", "r"),
-           p::with_custodian_and_ward_postcall<0, 2>(), // the realization reference count is increased
+           p::with_custodian_and_ward_postcall<0, 2>(),  // the realization reference count is increased
            "Wrap a single-element realization in an Image object of type T.");
 
     p::def("Image", &ImageFactory::create_image_from_buffer,
            p::args("type", "b"),
-           p::with_custodian_and_ward_postcall<0, 2>(), // the buffer_t reference count is increased
+           p::with_custodian_and_ward_postcall<0, 2>(),  // the buffer_t reference count is increased
            "Wrap a buffer_t in an Image object of type T, so that we can access its pixels.");
 
 #ifdef USE_NUMPY
@@ -602,21 +586,21 @@ void defineImage()
 
     p::def("ndarray_to_image", &ndarray_to_image,
            p::args("array"),
-           p::with_custodian_and_ward_postcall<0, 1>(), // the array reference count is increased
+           p::with_custodian_and_ward_postcall<0, 1>(),  // the array reference count is increased
            "Converts a numpy array into a Halide::Image."
            "Will take into account the array size, dimensions, and type."
            "Created Image refers to the array data (no copy).");
 
     p::def("Image", &ndarray_to_image,
            p::args("array"),
-           p::with_custodian_and_ward_postcall<0, 1>(), // the array reference count is increased
+           p::with_custodian_and_ward_postcall<0, 1>(),  // the array reference count is increased
            "Wrap numpy array in a Halide::Image."
            "Will take into account the array size, dimensions, and type."
            "Created Image refers to the array data (no copy).");
 
     p::def("image_to_ndarray", &image_to_ndarray,
            p::args("image"),
-           p::with_custodian_and_ward_postcall<0, 1>(), // the image reference count is increased
+           p::with_custodian_and_ward_postcall<0, 1>(),  // the image reference count is increased
            "Creates a numpy array from a Halide::Image."
            "Will take into account the Image size, dimensions, and type."
            "Created ndarray refers to the Image data (no copy).");
