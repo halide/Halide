@@ -175,8 +175,10 @@ struct TextureInfo {
 };
 
 struct ModuleState {
-    KernelInfo *kernel;
+    KernelInfo **kernel;
     ModuleState *next;
+    int num_kernels;                   // total kernels in this module
+    int max_kernels;                   // max kernels
 };
 
 
@@ -769,7 +771,10 @@ WEAK int halide_opengl_device_release(void *user_context) {
 
     ModuleState *mod = state_list;
     while (mod) {
-        delete_kernel(user_context, mod->kernel);
+        for (int i=0; i<mod->num_kernels; i++) {
+            delete_kernel(user_context, mod->kernel[i]);
+        }
+        free(mod->kernel);
         mod->kernel = NULL;
         ModuleState *next = mod->next;
         // do not call free(mod) to avoid dangling pointers: the module state
@@ -1400,22 +1405,6 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
 using namespace Halide::Runtime::Internal::OpenGL;
 
-// Find the correct module for the called function
-// TODO: This currently takes O(# of GLSL'd stages) and can
-// be optimized
-WEAK ModuleState* find_module(const char *stage_name) {
-    ModuleState* state_ptr = state_list;
-
-    while (state_ptr != NULL) {
-        KernelInfo *kernel = state_ptr->kernel;
-        if (kernel && strcmp(stage_name, kernel->name) == 0) {
-            return state_ptr;
-        }
-        state_ptr = state_ptr->next;
-    }
-
-    return NULL;
-}
 
 //  Create wrappers that satisfy old naming conventions
 
@@ -1439,14 +1428,16 @@ WEAK int halide_opengl_run(void *user_context,
 
     GLStateSaver state_saver;
 
-    // Find the right module
-    ModuleState *mod = find_module(entry_name);
+    ModuleState *mod = (ModuleState*)state_ptr;
     if (!mod) {
-      error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
-      return 1;
+        error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
+        return 1;
     }
 
-    KernelInfo *kernel = mod->kernel;
+    // kernel id is passed in as the first argument
+    int* kernel_id = (int*)args[0];
+
+    KernelInfo *kernel = mod->kernel[*kernel_id];
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
@@ -1464,7 +1455,7 @@ WEAK int halide_opengl_run(void *user_context,
     int num_uniform_ints = 0;
 
     Argument *kernel_arg = kernel->arguments;
-    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 1; args[i]; i++, kernel_arg = kernel_arg->next) {
 
         // Check for a mismatch between the number of arguments declared in the
         // fragment shader source header and the number passed to this function
@@ -1515,7 +1506,7 @@ WEAK int halide_opengl_run(void *user_context,
     int uniform_int_idx = 0;
 
     kernel_arg = kernel->arguments;
-    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 1; args[i]; i++, kernel_arg = kernel_arg->next) {
 
         if (kernel_arg->kind == Argument::Outbuf) {
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
@@ -1665,7 +1656,7 @@ WEAK int halide_opengl_run(void *user_context,
 
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
-    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+    for (int i = 1; args[i]; i++, kernel_arg = kernel_arg->next) {
         if (kernel_arg->kind != Argument::Outbuf) continue;
 
         halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
@@ -1920,7 +1911,9 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
 WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
                                           const char *src, int size) {
     debug(user_context) << "In initialize_kernels\n";
-    
+
+    const int max_kernel_increment = 16;
+
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -1929,6 +1922,31 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
 
     ModuleState **state = (ModuleState **)state_ptr;
     ModuleState *module = *state;
+
+    // Create a module if it doesn't exist yet.  We should only create one
+    // global module that contains multiple kernels
+
+    if (!module) {
+        // Construct a new ModuleState and add it to the global list
+        module = (ModuleState *)malloc(sizeof(ModuleState));
+        module->kernel = NULL;
+        module->num_kernels = 0;
+        module->max_kernels = max_kernel_increment;
+        module->kernel = (KernelInfo**)malloc(sizeof(KernelInfo*) *
+            max_kernel_increment);
+
+        if (!module->kernel) {
+            error(user_context) << "Unable to allocate memory for kernels";
+        }
+
+        module->next = state_list;
+        state_list = module;
+        *state = module;
+    } else {
+        // there's only one initialize call per module.  if the module
+        // exists, we've already initialized the kernels.
+        return 0;
+    }
 
     while (this_kernel) {
         // Find the start of the next kernel
@@ -1941,23 +1959,34 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
         } else {
             len = next_kernel - this_kernel;
         }
-        
-        // Construct a new ModuleState and add it to the global list
-        module = (ModuleState *)malloc(sizeof(ModuleState));
-        module->kernel = NULL;
-        module->next = state_list;
-        state_list = module;
-        *state = module;
-        
-        KernelInfo *kernel = module->kernel;
-        if (!kernel) {
-            kernel = create_kernel(user_context, this_kernel, len);
-            if (!kernel) {
-                error(user_context) << "Invalid kernel: " << this_kernel;
-                return -1;
+        if (module->num_kernels == module->max_kernels) {
+            // allocate a new array
+            KernelInfo** new_kernels = (KernelInfo**)malloc(
+                sizeof(KernelInfo*) * (module->max_kernels + max_kernel_increment));
+
+            if (!module->kernel) {
+                error(user_context) << "Unable to allocate memory for more kernels";
             }
-            module->kernel = kernel;
+
+            // copy old kernel ptrs into new array
+            for (int i=0; i<module->num_kernels; i++) {
+                new_kernels[i] = module->kernel[i];
+            }
+            // dealloc old kernel array & replace in module
+            free(module->kernel);
+            module->kernel = new_kernels;
+            module->max_kernels += max_kernel_increment;
         }
+
+        KernelInfo *kernel = module->kernel[module->num_kernels];
+        kernel = create_kernel(user_context, this_kernel, len);
+
+        if (!kernel) {
+            error(user_context) << "Invalid kernel: " << this_kernel;
+            return -1;
+        }
+        module->kernel[module->num_kernels] = kernel;
+        module->num_kernels++;
         
         // Create the vertex shader. The runtime will output boilerplate for the
         // vertex shader based on a fixed program plus arguments obtained from
@@ -2070,9 +2099,12 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     if (!global_state.initialized) return;
 
     debug(user_context) << "halide_opengl_context_lost\n";
+    // TODO(shoaibkamil) will this actually trigger recompilation?
     for (ModuleState *mod = state_list; mod; mod = mod->next) {
         // Reset program handle to force recompilation.
-        mod->kernel->program_id = 0;
+        for (int i=0; i < mod->num_kernels; i++) {
+            mod->kernel[i]->program_id = 0;
+        }
     }
 
     TextureInfo *tex = global_state.textures;

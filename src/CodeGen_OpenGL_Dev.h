@@ -36,6 +36,7 @@ public:
 
     std::string api_unique_name() { return "opengl"; }
 
+    std::map<std::string, int> kernel_id;
 private:
     CodeGen_GLSL *glc;
 

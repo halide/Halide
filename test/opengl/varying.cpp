@@ -85,10 +85,10 @@ int main() {
     f0.realize(out0);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 2) {
+    if (varyings.size() != 1) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 2);
+                (int)varyings.size(), 1);
         return 1;
     }
 
@@ -156,10 +156,10 @@ int main() {
     f1.realize(out1);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 4) {
+    if (varyings.size() != 2) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 4);
+                (int)varyings.size(), 2);
         return 1;
     }
 
@@ -215,10 +215,11 @@ int main() {
     f2.realize(out2);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 4) {
+    // In this case, the varyings are just the actual pixel locations
+    if (varyings.size() != 0) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 4);
+                (int)varyings.size(), 0);
         return 1;
     }
 
@@ -286,7 +287,7 @@ int main() {
     f3.realize(out3);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 2) {
+    if (varyings.size() != 1) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
                 (int)varyings.size(), 2);
