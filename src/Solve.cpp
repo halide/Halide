@@ -83,6 +83,7 @@ private:
     // Return the negative of an expr. Does some eager simplification
     // to avoid injecting pointless -1s.
     Expr negate(Expr e) {
+        internal_assert(!e.type().is_uint()) << "Negating unsigned is not legal\n";
         const Mul *mul = e.as<Mul>();
         if (mul && is_const(mul->b)) {
             return mul->a * simplify(-1*mul->b);
@@ -226,7 +227,16 @@ private:
                 expr = mutate(add_a->a + (add_a->b - b));
             }
         } else if (b_uses_var && !a_uses_var) {
-            if (sub_b && !b_failed) {
+            if (op->type.is_uint()) {
+                if (sub_b && b_failed) {
+                    // a - (b - f(x)) -> f(x) + (a - b)
+                    failed = old_failed || a_failed;
+                    expr = mutate(sub_b->b + (a - sub_b->a));
+                } else {
+                    // Negating unsigned is not legal
+                    fail(a - b);
+                }
+            } else if (sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
                 expr = mutate(negate(sub_b->a) + (a + sub_b->b));
             } else if (add_b && !b_failed) {
@@ -581,6 +591,9 @@ private:
                 } else if (is_const(mul_a->b, -1)) {
                     expr = mutate(Opp::make(mul_a->a, make_zero(b.type()) - b));
                 } else if (is_negative_const(mul_a->b)) {
+                    // It shouldn't have been unsigned since the is_negative_const
+                    // check is true, but put an assertion anyway.
+                    internal_assert(!b.type().is_uint()) << "Negating unsigned is not legal\n";
                     expr = mutate(Opp::make(mul_a->a * negate(mul_a->b), negate(b)));
                 } else {
                     // Don't use operator/ and operator % to sneak
@@ -618,6 +631,9 @@ private:
                     if (is_eq || is_ne) {
                         // Can't do anything with this
                     } else if (is_negative_const(div_a->b)) {
+                        // It shouldn't have been unsigned since the is_negative_const
+                        // check is true, but put an assertion anyway.
+                        internal_assert(!a.type().is_uint()) << "Negating unsigned is not legal\n";
                         // With Euclidean division, (a/(-b)) == -(a/b)
                         expr = mutate(Cmp::make(negate(div_a->a / negate(div_a->b)), b));
                     } else if (is_positive_const(div_a->b)) {
@@ -1552,6 +1568,15 @@ void solve_test() {
     check_solve((min(x, y) + min(y, x))*max(y, x), (min(x, y)*2)*max(x, y));
     check_solve(max((min((y*x), x) + min((1 + y), x)), (y + 2*x)),
                 max((min((x*y), x) + min(x, (1 + y))), (x*2 + y)));
+
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        Expr z = Variable::make(UInt(32), "z");
+        check_solve(5 - (4 - 4*x), x*(4) + 1);
+        check_solve(z - (y - x), x + (z - y));
+        check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+    }
 
     debug(0) << "Solve test passed\n";
 

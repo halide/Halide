@@ -10,21 +10,13 @@ namespace {
 
 std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
 
-    #if LLVM_VERSION >= 36
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
-    #else
-    llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
-    #endif
 
     auto ret_val = llvm::parseBitcodeFile(bitcode_buffer, *context);
     if (!ret_val) {
         internal_error << "Could not parse built-in bitcode file " << id
                        << " llvm error is " << ret_val.getError() << "\n";
     }
-
-    #if LLVM_VERSION < 36
-    delete bitcode_buffer;
-    #endif
 
     std::unique_ptr<llvm::Module> result(std::move(*ret_val));
     result->setModuleIdentifier(id);
@@ -229,10 +221,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 #if defined(WITH_NATIVE_CLIENT)
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-S32");
-                #elif LLVM_VERSION >= 37
-                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #else
-                return llvm::DataLayout("e-m:w-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
+                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
                 #endif
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
@@ -323,20 +313,14 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Windows) {
             triple.setVendor(llvm::Triple::PC);
             triple.setOS(llvm::Triple::Win32);
-            #if LLVM_VERSION >= 36
             if (target.has_feature(Target::MinGW)) {
                 triple.setEnvironment(llvm::Triple::GNU);
             } else {
                 triple.setEnvironment(llvm::Triple::MSVC);
             }
-            #endif
             if (target.has_feature(Target::JIT)) {
                 // Use ELF for jitting
-                #if LLVM_VERSION < 35
-                triple.setEnvironment(llvm::Triple::ELF);
-                #else
                 triple.setObjectFormat(llvm::Triple::ELF);
-                #endif
             }
         } else if (target.os == Target::Android) {
             triple.setOS(llvm::Triple::Linux);
@@ -467,11 +451,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
     for (size_t i = 0; i < modules.size(); i++) {
-        #if LLVM_VERSION >= 37
         modules[i]->setDataLayout(data_layout);
-        #else
-        modules[i]->setDataLayout(&data_layout);
-        #endif
         modules[i]->setTargetTriple(triple.str());
     }
 
@@ -482,12 +462,8 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         bool failed = llvm::Linker::linkModules(*modules[0],
                                                 std::move(modules[i]));
         #else
-            #if LLVM_VERSION >= 36
-            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release());
-            #else
-            bool failed = llvm::Linker::LinkModules(modules[0].get(), modules[i].release(),
-                                                    llvm::Linker::DestroySource, &err_msg);
-            #endif
+        bool failed = llvm::Linker::LinkModules(modules[0].get(),
+                                                modules[i].release());
         #endif
 
         if (failed) {
@@ -1009,22 +985,16 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
         }
 
         // Also mark the halide_gpu_thread_barrier as noduplicate.
-        #if LLVM_VERSION > 32
         if (f.getName() == "halide_gpu_thread_barrier") {
             f.addFnAttr(llvm::Attribute::NoDuplicate);
         }
-        #endif
     }
 
     llvm::Triple triple("nvptx64--");
     modules[0]->setTargetTriple(triple.str());
 
     llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
-    #if LLVM_VERSION > 36
     modules[0]->setDataLayout(dl);
-    #else
-    modules[0]->setDataLayout(&dl);
-    #endif
 
     return std::move(modules[0]);
 }
@@ -1038,11 +1008,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_renderscript_device(Target 
     m->setTargetTriple(triple.str());
 
     llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
-    #if LLVM_VERSION > 36
     m->setDataLayout(dl);
-    #else
-    m->setDataLayout(&dl);
-    #endif
 
     return m;
 }

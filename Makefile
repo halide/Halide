@@ -147,10 +147,6 @@ CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 # to propagate exceptions and causes a test failure.
 CXX_FLAGS += -funwind-tables
 
-ifeq ($(LLVM_VERSION_TIMES_10), 35)
-LLVM_OLD_JIT_COMPONENT = jit
-endif
-
 print-%:
 	@echo '$*=$($*)'
 
@@ -390,16 +386,10 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WrapCalls.cpp
 
-ifeq ($(LLVM_VERSION_TIMES_10),35)
-BITWRITER_VERSION=.35
-else
-BITWRITER_VERSION=
-endif
-
 BITWRITER_SOURCE_FILES = \
-  BitWriter_3_2$(BITWRITER_VERSION)/BitcodeWriter.cpp \
-  BitWriter_3_2$(BITWRITER_VERSION)/BitcodeWriterPass.cpp \
-  BitWriter_3_2$(BITWRITER_VERSION)/ValueEnumerator.cpp
+  BitWriter_3_2/BitcodeWriter.cpp \
+  BitWriter_3_2/BitcodeWriterPass.cpp \
+  BitWriter_3_2/ValueEnumerator.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
@@ -706,14 +696,9 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
 
-ifeq ($(LLVM_VERSION_TIMES_10),35)
-RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
-RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
-else
 # Compile generic 32- or 64-bit code
 RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
 RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
-endif
 
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
@@ -1222,7 +1207,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39 40))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 37 38 39 40 41 42))
 LLVM_OK=yes
 endif
 
