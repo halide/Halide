@@ -251,7 +251,7 @@ Stmt add_image_checks(Stmt s,
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
             if (!touched[j].is_bounded()) {
-                user_error << "BufferPtr " << name
+                user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
             }
