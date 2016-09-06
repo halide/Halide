@@ -70,6 +70,10 @@ if (BUILD_AOT_TUTORIAL)
   add_executable(lesson_10_aot_compilation_run
                  lesson_10_aot_compilation_run.cpp)
 
+  # FIXME: this is redundant, since we generated the library in 
+  # lesson_10_aot_compilation_generate; we need it mainly to generate (again)
+  # a .h file into a path where we can find it. Remove either this or the
+  # generate above.
   halide_add_generator_dependency(TARGET lesson_10_aot_compilation_run
     GENERATOR_TARGET lesson_10_aot_compilation_generate
     GENERATOR_NAME lesson_10_aot_compilation_generate
