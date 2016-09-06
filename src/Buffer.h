@@ -1,5 +1,5 @@
-#ifndef HALIDE_BUFFER_H
-#define HALIDE_BUFFER_H
+#ifndef HALIDE_BUFFER_PTR_H
+#define HALIDE_BUFFER_PTR_H
 
 /** \file
  * Defines BufferPtr - A c++ wrapper around a buffer_t.
