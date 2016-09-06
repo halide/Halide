@@ -1,4 +1,4 @@
-#include "Buffer.h"
+#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "JITModule.h"

@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "Buffer.h"
+#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"

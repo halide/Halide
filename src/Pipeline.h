@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "Buffer.h"
+#include "BufferPtr.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
