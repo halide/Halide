@@ -9,7 +9,7 @@
 #include <functional>
 
 #include "IR.h"
-#include "Buffer.h"
+#include "BufferPtr.h"
 #include "ModulusRemainder.h"
 #include "Outputs.h"
 #include "Target.h"

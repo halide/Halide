@@ -223,7 +223,7 @@ set(HEADER_FILES
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
-  Buffer.h
+  BufferPtr.h
   CSE.h
   Closure.h
   CodeGen_ARM.h
@@ -342,7 +342,7 @@ set(HEADER_FILES
   VectorizeLoops.h
   WrapCalls.h
   runtime/HalideRuntime.h
-  runtime/HalideBuffer.h  
+  runtime/HalideBuffer.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -387,7 +387,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
-  Buffer.cpp
+  BufferPtr.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp

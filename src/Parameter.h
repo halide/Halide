@@ -6,7 +6,7 @@
  */
 
 #include "Expr.h"
-#include "Buffer.h"
+#include "BufferPtr.h"
 
 namespace Halide {
 namespace Internal {
