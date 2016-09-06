@@ -10,23 +10,17 @@
 namespace h = Halide;
 namespace p = boost::python;
 
-
-
-h::Expr reinterpret0(h::Type t, h::Expr e)
-{
+h::Expr reinterpret0(h::Type t, h::Expr e) {
     return h::reinterpret(t, e);
 }
 
-h::Expr cast0(h::Type t, h::Expr e)
-{
+h::Expr cast0(h::Type t, h::Expr e) {
     return Halide::cast(t, e);
 }
 
-h::Expr select0(h::Expr condition, h::Expr true_value, h::Expr false_value)
-{
+h::Expr select0(h::Expr condition, h::Expr true_value, h::Expr false_value) {
     return h::select(condition, true_value, false_value);
 }
-
 
 h::Expr select1(h::Expr c1, h::Expr v1,
                 h::Expr c2, h::Expr v2,
@@ -155,25 +149,19 @@ h::Expr select9(h::Expr c1, h::Expr v1,
                      c10, v10, default_val);
 }
 
-h::Expr print_when0(h::Expr condition, p::tuple values_passed)
-{
+h::Expr print_when0(h::Expr condition, p::tuple values_passed) {
     const size_t num_values = p::len(values_passed);
     std::vector<h::Expr> values;
     values.reserve(num_values);
 
-    for(size_t i=0; i < num_values; i += 1)
-    {
+    for (size_t i = 0; i < num_values; i += 1) {
         p::object o = values_passed[i];
         p::extract<h::Expr &> expr_extract(o);
 
-        if(expr_extract.check())
-        {
+        if (expr_extract.check()) {
             values.push_back(expr_extract());
-        }
-        else
-        {
-            for(size_t j=0; j < num_values; j+=1)
-            {
+        } else {
+            for (size_t j = 0; j < num_values; j += 1) {
                 p::object o = values_passed[j];
                 const std::string o_str = p::extract<std::string>(p::str(o));
                 printf("print_when values[%lu] == %s\n", j, o_str.c_str());
@@ -185,48 +173,40 @@ h::Expr print_when0(h::Expr condition, p::tuple values_passed)
     return h::print_when(condition, values);
 }
 
-h::Expr random_float0()
-{
+h::Expr random_float0() {
     return h::random_float();
 }
 
-h::Expr random_float1(h::Expr seed)
-{
+h::Expr random_float1(h::Expr seed) {
     return h::random_float(seed);
 }
 
-h::Expr random_int0()
-{
+h::Expr random_int0() {
     return h::random_int();
 }
 
-h::Expr random_int1(h::Expr seed)
-{
+h::Expr random_int1(h::Expr seed) {
     return h::random_int(seed);
 }
 
-
-h::Expr undef0(h::Type type)
-{
+h::Expr undef0(h::Type type) {
     return h::undef(type);
 }
 
-h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_values)
-{
+h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_values) {
     return h::memoize_tag(result, cache_key_values);
 }
 
-void defineOperators()
-{
+void defineOperators() {
     // defined in IROperator.h
 
     h::Expr (*max_exprs)(h::Expr, h::Expr) = &h::max;
-    h::Expr (*max_expr_int)(h::Expr, int)  = &h::max;
-    h::Expr (*max_int_expr)(int, h::Expr)  = &h::max;
+    h::Expr (*max_expr_int)(h::Expr, int) = &h::max;
+    h::Expr (*max_int_expr)(int, h::Expr) = &h::max;
 
     h::Expr (*min_exprs)(h::Expr, h::Expr) = &h::min;
-    h::Expr (*min_expr_int)(h::Expr, int)  = &h::min;
-    h::Expr (*min_int_expr)(int, h::Expr)  = &h::min;
+    h::Expr (*min_expr_int)(h::Expr, int) = &h::min;
+    h::Expr (*min_int_expr)(int, h::Expr) = &h::min;
 
     p::def("max", max_exprs,
            p::args("a", "b"),
@@ -291,13 +271,11 @@ void defineOperators()
            "various ways to write this yourself, but they contain numerous "
            "gotchas and don't always compile to good code, so use this instead.");
 
-
     p::def("select", &select0, p::args("condition", "true_value", "false_value"),
            "Returns an expression similar to the ternary operator in C, except "
            "that it always evaluates all arguments. If the first argument is "
            "true, then return the second, else return the third. Typically "
            "vectorizes cleanly, but benefits from SSE41 or newer on x86.");
-
 
     p::def("select", &select1, p::args("c1", "v1", "c2", "v2", "default_val"),
            "A multi-way variant of select similar to a switch statement in C, "
@@ -306,44 +284,44 @@ void defineOperators()
            "final value if all conditions are false.");
 
     p::def("select", &select2, p::args(
-               "c1", "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "default_val"));
+                                   "c1", "v1",
+                                   "c2", "v2",
+                                   "c3", "v3",
+                                   "default_val"));
 
     p::def("select", &select3, p::args(
-               "c1", "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "default_val"));
+                                   "c1", "v1",
+                                   "c2", "v2",
+                                   "c3", "v3",
+                                   "c4", "v4",
+                                   "default_val"));
 
     p::def("select", &select4, p::args(
-               "c1", "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "c5", "v5",
-               "default_val"));
+                                   "c1", "v1",
+                                   "c2", "v2",
+                                   "c3", "v3",
+                                   "c4", "v4",
+                                   "c5", "v5",
+                                   "default_val"));
 
     p::def("select", &select5, p::args(
-               "c1", "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "c5", "v5",
-               "c6", "v6",
-               "default_val"));
+                                   "c1", "v1",
+                                   "c2", "v2",
+                                   "c3", "v3",
+                                   "c4", "v4",
+                                   "c5", "v5",
+                                   "c6", "v6",
+                                   "default_val"));
 
     p::def("select", &select6, p::args(
-               "c1", "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "c5", "v5",
-               "c6", "v6",
-               "c7", "v7",
-               "default_val"));
+                                   "c1", "v1",
+                                   "c2", "v2",
+                                   "c3", "v3",
+                                   "c4", "v4",
+                                   "c5", "v5",
+                                   "c6", "v6",
+                                   "c7", "v7",
+                                   "default_val"));
 
     /*
     // Too many arguments for boost.python. Hopefully rare enough use case.
@@ -425,7 +403,6 @@ void defineOperators()
     p::def("asinh", &h::asinh, p::args("x"),
            "Return the hyperbolic arcsine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
-
 
     p::def("cosh", &h::cosh, p::args("x"),
            "Return the hyperbolic cosine of a floating-point expression. If the argument is "
@@ -596,7 +573,6 @@ void defineOperators()
            "Generally, lerp will vectorize as if it were an operation on a type "
            "twice the bit size of the inferred type for x and y. ");
 
-
     p::def("popcount", &h::popcount, p::args("x"),
            "Count the number of set bits in an expression.");
 
@@ -636,12 +612,12 @@ void defineOperators()
            "elements.\n"
 
            "This function vectorizes cleanly.");
-    p::def("random_float", &random_float0); // no args
+    p::def("random_float", &random_float0);  // no args
 
     p::def("random_int", &random_int1, p::args("seed"),
            "Return a random variable representing a uniformly distributed "
            "32-bit integer. See \\ref random_float. Vectorizes cleanly.");
-    p::def("random_int", &random_int0); // no args
+    p::def("random_int", &random_int0);  // no args
 
     p::def("undef", &undef0, p::args("type"),
            "Return an undef value of the given type. Halide skips stores that "

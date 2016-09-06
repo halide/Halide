@@ -3,4 +3,4 @@
 
 void defineInlineReductions();
 
-#endif // INLINEREDUCTIONS_H
+#endif  // INLINEREDUCTIONS_H
