@@ -41,11 +41,9 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   set(multiValueArgs GENERATOR_ARGS GENERATOR_OUTPUTS)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-MESSAGE("args_GENERATED_FUNCTION ${args_GENERATED_FUNCTION}")
   if (args_GENERATED_FUNCTION STREQUAL "")
     set(args_GENERATED_FUNCTION ${args_GENERATOR_NAME})
   endif()
-MESSAGE("args_GENERATED_FUNCTION ${args_GENERATED_FUNCTION}")
 
   # Create a directory to contain generator specific intermediate files
   halide_aot_scratch_dir(${AOT_LIBRARY_TARGET} SCRATCH_DIR)
