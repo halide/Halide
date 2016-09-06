@@ -405,9 +405,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *bits = builder->CreateBitCast(ptr, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                     gpu_args_arr_type,
-#endif
                                     gpu_args_arr,
                                     0,
                                     i));
@@ -417,18 +415,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                     gpu_arg_sizes_arr_type,
-#endif
                                     gpu_arg_sizes_arr,
                                     0,
                                     i));
 
             builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
                                  builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                     gpu_arg_is_buffer_arr_type,
-#endif
                                     gpu_arg_is_buffer_arr,
                                     0,
                                     i));
@@ -436,25 +430,19 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // nullptr-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
                              builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                 gpu_args_arr_type,
-#endif
                                 gpu_args_arr,
                                 0,
                                 num_args));
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                 gpu_arg_sizes_arr_type,
-#endif
                                 gpu_arg_sizes_arr,
                                 0,
                                 num_args));
         builder->CreateStore(ConstantInt::get(i8_t, 0),
                              builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                 gpu_arg_is_buffer_arr_type,
-#endif
                                 gpu_arg_is_buffer_arr,
                                 0,
                                 num_args));
@@ -479,25 +467,19 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                 gpu_arg_sizes_arr_type,
-#endif
                 gpu_arg_sizes_arr,
                 0,
                 0,
                 "gpu_arg_sizes_ar_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                 gpu_args_arr_type,
-#endif
                 gpu_args_arr,
                 0,
                 0,
                 "gpu_args_arr_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                 gpu_arg_is_buffer_arr_type,
-#endif
                 gpu_arg_is_buffer_arr,
                 0,
                 0,
