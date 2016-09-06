@@ -2,7 +2,7 @@
 #define HALIDE_BUFFER_PTR_H
 
 /** \file
- * Defines BufferPtr - A c++ wrapper around a buffer_t.
+ * Defines BufferPtr - A named shared pointer to a Halide::Buffer
  */
 
 #include "runtime/HalideBuffer.h"
@@ -14,7 +14,7 @@ namespace Halide {
 namespace Internal {
 struct BufferContents;
 
-/** A named reference-counted handle on an Image of unknown type and dimensionality */
+/** A named reference-counted handle on a Halide::Buffer<> */
 class BufferPtr {
 private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
