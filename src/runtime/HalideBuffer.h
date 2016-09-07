@@ -23,6 +23,11 @@
 #define ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
+// gcc 5.1 has a false positive warning on this code
+#if __GNUC__ == 5 && __GNUC_MINOR__ == 1
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+
 /** A C struct describing the shape of a single dimension of a halide
  * buffer. This will be a type in the runtime once halide_buffer_t is
  * merged. */
@@ -1088,12 +1093,16 @@ public:
 
     /** Make a zero-dimensional Buffer */
     static Buffer<void, D> make_scalar(halide_type_t t) {
-        return Buffer<void, 1>(t, 1).sliced(0, 0);
+        Buffer<void, D> buf(t, 1);
+        buf.slice(0, 0);
+        return buf;
     }
 
     /** Make a zero-dimensional Buffer */
     static Buffer<T, D> make_scalar() {
-        return Buffer<T, 1>(1).sliced(0, 0);
+        Buffer<T, D> buf(1);
+        buf.slice(0, 0);
+        return buf;
     }
 
 private:
