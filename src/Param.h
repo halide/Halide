@@ -3,6 +3,7 @@
 
 #include <type_traits>
 
+#include "Argument.h"
 #include "IR.h"
 
 /** \file

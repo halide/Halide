@@ -8,7 +8,6 @@
 #include "runtime/HalideBuffer.h"
 #include "Expr.h"
 #include "Util.h"
-#include "Argument.h"
 
 namespace Halide {
 namespace Internal {
@@ -41,9 +40,6 @@ public:
 
     /** Get the runtime name of this buffer used for debugging. */
     EXPORT const std::string &name() const;
-
-    /** Convert this buffer to an argument to a halide pipeline. */
-    EXPORT operator Argument() const;
 
     /** Get the Halide type of the underlying buffer */
     EXPORT Type type() const;

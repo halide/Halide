@@ -6,11 +6,13 @@
  * generated halide pipeline
  */
 
+#include "BufferPtr.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
 #include "runtime/HalideBuffer.h"
+
 
 namespace Halide {
 
@@ -74,7 +76,11 @@ struct Argument {
     }
 
     template<typename T, int D>
-    Argument(const Image<T, D> &im) : kind(InputBuffer), dimensions(im.dimensions()), type(im.type()) {}
+    Argument(const Image<T, D> &im) :
+        name(Internal::BufferPtr(im).name()),
+        kind(InputBuffer),
+        dimensions(im.dimensions()),
+        type(im.type()) {}
 
     bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
     bool is_scalar() const { return kind == InputScalar; }
