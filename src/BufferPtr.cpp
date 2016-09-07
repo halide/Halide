@@ -8,6 +8,8 @@
 #include "IREquality.h"
 #include "IROperator.h"
 
+#include <mutex>
+
 namespace Halide {
 namespace Internal {
 
@@ -28,9 +30,21 @@ EXPORT void destroy<BufferContents>(const BufferContents *p) {
 }
 
 namespace {
-std::string make_buffer_name(const std::string &n, BufferPtr *b) {
+std::string make_buffer_name(const std::string &n, const Image<> &image) {
     if (n.empty()) {
-        return Internal::make_entity_name(b, "Halide::Internal::BufferPtr", 'b');
+        // Embedded images are deduped by name, so it's important that
+        // the same image always gets the same name.
+        static std::mutex name_lock;
+        std::lock_guard<std::mutex> lock_guard(name_lock);
+        static std::map<const void *, std::string> buffer_names;
+        auto it = buffer_names.find(image.data());
+        if (it == buffer_names.end()) {
+            std::string name = unique_name('b');
+            buffer_names[image.data()] = name;
+            return name;
+        } else {
+            return it->second;
+        }
     } else {
         return n;
     }
@@ -40,19 +54,19 @@ std::string make_buffer_name(const std::string &n, BufferPtr *b) {
 BufferPtr::BufferPtr(const Image<> &buf, std::string name) :
     contents(new Internal::BufferContents) {
     contents->image = Image<>(buf);
-    contents->name = make_buffer_name(name, this);
+    contents->name = make_buffer_name(name, contents->image);
 }
 
 BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
     contents(new Internal::BufferContents) {
     contents->image = Image<>(t, buf);
-    contents->name = make_buffer_name(name, this);
+    contents->name = make_buffer_name(name, contents->image);
 }
 
 BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
     contents(new Internal::BufferContents) {
     contents->image = Image<>(t, size);
-    contents->name = make_buffer_name(name, this);
+    contents->name = make_buffer_name(name, contents->image);
 }
 
 bool BufferPtr::same_as(const BufferPtr &other) const {
@@ -73,10 +87,6 @@ bool BufferPtr::defined() const {
 
 const std::string &BufferPtr::name() const {
     return contents->name;
-}
-
-BufferPtr::operator Argument() const {
-    return Argument(name(), Argument::InputBuffer, type(), dimensions());
 }
 
 Type BufferPtr::type() const {
