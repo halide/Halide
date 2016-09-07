@@ -127,6 +127,7 @@ private:
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         const Add *add_a = a.as<Add>();
@@ -309,6 +310,7 @@ private:
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         expr = Expr();
@@ -374,6 +376,7 @@ private:
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         const Add *add_a = a.as<Add>();
@@ -486,6 +489,7 @@ private:
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         const T *t_a = a.as<T>();
@@ -1576,10 +1580,13 @@ void solve_test() {
         check_solve(5 - (4 - 4*x), x*(4) + 1);
         check_solve(z - (y - x), x + (z - y));
         check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+
+        // This is used to cause infinite recursion
+        Expr expr = Add::make(z, Sub::make(x, y));
+        SolverResult solved = solve_expression(expr, "y");
     }
 
     debug(0) << "Solve test passed\n";
-
 }
 
 }
