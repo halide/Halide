@@ -602,14 +602,6 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                expr = hoist_slice_vector<Add>(op);
-            } else {
-                expr = hoist_slice_vector<Add>(Add::make(a, b));
-            }
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -1418,15 +1410,7 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                expr = hoist_slice_vector<Mul>(op);
-            } else {
-                expr = hoist_slice_vector<Mul>(Mul::make(a, b));
-            }
-        }else if (broadcast_a && broadcast_b) {
+        } else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -2387,14 +2371,6 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                expr = hoist_slice_vector<Min>(op);
-            } else {
-                expr = hoist_slice_vector<Min>(min(a, b));
-            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2747,14 +2723,6 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                expr = hoist_slice_vector<Max>(op);
-            } else {
-                expr = hoist_slice_vector<Max>(max(a, b));
-            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -4117,59 +4085,6 @@ private:
             IRMutator::visit(op);
         }
     }
-    template <typename T>
-    Expr hoist_slice_vector(Expr e) {
-        const T *op = e.as<T>();
-        internal_assert(op);
-        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
-
-        const Call *call_a = op->a.template as<Call>();
-        const Call *call_b = op->b.template as<Call>();
-
-        internal_assert(call_a && call_b &&
-                        call_a->is_intrinsic(Call::slice_vector) &&
-                        call_b->is_intrinsic(Call::slice_vector));
-
-        if (!equal(call_a->args[1], call_b->args[1]) ||
-            !equal(call_a->args[2], call_b->args[2])) {
-            debug(4) << " ...unable to hoist - slice vector arguments don't match\n";
-            return e;
-        }
-
-        const Call *concat_a = call_a->args[0].as<Call>();
-        const Call *concat_b = call_b->args[0].as<Call>();
-        if (!concat_a || !concat_b) {
-            debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
-            return e;
-        }
-
-        const std::vector<Expr> &slices_a = concat_a->args;
-        const std::vector<Expr> &slices_b = concat_b->args;
-        if (slices_a.size() != slices_b.size()) {
-            return e;
-        }
-
-        for (size_t i = 0; i < slices_a.size(); i++) {
-            if (slices_a[i].type() != slices_b[i].type()) {
-                debug(4) << " ...unable to hoist - type mismatch\n";
-                return e;
-            }
-        }
-
-        vector<Expr> new_slices;
-        for (size_t i = 0; i < slices_a.size(); i++) {
-            new_slices.push_back(T::make(slices_a[i], slices_b[i]));
-        }
-
-        Expr start_lane = call_a->args[1];
-        Expr result_lanes = call_a->args[3];
-        Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
-        Expr ret_expr = Call::make(op->type, Call::slice_vector,
-                                   {concat_v, start_lane, call_a->args[2], result_lanes},
-                                   Call::PureIntrinsic);
-        debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
-        return ret_expr;
-    }
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
@@ -4201,19 +4116,14 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
-            const Call *call = new_value.as<Call>();
+
             const Variable *var_b = nullptr;
-            const Variable *var_a = nullptr;
             if (add) {
                 var_b = add->b.as<Variable>();
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
-            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
-                       (call->args.size() == 2)) {
-                var_a = call->args[0].as<Variable>();
-                var_b = call->args[1].as<Variable>();
             }
 
             if (is_const(new_value)) {
@@ -4261,20 +4171,6 @@ private:
                 new_value = cast->value;
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
-            } else if (call && call->is_intrinsic(Call::slice_vector)) {
-                new_value = call->args[0];
-                new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
-                                                              {new_var, call->args[1], call->args[2], call->args[3]},
-                                                              Call::PureIntrinsic), replacement);
-            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
-                       ((var_a && !var_b) || (!var_a && var_b))) {
-                new_var = Variable::make(var_a ? call->args[1].type() : call->args[0].type(), new_name);
-                Expr op_a = var_a ? call->args[0] : new_var;
-                Expr op_b = var_a ? new_var : call->args[1];
-                replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
-                                                              {op_a, op_b}, Call::PureIntrinsic), replacement);
-                new_value = var_a ? call->args[1] : call->args[0];
             } else {
                 break;
             }
