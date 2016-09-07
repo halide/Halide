@@ -1094,6 +1094,7 @@ class OptimizeShuffles : public IRMutator {
 public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
+
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
