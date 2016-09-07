@@ -588,7 +588,13 @@ set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} 
+                  RESULT_VARIABLE LLVM_CONFIG_RESULT
+                  OUTPUT_VARIABLE LIBS_UNSTRIPPED
+                  ERROR_VARIABLE LLVM_CONFIG_ERROR)
+  if (${LLVM_CONFIG_RESULT})
+    message(FATAL_ERROR "llvm-config failed: ${LLVM_CONFIG_ERROR}")
+  endif()
   string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
