@@ -1093,14 +1093,14 @@ public:
 
     /** Make a zero-dimensional Buffer */
     static Buffer<void, D> make_scalar(halide_type_t t) {
-        Buffer<void, D> buf(t, 1);
+        Buffer<void, 1> buf(t, 1);
         buf.slice(0, 0);
         return buf;
     }
 
     /** Make a zero-dimensional Buffer */
     static Buffer<T, D> make_scalar() {
-        Buffer<T, D> buf(1);
+        Buffer<T, 1> buf(1);
         buf.slice(0, 0);
         return buf;
     }
