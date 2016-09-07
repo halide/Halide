@@ -1,10 +1,9 @@
 include(CMakeParseArguments)
 
-function(halide_aot_scratch_dir NAME OUTVAR)
-  set(SCRATCH_DIR "${CMAKE_BINARY_DIR}/aot_gen_scratch/${NAME}")
-  file(MAKE_DIRECTORY "${SCRATCH_DIR}")
-  MESSAGE("MAKE ${SCRATCH_DIR}")  
-  set(${OUTVAR} "${SCRATCH_DIR}" PARENT_SCOPE)
+function(halide_generator_genfiles_dir NAME OUTVAR)
+  set(GENFILES_DIR "${CMAKE_BINARY_DIR}/generator_genfiles/${NAME}")
+  file(MAKE_DIRECTORY "${GENFILES_DIR}")
+  set(${OUTVAR} "${GENFILES_DIR}" PARENT_SCOPE)
 endfunction()
 
 # This function adds custom build steps to invoke a Halide generator exectuable
@@ -46,13 +45,13 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   endif()
 
   # Create a directory to contain generator specific intermediate files
-  halide_aot_scratch_dir(${AOT_LIBRARY_TARGET} SCRATCH_DIR)
+  halide_generator_genfiles_dir(${AOT_LIBRARY_TARGET} GENFILES_DIR)
 
   # Determine the name of the output files
   set(FILTER_LIB "${AOT_LIBRARY_TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${AOT_LIBRARY_TARGET}.h")
 
-  set(generator_exec_args "-o" "${SCRATCH_DIR}")
+  set(generator_exec_args "-o" "${GENFILES_DIR}")
   if (NOT ${args_GENERATED_FUNCTION} STREQUAL "")
     list(APPEND generator_exec_args "-f" "${args_GENERATED_FUNCTION}" )
   endif()
@@ -80,17 +79,17 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   # Add a custom target to invoke the GENERATOR_TARGET and output the Halide
   # generated library.
   add_custom_command(
-    OUTPUT "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}"
+    OUTPUT "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}"
     DEPENDS "${args_GENERATOR_TARGET}"
     COMMAND "${generator_exec}" ${generator_exec_args}
-    WORKING_DIRECTORY "${SCRATCH_DIR}"
+    WORKING_DIRECTORY "${GENFILES_DIR}"
   )
 
   # Use a custom target to force it to run the generator before the
   # object file for the runner. 
   set(EXEC_GENERATOR_TARGET "${AOT_LIBRARY_TARGET}.exec_generator")
   add_custom_target(${EXEC_GENERATOR_TARGET}
-                    DEPENDS "${SCRATCH_DIR}/${FILTER_LIB}" "${SCRATCH_DIR}/${FILTER_HDR}")
+                    DEPENDS "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}")
 
   # Place the target in a special folder in IDEs
   set_target_properties(${EXEC_GENERATOR_TARGET} PROPERTIES FOLDER "generator")
@@ -100,15 +99,15 @@ endfunction(halide_add_aot_library)
 # Usage:
 #   halide_add_aot_library_dependency(TARGET AOT_LIBRARY_TARGET)
 function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
-    halide_aot_scratch_dir(${AOT_LIBRARY_TARGET} SCRATCH_DIR)
+    halide_generator_genfiles_dir(${AOT_LIBRARY_TARGET} GENFILES_DIR)
   
     set(FILTER_LIB "${AOT_LIBRARY_TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
     set(EXEC_GENERATOR_TARGET "${AOT_LIBRARY_TARGET}.exec_generator")
     add_dependencies("${TARGET}" "${EXEC_GENERATOR_TARGET}")
 
-    target_link_libraries("${TARGET}" PRIVATE "${SCRATCH_DIR}/${FILTER_LIB}")
-    target_include_directories("${TARGET}" PRIVATE "${SCRATCH_DIR}")
+    target_link_libraries("${TARGET}" PRIVATE "${GENFILES_DIR}/${FILTER_LIB}")
+    target_include_directories("${TARGET}" PRIVATE "${GENFILES_DIR}")
 
     if (WIN32)
       if (MSVC)
