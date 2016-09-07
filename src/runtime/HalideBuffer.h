@@ -131,6 +131,11 @@ class Buffer {
      * providing return types for operator() */
     using not_void_T = typename std::conditional<T_is_void, uint8_t, T>::type;
 
+    /** The type the elements are stored as. Equal to T unless T is a
+     * pointer, in which case uint64_t. Halide stores all pointer
+     * types as uint64s internally, even on 32-bit systems. */
+    using storage_T = typename std::conditional<std::is_pointer<T>::value, uint64_t, T>::type;
+
     /** Get the Halide type of T. Callers should not use the result if
      * T is void. */
     static halide_type_t static_halide_type() {
@@ -652,7 +657,7 @@ public:
                       "where D is at least the desired number of dimensions");
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         initialize_shape(0, first, int(rest)...);
-        buf.elem_size = sizeof(T);
+        buf.elem_size = halide_type_of<T>().bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
         buf.host_dirty = true;
@@ -688,7 +693,7 @@ public:
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
         }
-        buf.elem_size = sizeof(T);
+        buf.elem_size = halide_type_of<T>().bytes();
         buf.host = (uint8_t *)data;
         buf.host_dirty = true;
     }
@@ -1095,18 +1100,18 @@ private:
 
     template<typename ...Args>
     ALWAYS_INLINE
-    T *address_of(int d, int first, Args... rest) const {
+    storage_T *address_of(int d, int first, Args... rest) const {
         return address_of(d+1, rest...) + this->buf.stride[d] * (first - this->buf.min[d]);
     }
 
     ALWAYS_INLINE
-    T *address_of(int d) const {
-        return (T *)(this->buf.host);
+    storage_T *address_of(int d) const {
+        return (storage_T *)(this->buf.host);
     }
 
     ALWAYS_INLINE
-    T *address_of(const int *pos) const {
-        T *ptr = (T *)(this->buf.host);
+    storage_T *address_of(const int *pos) const {
+        storage_T *ptr = (storage_T *)(this->buf.host);
         for (int i = this->dimensions() - 1; i >= 0; i--) {
             ptr += this->buf.stride[i] * (pos[i] - this->buf.min[i]);
         }
