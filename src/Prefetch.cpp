@@ -39,6 +39,7 @@ public:
 private:
     const map<string, Function> &env;
     Scope<Interval> scope;
+    Scope<int> realizations;
     unsigned long ptmp = 0;   // ID for all tmp vars in a prefetch op
 
 private:
@@ -109,6 +110,12 @@ private:
         Type t = get_type(varname, has_static_type);
         string elem_size_name = varname + ".elem_size";
 
+        if (realizations.contains(varname)) {
+            debug(dbg_prefetch2) << "  Found realize node for " << varname << "\n";
+            debug(dbg_prefetch1) << "  Info: not prefetching " << varname << "\n";
+            return;
+        }
+
         std::ostringstream ss; ss << t;
         string type_name = ss.str();
         debug(dbg_prefetch1) << "  prefetch" << ptmp << ": "
@@ -173,7 +180,7 @@ private:
 
         // This box should not be prefetched
         if (!do_prefetch) {
-            debug(dbg_prefetch1) << "  not prefetching " << varname << "\n";
+            debug(dbg_prefetch1) << "  Info: not prefetching " << varname << "\n";
             return;
         }
 
@@ -260,6 +267,13 @@ private:
         IRMutator::visit(op);
         debug(dbg_prefetch5) << "LetStmt scope.pop(" << op->name << ")\n";
         scope.pop(op->name);
+    }
+    void visit(const Realize *op) {
+        realizations.push(op->name, 1);
+        debug(dbg_prefetch5) << "Realize push(" << op->name << ")\n";
+        IRMutator::visit(op);
+        debug(dbg_prefetch5) << "Realize pop(" << op->name << ")\n";
+        realizations.pop(op->name);
     }
 
     void visit(const For *op) {
