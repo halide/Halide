@@ -123,7 +123,7 @@ function(halide_define_aot_test NAME)
                            GENERATOR_TARGET "${NAME}.generator"
                            GENERATOR_NAME "${NAME}"
                            GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
-                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${GENERATOR_ARGS}")
+                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}")
     halide_add_aot_library_dependency("${TARGET}" "${AOT_LIBRARY_TARGET}")
   endif()
 
