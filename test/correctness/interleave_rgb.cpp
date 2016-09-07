@@ -27,6 +27,7 @@ bool test_interleave() {
     }
     Image<T> buff = Image<T>::make_interleaved(256, 128, 3);
     interleaved.realize(buff, target);
+    buff.copy_to_host();
     for (int y = 0; y < buff.height(); y++) {
         for (int x = 0; x < buff.width(); x++) {
             for (int c = 0; c < 3; c++) {
