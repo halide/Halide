@@ -5,14 +5,14 @@
 using Halide::Argument;
 using Halide::Expr;
 using Halide::Func;
-using Halide::Image;
+using Halide::Buffer;
 using Halide::Internal::GeneratorParamValues;
 
 const int kSize = 32;
 
 template<typename Type>
-Image<Type> MakeImage() {
-    Image<Type> im(kSize, kSize, 3);
+Buffer<Type> MakeBuffer() {
+    Buffer<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -24,7 +24,7 @@ Image<Type> MakeImage() {
 }
 
 template<typename InputType, typename OutputType>
-void verify(const Image<InputType> &input, float float_arg, int int_arg, const Image<OutputType> &output) {
+void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -79,13 +79,13 @@ int main(int argc, char **argv) {
         // the input (otherwise we'll get a buffer type mismatch error).
         Halide::Pipeline p = gen.build();
 
-        Image<float> src = MakeImage<float>();
+        Buffer<float> src = MakeBuffer<float>();
         gen.input.set(src);
         gen.float_arg.set(1.234f);
         gen.int_arg.set(33);
 
         Halide::Realization r = p.outputs()[0].realize(kSize, kSize, 3, gen.get_target());
-        Image<int16_t> dst = r[1];
+        Buffer<int16_t> dst = r[1];
         verify(src, 1.234f, 33, dst);
     }
 

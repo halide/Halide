@@ -62,7 +62,7 @@ void schedule(Func f, const Target &t) {
 
 template <typename T>
 int test_bit_counting(const Target &target) {
-    Image<T> input(256);
+    Buffer<T> input(256);
     for (int i = 0; i < 256; i++) {
         if (i < 16) {
             input(i) = i;
@@ -77,7 +77,7 @@ int test_bit_counting(const Target &target) {
     popcount_test(x) = popcount(input(x));
     schedule(popcount_test, target);
 
-    Image<T> popcount_result = popcount_test.realize(256);
+    Buffer<T> popcount_result = popcount_test.realize(256);
     for (int i = 0; i < 256; ++i) {
         if (popcount_result(i) != local_popcount(input(i))) {
             std::string bits_string = as_bits(input(i));
@@ -92,7 +92,7 @@ int test_bit_counting(const Target &target) {
     ctlz_test(x) = count_leading_zeros(input(x));
     schedule(ctlz_test, target);
 
-    Image<T> ctlz_result = ctlz_test.realize(256);
+    Buffer<T> ctlz_result = ctlz_test.realize(256);
     for (int i = 0; i < 256; ++i) {
         if (input(i) == 0) {
             // results are undefined for zero input
@@ -112,7 +112,7 @@ int test_bit_counting(const Target &target) {
     cttz_test(x) = count_trailing_zeros(input(x));
     schedule(cttz_test, target);
 
-    Image<T> cttz_result = cttz_test.realize(256);
+    Buffer<T> cttz_result = cttz_test.realize(256);
     for (int i = 0; i < 256; ++i) {
         if (input(i) == 0) {
             // results are undefined for zero input

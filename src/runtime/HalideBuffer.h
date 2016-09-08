@@ -1446,7 +1446,7 @@ void for_each_element(const buffer_t &buf, Fn &&f) {
     for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
 }
 
-// Temporary code to make Image an alias for Buffer. Will be deprecated very soon.
+// Image is an alias for Buffer. Will be deprecated.
 template<typename T = void, int D = 4> using Image = Buffer<T, D>;
 
 

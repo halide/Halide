@@ -13,7 +13,7 @@ int main() {
         return 1;
     }
 
-    Image<float> input(255, 255, 3);
+    Buffer<float> input(255, 255, 3);
     for (int y=0; y<input.height(); y++) {
         for (int x=0; x<input.width(); x++) {
             for (int c=0; c<3; c++) {
@@ -31,7 +31,7 @@ int main() {
     Func g;
     g(x, y, c) = input(x, y, c);
 
-    Image<float> out(255, 255, 3);
+    Buffer<float> out(255, 255, 3);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
     g.realize(out);

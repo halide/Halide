@@ -19,7 +19,7 @@ int test_per_channel_select() {
 
     cpu(x, y, c) = gpu(x, y, c);
 
-    Image<uint8_t> out(10, 10, 4);
+    Buffer<uint8_t> out(10, 10, 4);
     cpu.realize(out);
 
     // Verify the result
@@ -67,7 +67,7 @@ int test_flag_scalar_select() {
     // This should trigger a copy_to_host operation
     cpu(x, y, c) = gpu(x, y, c);
 
-    Image<uint8_t> out(10, 10, 4);
+    Buffer<uint8_t> out(10, 10, 4);
     cpu.realize(out);
 
     // Verify the result
@@ -100,7 +100,7 @@ int test_flag_pixel_select() {
     Param<int> flag("flag");
     flag.set(flag_value);
 
-    Image<uint8_t> image(10, 10, 4);
+    Buffer<uint8_t> image(10, 10, 4);
     for (int y=0; y<image.height(); y++) {
         for (int x=0; x<image.width(); x++) {
             for (int c=0; c<image.channels(); c++) {
@@ -118,7 +118,7 @@ int test_flag_pixel_select() {
     // This should trigger a copy_to_host operation
     cpu(x, y, c) = gpu(x, y, c);
 
-    Image<uint8_t> out(10, 10, 4);
+    Buffer<uint8_t> out(10, 10, 4);
     cpu.realize(out);
 
     // Verify the result

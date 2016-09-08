@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     o.set_bounds(0, 0, select(o.extent(0) < 22, o.extent(0) + 1, o.extent(0)));
 
     // Make a bounds query buffer
-    Image<float> out_buf(nullptr, 7, 8);
+    Buffer<float> out_buf(nullptr, 7, 8);
     out_buf.set_min(2, 2);
 
     out.infer_input_bounds(out_buf);

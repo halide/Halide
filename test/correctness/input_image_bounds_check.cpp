@@ -16,7 +16,7 @@ void halide_error(void *, const char *msg) {
 extern "C" void set_error_handler(void (*)(void *, const char *));
 
 int main(int argc, char **argv) {
-    Image<float> input(19);
+    Buffer<float> input(19);
     for (int i = 0; i < 19; i++) {
         input(i) = i;
     }
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
     // But if we try to make the input smaller than the vector width, it
     // still won't work.
-    Image<float> small_input(3);
+    Buffer<float> small_input(3);
     Func i;
     i(x) = small_input(x);
     i.vectorize(x, 4);
