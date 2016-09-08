@@ -708,7 +708,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
     halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
-    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_end = 37 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
