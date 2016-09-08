@@ -122,9 +122,9 @@ int main(int argc, char **argv) {
     use_l1.compile_jit();
     use_wrap_for_shared.compile_jit();
 
-    Image<int> out1(1000, 1000);
-    Image<int> out2(1000, 1000);
-    Image<int> out3(1000, 1000);
+    Buffer<int> out1(1000, 1000);
+    Buffer<int> out2(1000, 1000);
+    Buffer<int> out3(1000, 1000);
 
     double shared_time = benchmark(5, 5, [&]() {
             use_shared.realize(out1);

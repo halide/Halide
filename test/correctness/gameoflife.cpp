@@ -33,7 +33,7 @@ Func gameOfLife(ImageParam input, int n) {
 
 int main(int argc, char **argv) {
 
-    Image<uint8_t> board1(32, 32), board2(32, 32), board3(32, 32);
+    Buffer<uint8_t> board1(32, 32), board2(32, 32), board3(32, 32);
 
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {

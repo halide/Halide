@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     //int W = 64*3, H = 64*3;
     const int W = 128, H = 48;
 
-    Image<uint16_t> in(W, H);
+    Buffer<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = rand() & 0xff;
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    Image<uint16_t> tent(3, 3);
+    Buffer<uint16_t> tent(3, 3);
     tent(0, 0) = 1;
     tent(0, 1) = 2;
     tent(0, 2) = 1;
@@ -101,8 +101,8 @@ int main(int argc, char **argv) {
         blur2.vectorize(x, 4).parallel(y);
     }
 
-    Image<uint16_t> out1 = blur1.realize(W, H, target);
-    Image<uint16_t> out2 = blur2.realize(W, H, target);
+    Buffer<uint16_t> out1 = blur1.realize(W, H, target);
+    Buffer<uint16_t> out2 = blur2.realize(W, H, target);
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {

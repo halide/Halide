@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
         interleaved.tile(x, y, xo, yo, x, y, 8, 8).vectorize(x);
     }
 
-    Image<uint16_t> out = interleaved.realize(128, 128, target);
+    Buffer<uint16_t> out = interleaved.realize(128, 128, target);
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
             uint16_t correct = x%2 == 0 ? 3 : 7;

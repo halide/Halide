@@ -4,11 +4,11 @@
 // Yes, this is a little unusual, but it's recommended practice.
 #include "example_generator.cpp"
 
-using Halide::Image;
+using Halide::Buffer;
 
 const int kSize = 32;
 
-void verify(const Image<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
     for (int i = 0; i < kSize; i++) {
         for (int j = 0; j < kSize; j++) {
             for (int c = 0; c < channels; c++) {
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
                                          { "target", "host" },
                                          { "enummy", "foo" },
                                          { "flag", "false" } });
-        Image<int32_t> img = gen.build().realize(kSize, kSize, 3, gen.get_target());
+        Buffer<int32_t> img = gen.build().realize(kSize, kSize, 3, gen.get_target());
         verify(img, 2.392, 1, 3);
     }
     {
@@ -43,13 +43,13 @@ int main(int argc, char **argv) {
         // member values directly, of course.
         Example gen;
         gen.compiletime_factor.set(2.913);
-        Image<int32_t> img = gen.build().realize(kSize, kSize, 3);
+        Buffer<int32_t> img = gen.build().realize(kSize, kSize, 3);
         verify(img, 2.913, 1, 3);
 
         // You can change the GeneratorParams between each call to build().
         gen.compiletime_factor.set(0.1423);
         gen.channels.set(4);
-        Image<int32_t> img2 = gen.build().realize(kSize, kSize, 4);
+        Buffer<int32_t> img2 = gen.build().realize(kSize, kSize, 4);
         verify(img2, 0.1423, 1, 4);
 
         // Setting non-existent GeneratorParams will fail with a user_assert.
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     {
         // If you're fine with the default values of all GeneratorParams,
         // you can just use a temporary:
-        Image<int32_t> img = Example().build().realize(kSize, kSize, 3);
+        Buffer<int32_t> img = Example().build().realize(kSize, kSize, 3);
         verify(img, 1, 1, 3);
     }
     {
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
         Example gen;
         gen.compiletime_factor.set(1.234f);
         gen.runtime_factor.set(3.456f);
-        Image<int32_t> img = gen.build().realize(kSize, kSize, 3);
+        Buffer<int32_t> img = gen.build().realize(kSize, kSize, 3);
         verify(img, 1.234f, 3.456f, 3);
     }
 

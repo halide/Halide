@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 
         p.set(3);
         h.set_custom_trace(my_trace);
-        Image<int> result = h.realize(10);
+        Buffer<int> result = h.realize(10);
 
         for (int i = 0; i < 10; i++) {
             int correct = (i&1) == 1 ? 6 : 22;
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
 
         p.set(3);
         h.set_custom_trace(my_trace);
-        Image<int> result = h.realize(10);
+        Buffer<int> result = h.realize(10);
 
         for (int i = 0; i < 10; i++) {
             int correct = (i&1) == 1 ? 6 : 22;

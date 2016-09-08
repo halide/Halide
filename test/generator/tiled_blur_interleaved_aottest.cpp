@@ -32,7 +32,7 @@ int my_halide_trace(void *user_context, const halide_trace_event *ev) {
 int main(int argc, char **argv) {
     halide_set_custom_trace(&my_halide_trace);
 
-    Image<float> input = Image<float>::make_interleaved(W, H, 3);
+    Buffer<float> input = Buffer<float>::make_interleaved(W, H, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             for (int c = 0; c < 3; c++) {
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    Image<float> output = Image<float>::make_interleaved(W, H, 3);
+    Buffer<float> output = Buffer<float>::make_interleaved(W, H, 3);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
 
