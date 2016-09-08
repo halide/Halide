@@ -41,6 +41,7 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
+#include <llvm/Transforms/Utils/SymbolRewriter.h>
 #include <llvm/ADT/StringMap.h>
 #if !defined(WITH_NATIVE_CLIENT)
 #include <llvm/Object/ArchiveWriter.h>
