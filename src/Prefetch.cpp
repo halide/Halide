@@ -37,10 +37,11 @@ public:
     InjectPrefetch(const map<string, Function> &e)
         : env(e) { }
 private:
-    const map<string, Function> &env;
-    Scope<Interval> scope;
-    Scope<int> realizations;
-    unsigned long ptmp = 0;   // ID for all tmp vars in a prefetch op
+    const map<string, Function> &env;   // Environment
+    Scope<Interval> scope;              // Interval scope
+    Scope<int> rscope;                  // Realize scope
+    stack<string> rstack;               // Realize stack
+    unsigned long ptmp = 0;             // ID for all tmp vars in a prefetch op
 
 private:
     using IRMutator::visit;
@@ -110,7 +111,7 @@ private:
         Type t = get_type(varname, has_static_type);
         string elem_size_name = varname + ".elem_size";
 
-        if (realizations.contains(varname)) {
+        if (rscope.contains(varname)) {
             debug(dbg_prefetch2) << "  Found realize node for " << varname << "\n";
             debug(dbg_prefetch1) << "  Info: not prefetching " << varname << "\n";
             return;
@@ -119,7 +120,7 @@ private:
         std::ostringstream ss; ss << t;
         string type_name = ss.str();
         debug(dbg_prefetch1) << "  prefetch" << ptmp << ": "
-                             << varname << " (" 
+                             << varname << " ("
                              << (has_static_type ? type_name : elem_size_name)
                              << ", dims:" << dims << ")\n";
 
@@ -130,8 +131,8 @@ private:
         }
         debug(dbg_prefetch3) << "    ---------\n";
 
-        // TODO: Opt: check box if it should be prefetched? 
-        // TODO       - Only prefetch if varying by ivar_name? 
+        // TODO: Opt: check box if it should be prefetched?
+        // TODO       - Only prefetch if varying by ivar_name?
         // TODO       - Don't prefetch if "small" all constant dimensions?
         // TODO         e.g. see: camera_pipe.cpp corrected matrix(4,3)
 
@@ -150,7 +151,7 @@ private:
             string min_name = varname + "_prefetch_" + pstr + "_min_" + istr;
             string max_name = varname + "_prefetch_" + pstr + "_max_" + istr;
 
-#if 0  // TODO: Determine if the stride varname is defined - check not yet working
+#if 0  // TODO: Determine if the stride varname is defined
             string stride_name_required = stride_name + ".required";
             string stride_name_constrained = stride_name + ".constrained";
             if (scope.contains(stride_name_required)) {
@@ -260,6 +261,7 @@ private:
         debug(dbg_prefetch5) << "Let scope.pop(" << op->name << ")\n";
         scope.pop(op->name);
     }
+
     void visit(const LetStmt *op) {
         Interval in = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, in);
@@ -268,12 +270,13 @@ private:
         debug(dbg_prefetch5) << "LetStmt scope.pop(" << op->name << ")\n";
         scope.pop(op->name);
     }
+
     void visit(const Realize *op) {
-        realizations.push(op->name, 1);
+        rscope.push(op->name, 1);
+        rstack.push(op->name);
         debug(dbg_prefetch5) << "Realize push(" << op->name << ")\n";
         IRMutator::visit(op);
-        debug(dbg_prefetch5) << "Realize pop(" << op->name << ")\n";
-        realizations.pop(op->name);
+        // Note: the realize scope/stack is cleaned up elsewhere
     }
 
     void visit(const For *op) {
@@ -283,16 +286,25 @@ private:
         string ivar_name = tuple_var(op->name);
         vector<Prefetch> &prefetches = get_func(func_name).schedule().prefetches();
 
+        debug(dbg_prefetch4) << "For: " << op->name << " " << func_name << " " << ivar_name << "\n";
         if (prefetches.empty()) {
-            debug(dbg_prefetch4) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
             debug(dbg_prefetch4) << " No prefetch directives in schedule\n";
         } else {
-            debug(dbg_prefetch4) << "InjectPrefetch: " << op->name << " " << func_name << " " << ivar_name;
             debug(dbg_prefetch4) << " Found prefetch directive(s) in schedule\n";
         }
 
+        // Record current position on realize stack
+        size_t rpos = rstack.size();
+        debug(dbg_prefetch5) << " Realize stack for " << op->name << " on entry:" << rstack.size() << "\n";
+
+        body = mutate(body);
+
+        if (rstack.size() > rpos) {
+            debug(dbg_prefetch5) << " Realize stack for " << op->name << " during:" << rstack.size() << "\n";
+        }
+
         for (const Prefetch &p : prefetches) {
-            debug(dbg_prefetch4) << "InjectPrefetch: check ivar:" << p.var << "\n";
+            debug(dbg_prefetch4) << " Check prefetch ivar: " << p.var << " == " << ivar_name << "\n";
             if (p.var == ivar_name) {
                 debug(dbg_prefetch4) << " Found directive matching " << ivar_name << "\n";
                 debug(dbg_prefetch1) << " " << func_name
@@ -302,7 +314,9 @@ private:
                 Expr var = Variable::make(Int(32), op->name);
                 Interval prein(var + p.offset, var + p.offset);
                 scope.push(op->name, prein);
-                debug(dbg_prefetch5) << "For scope.push(" << op->name << ")\n";
+                debug(dbg_prefetch5) << " For scope.push(" << op->name << ", ("
+                                     << var << " + " << p.offset << ", "
+                                     << var << " + " << p.offset << "))\n";
 
                 map<string, Box> boxes;
                 boxes = boxes_required(body, scope);
@@ -318,13 +332,22 @@ private:
 
                 inject_prefetch_stmts(op, p, plets, pstmts, body);
 
-                debug(dbg_prefetch5) << "For scope.pop(" << op->name << ")\n";
+                debug(dbg_prefetch5) << " For scope.pop(" << op->name << ")\n";
                 scope.pop(op->name);
             }
         }
 
-        body = mutate(body);
+        // Restore previous position on realize stack
+        while (rstack.size() > rpos) {
+            string &rname = rstack.top();
+            rscope.pop(rname);
+            rstack.pop();
+            debug(dbg_prefetch5) << "Realize pop(" << rname << ")\n";
+        }
+        debug(dbg_prefetch5) << "Realize stack for " << op->name << " on exit:" << rstack.size() << "\n";
+
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        debug(dbg_prefetch4) << "EndFor: " << op->name << "\n";
     }
 
 };
