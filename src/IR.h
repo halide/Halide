@@ -574,6 +574,8 @@ struct Call : public ExprNode<Call> {
 struct Variable : public ExprNode<Variable> {
     std::string name;
 
+    unsigned int unique_ivar_or_zero;
+
     /** References to scalar parameters, or to the dimensions of buffer
      * parameters hang onto those expressions. */
     Parameter param;
@@ -584,23 +586,23 @@ struct Variable : public ExprNode<Variable> {
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
-    static Expr make(Type type, std::string name) {
-        return make(type, name, BufferPtr(), Parameter(), ReductionDomain());
+    static Expr make(Type type, std::string name, unsigned int unique = 0) {
+        return make(type, name, BufferPtr(), Parameter(), ReductionDomain(), unique);
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, BufferPtr(), param, ReductionDomain());
+        return make(type, name, BufferPtr(), param, ReductionDomain(), 0);
     }
 
     static Expr make(Type type, std::string name, BufferPtr image) {
-        return make(type, name, image, Parameter(), ReductionDomain());
+        return make(type, name, image, Parameter(), ReductionDomain(), 0);
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, BufferPtr(), Parameter(), reduction_domain);
+        return make(type, name, BufferPtr(), Parameter(), reduction_domain, 0);
     }
 
-    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain, unsigned int unique = 0);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };

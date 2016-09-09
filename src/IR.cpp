@@ -525,11 +525,12 @@ Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, Call
     return node;
 }
 
-Expr Variable::make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain) {
+  Expr Variable::make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain, unsigned int unique) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;
     node->name = name;
+    node->unique_ivar_or_zero = unique;
     node->image = image;
     node->param = param;
     node->reduction_domain = reduction_domain;

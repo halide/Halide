@@ -11,6 +11,7 @@
 #include "Reduction.h"
 
 #include <map>
+#include <set>
 
 namespace Halide {
 
@@ -23,7 +24,12 @@ namespace Internal {
 
 class IRVisitor;
 class IRMutator;
+struct Variable;
 struct Specialization;
+
+struct IVarOrdering {
+    bool operator()(const Variable *a, const Variable *b) const;
+};
 
 /** A Function definition which can either represent a init or an update
  * definition. A function may have different definitions due to specialization,
@@ -113,6 +119,13 @@ public:
     const Specialization &add_specialization(Expr condition);
     // @}
 
+    /** Access to the implicit vars of a definition. While
+     *  defining the function, this list may be added to.
+     */
+    // @{
+    std::set<const Variable *, IVarOrdering> &ivars();
+    const std::set<const Variable *, IVarOrdering> &ivars() const;
+    // @}
 };
 
 struct Specialization {

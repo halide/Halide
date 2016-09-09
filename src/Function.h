@@ -133,6 +133,9 @@ public:
     /** Get the pure arguments */
     EXPORT const std::vector<std::string> args() const;
 
+    /** Get the implicit vars of a Function. */
+    EXPORT const std::set<const Variable *, IVarOrdering> ivars() const;
+
     /** Get the dimensionality */
     EXPORT int dimensions() const;
 

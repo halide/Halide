@@ -2257,7 +2257,15 @@ FuncRef::operator Expr() const {
         << "Can't convert a reference Func \"" << func.name()
         << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
 
-    return Call::make(func, args);
+    if (!func.ivars().empty()) {
+        std::vector<Expr> args_with_ivars = args;
+	for (const Variable *v : func.ivars()) {
+	    args_with_ivars.push_back(Expr(v));
+	}
+        return Call::make(func, args_with_ivars);
+    } else {
+        return Call::make(func, args);
+    }
 }
 
 FuncTupleElementRef FuncRef::operator[](int i) const {

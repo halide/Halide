@@ -13,11 +13,16 @@ using std::vector;
 using std::string;
 using std::map;
 
+bool IVarOrdering::operator()(const Variable *a, const Variable *b) const {
+    return a->unique_ivar_or_zero < b->unique_ivar_or_zero;
+}
+
 struct DefinitionContents {
     mutable RefCount ref_count;
     bool is_init;
     Expr predicate;
     std::vector<Expr> values, args;
+    std::set<const Variable *, IVarOrdering> ivars;
     Schedule schedule;
     std::vector<Specialization> specializations;
 
@@ -201,6 +206,14 @@ const Specialization &Definition::add_specialization(Expr condition) {
 
     contents->specializations.push_back(s);
     return contents->specializations.back();
+}
+
+std::set<const Variable *, IVarOrdering> &Definition::ivars() {
+    return contents->ivars;
+}
+
+const std::set<const Variable *, IVarOrdering> &Definition::ivars() const {
+    return contents->ivars;
 }
 
 }

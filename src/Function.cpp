@@ -121,6 +121,8 @@ EXPORT void destroy<FunctionContents>(const FunctionContents *f) {
 // internal to the expression
 struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
+    set<const Variable *, IVarOrdering> ivars;
+
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
     const std::string name;
@@ -165,6 +167,11 @@ struct CheckVars : public IRGraphVisitor {
         for (size_t i = 0; i < pure_args.size(); i++) {
             if (var->name == pure_args[i]) return;
         }
+
+	if (var->unique_ivar_or_zero != 0) {
+	    ivars.insert(var);
+	    return;
+	}
 
         // Is it in a reduction domain?
         if (var->reduction_domain.defined()) {
@@ -438,10 +445,18 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         pure_def_args[i] = Var(args[i]);
     }
 
+    contents->init_def.ivars() = check.ivars;
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {args[i]};
+        contents->init_def.schedule().storage_dims().push_back(sd);
+    }
+    // add ivars to schedule
+    for (const Variable *v : check.ivars) {
+        Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        contents->init_def.schedule().dims().push_back(d);
+        StorageDim sd = {v->name};
         contents->init_def.schedule().storage_dims().push_back(sd);
     }
 
@@ -737,6 +752,10 @@ const std::vector<std::string> Function::args() const {
         arg_names[i] = var->name;
     }
     return arg_names;
+}
+
+const std::set<const Variable *, IVarOrdering> Function::ivars() const {
+    return contents->init_def.ivars();
 }
 
 int Function::dimensions() const {

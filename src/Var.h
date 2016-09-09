@@ -16,9 +16,15 @@ namespace Halide {
  * Int(32). */
 class Var {
     std::string _name;
+    unsigned int unique_ivar_or_zero;
+
+protected:
+    /** Construct a Var with the given name */
+    EXPORT Var(const std::string &n, unsigned int unique_ivar_or_zero);
+
 public:
     /** Construct a Var with the given name */
-    EXPORT Var(const std::string &n);
+    EXPORT Var(const std::string &n) : Var(n, 0) { };
 
     /** Construct a Var with an automatically-generated unique name. */
     EXPORT Var();
@@ -27,12 +33,15 @@ public:
     const std::string &name() const {return _name;}
 
     /** Test if two Vars are the same. This simply compares the names. */
-    bool same_as(const Var &other) const {return _name == other._name;}
+    bool same_as(const Var &other) const {
+        return _name == other._name &&
+	       unique_ivar_or_zero == other.unique_ivar_or_zero;
+    }
 
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments
      * to the function are fewer than its dimensionality and a
-     * placeholder ("_") appears in its argument list. Defining a
+c     * placeholder ("_") appears in its argument list. Defining a
      * function to equal an expression containing implicit variables
      * similarly appends those implicit variables, in the same order,
      * to the left-hand-side of the definition where the placeholder
@@ -146,7 +155,17 @@ public:
 
     /** A Var can be treated as an Expr of type Int(32) */
     operator Expr() const {
-        return Internal::Variable::make(Int(32), name());
+        return Internal::Variable::make(Int(32), name(), unique_ivar_or_zero);
+    }
+
+    /** Return whether this is an IVar. */
+    bool is_ivar() { return unique_ivar_or_zero != 0; }
+
+    /** Return whether this var/ivar sorts earlier than another.
+     * All Vars sort before all IVars, but there is no ordering between
+     * non-IVar Vars. */
+    bool earlier_ivar(const Var &other) {
+        return unique_ivar_or_zero < other.unique_ivar_or_zero;
     }
 
     /** Vars to use for scheduling producer/consumer pairs on the gpu. */
@@ -163,7 +182,17 @@ public:
     static Var outermost() {
         return Var("__outermost");
     }
+};
 
+class IVar : public Var {
+    static unsigned int next_ivar_id();
+public:
+
+    // TODO: This unique_name call is done to prevent IVar names from
+    // matching Var names. This is a total hack and is not 100% reliable as
+    // Var's can be made with an name.
+    IVar(const std::string &n) : Var(n + Internal::unique_name('i'), next_ivar_id()) {
+    }
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
