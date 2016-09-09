@@ -558,15 +558,7 @@ public:
 
     Target get_target() const { return target; }
 
-    EXPORT GeneratorParamValues get_generator_param_values();
     EXPORT void set_generator_param_values(const GeneratorParamValues &params);
-
-    std::vector<Argument> get_filter_arguments() {
-        build_params();
-        return filter_arguments;
-    }
-
-    EXPORT std::vector<Argument> get_filter_output_types();
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -580,14 +572,6 @@ public:
     int natural_vector_size() const {
         return get_target().natural_vector_size<data_t>();
     }
-
-    // Call build() and produce compiled output of the given func.
-    // All files will be in the given directory, with the given file_base_name
-    // plus an appropriate extension. If file_base_name is empty, function_name
-    // will be used as file_base_name. If function_name is empty, generator_name()
-    // will be used for the function.
-    EXPORT void emit_filter(const std::string &output_dir, const std::string &function_name = "",
-                            const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
@@ -605,9 +589,9 @@ private:
     std::vector<Internal::GeneratorParamBase *> generator_params;
     std::vector<Argument> filter_arguments;
     bool params_built{false};
+    bool generator_params_set{false};
 
-    EXPORT void build_params();
-    EXPORT void rebuild_params();
+    EXPORT void build_params(bool force = false);
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
