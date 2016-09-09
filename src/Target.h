@@ -204,8 +204,8 @@ struct Target {
      *
      *   arch-bits-os-feature1-feature2...featureN.
      *
-     * Note that is guaranteed that t2.from_string(t1.to_string()) == t1,
-     * but not that from_string(s).to_string() == s (since there can be
+     * Note that is guaranteed that Target(t1.to_string()) == t1,
+     * but not that Target(s).to_string() == s (since there can be
      * multiple strings that parse to the same Target)...
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).
