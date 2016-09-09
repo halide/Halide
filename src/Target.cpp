@@ -391,14 +391,19 @@ void bad_target_string(const std::string &target) {
         }
     }
     user_error << "Did not understand Halide target " << target << "\n"
-               << "Expected format is arch-os-feature1-feature2-...\n"
-               << "Where arch is " << architectures << " .\n"
-               << "Os is " << oses << " .\n"
-               << "If arch or os are omitted, they default to the host.\n"
-               << "Features are " << features << " .\n"
+               << "Expected format is arch-bits-os-feature1-feature2-...\n"
+               << "Where arch is: " << architectures << ".\n"
+               << "bits is either 32 or 64.\n"
+               << "os is: " << oses << ".\n"
+               << "\n"
+               << "If arch, bits, or os are omitted, they default to the host.\n"
+               << "\n"
+               << "Features are: " << features << ".\n"
+               << "\n"
                << "The target can also begin with \"host\", which sets the "
                << "host's architecture, os, and feature set, with the "
                << "exception of the GPU runtimes, which default to off.\n"
+               << "\n"
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
