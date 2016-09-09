@@ -300,7 +300,7 @@ bool merge_string(Target &t, const std::string &target) {
     }
     tokens.push_back(rest);
 
-    bool os_specified = false, arch_specified = false, bits_specified = false;
+    bool os_specified = false, arch_specified = false, bits_specified = false, features_specified = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
         const string &tok = tokens[i];
@@ -312,7 +312,7 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             t = get_host_target();
-        } else if (tok == "32" || tok == "64") {
+        } else if (tok == "32" || tok == "64" || tok == "0") {
             if (bits_specified) {
                 return false;
             }
@@ -330,6 +330,7 @@ bool merge_string(Target &t, const std::string &target) {
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
+            features_specified = true;
         } else {
             return false;
         }
@@ -345,6 +346,16 @@ bool merge_string(Target &t, const std::string &target) {
             return false;
         }
         if (!bits_specified || t.bits != 32) {
+            return false;
+        }
+    }
+
+    if (bits_specified && t.bits == 0) {
+        // bits == 0 is allowed iff arch and os are "unknown" and no features are set,
+        // to allow for roundtripping the string for default Target() ctor.
+        if (!(arch_specified && t.arch == Target::ArchUnknown) ||
+            !(os_specified && t.os == Target::OSUnknown) ||
+            features_specified) {
             return false;
         }
     }
