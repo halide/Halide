@@ -1052,9 +1052,10 @@ string CodeGen_ARM::mattrs() const {
 bool CodeGen_ARM::use_soft_float_abi() const {
     // One expects the flag is irrelevant on 64-bit, but we'll make the logic
     // exhaustive anyway. It is not clear the armv7s case is necessary either.
-    return target.bits == 32 &&
-        ((target.os == Target::Android) ||
-         (target.os == Target::IOS && !target.has_feature(Target::ARMv7s)));
+    return target.has_feature(Target::SoftFloatABI) ||
+        (target.bits == 32 &&
+         ((target.os == Target::Android) ||
+          (target.os == Target::IOS && !target.has_feature(Target::ARMv7s))));
 }
 
 int CodeGen_ARM::native_vector_bits() const {
