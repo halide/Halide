@@ -13,7 +13,7 @@
 // in HalideRuntime.h without them. Instead we use a pragma that adds
 // a linker flag. Because the pragma is in a macro, we use __pragma
 // instead of #pragma
-#if _LP64
+#ifdef _WIN64
 #define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:" #n))  
 #else
 #define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:_" #n)) 
