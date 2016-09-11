@@ -35,7 +35,7 @@ public:
     /** Test if two Vars are the same. This simply compares the names. */
     bool same_as(const Var &other) const {
         return _name == other._name &&
-	       unique_ivar_or_zero == other.unique_ivar_or_zero;
+               unique_ivar_or_zero == other.unique_ivar_or_zero;
     }
 
     /** Implicit var constructor. Implicit variables are injected

@@ -430,7 +430,7 @@ private:
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(make_zero(f.output_types()[0]));
             std::string max_stage_num = std::to_string(f.updates().size());
-            const std::vector<std::string> f_args = f.args();
+            const std::vector<std::string> f_args = f.all_args();
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f_args[i] + ".min");
                 Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f_args[i] + ".max");

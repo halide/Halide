@@ -59,7 +59,7 @@ const string &Func::name() const {
 
 /** Get the pure arguments. */
 std::vector<Var> Func::args() const {
-    const std::vector<std::string> arg_names = func.args();
+    const std::vector<std::string> arg_names = func.explicit_args();
     std::vector<Var> args(arg_names.size());
     for (size_t i = 0; i < arg_names.size(); i++) {
         args[i] = Var(arg_names[i]);
@@ -94,7 +94,7 @@ const std::vector<Expr> &Func::update_args(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    return func.update(idx).args();
+    return func.update(idx).explicit_args();
 }
 
 /** Get the right-hand-side of the update definition. An error if
@@ -184,7 +184,8 @@ EXPORT const std::string &Func::extern_function_name() const {
 
 int Func::dimensions() const {
     if (!defined()) return 0;
-    return func.dimensions();
+    // TODO: Figure out what to do here...
+    return func.explicit_args().size();
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
@@ -477,7 +478,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         func_name = tmp[0];
     }
 
-    vector<Expr> &args = definition.args();
+    vector<Expr> args = definition.all_args();
     vector<Expr> &values = definition.values();
 
     // Check whether the operator is associative and determine the operator and
@@ -1632,8 +1633,8 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
     invalidate_cache();
     bool found = false;
-    for (size_t i = 0; i < func.args().size(); i++) {
-        if (var.name() == func.args()[i]) {
+    for (const auto &arg_name : func.all_args()) {
+        if (var.name() == arg_name) {
             found = true;
         }
     }
@@ -1667,8 +1668,8 @@ Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
     invalidate_cache();
 
     bool found = false;
-    for (size_t i = 0; i < func.args().size(); i++) {
-        if (var.name() == func.args()[i]) {
+    for (const auto &arg_name : func.all_args()) {
+        if (var.name() == arg_name) {
             found = true;
         }
     }
@@ -2096,15 +2097,14 @@ Stage FuncRef::operator=(const Tuple &e) {
             expanded_args_str[i] = v->name;
         }
         func.define(expanded_args_str, e.as_vector());
-        return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
-
+        return Stage(func.definition(), func.name(), func.explicit_args(), func.schedule().storage_dims());
     } else {
         func.define_update(args, e.as_vector());
 
         size_t update_stage = func.updates().size() - 1;
         return Stage(func.update(update_stage),
                      func.name() + ".update(" + std::to_string(update_stage) + ")",
-                     func.args(),
+                     func.explicit_args(),
                      func.schedule().storage_dims());
     }
 }
@@ -2257,11 +2257,11 @@ FuncRef::operator Expr() const {
         << "Can't convert a reference Func \"" << func.name()
         << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
 
-    if (!func.ivars().empty()) {
+    if (!func.implicit_args().empty()) {
         std::vector<Expr> args_with_ivars = args;
-	for (const Variable *v : func.ivars()) {
-	    args_with_ivars.push_back(Expr(v));
-	}
+        for (const Expr &e : func.implicit_args()) {
+            args_with_ivars.push_back(e);
+        }
         return Call::make(func, args_with_ivars);
     } else {
         return Call::make(func, args);

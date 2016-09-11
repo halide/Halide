@@ -390,7 +390,8 @@ Stmt build_provide_loop_nest(string func_name,
     internal_assert(!is_update == def.is_init());
 
     // Default stored values
-    vector<Expr> site(def.args().size());
+    auto args(def.all_args());
+    vector<Expr> site(args.size());
     vector<Expr> values(def.values().size());
     for (size_t i = 0; i < values.size(); i++) {
         Expr v = def.values()[i];
@@ -400,8 +401,8 @@ Stmt build_provide_loop_nest(string func_name,
     }
 
     // Default stored locations
-    for (size_t i = 0; i < def.args().size(); i++) {
-        Expr s = def.args()[i];
+    for (size_t i = 0; i < args.size(); i++) {
+        Expr s = args[i];
         s = qualify(prefix, s);
         site[i] = s;
         debug(3) << "Site " << i << " = " << s << "\n";
@@ -500,7 +501,7 @@ Stmt build_produce(Function f) {
                 stride_name += ".0";
             }
             string stage_name = f.name() + ".s0.";
-            const vector<string> f_args = f.args();
+            const vector<string> f_args = f.all_args();
             for (int j = 0; j < f.outputs(); j++) {
 
                 vector<Expr> buffer_args(2);
@@ -554,7 +555,7 @@ Stmt build_produce(Function f) {
     } else {
 
         string prefix = f.name() + ".s0.";
-        vector<string> dims = f.args();
+        vector<string> dims = f.all_args();
         return build_provide_loop_nest(f.name(), prefix, dims, f.definition(), false);
     }
 }
@@ -569,7 +570,7 @@ vector<Stmt> build_update(Function f) {
 
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
-        vector<string> dims = f.args();
+        vector<string> dims = f.all_args();
         Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, def, true);
         updates.push_back(loop);
     }
@@ -680,7 +681,7 @@ private:
         if (!is_output) {
             Region bounds;
             string name = func.name();
-            const vector<string> func_args = func.args();
+            const vector<string> func_args = func.all_args();
             for (int i = 0; i < func.dimensions(); i++) {
                 const string &arg = func_args[i];
                 Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");

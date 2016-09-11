@@ -1407,7 +1407,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
     for (size_t i = 0; i < order.size(); i++) {
         Function f = env.find(order[i])->second;
-        const vector<string> f_args = f.args();
+        const vector<string> f_args = f.all_args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = make_pair(f.name(), j);
 
@@ -1417,7 +1417,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
                 // Make a scope that says the args could be anything.
                 Scope<Interval> arg_scope;
-                for (size_t k = 0; k < f.args().size(); k++) {
+                for (size_t k = 0; k < f.all_args().size(); k++) {
                     arg_scope.push(f_args[k], Interval::everything());
                 }
 

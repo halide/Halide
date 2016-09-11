@@ -92,7 +92,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
     // in the definition (including in its specializations)
     bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
-        const Variable *var = def.args()[dim_idx].as<Variable>();
+        const Variable *var = def.all_args()[dim_idx].as<Variable>();
         if ((!var) || (var->name != dim)) {
             return false;
         }
@@ -125,7 +125,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Region provided:\n";
 
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
-            const std::vector<string> func_args = func.args();
+            const std::vector<string> func_args = func.all_args();
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];

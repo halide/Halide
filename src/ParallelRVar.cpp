@@ -93,7 +93,7 @@ bool can_parallelize_rvar(const string &v,
                           const string &f,
                           const Definition &r) {
     const vector<Expr> &values = r.values();
-    const vector<Expr> &args = r.args();
+    const vector<Expr> &args = r.all_args();
     const vector<ReductionVariable> &rvars = r.schedule().rvars();
 
     FindLoads find(f);

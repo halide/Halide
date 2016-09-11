@@ -131,10 +131,17 @@ public:
     EXPORT const Definition &definition() const;
 
     /** Get the pure arguments */
-    EXPORT const std::vector<std::string> args() const;
+    EXPORT const std::vector<std::string> explicit_args() const;
 
-    /** Get the implicit vars of a Function. */
-    EXPORT const std::set<const Variable *, IVarOrdering> ivars() const;
+    /** Get all arguments, both explicit and implicit. The explicit ones
+     * come from the pure definition and the implicit ones are the union
+     * of all implicits used in all definitions, including update definitions.
+     * All Exprs in this list must be Variable nodes directly. */
+    EXPORT const std::vector<std::string> all_args() const;
+
+    /** Get the implicit vars of a Function. All Exprs in this list must be
+     * Variable nodes directly. */
+    const std::set<Expr, IVarOrdering> implicit_args() const;
 
     /** Get the dimensionality */
     EXPORT int dimensions() const;

@@ -126,7 +126,7 @@ private:
             map<string, Function>::const_iterator iter = env.find(realize->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             const vector<StorageDim> &storage_dims = iter->second.schedule().storage_dims();
-            const vector<string> args = iter->second.args();
+            const vector<string> args = iter->second.all_args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {

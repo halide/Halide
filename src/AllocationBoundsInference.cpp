@@ -29,7 +29,7 @@ class AllocationInference : public IRMutator {
         map<string, Function>::const_iterator iter = env.find(op->name);
         internal_assert(iter != env.end());
         Function f = iter->second;
-        const vector<string> f_args = f.args();
+        const vector<string> f_args = f.all_args();
 
         Scope<Interval> empty_scope;
         Box b = box_touched(op->body, op->name, empty_scope, func_bounds);

@@ -103,7 +103,7 @@ class Inliner : public IRMutator {
             // Grab the body
             Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
 
-            const vector<string> func_args = func.args();
+            const vector<string> func_args = func.all_args();
 
             // Bind the args using Let nodes
             internal_assert(args.size() == func_args.size());

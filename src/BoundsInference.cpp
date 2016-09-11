@@ -145,7 +145,7 @@ public:
 
             vector<vector<Expr>> vecs(2);
             if (is_update) {
-                vecs[0] = def.args();
+                vecs[0] = def.all_args(); // TODO: determine if this is right?
             }
             vecs[1] = def.values();
 
@@ -244,7 +244,7 @@ public:
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
         // in the definition (including in its specializations)
         bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
-            const Variable *var = def.args()[dim_idx].as<Variable>();
+            const Variable *var = def.all_args()[dim_idx].as<Variable>();
             if ((!var) || (var->name != dim)) {
                 return false;
             }
@@ -269,7 +269,7 @@ public:
             // Merge all the relevant boxes.
             Box b;
 
-            const vector<string> func_args = func.args();
+            const vector<string> func_args = func.all_args();
 
             for (const pair<pair<string, int>, Box> &i : bounds) {
                 string func_name = i.first.first;
@@ -522,7 +522,7 @@ public:
                 vector<Expr> output_buffer_t_args(2);
                 output_buffer_t_args[0] = null_handle;
                 output_buffer_t_args[1] = make_zero(func.output_types()[j]);
-                for (const string arg : func.args()) {
+                for (const string arg : func.all_args()) {
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
@@ -567,7 +567,7 @@ public:
         // We need to take into account specializations which may refer to
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
-            for (const string farg : func.args()) {
+            for (const string farg : func.all_args()) {
                 string arg = name + ".s" + std::to_string(stage) + "." + farg;
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg + ".min"),
@@ -871,7 +871,7 @@ public:
             // Finally, define the production bounds for the thing
             // we're producing.
             if (producing >= 0 && !inner_productions.empty()) {
-                const vector<string> f_args = f.args();
+                const vector<string> f_args = f.all_args();
                 for (size_t i = 0; i < box.size(); i++) {
                     internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f_args[i];

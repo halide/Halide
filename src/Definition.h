@@ -28,7 +28,7 @@ struct Variable;
 struct Specialization;
 
 struct IVarOrdering {
-    bool operator()(const Variable *a, const Variable *b) const;
+    bool operator()(Expr a, Expr b) const;
 };
 
 /** A Function definition which can either represent a init or an update
@@ -50,7 +50,7 @@ public:
     EXPORT explicit Definition(const IntrusivePtr<DefinitionContents> &);
 
     /** Construct a Definition with the supplied args, values, and reduction domain. */
-    EXPORT Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
+    EXPORT Definition(const std::vector<Expr> &explicit_args, const std::vector<Expr> &values,
                       const ReductionDomain &rdom, bool is_init);
 
     /** Construct an empty Definition. By default, it is a init definition. */
@@ -82,12 +82,28 @@ public:
      * definition. */
     void mutate(IRMutator *);
 
-    /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
+    /** Get the default (no-specialization) arguments (left-hand-side) of the definition.
+     * Only includes the arguments the caller must provide. Implicit vars are not included. */
     // @{
-    const std::vector<Expr> &args() const;
-    std::vector<Expr> &args();
+    const std::vector<Expr> &explicit_args() const;
+    std::vector<Expr> &explicit_args();
     // @}
 
+    /** Access to the implicit vars of a definition. While
+     *  defining the function, this list may be added to.
+     */
+    // @{
+    std::set<Expr , IVarOrdering> &implicit_args();
+    const std::set<Expr, IVarOrdering> &implicit_args() const;
+
+    /** Get list of both explicit args and implicit args. This is the argument
+     * list visible to the backend. Implicit vars are appropriately ordered at
+     * the end of the list. */
+    // @{
+    std::vector<Expr> all_args() const;
+    // @}
+
+    // @}
     /** Get the default (no-specialization) right-hand-side of the definition */
     // @{
     const std::vector<Expr> &values() const;
@@ -117,14 +133,6 @@ public:
     const std::vector<Specialization> &specializations() const;
     std::vector<Specialization> &specializations();
     const Specialization &add_specialization(Expr condition);
-    // @}
-
-    /** Access to the implicit vars of a definition. While
-     *  defining the function, this list may be added to.
-     */
-    // @{
-    std::set<const Variable *, IVarOrdering> &ivars();
-    const std::set<const Variable *, IVarOrdering> &ivars() const;
     // @}
 };
 

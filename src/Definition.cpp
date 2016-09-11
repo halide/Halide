@@ -13,8 +13,12 @@ using std::vector;
 using std::string;
 using std::map;
 
-bool IVarOrdering::operator()(const Variable *a, const Variable *b) const {
-    return a->unique_ivar_or_zero < b->unique_ivar_or_zero;
+bool IVarOrdering::operator()(Expr a, Expr b) const {
+    const Variable *va = a.as<Variable>();
+    internal_assert(va != nullptr) << "IVar Expr is not a Variable.\n";
+    const Variable *vb = b.as<Variable>();
+    internal_assert(vb != nullptr) << "IVar Expr is not a Variable.\n";
+    return va->unique_ivar_or_zero < vb->unique_ivar_or_zero;
 }
 
 struct DefinitionContents {
@@ -22,7 +26,7 @@ struct DefinitionContents {
     bool is_init;
     Expr predicate;
     std::vector<Expr> values, args;
-    std::set<const Variable *, IVarOrdering> ivars;
+    std::set<Expr, IVarOrdering> ivars;
     Schedule schedule;
     std::vector<Specialization> specializations;
 
@@ -114,6 +118,7 @@ Definition Definition::deep_copy(
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
+    copy.contents->ivars = contents->ivars;
     copy.contents->schedule = contents->schedule.deep_copy(copied_map);
 
     // Deep-copy specializations
@@ -138,12 +143,29 @@ void Definition::mutate(IRMutator *mutator) {
     contents->mutate(mutator);
 }
 
-std::vector<Expr> &Definition::args() {
+std::vector<Expr> &Definition::explicit_args() {
     return contents->args;
 }
 
-const std::vector<Expr> &Definition::args() const {
+const std::vector<Expr> &Definition::explicit_args() const {
     return contents->args;
+}
+
+std::set<Expr, IVarOrdering> &Definition::implicit_args() {
+    return contents->ivars;
+}
+
+const std::set<Expr, IVarOrdering> &Definition::implicit_args() const {
+    return contents->ivars;
+}
+
+std::vector<Expr> Definition::all_args() const {
+    // TODO: cache this.
+    std::vector<Expr> result = explicit_args();
+    for (const auto ea : implicit_args()) {
+        result.push_back(ea);
+    }
+    return result;
 }
 
 std::vector<Expr> &Definition::values() {
@@ -191,6 +213,7 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
     s.definition.contents->args   = contents->args;
+    s.definition.contents->ivars   = contents->ivars;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
     s.definition.contents->schedule.store_level()      = contents->schedule.store_level();
@@ -206,14 +229,6 @@ const Specialization &Definition::add_specialization(Expr condition) {
 
     contents->specializations.push_back(s);
     return contents->specializations.back();
-}
-
-std::set<const Variable *, IVarOrdering> &Definition::ivars() {
-    return contents->ivars;
-}
-
-const std::set<const Variable *, IVarOrdering> &Definition::ivars() const {
-    return contents->ivars;
 }
 
 }

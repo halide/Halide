@@ -19,9 +19,17 @@ namespace {
 
 void substitute_value_in_var(const string &var, Expr value, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
-        for (auto &def_arg : def.args()) {
+        for (auto &def_arg : def.explicit_args()) {
             def_arg = simplify(substitute(var, value, def_arg));
         }
+
+        // TODO: This seems like it could convert an implicit variable to something else.
+        std::set<Expr, IVarOrdering> new_implicits;
+        for (auto &def_arg : def.implicit_args()) {
+            new_implicits.insert(simplify(substitute(var, value, def_arg)));
+        }
+        def.implicit_args() = new_implicits;
+
         for (auto &def_val : def.values()) {
             def_val = simplify(substitute(var, value, def_val));
         }

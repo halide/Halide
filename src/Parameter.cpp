@@ -55,7 +55,7 @@ void Parameter::check_is_scalar() const {
 
 void Parameter::check_dim_ok(int dim) const {
     user_assert(dim >= 0 && dim < dimensions())
-        << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
+        << "Dimension " << dim << " of Parameter " << name() << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
 Parameter::Parameter() : contents(nullptr) {

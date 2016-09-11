@@ -72,7 +72,7 @@ struct FunctionContents {
         }
 
         for (Parameter i : output_buffers) {
-            for (size_t j = 0; j < init_def.args().size() && j < 4; j++) {
+            for (size_t j = 0; j < init_def.all_args().size() && j < 4; j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);
                 }
@@ -121,7 +121,7 @@ EXPORT void destroy<FunctionContents>(const FunctionContents *f) {
 // internal to the expression
 struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
-    set<const Variable *, IVarOrdering> ivars;
+    set<Expr, IVarOrdering> ivars;
 
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
@@ -168,10 +168,10 @@ struct CheckVars : public IRGraphVisitor {
             if (var->name == pure_args[i]) return;
         }
 
-	if (var->unique_ivar_or_zero != 0) {
-	    ivars.insert(var);
-	    return;
-	}
+        if (var->unique_ivar_or_zero != 0) {
+            ivars.insert(Expr(var));
+            return;
+        }
 
         // Is it in a reduction domain?
         if (var->reduction_domain.defined()) {
@@ -389,6 +389,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     CheckVars check(name());
     check.pure_args = args;
     for (size_t i = 0; i < values.size(); i++) {
+      debug(0) << name() << " value is: " << values[i] << "\n";
         values[i].accept(&check);
     }
 
@@ -439,21 +440,18 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "Func is already defined.\n";
 
     contents->init_def.values() = values;
-    auto &pure_def_args = contents->init_def.args();
+    auto &pure_def_args = contents->init_def.explicit_args();
     pure_def_args.resize(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        pure_def_args[i] = Var(args[i]);
+        // TODO: Handle large coordinates?
+        pure_def_args[i] = Variable::make(Int(32), args[i]);
     }
+    contents->init_def.implicit_args() = check.ivars;
 
-    contents->init_def.ivars() = check.ivars;
-    for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
-        contents->init_def.schedule().dims().push_back(d);
-        StorageDim sd = {args[i]};
-        contents->init_def.schedule().storage_dims().push_back(sd);
-    }
-    // add ivars to schedule
-    for (const Variable *v : check.ivars) {
+    for (const Expr &e : contents->init_def.all_args()) {
+      debug(0) << "Expr is " << e << " " << (int)e->type_info() << "\n";
+        const Variable *v = e.as<Variable>();
+        internal_assert(v != nullptr) << "Arg Expr is not Variable.\n";
         Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {v->name};
@@ -476,7 +474,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         if (values.size() > 1) {
             buffer_name += '.' + std::to_string((int)i);
         }
-        Parameter output(values[i].type(), true, args.size(), buffer_name);
+        Parameter output(values[i].type(), true, contents->init_def.schedule().storage_dims().size(), buffer_name);
         contents->output_buffers.push_back(output);
     }
 }
@@ -540,7 +538,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // pure args in the pure definition.
     bool pure = true;
     vector<string> pure_args(args.size());
-    const auto &pure_def_args = contents->init_def.args();
+    const auto &pure_def_args = contents->init_def.all_args();
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
         user_assert(args[i].defined())
@@ -717,7 +715,7 @@ void Function::define_extern(const std::string &function_name,
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
-    auto &pure_def_args = contents->init_def.args();
+    auto pure_def_args = contents->init_def.all_args();
     pure_def_args.resize(dimensionality);
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
@@ -743,8 +741,8 @@ const Definition &Function::definition() const {
     return contents->init_def;
 }
 
-const std::vector<std::string> Function::args() const {
-    const auto &pure_def_args = contents->init_def.args();
+const std::vector<std::string> Function::explicit_args() const {
+    const auto &pure_def_args = contents->init_def.explicit_args();
     std::vector<std::string> arg_names(pure_def_args.size());
     for (size_t i = 0; i < pure_def_args.size(); i++) {
         const Variable *var = pure_def_args[i].as<Variable>();
@@ -754,12 +752,27 @@ const std::vector<std::string> Function::args() const {
     return arg_names;
 }
 
-const std::set<const Variable *, IVarOrdering> Function::ivars() const {
-    return contents->init_def.ivars();
+const std::vector<std::string> Function::all_args() const {
+    const auto &pure_def_args = contents->init_def.all_args();
+    std::vector<std::string> arg_names(pure_def_args.size());
+    size_t i;
+    for (i = 0; i < pure_def_args.size(); i++) {
+        const Variable *var = pure_def_args[i].as<Variable>();
+        internal_assert(var);
+        arg_names[i] = var->name;
+    }
+
+    return arg_names;
+}
+
+
+const std::set<Expr, IVarOrdering> Function::implicit_args() const {
+    return contents->init_def.implicit_args();
 }
 
 int Function::dimensions() const {
-    return contents->init_def.args().size();
+    return contents->init_def.explicit_args().size() +
+           contents->init_def.implicit_args().size();
 }
 
 const std::vector<Type> &Function::output_types() const {
