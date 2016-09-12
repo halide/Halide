@@ -531,11 +531,6 @@ protected:
 
 namespace Internal {
 
-// Note that various sections of code rely on being able to iterate
-// through this in a predictable order; do not change to unordered_map (etc)
-// without considering that.
-using GeneratorParamValues = std::map<std::string, std::string>;
-
 class GeneratorBase : public NamesInterface {
 public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
@@ -558,7 +553,7 @@ public:
 
     Target get_target() const { return target; }
 
-    EXPORT void set_generator_param_values(const GeneratorParamValues &params);
+    EXPORT void set_generator_param_values(const std::map<std::string, std::string> &params);
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -607,7 +602,7 @@ private:
 class GeneratorFactory {
 public:
     virtual ~GeneratorFactory() {}
-    virtual std::unique_ptr<GeneratorBase> create(const GeneratorParamValues &params) const = 0;
+    virtual std::unique_ptr<GeneratorBase> create(const std::map<std::string, std::string> &params) const = 0;
 };
 
 class GeneratorRegistry {
@@ -617,7 +612,7 @@ public:
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                        const GeneratorParamValues &params);
+                                                        const std::map<std::string, std::string> &params);
 
 private:
     using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory>>;
@@ -651,7 +646,7 @@ template <class T> class RegisterGenerator {
 private:
     class TFactory : public Internal::GeneratorFactory {
     public:
-        std::unique_ptr<Internal::GeneratorBase> create(const Internal::GeneratorParamValues &params) const override {
+        std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) const override {
             std::unique_ptr<Internal::GeneratorBase> g(new T());
             g->set_generator_param_values(params);
             return g;
