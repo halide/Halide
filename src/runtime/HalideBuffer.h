@@ -130,7 +130,7 @@ class Buffer {
     AllocationHeader *alloc = nullptr;
 
     /** True if T is of type void */
-    static const bool T_is_void = std::is_same<T, void>::value;
+    static const bool T_is_void = std::is_same<typename std::remove_const<T>::type, void>::value;
 
     /** T unless T is void, in which case uint8_t. Useful for
      * providing return types for operator() */
@@ -144,7 +144,7 @@ class Buffer {
     /** Get the Halide type of T. Callers should not use the result if
      * T is void. */
     static halide_type_t static_halide_type() {
-        return halide_type_of<not_void_T>();
+        return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
 
     /** Increment the reference count of any owned allocation */
@@ -408,14 +408,16 @@ public:
      * cannot be constructed from some other Buffer type. */
     template<typename T2, int D2>
     void assert_can_convert_from(const Buffer<T2, D2> &other) {
-        static_assert((std::is_same<typename std::remove_const<T>::type, T2>::value ||
-                       T_is_void ||
-                       std::is_same<T2, void>::value),
+        static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
+                      "Can't convert from a Buffer<const T> to a Buffer<T>");
+        static_assert(std::is_same<typename std::remove_const<T>::type,
+                                   typename std::remove_const<T2>::type>::value ||
+                      T_is_void || Buffer<T2, D2>::T_is_void,
                       "type mismatch constructing Buffer");
         if (D < D2) {
             assert(other.dimensions() <= D);
         }
-        if (std::is_same<T2, void>::value && !T_is_void) {
+        if (Buffer<T2, D2>::T_is_void && !T_is_void) {
             assert(other.ty == static_halide_type());
         }
     }
