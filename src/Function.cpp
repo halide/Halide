@@ -239,6 +239,35 @@ public:
     FreezeFunctions(const string &f) : func(f) {}
 };
 
+// TODO: Does this need to be a graph mutator?
+class RewriteSelfCallImplicits : public IRGraphMutator {
+private:
+    using IRGraphMutator::visit;
+
+    std::string name;
+    size_t explicit_arg_count;
+    std::set<Expr, IVarOrdering> new_ivars;
+
+    void visit(const Call *op) {
+        IRGraphMutator::visit(op);
+        if (op->name == name) {
+            internal_assert(op->args.size() >= explicit_arg_count) << "Not enough arguments in self-call to satisfy exlicit count.\n";
+            std::vector<Expr> args;
+
+            args.insert(args.end(), op->args.begin(), op->args.begin() + explicit_arg_count);
+            args.insert(args.end(), new_ivars.begin(), new_ivars.end());
+            expr = Call::make(op->type, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+        }
+    }
+
+public:
+    RewriteSelfCallImplicits(const std::string name, size_t explicit_arg_count,
+                             const std::set<Expr, IVarOrdering> &new_ivars)
+      : name(name), explicit_arg_count(explicit_arg_count), new_ivars(new_ivars) {
+    }
+};
+
 // A counter to use in tagging random variables
 namespace {
 static std::atomic<int> rand_counter;
@@ -389,7 +418,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     CheckVars check(name());
     check.pure_args = args;
     for (size_t i = 0; i < values.size(); i++) {
-      debug(0) << name() << " value is: " << values[i] << "\n";
         values[i].accept(&check);
     }
 
@@ -449,7 +477,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     contents->init_def.implicit_args() = check.ivars;
 
     for (const Expr &e : contents->init_def.all_args()) {
-      debug(0) << "Expr is " << e << " " << (int)e->type_info() << "\n";
         const Variable *v = e.as<Variable>();
         internal_assert(v != nullptr) << "Arg Expr is not Variable.\n";
         Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
@@ -499,7 +526,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     // Check the dimensionality matches
-    user_assert((int)_args.size() == dimensions())
+    user_assert(_args.size() == explicit_args().size())
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Dimensionality of update definition must match dimensionality of pure definition.\n";
 
@@ -538,7 +565,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // pure args in the pure definition.
     bool pure = true;
     vector<string> pure_args(args.size());
-    const auto &pure_def_args = contents->init_def.all_args();
+    // TODO: Should this be all_args or explicit_args?
+    const auto &pure_def_args = contents->init_def.explicit_args();
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
         user_assert(args[i].defined())
@@ -575,6 +603,75 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     if (check.reduction_domain.defined()) {
         check.unbound_reduction_vars_ok = true;
         check.reduction_domain.predicate().accept(&check);
+    }
+    if (!std::includes(contents->init_def.implicit_args().begin(), contents->init_def.implicit_args().end(),
+                       check.ivars.begin(), check.ivars.end(), IVarOrdering())) {
+        size_t prev_implicits = contents->init_def.implicit_args().size();
+
+        std::set<Expr, IVarOrdering> merged;
+ 
+        std::set_union(contents->init_def.implicit_args().begin(),
+                       contents->init_def.implicit_args().end(),
+                       check.ivars.begin(), check.ivars.end(),
+                       std::inserter(merged, merged.begin()), IVarOrdering());
+
+        RewriteSelfCallImplicits rewrite_self_calls(name(),
+                                                    contents->init_def.explicit_args().size(), merged);
+        for (Definition &def: contents->updates) {
+            def.mutate(&rewrite_self_calls);
+        }
+        for (size_t i = 0; i < values.size(); i++) {
+            values[i] = rewrite_self_calls.mutate(values[i]);
+        }
+
+        contents->init_def.implicit_args() = merged;
+
+        // Schedule dims and output buffers have to be resized as well.
+        // TODO: verify there are no ordering bugs with this.
+        contents->init_def.schedule().dims().clear();
+        contents->init_def.schedule().storage_dims().clear();
+        for (const Expr &e : contents->init_def.all_args()) {
+            const Variable *v = e.as<Variable>();
+            internal_assert(v != nullptr) << "Arg Expr is not Variable.\n";
+            Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+            contents->init_def.schedule().dims().push_back(d);
+            StorageDim sd = {v->name};
+            contents->init_def.schedule().storage_dims().push_back(sd);
+        }
+
+        // Add the dummy outermost dim
+        {
+            Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+            contents->init_def.schedule().dims().push_back(d);
+        }
+
+        contents->output_buffers.clear();
+        for (size_t i = 0; i < values.size(); i++) {
+            string buffer_name = name();
+            if (values.size() > 1) {
+                buffer_name += '.' + std::to_string((int)i);
+            }
+            Parameter output(values[i].type(), true, contents->init_def.schedule().storage_dims().size(), buffer_name);
+            contents->output_buffers.push_back(output);
+        }
+
+        // Handle schedule for any previous update definitions
+        for (Definition &update_def : contents->updates) {
+            update_def.schedule().dims().erase(update_def.schedule().dims().end() - prev_implicits - 1, update_def.schedule().dims().end());
+
+            // Then add the implicit vars outside of that.
+            for (const auto &e : contents->init_def.implicit_args()) {
+                const Variable *v = e.as<Variable>();
+                Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+                update_def.schedule().dims().push_back(d);
+            }
+
+            // Then the dummy outermost dim
+            {
+                Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+                update_def.schedule().dims().push_back(d);
+            }
+        }
     }
 
     // Freeze all called functions
@@ -635,6 +732,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     Definition r(args, values, check.reduction_domain, false);
     internal_assert(!r.is_init()) << "Should have been an update definition\n";
+    r.implicit_args() = contents->init_def.implicit_args();
 
     // First add any reduction domain
     if (check.reduction_domain.defined()) {
@@ -662,6 +760,13 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         }
     }
 
+    // Then add the implicit vars outside of that.
+    for (const auto &e : contents->init_def.implicit_args()) {
+        const Variable *v = e.as<Variable>();
+        Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        r.schedule().dims().push_back(d);
+    }
+
     // Then the dummy outermost dim
     {
         Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
@@ -686,6 +791,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
 }
 
+// TODO: Handle implicit arguments
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
