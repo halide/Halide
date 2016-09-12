@@ -23,6 +23,11 @@
 #define ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
+// gcc 5.1 has a false positive warning on this code
+#if __GNUC__ == 5 && __GNUC_MINOR__ == 1
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+
 /** A C struct describing the shape of a single dimension of a halide
  * buffer. This will be a type in the runtime once halide_buffer_t is
  * merged. */
@@ -565,18 +570,19 @@ public:
      * type. Only used when you do know what size you want but you
      * don't know statically what type the elements are. Pass zeroes
      * to make a buffer suitable for bounds query calls. */
-    template<typename ...Args>
-    Buffer(halide_type_t t, int first, Args&&... rest) : ty(t) {
+    template<typename ...Args,
+             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+    Buffer(halide_type_t t, int first, Args... rest) : ty(t) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
-        initialize_shape(0, first, int(rest)...);
+        initialize_shape(0, first, rest...);
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
-        if (!any_zero(first, int(rest)...)) {
+        if (!any_zero(first, rest...)) {
             check_overflow();
             allocate();
         }
@@ -585,17 +591,18 @@ public:
 
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
-    template<typename ...Args>
-    Buffer(int first, Args&&... rest) : ty(static_halide_type()) {
+    template<typename ...Args,
+             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+    Buffer(int first, Args... rest) : ty(static_halide_type()) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
-        initialize_shape(0, first, int(rest)...);
+        initialize_shape(0, first, rest...);
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
-        if (!any_zero(first, int(rest)...)) {
+        if (!any_zero(first, rest...)) {
             check_overflow();
             allocate();
         }
@@ -631,7 +638,8 @@ public:
     /** Initialize an Buffer of runtime type from a pointer and some
      * sizes. Assumes dense row-major packing and a min coordinate of
      * zero. Does not take ownership of the data. */
-    template<typename ...Args>
+    template<typename ...Args,
+             typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(halide_type_t t, void *data, int first, Args&&... rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
@@ -650,14 +658,15 @@ public:
     /** Initialize an Buffer from a pointer and some sizes. Assumes
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data. */
-    template<typename ...Args>
+    template<typename ...Args,
+             typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(T *data, int first, Args&&... rest) {
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         initialize_shape(0, first, int(rest)...);
-        buf.elem_size = halide_type_of<T>().bytes();
+        buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
         buf.host_dirty = true;
@@ -693,7 +702,7 @@ public:
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
         }
-        buf.elem_size = halide_type_of<T>().bytes();
+        buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)data;
         buf.host_dirty = true;
     }
@@ -1088,12 +1097,16 @@ public:
 
     /** Make a zero-dimensional Buffer */
     static Buffer<void, D> make_scalar(halide_type_t t) {
-        return Buffer<void, 1>(t, 1).sliced(0, 0);
+        Buffer<void, 1> buf(t, 1);
+        buf.slice(0, 0);
+        return buf;
     }
 
     /** Make a zero-dimensional Buffer */
     static Buffer<T, D> make_scalar() {
-        return Buffer<T, 1>(1).sliced(0, 0);
+        Buffer<T, 1> buf(1);
+        buf.slice(0, 0);
+        return buf;
     }
 
 private:
@@ -1137,10 +1150,10 @@ public:
      * treated as their min coordinate.
      */
     //@{
-    template<typename ...Args>
+    template<typename ...Args,
+             typename = typename std::enable_if<AllInts<Args...>::value>::type>
     ALWAYS_INLINE
-    typename std::enable_if<AllInts<Args...>::value, const not_void_T &>::type
-    operator()(int first, Args... rest) const {
+    const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         return *((const not_void_T *)(address_of(0, first, rest...)));
@@ -1162,10 +1175,10 @@ public:
         return *((const not_void_T *)(address_of(pos)));
     }
 
-    template<typename ...Args>
+    template<typename ...Args,
+             typename = typename std::enable_if<AllInts<Args...>::value>::type>
     ALWAYS_INLINE
-    typename std::enable_if<AllInts<Args...>::value, not_void_T &>::type
-    operator()(int first, Args... rest) {
+    not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         set_host_dirty();
@@ -1236,8 +1249,8 @@ private:
 public:
 
     /** Set every value in the buffer to the given value */
-    template<typename = std::enable_if<(!T_is_void)>>
     void fill(not_void_T val) {
+        static_assert(!T_is_void, "Can't fill a Buffer of unknown type");
         fill_helper(val);
     }
 
