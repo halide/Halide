@@ -52,6 +52,12 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
     #endif
 
+    // Enable symbol rewriting. This allows code outside libHalide to
+    // use symbol rewriting when compiling Halide code (for example, by
+    // using cl::ParseCommandLineOption and then passing the appropriate
+    // rewrite options via -mllvm flags).
+    pass_manager.add(llvm::createRewriteSymbolsPass());
+
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
 
