@@ -248,7 +248,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
-    {"fuzz_float_stores", Target::FuzzFloatStores}
+    {"fuzz_float_stores", Target::FuzzFloatStores},
+    {"soft_float_abi", Target::SoftFloatABI},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
