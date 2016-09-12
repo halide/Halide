@@ -6,7 +6,6 @@ using Halide::Argument;
 using Halide::Expr;
 using Halide::Func;
 using Halide::Image;
-using Halide::Internal::GeneratorParamValues;
 
 const int kSize = 32;
 
