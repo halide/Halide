@@ -331,7 +331,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 
 /* static */
 std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name,
-                                                         const GeneratorParamValues &params) {
+                                                         const std::map<std::string, std::string> &params) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
@@ -398,7 +398,7 @@ void GeneratorBase::build_params(bool force) {
     }
 }
 
-void GeneratorBase::set_generator_param_values(const GeneratorParamValues &params) {
+void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
     user_assert(!generator_params_set) << "set_generator_param_values() must be called at most once per Generator instance.\n";
     build_params();
     std::map<std::string, GeneratorParamBase *> m;
