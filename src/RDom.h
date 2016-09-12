@@ -210,11 +210,13 @@ public:
     // @}
 
     /** Construct a reduction domain that iterates over all points in
-     * a given Buffer, Image, or ImageParam. Has the same
-     * dimensionality as the argument. */
+     * a given Buffer or ImageParam. Has the same dimensionality as
+     * the argument. */
     // @{
-    EXPORT RDom(Buffer);
+    EXPORT RDom(const Image<> &);
     EXPORT RDom(ImageParam);
+    template<typename T, int D>
+    NO_INLINE RDom(const Image<T, D> &im) : RDom(Image<>(im)) {}
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */

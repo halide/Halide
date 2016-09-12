@@ -1,12 +1,12 @@
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 #include <math.h>
 #include <stdio.h>
 
 #include "argvcall.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int kSize = 32;
 

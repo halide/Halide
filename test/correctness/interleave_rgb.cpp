@@ -25,20 +25,15 @@ bool test_interleave() {
     } else {
         interleaved.vectorize(x, target.natural_vector_size<uint8_t>()).unroll(c);
     }
-    Buffer buff(type_of<T>(), 256, 128, 3);
-    buff.raw_buffer()->stride[0] = 3;
-    buff.raw_buffer()->stride[1] = 3 * buff.extent(0);
-    buff.raw_buffer()->stride[2] = 1;
-
-    Realization r({buff});
-    interleaved.realize(r, target);
-    Image<T> out = r[0];
-    for (int y = 0; y < out.height(); y++) {
-        for (int x = 0; x < out.width(); x++) {
+    Image<T> buff = Image<T>::make_interleaved(256, 128, 3);
+    interleaved.realize(buff, target);
+    buff.copy_to_host();
+    for (int y = 0; y < buff.height(); y++) {
+        for (int x = 0; x < buff.width(); x++) {
             for (int c = 0; c < 3; c++) {
                 T correct = x * 3 + y * 5 + c;
-                if (out(x, y, c) != correct) {
-                    printf("out(%d, %d, %d) = %d instead of %d\n", x, y, c, out(x, y, c), correct);
+                if (buff(x, y, c) != correct) {
+                    printf("out(%d, %d, %d) = %d instead of %d\n", x, y, c, buff(x, y, c), correct);
                     return false;
                 }
             }

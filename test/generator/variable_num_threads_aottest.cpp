@@ -1,5 +1,5 @@
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +10,7 @@
 bool stop = false;
 int max_threads = 1;
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 void mess_with_num_threads(void *) {
     while (!stop) {

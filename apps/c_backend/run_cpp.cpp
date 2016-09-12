@@ -2,11 +2,11 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "pipeline_cpp_native.h"
 #include "pipeline_cpp_cpp.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 extern "C" int an_extern_c_func(int a1, float a2) {
     return (int)(a1 + a2);

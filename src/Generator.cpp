@@ -1,3 +1,5 @@
+#include <set>
+
 #include "Generator.h"
 #include "Outputs.h"
 
@@ -363,6 +365,7 @@ void GeneratorBase::rebuild_params() {
 
 void GeneratorBase::build_params() {
     if (!params_built) {
+        std::set<std::string> names;
         std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
             this, size, ObjectInstanceRegistry::FilterParam);
         for (size_t i = 0; i < vf.size(); ++i) {
@@ -370,9 +373,8 @@ void GeneratorBase::build_params() {
             internal_assert(param != nullptr);
             user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-            for (const Argument& arg : filter_arguments) {
-                user_assert(arg.name != param->name()) << "Duplicate Param name: " << param->name();
-            }
+            user_assert(!names.count(param->name())) << "Duplicate Param name: " << param->name();
+            names.insert(param->name());
             Expr def, min, max;
             if (!param->is_buffer()) {
                 def = param->get_scalar_expr();
@@ -390,9 +392,9 @@ void GeneratorBase::build_params() {
             GeneratorParamBase *param = static_cast<GeneratorParamBase *>(vg[i]);
             internal_assert(param != nullptr);
             user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
-            user_assert(generator_params.find(param->name) == generator_params.end())
-                << "Duplicate GeneratorParam name: " << param->name;
-            generator_params[param->name] = param;
+            user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
+            names.insert(param->name);
+            generator_params.push_back(param);
         }
         params_built = true;
     }
@@ -401,8 +403,7 @@ void GeneratorBase::build_params() {
 GeneratorParamValues GeneratorBase::get_generator_param_values() {
     build_params();
     GeneratorParamValues results;
-    for (auto key_value : generator_params) {
-        GeneratorParamBase *param = key_value.second;
+    for (auto param : generator_params) {
         results[param->name] = param->to_string();
     }
     return results;
@@ -410,13 +411,16 @@ GeneratorParamValues GeneratorBase::get_generator_param_values() {
 
 void GeneratorBase::set_generator_param_values(const GeneratorParamValues &params) {
     build_params();
+    std::map<std::string, GeneratorParamBase *> m;
+    for (auto param : generator_params) {
+        m[param->name] = param;
+    }
     for (auto key_value : params) {
         const std::string &key = key_value.first;
         const std::string &value = key_value.second;
-        auto param = generator_params.find(key);
-        user_assert(param != generator_params.end())
-            << "Generator has no GeneratorParam named: " << key;
-        param->second->from_string(value);
+        auto p = m.find(key);
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        p->second->from_string(value);
     }
 }
 

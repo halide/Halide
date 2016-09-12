@@ -679,10 +679,6 @@ WEAK const char *parse_opengl_version(const char *str, int *major, int *minor) {
 // Initialize the OpenGL-specific parts of the runtime.
 WEAK int halide_opengl_init(void *user_context) {
     if (global_state.initialized) {
-        // Check if the user put OpenGL in error state before/between Halide calls
-        if (global_state.CheckAndReportError(user_context, "user OpenGL state")) {
-            return 1;
-        }
         return 0;
     }
 
@@ -729,12 +725,6 @@ WEAK int halide_opengl_init(void *user_context) {
         << "  texture_rg: " << (global_state.have_texture_rg ? "yes\n" : "no\n")
         << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
         << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
-
-    // Check if [user-provided] halide_opengl_create_context() left OpenGL
-    // in error state.
-    if (global_state.CheckAndReportError(user_context, "user OpenGL state")) {
-        return 1;
-    }
 
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);

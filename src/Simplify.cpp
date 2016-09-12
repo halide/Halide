@@ -71,7 +71,7 @@ bool is_var_relop_simple_const(Expr e, string* name) {
 }
 
 bool is_var_simple_const_comparison(Expr e, string* name) {
-    // It's not clear if GT, LT, etc would be useful 
+    // It's not clear if GT, LT, etc would be useful
     // here; leaving them out until proven otherwise.
     return is_var_relop_simple_const<EQ>(e, name) ||
            is_var_relop_simple_const<NE>(e, name);
@@ -104,9 +104,9 @@ Expr indeterminate_expression_error(Type t) {
     return Call::make(t, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
 }
 
-// If 'e' is indeterminate_expression of type t, 
+// If 'e' is indeterminate_expression of type t,
 //      set *expr to it and return true.
-// If 'e' is indeterminate_expression of other type, 
+// If 'e' is indeterminate_expression of other type,
 //      make a new indeterminate_expression of the proper type, set *expr to it and return true.
 // Otherwise, leave *expr untouched and return false.
 bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
@@ -526,6 +526,9 @@ private:
             (b.as<Max>() && !a.as<Max>())) {
             std::swap(a, b);
         }
+        if ((b.as<Min>() && a.as<Max>())) {
+            std::swap(a, b);
+        }
 
         const Call *call_a = a.as<Call>();
         const Call *call_b = b.as<Call>();
@@ -551,6 +554,8 @@ private:
         const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): nullptr;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): nullptr;
         const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): nullptr;
+
+        const Max *max_b = b.as<Max>();
 
         const Min *min_a = a.as<Min>();
         const Max *max_a = a.as<Max>();
@@ -766,6 +771,18 @@ private:
                    ia + ib == 0) {
             // max(a + (-2), b) + 2 -> max(a, b + 2)
             expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // min(x, y) + max(x, y) -> x + y
+            expr = mutate(min_a->a + min_a->b);
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // min(x, y) + max(y, x) -> x + y
+            expr = mutate(min_a->a + min_a->b);
         } else if (no_overflow(op->type) &&
                    div_a &&
                    add_a_a &&
@@ -1346,7 +1363,10 @@ private:
             return;
         }
 
-        if (is_simple_const(a)) std::swap(a, b);
+        if (is_simple_const(a) ||
+            (b.as<Min>() && a.as<Max>())) {
+            std::swap(a, b);
+        }
 
         int64_t ia = 0, ib = 0;
         uint64_t ua = 0, ub = 0;
@@ -1361,7 +1381,9 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
+        const Min *min_a = a.as<Min>();
         const Mul *mul_b = b.as<Mul>();
+        const Max *max_b = b.as<Max>();
 
         if (is_zero(a)) {
             expr = a;
@@ -1408,6 +1430,18 @@ private:
         } else if (mul_b && is_simple_const(mul_b->b)) {
             // Pull constants outside
             expr = mutate((a * mul_b->a) * mul_b->b);
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // min(x, y) * max(x, y) -> x*y
+            expr = mutate(min_a->a * min_a->b);
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // min(x, y) * max(y, x) -> x*y
+            expr = mutate(min_a->a * min_a->b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2158,7 +2192,20 @@ private:
             // min(max(a, 4), ((a + 3)/4)*4) -> max(a, 4)
             expr = a;
         } else if (max_a &&
-                   equal(max_a->b, b)) {
+                   min_b &&
+                   equal(max_a->a, min_b->a) &&
+                   equal(max_a->b, min_b->b)) {
+            // min(max(x, y), min(x, y)) -> min(x, y)
+            expr = mutate(min(max_a->a, max_a->b));
+        } else if (max_a &&
+                   min_b &&
+                   equal(max_a->a, min_b->b) &&
+                   equal(max_a->b, min_b->a)) {
+            // min(max(x, y), min(y, x)) -> min(x, y)
+            expr = mutate(min(max_a->a, max_a->b));
+        } else if (max_a &&
+                   (equal(max_a->a, b) || equal(max_a->b, b))) {
+            // min(max(x, y), x) -> x
             // min(max(x, y), y) -> y
             expr = b;
         } else if (min_a &&
@@ -2500,7 +2547,20 @@ private:
                 expr = b;
             }
         } else if (min_a &&
-                   equal(min_a->b, b)) {
+                   max_b &&
+                   equal(min_a->a, max_b->a) &&
+                   equal(min_a->b, max_b->b)) {
+            // max(min(x, y), max(x, y)) -> max(x, y)
+            expr = mutate(max(min_a->a, min_a->b));
+        } else if (min_a &&
+                   max_b &&
+                   equal(min_a->a, max_b->b) &&
+                   equal(min_a->b, max_b->a)) {
+            // max(min(x, y), max(y, x)) -> max(x, y)
+            expr = mutate(max(min_a->a, min_a->b));
+        } else if (min_a &&
+                   (equal(min_a->a, b) || equal(min_a->b, b))) {
+            // max(min(x, y), x) -> x
             // max(min(x, y), y) -> y
             expr = b;
         } else if (max_a &&
@@ -3196,7 +3256,7 @@ private:
         } else if (eq_a &&
                    neq_b &&
                    equal(eq_a->a, neq_b->a) &&
-                   is_simple_const(eq_a->b) && 
+                   is_simple_const(eq_a->b) &&
                    is_simple_const(neq_b->b)) {
             // (a == k1) && (a != k2) -> (a == k1) && (k1 != k2)
             // (second term always folds away)
@@ -3204,7 +3264,7 @@ private:
         } else if (neq_a &&
                    eq_b &&
                    equal(neq_a->a, eq_b->a) &&
-                   is_simple_const(neq_a->b) && 
+                   is_simple_const(neq_a->b) &&
                    is_simple_const(eq_b->b)) {
             // (a != k1) && (a == k2) -> (a == k2) && (k1 != k2)
             // (second term always folds away)
@@ -3308,7 +3368,7 @@ private:
         } else if (eq_a &&
                    neq_b &&
                    equal(eq_a->a, neq_b->a) &&
-                   is_simple_const(eq_a->b) && 
+                   is_simple_const(eq_a->b) &&
                    is_simple_const(neq_b->b)) {
             // (a == k1) || (a != k2) -> (a != k2) || (k1 == k2)
             // (second term always folds away)
@@ -3316,7 +3376,7 @@ private:
         } else if (neq_a &&
                    eq_b &&
                    equal(neq_a->a, eq_b->a) &&
-                   is_simple_const(neq_a->b) && 
+                   is_simple_const(neq_a->b) &&
                    is_simple_const(eq_b->b)) {
             // (a != k1) || (a == k2) -> (a != k1) || (k1 == k2)
             // (second term always folds away)
@@ -3330,7 +3390,7 @@ private:
                    ((is_var_simple_const_comparison(and_a->a, &name_a) && name_a == name_c) ||
                    (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
             // (a && b) || (c) -> (a || c) && (b || c)
-            // iff c and at least one of a or b is of the form 
+            // iff c and at least one of a or b is of the form
             //     (var == const) or (var != const)
             // (and the vars are the same)
             expr = mutate(And::make(Or::make(and_a->a, b), Or::make(and_a->b, b)));
@@ -3339,7 +3399,7 @@ private:
                    ((is_var_simple_const_comparison(and_b->a, &name_a) && name_a == name_c) ||
                    (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
             // (c) || (a && b) -> (a || c) && (b || c)
-            // iff c and at least one of a or b is of the form 
+            // iff c and at least one of a or b is of the form
             //     (var == const) or (var != const)
             // (and the vars are the same)
             expr = mutate(And::make(Or::make(and_b->a, a), Or::make(and_b->b, a)));
@@ -4993,6 +5053,12 @@ void check_bounds() {
     check(min(2, x) - x, 2 - max(x, 2));
     check(max(2, x) - x, 2 - min(x, 2));
 
+    check(max(min(x, y), x), x);
+    check(max(min(x, y), y), y);
+    check(min(max(x, y), x), x);
+    check(min(max(x, y), y), y);
+    check(max(min(x, y), x) + y, x + y);
+
     check(max(min(max(x, y), z), y), max(min(x, z), y));
     check(max(min(z, max(x, y)), y), max(min(x, z), y));
     check(max(y, min(max(x, y), z)), max(min(x, z), y));
@@ -5567,14 +5633,14 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
 }
 
 void check_indeterminate() {
-    const int32_t values[] = { 
+    const int32_t values[] = {
         -2147483648,
         -2147483647,
-        -2, 
-        -1, 
-        0, 
-        1, 
-        2, 
+        -2,
+        -1,
+        0,
+        1,
+        2,
         2147483647,
     };
 
@@ -5583,7 +5649,7 @@ void check_indeterminate() {
         check_indeterminate_ops(Expr(i1), !i1, false);
         for (int32_t i2 : values) {
             {
-                Expr e1(i1), e2(i2); 
+                Expr e1(i1), e2(i2);
                 Expr r = (e1 / e2);
                 bool r_is_zero = !i1 || (i2 != 0 && !div_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
                 bool r_is_ind = !i2;
@@ -5600,7 +5666,7 @@ void check_indeterminate() {
             {
                 uint32_t u1 = (uint32_t)i1;
                 uint32_t u2 = (uint32_t)i2;
-                Expr e1(u1), e2(u2); 
+                Expr e1(u1), e2(u2);
                 Expr r = (e1 / e2);
                 bool r_is_zero = !u1 || (u2 != 0 && !div_imp(u1, u2));
                 bool r_is_ind = !u2;
@@ -5674,6 +5740,30 @@ void simplify_test() {
     check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
           Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
 
+    // Check min(x, y)*max(x, y) gets simplified into x*y
+    check(min(x, y)*max(x, y), x*y);
+    check(min(x, y)*max(y, x), x*y);
+    check(max(x, y)*min(x, y), x*y);
+    check(max(y, x)*min(x, y), x*y);
+
+    // Check min(x, y) + max(x, y) gets simplified into x + y
+    check(min(x, y) + max(x, y), x + y);
+    check(min(x, y) + max(y, x), x + y);
+    check(max(x, y) + min(x, y), x + y);
+    check(max(y, x) + min(x, y), x + y);
+
+    // Check max(min(x, y), max(x, y)) gets simplified into max(x, y)
+    check(max(min(x, y), max(x, y)), max(x, y));
+    check(max(min(x, y), max(y, x)), max(x, y));
+    check(max(max(x, y), min(x, y)), max(x, y));
+    check(max(max(y, x), min(x, y)), max(x, y));
+
+    // Check min(max(x, y), min(x, y)) gets simplified into min(x, y)
+    check(min(max(x, y), min(x, y)), min(x, y));
+    check(min(max(x, y), min(y, x)), min(x, y));
+    check(min(min(x, y), max(x, y)), min(x, y));
+    check(min(min(y, x), max(x, y)), min(x, y));
+
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
     bounds_info.push("x", Interval(0,4));
@@ -5712,9 +5802,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), BufferPtr(), Parameter());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), BufferPtr(), Parameter());
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), BufferPtr(), Parameter());
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5722,7 +5812,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), BufferPtr(), Parameter());
         e = interleave_vectors({load1, load3});
         check(e, e);
 

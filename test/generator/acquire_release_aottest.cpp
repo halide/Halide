@@ -10,14 +10,14 @@ int main(int argc, char **argv) {
 
 #include <math.h>
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #include <string.h>
 
 #include "acquire_release.h"
 
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int W = 256, H = 256;
 
