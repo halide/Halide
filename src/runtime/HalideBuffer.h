@@ -662,7 +662,7 @@ public:
                       "where D is at least the desired number of dimensions");
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         initialize_shape(0, first, int(rest)...);
-        buf.elem_size = halide_type_of<T>().bytes();
+        buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
         buf.host_dirty = true;
@@ -698,7 +698,7 @@ public:
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
         }
-        buf.elem_size = halide_type_of<T>().bytes();
+        buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)data;
         buf.host_dirty = true;
     }
