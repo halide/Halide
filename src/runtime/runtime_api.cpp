@@ -109,6 +109,8 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_metal_release_context,
     (void *)&halide_metal_run,
     (void *)&halide_metal_wrap_buffer,
+    (void *)&halide_msan_annotate_buffer_is_initialized,
+    (void *)&halide_msan_annotate_memory_is_initialized,
     (void *)&halide_mutex_destroy,
     (void *)&halide_mutex_lock,
     (void *)&halide_mutex_unlock,
