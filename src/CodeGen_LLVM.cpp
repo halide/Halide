@@ -629,6 +629,19 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
+    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
+    // happen for every output buffer if the function succeeds.
+    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {
+        llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized");
+        internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized in module\n";
+        annotate_buffer_fn->setDoesNotAlias(0);
+        for (const auto &arg : f.args) {
+            if (arg.kind == Argument::OutputBuffer) {
+                register_destructor(annotate_buffer_fn, sym_get(arg.name), OnSuccess);
+            }
+        }
+    }
+
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
@@ -701,10 +714,12 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     PHINode *error_code = dyn_cast<PHINode>(dtors->begin());
     internal_assert(error_code) << "The destructor block is supposed to start with a phi node\n";
 
-    llvm::Value *should_call =
-        (when == Always) ?
-        ConstantInt::get(i1_t, 1) :
-        builder->CreateIsNotNull(error_code);
+    llvm::Value *should_call;
+    switch (when) {
+        case Always:    should_call = ConstantInt::get(i1_t, 1); break;
+        case OnError:   should_call = builder->CreateIsNotNull(error_code); break;
+        case OnSuccess: should_call = builder->CreateIsNull(error_code); break;
+    }
 
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
@@ -919,15 +934,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
-#ifdef LLVM_SUPPORTS_MSAN
-static void add_memory_sanitizer_pass(const llvm::PassManagerBuilder &builder,
-                                      llvm::PassManagerBase &pm) {
-  // Halide doesn't (yet) support track_origins as an option for MSAN
-  const bool kTrackOrigins = false; 
-  pm.add(llvm::createMemorySanitizerPass(kTrackOrigins));
-}
-#endif
-
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
@@ -972,17 +978,6 @@ void CodeGen_LLVM::optimize_module() {
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
     b.LoopVectorize = true;
     b.SLPVectorize = true;
-
-    if (target.has_feature(Target::MSAN)) {
-#ifdef LLVM_SUPPORTS_MSAN
-        debug(2) << "Adding MSAN pass\n";
-        b.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast, add_memory_sanitizer_pass);
-        b.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0, add_memory_sanitizer_pass);
-#else
-        user_error << "MSAN is not supported for this version of LLVM.\n"
-#endif
-    }
-
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 

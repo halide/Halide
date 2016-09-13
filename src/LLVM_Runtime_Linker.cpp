@@ -89,6 +89,7 @@ DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
+DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(noos)
 DECLARE_CPP_INITMOD(opencl)
@@ -831,6 +832,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.has_feature(Target::Profile)) {
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+            }
+            if (t.has_feature(Target::MSAN)) {
+                modules.push_back(get_initmod_msan(c, bits_64, debug));
             }
         }
 
