@@ -54,6 +54,7 @@
 
 #if LLVM_VERSION >= 40
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
+#include <llvm/Transforms/Instrumentation.h>
 #endif
 
 #include <llvm/IR/Value.h>
@@ -79,6 +80,11 @@
 #undef NDEBUG
 #include <assert.h>
 #define NDEBUG
+#endif
+
+#if LLVM_VERSION >= 40
+// MSAN works on earlier LLVM versions, but has only been tested on 4.0+.
+#define LLVM_SUPPORTS_MSAN
 #endif
 
 namespace Halide { namespace Internal {
