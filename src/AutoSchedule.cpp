@@ -303,7 +303,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // If the argument is an image or a buffer the bounds
                     // required are unknown. Create an infinite region of the
                     // correct dimension and update the region map.
-                    Buffer buf;
+                    BufferPtr buf;
                     if (arg.is_image_param()) {
                         buf = arg.image_param.get_buffer();
                     } else {

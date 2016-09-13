@@ -306,7 +306,7 @@ set<string> get_parents(Function f, int stage) {
                 parents.insert(find.funcs_called.begin(),
                                find.funcs_called.end());
             } else if (arg.is_image_param() || arg.is_buffer()) {
-                Buffer buf;
+                BufferPtr buf;
                 if (arg.is_image_param()) {
                     buf = arg.image_param.get_buffer();
                 } else {
