@@ -919,6 +919,15 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
+#ifdef LLVM_SUPPORTS_MSAN
+static void add_memory_sanitizer_pass(const llvm::PassManagerBuilder &builder,
+                                      llvm::PassManagerBase &pm) {
+  // Halide doesn't (yet) support track_origins as an option for MSAN
+  const bool kTrackOrigins = false; 
+  pm.add(llvm::createMemorySanitizerPass(kTrackOrigins));
+}
+#endif
+
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
@@ -963,6 +972,17 @@ void CodeGen_LLVM::optimize_module() {
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+    if (target.has_feature(Target::MSAN)) {
+#ifdef LLVM_SUPPORTS_MSAN
+        debug(2) << "Adding MSAN pass\n";
+        b.addExtension(llvm::PassManagerBuilder::EP_OptimizerLast, add_memory_sanitizer_pass);
+        b.addExtension(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0, add_memory_sanitizer_pass);
+#else
+        user_error << "MSAN is not supported for this version of LLVM.\n"
+#endif
+    }
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
