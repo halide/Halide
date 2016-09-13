@@ -18,6 +18,18 @@ struct spawned_thread {
 
 #define STACK_SIZE 256*1024
 
+extern "C" {
+static  inline int qurt_get_thread_no()
+{
+    unsigned int thread_id;
+    __asm volatile (
+        " %0 = htid\n"
+        " %0 = and(%0, #3) // v2x\n"
+        : "=r"(thread_id)
+        );
+    return thread_id;
+}
+}
 struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     static volatile int next_id = 1;
 
