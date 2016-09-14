@@ -41,10 +41,6 @@ int qurt_hvx_get_mode() {
         " %0 = and(%0, #128) // v2x\n"
         : "=r"(mode)
         );
-    __asm volatile (
-        "isync\n"
-        );
-
     return mode == 128 ? 1 : 0;
 }
 
