@@ -493,16 +493,13 @@ extern int halide_msan_annotate_memory_is_initialized(void *user_context, const 
 /** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
  * using halide_msan_annotate_memory_is_initialized() for marking. 
  *
- * Note that "buffer" is typed as a void* but is expected to be a buffer_t* -- this is
- * to simplify the use of this function as a destructor.
- *
  * The default implementation takes pains to only mark the active memory ranges
  * (skipping padding), and sorting into ranges to always mark the smallest number of
  * ranges, in monotonically increasing memory order.
  *
  * Most client code should never need to replace the default implementation.
  */
-extern int halide_msan_annotate_buffer_is_initialized(void *user_context, void *buffer);
+extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct buffer_t *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
 enum halide_error_code_t {

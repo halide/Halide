@@ -16,8 +16,7 @@ WEAK int halide_msan_annotate_memory_is_initialized(void *user_context, const vo
 // (but *not* the buffer_t itself); it takes pains to only mark the active memory ranges
 // (skipping padding), and sorting into ranges to always mark the smallest number of
 // ranges, in monotonically increasing memory order.
-WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, void *v) {
-    buffer_t *b = (buffer_t *)v;
+WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, buffer_t *b) {
     if (b == NULL) {
         return 0;
     }
