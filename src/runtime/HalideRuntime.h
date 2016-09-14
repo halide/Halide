@@ -486,13 +486,9 @@ extern int halide_create_temp_file(void *user_context,
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
  *
- * The default implementation does nothing; you must provide a
- * replacement that hooks into the relevant code for your runtime.
- * For MSAN, this is typically just
- *
- *    ANNOTATE_MEMORY_IS_INITIALIZED(ptr, len);
+ * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
  */
-extern void halide_msan_annotate_memory_is_initialized(void *user_context, void *ptr, size_t len);
+extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len);
 
 /** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
  * using halide_msan_annotate_memory_is_initialized() for marking. 
