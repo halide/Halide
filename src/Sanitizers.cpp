@@ -17,7 +17,6 @@ class InjectMSANHelpers : public IRMutator {
     void visit(const ProducerConsumer *op) {
         Stmt produce, update, consume;
 
-        std::cerr << "ProducerConsumer "<< op->name << "\n";
         produce = mutate(op->produce);
         if (op->update.defined()) {
             update = mutate(op->update);
