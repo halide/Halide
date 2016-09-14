@@ -13,6 +13,7 @@ using namespace Halide;
 
 extern "C" void halide_error(void *user_context, const char *msg) {
     fprintf(stderr, "Saw error: %s\n", msg);
+    // Do not exit.
 }
 
 // Must provide a stub for this since we aren't compiling with LLVM MSAN
@@ -24,19 +25,27 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
     exit(-1);
 }
 
-bool fail_on_annotate = false;
 const void* previous = nullptr;
-extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
-    if (fail_on_annotate) {
-        fprintf(stderr, "Failure!\nShould not have seen an annotate call here.\n");
-        exit(-1);
-    }
+extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
     if (ptr <= previous) {
         fprintf(stderr, "Failure!\nExpected monotonic increase but saw %p -> %p\n", previous, ptr);
         exit(-1);
     }
     printf("%p:%08x\n", ptr, (unsigned int) len);
     previous = ptr;
+    return 0;
+}
+
+template<typename T>
+void verify(const T &image) {
+    image.for_each_element([&](int x, int y, int c) {
+        const int kExpected = (int32_t)(x + y + c + 3);
+        if (image(x, y, c) != kExpected) {
+            fprintf(stderr, "Failure @ %d %d %d: expected %d, got %d\n",
+                x, y, c, kExpected, image(x, y, c));
+            exit(-1);
+        }
+    });
 }
 
 //-----------------------------------------------------------------------------
@@ -51,6 +60,11 @@ int main()
             fprintf(stderr, "Failure!\n");
             exit(-1);
         }
+        verify(out);
+    }
+    if (previous == nullptr) {
+        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
+        exit(-1);
     }
 
     printf("Testing sparse chunky...\n");
@@ -69,6 +83,10 @@ int main()
             exit(-1);
         }
     }
+    if (previous == nullptr) {
+        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
+        exit(-1);
+    }
 
     printf("Testing planar...\n");
     previous = nullptr;
@@ -78,6 +96,10 @@ int main()
             fprintf(stderr, "Failure!\n");
             exit(-1);
         }
+    }
+    if (previous == nullptr) {
+        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
+        exit(-1);
     }
 
     printf("Testing sparse planar...\n");
@@ -96,17 +118,24 @@ int main()
             exit(-1);
         }
     }
+    if (previous == nullptr) {
+        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
+        exit(-1);
+    }
 
     // Buffers should not be marked as "initialized" if the filter fails with an error.
     printf("Testing error case...\n");
     previous = nullptr;
-    fail_on_annotate = true;
     {
         auto out = Buffer<int32_t>(1, 1, 1);
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);
         }
+    }
+    if (previous != nullptr) {
+        fprintf(stderr, "Failure!\nExpected NOT to see annotations.\n");
+        exit(-1);
     }
 
     printf("Success!\n");
