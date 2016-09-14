@@ -172,6 +172,12 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
+    if (t.has_feature(Target::MSAN)) {
+        debug(1) << "Injecting MSAN helpers...\n";
+        s = inject_msan_helpers(s);
+        debug(2) << "Lowering after injecting MSAN helpers:\n" << s << "\n\n";
+    }
+
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
         s = rewrite_memoized_allocations(s, env);
@@ -271,12 +277,6 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
-
-    if (t.has_feature(Target::MSAN)) {
-        debug(1) << "Injecting MSAN helpers...\n";
-        s = inject_msan_helpers(s);
-        debug(2) << "Lowering after injecting MSAN helpers:\n" << s << "\n\n";
-    }
 
     debug(1) << "Splitting off Hexagon offload...\n";
     s = inject_hexagon_rpc(s, t);
