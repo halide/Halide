@@ -15,9 +15,18 @@ extern "C" void halide_error(void *user_context, const char *msg) {
     fprintf(stderr, "Saw error: %s\n", msg);
 }
 
+// Must provide a stub for this since we aren't compiling with LLVM MSAN
+// enabled, and the default implementation of halide_msan_annotate_memory_is_initialized()
+// expects this to be present
+extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
+                                            const void *mem, size_t size) {
+    fprintf(stderr, "Impossible\n");
+    exit(-1);
+}
+
 bool fail_on_annotate = false;
-void* previous = nullptr;
-extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, void *ptr, size_t len) {
+const void* previous = nullptr;
+extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
     if (fail_on_annotate) {
         fprintf(stderr, "Failure!\nShould not have seen an annotate call here.\n");
         exit(-1);
