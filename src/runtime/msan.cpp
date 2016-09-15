@@ -26,6 +26,13 @@ WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, buffer_t
         return 0;
     }
 
+    if (b->dev_dirty) {
+        // buffer has been computed on a gpu, but not copied back:
+        // don't annotate as initialized. (We'll assume that subsequent
+        // calls to halide_copy_to_host will force another call.)
+        return 0;
+    }
+
     // TODO: Is this 32-bit or 64-bit? Leaving signed for now
     // in case negative strides.
     for (int w = 0; w < (int)c.extent[3]; w++) {

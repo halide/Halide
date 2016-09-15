@@ -172,12 +172,6 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::MSAN)) {
-        debug(1) << "Injecting MSAN helpers...\n";
-        s = inject_msan_helpers(s);
-        debug(2) << "Lowering after injecting MSAN helpers:\n" << s << "\n\n";
-    }
-
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
         s = rewrite_memoized_allocations(s, env);
@@ -212,6 +206,14 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
+    }
+
+    // Note that this must come *after* GPU injections (since it may need to adjust
+    // halide_copy_to_host calls)
+    if (t.has_feature(Target::MSAN)) {
+        debug(1) << "Injecting MSAN helpers...\n";
+        s = inject_msan_helpers(s);
+        debug(2) << "Lowering after injecting MSAN helpers:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
