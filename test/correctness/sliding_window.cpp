@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     }
 
     // Try again where there's a containing stage
-    {
+    /*{
         count = 0;
         Func f, g, h;
         f(x) = call_counter(x, 0);
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
         f.store_at(g, y).compute_at(g, x);
         g.set_custom_allocator(&my_malloc, &my_free);
         Image<int> im = g.realize(10, 10);
-    }
+    }*/
 
     printf("Success!\n");
     return 0;

@@ -4432,7 +4432,6 @@ private:
         const IfThenElse *if_first = first.as<IfThenElse>();
         const IfThenElse *if_rest = rest.as<IfThenElse>();
 
-        // Check if first is a no-op.
         if (is_no_op(first) &&
             is_no_op(rest)) {
             stmt = Evaluate::make(0);

@@ -23,19 +23,44 @@ private:
     using IRVisitor::visit;
 
     void visit(const Producer *op) {
+        Stmt produce = op->body;
+        Stmt update;
+
+        // Peel the let/if stmts until we find a block
+        Stmt body = op->body;
+        while (true) {
+            const LetStmt *let = body.as<LetStmt>();
+            const IfThenElse *if_else = body.as<IfThenElse>();
+            if (let) {
+                body = let->body;
+            } else if (if_else) {
+                body = if_else->then_case;
+            } else {
+                break;
+            }
+        }
+
+        // Check if the Producer node has an update node. Note: checking if it is
+        // a block only may result in false positive: the block may have been pair
+        // of prolog-steady state-epilogue instead of produce-update
+        if (const Block *block = body.as<Block>()) {
+            produce = block->first;
+            update = block->rest;
+        }
+
         string old_producer = producer;
         producer = op->name;
         calls[producer]; // Make sure each producer is allocated a slot
-        op->body.accept(this);
+        produce.accept(this);
         producer = old_producer;
 
-        /*if (op->update.defined()) {
+        if (update.defined()) {
             // Just lump all the update stages together
             producer = op->name + ".update(" + std::to_string(0) + ")";
             calls[producer]; // Make sure each producer is allocated a slot
-            op->update.accept(this);
+            update.accept(this);
             producer = old_producer;
-        }*/
+        }
         producer = old_producer;
     }
 
@@ -53,10 +78,6 @@ private:
 
 
 int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
-    if (result.size() != expected.size()) {
-        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
-        return -1;
-    }
     for (auto &iter : expected) {
         if (result.count(iter.first) == 0) {
             printf("Expect %s to be in the call graphs\n", iter.first.c_str());
