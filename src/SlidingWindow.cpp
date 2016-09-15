@@ -260,7 +260,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // before the last one. Because, e.g., an intermediate
             // stage may be unrolled, expanding its bounds provided.
 
-            //TODO(psuriana)
             if (op->body.defined()) {
                 Box b = box_provided(op->body, func.name());
                 if (can_slide_up) {

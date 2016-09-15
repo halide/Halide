@@ -581,7 +581,6 @@ class InjectBufferCopies : public IRMutator {
             // TODO: handle this case by creating the args from scratch?
             internal_assert(!create_buffer_args.empty());
 
-            debug(0) << "***MAKING BUFFER FOR " << op->name << "\n";
             stmt = LetStmt::make(op->name + ".buffer", Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, create_buffer_args, Call::Intrinsic), inner_body);
 
             // Rebuild any wrapped lets outside the one for the create_buffer_t.
