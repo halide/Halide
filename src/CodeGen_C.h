@@ -170,7 +170,8 @@ protected:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const ProducerConsumer *);
+    void visit(const Producer *);
+    void visit(const Consumer *);
     void visit(const For *);
     void visit(const Provide *);
     void visit(const Allocate *);

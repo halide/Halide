@@ -273,19 +273,32 @@ struct AssertStmt : public StmtNode<AssertStmt> {
 };
 
 /** This node is a helpful annotation to do with permissions. The
- * three child statements happen in order. In the 'produce'
- * statement 'buffer' is write-only. In 'update' it is
- * read-write. In 'consume' it is read-only. The 'update' node is
+ * two child statements happen in order. In the 'produce' statement 'buffer'
+ * is write-only. In 'update' it is read-write. The 'update' node is
  * often undefined. (check update.defined() to find out). None of this
  * is actually enforced, the node is purely for informative
  * purposes to help out our analysis during lowering. */
-struct ProducerConsumer : public StmtNode<ProducerConsumer> {
+struct Producer : public StmtNode<Producer> {
     std::string name;
-    Stmt produce, update, consume;
+    Stmt body;
 
-    EXPORT static Stmt make(std::string name, Stmt produce, Stmt update, Stmt consume);
+    EXPORT static Stmt make(std::string name, Stmt body);
 
-    static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
+    static const IRNodeType _type_info = IRNodeType::Producer;
+};
+
+
+/** This node is a helpful annotation to do with permissions. 'consume' happens
+ * after 'produce' and 'update'. In 'consume' it is read-only. None of this
+ * is actually enforced, the node is purely for informative purposes to help
+ * out our analysis during lowering. */
+struct Consumer : public StmtNode<Consumer> {
+    std::string name;
+    Stmt body;
+
+    EXPORT static Stmt make(std::string name, Stmt body);
+
+    static const IRNodeType _type_info = IRNodeType::Consumer;
 };
 
 /** Store a 'value' to the buffer called 'name' at a given

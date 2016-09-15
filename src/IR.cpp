@@ -303,16 +303,21 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt ProducerConsumer::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
-    internal_assert(produce.defined()) << "ProducerConsumer of undefined\n";
-    // update is allowed to be null
-    internal_assert(consume.defined()) << "ProducerConsumer of undefined\n";
+Stmt Producer::make(std::string name, Stmt body) {
+    internal_assert(body.defined()) << "Producer of undefined\n";
 
-    ProducerConsumer *node = new ProducerConsumer;
+    Producer *node = new Producer;
     node->name = name;
-    node->produce = produce;
-    node->update = update;
-    node->consume = consume;
+    node->body = body;
+    return node;
+}
+
+Stmt Consumer::make(std::string name, Stmt body) {
+    internal_assert(body.defined()) << "Consumer of undefined\n";
+
+    Consumer *node = new Consumer;
+    node->name = name;
+    node->body = body;
     return node;
 }
 
@@ -566,7 +571,8 @@ template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Cal
 template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
 template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
 template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
-template<> void StmtNode<ProducerConsumer>::accept(IRVisitor *v) const { v->visit((const ProducerConsumer *)this); }
+template<> void StmtNode<Producer>::accept(IRVisitor *v) const { v->visit((const Producer *)this); }
+template<> void StmtNode<Consumer>::accept(IRVisitor *v) const { v->visit((const Consumer *)this); }
 template<> void StmtNode<For>::accept(IRVisitor *v) const { v->visit((const For *)this); }
 template<> void StmtNode<Store>::accept(IRVisitor *v) const { v->visit((const Store *)this); }
 template<> void StmtNode<Provide>::accept(IRVisitor *v) const { v->visit((const Provide *)this); }

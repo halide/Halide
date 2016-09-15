@@ -345,7 +345,7 @@ private:
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         scope.push(op->name, unique_id());
         stream << open_div("Produce");
         int produce_id = unique_id();
@@ -356,27 +356,27 @@ private:
         stream << close_expand_button() << " {";
         stream << close_span();;
         stream << open_div("ProduceBody Indent", produce_id);
-        print(op->produce);
+        print(op->body);
         stream << close_div();
         stream << matched("}");
         stream << close_div();
-        if (op->update.defined()) {
-            stream << open_div("Update");
-            int update_id = unique_id();
-            stream << open_span("Matched");
-            stream << open_expand_button(update_id);
-            stream << keyword("update") << " ";
-            stream << var(op->name);
-            stream << close_expand_button();
-            stream << " {";
-            stream << close_span();
-            stream << open_div("UpdateBody Indent", update_id);
-            print(op->update);
-            stream << close_div();
-            stream << matched("}");
-            stream << close_div();
-        }
-        print(op->consume);
+        scope.pop(op->name);
+    }
+    void visit(const Consumer *op) {
+        scope.push(op->name, unique_id());
+        stream << open_div("Consume");
+        int produce_id = unique_id();
+        stream << open_span("Matched");
+        stream << open_expand_button(produce_id);
+        stream << keyword("consume") << " ";
+        stream << var(op->name);
+        stream << close_expand_button() << " {";
+        stream << close_span();;
+        stream << open_div("ConsumeBody Indent", produce_id);
+        print(op->body);
+        stream << close_div();
+        stream << matched("}");
+        stream << close_div();
         scope.pop(op->name);
     }
     void visit(const For *op) {

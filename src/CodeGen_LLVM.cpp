@@ -3085,23 +3085,18 @@ void CodeGen_LLVM::return_with_error_code(llvm::Value *error_code) {
     builder->CreateBr(get_destructor_block());
 }
 
-void CodeGen_LLVM::visit(const ProducerConsumer *op) {
+void CodeGen_LLVM::visit(const Producer *op) {
     BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);
-    codegen(op->produce);
+    codegen(op->body);
+}
 
-    if (op->update.defined()) {
-        BasicBlock *update = BasicBlock::Create(*context, std::string("update ") + op->name, function);
-        builder->CreateBr(update);
-        builder->SetInsertPoint(update);
-        codegen(op->update);
-    }
-
+void CodeGen_LLVM::visit(const Consumer *op) {
     BasicBlock *consume = BasicBlock::Create(*context, std::string("consume ") + op->name, function);
     builder->CreateBr(consume);
     builder->SetInsertPoint(consume);
-    codegen(op->consume);
+    codegen(op->body);
 }
 
 void CodeGen_LLVM::visit(const For *op) {

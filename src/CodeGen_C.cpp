@@ -1342,21 +1342,16 @@ void CodeGen_C::visit(const AssertStmt *op) {
     close_scope("");
 }
 
-void CodeGen_C::visit(const ProducerConsumer *op) {
-
+void CodeGen_C::visit(const Producer *op) {
     do_indent();
     stream << "// produce " << op->name << '\n';
-    print_stmt(op->produce);
+    print_stmt(op->body);
+}
 
-    if (op->update.defined()) {
-        do_indent();
-        stream << "// update " << op->name << '\n';
-        print_stmt(op->update);
-    }
-
+void CodeGen_C::visit(const Consumer *op) {
     do_indent();
     stream << "// consume " << op->name << '\n';
-    print_stmt(op->consume);
+    print_stmt(op->body);
 }
 
 void CodeGen_C::visit(const For *op) {

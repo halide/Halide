@@ -27,7 +27,7 @@ private:
         Internal::IRVisitor::visit(op);
     }
 
-    void visit(const Internal::ProducerConsumer *op) {
+    void visit(const Internal::Producer *op) {
         bool old_in_produce = in_produce;
         in_produce = true;
         Internal::IRVisitor::visit(op);

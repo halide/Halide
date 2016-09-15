@@ -129,7 +129,7 @@ class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
     // BufferInfo tracks the state of a givven buffer over an IR scope.
-    // Generally the scope is a ProducerConsumer. The data herein is mutable.
+    // Generally the scope is a Producer/Consumer. The data herein is mutable.
     struct BufferInfo {
         bool host_touched,  // Is there definitely a host-side allocation?
             dev_touched,    // Is there definitely a device-side allocation?
@@ -433,7 +433,7 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
@@ -449,24 +449,12 @@ class InjectBufferCopies : public IRMutator {
            }
         }
 
-        Stmt produce = mutate(op->produce);
-        produce = do_copies(produce);
-
-        Stmt update;
-        if (op->update.defined()) {
-            update = mutate(op->update);
-            update = do_copies(update);
-        }
-
-        Stmt consume = mutate(op->consume);
-        consume = do_copies(consume);
-
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
+        Stmt body = mutate(op->body);
+        body = do_copies(body);
+        if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = Producer::make(op->name, body);
         }
 
         // Need to make all output buffers touched on device valid
@@ -484,6 +472,21 @@ class InjectBufferCopies : public IRMutator {
                     stmt = Block::make(make_buffer_copy(ToDevice, buf_name, i.second.current_device), stmt);
                 }
             }
+        }
+    }
+
+    void visit(const Consumer *op) {
+        if (device_api != DeviceAPI::Host) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Stmt body = mutate(op->body);
+        body = do_copies(body);
+        if (body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = Consumer::make(op->name, body);
         }
     }
 
@@ -578,6 +581,7 @@ class InjectBufferCopies : public IRMutator {
             // TODO: handle this case by creating the args from scratch?
             internal_assert(!create_buffer_args.empty());
 
+            debug(0) << "***MAKING BUFFER FOR " << op->name << "\n";
             stmt = LetStmt::make(op->name + ".buffer", Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, create_buffer_args, Call::Intrinsic), inner_body);
 
             // Rebuild any wrapped lets outside the one for the create_buffer_t.

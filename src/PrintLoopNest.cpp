@@ -116,16 +116,20 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         do_indent();
-        out << "compute " << simplify_func_name(op->name) << ":\n";
+        out << "produce " << simplify_func_name(op->name) << ":\n";
         indent += 2;
-        op->produce.accept(this);
-        if (op->update.defined()) {
-            op->update.accept(this);
-        }
+        op->body.accept(this);
         indent -= 2;
-        op->consume.accept(this);
+    }
+
+    void visit(const Consumer *op) {
+        do_indent();
+        out << "consume " << simplify_func_name(op->name) << ":\n";
+        indent += 2;
+        op->body.accept(this);
+        indent -= 2;
     }
 
     void visit(const Provide *op) {

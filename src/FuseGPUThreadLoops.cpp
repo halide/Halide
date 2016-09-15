@@ -45,29 +45,6 @@ class InjectThreadBarriers : public IRMutator {
         in_threads = old_in_threads;
     }
 
-    void visit(const ProducerConsumer *op) {
-        if (!in_threads) {
-            Stmt produce = mutate(op->produce);
-            if (!is_no_op(produce)) {
-                produce = Block::make(produce, barrier);
-            }
-
-            Stmt update;
-            if (op->update.defined()) {
-                update = mutate(op->update);
-                if (!is_no_op(update)) {
-                    update = Block::make(update, barrier);
-                }
-            }
-
-            Stmt consume = mutate(op->consume);
-
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     void visit(const Block *op) {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
@@ -171,23 +148,6 @@ class NormalizeDimensionality : public IRMutator {
             max_depth++;
         }
         return s;
-    }
-
-    void visit(const ProducerConsumer *op) {
-        Stmt produce = wrap(op->produce);
-        Stmt update;
-        if (op->update.defined()) {
-            update = wrap(op->update);
-        }
-        Stmt consume = wrap(op->consume);
-
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
-            stmt = op;
-        } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
-        }
     }
 
     void visit(const Block *op) {
@@ -344,34 +304,6 @@ class ExtractSharedAllocations : public IRMutator {
             }
 
             stmt = For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
-        }
-    }
-
-
-    void visit(const ProducerConsumer *op) {
-        if (!in_threads) {
-            Stmt produce = mutate(op->produce);
-            if (!is_no_op(produce)) {
-                barrier_stage++;
-            }
-            Stmt update;
-            if (op->update.defined()) {
-                update = mutate(op->update);
-                if (!is_no_op(update)) {
-                    barrier_stage++;
-                }
-            }
-            Stmt consume = mutate(op->consume);
-
-            if (produce.same_as(op->produce) &&
-                update.same_as(op->update) &&
-                consume.same_as(op->consume)) {
-                stmt = op;
-            } else {
-                stmt = ProducerConsumer::make(op->name, produce, update, consume);
-            }
-        } else {
-            IRMutator::visit(op);
         }
     }
 
