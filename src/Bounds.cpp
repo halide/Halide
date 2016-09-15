@@ -742,7 +742,11 @@ private:
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const ProducerConsumer *) {
+    void visit(const Producer *) {
+        internal_error << "Bounds of statement\n";
+    }
+
+    void visit(const Consumer *) {
         internal_error << "Bounds of statement\n";
     }
 

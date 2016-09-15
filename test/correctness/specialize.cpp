@@ -46,7 +46,7 @@ void my_free(void *ctx, void *ptr) {
 }
 
 // Custom lowering pass to count the number of IfThenElse statements found inside
-// ProducerConsumer nodes.
+// Producer/Consumer nodes.
 int if_then_else_count = 0;
 class CountIfThenElse : public Internal::IRMutator {
     int producer_consumers;
@@ -54,7 +54,13 @@ class CountIfThenElse : public Internal::IRMutator {
 public:
     CountIfThenElse() : producer_consumers(0) {}
 
-    void visit(const Internal::ProducerConsumer *op) {
+    void visit(const Internal::Producer *op) {
+        // Only count ifs found inside a pipeline.
+        producer_consumers++;
+        IRMutator::visit(op);
+        producer_consumers--;
+    }
+    void visit(const Internal::Consumer *op) {
         // Only count ifs found inside a pipeline.
         producer_consumers++;
         IRMutator::visit(op);

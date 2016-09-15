@@ -33,7 +33,8 @@ private:
     // Don't enter any inner constructs for which it's not safe to pull out stores.
     void visit(const For *op) {collecting = false; stmt = op;}
     void visit(const IfThenElse *op) {collecting = false; stmt = op;}
-    void visit(const ProducerConsumer *op) {collecting = false; stmt = op;}
+    void visit(const Producer *op) {collecting = false; stmt = op;}
+    void visit(const Consumer *op) {collecting = false; stmt = op;}
     void visit(const Allocate *op) {collecting = false; stmt = op;}
     void visit(const Realize *op) {collecting = false; stmt = op;}
 

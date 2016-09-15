@@ -28,7 +28,7 @@ using std::map;
 class CountProducers : public IRVisitor {
     const std::string &name;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         if (op->name == name) {
             count++;
         } else {
@@ -94,7 +94,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
+        if (op->name == func.name()) {
+            // Can't proceed into the pipeline for this func
+            stmt = op;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Consumer *op) {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
             stmt = op;

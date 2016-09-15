@@ -673,7 +673,19 @@ private:
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
 
-        return ProducerConsumer::make(func.name(), realization.first, realization.second, s);
+        Stmt producer;
+        if (realization.first.defined() && realization.second.defined()) {
+            producer = Producer::make(func.name(), Block::make(realization.first, realization.second));
+        } else if (realization.first.defined()) {
+            producer = Producer::make(func.name(), realization.first);
+        } else {
+            internal_assert(realization.second.defined());
+            producer = Producer::make(func.name(), realization.second);
+        }
+
+        Stmt consumer = Consumer::make(func.name(), s);
+
+        return Block::make(producer, consumer);
     }
 
     Stmt build_realize(Stmt s) {
@@ -702,23 +714,16 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         string old = producing;
         producing = op->name;
-        Stmt produce = mutate(op->produce);
-        Stmt update;
-        if (op->update.defined()) {
-            update = mutate(op->update);
-        }
+        Stmt body = mutate(op->body);
         producing = old;
-        Stmt consume = mutate(op->consume);
 
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
+        if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = Producer::make(op->name, body);
         }
     }
 
@@ -975,15 +980,11 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         string old_caller = caller;
         caller = op->name;
-        op->produce.accept(this);
-        if (op->update.defined()) {
-            op->update.accept(this);
-        }
+        op->body.accept(this);
         caller = old_caller;
-        op->consume.accept(this);
     }
 
     void visit(const Call *op) {

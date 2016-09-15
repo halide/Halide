@@ -120,7 +120,7 @@ protected:
             in_glsl_loops = true;
         } else if (within_kernel_loop) {
             // The inner loop variable is non-linear w.r.t the glsl pixel coordinate.
-            scope.push(op->name, 2); 
+            scope.push(op->name, 2);
         }
 
         Stmt mutated_body = mutate(op->body);
@@ -690,7 +690,8 @@ protected:
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
     virtual void visit(const AssertStmt *);
-    virtual void visit(const ProducerConsumer *);
+    virtual void visit(const Producer *);
+    virtual void visit(const Consumer *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
@@ -817,8 +818,12 @@ void IRFilter::visit(const AssertStmt *op) {
     mutate_operator(this, op, op->condition, op->message, &stmt);
 }
 
-void IRFilter::visit(const ProducerConsumer *op) {
-    mutate_operator(this, op, op->produce, op->update, op->consume, &stmt);
+void IRFilter::visit(const Producer *op) {
+    mutate_operator(this, op, op->body, &stmt);
+}
+
+void IRFilter::visit(const Consumer *op) {
+    mutate_operator(this, op, op->body, &stmt);
 }
 
 void IRFilter::visit(const For *op) {

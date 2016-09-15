@@ -22,21 +22,20 @@ public:
 private:
     using IRVisitor::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Producer *op) {
         string old_producer = producer;
         producer = op->name;
         calls[producer]; // Make sure each producer is allocated a slot
-        op->produce.accept(this);
+        op->body.accept(this);
         producer = old_producer;
 
-        if (op->update.defined()) {
+        /*if (op->update.defined()) {
             // Just lump all the update stages together
             producer = op->name + ".update(" + std::to_string(0) + ")";
             calls[producer]; // Make sure each producer is allocated a slot
             op->update.accept(this);
             producer = old_producer;
-        }
-        op->consume.accept(this);
+        }*/
         producer = old_producer;
     }
 
