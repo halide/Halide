@@ -122,24 +122,6 @@ EXPORT extern const std::map<std::string, Halide::Type> &get_halide_type_enum_ma
  * for ahead-of-time filter compilation. */
 EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
-class GeneratorParamBase {
-public:
-    EXPORT explicit GeneratorParamBase(const std::string &name);
-    EXPORT virtual ~GeneratorParamBase();
-
-    const std::string name;
-
-protected:
-    friend class GeneratorBase;
-
-    virtual void set_from_string(const std::string &value_string) = 0;
-    virtual std::string to_string() const = 0;
-
-private:
-    explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
-    void operator=(const GeneratorParamBase &) = delete;
-};
-
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
 //
@@ -166,12 +148,36 @@ struct select_type : std::conditional<First::value, typename First::type, typena
 template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
-template<typename T>
-class GeneratorParamImpl {
+class GeneratorParamBase {
 public:
-    explicit GeneratorParamImpl(const T &value) : value_(value) {}
+    EXPORT explicit GeneratorParamBase(const std::string &name);
+    EXPORT virtual ~GeneratorParamBase();
+
+    const std::string name;
+
+protected:
+    friend class GeneratorBase;
+
+    virtual void set_from_string(const std::string &value_string) = 0;
+    virtual std::string to_string() const = 0;
+
+private:
+    explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
+    void operator=(const GeneratorParamBase &) = delete;
+};
+
+template<typename T>
+class GeneratorParamImpl : public GeneratorParamBase {
+public:
+    explicit GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
+
     T value() const { return value_; }
-    void set(const T &new_value) { value_ = new_value; }
+
+    operator T() const { return this->value(); }
+    
+    operator Expr() const { return Internal::make_const(type_of<T>(), this->value()); }
+
+    virtual void set(const T &new_value) { value_ = new_value; }
 
 private:
     T value_;
@@ -185,11 +191,11 @@ private:
 template<typename T>
 class GeneratorParam_Target : public GeneratorParamImpl<T> {
 public:
-    explicit GeneratorParam_Target(const T &value) : GeneratorParamImpl<T>(value) {}
-    void set_from_string(const std::string &new_value_string) {
+    explicit GeneratorParam_Target(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
+    void set_from_string(const std::string &new_value_string) override {
         this->set(Target(new_value_string));
     }
-    std::string to_string() const {
+    std::string to_string() const override {
         return this->value().to_string();
     }
 };
@@ -197,19 +203,21 @@ public:
 template<typename T>
 class GeneratorParam_Arithmetic : public GeneratorParamImpl<T> {
 public:
-    explicit GeneratorParam_Arithmetic(const T &value, 
+    explicit GeneratorParam_Arithmetic(const std::string &name, 
+                                       const T &value, 
                                        const T &min = std::numeric_limits<T>::lowest(), 
                                        const T &max = std::numeric_limits<T>::max())
-        : GeneratorParamImpl<T>(value), min(min), max(max) {
+        : GeneratorParamImpl<T>(name, value), min(min), max(max) {
+        // call set() to ensure value is clamped to min/max
         this->set(value);
     }
 
-    void set(const T &new_value) {
+    void set(const T &new_value) override {
         user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
         GeneratorParamImpl<T>::set(new_value);
     }
 
-    void set_from_string(const std::string &new_value_string) {
+    void set_from_string(const std::string &new_value_string) override {
         std::istringstream iss(new_value_string);
         T t;
         iss >> t;
@@ -217,7 +225,7 @@ public:
         this->set(t);
     }
 
-    std::string to_string() const {
+    std::string to_string() const override {
         std::ostringstream oss;
         oss << this->value();
         return oss.str();
@@ -230,9 +238,9 @@ private:
 template<typename T>
 class GeneratorParam_Bool : public GeneratorParam_Arithmetic<T> {
 public:
-    explicit GeneratorParam_Bool(const T &value) : GeneratorParam_Arithmetic<T>(value) {}
+    explicit GeneratorParam_Bool(const std::string &name, const T &value) : GeneratorParam_Arithmetic<T>(name, value) {}
 
-    void set_from_string(const std::string &new_value_string) {
+    void set_from_string(const std::string &new_value_string) override {
         bool v = false;
         if (new_value_string == "true") {
             v = true;
@@ -244,7 +252,7 @@ public:
         this->set(v);
     }
 
-    std::string to_string() const {
+    std::string to_string() const override {
         return this->value() ? "true" : "false";
     }
 };
@@ -252,16 +260,16 @@ public:
 template<typename T>
 class GeneratorParam_Enum : public GeneratorParamImpl<T> {
 public:
-    explicit GeneratorParam_Enum(const T &value, const std::map<std::string, T> &enum_map)
-        : GeneratorParamImpl<T>(value), enum_map(enum_map) {}
+    explicit GeneratorParam_Enum(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
+        : GeneratorParamImpl<T>(name, value), enum_map(enum_map) {}
 
-    void set_from_string(const std::string &new_value_string) {
+    void set_from_string(const std::string &new_value_string) override {
         auto it = enum_map.find(new_value_string);
         user_assert(it != enum_map.end()) << "Enumeration value not found: " << new_value_string;
         this->set(it->second);
     }
 
-    std::string to_string() const {
+    std::string to_string() const override {
         return Internal::enum_to_string(enum_map, this->value());
     }
 
@@ -272,9 +280,19 @@ private:
 template<typename T>
 class GeneratorParam_Type : public GeneratorParam_Enum<T> {
 public:
-    explicit GeneratorParam_Type(const T &value)
-        : GeneratorParam_Enum<T>(value, Internal::get_halide_type_enum_map()) {}
+    explicit GeneratorParam_Type(const std::string &name, const T &value)
+        : GeneratorParam_Enum<T>(name, value, Internal::get_halide_type_enum_map()) {}
 };
+
+template<typename T> 
+using GeneratorParamImplBase =
+    typename Internal::select_type<
+        Internal::cond<std::is_same<T, Target>::value, Internal::GeneratorParam_Target<T>>,
+        Internal::cond<std::is_same<T, Type>::value,   Internal::GeneratorParam_Type<T>>,
+        Internal::cond<std::is_same<T, bool>::value,   Internal::GeneratorParam_Bool<T>>,
+        Internal::cond<std::is_arithmetic<T>::value,   Internal::GeneratorParam_Arithmetic<T>>,
+        Internal::cond<std::is_enum<T>::value,         Internal::GeneratorParam_Enum<T>>
+    >::type;
 
 }  // namespace Internal
 
@@ -307,42 +325,16 @@ public:
  *
  */
 template <typename T> 
- class GeneratorParam : public Internal::GeneratorParamBase {
+ class GeneratorParam : public Internal::GeneratorParamImplBase<T> {
 public:
     GeneratorParam(const std::string &name, const T &value)
-        : GeneratorParamBase(name), impl(value) {}
+        : Internal::GeneratorParamImplBase<T>(name, value) {}
 
     GeneratorParam(const std::string &name, const T &value, const T &min, const T &max)
-        : GeneratorParamBase(name), impl(value, min, max) {}
+        : Internal::GeneratorParamImplBase<T>(name, value, min, max) {}
 
     GeneratorParam(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
-        : GeneratorParamBase(name), impl(value, enum_map) {}
-
-    // TODO: make this private; the only apparent use is some existing Generators
-    // which use it to dance on the Target value inside build() [e.g. to set NoAsserts].
-    void set(const T &new_value) { impl.set(new_value); }
-
-    operator T() const { return impl.value(); }
-    operator Expr() const { return Internal::make_const(type_of<T>(), impl.value()); }
-
-protected:
-    void set_from_string(const std::string &new_value_string) override {
-        impl.set_from_string(new_value_string);
-    }
-
-    std::string to_string() const override {
-        return impl.to_string();
-    }
-
-private:
-    using ImplClass = typename Internal::select_type<
-        Internal::cond<std::is_same<T, Target>::value, Internal::GeneratorParam_Target<T>>,
-        Internal::cond<std::is_same<T, Type>::value,   Internal::GeneratorParam_Type<T>>,
-        Internal::cond<std::is_same<T, bool>::value,   Internal::GeneratorParam_Bool<T>>,
-        Internal::cond<std::is_arithmetic<T>::value,   Internal::GeneratorParam_Arithmetic<T>>,
-        Internal::cond<std::is_enum<T>::value,         Internal::GeneratorParam_Enum<T>>
-    >::type;
-    ImplClass impl;
+        : Internal::GeneratorParamImplBase<T>(name, value, enum_map) {}
 };
 
 /** Addition between GeneratorParam<T> and any type that supports operator+ with T.
