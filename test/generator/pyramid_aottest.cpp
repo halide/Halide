@@ -1,6 +1,5 @@
 #include <math.h>
 #include <stdio.h>
-#include <ratio>
 
 #include "pyramid.h"
 #include "HalideBuffer.h"
@@ -9,34 +8,8 @@
 using std::vector;
 using namespace Halide;
 
-template<bool B, typename T>
-struct cond {
-    static constexpr bool value = B;
-    using type = T;
-};
-
-template <typename First, typename... Rest>
-struct select : std::conditional<First::value, First, typename select<Rest...>::type> { };
-
-template<typename First>
-struct select<First> {
-    //static_assert(T::value, "No case of select was chosen");
-    using type = std::conditional<First::value, typename First::type, void>;
-};
-
-template<int a>
-struct tester : public select<cond<a == 0, std::ratio<1, 2>>,
-                              cond<a == 1, std::ratio<3, 2>>,
-                              cond<a == 2, std::ratio<7, 2>>>::type {};
-
-
 int main(int argc, char **argv) {
     Image<float> input(1024, 1024);
-
-    using T0 = tester<0>::type; printf("t0 %d %d\n", (int)T0::num, (int)T0::den);
-    using T1 = tester<1>::type; printf("t0 %d %d\n", (int)T1::num, (int)T1::den);
-    using T2 = tester<2>::type; printf("t0 %d %d\n", (int)T2::num, (int)T2::den);
-    //using T3 = tester<3>::type; printf("t0 %d %d\n", (int)T3::num, (int)T3::den);
 
     // Put some junk in the input. Keep it to small integers so the float averaging stays exact.
     for (int y = 0; y < input.height(); y++) {
