@@ -260,7 +260,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // before the last one. Because, e.g., an intermediate
             // stage may be unrolled, expanding its bounds provided.
 
-            if (op->body.defined()) {
+            if (!func.updates().empty()) {
                 Box b = box_provided(op->body, func.name());
                 if (can_slide_up) {
                     string n = prefix + dim + ".min";

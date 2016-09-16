@@ -17,35 +17,38 @@ typedef map<string, vector<string>> CallGraphs;
 
 class CheckCalls : public IRVisitor {
 public:
+    CheckCalls(const map<string, Function> &funcs) : funcs(funcs) {}
+
     CallGraphs calls; // Caller -> vector of callees
-    string producer = "";
 private:
+    map<string, Function> funcs;
+    string producer = "";
+
     using IRVisitor::visit;
 
     void visit(const Producer *op) {
+        assert(funcs.count(op->name));
         Stmt produce = op->body;
         Stmt update;
 
-        // Peel the let/if stmts until we find a block
-        Stmt body = op->body;
-        while (true) {
-            const LetStmt *let = body.as<LetStmt>();
-            const IfThenElse *if_else = body.as<IfThenElse>();
-            if (let) {
-                body = let->body;
-            } else if (if_else) {
-                body = if_else->then_case;
-            } else {
-                break;
+        if (!funcs[op->name].updates().empty()) {
+            // Peel the let/if stmts until we find a block
+            Stmt body = op->body;
+            while (true) {
+                const LetStmt *let = body.as<LetStmt>();
+                const IfThenElse *if_else = body.as<IfThenElse>();
+                if (let) {
+                    body = let->body;
+                } else if (if_else) {
+                    body = if_else->then_case;
+                } else {
+                    break;
+                }
             }
-        }
-
-        // Check if the Producer node has an update node. Note: checking if it is
-        // a block only may result in false positive: the block may have been pair
-        // of prolog-steady state-epilogue instead of produce-update
-        if (const Block *block = body.as<Block>()) {
-            produce = block->first;
-            update = block->rest;
+            if (const Block *block = body.as<Block>()) {
+                produce = block->first;
+                update = block->rest;
+            }
         }
 
         string old_producer = producer;
@@ -55,6 +58,7 @@ private:
         producer = old_producer;
 
         if (update.defined()) {
+            assert(!funcs[op->name].updates().empty());
             // Just lump all the update stages together
             producer = op->name + ".update(" + std::to_string(0) + ")";
             calls[producer]; // Make sure each producer is allocated a slot
@@ -76,8 +80,11 @@ private:
     }
 };
 
-
 int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
+    if (result.size() != expected.size()) {
+        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
+        return -1;
+    }
     for (auto &iter : expected) {
         if (result.count(iter.first) == 0) {
             printf("Expect %s to be in the call graphs\n", iter.first.c_str());
@@ -145,7 +152,12 @@ int simple_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm.name(), intm.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -195,7 +207,13 @@ int reorder_split_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm1.name(), intm1.function()},
+            {intm2.name(), intm2.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -248,7 +266,13 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm.name(), intm.function()},
+            {wrapper.name(), wrapper.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -321,7 +345,15 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
         if (compile_module) {
             // Check the call graphs.
             Module m = g.compile_to_module({g.infer_arguments()});
-            CheckCalls checker;
+            map<string, Function> funcs = {
+                {a.name(), a.function()},
+                {b.name(), b.function()},
+                {c.name(), c.function()},
+                {f.name(), f.function()},
+                {g.name(), g.function()},
+                {intm.name(), intm.function()},
+            };
+            CheckCalls checker(funcs);
             m.functions().front().body.accept(&checker);
 
             CallGraphs expected = {
@@ -372,7 +404,12 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
         p.set(20);
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm.name(), intm.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -433,7 +470,12 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm.name(), intm.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -496,7 +538,12 @@ int histogram_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {hist.name(), hist.function()},
+            {g.name(), g.function()},
+            {intm.name(), intm.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -564,7 +611,14 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = dot.compile_to_module({dot.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {a.name(), a.function()},
+            {b.name(), b.function()},
+            {dot.name(), dot.function()},
+            {intm1.name(), intm1.function()},
+            {intm2.name(), intm2.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -626,7 +680,13 @@ int tuple_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm1.name(), intm1.function()},
+            {intm2.name(), intm2.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
@@ -707,7 +767,15 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     if (compile_module) {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
+        map<string, Function> funcs = {
+            {f.name(), f.function()},
+            {g.name(), g.function()},
+            {intm1.name(), intm1.function()},
+            {intm2.name(), intm2.function()},
+            {intm3.name(), intm3.function()},
+            {intm4.name(), intm4.function()},
+        };
+        CheckCalls checker(funcs);
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
