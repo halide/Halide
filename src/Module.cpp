@@ -310,6 +310,7 @@ void compile_multitarget(const std::string &fn_name,
             Target::CPlusPlusMangling,
             Target::JIT,
             Target::Matlab,
+            Target::MSAN,
             Target::NoRuntime,
             Target::UserContext,
         }};
