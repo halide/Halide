@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "device_buffer_utils.h"
 
 extern "C" {
 
