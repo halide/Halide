@@ -103,6 +103,17 @@ namespace Halide {
 
 namespace Internal {
 
+template <typename T>
+NO_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T& t) {
+    for (auto key_value : enum_map) {
+        if (t == key_value.second) {
+            return key_value.first;
+        }
+    }
+    user_error << "Enumeration value not found.\n";
+    return "";
+}
+
 EXPORT extern const std::map<std::string, Halide::Type> &get_halide_type_enum_map();
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
@@ -115,14 +126,152 @@ class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
     EXPORT virtual ~GeneratorParamBase();
-    virtual void from_string(const std::string &value_string) = 0;
-    virtual std::string to_string() const = 0;
 
     const std::string name;
+
+protected:
+    friend class GeneratorBase;
+
+    virtual void set_from_string(const std::string &value_string) = 0;
+    virtual std::string to_string() const = 0;
 
 private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
+};
+
+// select_type<> is to std::conditional as switch is to if:
+// it allows a multiway compile-time type definition via the form
+//
+//    select_type<cond<condition1, type1>,
+//                cond<condition2, type2>,
+//                ....
+//                cond<conditionN, typeN>>::type
+//
+// Note that the conditions are evaluated in order; the first evaluating to true
+// is chosen.
+//
+// Note that if no conditions evaluate to true, the type is 'void' (i.e. illegal).
+template<bool B, typename T>
+struct cond {
+    static constexpr bool value = B;
+    using type = T;
+};
+
+template <typename First, typename... Rest>
+struct select_type : std::conditional<First::value, typename First::type, typename select_type<Rest...>::type> { };
+
+template<typename First>
+struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
+
+template<typename T>
+class GeneratorParamImpl {
+public:
+    explicit GeneratorParamImpl(const T &value) : value_(value) {}
+    T value() const { return value_; }
+    void set(const T &new_value) { value_ = new_value; }
+
+private:
+    T value_;
+};
+
+// Stubs for type-specific implementations of GeneratorParam, to avoid
+// many complex enable_if<> statements that were formerly spread through the
+// implementation. Note that not all of these need to be templated classes,
+// (e.g. for GeneratorParam_Target, T == Target always), but are declared 
+// that way for symmetry of declaration.
+template<typename T>
+class GeneratorParam_Target : public GeneratorParamImpl<T> {
+public:
+    explicit GeneratorParam_Target(const T &value) : GeneratorParamImpl<T>(value) {}
+    void set_from_string(const std::string &new_value_string) {
+        this->set(Target(new_value_string));
+    }
+    std::string to_string() const {
+        return this->value().to_string();
+    }
+};
+
+template<typename T>
+class GeneratorParam_Arithmetic : public GeneratorParamImpl<T> {
+public:
+    explicit GeneratorParam_Arithmetic(const T &value, 
+                                       const T &min = std::numeric_limits<T>::lowest(), 
+                                       const T &max = std::numeric_limits<T>::max())
+        : GeneratorParamImpl<T>(value), min(min), max(max) {
+        this->set(value);
+    }
+
+    void set(const T &new_value) {
+        user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
+        GeneratorParamImpl<T>::set(new_value);
+    }
+
+    void set_from_string(const std::string &new_value_string) {
+        std::istringstream iss(new_value_string);
+        T t;
+        iss >> t;
+        user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << new_value_string;
+        this->set(t);
+    }
+
+    std::string to_string() const {
+        std::ostringstream oss;
+        oss << this->value();
+        return oss.str();
+    }
+
+private:
+    const T min, max;
+};
+
+template<typename T>
+class GeneratorParam_Bool : public GeneratorParam_Arithmetic<T> {
+public:
+    explicit GeneratorParam_Bool(const T &value) : GeneratorParam_Arithmetic<T>(value) {}
+
+    void set_from_string(const std::string &new_value_string) {
+        bool v = false;
+        if (new_value_string == "true") {
+            v = true;
+        } else if (new_value_string == "false") {
+            v = false;
+        } else {
+            user_assert(false) << "Unable to parse bool: " << new_value_string;
+        }
+        this->set(v);
+    }
+
+    std::string to_string() const {
+        return this->value() ? "true" : "false";
+    }
+};
+
+template<typename T>
+class GeneratorParam_Enum : public GeneratorParamImpl<T> {
+public:
+    explicit GeneratorParam_Enum(const T &value, const std::map<std::string, T> &enum_map)
+        : GeneratorParamImpl<T>(value), enum_map(enum_map) {}
+
+    void set_from_string(const std::string &new_value_string) {
+        auto it = enum_map.find(new_value_string);
+        user_assert(it != enum_map.end()) << "Enumeration value not found: " << new_value_string;
+        this->set(it->second);
+    }
+
+    std::string to_string() const {
+        return Internal::enum_to_string(enum_map, this->value());
+    }
+
+private:
+    const std::map<std::string, T> enum_map;
+};
+
+template<typename T>
+class GeneratorParam_Type : public GeneratorParam_Enum<T> {
+public:
+    explicit GeneratorParam_Type(const T &value)
+        : GeneratorParam_Enum<T>(value, Internal::get_halide_type_enum_map()) {}
 };
 
 }  // namespace Internal
@@ -155,182 +304,43 @@ private:
  * No vector Types are currently supported by this mapping.
  *
  */
-template <typename T> class GeneratorParam : public Internal::GeneratorParamBase {
+template <typename T> 
+ class GeneratorParam : public Internal::GeneratorParamBase {
 public:
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
     GeneratorParam(const std::string &name, const T &value)
-        : GeneratorParamBase(name), value(value), min(value), max(value) {}
+        : GeneratorParamBase(name), impl(value) {}
 
-    // Note that "is_arithmetic" includes the bool type.
-    template <typename T2 = T,
-              typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
-    GeneratorParam(const std::string &name, const T &value)
-        : GeneratorParamBase(name), value(value), min(std::numeric_limits<T>::lowest()),
-          max(std::numeric_limits<T>::max()) {}
-
-    template <typename T2 = T,
-              typename std::enable_if<std::is_arithmetic<T2>::value &&
-                                      !std::is_same<T2, bool>::value>::type * = nullptr>
     GeneratorParam(const std::string &name, const T &value, const T &min, const T &max)
-        : GeneratorParamBase(name),
-          // Use the set() method so that out-of-range values are checked.
-          // value(std::min(std::max(value, min), max)),
-          min(min), max(max) {
-        static_assert(std::is_arithmetic<T>::value && !std::is_same<T, bool>::value,
-                      "Only arithmetic types may specify min and max");
-        set(value);
-    }
+        : GeneratorParamBase(name), impl(value, min, max) {}
 
-    template <typename T2 = T, typename std::enable_if<std::is_enum<T2>::value>::type * = nullptr>
-    GeneratorParam(const std::string &name, const T &value,
-                   const std::map<std::string, T> &enum_map)
-        : GeneratorParamBase(name), value(value), min(std::numeric_limits<T>::lowest()),
-          max(std::numeric_limits<T>::max()), enum_map(enum_map) {
-        static_assert(std::is_enum<T>::value, "Only enum types may specify value maps");
-    }
+    GeneratorParam(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
+        : GeneratorParamBase(name), impl(value, enum_map) {}
 
-    // Special-case for Halide::Type, which has a built-in enum map (and no min or max).
-    template <typename T2 = T, typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
-    GeneratorParam(const std::string &name, const T &value)
-        : GeneratorParamBase(name), value(value), min(value),
-          max(value), enum_map(Internal::get_halide_type_enum_map()) {
-    }
+    // TODO: make this private; the only apparent use is some existing Generators
+    // which use it to dance on the Target value inside build() [e.g. to set NoAsserts].
+    void set(const T &new_value) { impl.set(new_value); }
 
-    // Arithmetic values must fall within the range -- we don't silently clamp.
-    template <typename T2 = T,
-              typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
-    void set(const T &new_value) {
-        user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
-        value = new_value;
-    }
+    operator T() const { return impl.value(); }
+    operator Expr() const { return Internal::make_const(type_of<T>(), impl.value()); }
 
-    template <typename T2 = T,
-              typename std::enable_if<!std::is_arithmetic<T2>::value>::type * = nullptr>
-    void set(const T &new_value) {
-        value = new_value;
-    }
-
-    void from_string(const std::string &new_value_string) override {
-        // delegate to a function that we can specialize based on the template argument
-        set(from_string_impl(new_value_string));
+protected:
+    void set_from_string(const std::string &new_value_string) override {
+        impl.set_from_string(new_value_string);
     }
 
     std::string to_string() const override {
-        // delegate to a function that we can specialize based on the template argument
-        return to_string_impl(value);
+        return impl.to_string();
     }
-
-    operator T() const { return value; }
-    operator Expr() const { return Internal::make_const(type_of<T>(), value); }
 
 private:
-    T value;
-    const T min, max;  // only for arithmetic types
-    const std::map<std::string, T> enum_map;  // only for enums
-
-    // Note that none of the string conversions are static:
-    // the specializations for enum require access to enum_map
-
-    // string conversions: Target
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
-    T from_string_impl(const std::string &s) const {
-        return Target(s);
-    }
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
-    std::string to_string_impl(const T& t) const {
-        return t.to_string();
-    }
-
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
-    T from_string_impl(const std::string &s) const {
-        auto it = enum_map.find(s);
-        user_assert(it != enum_map.end()) << "Enumeration value not found: " << s;
-        return it->second;
-    }
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
-    std::string to_string_impl(const T& t) const {
-        for (auto key_value : enum_map) {
-            if (t == key_value.second) {
-                return key_value.first;
-            }
-        }
-        user_assert(0) << "Type value not found: " << name;
-        return "";
-    }
-
-    // string conversions: bool
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, bool>::value>::type * = nullptr>
-    T from_string_impl(const std::string &s) const {
-        if (s == "true") return true;
-        if (s == "false") return false;
-        user_assert(false) << "Unable to parse bool: " << s;
-        return false;
-    }
-    template <typename T2 = T,
-              typename std::enable_if<std::is_same<T2, bool>::value>::type * = nullptr>
-    std::string to_string_impl(const T& t) const {
-        return t ? "true" : "false";
-    }
-
-    // string conversions: integer
-    template <typename T2 = T,
-              typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
-    T from_string_impl(const std::string &s) const {
-        std::istringstream iss(s);
-        T t;
-        iss >> t;
-        user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse integer: " << s;
-        return t;
-    }
-    template <typename T2 = T,
-              typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
-    std::string to_string_impl(const T& t) const {
-        std::ostringstream oss;
-        oss << t;
-        return oss.str();
-    }
-
-    // string conversions: float
-    template <typename T2 = T,
-              typename std::enable_if<std::is_floating_point<T2>::value>::type * = nullptr>
-    T from_string_impl(const std::string &s) const {
-        std::istringstream iss(s);
-        T t;
-        iss >> t;
-        user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse float: " << s;
-        return t;
-    }
-    template <typename T2 = T,
-              typename std::enable_if<std::is_floating_point<T2>::value>::type * = nullptr>
-    std::string to_string_impl(const T& t) const {
-        std::ostringstream oss;
-        oss << t;
-        return oss.str();
-    }
-
-    // string conversions: enum
-    template <typename T2 = T, typename std::enable_if<std::is_enum<T2>::value>::type * = nullptr>
-    T from_string_impl(const std::string &s) const {
-        auto it = enum_map.find(s);
-        user_assert(it != enum_map.end()) << "Enumeration value not found: " << s;
-        return it->second;
-    }
-    template <typename T2 = T, typename std::enable_if<std::is_enum<T2>::value>::type * = nullptr>
-    std::string to_string_impl(const T& t) const {
-        for (auto key_value : enum_map) {
-            if (t == key_value.second) {
-                return key_value.first;
-            }
-        }
-        user_assert(0) << "Enumeration value not found: " << name << " = " << (int)t;
-        return "";
-    }
+    using ImplClass = typename Internal::select_type<
+        Internal::cond<std::is_same<T, Target>::value, Internal::GeneratorParam_Target<T>>,
+        Internal::cond<std::is_same<T, Type>::value,   Internal::GeneratorParam_Type<T>>,
+        Internal::cond<std::is_same<T, bool>::value,   Internal::GeneratorParam_Bool<T>>,
+        Internal::cond<std::is_arithmetic<T>::value,   Internal::GeneratorParam_Arithmetic<T>>,
+        Internal::cond<std::is_enum<T>::value,         Internal::GeneratorParam_Enum<T>>
+    >::type;
+    ImplClass impl;
 };
 
 /** Addition between GeneratorParam<T> and any type that supports operator+ with T.
