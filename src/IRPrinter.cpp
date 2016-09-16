@@ -129,8 +129,10 @@ void IRPrinter::test() {
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
         "  }\n"
         "}\n"
-        "vectorized (x, 0, y) {\n"
-        "  out[x] = (buf((x % 3)) + 1)\n"
+        "consume buf {\n"
+        "  vectorized (x, 0, y) {\n"
+        "    out[x] = (buf((x % 3)) + 1)\n"
+        "  }\n"
         "}\n";
 
     if (source.str() != correct_source) {
