@@ -39,22 +39,6 @@ class InjectMSANHelpers : public IRMutator {
         stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
 
-    void visit(const Call *op) {
-        // convert all calls to halide_copy_to_host() into a pair of calls:
-        // halide_copy_to_host() + halide_msan_annotate_buffer_is_initialized()
-        if (op->call_type == Call::Extern && op->name == "halide_copy_to_host") {
-            Expr call_copy_to_host = op;
-            Expr call_annotate = Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", op->args, Call::Extern);
-            std::string copy_to_host_result_name = unique_name("copy_to_host_result");
-            Expr copy_to_host_result = Variable::make(Int(32), copy_to_host_result_name);
-            expr = Let::make(copy_to_host_result_name, call_copy_to_host, 
-                             select(copy_to_host_result != 0, copy_to_host_result, call_annotate));
-
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
 public:
     InjectMSANHelpers() {}
 
