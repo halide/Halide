@@ -151,7 +151,9 @@ private:
 // Note that the conditions are evaluated in order; the first evaluating to true
 // is chosen.
 //
-// Note that if no conditions evaluate to true, the type is 'void' (i.e. illegal).
+// Note that if no conditions evaluate to true, the resulting type is illegal
+// and will produce a compilation error. (You can provide a default by simply
+// using cond<true, SomeType> as the final entry.)
 template<bool B, typename T>
 struct cond {
     static constexpr bool value = B;
