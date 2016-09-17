@@ -410,7 +410,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
         const std::string &value = key_value.second;
         auto p = m.find(key);
         user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
-        p->second->from_string(value);
+        p->second->set_from_string(value);
     }
     generator_params_set = true;
 }
