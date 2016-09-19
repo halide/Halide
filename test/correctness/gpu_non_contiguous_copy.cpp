@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     cropped.stride[1] *= 2;
     cropped.stride[2] *= 2;
     cropped.stride[3] *= 2;
-    Buffer out(Int(32), &cropped);
+    Image<int32_t> out(cropped);
 
     // Make a bitmask representing the region inside the crop.
     Image<bool> in_subregion(80, 60, 10, 10);

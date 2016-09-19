@@ -16,7 +16,6 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "Image.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
 #include "Debug.h"
@@ -2330,43 +2329,44 @@ FuncTupleElementRef::operator Expr() const {
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], sizes);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return pipeline().realize(sizes, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
-    user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return realize({x_size, y_size, z_size, w_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize(x_size, y_size, z_size, 0, target);
+    return realize({x_size, y_size, z_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize(x_size, y_size, 0, 0, target);
+    return realize({x_size, y_size}, target);
 }
 
 Realization Func::realize(int x_size, const Target &target) {
-    return realize(x_size, 0, 0, 0, target);
+    return realize(std::vector<int>{x_size}, target);
+}
+
+Realization Func::realize(const Target &target) {
+    return realize(std::vector<int>{}, target);
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
+    vector<Image<>> outputs(func.outputs());
+    int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
+        // We're not actually going to read from these outputs, so
+        // make the allocation tiny, then expand them with unsafe
+        // cropping.
+        Image<> im = Image<>::make_scalar(func.output_types()[i]);
+        for (int s : sizes) {
+            if (!s) break;
+            im.add_dimension();
+            im.crop(im.dimensions()-1, 0, s);
+        }
+        outputs[i] = std::move(im);
     }
     Realization r(outputs);
     infer_input_bounds(r);
@@ -2537,16 +2537,8 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Buffer b, const Target &target) {
-    pipeline().realize(b, target);
-}
-
 void Func::realize(Realization dst, const Target &target) {
     pipeline().realize(dst, target);
-}
-
-void Func::infer_input_bounds(Buffer dst) {
-    pipeline().infer_input_bounds(dst);
 }
 
 void Func::infer_input_bounds(Realization dst) {

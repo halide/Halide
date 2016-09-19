@@ -3,9 +3,9 @@
 #include <tuple>
 #include "HalideRuntime.h"
 #include "multitarget.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 void my_error_handler(void *user_context, const char *message) {
     printf("Saw Error: (%s)\n", message);

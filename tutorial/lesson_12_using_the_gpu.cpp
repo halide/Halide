@@ -162,7 +162,7 @@ public:
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
         padded.gpu_threads(x, y);
-        
+
         // JIT-compile the pipeline for the GPU. CUDA, OpenCL, or
         // Metal are not enabled by default. We have to construct a
         // Target object, enable one of them, and then pass that
@@ -201,14 +201,7 @@ public:
     void test_performance() {
         // Test the performance of the scheduled MyPipeline.
 
-        // If we realize curved into a Halide::Image, that will
-        // unfairly penalize GPU performance by including a GPU->CPU
-        // copy in every run. Halide::Image objects always exist on
-        // the CPU.
-
-        // Halide::Buffer, however, represents a buffer that may
-        // exist on either CPU or GPU or both.
-        Buffer output(UInt(8), input.width(), input.height(), input.channels());
+        Image<uint8_t> output(input.width(), input.height(), input.channels());
 
         // Run the filter once to initialize any GPU runtime state.
         curved.realize(output);

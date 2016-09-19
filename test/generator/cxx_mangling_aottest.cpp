@@ -1,13 +1,13 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #include <string.h>
 
 #include "cxx_mangling.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int32_t extract_value_global(int32_t *arg) {
     return *arg;

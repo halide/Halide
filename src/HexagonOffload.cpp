@@ -3,15 +3,15 @@
 #include <memory>
 
 #include "HexagonOffload.h"
-#include "IRMutator.h"
-#include "Substitute.h"
 #include "Closure.h"
-#include "Param.h"
-#include "Image.h"
-#include "LLVM_Output.h"
-#include "RemoveTrivialForLoops.h"
 #include "InjectHostDevBufferCopies.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "LLVM_Output.h"
 #include "LLVM_Headers.h"
+#include "Param.h"
+#include "RemoveTrivialForLoops.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -85,9 +85,10 @@ class InjectHexagonRpc : public IRMutator {
     Expr state_var(const std::string& name, Type type) {
         Expr& var = state_vars[name];
         if (!var.defined()) {
-            Buffer storage(type, {}, nullptr, name + "_buf");
-            *(void **)storage.host_ptr() = nullptr;
-            var = Load::make(type_of<void*>(), name + "_buf", 0, storage, Parameter());
+            Image<void *> storage = Image<void *>::make_scalar();
+            storage() = nullptr;
+            BufferPtr buf(storage, name + "_buf");
+            var = Load::make(type_of<void*>(), name + "_buf", 0, buf, Parameter());
         }
         return var;
     }
@@ -108,10 +109,10 @@ class InjectHexagonRpc : public IRMutator {
     // Create a Buffer containing the given buffer/size, and return an
     // expression for a pointer to the first element.
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
-        Buffer code(type_of<uint8_t>(), {(int)size}, nullptr, name);
-        memcpy(code.host_ptr(), buffer, (int)size);
-
-        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
+        Image<uint8_t> code((int)size);
+        memcpy(code.data(), buffer, (int)size);
+        BufferPtr buf(code, name);
+        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, buf, Parameter());
         return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
     }
 

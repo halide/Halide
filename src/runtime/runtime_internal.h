@@ -134,15 +134,6 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
 WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf);
 
 struct halide_filter_metadata_t;
-struct _halide_runtime_internal_registered_filter_t {
-    // This is a _halide_runtime_internal_registered_filter_t, but
-    // recursive types currently break our method that copies types from
-    // llvm module to llvm module
-    void *next;
-    const halide_filter_metadata_t* (*metadata)();
-    int (*argv_func)(void **args);
-};
-WEAK void halide_runtime_internal_register_metadata(_halide_runtime_internal_registered_filter_t *info);
 
 struct mxArray;
 WEAK int halide_matlab_call_pipeline(void *user_context,

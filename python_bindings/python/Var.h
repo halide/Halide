@@ -3,4 +3,4 @@
 
 void defineVar();
 
-#endif // VAR_H
+#endif  // VAR_H
