@@ -71,8 +71,7 @@ protected:
     EXPORT virtual void visit(const Let *);
     EXPORT virtual void visit(const LetStmt *);
     EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const Producer *);
-    EXPORT virtual void visit(const Consumer *);
+    EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);

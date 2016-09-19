@@ -27,11 +27,15 @@ private:
         Internal::IRVisitor::visit(op);
     }
 
-    void visit(const Internal::Producer *op) {
-        bool old_in_produce = in_produce;
-        in_produce = true;
-        Internal::IRVisitor::visit(op);
-        in_produce = old_in_produce;
+    void visit(const Internal::ProducerConsumer *op) {
+        if (op->is_producer) {
+            bool old_in_produce = in_produce;
+            in_produce = true;
+            Internal::IRVisitor::visit(op);
+            in_produce = old_in_produce;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 };
 

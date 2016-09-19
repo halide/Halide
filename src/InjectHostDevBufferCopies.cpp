@@ -128,8 +128,8 @@ public:
 class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
-    // BufferInfo tracks the state of a givven buffer over an IR scope.
-    // Generally the scope is a Producer/Consumer. The data herein is mutable.
+    // BufferInfo tracks the state of a given buffer over an IR scope.
+    // Generally the scope is a ProducerConsumer. The data herein is mutable.
     struct BufferInfo {
         bool host_touched,  // Is there definitely a host-side allocation?
             dev_touched,    // Is there definitely a device-side allocation?
@@ -433,20 +433,10 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const Producer *op) {
+    void visit(const ProducerConsumer *op) {
         if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
-        }
-
-        bool is_output = true;
-        // The buffers associated with this pipeline should get this loop level
-        for (pair<const string, BufferInfo> &i : state) {
-            const string &buf_name = i.first;
-            if (buf_name == op->name || starts_with(buf_name, op->name + ".")) {
-                i.second.loop_level = loop_level;
-                is_output = false;
-           }
         }
 
         Stmt body = mutate(op->body);
@@ -454,39 +444,36 @@ class InjectBufferCopies : public IRMutator {
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Producer::make(op->name, body);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
 
-        // Need to make all output buffers touched on device valid
-        if (is_output) {
+        if (op->is_producer) {
+            bool is_output = true;
+            // The buffers associated with this pipeline should get this loop level
             for (pair<const string, BufferInfo> &i : state) {
                 const string &buf_name = i.first;
-                if ((buf_name == op->name || starts_with(buf_name, op->name + ".")) &&
-                    i.second.dev_touched && i.second.current_device != DeviceAPI::Host) {
-                    // Inject a device copy, which will make sure the device buffer is allocated
-                    // on the right device and that the host dirty bit is false so the device
-                    // can write. (Which will involve copying to the device if host was dirty
-                    // for the passed in buffer.)
-                    debug(4) << "Injecting device copy for output " << buf_name << " on " <<
-                        static_cast<int>(i.second.current_device) << "\n";
-                    stmt = Block::make(make_buffer_copy(ToDevice, buf_name, i.second.current_device), stmt);
+                if (buf_name == op->name || starts_with(buf_name, op->name + ".")) {
+                    i.second.loop_level = loop_level;
+                    is_output = false;
+               }
+            }
+
+            // Need to make all output buffers touched on device valid
+            if (is_output) {
+                for (pair<const string, BufferInfo> &i : state) {
+                    const string &buf_name = i.first;
+                    if ((buf_name == op->name || starts_with(buf_name, op->name + ".")) &&
+                        i.second.dev_touched && i.second.current_device != DeviceAPI::Host) {
+                        // Inject a device copy, which will make sure the device buffer is allocated
+                        // on the right device and that the host dirty bit is false so the device
+                        // can write. (Which will involve copying to the device if host was dirty
+                        // for the passed in buffer.)
+                        debug(4) << "Injecting device copy for output " << buf_name << " on " <<
+                            static_cast<int>(i.second.current_device) << "\n";
+                        stmt = Block::make(make_buffer_copy(ToDevice, buf_name, i.second.current_device), stmt);
+                    }
                 }
             }
-        }
-    }
-
-    void visit(const Consumer *op) {
-        if (device_api != DeviceAPI::Host) {
-            IRMutator::visit(op);
-            return;
-        }
-
-        Stmt body = mutate(op->body);
-        body = do_copies(body);
-        if (body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = Consumer::make(op->name, body);
         }
     }
 

@@ -327,11 +327,7 @@ class MonotonicVisitor : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
-    void visit(const Producer *op) {
-        internal_error << "Monotonic of statement\n";
-    }
-
-    void visit(const Consumer *op) {
+    void visit(const ProducerConsumer *op) {
         internal_error << "Monotonic of statement\n";
     }
 

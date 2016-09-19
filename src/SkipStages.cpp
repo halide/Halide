@@ -108,12 +108,16 @@ private:
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const Producer *op) {
-        in_pipeline.push(op->name, 0);
-        if (op->name != buffer) {
-            op->body.accept(this);
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer) {
+            in_pipeline.push(op->name, 0);
+            if (op->name != buffer) {
+                op->body.accept(this);
+            }
+            in_pipeline.pop(op->name);
+        } else {
+            IRVisitor::visit(op);
         }
-        in_pipeline.pop(op->name);
     }
 
     // Logical operators with eager constant folding
@@ -304,16 +308,18 @@ private:
         }
     }
 
-    void visit(const Producer *op) {
+    void visit(const ProducerConsumer *op) {
         // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
         IRMutator::visit(op);
 
-        op = stmt.as<Producer>();
-        internal_assert(op);
-        if (op->name == buffer) {
-            Stmt body = IfThenElse::make(compute_predicate, op->body);
-            stmt = Producer::make(op->name, body);
+        if (op->is_producer) {
+            op = stmt.as<ProducerConsumer>();
+            internal_assert(op);
+            if (op->name == buffer) {
+                Stmt body = IfThenElse::make(compute_predicate, op->body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            }
         }
     }
 };
@@ -470,8 +476,8 @@ class MightBeSkippable : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Consumer *op) {
-        if (op->name == func) {
+    void visit(const ProducerConsumer *op) {
+        if (!op->is_producer && (op->name == func)) {
             bool old_result = result;
             result = true;
             op->body.accept(this);

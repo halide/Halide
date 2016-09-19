@@ -26,46 +26,50 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const Producer *op) {
-        assert(funcs.count(op->name));
-        Stmt produce = op->body;
-        Stmt update;
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer) {
+            assert(funcs.count(op->name));
+            Stmt produce = op->body;
+            Stmt update;
 
-        if (!funcs[op->name].updates().empty()) {
-            // Peel the let/if stmts until we find a block
-            Stmt body = op->body;
-            while (true) {
-                const LetStmt *let = body.as<LetStmt>();
-                const IfThenElse *if_else = body.as<IfThenElse>();
-                if (let) {
-                    body = let->body;
-                } else if (if_else) {
-                    body = if_else->then_case;
-                } else {
-                    break;
+            if (!funcs[op->name].updates().empty()) {
+                // Peel the let/if stmts until we find a block
+                Stmt body = op->body;
+                while (true) {
+                    const LetStmt *let = body.as<LetStmt>();
+                    const IfThenElse *if_else = body.as<IfThenElse>();
+                    if (let) {
+                        body = let->body;
+                    } else if (if_else) {
+                        body = if_else->then_case;
+                    } else {
+                        break;
+                    }
+                }
+                if (const Block *block = body.as<Block>()) {
+                    produce = block->first;
+                    update = block->rest;
                 }
             }
-            if (const Block *block = body.as<Block>()) {
-                produce = block->first;
-                update = block->rest;
-            }
-        }
 
-        string old_producer = producer;
-        producer = op->name;
-        calls[producer]; // Make sure each producer is allocated a slot
-        produce.accept(this);
-        producer = old_producer;
-
-        if (update.defined()) {
-            assert(!funcs[op->name].updates().empty());
-            // Just lump all the update stages together
-            producer = op->name + ".update(" + std::to_string(0) + ")";
+            string old_producer = producer;
+            producer = op->name;
             calls[producer]; // Make sure each producer is allocated a slot
-            update.accept(this);
+            produce.accept(this);
             producer = old_producer;
+
+            if (update.defined()) {
+                assert(!funcs[op->name].updates().empty());
+                // Just lump all the update stages together
+                producer = op->name + ".update(" + std::to_string(0) + ")";
+                calls[producer]; // Make sure each producer is allocated a slot
+                update.accept(this);
+                producer = old_producer;
+            }
+            producer = old_producer;
+        } else {
+            IRVisitor::visit(op);
         }
-        producer = old_producer;
     }
 
     void visit(const Load *op) {

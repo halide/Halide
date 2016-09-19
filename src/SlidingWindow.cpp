@@ -106,8 +106,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         return true;
     }
 
-    void visit(const Producer *op) {
-        if (op->name != func.name()) {
+    void visit(const ProducerConsumer *op) {
+        if (!op->is_producer || (op->name != func.name())) {
             IRMutator::visit(op);
         } else {
 

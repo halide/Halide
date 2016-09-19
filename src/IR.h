@@ -272,33 +272,25 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     static const IRNodeType _type_info = IRNodeType::AssertStmt;
 };
 
-/** This node is a helpful annotation to do with permissions. The
- * two child statements happen in order. In the 'produce' statement 'buffer'
- * is write-only. In 'update' it is read-write. The 'update' node is
- * often undefined. (check update.defined() to find out). None of this
- * is actually enforced, the node is purely for informative
- * purposes to help out our analysis during lowering. */
-struct Producer : public StmtNode<Producer> {
+/** This node is a helpful annotation to do with permissions. If 'is_produce' is
+ * set to true, this represents a producer node which may also contain updates;
+ * otherwise, this represents a consumer node. If the producer node contains
+ * updates, the body of the node will be a block of 'produce' and 'update'
+ * in that order. In a producer node, the access is read-write only (or write
+ * only if it doesn't have updates). In a consumer node, the access is read-only.
+ * None of this is actually enforced, the node is purely for informative purposes
+ * to help out our analysis during lowering. For every unique ProducerConsumer,
+ * there is an associated Realize node with the same name that creates the buffer
+ * being read from or written to in the body of the ProducerConsumer.
+ */
+struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
+    bool is_producer;
     Stmt body;
 
-    EXPORT static Stmt make(std::string name, Stmt body);
+    EXPORT static Stmt make(std::string name, bool is_producer, Stmt body);
 
-    static const IRNodeType _type_info = IRNodeType::Producer;
-};
-
-
-/** This node is a helpful annotation to do with permissions. 'consume' happens
- * after 'produce' and 'update'. In 'consume' it is read-only. None of this
- * is actually enforced, the node is purely for informative purposes to help
- * out our analysis during lowering. */
-struct Consumer : public StmtNode<Consumer> {
-    std::string name;
-    Stmt body;
-
-    EXPORT static Stmt make(std::string name, Stmt body);
-
-    static const IRNodeType _type_info = IRNodeType::Consumer;
+    static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 
 /** Store a 'value' to the buffer called 'name' at a given

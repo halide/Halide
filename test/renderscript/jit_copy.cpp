@@ -97,18 +97,7 @@ protected:
         IRMutator::visit(op);
     }
 
-    void visit(const Producer *op) {
-        assert(!in_pipeline); // There should be only one pipeline in the test.
-        for_nest_level = 0;
-        in_pipeline = true;
-
-        assert(op->body.defined());
-
-        IRMutator::visit(op);
-        stmt = Evaluate::make(0);
-    }
-
-    void visit(const Consumer *op) {
+    void visit(const ProducerConsumer *op) {
         assert(!in_pipeline); // There should be only one pipeline in the test.
         for_nest_level = 0;
         in_pipeline = true;

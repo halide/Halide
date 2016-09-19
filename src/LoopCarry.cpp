@@ -492,11 +492,15 @@ class LoopCarry : public IRMutator {
     int max_carried_values;
     Scope<int> in_consume;
 
-    void visit(const Consumer *op) {
-        in_consume.push(op->name, 0);
-        Stmt body = mutate(op->body);
-        in_consume.pop(op->name);
-        stmt = Consumer::make(op->name, body);
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer) {
+            IRMutator::visit(op);
+        } else {
+            in_consume.push(op->name, 0);
+            Stmt body = mutate(op->body);
+            in_consume.pop(op->name);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+        }
     }
 
     void visit(const For *op) {

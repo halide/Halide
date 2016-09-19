@@ -176,41 +176,9 @@ private:
 
     }
 
-    void visit(const Producer *op) {
+    void visit(const ProducerConsumer *op) {
         IRMutator::visit(op);
-        op = stmt.as<Producer>();
-        internal_assert(op);
-        map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return;
-        Function f = iter->second;
-        if (f.is_tracing_realizations() || global_level > 0) {
-            // Throw a tracing call around each pipeline event
-            vector<Expr> args;
-            args.push_back(op->name);
-            args.push_back(0);
-            args.push_back(Variable::make(Int(32), op->name + ".trace_id"));
-            args.push_back(0); // value index
-            args.push_back(0); // value
-
-            // Use the size of the pure step
-            const vector<string> f_args = f.args();
-            for (int i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".min");
-                Expr max = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".max");
-                Expr extent = (max + 1) - min;
-                args.push_back(min);
-                args.push_back(extent);
-            }
-
-            args[1] = halide_trace_produce;
-            Expr call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            stmt = LetStmt::make(f.name() + ".trace_id", call, stmt);
-        }
-    }
-
-    void visit(const Consumer *op) {
-        IRMutator::visit(op);
-        op = stmt.as<Consumer>();
+        op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
@@ -235,14 +203,19 @@ private:
             }
 
             Expr call;
-            args[1] = halide_trace_end_consume;
-            call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            Stmt new_body = Block::make(op->body, Evaluate::make(call));
+            if (op->is_producer) {
+                args[1] = halide_trace_produce;
+                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+            } else {
+                args[1] = halide_trace_end_consume;
+                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+                Stmt new_body = Block::make(op->body, Evaluate::make(call));
 
-            stmt = Consumer::make(op->name, new_body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
 
-            args[1] = halide_trace_consume;
-            call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+                args[1] = halide_trace_consume;
+                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+            }
             stmt = LetStmt::make(f.name() + ".trace_id", call, stmt);
         }
     }
