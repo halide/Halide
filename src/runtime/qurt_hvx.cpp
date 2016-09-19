@@ -2,6 +2,7 @@
 #include "HalideRuntimeQurt.h"
 #include "printer.h"
 #include "mini_qurt.h"
+#include "hexagon_remote/log.h"
 
 using namespace Halide::Runtime::Internal::Qurt;
 
@@ -52,6 +53,22 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
     halide_qurt_hvx_unlock(user_context);
 }
 
+// #define DEBUG_PREFETCH  1
+#ifdef DEBUG_PREFETCH
+// Only produce debug info in this range
+#define DBG_PREFETCH_START   1
+#define DBG_PREFETCH_STOP    9
+//#define DBG_PREFETCH_STOP    0xFFFFFFFF
+#define DBG_PREFETCH_V(...)  log_printf(__VA_ARGS__)
+#define DBG_PREFETCH(...)    if ((dbg_cnt >= DBG_PREFETCH_START) && \
+                                 (dbg_cnt <= DBG_PREFETCH_STOP)) { \
+                               log_printf(__VA_ARGS__); \
+                             }
+#else
+#define DBG_PREFETCH_V(...)  {}
+#define DBG_PREFETCH(...)    {}
+#endif
+
 // Notes:
 //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
 //  - If 3 are already pending, the oldest request is dropped
@@ -63,31 +80,58 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 #define MASK16          0xFFFF
 #define MAX_PREFETCH    3
 
-// TODO: Opt: Generate control code for prefetch_buffer_t in Prefetch.cpp
-// TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
-WEAK int halide_hexagon_prefetch_buffer_t(uint32_t dim, int32_t elem_size, const buffer_t *buf)
+// halide_hexagon_prefetch_buffer_t
+//
+// Prefetch a multi-dimensional box (subset) from a larger array
+//
+//   dim        number of dimensions in array
+//   elem_size  size in bytes of one element
+//   num_elem   total number of elements in array
+//   buf        buffer_t describing box to prefetch
+//
+// TODO: Opt: Generate more control code for prefetch_buffer_t directly in
+// TODO       Prefetch.cpp to avoid passing box info through a buffer_t
+// TODO       (which results in ~30 additional stores/loads)
+//
+WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem_size,
+                const uint32_t num_elem, const buffer_t *buf)
 {
     // Extract needed fields from buffer_t
     unsigned char *addr   = buf->host;
-    const int32_t *min    = buf->min;
-    const int32_t *stride = buf->stride;
     const int32_t *extent = buf->extent;
-    const int32_t elem_size_bytes = elem_size;  // element size in bytes
+    const int32_t *stride = buf->stride;
+    const int32_t *min    = buf->min;
     unsigned int boxdim   = dim;  // dimensions of entire box to prefetch
     unsigned int iterdim  = 2;    // dimension to iterate over
+#ifdef DEBUG_PREFETCH
+    static uint32_t dbg_cnt = 0;  // limit how many calls debug is generated
+    dbg_cnt++;
+#endif
+    DBG_PREFETCH("halide_hexagon_prefetch_buffer_t(%u, %d)\n", dim, elem_size, num_elem);
+
+    unsigned char *addr_beg = addr;
+    unsigned char *addr_end = addr + (num_elem * elem_size);
+    DBG_PREFETCH("addr range 0x%p => 0x%p\n", addr_beg, addr_end);
+
+    DBG_PREFETCH("buf host=0x%p elem_size=%d\n", addr, buf->elem_size);
+    for (unsigned int i = 0; i < boxdim; i++) {
+        DBG_PREFETCH("buf stride[%d]=0x%-8x min[%d]=%-6d ext[%d]=%d\n",
+                          i, stride[i], i, min[i], i, extent[i]);
+    }
 
     // Compute starting position of box
     int32_t startpos = 0;
     for (unsigned int i = 0; i < boxdim; i++) {
         startpos += min[i] * stride[i];
     }
-    addr += startpos * elem_size_bytes;
+    addr += startpos * elem_size;
+    DBG_PREFETCH("startpos=0x%x => addr=0x%p\n", startpos, addr);
 
     // Compute 2-D prefetch descriptor
     // l2fetch(Rs,Rtt): 48 bit descriptor
     uint32_t pdir    = 1;   // 0 row major, 1 = column major
-    uint32_t pstride = stride[0] * elem_size_bytes;
-    uint32_t pwidth  = extent[0] * elem_size_bytes;
+    uint32_t pstride = stride[0] * elem_size;
+    uint32_t pwidth  = extent[0] * elem_size;
     uint32_t pheight = 1;
     if (boxdim > 1) {
         pheight = extent[1];
@@ -99,7 +143,7 @@ WEAK int halide_hexagon_prefetch_buffer_t(uint32_t dim, int32_t elem_size, const
     int32_t newpstride = pstride;
     while (boxdim > 2) {
         if (pheight == 1) {     // if height is currently 1
-            newpstride = stride[iterdim-1] * elem_size_bytes;  // update stride
+            newpstride = stride[iterdim-1] * elem_size;  // update stride
         } else {
             break;              // otherwise, we're done collapsing
         }
@@ -128,19 +172,23 @@ WEAK int halide_hexagon_prefetch_buffer_t(uint32_t dim, int32_t elem_size, const
     // uint64_t pdesc = 0x1020002000001; // col, 512 width, 1 row
     // uint64_t pdesc = 0x1144014400001; // col, 5184 width, 1 row
 
-    // debug(0) << "halide_hexagon_prefetch_buffer_t("
-    //          << dim << ", " << elem_size ", " << buf << ")"
-    //          << " addr:" << addr << " pdesc:" << pdesc << "\n";
+    DBG_PREFETCH("prefetch pdir:0x%x pstride:0x%x pwidth:0x%x pheight:0x%x\n",
+                           pdir, pstride, pwidth, pheight);
+    DBG_PREFETCH("prefetch addr:0x%p pdesc:0x%llx\n", addr, pdesc);
 
     if (boxdim <= 2) {  // 2-D box, perform a single prefetch
 
         // Perform prefetch
-        // debug(0) << "  l2fetch(" << addr << "," << pdesc << ")\n";
-        __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
+        DBG_PREFETCH("l2fetch(0x%p, 0x%llx)\n", addr, pdesc);
+        if ((addr >= addr_beg) && (addr < addr_end)) {
+            __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
+        } else {
+            DBG_PREFETCH_V("l2fetch: 0x%p out of range\n", addr);
+        }
 
     } else { // For higher dimension boxes...
 
-        // debug(0) << "  iterdim: "    << iterdim << "\n";
+        DBG_PREFETCH("iterdim:%d\n", iterdim);
 
         // If iterdim is not last dim && iterdim extent is 1...
         while ((iterdim < dim-1) && (extent[iterdim] == 1)) {
@@ -148,21 +196,24 @@ WEAK int halide_hexagon_prefetch_buffer_t(uint32_t dim, int32_t elem_size, const
         }
 
         // Get iteration stride and extents
-        int32_t iterstride = stride[iterdim] * elem_size_bytes;
+        int32_t iterstride = stride[iterdim] * elem_size;
         int32_t iterextent = extent[iterdim];
         iterextent = MAX(iterextent, MAX_PREFETCH);   // limit max number
 
-        // debug(0) << "  iterdim: "    << iterdim << "\n";
-        // debug(0) << "  iterstride: " << iterstride << "\n";
-        // debug(0) << "  iterextent: " << iterextent << "\n";
+        DBG_PREFETCH("idim:%d istride:0x%x iextent:%d\n", iterdim, iterstride, iterextent);
 
         // TODO: Add support for iterating over multiple higher dimensions?
         // TODO  Currently just iterating over one outer dimension since
         // TODO  only MAX_PREFETCH prefetches can be queued anyway.
         for (int32_t i = 0; i < iterextent; i++) {
             // Perform prefetch
-            // debug(0) << "  l2fetch(" << addr << "," << pdesc << ")\n";
-            __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
+            DBG_PREFETCH("%d: l2fetch(0x%p, 0x%llx)\n", i, addr, pdesc);
+            if ((addr >= addr_beg) && (addr < addr_end)) {
+                __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
+            } else {
+                DBG_PREFETCH_V("%d: l2fetch: +0x%x => 0x%p out of range [0x%p, 0x%p]\n",
+                                i, iterstride, addr, addr_beg, addr_end);
+            }
             addr += iterstride;
         }
     }
