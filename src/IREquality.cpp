@@ -78,8 +78,7 @@ private:
     void visit(const Let *);
     void visit(const LetStmt *);
     void visit(const AssertStmt *);
-    void visit(const Producer *);
-    void visit(const Consumer *);
+    void visit(const ProducerConsumer *);
     void visit(const For *);
     void visit(const Store *);
     void visit(const Provide *);
@@ -346,17 +345,11 @@ void IRComparer::visit(const AssertStmt *op) {
     compare_expr(s->message, op->message);
 }
 
-void IRComparer::visit(const Producer *op) {
-    const Producer *s = stmt.as<Producer>();
+void IRComparer::visit(const ProducerConsumer *op) {
+    const ProducerConsumer *s = stmt.as<ProducerConsumer>();
 
     compare_names(s->name, op->name);
-    compare_stmt(s->body, op->body);
-}
-
-void IRComparer::visit(const Consumer *op) {
-    const Consumer *s = stmt.as<Consumer>();
-
-    compare_names(s->name, op->name);
+    compare_scalar(s->is_producer, op->is_producer);
     compare_stmt(s->body, op->body);
 }
 

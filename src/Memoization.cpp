@@ -441,7 +441,7 @@ private:
         }
     }
 
-    void visit(const Producer *op) {
+    void visit(const ProducerConsumer *op) {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -453,39 +453,23 @@ private:
 
             std::string cache_miss_name = op->name + ".cache_miss";
             Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-            Stmt mutated_body = IfThenElse::make(cache_miss, body);
 
-            stmt = Producer::make(op->name, mutated_body);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
+            if (op->is_producer) {
+                Stmt mutated_body = IfThenElse::make(cache_miss, body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+            } else {
+                const Function f(iter->second);
+                KeyInfo key_info(f, top_level_name);
 
-    void visit(const Consumer *op) {
-        std::map<std::string, Function>::const_iterator iter = env.find(op->name);
-        if (iter != env.end() &&
-            iter->second.schedule().memoized()) {
+                std::string cache_key_name = op->name + ".cache_key";
+                std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
-            // The error checking should have been done inside Realization node
-            // of this consumer, so no need to do it here.
+                Stmt cache_store_back =
+                    IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
 
-            Stmt body = mutate(op->body);
-
-            const Function f(iter->second);
-            KeyInfo key_info(f, top_level_name);
-
-            std::string cache_key_name = op->name + ".cache_key";
-            std::string cache_miss_name = op->name + ".cache_miss";
-            std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
-
-            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-
-            Stmt cache_store_back =
-                IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
-
-            Stmt mutated_body = Block::make(cache_store_back, body);
-
-            stmt = Consumer::make(op->name, mutated_body);
+                Stmt mutated_body = Block::make(cache_store_back, body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+            }
         } else {
             IRMutator::visit(op);
         }

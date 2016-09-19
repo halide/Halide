@@ -345,34 +345,17 @@ private:
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
-    void visit(const Producer *op) {
+    void visit(const ProducerConsumer *op) {
         scope.push(op->name, unique_id());
-        stream << open_div("Produce");
+        stream << open_div(op->is_producer ? "Produce" : "Consumer");
         int produce_id = unique_id();
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
-        stream << keyword("produce") << " ";
+        stream << keyword(op->is_producer ? "produce" : "consume") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();;
-        stream << open_div("ProduceBody Indent", produce_id);
-        print(op->body);
-        stream << close_div();
-        stream << matched("}");
-        stream << close_div();
-        scope.pop(op->name);
-    }
-    void visit(const Consumer *op) {
-        scope.push(op->name, unique_id());
-        stream << open_div("Consume");
-        int produce_id = unique_id();
-        stream << open_span("Matched");
-        stream << open_expand_button(produce_id);
-        stream << keyword("consume") << " ";
-        stream << var(op->name);
-        stream << close_expand_button() << " {";
-        stream << close_span();;
-        stream << open_div("ConsumeBody Indent", produce_id);
+        stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
         print(op->body);
         stream << close_div();
         stream << matched("}");

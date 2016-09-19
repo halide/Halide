@@ -675,15 +675,15 @@ private:
 
         Stmt producer;
         if (realization.first.defined() && realization.second.defined()) {
-            producer = Producer::make(func.name(), Block::make(realization.first, realization.second));
+            producer = ProducerConsumer::make(func.name(), true, Block::make(realization.first, realization.second));
         } else if (realization.first.defined()) {
-            producer = Producer::make(func.name(), realization.first);
+            producer = ProducerConsumer::make(func.name(), true, realization.first);
         } else {
             internal_assert(realization.second.defined());
-            producer = Producer::make(func.name(), realization.second);
+            producer = ProducerConsumer::make(func.name(), true, realization.second);
         }
 
-        Stmt consumer = Consumer::make(func.name(), s);
+        Stmt consumer = ProducerConsumer::make(func.name(), false, s);
 
         return Block::make(producer, consumer);
     }
@@ -714,16 +714,20 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Producer *op) {
-        string old = producing;
-        producing = op->name;
-        Stmt body = mutate(op->body);
-        producing = old;
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer) {
+            string old = producing;
+            producing = op->name;
+            Stmt body = mutate(op->body);
+            producing = old;
 
-        if (body.same_as(op->body)) {
-            stmt = op;
+            if (body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            }
         } else {
-            stmt = Producer::make(op->name, body);
+            IRMutator::visit(op);
         }
     }
 
@@ -980,11 +984,15 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const Producer *op) {
-        string old_caller = caller;
-        caller = op->name;
-        op->body.accept(this);
-        caller = old_caller;
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer) {
+            string old_caller = caller;
+            caller = op->name;
+            op->body.accept(this);
+            caller = old_caller;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 
     void visit(const Call *op) {

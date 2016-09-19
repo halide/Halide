@@ -108,8 +108,8 @@ void IRPrinter::test() {
     Stmt store2 = Store::make("out", call + 1, x, Parameter());
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
 
-    Stmt producer = Producer::make("buf", for_loop);
-    Stmt consumer = Consumer::make("buf", for_loop2);
+    Stmt producer = ProducerConsumer::make("buf", true, for_loop);
+    Stmt consumer = ProducerConsumer::make("buf", false, for_loop2);
     Stmt pipeline = Block::make(producer, consumer);
 
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
@@ -497,20 +497,13 @@ void IRPrinter::visit(const AssertStmt *op) {
     stream << ")\n";
 }
 
-void IRPrinter::visit(const Producer *op) {
+void IRPrinter::visit(const ProducerConsumer *op) {
     do_indent();
-    stream << "produce " << op->name << " {\n";
-    indent += 2;
-    print(op->body);
-    indent -= 2;
-
-    do_indent();
-    stream << "}\n";
-}
-
-void IRPrinter::visit(const Consumer *op) {
-    do_indent();
-    stream << "consume " << op->name << " {\n";
+    if (op->is_producer) {
+        stream << "produce " << op->name << " {\n";
+    } else {
+        stream << "consume " << op->name << " {\n";
+    }
     indent += 2;
     print(op->body);
     indent -= 2;

@@ -1342,15 +1342,13 @@ void CodeGen_C::visit(const AssertStmt *op) {
     close_scope("");
 }
 
-void CodeGen_C::visit(const Producer *op) {
+void CodeGen_C::visit(const ProducerConsumer *op) {
     do_indent();
-    stream << "// produce " << op->name << '\n';
-    print_stmt(op->body);
-}
-
-void CodeGen_C::visit(const Consumer *op) {
-    do_indent();
-    stream << "// consume " << op->name << '\n';
+    if (op->is_producer) {
+        stream << "// produce " << op->name << '\n';
+    } else {
+        stream << "// consume " << op->name << '\n';
+    }
     print_stmt(op->body);
 }
 

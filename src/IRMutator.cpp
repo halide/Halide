@@ -169,21 +169,12 @@ void IRMutator::visit(const AssertStmt *op) {
     }
 }
 
-void IRMutator::visit(const Producer *op) {
+void IRMutator::visit(const ProducerConsumer *op) {
     Stmt body = mutate(op->body);
     if (body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = Producer::make(op->name, body);
-    }
-}
-
-void IRMutator::visit(const Consumer *op) {
-    Stmt body = mutate(op->body);
-    if (body.same_as(op->body)) {
-        stmt = op;
-    } else {
-        stmt = Consumer::make(op->name, body);
+        stmt = ProducerConsumer::make(op->name, op->is_producer, body);
     }
 }
 

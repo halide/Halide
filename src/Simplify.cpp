@@ -4398,7 +4398,7 @@ private:
         }
     }
 
-    void visit(const Producer *op) {
+    void visit(const ProducerConsumer *op) {
         Stmt body = mutate(op->body);
 
         if (is_no_op(body)) {
@@ -4406,19 +4406,7 @@ private:
         } else if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Producer::make(op->name, body);
-        }
-    }
-
-    void visit(const Consumer *op) {
-        Stmt body = mutate(op->body);
-
-        if (is_no_op(body)) {
-            stmt = Evaluate::make(0);
-        } else if (body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = Consumer::make(op->name, body);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
