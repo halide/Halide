@@ -6,7 +6,7 @@
  */
 
 #include "Expr.h"
-#include "Buffer.h"
+#include "BufferPtr.h"
 
 namespace Halide {
 namespace Internal {
@@ -95,11 +95,11 @@ public:
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
-    EXPORT Buffer get_buffer() const;
+    EXPORT BufferPtr get_buffer() const;
 
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
-    EXPORT void set_buffer(Buffer b);
+    EXPORT void set_buffer(BufferPtr b);
 
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never

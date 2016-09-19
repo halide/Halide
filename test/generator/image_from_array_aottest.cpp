@@ -1,4 +1,4 @@
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 #include <stdint.h>
 #include <iostream>
@@ -7,7 +7,7 @@
 #include <vector>
 
 using namespace std;
-using namespace Halide::Tools;
+using namespace Halide;
 
 //-----------------------------------------------------------------------------
 // Returns the dimension sizes of a statically sized array from inner to outer.

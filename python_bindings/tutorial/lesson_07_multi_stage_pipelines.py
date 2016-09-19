@@ -38,7 +38,7 @@ def main():
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = Image(imread(image_path), name="rgb.png")
+        input = Image(imread(image_path))
         assert input.type() == UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -108,7 +108,7 @@ def main():
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-        input = Image(imread(image_path), name="rgb.bis.png")
+        input = Image(imread(image_path))
         assert input.type() == UInt(8)
 
         # This time, we'll wrap the input in a Func that prevents
@@ -160,7 +160,7 @@ def main():
 
         # This time it's safe to evaluate the output over the some
         # domain as the input, because we have a boundary condition.
-        result = Image(UInt(8), output.realize(input.width(), input.height(), 3))
+        result = output.realize(input.width(), input.height(), 3)
 
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the

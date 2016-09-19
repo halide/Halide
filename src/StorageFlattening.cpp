@@ -172,7 +172,7 @@ private:
             // Create a buffer_t object for this allocation.
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-            Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
+            Expr first_elem = Load::make(t, buffer_name, 0, BufferPtr(), Parameter());
             args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
             args[1] = make_zero(realize->types[idx]);
             for (int i = 0; i < dims; i++) {

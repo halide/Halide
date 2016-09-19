@@ -50,6 +50,8 @@ set(RUNTIME_CPP
   mips_cpu_features
   module_aot_ref_count
   module_jit_ref_count
+  msan
+  msan_stubs
   nacl_host_cpu_count
   noos
   opencl
@@ -128,24 +130,16 @@ set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    IF (LLVM_VERSION LESS 36)
-      IF (${j} EQUAL 32)
+    IF (${j} EQUAL 32)
+      IF (${i} MATCHES "windows_.*")
+        # win32 uses the stdcall calling convention, which is x86-specific
         set(TARGET "i386-unknown-unknown-unknown")
       ELSE()
-        set(TARGET "x86_64-unknown-unknown-unknown")
+        set(TARGET "le32-unknown-nacl-unknown")
       ENDIF()
     ELSE()
-      IF (${j} EQUAL 32)
-        IF (${i} MATCHES "windows_.*")
-          # win32 uses the stdcall calling convention, which is x86-specific
-          set(TARGET "i386-unknown-unknown-unknown")
-        ELSE()
-          set(TARGET "le32-unknown-nacl-unknown")
-        ENDIF()
-      ELSE()
-        # generic 64-bit code
-        set(TARGET "le64-unknown-unknown-unknown")
-      ENDIF()
+      # generic 64-bit code
+      set(TARGET "le64-unknown-unknown-unknown")
     ENDIF()
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
     set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
@@ -223,7 +217,7 @@ set(HEADER_FILES
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
-  Buffer.h
+  BufferPtr.h
   CSE.h
   Closure.h
   CodeGen_ARM.h
@@ -275,7 +269,6 @@ set(HEADER_FILES
   IROperator.h
   IRPrinter.h
   IRVisitor.h
-  Image.h
   ImageParam.h
   Interval.h
   InjectHostDevBufferCopies.h
@@ -316,6 +309,7 @@ set(HEADER_FILES
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
+  Sanitizers.h
   Schedule.h
   ScheduleFunctions.h
   Scope.h
@@ -343,6 +337,7 @@ set(HEADER_FILES
   VectorizeLoops.h
   WrapCalls.h
   runtime/HalideRuntime.h
+  runtime/HalideBuffer.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -361,21 +356,14 @@ configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYO
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideBuffer.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
-IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
-  set(BITWRITER_FILES
-    BitWriter_3_2.35/BitcodeWriter.cpp
-    BitWriter_3_2.35/BitcodeWriterPass.cpp
-    BitWriter_3_2.35/ValueEnumerator.cpp
-  )
-ELSE()
-  set(BITWRITER_FILES
-    BitWriter_3_2/BitcodeWriter.cpp
-    BitWriter_3_2/BitcodeWriterPass.cpp
-    BitWriter_3_2/ValueEnumerator.cpp
-  )
-ENDIF()
+set(BITWRITER_FILES
+  BitWriter_3_2/BitcodeWriter.cpp
+  BitWriter_3_2/BitcodeWriterPass.cpp
+  BitWriter_3_2/ValueEnumerator.cpp
+)
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
@@ -386,7 +374,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
-  Buffer.cpp
+  BufferPtr.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
@@ -436,7 +424,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IROperator.cpp
   IRPrinter.cpp
   IRVisitor.cpp
-  Image.cpp
   ImageParam.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
@@ -473,6 +460,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
+  Sanitizers.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
@@ -516,11 +504,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 # This list will be appended to depending on the targets we need to support
 # See the output of ``llvm-config --components`` for a list of possible components
 set(LLVM_COMPONENTS mcjit;bitwriter;linker)
-if (LLVM_VERSION GREATER 36)
-  list(APPEND LLVM_COMPONENTS passes)
-else()
-  list(APPEND LLVM_COMPONENTS ipo)
-endif()
+list(APPEND LLVM_COMPONENTS passes)
 
 # Set definitions and compiler flags
 
@@ -608,7 +592,13 @@ set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} 
+                  RESULT_VARIABLE LLVM_CONFIG_RESULT
+                  OUTPUT_VARIABLE LIBS_UNSTRIPPED
+                  ERROR_VARIABLE LLVM_CONFIG_ERROR)
+  if (${LLVM_CONFIG_RESULT})
+    message(FATAL_ERROR "llvm-config failed: ${LLVM_CONFIG_ERROR}")
+  endif()
   string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
@@ -621,11 +611,7 @@ endif()
 target_link_libraries(Halide PRIVATE ${LIBS})
 
 if (NOT MSVC)
-  if (${LLVM_VERSION} GREATER 34)
-    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  else()
-    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  endif()
+  execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")

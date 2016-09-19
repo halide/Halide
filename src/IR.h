@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "Buffer.h"
+#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
@@ -200,12 +200,12 @@ struct Load : public ExprNode<Load> {
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
-    Buffer image;
+    BufferPtr image;
 
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, BufferPtr image, Parameter param);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -516,7 +516,7 @@ struct Call : public ExprNode<Call> {
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
-    Buffer image;
+    BufferPtr image;
 
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
@@ -524,7 +524,7 @@ struct Call : public ExprNode<Call> {
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                             IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
-                            Buffer image = Buffer(), Parameter param = Parameter());
+                            BufferPtr image = BufferPtr(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
     static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
@@ -533,17 +533,17 @@ struct Call : public ExprNode<Call> {
             << "Value index out of range in call to halide function\n";
         internal_assert(func.has_pure_definition() || func.has_extern_definition())
             << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer(), Parameter());
+        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, BufferPtr(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(Buffer image, const std::vector<Expr> &args) {
+    static Expr make(BufferPtr image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferPtr(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -579,28 +579,28 @@ struct Variable : public ExprNode<Variable> {
     Parameter param;
 
     /** References to properties of literal image parameters. */
-    Buffer image;
+    BufferPtr image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, Buffer(), Parameter(), ReductionDomain());
+        return make(type, name, BufferPtr(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, Buffer(), param, ReductionDomain());
+        return make(type, name, BufferPtr(), param, ReductionDomain());
     }
 
-    static Expr make(Type type, std::string name, Buffer image) {
+    static Expr make(Type type, std::string name, BufferPtr image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, Buffer(), Parameter(), reduction_domain);
+        return make(type, name, BufferPtr(), Parameter(), reduction_domain);
     }
 
-    EXPORT static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };

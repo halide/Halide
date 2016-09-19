@@ -1,12 +1,12 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 
 #include "tiled_blur_interleaved.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int W = 80, H = 80;
 

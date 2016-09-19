@@ -5,10 +5,10 @@
 #include "daubechies_x.h"
 #include "inverse_daubechies_x.h"
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 namespace {
 
@@ -32,9 +32,7 @@ T clamp(T x, T min, T max) {
 
 template<typename T>
 void save_untransformed(Image<T> t, const std::string& filename) {
-    if (!save(t, filename)) {
-        _assert(false, "Unable to save image\n");
-    }
+    Tools::save_image(t, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
@@ -47,9 +45,7 @@ void save_transformed(Image<T> t, const std::string& filename) {
             rearranged(x + t.width(), y, 0) = clamp(t(x, y, 1)*4.f + 0.5f, 0.0f, 1.0f);
         }
     }
-    if (!save(rearranged, filename)) {
-        _assert(false, "Unable to save image\n");
-    }
+    Tools::save_image(rearranged, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
@@ -61,10 +57,7 @@ int main(int argc, char **argv) {
     const std::string src_image = argv[1];
     const std::string dirname = argv[2];
 
-    Image<float> input;
-    if (!load(src_image, &input)) {
-        _assert(false, "Unable to load image\n");
-    }
+    Image<float> input = Tools::load_image(src_image);
     Image<float> transformed(input.width()/2, input.height(), 2);
     Image<float> inverse_transformed(input.width(), input.height(), 1);
 

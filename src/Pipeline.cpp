@@ -50,7 +50,7 @@ Outputs static_library_outputs(const string &filename_prefix, const Target &targ
 struct InferredArgument {
     Argument arg;
     Parameter param;
-    Buffer buffer;
+    BufferPtr buffer;
 
     bool operator<(const InferredArgument &other) const {
         if (arg.is_buffer() && !other.arg.is_buffer()) {
@@ -261,7 +261,7 @@ void Pipeline::compile_to_static_library(const string &filename_prefix,
     m.compile(outputs);
 }
 
-void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix, 
+void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                      const std::vector<Argument> &args,
                                                      const std::vector<Target> &targets) {
     auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
@@ -373,11 +373,11 @@ private:
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                      p.type(), p.dimensions(), def, min, max),
             p,
-            Buffer()};
+            BufferPtr()};
         args.push_back(a);
     }
 
-    void include_buffer(Buffer b) {
+    void include_buffer(BufferPtr b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
 
@@ -450,10 +450,10 @@ vector<Argument> Pipeline::infer_arguments() {
 
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+vector<BufferPtr> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
     infer_arguments(body);
 
-    vector<Buffer> images_to_embed;
+    vector<BufferPtr> images_to_embed;
 
     for (const InferredArgument &arg : contents->inferred_args) {
 
@@ -581,7 +581,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<Buffer> global_images = validate_arguments(public_args, private_body);
+    vector<BufferPtr> global_images = validate_arguments(public_args, private_body);
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -589,7 +589,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
     vector<Argument> private_args = public_args;
-    for (Buffer buf : global_images) {
+    for (BufferPtr buf : global_images) {
         module.append(buf);
         private_args.push_back(Argument(buf.name(),
                                         Argument::InputBuffer,
@@ -762,19 +762,18 @@ const JITHandlers &Pipeline::jit_handlers() {
     return contents->jit_handlers;
 }
 
-void Pipeline::realize(Buffer b, const Target &target) {
-    realize(Realization({b}), target);
-}
-
 Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    vector<Buffer> bufs;
+    vector<Image<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, sizes));
+        bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     realize(r, target);
+    for (Image<> &im : r) {
+        im.copy_to_host();
+    }
     return r;
 }
 
@@ -799,6 +798,10 @@ Realization Pipeline::realize(int x_size,
     // as a scalar initializer
     vector<int32_t> v = {x_size};
     return realize(v, target);
+}
+
+Realization Pipeline::realize(const Target &target) {
+    return realize(vector<int32_t>(), target);
 }
 
 namespace {
@@ -906,7 +909,7 @@ struct JITFuncCallContext {
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
-// params. Unbound image params produce null values.
+// params. 
 vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -940,16 +943,14 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         Type type = output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func \"" << func.name()
+            << "\" into Buffer at " << (void *)dst[i].host_ptr()
+            << " because Buffer is " << dst[i].dimensions()
+            << "-dimensional, but Func \"" << func.name()
             << "\" is " << dims << "-dimensional.\n";
         user_assert(dst[i].type() == type)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" has type " << dst[i].type()
+            << "\" into Buffer at " << (void *)dst[i].host_ptr()
+            << " because Buffer has type " << Type(dst[i].type())
             << ", but Func \"" << func.name()
             << "\" has type " << type << ".\n";
     }
@@ -962,7 +963,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (InferredArgument arg : input_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer buf = arg.param.get_buffer();
+            BufferPtr buf = arg.param.get_buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -983,12 +984,10 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (Buffer buf : dst.as_vector()) {
-        internal_assert(buf.defined()) << "Can't realize into an undefined Buffer\n";
+    for (const Image<> &buf : dst) {
         arg_values.push_back(buf.raw_buffer());
         const void *ptr = arg_values.back();
-        debug(1) << "JIT output buffer " << buf.name()
-                 << " @ " << ptr << "\n";
+        debug(1) << "JIT output buffer @ " << ptr << "\n";
     }
 
     return arg_values;
@@ -1237,50 +1236,27 @@ void Pipeline::infer_input_bounds(Realization dst) {
                            << buf.min[2] + buf.extent[2] << ","
                            << buf.min[3] + buf.extent[3] << ")\n";
 
-        // Figure out how much memory to allocate for this buffer
-        size_t min_idx = 0, max_idx = 0;
-        for (int d = 0; d < 4; d++) {
-            if (buf.stride[d] > 0) {
-                min_idx += buf.min[d] * buf.stride[d];
-                max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-            } else {
-                max_idx += buf.min[d] * buf.stride[d];
-                min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-            }
-        }
-        size_t total_size = (max_idx - min_idx);
-        while (total_size & 0x1f) total_size++;
-
-        // Allocate enough memory with the right dimensionality.
-        Buffer buffer(ia.param.type(), total_size,
-                      buf.extent[1] > 0 ? 1 : 0,
-                      buf.extent[2] > 0 ? 1 : 0,
-                      buf.extent[3] > 0 ? 1 : 0);
-
-        // Rewrite the buffer fields to match the ones returned
-        for (int d = 0; d < 4; d++) {
-            buffer.raw_buffer()->min[d] = buf.min[d];
-            buffer.raw_buffer()->stride[d] = buf.stride[d];
-            buffer.raw_buffer()->extent[d] = buf.extent[d];
-        }
-        ia.param.set_buffer(buffer);
+        Image<> im(ia.param.type(), buf);
+        im.allocate();
+        ia.param.set_buffer(im);
     }
 }
 
 void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
-    vector<Buffer> bufs;
+    vector<int> size;
+    if (x_size) size.push_back(x_size);
+    if (y_size) size.push_back(y_size);
+    if (z_size) size.push_back(z_size);
+    if (w_size) size.push_back(w_size);
+
+    vector<Image<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, x_size, y_size, z_size, w_size));
+        bufs.emplace_back(t, size);
     }
     Realization r(bufs);
     infer_input_bounds(r);
-}
-
-
-void Pipeline::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization({dst}));
 }
 
 void Pipeline::invalidate_cache() {

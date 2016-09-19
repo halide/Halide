@@ -49,13 +49,18 @@ bool test(int vec_width) {
     g(x, y) = e;
     f.bound(x, 0, vec_width).vectorize(x);
 
+    // Stop llvm from auto-vectorizing the scalar case and messing up
+    // the comparison. Also causes cache effects, but the entire input
+    // is small enough to fit in cache.
+    g.reorder(y, x);
+
     Image<A> outputg = g.realize(W, H);
     Image<A> outputf = f.realize(W, H);
 
-    double t_g = benchmark(1, 10, [&]() {
+    double t_g = benchmark(10, 10, [&]() {
         g.realize(outputg);
     });
-    double t_f = benchmark(1, 10, [&]() {
+    double t_f = benchmark(10, 10, [&]() {
         f.realize(outputf);
     });
 

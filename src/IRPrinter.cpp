@@ -42,7 +42,7 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
-ostream &operator <<(ostream &stream, const Buffer &buffer) {
+ostream &operator <<(ostream &stream, const Internal::BufferPtr &buffer) {
     return stream << "buffer " << buffer.name() << " = {...}\n";
 }
 

@@ -20,15 +20,9 @@ int main(int argc, char **argv) {
 
     o.set_bounds(0, 0, select(o.extent(0) < 22, o.extent(0) + 1, o.extent(0)));
 
-    // The only way to build a query buffer for output bounds right
-    // now is to make a buffer_t manually.
-    buffer_t out_buffer_t = {0};
-    out_buffer_t.min[0] = 2;
-    out_buffer_t.extent[0] = 7;
-    out_buffer_t.min[1] = 2;
-    out_buffer_t.extent[1] = 8;
-
-    Buffer out_buf(Float(32), &out_buffer_t, "out_buf");
+    // Make a bounds query buffer
+    Image<float> out_buf(nullptr, 7, 8);
+    out_buf.set_min(2, 2);
 
     out.infer_input_bounds(out_buf);
 

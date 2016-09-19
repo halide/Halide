@@ -500,7 +500,7 @@ public:
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
-                    Buffer b = args[j].buffer;
+                    BufferPtr b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
 
                     Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");

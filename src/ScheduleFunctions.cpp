@@ -463,7 +463,7 @@ Stmt build_produce(Function f) {
                     extern_call_args.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
-                Buffer b = arg.buffer;
+                BufferPtr b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 Expr buf = Variable::make(type_of<struct buffer_t *>(), b.name() + ".buffer", p);

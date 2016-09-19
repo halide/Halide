@@ -4,9 +4,9 @@
 #include <cstdio>
 
 #include "benchmark.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 //#define cimg_display 0
 //#include "CImg.h"

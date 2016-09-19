@@ -3,4 +3,4 @@
 
 void defineError();
 
-#endif // ERROR_H
+#endif  // ERROR_H

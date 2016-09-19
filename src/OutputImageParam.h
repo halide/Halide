@@ -6,6 +6,7 @@
  * Classes for declaring output image parameters to halide pipelines
  */
 
+#include "Argument.h"
 #include "Var.h"
 
 namespace Halide {
@@ -20,9 +21,89 @@ protected:
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind;
 
+    void add_implicit_args_if_placeholder(std::vector<Expr> &args,
+                                          Expr last_arg,
+                                          int total_args,
+                                          bool *placeholder_seen) const;
 public:
 
-    /** Construct a nullptr image parameter handle. */
+    struct Dimension {
+        /** Get an expression representing the minimum coordinates of this image
+         * parameter in the given dimension. */
+        EXPORT Expr min() const;
+
+        /** Get an expression representing the extent of this image
+         * parameter in the given dimension */
+        EXPORT Expr extent() const;
+
+        /** Get an expression representing the maximum coordinates of
+         * this image parameter in the given dimension. */
+        EXPORT Expr max() const;
+
+        /** Get an expression representing the stride of this image in the
+         * given dimension */
+        EXPORT Expr stride() const;
+
+        /** Set the min in a given dimension to equal the given
+         * expression. Setting the mins to zero may simplify some
+         * addressing math. */
+        EXPORT Dimension set_min(Expr e);
+
+        /** Set the extent in a given dimension to equal the given
+         * expression. Images passed in that fail this check will generate
+         * a runtime error. Returns a reference to the ImageParam so that
+         * these calls may be chained.
+         *
+         * This may help the compiler generate better
+         * code. E.g:
+         \code
+         im.dim(0).set_extent(100);
+         \endcode
+         * tells the compiler that dimension zero must be of extent 100,
+         * which may result in simplification of boundary checks. The
+         * value can be an arbitrary expression:
+         \code
+         im.dim(0).set_extent(im.dim(1).extent());
+         \endcode
+         * declares that im is a square image (of unknown size), whereas:
+         \code
+         im.dim(0).set_extent((im.dim(0).extent()/32)*32);
+         \endcode
+         * tells the compiler that the extent is a multiple of 32. */
+        EXPORT Dimension set_extent(Expr e);
+
+        /** Set the stride in a given dimension to equal the given
+         * value. This is particularly helpful to set when
+         * vectorizing. Known strides for the vectorized dimension
+         * generate better code. */
+        EXPORT Dimension set_stride(Expr e);
+
+        /** Set the min and extent in one call. */
+        EXPORT Dimension set_bounds(Expr min, Expr extent);
+
+        /** Get a different dimension of the same buffer */
+        // @{
+        EXPORT Dimension dim(int i);
+        EXPORT const Dimension dim(int i) const;
+        // @}
+
+    private:
+        friend class OutputImageParam;
+
+        /** Construct a Dimension representing dimension d of some
+         * Internal::Parameter p. Only OutputImageParam may construct
+         * these. */
+        Dimension(const Internal::Parameter &p, int d) : param(p), d(d) {}
+
+        /** Only OutputImageParam may copy these, too. This prevents
+         * users removing constness by making a non-const copy. */
+        Dimension(const Dimension &) = default;
+
+        Internal::Parameter param;
+        int d;
+    };
+
+    /** Construct a null image parameter handle. */
     OutputImageParam() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
@@ -37,66 +118,32 @@ public:
     /** Is this parameter handle non-nullptr */
     EXPORT bool defined() const;
 
-    /** Get an expression representing the minimum coordinates of this image
-     * parameter in the given dimension. */
-    EXPORT Expr min(int x) const;
+    /** Get a handle on one of the dimensions for the purposes of
+     * inspecting or constraining its min, extent, or stride. */
+    EXPORT Dimension dim(int i);
 
-    /** Get an expression representing the extent of this image
-     * parameter in the given dimension */
-    EXPORT Expr extent(int x) const;
+    /** Get a handle on one of the dimensions for the purposes of
+     * inspecting its min, extent, or stride. */
+    EXPORT const Dimension dim(int i) const;
 
-    /** Get an expression representing the stride of this image in the
-     * given dimension */
-    EXPORT Expr stride(int x) const;
+    /** Get or constrain the shape of the dimensions. Soon to be
+     * deprecated. Do not use. */
+    // @{
+    OutputImageParam set_min(int i, Expr e) {dim(i).set_min(e); return *this;}
+    OutputImageParam set_extent(int i, Expr e) {dim(i).set_extent(e); return *this;}
+    OutputImageParam set_bounds(int i, Expr a, Expr b) {dim(i).set_bounds(a, b); return *this;}
+    OutputImageParam set_stride(int i, Expr e) {dim(i).set_stride(e); return *this;}
+    Expr min(int i) const {return dim(i).min();}
+    Expr extent(int i) const {return dim(i).extent();}
+    Expr stride(int i) const {return dim(i).stride();}
+    // @}
 
-    /** Get the ailgnment of the host pointer. Use set_host_alignment
-     * to change the default value of 1. */
+    /** Get the alignment of the host pointer in bytes. Defaults to
+     * the size of type. */
     EXPORT int host_alignment() const;
 
-    /** Set the extent in a given dimension to equal the given
-     * expression. Images passed in that fail this check will generate
-     * a runtime error. Returns a reference to the ImageParam so that
-     * these calls may be chained.
-     *
-     * This may help the compiler generate better
-     * code. E.g:
-     \code
-     im.set_extent(0, 100);
-     \endcode
-     * tells the compiler that dimension zero must be of extent 100,
-     * which may result in simplification of boundary checks. The
-     * value can be an arbitrary expression:
-     \code
-     im.set_extent(0, im.extent(1));
-     \endcode
-     * declares that im is a square image (of unknown size), whereas:
-     \code
-     im.set_extent(0, (im.extent(0)/32)*32);
-     \endcode
-     * tells the compiler that the extent is a multiple of 32. */
-    EXPORT OutputImageParam &set_extent(int dim, Expr extent);
-
-    /** Set the min in a given dimension to equal the given
-     * expression. Setting the mins to zero may simplify some
-     * addressing math. */
-    EXPORT OutputImageParam &set_min(int dim, Expr min);
-
-    /** Set the stride in a given dimension to equal the given
-     * value. This is particularly helpful to set when
-     * vectorizing. Known strides for the vectorized dimension
-     * generate better code. */
-    EXPORT OutputImageParam &set_stride(int dim, Expr stride);
-
-    /** Set the alignment of the host pointer. On some architectures
-     * an unaligned load/store is significantly more expensive in
-     * terms of performance than an aligned load/store. This allows
-     * the user to align external buffers favorably so that halide
-     * can generate aligned loads/stores as appropriate. The alignment
-     * should be a power of 2. */
-    EXPORT OutputImageParam &set_host_alignment(int bytes);
-
-    /** Set the min and extent in one call. */
-    EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
+    /** Set the expected alignment of the host pointer in bytes. */
+    EXPORT OutputImageParam &set_host_alignment(int);
 
     /** Get the dimensionality of this image parameter */
     EXPORT int dimensions() const;

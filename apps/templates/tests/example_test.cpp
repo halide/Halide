@@ -5,7 +5,7 @@
 #include "HalideRuntimeOpenGL.h"
 #include "SimpleAppAPI.h"
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 #include "example4.h"
 #include "example4_glsl.h"

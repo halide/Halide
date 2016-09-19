@@ -14,7 +14,6 @@
 #include "Argument.h"
 #include "RDom.h"
 #include "JITModule.h"
-#include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
 #include "Module.h"
@@ -469,23 +468,23 @@ public:
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
+    /** Construct a new Func to wrap an Image. */
+    template<typename T, int D>
+    NO_INLINE explicit Func(const Image<T, D> &im) : Func() {
+        (*this)(_) = im(_);
+    }
+
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer or buffers. Performs compilation if the
      * Func has not previously been realized and jit_compile has not
-     * been called. The returned Buffer should probably be instantly
-     * wrapped in an Image class of the appropriate type. That is, do
-     * this:
+     * been called. If the final stage of the pipeline is on the GPU,
+     * data is copied back to the host before being returned. The
+     * returned Realization should probably be instantly converted to
+     * an Image class of the appropriate type. That is, do this:
      *
      \code
      f(x) = sin(x);
      Image<float> im = f.realize(...);
-     \endcode
-     *
-     * not this:
-     *
-     \code
-     f(x) = sin(x)
-     Buffer im = f.realize(...)
      \endcode
      *
      * If your Func has multiple values, because you defined it using
@@ -509,24 +508,25 @@ public:
                                const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = Target());
-    EXPORT Realization realize(int x_size = 0,
+    EXPORT Realization realize(int x_size,
                                const Target &target = Target());
+    EXPORT Realization realize(const Target &target = Target());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
      * function, strange things may happen, as the pipeline isn't
      * necessarily safe to run in-place. If you pass multiple buffers,
-     * they must have matching sizes. */
+     * they must have matching sizes. This form of realize does *not*
+     * automatically copy data back from the GPU. */
     // @{
     EXPORT void realize(Realization dst, const Target &target = Target());
-    EXPORT void realize(Buffer dst, const Target &target = Target());
 
-    template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = Target()) {
-        // Images are expected to exist on-host.
-        realize(Buffer(dst), target);
-        dst.copy_to_host();
+    template<typename T, int D>
+    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
+        Realization r(dst);
+        realize(r, target);
+        dst = r[0];
     }
     // @}
 
@@ -538,7 +538,17 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-    EXPORT void infer_input_bounds(Buffer dst);
+
+    template<typename T, int D>
+    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
+        // It's possible for bounds inference to also manipulate
+        // output buffers if their host pointer is null, so we must
+        // take Images by reference and communicate the bounds query
+        // result by modifying the argument.
+        Realization r(im);
+        infer_input_bounds(r);
+        im = r[0];
+    }
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
@@ -1834,7 +1844,7 @@ NO_INLINE T evaluate(Expr e) {
     Func f;
     f() = e;
     Image<T> im = f.realize();
-    return im(0);
+    return im();
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
@@ -1853,8 +1863,8 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b) {
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
 }
 
 template<typename A, typename B, typename C>
@@ -1875,9 +1885,9 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c) {
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
-    *c = Image<C>(r[2])(0);
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
 }
 
 template<typename A, typename B, typename C, typename D>
@@ -1902,10 +1912,10 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
-    *c = Image<C>(r[2])(0);
-    *d = Image<D>(r[3])(0);
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
+    *d = Image<D>(r[3])();
 }
  // @}
 
@@ -1938,7 +1948,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
     f() = e;
     Internal::schedule_scalar(f);
     Image<T> im = f.realize();
-    return im(0);
+    return im();
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. Can
@@ -1959,8 +1969,8 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
 }
 
 template<typename A, typename B, typename C>
@@ -1981,9 +1991,9 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
-    *c = Image<C>(r[2])(0);
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
 }
 
 template<typename A, typename B, typename C, typename D>
@@ -2009,10 +2019,10 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
-    *c = Image<C>(r[2])(0);
-    *d = Image<D>(r[3])(0);
+    *a = Image<A>(r[0])();
+    *b = Image<B>(r[1])();
+    *c = Image<C>(r[2])();
+    *d = Image<D>(r[3])();
 }
 // @}
 

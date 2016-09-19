@@ -7,9 +7,10 @@
  */
 
 #include <functional>
- 
+
+#include "Argument.h"
+#include "BufferPtr.h"
 #include "IR.h"
-#include "Buffer.h"
 #include "ModulusRemainder.h"
 #include "Outputs.h"
 #include "Target.h"
@@ -80,13 +81,13 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    EXPORT const std::vector<Buffer> &buffers() const;
+    EXPORT const std::vector<Internal::BufferPtr> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
     // @}
 
     /** Add a declaration to this module. */
     // @{
-    EXPORT void append(const Buffer &buffer);
+    EXPORT void append(const Internal::BufferPtr &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
     // @}
 
@@ -110,9 +111,9 @@ EXPORT Outputs compile_standalone_runtime(const Outputs &output_files, Target t)
 
 typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
 
-EXPORT void compile_multitarget(const std::string &fn_name, 
+EXPORT void compile_multitarget(const std::string &fn_name,
                                 const Outputs &output_files,
-                                const std::vector<Target> &targets, 
+                                const std::vector<Target> &targets,
                                 ModuleProducer module_producer);
 
 }

@@ -35,8 +35,8 @@ extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) 
 using namespace Halide;
 
 void check(ImageParam im, int x, int w, int y, int h) {
-    Buffer buf = im.get();
-    if (!buf.defined()) {
+    Image<uint8_t> buf = im.get();
+    if (!buf.data()) {
         printf("Bounds inference didn't occur!\n");
         abort();
     }

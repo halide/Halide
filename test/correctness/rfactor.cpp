@@ -455,13 +455,15 @@ int histogram_rfactor_test(bool compile_module) {
             reference_hist[uint8_t(in(x, y))] += 1;
         }
     }
+    // Wrap the image in a buffer, so that we know its name.
+    BufferPtr in_buf(in);
 
     Func hist("hist"), g("g");
     Var x("x");
 
     RDom r(in);
     hist(x) = 0;
-    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255)) += 1;
+    hist(clamp(cast<int>(in_buf(r.x, r.y)), 0, 255)) += 1;
     hist.compute_root();
 
     Var u("u");
@@ -482,7 +484,7 @@ int histogram_rfactor_test(bool compile_module) {
             {hist.name(), {}},
             {hist.update(0).name(), {intm.name(), hist.name()}},
             {intm.name(), {}},
-            {intm.update(0).name(), {in.name(), intm.name()}},
+            {intm.update(0).name(), {in_buf.name(), intm.name()}},
 
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
