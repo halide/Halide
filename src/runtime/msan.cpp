@@ -7,8 +7,8 @@ extern "C" {
 extern void AnnotateMemoryIsInitialized(const char *file, int line,
                                         const void *mem, size_t size);
 
-WEAK void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
-    AnnotateMemoryIsInitialized("Halide", 0, ptr, len);
+WEAK void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
+    AnnotateMemoryIsInitialized("Halide", 0, ptr, (size_t) len);
 }
 
 // Default implementation marks the data pointed to by the buffer_t as initialized
@@ -48,6 +48,10 @@ WEAK void halide_msan_annotate_buffer_is_initialized(void *user_context, buffer_
             }
         }
     }
+}
+
+WEAK void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *b) {
+    return halide_msan_annotate_buffer_is_initialized(user_context, (buffer_t *)b);
 }
 
 }

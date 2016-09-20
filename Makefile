@@ -360,7 +360,6 @@ SOURCE_FILES = \
   RemoveDeadAllocations.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
-  Sanitizers.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
@@ -496,7 +495,6 @@ HEADER_FILES = \
   RemoveDeadAllocations.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
-  Sanitizers.h \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
