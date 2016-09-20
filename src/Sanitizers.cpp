@@ -7,16 +7,7 @@ namespace Internal {
 
 namespace {
 
-Stmt call_extern_and_assert(const std::string& name, const std::vector<Expr>& args) {
-    Expr call = Call::make(Int(32), name, args, Call::Extern);
-    std::string call_result_name = unique_name(name + "_result");
-    Expr call_result_var = Variable::make(Int(32), call_result_name);
-    return LetStmt::make(call_result_name, call,
-                         AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
-}
-
 class InjectMSANHelpers : public IRMutator {
-    using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
         Stmt produce, update, consume;
@@ -27,8 +18,13 @@ class InjectMSANHelpers : public IRMutator {
         }
         consume = mutate(op->consume);
 
-        Expr buffer = Variable::make(type_of<struct buffer_t *>(), op->name + ".buffer");
-        Stmt annotate = call_extern_and_assert("halide_msan_annotate_buffer_is_initialized", {buffer});
+        std::string var_name = op->name + ".buffer";
+        debug(3) << "Annotating buffer " << var_name << "\n";
+        Expr buffer = Variable::make(type_of<struct buffer_t *>(), var_name);
+        // Return type is really 'void', but no way to represent that in our IR.
+        // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+        Expr call = Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern);
+        Stmt annotate = Evaluate::make(call);
 
         if (op->update.defined()) {
             update = Block::make(update, annotate);
