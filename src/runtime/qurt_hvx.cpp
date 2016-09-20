@@ -69,12 +69,6 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 #define DBG_PREFETCH(...)    {}
 #endif
 
-// Notes:
-//  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
-//  - If 3 are already pending, the oldest request is dropped
-//  - USR:PFA status bit is set to indicate that prefetches are in progress
-//  - A l2fetch with any subfield set to zero cancels all pending prefetches
-//
 #define MIN(x,y)        (((x)<(y)) ? (x) : (y))
 #define MAX(x,y)        (((x)>(y)) ? (x) : (y))
 #define MASK16          0xFFFF
@@ -88,6 +82,14 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 //   elem_size  size in bytes of one element
 //   num_elem   total number of elements in array
 //   buf        buffer_t describing box to prefetch
+//
+// Notes:
+//  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
+//  - If 3 are already pending, the oldest request is dropped
+//  - USR:PFA status bit is set to indicate that prefetches are in progress
+//  - A l2fetch with any subfield set to zero cancels all pending prefetches
+//  - The l2fetch starting address must be in mapped memory but the range
+//    prefetched can go into unmapped memory without raising an exception
 //
 // TODO: Opt: Generate more control code for prefetch_buffer_t directly in
 // TODO       Prefetch.cpp to avoid passing box info through a buffer_t
@@ -109,8 +111,8 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
 #endif
     DBG_PREFETCH("halide_hexagon_prefetch_buffer_t(%u, %d)\n", dim, elem_size, num_elem);
 
-    unsigned char *addr_beg = addr;
-    unsigned char *addr_end = addr + (num_elem * elem_size);
+    const unsigned char *addr_beg = addr;
+    const unsigned char *addr_end = addr + (num_elem * elem_size);
     DBG_PREFETCH("addr range 0x%p => 0x%p\n", addr_beg, addr_end);
 
     DBG_PREFETCH("buf host=0x%p elem_size=%d\n", addr, buf->elem_size);
@@ -126,6 +128,12 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
     }
     addr += startpos * elem_size;
     DBG_PREFETCH("startpos=0x%x => addr=0x%p\n", startpos, addr);
+    // Range check starting address
+    if ((addr < addr_beg) || (addr >= addr_end)) {
+        DBG_PREFETCH_V("l2fetch: 0x%p out of range [0x%p, 0x%p]\n",
+                        addr, addr_beg, addr_end);
+        return 0;
+    }
 
     // Compute 2-D prefetch descriptor
     // l2fetch(Rs,Rtt): 48 bit descriptor
@@ -180,11 +188,7 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
 
         // Perform prefetch
         DBG_PREFETCH("l2fetch(0x%p, 0x%llx)\n", addr, pdesc);
-        if ((addr >= addr_beg) && (addr < addr_end)) {
-            __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
-        } else {
-            DBG_PREFETCH_V("l2fetch: 0x%p out of range\n", addr);
-        }
+        __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
 
     } else { // For higher dimension boxes...
 
@@ -206,9 +210,10 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
         // TODO  Currently just iterating over one outer dimension since
         // TODO  only MAX_PREFETCH prefetches can be queued anyway.
         for (int32_t i = 0; i < iterextent; i++) {
-            // Perform prefetch
             DBG_PREFETCH("%d: l2fetch(0x%p, 0x%llx)\n", i, addr, pdesc);
+            // Range check starting address
             if ((addr >= addr_beg) && (addr < addr_end)) {
+                // Perform prefetch
                 __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
             } else {
                 DBG_PREFETCH_V("%d: l2fetch: +0x%x => 0x%p out of range [0x%p, 0x%p]\n",

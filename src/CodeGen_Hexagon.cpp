@@ -1406,7 +1406,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         value = ret;
 
         // debug(0) << "value: " << value << "\n";
-        value->dump();
+        // value->dump();
         return;
     }
 
