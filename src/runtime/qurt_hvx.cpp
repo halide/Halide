@@ -154,6 +154,8 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
     uint32_t pwidth  = extent[0] * elem_size;
     uint32_t pheight = 1;
     if (boxdim > 1) {
+        // Note: Currently assuming this will fit within MASK16
+        pstride = stride[1] * elem_size;
         pheight = extent[1];
     }
 
