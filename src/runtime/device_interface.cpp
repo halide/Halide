@@ -47,12 +47,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
         return halide_error_code_copy_to_host_failed;
     }
     buf->dev_dirty = false;
-    result = halide_msan_annotate_buffer_is_initialized(user_context, buf);
-    if (result != 0) {
-        debug(user_context) << "copy_to_host_already_locked " << buf << " halide_msan_annotate_buffer_is_initialized returned an error\n";
-        // No unique error code for annotation failure, but that's OK
-        return halide_error_code_copy_to_host_failed;
-    }
+    halide_msan_annotate_buffer_is_initialized(user_context, buf);
 
     return 0;
 }

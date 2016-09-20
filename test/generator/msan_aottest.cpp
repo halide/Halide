@@ -26,14 +26,13 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
 }
 
 const void* previous = nullptr;
-extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
+extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
     if (ptr <= previous) {
         fprintf(stderr, "Failure!\nExpected monotonic increase but saw %p -> %p\n", previous, ptr);
         exit(-1);
     }
     printf("%p:%08x\n", ptr, (unsigned int) len);
     previous = ptr;
-    return 0;
 }
 
 template<typename T>
