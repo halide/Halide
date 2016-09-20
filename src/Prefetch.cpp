@@ -203,10 +203,10 @@ private:
         args_prefetch[3] = var_prefetch_buf;
         Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                               args_prefetch, Call::Intrinsic));
-        // TODO: Opt: Keep running sum of bytes prefetched on this sequence
+        // TODO: Opt: Keep running sum of bytes prefetched on this sequence?
         // TODO: Opt: Keep running sum of number of prefetch instructions issued
         // TODO       on this sequence? (to not exceed MAX_PREFETCH)
-        // TODO: Opt: Generate control code for prefetch_buffer_t in Prefetch.cpp
+        // TODO: Opt: Generate more control code for prefetch_buffer_t in Prefetch.cpp?
         // TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
 
         pstmts.push_back(stmt_prefetch);
@@ -284,6 +284,12 @@ private:
         string ivar_name = tuple_var(op->name);
         vector<Prefetch> &prefetches = get_func(func_name).schedule().prefetches();
 
+        // Add loop variable to interval scope for any inner loop prefetch
+        Expr var = Variable::make(Int(32), op->name);
+        Interval prein(var, var);
+        scope.push(op->name, prein);
+        debug(dbg_prefetch5) << "For scope.push(" << op->name << ", (" << var << "))\n";
+
         debug(dbg_prefetch4) << "For: " << op->name << " " << func_name << " " << ivar_name << "\n";
         if (prefetches.empty()) {
             debug(dbg_prefetch4) << " No prefetch directives in schedule\n";
@@ -308,7 +314,7 @@ private:
                 debug(dbg_prefetch1) << " " << func_name
                                      << " prefetch(" << ivar_name << ", " << p.offset << ")\n";
 
-                // Add in prefetch offset
+                // Add loop variable + prefetch offset to interval scope for box computation
                 Expr var = Variable::make(Int(32), op->name);
                 Interval prein(var + p.offset, var + p.offset);
                 scope.push(op->name, prein);
@@ -345,6 +351,9 @@ private:
             debug(dbg_prefetch5) << "Realize pop(" << rname << ")\n";
         }
         debug(dbg_prefetch5) << "Realize stack for " << op->name << " on exit:" << rstack.size() << "\n";
+
+        debug(dbg_prefetch5) << "For scope.pop(" << op->name << ")\n";
+        scope.pop(op->name);
 
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         debug(dbg_prefetch4) << "EndFor: " << op->name << "\n";
