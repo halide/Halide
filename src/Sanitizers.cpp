@@ -19,24 +19,17 @@ class InjectMSANHelpers : public IRMutator {
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        Stmt produce, update, consume;
+        if (op->is_producer) {
+            Stmt body = mutate(op->body);
 
-        produce = mutate(op->produce);
-        if (op->update.defined()) {
-            update = mutate(op->update);
-        }
-        consume = mutate(op->consume);
+            Expr buffer = Variable::make(type_of<struct buffer_t *>(), op->name + ".buffer");
+            Stmt annotate = call_extern_and_assert("halide_msan_annotate_buffer_is_initialized", {buffer});
 
-        Expr buffer = Variable::make(type_of<struct buffer_t *>(), op->name + ".buffer");
-        Stmt annotate = call_extern_and_assert("halide_msan_annotate_buffer_is_initialized", {buffer});
-
-        if (op->update.defined()) {
-            update = Block::make(update, annotate);
+            body = Block::make(body, annotate);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            produce = Block::make(produce, annotate);
+            IRMutator::visit(op);
         }
-
-        stmt = ProducerConsumer::make(op->name, produce, update, consume);
     }
 
 public:
