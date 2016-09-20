@@ -302,12 +302,12 @@ Func process(Func raw, Type result_type,
         .reorder(c, x, y)
         .unroll(c);
     processed.compute_root()
-        .prefetch(y, 2)
         .split(y, yo, yi, strip_size)
         .split(yi, yi, yii, 2)
         .split(x, x, xi, 2*vec, TailStrategy::RoundUp)
         .reorder(xi, c, yii, x, yi, yo)
         .vectorize(xi, 2*vec)
+        .prefetch(yo, 2)
         .parallel(yo);
 
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
