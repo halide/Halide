@@ -114,7 +114,7 @@ private:
 
         if (rscope.contains(varname)) {
             debug(dbg_prefetch2) << "  Found realize node for " << varname << "\n";
-            debug(dbg_prefetch1) << "  Info: not prefetching " << varname << "\n";
+            debug(dbg_prefetch1) << "  Info: not prefetching realized " << varname << "\n";
             return;
         }
         if (has_static_type) {
@@ -126,7 +126,7 @@ private:
 
         std::ostringstream ss; ss << t;
         string type_name = ss.str();
-        debug(dbg_prefetch1) << "  prefetch" << ptmp << ": "
+        debug(dbg_prefetch1) << "  prefetch #" << ptmp << ": "
                              << varname << " ("
                              << (has_static_type ? type_name : elem_size_name)
                              << ", dims:" << dims << ")\n";
@@ -343,6 +343,7 @@ private:
             }
         }
 
+#if 0   // Don't pop here, still need to know later that function was realized
         // Restore previous position on realize stack
         while (rstack.size() > rpos) {
             string &rname = rstack.top();
@@ -350,6 +351,7 @@ private:
             rstack.pop();
             debug(dbg_prefetch5) << "Realize pop(" << rname << ")\n";
         }
+#endif
         debug(dbg_prefetch5) << "Realize stack for " << op->name << " on exit:" << rstack.size() << "\n";
 
         debug(dbg_prefetch5) << "For scope.pop(" << op->name << ")\n";
