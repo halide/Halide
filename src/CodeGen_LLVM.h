@@ -232,7 +232,7 @@ protected:
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
-    enum DestructorType {Always, OnError};
+    enum DestructorType {Always, OnError, OnSuccess};
 
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:

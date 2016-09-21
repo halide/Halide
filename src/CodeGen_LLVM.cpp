@@ -629,7 +629,20 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
-    // Generate the function body.
+    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()        
+    // happen for every output buffer if the function succeeds.       
+    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {     
+        llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");       
+        internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";       
+        annotate_buffer_fn->setDoesNotAlias(0);       
+        for (const auto &arg : f.args) {      
+            if (arg.kind == Argument::OutputBuffer) {     
+                register_destructor(annotate_buffer_fn, sym_get(arg.name), OnSuccess);        
+            }     
+        }     
+    }     
+       
+     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
 
@@ -701,14 +714,16 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     PHINode *error_code = dyn_cast<PHINode>(dtors->begin());
     internal_assert(error_code) << "The destructor block is supposed to start with a phi node\n";
 
-    llvm::Value *should_call =
-        (when == Always) ?
-        ConstantInt::get(i1_t, 1) :
-        builder->CreateIsNotNull(error_code);
-
+    llvm::Value *should_call = nullptr;
+    switch (when) {
+        case Always:    should_call = ConstantInt::get(i1_t, 1); break;
+        case OnError:   should_call = builder->CreateIsNotNull(error_code); break;
+        case OnSuccess: should_call = builder->CreateIsNull(error_code); break;       
+    }     
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
+    internal_assert(should_call);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
 
