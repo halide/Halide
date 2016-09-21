@@ -40,7 +40,6 @@ private:
     const map<string, Function> &env;   // Environment
     Scope<Interval> scope;              // Interval scope
     Scope<int> rscope;                  // Realize scope
-    stack<string> rstack;               // Realize stack
     unsigned long ptmp = 0;             // ID for all tmp vars in a prefetch op
 
 private:
@@ -229,25 +228,9 @@ private:
                 pbody = LetStmt::make(plets[i-1].first, plets[i-1].second, pbody);
             }
 
-#if 0
-            // Guard to not prefetch past the end of the iteration space
-            // TODO: Opt: Use original extent of loop in guard condition to
-            // TODO       prefetch valid iterations that are otherwise skipped
-            // TODO       with the current extent when loop is stripmined
-            // TODO: Opt: Consider not using a guard at all and letting address
-            // TODO       range check in prefetch runtime take care of guarding
-            Expr pcond = likely((Variable::make(Int(32), op->name) + p.offset)
-                                                < (op->min + op->extent - 1));
-            Stmt pguard = IfThenElse::make(pcond, pbody);
-
-            body = Block::make({pguard, body});
-            debug(dbg_prefetch4) << pguard << "\n";
-#else
-            // Don't guard, perform address range check in prefetch runtime
+            // No guard needed, address range checked in prefetch runtime
             body = Block::make({pbody, body});
             debug(dbg_prefetch4) << pbody << "\n";
-#endif
-
         }
     }
 
@@ -271,10 +254,8 @@ private:
 
     void visit(const Realize *op) {
         rscope.push(op->name, 1);
-        rstack.push(op->name);
         debug(dbg_prefetch5) << "Realize push(" << op->name << ")\n";
         IRMutator::visit(op);
-        // Note: the realize scope/stack is cleaned up elsewhere
     }
 
     void visit(const For *op) {
@@ -297,15 +278,7 @@ private:
             debug(dbg_prefetch4) << " Found prefetch directive(s) in schedule\n";
         }
 
-        // Record current position on realize stack
-        size_t rpos = rstack.size();
-        debug(dbg_prefetch5) << " Realize stack for " << op->name << " on entry:" << rstack.size() << "\n";
-
         body = mutate(body);
-
-        if (rstack.size() > rpos) {
-            debug(dbg_prefetch5) << " Realize stack for " << op->name << " during:" << rstack.size() << "\n";
-        }
 
         for (const Prefetch &p : prefetches) {
             debug(dbg_prefetch4) << " Check prefetch ivar: " << p.var << " == " << ivar_name << "\n";
@@ -342,17 +315,6 @@ private:
                 scope.pop(op->name);
             }
         }
-
-#if 0   // Don't pop here, still need to know later that function was realized
-        // Restore previous position on realize stack
-        while (rstack.size() > rpos) {
-            string &rname = rstack.top();
-            rscope.pop(rname);
-            rstack.pop();
-            debug(dbg_prefetch5) << "Realize pop(" << rname << ")\n";
-        }
-#endif
-        debug(dbg_prefetch5) << "Realize stack for " << op->name << " on exit:" << rstack.size() << "\n";
 
         debug(dbg_prefetch5) << "For scope.pop(" << op->name << ")\n";
         scope.pop(op->name);
