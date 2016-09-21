@@ -75,6 +75,7 @@ struct Target {
         HVX_v62 = halide_target_feature_hvx_v62,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
+        MSAN = halide_target_feature_msan,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
