@@ -63,6 +63,7 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 //   elem_size  size in bytes of one element
 //   num_elem   total number of elements in array
 //   buf        buffer_t describing box to prefetch
+//              (note: extent/stride/min are all assumed to be positive)
 //
 // Notes:
 //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
@@ -113,20 +114,19 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
     const int32_t *extent = buf->extent;
     const int32_t *stride = buf->stride;
     const int32_t *min    = buf->min;
-    unsigned int boxdim   = dim;  // dimensions of entire box to prefetch
-    unsigned int iterdim  = 2;    // dimension to iterate over
+    const uint32_t boxdim = dim;  // dimensions of entire box to prefetch
     const unsigned char *addr_beg = addr;
     const unsigned char *addr_end = addr + (num_elem * elem_size);
 
 #ifdef DEBUG_PREFETCH
     static uint32_t dbg_cnt = 0;  // limit how many calls debug is generated
     dbg_cnt++;
-    DBG_PREFETCH("halide_hexagon_prefetch_buffer_t(%u, %d)\n", dim, elem_size, num_elem);
+    DBG_PREFETCH("halide_hexagon_prefetch_buffer_t(%u, %d)\n", boxdim, elem_size, num_elem);
 
     DBG_PREFETCH("  addr range 0x%p => 0x%p\n", addr_beg, addr_end);
 
     DBG_PREFETCH("  buf host=0x%p elem_size=%d\n", addr, buf->elem_size);
-    for (unsigned int i = 0; i < boxdim; i++) {
+    for (uint32_t i = 0; i < boxdim; i++) {
         DBG_PREFETCH("  buf stride[%d]=0x%-8x min[%d]=%-6d ext[%d]=%d\n",
                           i, stride[i], i, min[i], i, extent[i]);
     }
@@ -134,7 +134,7 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
 
     // Compute starting position of box
     int32_t startpos = 0;
-    for (unsigned int i = 0; i < boxdim; i++) {
+    for (uint32_t i = 0; i < boxdim; i++) {
         startpos += min[i] * stride[i];
     }
     addr += startpos * elem_size;
@@ -149,22 +149,29 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
 
     // Compute 2-D prefetch descriptor
     // l2fetch(Rs,Rtt): 48 bit descriptor
-    uint32_t pdir    = 1;   // 0 row major, 1 = column major
+    uint32_t pdir    = 1;       // Prefetch direction: 0=rows, 1=columns
     uint32_t pstride = stride[0] * elem_size;
     uint32_t pwidth  = extent[0] * elem_size;
-    uint32_t pheight = 1;
-    if (boxdim > 1) {
-        // Note: Currently assuming this will fit within MASK16
-        pstride = stride[1] * elem_size;
-        pheight = extent[1];
+    uint32_t pheight = 1;       // Initially 1-D descriptor
+
+    uint32_t iterdim = 1;       // Dimension to iterate over
+    if (boxdim > 1) {           // Potential for 2-D descriptor
+        uint32_t newpstride = stride[1] * elem_size;
+        if (newpstride == (newpstride & MASK16)) {
+            pstride = newpstride;
+            pheight = extent[1];
+            iterdim++;
+        }
     }
+    DBG_PREFETCH("  iterdim:%d\n", iterdim);
 
 #if 0   // TODO: Opt: Box collapse disabled for now - needs more testing, and
         // TODO       collapse candidates tend to exceed the stride mask size
     // For boxes with dimension > 2 try to "collapse" any unit height
     // dimensions by increasing the descriptor stride
-    int32_t newpstride = pstride;
-    while (boxdim > 2) {
+    uint32_t newdim = boxdim;
+    while (newdim > 2) {
+        uint32_t newpstride = 0;
         if (pheight == 1) {     // if height is currently 1
             newpstride = stride[iterdim-1] * elem_size;  // update stride
         } else {
@@ -176,9 +183,10 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
         } else {
             break;              // otherwise, we're done collapsing
         }
-        boxdim--;       // remaining non-collapsed dimensions
+        newdim--;       // remaining non-collapsed dimensions
         iterdim++;      // update innermost iterate dimension
     }
+    DBG_PREFETCH("  iterdim:%d\n", iterdim);
 #endif
 
     pdir    = pdir & 0x1;           // bit  48
@@ -189,6 +197,7 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
     uint64_t pdir64    = pdir;
     uint64_t pstride64 = pstride;
     uint64_t pdesc = (pdir64<<48) | (pstride64<<32) | (pwidth<<16) | pheight;
+
     const uint32_t pbytes = pwidth * pheight;   // Bytes in prefetch descriptor
     uint32_t tbytes = 0;                        // Total bytes prefetched
     uint32_t tcnt = 0;                          // Total count of prefetch ops
@@ -202,19 +211,13 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
                            pdir, pstride, pwidth, pheight);
     DBG_PREFETCH("  prefetch addr:0x%p pdesc:0x%llx\n", addr, pdesc);
 
-    DBG_PREFETCH("  iterdim:%d\n", iterdim);
-    // If iterdim is not last dim && iterdim extent is 1...
-    while ((iterdim < dim-1) && (extent[iterdim] == 1)) {
-        iterdim++;          // ...iterate at the next higher dimension
+    // If iterdim extent is unity then move to next higher dimension
+    while ((iterdim < dim) && (extent[iterdim] == 1)) {
+        iterdim++;
     }
+    DBG_PREFETCH("  iterdim:%d\n", iterdim);
 
-    // TODO: Add support for iterating over multiple higher dimensions?
-    // TODO  Currently just iterating over one outer (non-unity) dimension
-    // TODO  since only MAX_PREFETCH prefetches can be queued anyway.
-
-    if ((boxdim <= 2) ||          // 2-D box, or
-        (iterdim >= dim) ||       // No dimension remaining to iterate over, or
-        (extent[iterdim] == 1)) { // >2-D box, but unity outer dimension
+    if (iterdim >= dim) {       // No dimension remaining to iterate over
 
         // Perform a single prefetch
         DBG_PREFETCH("  l2fetch(0x%p, 0x%llx): %d bytes\n", addr, pdesc, pbytes);
@@ -222,7 +225,7 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
         tbytes += pbytes;
         tcnt++;
 
-    } else { // Iterate for higher dimension boxes...
+    } else {    // Iterate for higher dimension boxes
 
         // Get iteration stride and extents
         int32_t iterstride = stride[iterdim] * elem_size;
@@ -231,6 +234,10 @@ WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim, const int32_t elem
 
         DBG_PREFETCH("  stride[%d]*%d=0x%x ext[%d]=%d\n",
                         iterdim, elem_size, iterstride, iterdim, iterextent);
+
+        // TODO: Add support for iterating over multiple higher dimensions?
+        // TODO  Currently just iterating over one outer (non-unity) dimension
+        // TODO  since only MAX_PREFETCH prefetches can be queued anyway.
 
         for (int32_t i = 0; i < iterextent; i++) {
             DBG_PREFETCH("  %d: l2fetch(0x%p, 0x%llx): %d bytes\n", i, addr, pdesc, pbytes);
