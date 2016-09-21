@@ -309,7 +309,6 @@ set(HEADER_FILES
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
-  Sanitizers.h
   Schedule.h
   ScheduleFunctions.h
   Scope.h
@@ -460,7 +459,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
-  Sanitizers.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
