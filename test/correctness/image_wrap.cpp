@@ -1,137 +1,14 @@
 #include "Halide.h"
-#include <assert.h>
+#include "../common/check_call_graphs.h"
+
 #include <stdio.h>
-#include <algorithm>
-#include <functional>
 #include <map>
-#include <numeric>
 
 using std::map;
-using std::vector;
 using std::string;
 
 using namespace Halide;
 using namespace Halide::Internal;
-
-typedef map<string, vector<string>> CallGraphs;
-
-class CheckCalls : public IRVisitor {
-public:
-    CheckCalls(const map<string, Function> &funcs) : funcs(funcs) {}
-
-    CallGraphs calls; // Caller -> vector of callees
-private:
-    map<string, Function> funcs;
-    string producer = "";
-
-    using IRVisitor::visit;
-
-    void visit(const ProducerConsumer *op) {
-        if (op->is_producer) {
-            assert(funcs.count(op->name));
-            Stmt produce = op->body;
-            Stmt update;
-
-            if (!funcs[op->name].updates().empty()) {
-                // Peel the let/if stmts until we find a block
-                Stmt body = op->body;
-                while (true) {
-                    const LetStmt *let = body.as<LetStmt>();
-                    const IfThenElse *if_else = body.as<IfThenElse>();
-                    if (let) {
-                        body = let->body;
-                    } else if (if_else) {
-                        body = if_else->then_case;
-                    } else {
-                        break;
-                    }
-                }
-                if (const Block *block = body.as<Block>()) {
-                    produce = block->first;
-                    update = block->rest;
-                }
-            }
-
-            string old_producer = producer;
-            producer = op->name;
-            calls[producer]; // Make sure each producer is allocated a slot
-            produce.accept(this);
-            producer = old_producer;
-
-            if (update.defined()) {
-                assert(!funcs[op->name].updates().empty());
-                // Just lump all the update stages together
-                producer = op->name + ".update(" + std::to_string(0) + ")";
-                calls[producer]; // Make sure each producer is allocated a slot
-                update.accept(this);
-                producer = old_producer;
-            }
-            producer = old_producer;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Load *op) {
-        IRVisitor::visit(op);
-        if (!producer.empty()) {
-            assert(calls.count(producer) > 0);
-            vector<string> &callees = calls[producer];
-            if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
-                callees.push_back(op->name);
-            }
-        }
-    }
-};
-
-int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
-    if (result.size() != expected.size()) {
-        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
-        return -1;
-    }
-    for (auto &iter : expected) {
-        if (result.count(iter.first) == 0) {
-            printf("Expect %s to be in the call graphs\n", iter.first.c_str());
-            return -1;
-        }
-        vector<string> &expected_callees = iter.second;
-        vector<string> &result_callees = result[iter.first];
-        std::sort(expected_callees.begin(), expected_callees.end());
-        std::sort(result_callees.begin(), result_callees.end());
-        if (expected_callees != result_callees) {
-            string expected_str = std::accumulate(
-                expected_callees.begin(), expected_callees.end(), std::string{},
-                [](const string &a, const string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
-            string result_str = std::accumulate(
-                result_callees.begin(), result_callees.end(), std::string{},
-                [](const string &a, const string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
-
-            printf("Expect calless of %s to be (%s); got (%s) instead\n",
-                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
-            return -1;
-        }
-
-    }
-    return 0;
-}
-
-int check_image(const Image<int> &im, const std::function<int(int,int)> &func) {
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = func(x, y);
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return -1;
-            }
-        }
-    }
-    return 0;
-}
 
 int calling_wrap_no_op_test() {
     Var x("x"), y("y");
@@ -204,12 +81,7 @@ int func_wrap_test() {
     // Check the call graphs.
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img'
     Module m = g.compile_to_module({g.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {wrapper.name(), wrapper.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
@@ -246,19 +118,11 @@ int multiple_funcs_sharing_wrapper_test() {
     Func img_f = img;
     img_f.compute_root();
 
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g1.name(), g1.function()},
-        {g2.name(), g2.function()},
-        {g3.name(), g3.function()},
-        {im_wrapper.name(), im_wrapper.function()},
-    };
-
     {
         // Check the call graphs.
         // Expect 'g1' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g1.compile_to_module({g1.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
@@ -281,7 +145,7 @@ int multiple_funcs_sharing_wrapper_test() {
         // Check the call graphs.
         // Expect 'g2' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
         Module m = g2.compile_to_module({g2.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
@@ -304,7 +168,7 @@ int multiple_funcs_sharing_wrapper_test() {
         // Check the call graphs.
         // Expect 'g3' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
         Module m = g3.compile_to_module({g3.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
@@ -349,13 +213,7 @@ int global_wrap_test() {
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img',
     // 'h' to call 'wrapper' and 'g'
     Module m = h.compile_to_module({h.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {h.name(), h.function()},
-        {wrapper.name(), wrapper.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
@@ -405,12 +263,6 @@ int update_defined_after_wrap_test() {
     img_f.compute_root();
     wrapper.compute_root().vectorize(_0, 8).unroll(_0, 2).split(_0, _0, xi, 4).parallel(_0);
 
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {wrapper.name(), wrapper.function()},
-    };
-
     {
         param.set(true);
 
@@ -418,12 +270,11 @@ int update_defined_after_wrap_test() {
         // Expect initialization of 'g' to call 'wrapper' and its update to call
         // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g.name(), {wrapper.name()}},
-            {g.update(0).name(), {wrapper.name(), g.name()}},
+            {g.name(), {wrapper.name(), g.name()}},
             {wrapper.name(), {img_f.name()}},
             {img_f.name(), {img.name()}},
         };
@@ -447,12 +298,11 @@ int update_defined_after_wrap_test() {
         // Expect initialization of 'g' to call 'wrapper' and its update to call
         // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g.name(), {wrapper.name()}},
-            {g.update(0).name(), {wrapper.name(), g.name()}},
+            {g.name(), {wrapper.name(), g.name()}},
             {wrapper.name(), {img_f.name()}},
             {img_f.name(), {img.name()}},
         };
@@ -473,7 +323,7 @@ int update_defined_after_wrap_test() {
 }
 
 int rdom_wrapper_test() {
-    Func source("source"), g("g");
+    Func source("source"), g("g"), result("result");
     Var x("x"), y("y");
 
     source(x, y) = x + y;
@@ -496,17 +346,11 @@ int rdom_wrapper_test() {
     // Expect 'wrapper' to call 'g', initialization of 'g' to call nothing
     // and its update to call 'img_f' and 'g', 'img_f' to call 'img'
     Module m = wrapper.compile_to_module({wrapper.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {wrapper.name(), wrapper.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {g.name(), {}},
-        {g.update(0).name(), {img_f.name(), g.name()}},
+        {g.name(), {img_f.name(), g.name()}},
         {wrapper.name(), {g.name()}},
         {img_f.name(), {img.name()}},
     };
@@ -544,14 +388,7 @@ int global_and_custom_wrap_test() {
     // Expect 'result' to call 'g' and 'img_wrapper', 'g' to call 'img_in_g',
     // 'img_wrapper' to call 'f', img_in_g' to call 'img_f', 'f' to call 'img'
     Module m = result.compile_to_module({result.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {result.name(), result.function()},
-        {img_in_g.name(), img_in_g.function()},
-        {img_wrapper.name(), img_wrapper.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
@@ -601,15 +438,7 @@ int wrapper_depend_on_mutated_func_test() {
     // Expect 'h' to call 'g_in_h', 'g_in_h' to call 'g', 'g' to call 'f',
     // 'f' to call 'img_in_f', img_in_f' to call 'img_f', 'img_f' to call 'img'
     Module m = h.compile_to_module({h.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {f.name(), f.function()},
-        {g.name(), g.function()},
-        {h.name(), h.function()},
-        {img_in_f.name(), img_in_f.function()},
-        {g_in_h.name(), g_in_h.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
@@ -654,16 +483,7 @@ int wrapper_on_wrapper_test() {
 
     // Check the call graphs.
     Module m = h.compile_to_module({h.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {h.name(), h.function()},
-        {img_in_g.name(), img_in_g.function()},
-        {img_in_img_in_g.name(), img_in_img_in_g.function()},
-        {img_in_h.name(), img_in_h.function()},
-        {g_in_h.name(), g_in_h.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
@@ -714,19 +534,11 @@ int wrapper_on_rdom_predicate_test() {
     // 'img_in_g' to call 'img_f', 'img_f' to call 'img', 'h_wrapper' to call 'h',
     // 'h' to call nothing
     Module m = g.compile_to_module({g.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {h.name(), h.function()},
-        {h_wrapper.name(), h_wrapper.function()},
-        {img_in_g.name(), img_in_g.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {g.name(), {}},
-        {g.update(0).name(), {g.name(), img_in_g.name(), h_wrapper.name()}},
+        {g.name(), {g.name(), img_in_g.name(), h_wrapper.name()}},
         {img_in_g.name(), {img_f.name()}},
         {img_f.name(), {img.name()}},
         {h_wrapper.name(), {h.name()}},
@@ -768,13 +580,7 @@ int two_fold_wrapper_test() {
 
     // Check the call graphs.
     Module m = output.compile_to_module({output.infer_arguments()});
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {output.name(), output.function()},
-        {img_in_output.name(), img_in_output.function()},
-        {img_in_output_in_output.name(), img_in_output_in_output.function()},
-    };
-    CheckCalls c(funcs);
+    CheckCalls c;
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
@@ -820,20 +626,10 @@ int multi_folds_wrapper_test() {
     img_in_g_in_g_in_h_in_h = img_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(_0).unroll(_1);
     h.compute_root().tile(x, y, xi, yi, 8, 8);
 
-    map<string, Function> funcs = {
-        {img_f.name(), img_f.function()},
-        {g.name(), g.function()},
-        {h.name(), h.function()},
-        {img_in_g_in_g.name(), img_in_g_in_g.function()},
-        {img_in_g.name(), img_in_g.function()},
-        {img_in_g_in_g_in_h.name(), img_in_g_in_g_in_h.function()},
-        {img_in_g_in_g_in_h_in_h.name(), img_in_g_in_g_in_h_in_h.function()},
-    };
-
     {
         // Check the call graphs.
         Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
@@ -856,7 +652,7 @@ int multi_folds_wrapper_test() {
     {
         // Check the call graphs.
         Module m = h.compile_to_module({h.infer_arguments()});
-        CheckCalls c(funcs);
+        CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
