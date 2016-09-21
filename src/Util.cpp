@@ -7,6 +7,7 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <iomanip>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -18,10 +19,15 @@
 #include <sys/stat.h>
 
 #ifdef __linux__
+#define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#endif
+#ifdef __APPLE__
+#define CAN_GET_RUNNING_PROGRAM_NAME
+#include <mach-o/dyld.h>
 #endif
 
 namespace Halide {
@@ -55,22 +61,27 @@ std::string get_env_variable(char const *env_var_name, size_t &read) {
 }
 
 string running_program_name() {
-    // linux specific currently.
-    #ifndef __linux__
-    return "";
-    #else
-    string program_name;
-    char path[PATH_MAX];
-    ssize_t len = ::readlink("/proc/self/exe", path, sizeof(path)-1);
-    if (len != -1) {
-        path[len] = '\0';
-        string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of("/")+1);
-    }
-    else {
+    #ifndef CAN_GET_RUNNING_PROGRAM_NAME
         return "";
-    }
-    return program_name;
+    #else
+        string program_name;
+        char path[PATH_MAX] = { 0 };
+        uint32_t size = sizeof(path);
+        #if defined(__linux__)
+            ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
+        #elif defined(__APPLE__)
+            ssize_t len = ::_NSGetExecutablePath(path, &size);
+        #endif
+        if (len != -1) {
+            #if defined(__linux__)
+                path[len] = '\0';
+            #endif
+            string tmp = std::string(path);
+            program_name = tmp.substr(tmp.find_last_of("/") + 1);
+        } else {
+            return "";
+        }
+        return program_name;
     #endif
 }
 
@@ -233,6 +244,16 @@ void file_unlink(const std::string &name) {
     #endif
 }
 
+void dir_rmdir(const std::string &name) {
+    #ifdef _MSC_VER
+    BOOL r = RemoveDirectoryA(name.c_str());
+    internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
+    #else
+    int r = ::rmdir(name.c_str());
+    internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
+    #endif
+}
+
 FileStat file_stat(const std::string &name) {
     #ifdef _MSC_VER
     struct _stat a;
@@ -260,11 +281,11 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
-    TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
-    DWORD ret = GetTempPath(MAX_PATH, tmp_path);
+    char tmp_path[MAX_PATH], tmp_file[MAX_PATH];
+    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
     internal_assert(ret != 0);
-    // Note that GetTempFileName() actually creates the file.
-    ret = GetTempFileName(tmp_path, prefix.c_str(), 0, tmp_file);
+    // Note that GetTempFileNameA() actually creates the file.
+    ret = GetTempFileNameA(tmp_path, prefix.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
     return std::string(tmp_file);
     #else
@@ -276,6 +297,56 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     internal_assert(fd != -1) << "Unable to create temp file for (" << &buf[0] << ")\n";
     close(fd);
     return std::string(&buf[0]);
+    #endif
+}
+
+std::string dir_make_temp() {
+    #ifdef _WIN32
+    char tmp_path[MAX_PATH];
+    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
+    internal_assert(ret != 0);
+    // There's no direct API to do this in Windows;
+    // our clunky-but-adequate approach here is to use 
+    // CoCreateGuid() to create a probably-unique name.
+    // Add a limit on the number of tries just in case.
+    for (int tries = 0; tries < 100; ++tries) {
+        GUID guid;
+        HRESULT hr = CoCreateGuid(&guid);
+        internal_assert(hr == S_OK);
+        std::ostringstream name;
+        name << std::hex
+	     << std::setfill('0')
+             << std::setw(8)
+             << guid.Data1
+             << std::setw(4)
+             << guid.Data2
+             << guid.Data3
+             << std::setw(2);
+        for (int i = 0; i < 8; i++) {
+            name << (int)guid.Data4[i];
+        }       
+        std::string dir = std::string(tmp_path) + std::string(name.str());
+        BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
+        if (result) {
+            debug(1) << "temp dir is: " << dir << "\n";
+            return dir;
+        }
+        // If name already existed, just loop and try again.
+        // Any other error, break from loop and fail.
+        if (GetLastError() != ERROR_ALREADY_EXISTS) {
+            break;
+        }
+    }
+    internal_assert(false) << "Unable to create temp directory.\n";
+    return "";
+    #else
+    std::string templ = "/tmp/XXXXXX";
+    // Copy into a temporary buffer, since mkdtemp modifies the buffer in place.
+    std::vector<char> buf(templ.size() + 1);
+    strcpy(&buf[0], templ.c_str());
+    char* result = mkdtemp(&buf[0]);
+    internal_assert(result != nullptr) << "Unable to create temp directory.\n";
+    return std::string(result);
     #endif
 }
 

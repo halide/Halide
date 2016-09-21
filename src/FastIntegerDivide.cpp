@@ -2,6 +2,7 @@
 
 #include "FastIntegerDivide.h"
 #include "IntegerDivisionTable.h"
+#include "IROperator.h"
 
 namespace Halide {
 
@@ -226,4 +227,9 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     return result;
 
 }
+
+Expr fast_integer_modulo(Expr numerator, Expr denominator) {
+    return numerator - fast_integer_divide(numerator, denominator) * denominator;
+}
+
 }

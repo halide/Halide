@@ -269,7 +269,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     int num_funcs = (int)(profiling.indices.size());
 
-    Expr func_names_buf = Load::make(Handle(), "profiling_func_names", 0, Buffer(), Parameter());
+    Expr func_names_buf = Load::make(Handle(), "profiling_func_names", 0, BufferPtr(), Parameter());
     func_names_buf = Call::make(Handle(), Call::address_of, {func_names_buf}, Call::Intrinsic);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_pipeline_start",
@@ -286,7 +286,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();
     if (!no_stack_alloc) {
-        Expr func_stack_peak_buf = Load::make(Handle(), "profiling_func_stack_peak_buf", 0, Buffer(), Parameter());
+        Expr func_stack_peak_buf = Load::make(Handle(), "profiling_func_stack_peak_buf", 0, BufferPtr(), Parameter());
         func_stack_peak_buf = Call::make(Handle(), Call::address_of, {func_stack_peak_buf}, Call::Intrinsic);
 
         Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");

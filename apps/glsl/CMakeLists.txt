@@ -1,4 +1,7 @@
 #Generators
+find_package(OpenGL)
+if (OpenGL_FOUND)
+
 halide_project(glsl_halide_blur "apps" halide_blur.cpp)
 set(hb_header "${CMAKE_CURRENT_BINARY_DIR}/blur.h")
 set(hb_lib "${CMAKE_CURRENT_BINARY_DIR}/blur${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -26,3 +29,5 @@ add_custom_command(OUTPUT "${hycc_header}" "${hycc_lib}"
                  COMMENT "Generating halide_blur files"
                  WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
                 )
+endif()
+

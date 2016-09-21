@@ -163,7 +163,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // spill/reloads.
             int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
             // Handles are stored as uint64s
-            llvm::Type *t = llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
+            llvm::Type *t =
+                llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);   
             allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
@@ -188,7 +189,11 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             debug(4) << "\n";
             Value *args[2] = { get_user_context(), llvm_size };
 
-            CallInst *call = builder->CreateCall(malloc_fn, args);
+            Value *call = builder->CreateCall(malloc_fn, args);
+
+            // Fix the type to avoid pointless bitcasts later
+            call = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());    
+
             allocation.ptr = call;
         }
 

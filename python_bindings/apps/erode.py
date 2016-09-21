@@ -25,13 +25,13 @@ def get_erode(input):
                                  clamp(y,cast(Int(32),0),cast(Int(32),input.height()-1)), c]
     erode_x[x,y,c] = min(min(min(min(input_clamped[x-2,y,c],input_clamped[x-1,y,c]),input_clamped[x,y,c]),input_clamped[x+1,y,c]),input_clamped[x+2,y,c])
     erode_y[x,y,c] = min(min(min(min(erode_x[x,y-2,c],erode_x[x,y-1,c]),erode_x[x,y,c]),erode_x[x,y+1,c]),erode_x[x,y+2,c])
-    
+
     yi = Var("yi")
-    
-    # CPU Schedule    
+
+    # CPU Schedule
     erode_x.compute_root().split(y, y, yi, 8).parallel(y)
     erode_y.compute_root().split(y, y, yi, 8).parallel(y)
-    
+
     return erode_y
 
 
@@ -57,11 +57,11 @@ def main():
 
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
-    input_image = ndarray_to_image(input_data, "input_image")
+    input_image = ndarray_to_image(input_data)
     input.set(input_image)
 
     output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
-    output_image = ndarray_to_image(output_data, "output_image")
+    output_image = ndarray_to_image(output_data)
 
     print("input_image", input_image)
     print("output_image", output_image)
@@ -83,4 +83,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

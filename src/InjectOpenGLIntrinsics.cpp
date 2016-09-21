@@ -69,19 +69,10 @@ private:
             Expr c_coordinate = mutate(call_args[2 + 2 * 2]);
             args[4] = c_coordinate;
 
-            Type load_type = call->type.with_lanes(4);
-
-            Expr load_call = Call::make(load_type, Call::glsl_texture_load,
-                                        vector<Expr>(&args[0], &args[4]),
-                                        Call::Intrinsic, nullptr, 0,
-                                        call->image, call->param);
-
-            // Add a shuffle_vector intrinsic to swizzle a single channel
-            // scalar out of the vec4 loaded by glsl_texture_load. This may
-            // be widened to the size of the Halide function color dimension
-            // during vectorization.
-            expr = Call::make(call->type, Call::shuffle_vector,
-                              {load_call, c_coordinate}, Call::Intrinsic);
+            expr = Call::make(call->type, Call::glsl_texture_load,
+                              vector<Expr>(&args[0], &args[5]),
+                              Call::Intrinsic, nullptr, 0,
+                              call->image, call->param);
         } else if (call->is_intrinsic(Call::image_store)) {
             user_assert(call->args.size() == 6)
                 << "GLSL stores require three coordinates.\n";

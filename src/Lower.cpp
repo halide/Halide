@@ -19,6 +19,7 @@
 #include "FindCalls.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
@@ -36,6 +37,7 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
+#include "Sanitizers.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "SkipStages.h"
@@ -206,6 +208,14 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
 
+    // Note that this must come *after* GPU injections (since it may need to adjust
+    // halide_copy_to_host calls)
+    if (t.has_feature(Target::MSAN)) {
+        debug(1) << "Injecting MSAN helpers...\n";
+        s = inject_msan_helpers(s);
+        debug(2) << "Lowering after injecting MSAN helpers:\n" << s << "\n\n";
+    }
+
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
@@ -243,7 +253,13 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     if (t.has_feature(Target::Profile)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+        debug(2) << "Lowering after injecting profiling:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::FuzzFloatStores)) {
+        debug(1) << "Fuzzing floating point stores...\n";
+        s = fuzz_float_stores(s);
+        debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";

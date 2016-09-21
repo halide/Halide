@@ -268,7 +268,7 @@ int main(int argc, char **argv) {
             return -1;
         }
         param.set(false);
-        im.set(Buffer());
+        im.reset();
         f.infer_input_bounds(100);
         m = im.get().min(0);
         if (m != -10) {

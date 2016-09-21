@@ -26,9 +26,9 @@ namespace numpy {
  *            and "import_ufunc()", and then calls
  *            dtype::register_scalar_converters().
  */
-void initialize(bool register_scalar_converters=true);
+void initialize(bool register_scalar_converters = true);
 
-} // namespace Halide::numpy
-} // namespace Halide
+}  // namespace Halide::numpy
+}  // namespace Halide
 
-#endif // !HALIDE_NUMPY_HPP_INCLUDED
+#endif  // !HALIDE_NUMPY_HPP_INCLUDED

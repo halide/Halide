@@ -1467,17 +1467,17 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
 }
 
 // Emit names for globals/functions etc.
-static void WriteValueSymbolTable(const ValueSymbolTable &VST,
+static void WriteValueSymbolTable(const ValueSymbolTable *VST,
                                   const llvm_3_2::ValueEnumerator &VE,
                                   BitstreamWriter &Stream) {
-  if (VST.empty()) return;
+  if (VST->empty()) return;
   Stream.EnterSubblock(bitc::VALUE_SYMTAB_BLOCK_ID, 4);
 
   // FIXME: Set up the abbrev, we know how many values there are!
   // FIXME: We know if the type names can use 7-bit ascii.
   SmallVector<unsigned, 64> NameVals;
 
-  for (ValueSymbolTable::const_iterator SI = VST.begin(), SE = VST.end();
+  for (ValueSymbolTable::const_iterator SI = VST->begin(), SE = VST->end();
        SI != SE; ++SI) {
 
     const ValueName &Name = *SI;
@@ -1637,8 +1637,12 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
     }
 
   // Emit names for all the instructions etc.
+#if LLVM_VERSION >= 40
   WriteValueSymbolTable(F.getValueSymbolTable(), VE, Stream);
-
+#else
+  WriteValueSymbolTable(&F.getValueSymbolTable(), VE, Stream);
+#endif
+  
   if (NeedsMetadataAttachment)
     WriteMetadataAttachment(F, VE, Stream);
   if (VE.shouldPreserveUseListOrder())
@@ -1848,7 +1852,7 @@ static void WriteModule(const Module *M, BitstreamWriter &Stream,
   WriteModuleMetadataStore(M, Stream);
 
   // Emit names for globals/functions etc.
-  WriteValueSymbolTable(M->getValueSymbolTable(), VE, Stream);
+  WriteValueSymbolTable(&M->getValueSymbolTable(), VE, Stream);
 
   // Emit module-level use-lists.
   if (VE.shouldPreserveUseListOrder())

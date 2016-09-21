@@ -139,7 +139,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Optimizing shuffles...\n";
-    body = optimize_hexagon_shuffles(body);
+    // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
+    const int lut_alignment = 64;
+    body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";
@@ -224,6 +226,12 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16v2,  "sxt.vb",  {i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32v2,  "sxt.vh",  {i16v1} },
 
+        // Similar to zxt/sxt, but without deinterleaving the result.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackub), u16v2, "unpack.vub", {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackuh), u32v2, "unpack.vuh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackb),  i16v2, "unpack.vb",  {i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackh),  i32v2, "unpack.vh",  {i16v1} },
+
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
@@ -248,6 +256,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16v1, "pack_sath.vw",  {i32v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8v1,  "pack.vh",       {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16v1, "pack.vw",       {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackob),      i8v1,  "packhi.vh",     {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackoh),      i16v1, "packhi.vw",     {i32v2} },
+
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
@@ -1464,6 +1475,32 @@ void CodeGen_Hexagon::visit(const Call *op) {
             Value *idx = codegen(op->args[1]);
             value = vlut(lut, idx, *min_index, *max_index);
             return;
+        } else if (op->is_intrinsic(Call::select_mask)) {
+            internal_assert(op->args.size() == 3);
+            // eliminate_bool_vectors has replaced all boolean vectors
+            // with integer vectors of the appropriate size, so we
+            // just need to convert the select_mask intrinsic to a
+            // hexagon mux intrinsic.
+            value = call_intrin(op->type,
+                                "halide.hexagon.mux" +
+                                type_suffix(op->args[1], op->args[2], false),
+                                op->args);
+            return;
+        } else if (op->is_intrinsic(Call::bool_to_mask)) {
+            internal_assert(op->args.size() == 1);
+            if (op->args[0].type().is_vector()) {
+                // The argument is already a mask of the right width.
+                op->args[0].accept(this);
+            } else {
+                // The argument is a scalar bool. Converting it to
+                // all-ones or all-zeros is sufficient for HVX masks
+                // (mux just looks at the LSB of each byte).
+                Expr equiv = -Cast::make(op->type, op->args[0]);
+                equiv.accept(this);
+            }
+            return;
+        } else if (op->is_intrinsic(Call::cast_mask)) {
+            internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
     }
     CodeGen_Posix::visit(op);
@@ -1487,9 +1524,15 @@ void CodeGen_Hexagon::visit(const Max *op) {
                             "halide.hexagon.max" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->a, op->b}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Min *op) {
@@ -1498,54 +1541,25 @@ void CodeGen_Hexagon::visit(const Min *op) {
                             "halide.hexagon.min" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->b, op->a}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    if (op->type.is_vector() && op->condition.type().is_vector()) {
-        // eliminate_bool_vectors has replaced all boolean vectors
-        // with integer vectors of the appropriate size, and this
-        // condition is of the form 'cond != 0'. We just need to grab
-        // cond and use that as the operand for vmux.
-        Expr cond = op->condition;
-        const NE *cond_ne_0 = cond.as<NE>();
-        if (cond_ne_0) {
-            internal_assert(is_zero(cond_ne_0->b));
-            cond = cond_ne_0->a;
-        }
-        Expr t = op->true_value;
-        Expr f = op->false_value;
-        value = call_intrin(op->type,
-                            "halide.hexagon.mux" + type_suffix(t, f, false),
-                            {cond, t, f});
-    } else if (op->type.is_vector()) {
-        // Implement scalar conditions with if-then-else.
-        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
+    internal_assert(op->condition.type().is_scalar()) << Expr(op) << "\n";
 
-        builder->SetInsertPoint(true_bb);
-        Value *true_value = codegen(op->true_value);
-        builder->CreateBr(after_bb);
-        // The true value might have jumped to a new block (e.g. if there was a
-        // nested select). To generate a correct PHI node, grab the current
-        // block.
-        BasicBlock *true_pred = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(false_bb);
-        Value *false_value = codegen(op->false_value);
-        builder->CreateBr(after_bb);
-        BasicBlock *false_pred = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(after_bb);
-        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-        phi->addIncoming(true_value, true_pred);
-        phi->addIncoming(false_value, false_pred);
-
-        value = phi;
+    if (op->type.is_vector()) {
+        // Implement scalar conditions on vector values with if-then-else.
+        value = codegen(Call::make(op->type, Call::if_then_else,
+                                   {op->condition, op->true_value, op->false_value},
+                                   Call::Intrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }

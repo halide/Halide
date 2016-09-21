@@ -1,22 +1,15 @@
-extern "C" {
-
 #include "bin/src/halide_hexagon_remote.h"
-#include <memory.h>
+#include <HalideRuntime.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <qurt.h>
 
+extern "C" {
 #include "HAP_farf.h"
 #include "HAP_power.h"
-
 }
-
-#include <HalideRuntime.h>
-
-#include <qurt.h>
 
 #include "elf.h"
 #include "pipeline_context.h"
@@ -28,27 +21,23 @@ const int stack_size = 1024 * 1024;
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
-// Use a 64 KB circular buffer to store log messages.
-Log global_log(1024 * 64);
-
-void log_printf(const char *fmt, ...) {
-    char message[1024] = { 0, };
-    va_list ap;
-    va_start(ap, fmt);
-    int message_size = vsnprintf(message, sizeof(message) - 1, fmt, ap);
-    va_end(ap);
-    global_log.write(message, message_size);
-}
-
 extern "C" {
 
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
-    log_printf("%s", str);
+    if (str) {
+        log_printf("%s", str);
+    }
 }
 
 void halide_error(void *user_context, const char *str) {
-    halide_print(user_context, str);
+    if (!str) {
+        log_printf("Unknown error\n");
+    } else if (*str == '\0' || str[strlen(str) - 1] != '\n') {
+        log_printf("Error: %s\n", str);
+    } else {
+        log_printf("Error: %s", str);
+    }
 }
 
 namespace {
@@ -313,13 +302,6 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     halide_hexagon_remote_power_hvx_off();
 
     return result;
-}
-
-int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
-    // Leave room for appending a null terminator.
-    *read_size = global_log.read(out, size - 1);
-    out[*read_size - 1] = 0;
-    return 0;
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
