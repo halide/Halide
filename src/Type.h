@@ -417,15 +417,12 @@ inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_typ
     return Type(Type::Handle, 64, lanes, handle_type);
 }
 
-namespace {
-
 /** Construct the halide equivalent of a C type */
-template<typename T> Type type_of() {
+template<typename T> 
+inline Type type_of() {
     return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }
 
-}
-
-}
+}  // namespace Halide
 
 #endif

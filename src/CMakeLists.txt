@@ -50,6 +50,8 @@ set(RUNTIME_CPP
   mips_cpu_features
   module_aot_ref_count
   module_jit_ref_count
+  msan
+  msan_stubs
   nacl_host_cpu_count
   noos
   opencl
@@ -307,6 +309,7 @@ set(HEADER_FILES
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
+  Sanitizers.h
   Schedule.h
   ScheduleFunctions.h
   Scope.h
@@ -457,6 +460,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
+  Sanitizers.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
