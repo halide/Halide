@@ -448,7 +448,7 @@ Stmt build_produce(Function f, const Target &target) {
         // Iterate through all of the input args to the extern
         // function building a suitable argument list for the
         // extern function call.
-        vector<string> buffer_names_to_annotate;
+        vector<Expr> buffers_to_annotate;
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
@@ -462,7 +462,7 @@ Stmt build_produce(Function f, const Target &target) {
                     buf_name += ".buffer";
                     Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
-                    buffer_names_to_annotate.push_back(buf_name);
+                    buffers_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
                 BufferPtr b = arg.buffer;
@@ -471,7 +471,7 @@ Stmt build_produce(Function f, const Target &target) {
                 string buf_name = b.name() + ".buffer";
                 Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
                 extern_call_args.push_back(buf);
-                buffer_names_to_annotate.push_back(buf_name);
+                buffers_to_annotate.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
                 string buf_name = p.name() + ".buffer";
@@ -480,7 +480,7 @@ Stmt build_produce(Function f, const Target &target) {
                 // Do not annotate ImageParams: both the buffer_t itself,
                 // and the contents it points to, should be filled by the caller;
                 // if we mark it here, we might mask a missed initialization.
-                // buffer_names_to_annotate.push_back(buf_name);
+                // buffers_to_annotate.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
             }
@@ -546,9 +546,7 @@ Stmt build_produce(Function f, const Target &target) {
         Stmt annotate;
         if (target.has_feature(Target::MSAN)) {
             // Mark the buffers as initialized before calling out.
-            for (const auto &buf_name: buffer_names_to_annotate) {
-                debug(3) << "Annotating buffer " << buf_name << "\n";
-                Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
+            for (const auto &buffer: buffers_to_annotate) {
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
                 Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
