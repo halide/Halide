@@ -3,4 +3,4 @@
 
 void defineParam();
 
-#endif // PARAM_H
+#endif  // PARAM_H

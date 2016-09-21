@@ -63,19 +63,21 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                           \
         ImageParam input(type_of<type>(), 1);                                 \
         test_##name(x) = name(input(x));                                      \
-        Buffer in_buffer(type_of<type>(), in_buf);                            \
+        Image<type> in_buffer(*in_buf);                                       \
         input.set(in_buffer);                                                 \
         if (target.has_gpu_feature()) {                                       \
             test_##name.gpu_tile(x, 8);                                       \
-        }                                                                     \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
+            test_##name.hexagon();                                                  \
+        }                                                                           \
         Image<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
-          type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]);  \
-	  if (!relatively_equal(c_result, result(i)))			\
-	    printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)reinterpret_cast<type *>(in_buf->host)[i], (double)c_result, (double)result(i)); \
-          assert(relatively_equal(c_result, result(i)) &&                     \
-                 "Failure on function " #name);                               \
-        }                                                                     \
+            type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]); \
+	    if (!relatively_equal(c_result, result(i)))			\
+                printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)reinterpret_cast<type *>(in_buf->host)[i], (double)c_result, (double)result(i)); \
+            assert(relatively_equal(c_result, result(i)) &&             \
+                   "Failure on function " #name);                       \
+        }                                                               \
     }
 
 // Version for a one argument function
@@ -89,18 +91,20 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                                 \
         ImageParam input(type_of<type>(), 2);                                       \
         test_##name(x) = name(input(0, x), input(1, x));                            \
-        Buffer in_buffer(type_of<type>(), in_buf);                                  \
+        Image<type> in_buffer(*in_buf);                                             \
         input.set(in_buffer);                                                       \
         if (target.has_gpu_feature()) {                                             \
-          test_##name.gpu_tile(x, 8);                                               \
+            test_##name.gpu_tile(x, 8);                                             \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
+            test_##name.hexagon();                                                  \
         }                                                                           \
         Image<type_ret> result = test_##name.realize(in_buf->extent[1], target);    \
         for (int i = 0; i < in_buf->extent[1]; i++) {                               \
-          type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2],     \
-                                     reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]);\
-          assert(relatively_equal(c_result, result(i)) &&                           \
-                 "Failure on function " #name);                                     \
-        }                                                                           \
+            type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2], \
+                                       reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]); \
+            assert(relatively_equal(c_result, result(i)) &&             \
+                   "Failure on function " #name);                       \
+        }                                                               \
     }
 
 #define fun_1_float_types(name)    \

@@ -144,7 +144,7 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 extern void halide_join_thread(struct halide_thread *);
 
 /** Set the number of threads used by Halide's thread pool. Returns
- * the old number. 
+ * the old number.
  *
  * n < 0  : error condition
  * n == 0 : use a reasonable system default (typically, number of cpus online).
@@ -181,6 +181,20 @@ typedef void *(*halide_malloc_t)(void *, size_t);
 typedef void (*halide_free_t)(void *, void *);
 extern halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc);
 extern halide_free_t halide_set_custom_free(halide_free_t user_free);
+//@}
+
+/** Halide calls these functions to interact with the underlying
+ * system runtime functions. To replace in AOT code on platforms that
+ * support weak linking, define these functions yourself.
+ *
+ * halide_load_library and halide_get_library_symbol are equivalent to
+ * dlopen and dlsym. halide_get_symbol(sym) is equivalent to
+ * dlsym(RTLD_DEFAULT, sym).
+ */
+//@{
+extern void *halide_get_symbol(const char *name);
+extern void *halide_load_library(const char *name);
+extern void *halide_get_library_symbol(void *lib, const char *name);
 //@}
 
 /** Called when debug_to_file is used inside %Halide code.  See
@@ -250,8 +264,15 @@ struct halide_type_t {
      * instances. */
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
+    /** Compare two types for equality. */
+    bool operator==(const halide_type_t &other) const {
+        return (code == other.code &&
+                bits == other.bits &&
+                lanes == other.lanes);
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() { return (bits + 7) / 8; }
+    size_t bytes() const { return (bits + 7) / 8; }
 #endif
 };
 
@@ -462,6 +483,24 @@ extern int halide_create_temp_file(void *user_context,
   const char *prefix, const char *suffix,
   char *path_buf, size_t path_buf_size);
 
+/** Annotate that a given range of memory has been initialized;
+ * only used when Target::MSAN is enabled.
+ *
+ * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
+ */
+extern int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len);
+
+/** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
+ * using halide_msan_annotate_memory_is_initialized() for marking. 
+ *
+ * The default implementation takes pains to only mark the active memory ranges
+ * (skipping padding), and sorting into ranges to always mark the smallest number of
+ * ranges, in monotonically increasing memory order.
+ *
+ * Most client code should never need to replace the default implementation.
+ */
+extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct buffer_t *buffer);
+
 /** The error codes that may be returned by a Halide pipeline. */
 enum halide_error_code_t {
     /** There was no error. This is the value returned by Halide on success. */
@@ -671,25 +710,25 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_register_metadata = 25,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+    halide_target_feature_matlab = 25,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-    halide_target_feature_matlab = 26,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+    halide_target_feature_profile = 26, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime = 27, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_profile = 27, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime = 28, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_metal = 28, ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw = 29, ///< For Windows compile to MinGW toolset rather then Visual Studio
 
-    halide_target_feature_metal = 29, ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw = 30, ///< For Windows compile to MinGW toolset rather then Visual Studio
+    halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
 
-    halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
-
-    halide_target_feature_hvx_64 = 33, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128 = 34, ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62 = 35, ///< Enable Hexagon v62 architecture.
-
-    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
+    halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
+    halide_target_feature_end = 38 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -867,31 +906,6 @@ struct halide_filter_metadata_t {
     /** The function name of the filter. */
     const char* name;
 };
-
-/** enumerate_func_t is a callback for halide_enumerate_registered_filters; it
- * is called once per registered filter discovered. Return 0 to continue
- * the enumeration, or nonzero to terminate the enumeration. enumerate_context
- * is an arbitrary pointer you can use to provide a callback argument. */
-typedef int (*enumerate_func_t)(void* enumerate_context,
-    const struct halide_filter_metadata_t *metadata, int (*argv_func)(void **args));
-
-/** If a filter is compiled with Target::RegisterMetadata, it will register itself
- * in an internal list at load time; halide_enumerate_registered_filters() allows
- * you to enumerate all such filters at runtime. This allows you to link together
- * arbitrary AOT-compiled filters and introspect/call them easily. Note:
- *
- * -- Only filters compiled with Target::RegisterMetadata enabled will be enumerated.
- * -- This function should not be called before or after main() (i.e., must not
- * be called from static ctors or dtors).
- * -- Filters will be enumerated in an unpredictable order; it is essential
- * you do not rely on a particular order of enumeration.
- * -- It is *not* guaranteed that the names in an enumeration are unique!
- *
- * The return value is zero if the enumerate_func_t always returns zero;
- * if the enumerate_func_t returns a nonzero value, enumeration will
- * terminate early and return that nonzero result.
- */
-extern int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func);
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread

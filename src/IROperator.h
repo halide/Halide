@@ -56,6 +56,9 @@ EXPORT bool is_negative_const(Expr e);
  */
 EXPORT bool is_negative_negatable_const(Expr e);
 
+/** Is the expression an undef */
+EXPORT bool is_undef(Expr e);
+
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
 EXPORT bool is_zero(Expr e);
@@ -384,7 +387,7 @@ inline Expr operator%(Expr a, Expr b) {
  * integer cannot be represented in the type of the expression. */
 inline Expr operator%(Expr a, int b) {
     user_assert(a.defined()) << "operator% of undefined Expr\n";
-    user_assert(b) << "operator% with constant 0 modulus\n";
+    user_assert(b != 0) << "operator% with constant 0 modulus\n";
     Internal::check_representable(a.type(), b);
     return Internal::Mod::make(a, Internal::make_const(a.type(), b));
 }
@@ -728,9 +731,13 @@ inline Expr max(Expr a, float b) {return max(a, Expr(b));}
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
-    min_val = cast(a.type(), min_val);
-    max_val = cast(a.type(), max_val);
-    return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
+    Expr n_min_val = lossless_cast(a.type(), min_val);
+    user_assert(n_min_val.defined())
+        << "clamp with possibly out of range minimum bound: " << min_val << "\n";
+    Expr n_max_val = lossless_cast(a.type(), max_val);
+    user_assert(n_max_val.defined())
+        << "clamp with possibly out of range maximum bound: " << max_val << "\n";
+    return Internal::Max::make(Internal::Min::make(a, n_max_val), n_min_val);
 }
 
 /** Returns the absolute value of a signed integer or floating-point
@@ -1771,15 +1778,15 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
     args.push_back(Expr(std::string(arg)));
-    collect_print_args(args, more_args...);
+    collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args... more_args) {
+inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
     args.push_back(arg);
-    collect_print_args(args, more_args...);
+    collect_print_args(args, std::forward<Args>(more_args)...);
 }
 }
 
@@ -1791,9 +1798,9 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args
 EXPORT Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
-inline NO_INLINE Expr print(Expr a, Args... args) {
+inline NO_INLINE Expr print(Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
-    Internal::collect_print_args(collected_args, args...);
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
 }
 //@}
@@ -1804,9 +1811,9 @@ inline NO_INLINE Expr print(Expr a, Args... args) {
 EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr print_when(Expr condition, Expr a, Args... args) {
+inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
-    Internal::collect_print_args(collected_args, args...);
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(condition, collected_args);
 }
 
@@ -1842,6 +1849,10 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+namespace Internal {
+EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+}  // namespace Internal
+
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
  * automatically inferred and added to the cache key. The memoize_tag
@@ -1869,13 +1880,10 @@ inline Expr undef() {
  * digest, memoize_tag can be used to key computations using that image
  * on the digest. */
 // @{
-EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
-
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args... args) {
-    std::vector<Expr> collected_args;
-    Internal::collect_args(collected_args, args...);
-    return memoize_tag(result, collected_args);
+inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
+    std::vector<Expr> collected_args{std::forward<Args>(args)...};
+    return Internal::memoize_tag_helper(result, collected_args);
 }
 // @}
 
@@ -1903,6 +1911,19 @@ inline Expr likely_if_innermost(Expr e) {
     return Internal::Call::make(e.type(), Internal::Call::likely_if_innermost,
                                 {e}, Internal::Call::PureIntrinsic);
 }
+
+
+/** Cast an expression to the halide type corresponding to the C++
+ * type T clamping to the minimum and maximum values of the result
+ * type. */
+template <typename T>
+Expr saturating_cast(Expr e) {
+    return saturating_cast(type_of<T>(), e);
+}
+
+/** Cast an expression to a new type, clamping to the minimum and
+ * maximum values of the result type. */
+EXPORT Expr saturating_cast(Type t, Expr e);
 
 }
 

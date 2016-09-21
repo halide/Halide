@@ -1,8 +1,74 @@
+#include "Func.h"
+#include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
 #include "Schedule.h"
+#include "Var.h"
 
 namespace Halide {
+
+LoopLevel::LoopLevel(Internal::IntrusivePtr<Internal::FunctionContents> f, 
+                     const std::string &var_name, 
+                     bool is_rvar) 
+    : function_contents(f), var_name(var_name), is_rvar(is_rvar) {}
+LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.get_contents(), v.name(), v.is_rvar) {}
+LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().get_contents(), v.name(), v.is_rvar) {}
+
+std::string LoopLevel::func_name() const {
+    if (function_contents.defined()) {
+        return Internal::Function(function_contents).name();
+    }
+    return "";
+}
+
+Func LoopLevel::func() const {
+    internal_assert(!is_inline() && !is_root());
+    internal_assert(function_contents.defined());
+    return Func(Internal::Function(function_contents));
+}
+
+VarOrRVar LoopLevel::var() const {
+    internal_assert(!is_inline() && !is_root());
+    return VarOrRVar(var_name, is_rvar);
+}
+
+bool LoopLevel::is_inline() const {
+    return var_name.empty();
+}
+
+/*static*/
+LoopLevel LoopLevel::root() {
+    return LoopLevel(nullptr, "__root", false);
+}
+
+bool LoopLevel::is_root() const {
+    return var_name == "__root";
+}
+
+std::string LoopLevel::to_string() const {
+    return (function_contents.defined() ? Internal::Function(function_contents).name() : "") + "." + var_name;
+}
+
+bool LoopLevel::match(const std::string &loop) const {
+    return Internal::starts_with(loop, func_name() + ".") && 
+           Internal::ends_with(loop, "." + var_name);
+}
+
+bool LoopLevel::match(const LoopLevel &other) const {
+    // Must compare by name, not by pointer, since in() can make copies
+    // that we need to consider equivalent
+    return (func_name() == other.func_name() &&
+            (var_name == other.var_name ||
+             Internal::ends_with(var_name, "." + other.var_name) ||
+             Internal::ends_with(other.var_name, "." + var_name)));
+}
+
+bool LoopLevel::operator==(const LoopLevel &other) const {
+    // Must compare by name, not by pointer, since in() can make copies
+    // that we need to consider equivalent
+    return func_name() == other.func_name() && var_name == other.var_name;
+}
+
 namespace Internal {
 
 typedef std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
@@ -50,6 +116,12 @@ struct ScheduleContents {
             }
             if (b.extent.defined()) {
                 b.extent = mutator->mutate(b.extent);
+            }
+            if (b.modulus.defined()) {
+                b.modulus = mutator->mutate(b.modulus);
+            }
+            if (b.remainder.defined()) {
+                b.remainder = mutator->mutate(b.remainder);
             }
         }
     }
@@ -222,6 +294,12 @@ void Schedule::accept(IRVisitor *visitor) const {
         if (b.extent.defined()) {
             b.extent.accept(visitor);
         }
+        if (b.modulus.defined()) {
+            b.modulus.accept(visitor);
+        }
+        if (b.remainder.defined()) {
+            b.remainder.accept(visitor);
+        }
     }
 }
 
@@ -231,5 +309,6 @@ void Schedule::mutate(IRMutator *mutator) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
+

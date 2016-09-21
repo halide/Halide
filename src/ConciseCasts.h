@@ -56,41 +56,36 @@ inline Expr u8(Expr e) {
 }
 
 inline Expr i8_sat(Expr e) {
-    return cast(Int(8, e.type().lanes()), clamp(e, -128, 127));
+    return saturating_cast(Int(8, e.type().lanes()), e);
 }
 
 inline Expr u8_sat(Expr e) {
-    if (e.type().is_uint()) {
-        return cast(UInt(8, e.type().lanes()), min(e, 255));
-    } else {
-        return cast(UInt(8, e.type().lanes()), clamp(e, 0, 255));
-    }
+    return saturating_cast(UInt(8, e.type().lanes()), e);
 }
 
 inline Expr i16_sat(Expr e) {
-    return cast(Int(16, e.type().lanes()), clamp(e, -32768, 32767));
+    return saturating_cast(Int(16, e.type().lanes()), e);
 }
 
 inline Expr u16_sat(Expr e) {
-    if (e.type().is_uint()) {
-        return cast(UInt(16, e.type().lanes()), min(e, 65535));
-    } else {
-        return cast(UInt(16, e.type().lanes()), clamp(e, 0, 65535));
-    }
+    return saturating_cast(UInt(16, e.type().lanes()), e);
 }
 
 inline Expr i32_sat(Expr e) {
-    return cast(Int(32, e.type().lanes()), clamp(e, Int(32).min(), Int(32).max()));
+    return saturating_cast(Int(32, e.type().lanes()), e);
 }
 
 inline Expr u32_sat(Expr e) {
-    if (e.type().is_uint()) {
-        return cast(UInt(32, e.type().lanes()), min(e, UInt(32).max()));
-    } else {
-        return cast(UInt(32, e.type().lanes()), clamp(e, 0, UInt(32).max()));
-    }
+    return saturating_cast(UInt(32, e.type().lanes()), e);
 }
 
+inline Expr i64_sat(Expr e) {
+    return saturating_cast(Int(64, e.type().lanes()), e);
+}
+
+inline Expr u64_sat(Expr e) {
+    return saturating_cast(UInt(64, e.type().lanes()), e);
+}
 
 };
 };

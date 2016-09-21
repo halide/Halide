@@ -9,30 +9,27 @@ namespace Internal {
 
 struct ParameterContents {
     mutable RefCount ref_count;
-    Type type;
-    const bool is_buffer;
-    int dimensions;
-    const bool is_explicit_name;
-    const bool is_registered;
-    std::string name;
-    std::string handle_type;
-    Buffer buffer;
-    bool initialized;
+    const Type type;
+    const int dimensions;
+    const std::string name;
+    const std::string handle_type;
+    BufferPtr buffer;
     uint64_t data;
-    uint64_t default_val;
     int host_alignment;
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
+    const bool is_buffer;
+    const bool is_explicit_name;
+    const bool is_registered;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r),
-          name(n), buffer(Buffer()), data(0), default_val(0) {
+        : type(t), dimensions(d), name(n), buffer(BufferPtr()), data(0), 
+          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
         stride_constraint[0] = 1;
-        host_alignment = type.bytes();
     }
 };
 
@@ -160,16 +157,22 @@ Expr Parameter::get_scalar_expr() const {
         case 32: return Expr(get_scalar<uint32_t>());
         case 64: return Expr(get_scalar<uint64_t>());
         }
+    } else if (t.is_handle()) {
+        // handles are always uint64 internally.
+        switch (t.bits()) {
+        case 64: return Expr(get_scalar<uint64_t>());
+        }
     }
+    internal_error << "Unsupported type " << t << " in get_scalar_expr\n";
     return Expr();
 }
 
-Buffer Parameter::get_buffer() const {
+BufferPtr Parameter::get_buffer() const {
     check_is_buffer();
     return contents->buffer;
 }
 
-void Parameter::set_buffer(Buffer b) {
+void Parameter::set_buffer(BufferPtr b) {
     check_is_buffer();
     if (b.defined()) {
         user_assert(contents->type == b.type())
@@ -185,12 +188,6 @@ void *Parameter::get_scalar_address() const {
     check_is_scalar();
     return &contents->data;
 }
-
-void *Parameter::get_default_address() const {
-    check_is_scalar();
-    return &contents->default_val;
-}
-
 
 /** Tests if this handle is the same as another handle */
 bool Parameter::same_as(const Parameter &other) const {

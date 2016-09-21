@@ -184,9 +184,9 @@ class RDom {
     EXPORT void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
 
     template <typename... Args>
-    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args... args) {
+    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args&&... args) {
         ranges.push_back(std::make_pair(min, extent));
-        initialize_from_ranges(ranges, args...);
+        initialize_from_ranges(ranges, std::forward<Args>(args)...);
     }
 
 public:
@@ -201,20 +201,22 @@ public:
     }
 
     template <typename... Args>
-    NO_INLINE RDom(Expr min, Expr extent, Args... args) {
+    NO_INLINE RDom(Expr min, Expr extent, Args&&... args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         std::vector<std::pair<Expr, Expr>> ranges;
-        initialize_from_ranges(ranges, min, extent, args...);
+        initialize_from_ranges(ranges, min, extent, std::forward<Args>(args)...);
     }
     // @}
 
     /** Construct a reduction domain that iterates over all points in
-     * a given Buffer, Image, or ImageParam. Has the same
-     * dimensionality as the argument. */
+     * a given Buffer or ImageParam. Has the same dimensionality as
+     * the argument. */
     // @{
-    EXPORT RDom(Buffer);
+    EXPORT RDom(const Image<> &);
     EXPORT RDom(ImageParam);
+    template<typename T, int D>
+    NO_INLINE RDom(const Image<T, D> &im) : RDom(Image<>(im)) {}
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */

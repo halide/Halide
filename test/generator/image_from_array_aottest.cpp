@@ -1,4 +1,4 @@
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 #include <stdint.h>
 #include <iostream>
@@ -7,22 +7,22 @@
 #include <vector>
 
 using namespace std;
-using namespace Halide::Tools;
+using namespace Halide;
 
 //-----------------------------------------------------------------------------
 // Returns the dimension sizes of a statically sized array from inner to outer.
 // E.g. ary[2][3][4] returns (4, 3, 2).
 
 template<typename T>
-vector<int> dimension_sizes(T const &, vector<int> dimSizes = vector<int>() ) {
-    return dimSizes;
+vector<int> dimension_sizes(T const &, vector<int> sizes = vector<int>() ) {
+    return sizes;
 }
 
 template<typename Array, size_t N>
-vector<int> dimension_sizes(Array (&vals)[N], vector<int> dimSizes = vector<int>()) {
-    dimSizes = dimension_sizes(vals[0], dimSizes);
-    dimSizes.push_back((int)N);
-    return dimSizes;
+vector<int> dimension_sizes(Array (&vals)[N], vector<int> sizes = vector<int>()) {
+    sizes = dimension_sizes(vals[0], sizes);
+    sizes.push_back((int)N);
+    return sizes;
 }
 
 //-----------------------------------------------------------------------------
@@ -82,113 +82,40 @@ void verify_dimension_sizes() {
     compare_vectors(dimension_sizes(a4), v4);
 }
 
-//-----------------------------------------------------------------------------
-// Convert integral values to 64-bit and set the number of digits to print
-// for floating point values.
-
-template<typename T
-    , typename Int = typename is_integral<T>::type
-    , typename Signed = integral_constant<bool, numeric_limits<T>::is_signed>
->
-struct printable_t;
-
-template<typename T> struct printable_t<T, true_type, true_type> {
-    int64_t v;
-    printable_t(T v) : v(static_cast<int64_t>(v)) {}
-    void print(ostream &os) const {
-        os << v;
-    }
-};
-
-template<typename T> struct printable_t<T, true_type, false_type> {
-    uint64_t v;
-    printable_t(T v) : v(static_cast<uint64_t>(v)) {}
-    void print(ostream &os) const {
-        os << v;
-    }
-};
-
-template<typename T> struct printable_t<T, false_type> {
-    T v;
-    printable_t(T v) : v(v) {}
-    void print(ostream &os) const {
-        streamsize prec = os.precision();
-        os.precision(numeric_limits<T>::digits10 + 2);
-        os << v;
-        os.precision(prec);
-    }
-};
-
-template<typename T>
-inline ostream & operator<<(ostream &os, printable_t<T> const &pr) {
-    pr.print(os);
-    return os;
-}
-
-template<typename T>
-inline printable_t<T> printable(T v) {
-    return printable_t<T>(v);
-}
-
-//-----------------------------------------------------------------------------
-
-template<typename T>
-void compare_extents(Image<T> const &img, int reference, int dimension) {
-    if (img.extent(dimension) == reference)
+template<typename Image>
+void compare_extents(const Image &img, int reference, int dimension) {
+    if (img.dim(dimension).extent() == reference)
         return;
     cout << "Extent of dimension " << dimension << " of " << img.dimensions()
-        << " is " << img.extent(dimension) << " instead of " << reference << "\n";
+         << " is " << img.dim(dimension).extent() << " instead of " << reference << "\n";
     exit(-1);
 }
 
 template<typename Array, typename T = typename remove_all_extents<Array>::type>
 void verify_image_construction_from_array(Array &vals) {
     Image<T> img(vals);
-    vector<int> dimSizes(dimension_sizes(vals));
-    int dims = (int)dimSizes.size();
+    vector<int> sizes(dimension_sizes(vals));
+    int dims = (int)sizes.size();
     int n = 1;
     for (int i = 0; i < dims; ++i) {
-        compare_extents(img, dimSizes[i], i);
-        n *= dimSizes[i];
+        compare_extents(img, sizes[i], i);
+        n *= sizes[i];
     }
-    T const *reference = first_of_array(vals);
-    T const *under_test = img.data();
-    for (int i = 0; i < n; ++i) {
-        if (under_test[i] == reference[i])
-            continue;
-
-        cout << "Value at index " << i << " is "
-            << printable(under_test[i]) << " instead of "
-            << printable(reference[i]) << "\n";
+    const void *reference = (const void *)first_of_array(vals);
+    const void *under_test = (const void *)(&img());
+    if (reference != under_test) {
+        cerr << "Start of array: " << reference
+             << "Start of image: " << under_test << "\n";
         exit(-1);
     }
 }
 
 template<typename T>
-void construct_various_dimensionalities(T q) {
+void test() {
     T a1[2];
     T a2[4][3];
     T a3[7][6][5];
     T a4[11][10][9][8];
-
-    int v = 0;
-    for (int i0 = 0; i0 < 11; ++i0) {
-        if (i0 < 2)
-            a1[i0] = static_cast<T>( (++v) * q );
-
-        for (int i1 = 0; i1 < 10; ++i1) {
-            if (i0 < 4 && i1 < 3)
-                a2[i0][i1] = static_cast<T>( (++v) * q );
-
-            for (int i2 = 0; i2 < 9; ++i2) {
-                if (i0 < 7 && i1 < 6 && i2 < 5)
-                    a3[i0][i1][i2] = static_cast<T>( (++v) * q );
-
-                for (int i3 = 0; i3 < 8; ++i3)
-                    a4[i0][i1][i2][i3] = static_cast<T>( (++v) * q );
-            }
-        }
-    }
 
     verify_image_construction_from_array(a1);
     verify_image_construction_from_array(a2);
@@ -203,18 +130,18 @@ int main()
     // Verify dimension_sizes() works as intended.
     verify_dimension_sizes();
 
-    construct_various_dimensionalities(static_cast<uint8_t >(1));
-    construct_various_dimensionalities(static_cast<uint16_t>(2));
-    construct_various_dimensionalities(static_cast<uint32_t>(4));
-    construct_various_dimensionalities(static_cast<uint64_t>(8));
+    test<uint8_t>();
+    test<uint16_t>();
+    test<uint32_t>();
+    test<uint64_t>();
 
-    construct_various_dimensionalities(static_cast<int8_t >(-1));
-    construct_various_dimensionalities(static_cast<int16_t>(-2));
-    construct_various_dimensionalities(static_cast<int32_t>(-3));
-    construct_various_dimensionalities(static_cast<int64_t>(-4));
+    test<int8_t>();
+    test<int16_t>();
+    test<int32_t>();
+    test<int64_t>();
 
-    construct_various_dimensionalities(1.1f);
-    construct_various_dimensionalities(1.2);
+    test<float>();
+    test<double>();
 
     printf("Success!\n");
     return 0;

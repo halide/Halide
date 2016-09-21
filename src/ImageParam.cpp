@@ -28,7 +28,7 @@ void ImageParam::init_func() {
     func(args) = Internal::Call::make(param, args_expr);
 }
 
-void ImageParam::set(Buffer b) {
+void ImageParam::set(Internal::BufferPtr b) {
     if (b.defined()) {
         user_assert(b.type() == type())
             << "Can't bind ImageParam " << name()
@@ -39,31 +39,16 @@ void ImageParam::set(Buffer b) {
     param.set_buffer(b);
 }
 
-Buffer ImageParam::get() const {
-    return param.get_buffer();
+const Image<> &ImageParam::get() const {
+    return param.get_buffer().get();
 }
 
-Expr ImageParam::operator()() const {
-    user_assert(dimensions() == 0)
-        << "Zero-argument access to Buffer " << name()
-        << ", which has " << dimensions() << "dimensions.\n";
-    return func();
+Image<> &ImageParam::get() {
+    return param.get_buffer().get();
 }
 
-Expr ImageParam::operator()(Expr x) const {
-    return func(x);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y) const {
-    return func(x, y);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y, Expr z) const {
-    return func(x, y, z);
-}
-
-Expr ImageParam::operator()(Expr x, Expr y, Expr z, Expr w) const {
-    return func(x, y, z, w);
+void ImageParam::reset() {
+    set(Internal::BufferPtr());
 }
 
 Expr ImageParam::operator()(std::vector<Expr> args_passed) const {

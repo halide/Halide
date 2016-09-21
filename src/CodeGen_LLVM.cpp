@@ -35,6 +35,19 @@
 
 #endif
 
+// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
+// properly on Windows: the return type isn't part of the name-mangling scheme
+// on *nix, but is for MSVC. Note also that this specialization must be in the
+// same (global) namespace as the others.
+template<>
+struct halide_c_type_to_name<struct halide_filter_metadata_t> {
+    static const bool known_type = true;
+    static halide_cplusplus_type_name name() {
+        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"};
+    }
+};
+
+
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
@@ -332,7 +345,6 @@ void CodeGen_LLVM::initialize_llvm() {
     // in llvm configuration
     if (!llvm_initialized) {
 
-        #if LLVM_VERSION >= 36
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
         size_t defined = 0;
@@ -346,7 +358,6 @@ void CodeGen_LLVM::initialize_llvm() {
             }
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
-        #endif
 
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
@@ -458,7 +469,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                 mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
             } else if (arg.kind == Argument::InputBuffer ||
                        arg.kind == Argument::OutputBuffer) {
-                mangle_args.push_back(ExternFuncArgument(Buffer()));
+                mangle_args.push_back(ExternFuncArgument(BufferPtr()));
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
@@ -466,6 +477,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                                                 { halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer } );
         Type void_star_star(Handle(1, &inner_type));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), { ExternFuncArgument(make_zero(void_star_star)) }, target);
+        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
     }
     return names;
 }
@@ -485,13 +497,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-    #if LLVM_VERSION < 36
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
-    #else
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    #endif
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -524,9 +531,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         if (f.linkage == LoweredFunc::External) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
-            if (target.has_feature(Target::RegisterMetadata)) {
-                register_metadata(names.simple_name, metadata_getter, wrapper);
-            }
 
             if (target.has_feature(Target::Matlab)) {
                 define_matlab_wrapper(module.get(), wrapper, metadata_getter);
@@ -724,7 +728,7 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     builder->CreateCall(call_destructor, args);
 }
 
-void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
+void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
@@ -774,21 +778,17 @@ void CodeGen_LLVM::compile_buffer(const Buffer &buf) {
 
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
-#if LLVM_VERSION >= 37
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, zero);
-#else
-    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, zero);
-#endif
     sym_push(buf.name(), global_ptr);
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
 Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
-    if (!e.defined() || e.type().is_handle()) {
-        // Handle is always emitted into metadata "undefined", regardless of
-        // what sort of Expr is provided.
+    if (!e.defined()) {
         return Constant::getNullValue(scalar_value_t_type->getPointerTo());
     }
+
+    internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
 
     llvm::Value *val = codegen(e);
     llvm::Constant *constant = dyn_cast<llvm::Constant>(val);
@@ -803,11 +803,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
 
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
-#if LLVM_VERSION >= 37
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
-#else
-        ConstantExpr::getInBoundsGetElementPtr(storage, zero),
-#endif
         scalar_value_t_type->getPointerTo());
 }
 
@@ -865,14 +861,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         };
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
+        Expr def = args[arg].def;
+        Expr min = args[arg].min;
+        Expr max = args[arg].max;
+        if (args[arg].type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            def = min = max = Expr();
+        }
         Constant *argument_fields[] = {
             create_string_constant(args[arg].name),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
-            embed_constant_expr(args[arg].def),
-            embed_constant_expr(args[arg].min),
-            embed_constant_expr(args[arg].max)
+            embed_constant_expr(def),
+            embed_constant_expr(min),
+            embed_constant_expr(max)
         };
         arguments_array_entries.push_back(ConstantStruct::get(argument_t_type, argument_fields));
     }
@@ -888,11 +892,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     Constant *metadata_fields[] = {
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
-#if LLVM_VERSION >= 37
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
-#else
-        /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array_storage, zeros),
-#endif
         /* target */ create_string_constant(target.to_string()),
         /* name */ create_string_constant(function_name)
     };
@@ -915,39 +915,6 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     return metadata_getter;
 }
 
-void CodeGen_LLVM::register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper) {
-    llvm::Function *register_metadata = module->getFunction("halide_runtime_internal_register_metadata");
-    internal_assert(register_metadata) << "Could not find register_metadata in initial module\n";
-
-    llvm::StructType *register_t_type = module->getTypeByName("struct._halide_runtime_internal_registered_filter_t");
-    internal_assert(register_t_type) << "Could not find register_t_type in initial module\n";
-
-    Constant *list_node_fields[] = {
-        Constant::getNullValue(i8_t->getPointerTo()),
-        metadata_getter,
-        argv_wrapper
-    };
-
-    GlobalVariable *list_node = new GlobalVariable(
-        *module,
-        register_t_type,
-        /*isConstant*/ false,
-        GlobalValue::PrivateLinkage,
-        ConstantStruct::get(register_t_type, list_node_fields));
-
-    llvm::FunctionType *func_t = llvm::FunctionType::get(void_t, false);
-    llvm::Function *ctor = llvm::Function::Create(func_t, llvm::GlobalValue::PrivateLinkage, name + ".register_metadata", module.get());
-    llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", ctor);
-    builder->SetInsertPoint(block);
-    llvm::Value *call_args[] = {list_node};
-    llvm::CallInst *call = builder->CreateCall(register_metadata, call_args);
-    call->setDoesNotThrow();
-    builder->CreateRet(call);
-    llvm::verifyFunction(*ctor);
-
-    llvm::appendToGlobalCtors(*module, ctor, 0);
-}
-
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
@@ -963,20 +930,29 @@ void CodeGen_LLVM::optimize_module() {
         module->dump();
     }
 
-    #if LLVM_VERSION < 37
-    FunctionPassManager function_pass_manager(module.get());
-    PassManager module_pass_manager;
-    #else
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
-    #endif
+    // We override PassManager::add so that we have an opportunity to
+    // blacklist problematic LLVM passes.
+    class MyFunctionPassManager : public legacy::FunctionPassManager {
+    public:
+        MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
+        virtual void add(Pass *p) override {
+            debug(2) << "Adding function pass: " << p->getPassName() << "\n";
+            legacy::FunctionPassManager::add(p);
+        }
+    };
 
-    #if (LLVM_VERSION >= 36) && (LLVM_VERSION < 37)
-    internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
-    module_pass_manager.add(new DataLayoutPass());
-    #endif
+    class MyModulePassManager : public legacy::PassManager {
+    public:
+        virtual void add(Pass *p) override {
+            debug(2) << "Adding module pass: " << p->getPassName() << "\n";
+            legacy::PassManager::add(p);
+        }
+    };
 
-    #if (LLVM_VERSION >= 37) && !WITH_NATIVE_CLIENT
+    MyFunctionPassManager function_pass_manager(module.get());
+    MyModulePassManager module_pass_manager;
+
+    #if !WITH_NATIVE_CLIENT
     std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
@@ -1136,9 +1112,7 @@ Value *CodeGen_LLVM::buffer_elem_size(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         0,
         1,
@@ -1147,9 +1121,7 @@ Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         0,
         0,
@@ -1158,9 +1130,7 @@ Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         0,
         6,
@@ -1169,9 +1139,7 @@ Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
 
 Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         0,
         7,
@@ -1184,9 +1152,7 @@ Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *idx = ConstantInt::get(i32_t, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         args,
         "buf_extent");
@@ -1198,9 +1164,7 @@ Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *idx = ConstantInt::get(i32_t, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         args,
         "buf_stride");
@@ -1212,9 +1176,7 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *idx = ConstantInt::get(i32_t, i);
     vector<llvm::Value *> args = {zero, field, idx};
     return builder->CreateInBoundsGEP(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         args,
         "buf_min");
@@ -1222,9 +1184,7 @@ Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
 
 Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
         buffer_t_type,
-#endif
         buffer,
         0,
         5,
@@ -1455,11 +1415,28 @@ void CodeGen_LLVM::visit(const Div *op) {
 }
 
 void CodeGen_LLVM::visit(const Mod *op) {
+    // Detect if it's a small int modulus
+    const int64_t *const_int_divisor = as_const_int(op->b);
+    const uint64_t *const_uint_divisor = as_const_uint(op->b);
+
     int bits;
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
+    } else if (const_int_divisor &&
+               op->type.is_int() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_int_divisor > 1 &&
+               ((op->type.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
+        // We can use our fast signed integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
+    } else if (const_uint_divisor &&
+               op->type.is_uint() &&
+               (op->type.bits() == 8 || op->type.bits() == 16 || op->type.bits() == 32) &&
+               *const_uint_divisor > 1 && *const_uint_divisor < 256) {
+        // We can use our fast unsigned integer division
+        value = codegen(common_subexpression_elimination(op->a - (op->a / op->b) * op->b));
     } else {
         // To match our definition of division, mod should be between 0
         // and |b|.
@@ -1708,10 +1685,10 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    LLVMMDNodeArgumentType root_buffer_type[] = {MDString::get(*context, "Halide buffer")};
+    llvm::Metadata *root_buffer_type[] = {MDString::get(*context, "Halide buffer")};
     MDNode *tbaa = MDNode::get(*context, root_buffer_type);
 
-    LLVMMDNodeArgumentType this_buffer_type[] = {MDString::get(*context, buffer), tbaa};
+    llvm::Metadata *this_buffer_type[] = {MDString::get(*context, buffer), tbaa};
     tbaa = MDNode::get(*context, this_buffer_type);
 
     // We also add metadata for constant indices to allow loads and
@@ -1722,7 +1699,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
-            LLVMMDNodeArgumentType this_level_type[] = {MDString::get(*context, level.str()), tbaa};
+            llvm::Metadata *this_level_type[] = {MDString::get(*context, level.str()), tbaa};
             tbaa = MDNode::get(*context, this_level_type);
         }
     }
@@ -2612,9 +2589,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (int i = 0; i < int_args; i++) {
                 Value *coord_ptr =
                     builder->CreateConstInBoundsGEP1_32(
-#if LLVM_VERSION >= 37
                         coords_type,
-#endif
                         coords,
                         i);
                 builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
@@ -2637,9 +2612,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         for (size_t i = 0; i < sizeof(halide_type_members)/sizeof(halide_type_members[0]); i++) {
             Value *field_ptr =
                 builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
                     halide_type_t_type,
-#endif
                     halide_type,
                     0,
                     i);
@@ -2664,9 +2637,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
             Value *field_ptr =
                 builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
                     trace_event_type,
-#endif
                     trace_event,
                     0,
                     i);
@@ -2715,9 +2686,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         codegen(op->args[0]);
         value = codegen(op->args[1]);
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        if (op->type.is_vector()) {
+        Expr cond = op->args[0];
+        if (const Broadcast *b = cond.as<Broadcast>()) {
+            cond = b->value;
+        }
+        if (cond.type().is_vector()) {
             scalarize(op);
-
         } else {
 
             internal_assert(op->args.size() == 3);
@@ -2725,24 +2699,21 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            Value *cond = codegen(op->args[0]);
-            if (cond->getType() != i1_t) {
-                cond = builder->CreateIsNotNull(cond);
-            }
-            builder->CreateCondBr(cond, true_bb, false_bb);
+            builder->CreateCondBr(codegen(cond), true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
+            BasicBlock *true_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(false_bb);
             Value *false_value = codegen(op->args[2]);
             builder->CreateBr(after_bb);
+            BasicBlock *false_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(after_bb);
-
             PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-            phi->addIncoming(true_value, true_bb);
-            phi->addIncoming(false_value, false_bb);
+            phi->addIncoming(true_value, true_pred);
+            phi->addIncoming(false_value, false_pred);
 
             value = phi;
         }
@@ -2768,9 +2739,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (size_t i = 0; i < args.size(); i++) {
                 Value *field_ptr =
                     builder->CreateConstInBoundsGEP2_32(
-#if LLVM_VERSION >= 37
                         struct_t,
-#endif
                         ptr,
                         0,
                         i);
@@ -3021,7 +2990,7 @@ void CodeGen_LLVM::visit(const Call *op) {
              call_args.push_back(&arg);
         }
 
-#if LLVM_VERSION >= 37 && !WITH_NATIVE_CLIENT
+#if !WITH_NATIVE_CLIENT
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
 #else
         llvm::CallInst *call = builder->CreateCall(phi, call_args);
@@ -3031,6 +3000,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::indeterminate_expression)) {
+        user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
@@ -3255,11 +3226,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
 
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
-#if LLVM_VERSION >= 37
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
-#else
-    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, zeros);
-#endif
     return ptr;
 }
 
@@ -3545,9 +3512,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Use a constant offset from the base pointer
                     Value *p =
                         builder->CreateConstInBoundsGEP1_32(
-#if LLVM_VERSION >= 37
                             llvm_type_of(ptr_type),
-#endif
                             ptr,
                             const_stride->value * i);
                     StoreInst *store = builder->CreateStore(v, p);

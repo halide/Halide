@@ -230,52 +230,33 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     llvm::TargetOptions options;
     get_target_options(*m, options, mcpu, mattrs);
 
-    #if LLVM_VERSION >= 37
     DataLayout initial_module_data_layout = m->getDataLayout();
-    #endif
     string module_name = m->getModuleIdentifier();
 
-    #if LLVM_VERSION > 35
     llvm::EngineBuilder engine_builder((std::move(m)));
-    #else
-    llvm::EngineBuilder engine_builder(m.release());
-    #endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-    #if LLVM_VERSION < 36
-    // >= 3.6 there is only mcjit.
-    engine_builder.setUseMCJIT(true);
-    //JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
-    //engine_builder.setJITMemoryManager(memory_manager);
-    HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
-    engine_builder.setMCJITMemoryManager(memory_manager);
-    #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-    #endif
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
 
-    #if LLVM_VERSION >= 37
-        TargetMachine *tm = engine_builder.selectTarget();
-        #if LLVM_VERSION == 37
-            DataLayout target_data_layout(*(tm->getDataLayout()));
-        #else
-            DataLayout target_data_layout(tm->createDataLayout());
-        #endif
-        if (initial_module_data_layout != target_data_layout) {
-                internal_error << "Warning: data layout mismatch between module ("
-                               << initial_module_data_layout.getStringRepresentation()
-                               << ") and what the execution engine expects ("
-                               << target_data_layout.getStringRepresentation() << ")\n";
-        }
-        ExecutionEngine *ee = engine_builder.create(tm);
+    TargetMachine *tm = engine_builder.selectTarget();
+    #if LLVM_VERSION == 37
+    DataLayout target_data_layout(*(tm->getDataLayout()));
     #else
-        ExecutionEngine *ee = engine_builder.create();
+    DataLayout target_data_layout(tm->createDataLayout());
     #endif
+    if (initial_module_data_layout != target_data_layout) {
+        internal_error << "Warning: data layout mismatch between module ("
+                       << initial_module_data_layout.getStringRepresentation()
+                       << ") and what the execution engine expects ("
+                       << target_data_layout.getStringRepresentation() << ")\n";
+    }
+    ExecutionEngine *ee = engine_builder.create(tm);
 
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
