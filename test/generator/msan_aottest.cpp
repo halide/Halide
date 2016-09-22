@@ -11,6 +11,41 @@
 using namespace std;
 using namespace Halide;
 
+// Just copies in -> out.
+extern "C" int msan_extern_stage(buffer_t *in, buffer_t *out) {
+    if (in->host == nullptr) {
+        in->extent[0] = 4;
+        in->extent[1] = 4;
+        in->extent[2] = 3;
+        in->min[0] = 0;
+        in->min[1] = 0;
+        in->min[2] = 0;
+        return 0;
+    }
+    if (!out->host) {
+        fprintf(stderr, "msan_extern_stage failure\n");
+        return -1;
+    }
+    if (in->elem_size != out->elem_size) {
+        return -1;
+    }
+    for (int c = 0; c < in->extent[2]; c++) {
+        for (int y = 0; y < in->extent[1]; y++) {
+            for (int x = 0; x < in->extent[0]; x++) {
+                const uint64_t in_off = (x * in->stride[0] +
+                                         y * in->stride[1] +
+                                         c * in->stride[2]) * in->elem_size;
+                const uint64_t out_off = (x * out->stride[0] +
+                                          y * out->stride[1] +
+                                          c * out->stride[2]) * out->elem_size;
+                memcpy(out->host + out_off, in->host + in_off, in->elem_size);
+            }
+        }
+    }
+    out->host_dirty = true;
+    return 0;
+}
+
 extern "C" void halide_error(void *user_context, const char *msg) {
     fprintf(stderr, "Saw error: %s\n", msg);
     // Do not exit.
@@ -25,24 +60,56 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
     exit(-1);
 }
 
-const void* previous = nullptr;
-extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
-    if (ptr <= previous) {
-        fprintf(stderr, "Failure!\nExpected monotonic increase but saw %p -> %p\n", previous, ptr);
+enum {
+  expect_intermediate_buffer,
+  expect_intermediate_contents,
+  expect_output_contents,
+} annotate_stage = expect_intermediate_buffer;
+const void* output_base = nullptr;
+const void* output_previous = nullptr;
+
+extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
+    printf("%d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int) len);
+    if (annotate_stage == expect_intermediate_buffer) {
+        if (output_previous != nullptr || len != sizeof(buffer_t)) {
+            fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
+        annotate_stage = expect_intermediate_contents;
+    } else if (annotate_stage == expect_intermediate_contents) {
+        if (output_previous != nullptr || len != 4 * 4 * 3 * 4) {
+            fprintf(stderr, "Failure: Expected %d, saw %d\n", 4 * 4 * 3 * 4, (unsigned int) len);
+            exit(-1);
+        }
+        annotate_stage = expect_output_contents;
+    } else if (annotate_stage == expect_output_contents) {
+        if (output_previous == nullptr) {
+            if (ptr != output_base) {
+                fprintf(stderr, "Failure: Expected base p %p but saw %p\n", output_base, ptr);
+                exit(-1);
+            }
+            if (ptr <= output_previous) {
+                fprintf(stderr, "Failure: Expected monotonic increase but saw %p -> %p\n", output_previous, ptr);
+                exit(-1);
+            }
+            output_previous = ptr;
+        }
+    } else {
+        fprintf(stderr, "Failure: bad enum\n");
         exit(-1);
     }
-    printf("%p:%08x\n", ptr, (unsigned int) len);
-    previous = ptr;
-    return 0;
 }
 
 template<typename T>
 void verify(const T &image) {
     image.for_each_element([&](int x, int y, int c) {
-        const int kExpected = (int32_t)(x + y + c + 3);
-        if (image(x, y, c) != kExpected) {
-            fprintf(stderr, "Failure @ %d %d %d: expected %d, got %d\n",
-                x, y, c, kExpected, image(x, y, c));
+        int expected = 3;
+        for (int i = 0; i < 4; ++i) {
+            expected += (int32_t)(i + y + c);
+        }
+        int actual = image(x, y, c);
+        if (actual != expected) {
+            fprintf(stderr, "Failure @ %d %d %d: expected %d, got %d\n", x, y, c, expected, actual);
             exit(-1);
         }
     });
@@ -53,22 +120,23 @@ void verify(const T &image) {
 int main()
 {
     printf("Testing interleaved...\n");
-    previous = nullptr;
     {
         auto out = Buffer<int32_t>::make_interleaved(4, 4, 3);
+        annotate_stage = expect_intermediate_buffer;
+        output_base = out.host_ptr();
+        output_previous = nullptr;
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
         }
         verify(out);
-    }
-    if (previous == nullptr) {
-        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
-        exit(-1);
+        if (output_previous == nullptr) {
+            fprintf(stderr, "Failure: Expected to see annotations.\n");
+            exit(-1);
+        }
     }
 
     printf("Testing sparse chunky...\n");
-    previous = nullptr;
     {
         const int kPad = 1;
         halide_dimension_t shape[3] = {
@@ -78,32 +146,36 @@ int main()
         };
         std::vector<int32_t> data(((4 * 3) + kPad) * 4);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
+        annotate_stage = expect_intermediate_buffer;
+        output_base = out.host_ptr();
+        output_previous = nullptr;
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
         }
-    }
-    if (previous == nullptr) {
-        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
-        exit(-1);
+        if (output_previous == nullptr) {
+            fprintf(stderr, "Failure: Expected to see annotations.\n");
+            exit(-1);
+        }
     }
 
     printf("Testing planar...\n");
-    previous = nullptr;
     {
         auto out = Buffer<int32_t>(4, 4, 3);
+        annotate_stage = expect_intermediate_buffer;
+        output_base = out.host_ptr();
+        output_previous = nullptr;
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
         }
-    }
-    if (previous == nullptr) {
-        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
-        exit(-1);
+        if (output_previous == nullptr) {
+            fprintf(stderr, "Failure: Expected to see annotations.\n");
+            exit(-1);
+        }
     }
 
     printf("Testing sparse planar...\n");
-    previous = nullptr;
     {
         const int kPad = 1;
         halide_dimension_t shape[3] = {
@@ -113,29 +185,33 @@ int main()
         };
         std::vector<int32_t> data((4 + kPad) * 4 * 3);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
+        annotate_stage = expect_intermediate_buffer;
+        output_base = out.host_ptr();
+        output_previous = nullptr;
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
         }
+        if (output_previous == nullptr) {
+            fprintf(stderr, "Failure: Expected to see annotations.\n");
+            exit(-1);
+        }
     }
-    if (previous == nullptr) {
-        fprintf(stderr, "Failure!\nExpected to see annotations.\n");
-        exit(-1);
-    }
-
     // Buffers should not be marked as "initialized" if the filter fails with an error.
     printf("Testing error case...\n");
-    previous = nullptr;
     {
         auto out = Buffer<int32_t>(1, 1, 1);
+        annotate_stage = expect_intermediate_buffer;
+        output_base = out.host_ptr();
+        output_previous = nullptr;
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);
         }
-    }
-    if (previous != nullptr) {
-        fprintf(stderr, "Failure!\nExpected NOT to see annotations.\n");
-        exit(-1);
+        if (output_previous != nullptr) {
+            fprintf(stderr, "Failure: Expected NOT to see annotations.\n");
+            exit(-1);
+        }
     }
 
     printf("Success!\n");
