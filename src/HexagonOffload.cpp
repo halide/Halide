@@ -376,6 +376,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     static const Target::Feature shared_features[] = {
         Target::Profile,
         Target::NoAsserts,
+        Target::MSAN,
         Target::HVX_64,
         Target::HVX_128,
         Target::HVX_v62
