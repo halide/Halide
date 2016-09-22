@@ -7,30 +7,29 @@ extern "C" {
 extern void AnnotateMemoryIsInitialized(const char *file, int line,
                                         const void *mem, size_t size);
 
-WEAK int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, size_t len) {
-    AnnotateMemoryIsInitialized("Halide", 0, ptr, len);
-    return 0;
+WEAK void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
+    AnnotateMemoryIsInitialized("Halide", 0, ptr, (size_t) len);
 }
 
 // Default implementation marks the data pointed to by the buffer_t as initialized
 // (but *not* the buffer_t itself); it takes pains to only mark the active memory ranges
 // (skipping padding), and sorting into ranges to always mark the smallest number of
 // ranges, in monotonically increasing memory order.
-WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, buffer_t *b) {
+WEAK void halide_msan_annotate_buffer_is_initialized(void *user_context, buffer_t *b) {
     if (b == NULL) {
-        return 0;
+        return;
     }
 
     Halide::Runtime::Internal::device_copy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
     if (c.chunk_size == 0) {
-        return 0;
+        return;
     }
 
     if (b->dev_dirty) {
         // buffer has been computed on a gpu, but not copied back:
         // don't annotate as initialized. (We'll assume that subsequent
         // calls to halide_copy_to_host will force another call.)
-        return 0;
+        return;
     }
 
     // TODO: Is this 32-bit or 64-bit? Leaving signed for now
@@ -44,13 +43,15 @@ WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, buffer_t
                                     z * c.stride_bytes[2] +
                                     w * c.stride_bytes[3]);
                     const void *from = (void *)(c.src + off);
-                    int r = halide_msan_annotate_memory_is_initialized(user_context, from, c.chunk_size);
-                    if (r != 0) return r;
+                    halide_msan_annotate_memory_is_initialized(user_context, from, c.chunk_size);
                 }
             }
         }
     }
-    return 0;
+}
+
+WEAK void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *b) {
+    return halide_msan_annotate_buffer_is_initialized(user_context, (buffer_t *)b);
 }
 
 }
