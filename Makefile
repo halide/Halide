@@ -360,7 +360,6 @@ SOURCE_FILES = \
   RemoveDeadAllocations.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
-  Sanitizers.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
@@ -496,7 +495,6 @@ HEADER_FILES = \
   RemoveDeadAllocations.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
-  Sanitizers.h \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
@@ -928,7 +926,7 @@ $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 $(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f msan -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-msan-debug
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f msan -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-msan
 
 # MSAN test doesn't use the standard runtime
 $(BIN_DIR)/generator_aot_msan: $(ROOT_DIR)/test/generator/msan_aottest.cpp $(FILTERS_DIR)/msan.a $(FILTERS_DIR)/msan.h $(INCLUDE_DIR)/HalideRuntime.h
