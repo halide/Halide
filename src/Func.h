@@ -64,7 +64,7 @@ public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
           const std::vector<Internal::StorageDim> &sdims)
             : definition(d), stage_name(n), dim_vars(args), storage_dims(sdims) {
-        internal_assert(definition.all_args().size() == dim_vars.size());
+        internal_assert(definition.explicit_args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
 
