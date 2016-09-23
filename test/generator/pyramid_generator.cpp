@@ -5,7 +5,7 @@ namespace {
 class Pyramid : public Halide::Generator<Pyramid> {
 public:
     ImageParam input{ Float(32), 2, "input" };
-    GeneratorParam<int> levels {"levels", 10};
+    GeneratorParam<int> levels{"levels", 1};  // deliberately wrong value, must be overridden to 10
 
     Var x, y;
 
@@ -24,14 +24,14 @@ public:
 
         pyramid[0](x, y) = in(x, y);
 
-        for (int i = 1; i < 10; i++) {
+        for (size_t i = 1; i < pyramid.size(); i++) {
             pyramid[i](x, y) = downsample(pyramid[i-1])(x, y);
         }
 
-        for (int i = 0; i < 10; i++) {
-            pyramid[i].compute_root().parallel(y);
+        for (Func p : pyramid) {
+            p.compute_root().parallel(y);
             // Vectorize if we're still wide enough at this level
-            pyramid[i].specialize(pyramid[i].output_buffer().width() >= 8).vectorize(x, 8);
+            p.specialize(p.output_buffer().width() >= 8).vectorize(x, 8);
         }
 
         return pyramid;
