@@ -201,6 +201,7 @@ int reorder_split_rfactor_test(bool compile_module) {
     }
     return 0;
 }
+
 int multi_split_rfactor_test(bool compile_module) {
     Func f("f"), g("g");
     Var x("x"), y("y");
