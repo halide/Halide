@@ -134,7 +134,10 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
 
     Image<int> im = f.realize(size, size);
-    auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
+    auto func = [&im_ref, &im](int x, int y, int z) {
+        // For x >= 23, the buffer is undef
+        return (x < 23) ? im_ref(x, y, z) : im(x, y, z);
+    };
     if (check_image(im, func)) {
         return -1;
     }
