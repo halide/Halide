@@ -218,7 +218,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(mandelbrot)
   halide_define_aot_test(matlab)
   halide_define_aot_test(memory_profiler_mandelbrot)
-  halide_define_aot_test(pyramid)
   halide_define_aot_test(variable_num_threads)
 
   # Tests that require nonstandard targets, namespaces, etc.
@@ -235,6 +234,9 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(cxx_mangling 
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::cxx_mangling)
+
+  halide_define_aot_test(pyramid
+                         GENERATOR_ARGS levels=10)
 
   halide_define_aot_test(msan
                          GENERATOR_HALIDE_TARGET host-msan)

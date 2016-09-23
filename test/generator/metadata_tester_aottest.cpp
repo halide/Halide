@@ -126,7 +126,9 @@ Image<Type> make_image() {
 }
 
 template <typename InputType, typename OutputType>
-void verify(const Image<InputType> &input, const Image<OutputType> &output0, const Image<OutputType> &output1) {
+void verify(const Image<InputType> &input, 
+            const Image<OutputType> &output0, 
+            const Image<OutputType> &output1) {
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -418,10 +420,41 @@ int main(int argc, char **argv) {
     Image<float> output0(kSize, kSize, 3);
     Image<float> output1(kSize, kSize, 3);
 
-    result = metadata_tester(input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
+    result = metadata_tester(
+        input,             // Input<Func>
+        false,             // Input<bool>
+        0,                 // Input<i8>
+        0,                 // Input<i16>
+        0,                 // Input<i32>
+        0,                 // Input<i64>
+        0,                 // Input<u8>
+        0,                 // Input<u16>
+        0,                 // Input<u32>
+        0,                 // Input<u64>
+        0.f,               // Input<float>
+        0.0,               // Input<double>
+        nullptr,           // Input<void*>
+        output0, output1   // Output<Tuple(Func, Func)>
+    );  
     EXPECT_EQ(0, result);
 
-    result = metadata_tester_ucon(user_context, input, false, 0, 0, 0, 0, 0, 0, 0, 0, 0.f, 0.0, nullptr, output0, output1);
+    result = metadata_tester_ucon(
+        user_context, 
+        input,             // Input<Func>
+        false,             // Input<bool>
+        0,                 // Input<i8>
+        0,                 // Input<i16>
+        0,                 // Input<i32>
+        0,                 // Input<i64>
+        0,                 // Input<u8>
+        0,                 // Input<u16>
+        0,                 // Input<u32>
+        0,                 // Input<u64>
+        0.f,               // Input<float>
+        0.0,               // Input<double>
+        nullptr,           // Input<void*>
+        output0, output1   // Output<Tuple(Func, Func)>
+    );
     EXPECT_EQ(0, result);
 
     verify(input, output0, output1);
