@@ -202,6 +202,61 @@ int reorder_split_rfactor_test(bool compile_module) {
     return 0;
 }
 
+int multi_split_rfactor_test(bool compile_module) {
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+
+    RDom r(10, 20, 20, 30);
+
+    f(x, y) = x - y;
+    f.compute_root();
+
+    g(x, y) = 1;
+    g(r.x, r.y) += f(r.x, r.y);
+    g.update(0).reorder({r.y, r.x});
+
+    RVar rxi("rxi"), rxo("rxo"), ryi("ryi"), ryo("ryo");
+    Var u("u"), v("v");
+
+    g.update(0).split(r.x, rxo, rxi, 2);
+    Func intm1 = g.update(0).rfactor({{rxo, u}, {r.y, v}});
+
+    g.update(0).split(r.y, ryo, ryi, 2);
+    Func intm2 = g.update(0).rfactor({{rxo, u}, {ryo, v}});
+    intm2.compute_root();
+    intm1.compute_root();
+
+    if (compile_module) {
+        // Check the call graphs.
+        Module m = g.compile_to_module({g.infer_arguments()});
+        CheckCalls checker;
+        m.functions().front().body.accept(&checker);
+
+        CallGraphs expected = {
+            {g.name(), {}},
+            {g.update(0).name(), {intm2.name(), g.name()}},
+            {intm2.name(), {}},
+            {intm2.update(0).name(), {intm1.name(), intm2.name()}},
+            {intm1.name(), {}},
+            {intm1.update(0).name(), {f.name(), intm1.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(checker.calls, expected) != 0) {
+            return -1;
+        }
+    } else {
+        Image<int> im = g.realize(80, 80);
+        auto func = [](int x, int y, int z) {
+            return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
+        };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
 int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     Func f("f"), g("g");
     Var x("x"), y("y"), z("z");
@@ -865,6 +920,16 @@ int main(int argc, char **argv) {
     }
     printf("    checking output img correctness...\n");
     if (reorder_split_rfactor_test(false) != 0) {
+        return -1;
+    }
+
+    printf("Running multiple split rfactor test\n");
+    printf("    checking call graphs...\n");
+    if (multi_split_rfactor_test(true) != 0) {
+        return -1;
+    }
+    printf("    checking output img correctness...\n");
+    if (multi_split_rfactor_test(false) != 0) {
         return -1;
     }
 
