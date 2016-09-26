@@ -464,7 +464,9 @@ class Interleaver : public IRMutator {
     void visit(const Mod *op) {
         const Ramp *r = op->a.as<Ramp>();
         for (int i = 2; i <= 4; ++i) {
-            if (r && is_const(op->b, i)) {
+            if (r &&
+                is_const(op->b, i) &&
+                (r->type.lanes() % i) == 0) {
                 should_deinterleave = true;
                 num_lanes = i;
                 break;
