@@ -74,12 +74,11 @@ if (BUILD_AOT_TUTORIAL)
   # lesson_10_aot_compilation_generate; we need it mainly to generate (again)
   # a .h file into a path where we can find it. Remove either this or the
   # generate above.
-  halide_add_generator_dependency(TARGET lesson_10_aot_compilation_run
-    GENERATOR_TARGET lesson_10_aot_compilation_generate
-    GENERATOR_NAME lesson_10_aot_compilation_generate
-    GENERATED_FUNCTION "lesson_10_halide"
-    GENERATOR_ARGS ""
-  )
+  halide_add_aot_library(lesson_10_halide
+                         GENERATOR_TARGET lesson_10_aot_compilation_generate
+                         GENERATOR_NAME lesson_10_aot_compilation_generate
+                         GENERATED_FUNCTION lesson_10_halide)
+  halide_add_aot_library_dependency(lesson_10_aot_compilation_run lesson_10_halide)
 
   # FIXME: Shouldn't halide_add_generator_dependency() add these??
   if (NOT WIN32)
