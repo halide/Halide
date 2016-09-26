@@ -122,21 +122,14 @@ function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
 
 endfunction(halide_add_aot_library_dependency)
 
-# Legacy wrapper function that calls halide_add_aot_library() + halide_add_aot_library_dependency().
-# New code should prefer to call them explicitly.
-function(halide_add_generator_dependency)
-  # Parse arguments
+function(halide_add_generator NAME)
   set(options )
-  set(oneValueArgs TARGET GENERATOR_TARGET GENERATOR_NAME GENERATED_FUNCTION)
-  set(multiValueArgs GENERATOR_ARGS)
-  cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  set(oneValueArgs )
+  set(multiValueArgs SRCS)
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-  set(AOT_LIBRARY_TARGET "${args_GENERATED_FUNCTION}")
-  halide_add_aot_library("${AOT_LIBRARY_TARGET}"
-                         GENERATOR_TARGET ${args_GENERATOR_TARGET}
-                         GENERATOR_NAME ${args_GENERATOR_NAME}
-                         GENERATED_FUNCTION ${args_GENERATED_FUNCTION}
-                         GENERATOR_ARGS ${args_GENERATOR_ARGS})
-  halide_add_aot_library_dependency(${args_TARGET} "${AOT_LIBRARY_TARGET}")
-
-endfunction(halide_add_generator_dependency)
+  halide_project("${NAME}" 
+                 "generator" 
+                 "${CMAKE_SOURCE_DIR}/tools/GenGen.cpp" 
+                 ${args_SRCS})
+endfunction(halide_add_generator)
