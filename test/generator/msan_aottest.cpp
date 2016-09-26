@@ -1,3 +1,11 @@
+#ifdef __MINGW32__
+#include <stdio.h>
+// Mingw doesn't support weak linkage
+int main(int argc, char **argv) {
+    printf("Skipping test on mingw");
+    return 0;
+}
+#else
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
 
@@ -225,3 +233,5 @@ int main()
     printf("Success!\n");
     return 0;
 }
+
+#endif
