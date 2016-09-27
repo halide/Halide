@@ -504,6 +504,9 @@ Stmt build_produce(Function f, const Target &target) {
                 buf_name += ".buffer";
                 Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
+                // Since this is a temporary, internal-only buffer, make sure it's marked.
+                // (but not the contents! callee is expected to fill that in.)
+                buffers_to_annotate.push_back(buffer);
             }
         } else {
             // Store level doesn't match compute level. Make an output
