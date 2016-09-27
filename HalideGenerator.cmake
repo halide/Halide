@@ -33,6 +33,7 @@ function(halide_generator_add_exec_generator_target EXEC_TARGET)
     DEPENDS ${args_GENERATOR_TARGET}
     COMMAND ${EXEC_PATH} ${args_GENERATOR_ARGS}
     WORKING_DIRECTORY ${args_GENFILES_DIR}
+    COMMENT "Executing Generator ${args_GENERATOR_TARGET} with args ${args_GENERATOR_ARGS}..."
   )
 
   add_custom_target(${EXEC_TARGET} DEPENDS ${args_OUTPUTS})
@@ -104,6 +105,7 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
     GENFILES_DIR     ${GENFILES_DIR}
     OUTPUTS          "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}"
   )
+  set_source_files_properties("${GENFILES_DIR}/${FILTER_HDR}" PROPERTIES GENERATED TRUE)
 endfunction(halide_add_aot_library)
 
 # Usage:
