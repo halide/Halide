@@ -891,6 +891,11 @@ $(FILTERS_DIR)/%.a: $(BIN_DIR)/%.generator
 $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
+$(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
+
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator
@@ -923,12 +928,12 @@ $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime input_type=uint8 input_dim=3 output_type=float32 output_dim=3 array_count=2
 
 $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-no_runtime input_type=uint8 input_dim=3 output_type=float32 output_dim=3 array_count=2
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
@@ -968,6 +973,11 @@ $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generat
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.a
 $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.a
 $(BIN_DIR)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.a
+
+$(BIN_DIR)/generator_jit_stubtest: $(FILTERS_DIR)/stubtest.stub.h $(BIN_DIR)/stubtest_generator.o
+
+$(BIN_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
+$(BIN_DIR)/stubuser.generator: $(BIN_DIR)/stubtest_generator.o
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;

@@ -114,7 +114,31 @@ NO_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, c
     return "";
 }
 
+template <typename T>
+T enum_from_string(const std::map<std::string, T> &enum_map, const std::string& s) {
+    auto it = enum_map.find(s);
+    user_assert(it != enum_map.end()) << "Enumeration value not found: " << s << "\n";
+    return it->second;
+}
+
 EXPORT extern const std::map<std::string, Halide::Type> &get_halide_type_enum_map();
+inline std::string halide_type_to_enum_string(const Type &t) {
+    return enum_to_string(get_halide_type_enum_map(), t);
+}
+
+EXPORT extern Halide::LoopLevel get_halide_undefined_looplevel();
+EXPORT extern const std::map<std::string, Halide::LoopLevel> &get_halide_looplevel_enum_map();
+inline std::string halide_looplevel_to_enum_string(const LoopLevel &loop_level){
+    return enum_to_string(get_halide_looplevel_enum_map(), loop_level);
+}
+
+// Convert a Halide Type into a string representation of its C source.
+// e.g., Int(32) -> "Halide::Int(32)"
+std::string halide_type_to_c_source(const Type &t);
+
+// Convert a Halide Type into a string representation of its C Source.
+// e.g., Int(32) -> "int32_t"
+std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files();
@@ -157,9 +181,36 @@ public:
 
 protected:
     friend class GeneratorBase;
+    friend class StubEmitter;
 
     virtual void set_from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
+    virtual std::string call_to_string(const std::string &v) const = 0;
+    virtual std::string get_c_type() const = 0;
+
+    virtual std::string get_type_decls() const {
+        return "";
+    }
+
+    virtual std::string get_default_value() const {
+        return to_string();
+    }
+
+    virtual std::string get_template_type() const {
+        return get_c_type();
+    }
+
+    virtual std::string get_template_value() const {
+        return get_default_value();
+    }
+
+    virtual bool is_schedule_param() const { 
+        return false; 
+    }
+
+    virtual bool is_looplevel_param() const { 
+        return false; 
+    }
 
 private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
@@ -175,9 +226,14 @@ public:
 
     operator T() const { return this->value(); }
     
-    operator Expr() const { return Internal::make_const(type_of<T>(), this->value()); }
+    operator Expr() const { return make_const(type_of<T>(), this->value()); }
 
     virtual void set(const T &new_value) { value_ = new_value; }
+
+protected:
+    bool is_looplevel_param() const override { 
+        return std::is_same<T, LoopLevel>::value; 
+    }
 
 private:
     T value_;
@@ -192,11 +248,23 @@ template<typename T>
 class GeneratorParam_Target : public GeneratorParamImpl<T> {
 public:
     explicit GeneratorParam_Target(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
+
     void set_from_string(const std::string &new_value_string) override {
         this->set(Target(new_value_string));
     }
+
     std::string to_string() const override {
         return this->value().to_string();
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        std::ostringstream oss;
+        oss << v << ".to_string()";
+        return oss.str();
+    }
+
+    std::string get_c_type() const override {
+        return "Halide::Target";
     }
 };
 
@@ -231,6 +299,28 @@ public:
         return oss.str();
     }
 
+    std::string call_to_string(const std::string &v) const override {
+        std::ostringstream oss;
+        oss << "std::to_string(" << v << ")";
+        return oss.str();
+    }
+
+    std::string get_c_type() const override {
+        std::ostringstream oss;
+        if (std::is_same<T, float>::value) {
+            return "float";
+        } else if (std::is_same<T, double>::value) {
+            return "double";
+        } else if (std::is_integral<T>::value) {
+            if (std::is_unsigned<T>::value) oss << 'u';
+            oss << "int" << (sizeof(T) * 8) << "_t";
+            return oss.str();
+        } else {
+            user_error << "Unknown arithmetic type\n";
+            return "";
+        }
+    }
+
 private:
     const T min, max;
 };
@@ -255,6 +345,16 @@ public:
     std::string to_string() const override {
         return this->value() ? "true" : "false";
     }
+
+    std::string call_to_string(const std::string &v) const override {
+        std::ostringstream oss;
+        oss << "(" << v << ") ? \"true\" : \"false\"";
+        return oss.str();
+    }
+
+    std::string get_c_type() const override {
+        return "bool";
+    }
 };
 
 template<typename T>
@@ -270,7 +370,41 @@ public:
     }
 
     std::string to_string() const override {
-        return Internal::enum_to_string(enum_map, this->value());
+        return enum_to_string(enum_map, this->value());
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        return "Enum_" + this->name + "_map().at(" + v + ")";
+    }
+
+    std::string get_c_type() const override {
+        return "Enum_" + this->name;
+    }
+
+    std::string get_default_value() const override {
+        return "Enum_" + this->name + "::" + enum_to_string(enum_map, this->value());
+    }
+
+    std::string get_type_decls() const override {
+        std::ostringstream oss;
+        oss << "enum class Enum_" << this->name << " {\n";
+        for (auto key_value : enum_map) {
+            oss << "  " << key_value.first << ",\n";
+        }
+        oss << "};\n";
+        oss << "\n";
+
+        // TODO: since we generate the enums, we could probably just use a vector (or array!) rather than a map,
+        // since we can ensure that the enum values are a nice tight range.
+        oss << "inline NO_INLINE const std::map<Enum_" << this->name << ", std::string>& Enum_" << this->name << "_map() {\n";
+        oss << "  static const std::map<Enum_" << this->name << ", std::string> m = {\n";
+        for (auto key_value : enum_map) {
+            oss << "    { Enum_" << this->name << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
+        }
+        oss << "  };\n";
+        oss << "  return m;\n";
+        oss << "};\n";
+        return oss.str();
     }
 
 private:
@@ -281,17 +415,73 @@ template<typename T>
 class GeneratorParam_Type : public GeneratorParam_Enum<T> {
 public:
     explicit GeneratorParam_Type(const std::string &name, const T &value)
-        : GeneratorParam_Enum<T>(name, value, Internal::get_halide_type_enum_map()) {}
+        : GeneratorParam_Enum<T>(name, value, get_halide_type_enum_map()) {}
+
+    std::string call_to_string(const std::string &v) const override {
+        return "Halide::Internal::halide_type_to_enum_string(" + v + ")";
+    }
+
+    std::string get_c_type() const override {
+        return "Halide::Type";
+    }
+
+    std::string get_template_type() const override {
+        return "typename";
+    }
+
+    std::string get_template_value() const override {
+        return halide_type_to_c_type(this->value());
+    }
+
+    std::string get_default_value() const override {
+        return halide_type_to_c_source(this->value());
+    }
+
+    std::string get_type_decls() const override {
+        return "";
+    }
+};
+
+template<typename T>
+class GeneratorParam_LoopLevel : public GeneratorParam_Enum<T> {
+public:
+    explicit GeneratorParam_LoopLevel(const std::string &name, const std::string &def) 
+        : GeneratorParam_Enum<T>(name, enum_from_string(get_halide_looplevel_enum_map(), def), get_halide_looplevel_enum_map()), def(def) {}
+
+    std::string call_to_string(const std::string &v) const override {
+        std::ostringstream oss;
+        oss << "Halide::Internal::halide_looplevel_to_enum_string(" << v << ")";
+        return oss.str();
+    }
+    std::string get_c_type() const override {
+        return "Halide::LoopLevel";
+    }
+
+    std::string get_default_value() const override {
+        if (def == "undefined") return "Halide::Internal::get_halide_undefined_looplevel()";
+        if (def == "root") return "Halide::LoopLevel::root()";
+        if (def == "inline") return "Halide::LoopLevel()";
+        user_error << "LoopLevel value " << def << " not found.\n";
+        return "";
+    }
+
+    std::string get_type_decls() const override {
+        return "";
+    }
+
+private:
+    const std::string def;
 };
 
 template<typename T> 
 using GeneratorParamImplBase =
-    typename Internal::select_type<
-        Internal::cond<std::is_same<T, Target>::value, Internal::GeneratorParam_Target<T>>,
-        Internal::cond<std::is_same<T, Type>::value,   Internal::GeneratorParam_Type<T>>,
-        Internal::cond<std::is_same<T, bool>::value,   Internal::GeneratorParam_Bool<T>>,
-        Internal::cond<std::is_arithmetic<T>::value,   Internal::GeneratorParam_Arithmetic<T>>,
-        Internal::cond<std::is_enum<T>::value,         Internal::GeneratorParam_Enum<T>>
+    typename select_type<
+        cond<std::is_same<T, Target>::value,    GeneratorParam_Target<T>>,
+        cond<std::is_same<T, Type>::value,      GeneratorParam_Type<T>>,
+        cond<std::is_same<T, LoopLevel>::value, GeneratorParam_LoopLevel<T>>,
+        cond<std::is_same<T, bool>::value,      GeneratorParam_Bool<T>>,
+        cond<std::is_arithmetic<T>::value,      GeneratorParam_Arithmetic<T>>,
+        cond<std::is_enum<T>::value,            GeneratorParam_Enum<T>>
     >::type;
 
 }  // namespace Internal
@@ -300,7 +490,7 @@ using GeneratorParamImplBase =
  * of the Generator at code-generation time. GeneratorParams are commonly
  * specified in build files (e.g. Makefile) to customize the behavior of
  * a given Generator, thus they have a very constrained set of types to allow
- * for efficient specification via command-line flags. A GeneratorParm can be:
+ * for efficient specification via command-line flags. A GeneratorParam can be:
  *   - any float or int type.
  *   - bool
  *   - enum
@@ -325,7 +515,7 @@ using GeneratorParamImplBase =
  *
  */
 template <typename T> 
- class GeneratorParam : public Internal::GeneratorParamImplBase<T> {
+class GeneratorParam : public Internal::GeneratorParamImplBase<T> {
 public:
     GeneratorParam(const std::string &name, const T &value)
         : Internal::GeneratorParamImplBase<T>(name, value) {}
@@ -335,6 +525,25 @@ public:
 
     GeneratorParam(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
         : Internal::GeneratorParamImplBase<T>(name, value, enum_map) {}
+
+    GeneratorParam(const std::string &name, const std::string &value)
+        : Internal::GeneratorParamImplBase<T>(name, value) {}
+};
+
+template <typename T> 
+class ScheduleParam : public GeneratorParam<T> {
+public:
+    ScheduleParam(const std::string &name, const T &value)
+        : GeneratorParam<T>(name, value) {}
+
+    ScheduleParam(const std::string &name, const T &value, const T &min, const T &max)
+        : GeneratorParam<T>(name, value, min, max) {}
+
+    ScheduleParam(const std::string &name, const std::string &value)
+        : GeneratorParam<T>(name, value) {}
+
+protected:
+    bool is_schedule_param() const override { return true; }
 };
 
 /** Addition between GeneratorParam<T> and any type that supports operator+ with T.
@@ -505,6 +714,582 @@ auto max(const GeneratorParam<T> &a, Other b) -> decltype(Internal::GeneratorMin
 template <typename T>
 decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
 
+namespace Internal {
+
+enum class IOKind { Scalar, Function };
+
+class FuncOrExpr {
+    IOKind kind_;
+    Halide::Func func_;
+    Halide::Expr expr_;
+public:
+    // *not* explicit 
+    FuncOrExpr(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
+    FuncOrExpr(const Expr &e) : kind_(IOKind::Scalar), func_(Func()), expr_(e) {}
+
+    IOKind kind() const {
+        return kind_;
+    }
+
+    Func func() const {
+        internal_assert(kind_ == IOKind::Function) << "Expected Func, got Expr";
+        return func_;
+    }
+
+    Expr expr() const {
+        internal_assert(kind_ == IOKind::Scalar) << "Expected Expr, got Func";
+        return expr_;
+    }
+};
+
+template <typename T>
+std::vector<FuncOrExpr> to_func_or_expr_vector(const T &t) {
+    return { FuncOrExpr(t) };
+}
+
+template <typename T>
+std::vector<FuncOrExpr> to_func_or_expr_vector(const std::vector<T> &v) {
+    std::vector<FuncOrExpr> r;
+    for (auto f : v) r.push_back(f);
+    return r;
+}
+
+void verify_same_funcs(Func a, Func b);
+void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
+
+template<typename T>
+class ArgWithParam {
+    T value_;
+    const GeneratorParam<T> * const param_;
+
+public:
+    // *not* explicit ctors
+    ArgWithParam(const T &value) : value_(value), param_(nullptr) {}
+    ArgWithParam(const GeneratorParam<T> &param) : value_(param), param_(&param) {}
+
+    T value() const { return param_ ? *param_ : value_; }
+};
+
+template<typename T>
+struct ArgWithParamVector {
+    const std::vector<ArgWithParam<T>> v;
+    // *not* explicit
+    ArgWithParamVector(const T &value) : v{ArgWithParam<T>(value)} {}
+    ArgWithParamVector(const GeneratorParam<T> &param) : v{ArgWithParam<T>(param)} {}
+    ArgWithParamVector(std::initializer_list<ArgWithParam<T>> t) : v(t) {}
+};
+
+using TypeArg = ArgWithParam<Type>;
+using TypeArgVector = ArgWithParamVector<Type>;
+using DimensionArg = ArgWithParam<int>;
+using ArraySizeArg = ArgWithParam<int>;
+
+class GIOBase {
+public:
+    size_t array_size() const { return (size_t) array_size_.value(); }
+    virtual bool is_array() const { internal_error << "Unimplemented"; return false; }
+
+    const std::string &name() const { return name_; }
+    IOKind kind() const { return kind_; }
+    size_t type_size() const { return types_.size(); }
+    Type type_at(size_t i) const { 
+        internal_assert(i < types_.size());
+        return types_.at(i).value(); 
+    }
+    Type type() const { 
+        internal_assert(type_size() == 1) << "Expected type_size() == 1, saw " << type_size() << " for " << name() << "\n";
+        return type_at(0); 
+    }
+    int dimensions() const { return dimensions_.value(); }
+
+    const std::vector<Func> &funcs() const {
+        internal_assert(funcs_.size() == array_size() && exprs_.empty());
+        return funcs_;
+    }
+
+    const std::vector<Expr> &exprs() const {
+        internal_assert(exprs_.size() == array_size() && funcs_.empty());
+        return exprs_;
+    }
+
+protected:
+    GIOBase(const ArraySizeArg &array_size, 
+            const std::string &name, 
+            IOKind kind,
+            const std::vector<TypeArg> &types,
+            const DimensionArg &dimensions);
+    virtual ~GIOBase();
+
+    friend class GeneratorBase;
+
+    ArraySizeArg array_size_;  // always 1 if is_array() == false
+
+    const std::string name_;
+    const IOKind kind_;
+    std::vector<TypeArg> types_;
+    DimensionArg dimensions_;
+
+    // Exactly one will have nonzero length
+    std::vector<Func> funcs_;
+    std::vector<Expr> exprs_;
+
+    std::string array_name(size_t i) const;
+
+    virtual void verify_internals() const;
+
+    template<typename ElemType>
+    const std::vector<ElemType> &get_values() const;
+
+private:
+    explicit GIOBase(const GIOBase &) = delete;
+    void operator=(const GIOBase &) = delete;
+};
+
+template<>
+inline const std::vector<Expr> &GIOBase::get_values<Expr>() const {
+    return exprs();
+}
+
+template<>
+inline const std::vector<Func> &GIOBase::get_values<Func>() const {
+    return funcs();
+}
+
+class GeneratorInputBase : public GIOBase {
+protected:
+    GeneratorInputBase(const ArraySizeArg &array_size,
+                       const std::string &name, 
+                       IOKind kind, 
+                       const TypeArg &t, 
+                       const DimensionArg &d);
+
+    GeneratorInputBase(const std::string &name, IOKind kind, const TypeArg &t, const DimensionArg &d)
+      : GeneratorInputBase(ArraySizeArg(1), name, kind, t, d) {}
+
+    ~GeneratorInputBase() override;
+
+    friend class GeneratorBase;
+
+    std::vector<Parameter> parameters_;
+
+    void init_internals();
+    void set_inputs(const std::vector<FuncOrExpr> &inputs);
+
+    virtual void set_def_min_max() {
+        // nothing
+    }
+
+    void verify_internals() const override;
+
+private:
+    void init_parameters();
+};
+
+
+template<typename T, typename ValueType>
+class GeneratorInputImpl : public GeneratorInputBase {
+protected:
+    using TBase = typename std::remove_all_extents<T>::type;
+
+    bool is_array() const override {
+        return std::is_array<T>::value;
+    }
+
+    template <typename T2 = T, typename std::enable_if<
+        // Only allow T2 not-an-array
+        !std::is_array<T2>::value
+    >::type * = nullptr>
+    GeneratorInputImpl(const std::string &name, IOKind kind, const TypeArg &t, const DimensionArg &d)
+        : GeneratorInputBase(name, kind, t, d) {
+    }
+
+    template <typename T2 = T, typename std::enable_if<
+        // Only allow T2[kSomeConst]
+        std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)
+    >::type * = nullptr>
+    GeneratorInputImpl(const std::string &name, IOKind kind, const TypeArg &t, const DimensionArg &d)
+        : GeneratorInputBase(ArraySizeArg(std::extent<T2, 0>::value), name, kind, t, d) {
+    }
+
+    template <typename T2 = T, typename std::enable_if<
+        // Only allow T2[]
+        std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0
+    >::type * = nullptr>
+    GeneratorInputImpl(const ArraySizeArg &array_size, const std::string &name, IOKind kind, const TypeArg &t, const DimensionArg &d)
+        : GeneratorInputBase(array_size, name, kind, t, d) {
+    }
+
+public:
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    size_t size() const {
+        return get_values<ValueType>().size();
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    ValueType operator[](size_t i) const {
+        return get_values<ValueType>()[i];
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    ValueType at(size_t i) const {
+        return get_values<ValueType>().at(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    typename std::vector<ValueType>::const_iterator begin() const {
+        return get_values<ValueType>().begin();
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    typename std::vector<ValueType>::const_iterator end() const {
+        return get_values<ValueType>().end();
+    }
+};
+
+template<typename T>
+class GeneratorInput_Func : public GeneratorInputImpl<T, Func> {
+private:
+    using Super = GeneratorInputImpl<T, Func>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+public:
+    GeneratorInput_Func(const std::string &name, const TypeArg &t, const DimensionArg &d)
+        : Super(name, IOKind::Function, t, d) {
+    }
+
+    GeneratorInput_Func(const ArraySizeArg &array_size, const std::string &name, const TypeArg &t, const DimensionArg &d)
+        : Super(array_size, name, IOKind::Function, t, d) {
+    }
+
+    template <typename... Args>
+    Expr operator()(Args&&... args) const {
+        return this->funcs().at(0)(std::forward<Args>(args)...);
+    }
+
+    Expr operator()(std::vector<Expr> args) const {
+        return this->funcs().at(0)(args);
+    }
+
+    operator class Func() const { 
+        return this->funcs().at(0); 
+    }
+};
+
+
+template<typename T>
+class GeneratorInput_Scalar : public GeneratorInputImpl<T, Expr> {
+private:
+    using Super = GeneratorInputImpl<T, Expr>;
+protected:
+    using TBase = typename Super::TBase;
+
+    const TBase def_{TBase()};
+
+protected:
+    void set_def_min_max() override {
+        for (Parameter &p : this->parameters_) {
+            p.set_scalar<TBase>(def_);
+        }
+    }
+
+public:
+    GeneratorInput_Scalar(const std::string &name, 
+                          const TBase &def)
+        : Super(name, IOKind::Scalar, type_of<TBase>(), 0), def_(def) {
+    }
+
+    GeneratorInput_Scalar(const ArraySizeArg &array_size, 
+                          const std::string &name, 
+                          const TBase &def)
+        : Super(array_size, name, IOKind::Scalar, type_of<TBase>(), 0), def_(def) {
+    }
+
+    /** You can use this Input as an expression in a halide
+     * function definition */
+    operator Expr() const { 
+        return this->exprs().at(0); 
+    }
+
+    /** Using an Input as the argument to an external stage treats it
+     * as an Expr */
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->exprs().at(0));
+    }
+
+
+};
+
+template<typename T>
+class GeneratorInput_Arithmetic : public GeneratorInput_Scalar<T> {
+private:
+    using Super = GeneratorInput_Scalar<T>;
+protected:
+    using TBase = typename Super::TBase;
+
+    const Expr min_, max_;
+
+protected:
+    void set_def_min_max() override {
+        GeneratorInput_Scalar<T>::set_def_min_max();
+        // Don't set min/max for bool
+        if (!std::is_same<TBase, bool>::value) {
+            for (Parameter &p : this->parameters_) {
+                if (min_.defined()) p.set_min_value(min_);
+                if (max_.defined()) p.set_max_value(max_);
+            }
+        }
+    }
+
+public:
+    GeneratorInput_Arithmetic(const std::string &name, 
+                              const TBase &def)
+        : Super(name, def), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(const ArraySizeArg &array_size, 
+                              const std::string &name, 
+                              const TBase &def)
+        : Super(array_size, name, def), min_(Expr()), max_(Expr()) {
+    }
+
+    GeneratorInput_Arithmetic(const std::string &name, 
+                              const TBase &def, 
+                              const TBase &min, 
+                              const TBase &max)
+        : Super(name, def), min_(min), max_(max) {
+    }
+
+    GeneratorInput_Arithmetic(const ArraySizeArg &array_size, 
+                              const std::string &name, 
+                              const TBase &def, 
+                              const TBase &min, 
+                              const TBase &max)
+        : Super(array_size, name, def), min_(min), max_(max) {
+    }
+};
+
+template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
+using GeneratorInputImplBase =
+    typename select_type<
+        cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
+        cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
+        cond<std::is_scalar<TBase>::value,     GeneratorInput_Scalar<T>>
+    >::type;
+
+}  // namespace Internal
+
+template <typename T> 
+class GeneratorInput : public Internal::GeneratorInputImplBase<T> {
+private:
+    using Super = Internal::GeneratorInputImplBase<T>;
+protected:
+    using TBase = typename Super::TBase;
+
+public:
+    GeneratorInput(const std::string &name, 
+                   const TBase &def = static_cast<TBase>(0))
+        : Super(name, def) {
+    }
+
+    GeneratorInput(const Internal::ArraySizeArg &array_size, const std::string &name, 
+                   const TBase &def = static_cast<TBase>(0))
+        : Super(array_size, name, def) {
+    }
+
+    GeneratorInput(const std::string &name, 
+                   const TBase &def, const TBase &min, const TBase &max)
+        : Super(name, def, min, max) {
+    }
+
+    GeneratorInput(const Internal::ArraySizeArg &array_size, const std::string &name, 
+                   const TBase &def, const TBase &min, const TBase &max)
+        : Super(array_size, name, def, min, max) {
+    }
+
+    GeneratorInput(const std::string &name, 
+                   const Internal::TypeArg &t, const Internal::DimensionArg &d)
+        : Super(name, t, d) {
+    }
+
+    GeneratorInput(const Internal::ArraySizeArg &array_size, const std::string &name, 
+                   const Internal::TypeArg &t, const Internal::DimensionArg &d)
+        : Super(array_size, name, t, d) {
+    }
+};
+
+namespace Internal {
+
+class GeneratorOutputBase : public GIOBase {
+protected:
+    GeneratorOutputBase(const ArraySizeArg &array_size, 
+                        const std::string &name, 
+                        const std::vector<TypeArg> &t, 
+                        const DimensionArg& d);
+
+    GeneratorOutputBase(const std::string &name, 
+                        const std::vector<TypeArg> &t, 
+                        const DimensionArg& d)
+      : GeneratorOutputBase(ArraySizeArg(1), name, t, d) {}
+
+    ~GeneratorOutputBase() override;
+
+    friend class GeneratorBase;
+
+    void init_internals();
+};
+
+template<typename T>
+class GeneratorOutputImpl : public GeneratorOutputBase {
+protected:
+    using TBase = typename std::remove_all_extents<T>::type;
+    using ValueType = Func;
+
+    bool is_array() const override {
+        return std::is_array<T>::value;
+    }
+
+    template <typename T2 = T, typename std::enable_if<
+        // Only allow T2 not-an-array
+        !std::is_array<T2>::value
+    >::type * = nullptr>
+    GeneratorOutputImpl(const std::string &name, const TypeArgVector &t, const DimensionArg &d)
+        : GeneratorOutputBase(name, t.v, d) {
+    }
+
+    template <typename T2 = T, typename std::enable_if<
+        // Only allow T2[kSomeConst]
+        std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)
+    >::type * = nullptr>
+    GeneratorOutputImpl(const std::string &name, const TypeArgVector &t, const DimensionArg &d)
+        : GeneratorOutputBase(ArraySizeArg(std::extent<T2, 0>::value), name, t.v, d) {
+    }
+
+    template <typename T2 = T, typename std::enable_if<
+        // Only allow T2[]
+        std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0
+    >::type * = nullptr>
+    GeneratorOutputImpl(const ArraySizeArg &array_size, const std::string &name, const TypeArgVector &t, const DimensionArg &d)
+        : GeneratorOutputBase(array_size, name, t.v, d) {
+    }
+
+public:
+    template <typename... Args, typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    FuncRef operator()(Args&&... args) const {
+        return get_values<ValueType>().at(0)(std::forward<Args>(args)...);
+    }
+
+    template <typename ExprOrVar, typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    FuncRef operator()(std::vector<ExprOrVar> args) const {
+        return get_values<ValueType>().at(0)(args);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    operator class Func() const { 
+        return get_values<ValueType>().at(0); 
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    size_t size() const {
+        return get_values<ValueType>().size();
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    ValueType operator[](size_t i) const {
+        return get_values<ValueType>()[i];
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    ValueType at(size_t i) const {
+        return get_values<ValueType>().at(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    typename std::vector<ValueType>::const_iterator begin() const {
+        return get_values<ValueType>().begin();
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    typename std::vector<ValueType>::const_iterator end() const {
+        return get_values<ValueType>().end();
+    }
+};
+
+template<typename T>
+class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
+private:
+    using Super = GeneratorOutputImpl<T>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+protected:
+    GeneratorOutput_Func(const std::string &name, const TypeArgVector &t, const DimensionArg &d)
+        : Super(name, t, d) {
+    }
+
+    GeneratorOutput_Func(const ArraySizeArg &array_size, const std::string &name, const TypeArgVector &t, const DimensionArg &d)
+        : Super(array_size, name, t, d) {
+    }
+};
+
+
+template<typename T>
+class GeneratorOutput_Arithmetic : public GeneratorOutputImpl<T> {
+private:
+    using Super = GeneratorOutputImpl<T>;
+protected:
+    using TBase = typename Super::TBase;
+
+protected:
+    explicit GeneratorOutput_Arithmetic(const std::string &name) 
+        : Super(name, {type_of<TBase>()}, 0) {
+    }
+
+    GeneratorOutput_Arithmetic(const ArraySizeArg &array_size, const std::string &name) 
+        : Super(array_size, name, {type_of<TBase>()}, 0) {
+    }
+};
+
+template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
+using GeneratorOutputImplBase =
+    typename select_type<
+        cond<std::is_same<TBase, Func>::value, GeneratorOutput_Func<T>>,
+        cond<std::is_arithmetic<TBase>::value, GeneratorOutput_Arithmetic<T>>
+    >::type;
+
+}  // namespace Internal
+
+template <typename T> 
+class GeneratorOutput : public Internal::GeneratorOutputImplBase<T> {
+private:
+    using Super = Internal::GeneratorOutputImplBase<T>;
+protected:
+    using TBase = typename Super::TBase;
+
+public:
+    explicit GeneratorOutput(const std::string &name) 
+        : Super(name) {
+    }
+
+    explicit GeneratorOutput(const char *name) 
+        : GeneratorOutput(std::string(name)) {
+    }
+
+    GeneratorOutput(const Internal::ArraySizeArg &array_size, const std::string &name) 
+        : Super(array_size, name) {
+    }
+
+    GeneratorOutput(const std::string &name, const Internal::TypeArgVector &t, const Internal::DimensionArg &d)
+        : Super(name, t, d) {
+    }
+
+    GeneratorOutput(const Internal::ArraySizeArg &array_size, const std::string &name, const Internal::TypeArgVector &t, const Internal::DimensionArg &d)
+        : Super(array_size, name, t, d) {
+    }
+};
+
 class NamesInterface {
     // Names in this class are only intended for use in derived classes.
 protected:
@@ -525,6 +1310,7 @@ protected:
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
+    template <typename T> using ScheduleParam = Halide::ScheduleParam<T>;
     template <typename T = void, int D = 4> using Image = Halide::Image<T, D>;
     template <typename T> using Param = Halide::Param<T>;
     static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
@@ -533,14 +1319,31 @@ protected:
     static inline Type UInt(int bits, int lanes = 1) { return Halide::UInt(bits, lanes); }
 };
 
+class GeneratorContext {
+public:
+    virtual Target get_target() const = 0;
+};
+
+class JITGeneratorContext : public GeneratorContext {
+public:
+    explicit JITGeneratorContext(const Target &t) : target(t) {}
+    Target get_target() const override { return target; }
+private:
+    const Target target;
+};
+
 namespace Internal {
 
-class GeneratorBase : public NamesInterface {
+class GeneratorStub;
+class SimpleGeneratorFactory;
+template <class T> class RegisterGeneratorAndStub;
+
+class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library;
+        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -550,14 +1353,17 @@ public:
         std::map<std::string, std::string> substitutions;
         EmitOptions()
             : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true) {}
+              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
 
-    Target get_target() const { return target; }
+    Target get_target() const override { return target; }
 
     EXPORT void set_generator_param_values(const std::map<std::string, std::string> &params);
+
+    EXPORT void set_schedule_param_values(const std::map<std::string, std::string> &params, 
+                                          const std::map<std::string, LoopLevel> &looplevel_params);
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -572,25 +1378,54 @@ public:
         return get_target().natural_vector_size<data_t>();
     }
 
+    EXPORT void emit_cpp_stub(const std::string &stub_file_path);
+
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
 
+    const GeneratorContext& context() const { return *this; }
+
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
     EXPORT virtual Pipeline build_pipeline() = 0;
+    EXPORT virtual void call_generate() = 0;
+    EXPORT virtual void call_schedule() = 0;
+
+    EXPORT void pre_build();
+    EXPORT void pre_generate();
+    EXPORT Pipeline produce_pipeline();
+
+    template<typename T>
+    using Input = GeneratorInput<T>;
+
+    template<typename T>
+    using Output = GeneratorOutput<T>;
+
+    bool build_pipeline_called{false};
+    bool generate_called{false};
+    bool schedule_called{false};
 
 private:
-    const size_t size;
+    friend class GeneratorStub;
+    friend class SimpleGeneratorFactory;
+    template<typename T> friend class RegisterGeneratorAndStub;
 
+    const size_t size;
+    std::vector<Internal::Parameter *> filter_params;
+    std::vector<Internal::GeneratorInputBase *> filter_inputs;
+    std::vector<Internal::GeneratorOutputBase *> filter_outputs;
     std::vector<Internal::GeneratorParamBase *> generator_params;
-    std::vector<Argument> filter_arguments;
     bool params_built{false};
     bool generator_params_set{false};
+    bool schedule_params_set{false};
+    bool inputs_set{false};
+    std::string cpp_stub_class_name;
 
     EXPORT void build_params(bool force = false);
+    EXPORT void init_inputs_and_outputs();
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
@@ -598,6 +1433,17 @@ private:
     void get_host_target();
     void get_jit_target_from_environment();
     void get_target_from_environment();
+
+    EXPORT Func get_first_output();
+    EXPORT Func get_output(const std::string &n);
+    EXPORT std::vector<Func> get_output_vector(const std::string &n);
+
+    void set_cpp_stub_class_name(const std::string &n) {
+        internal_assert(cpp_stub_class_name.empty());
+        cpp_stub_class_name = n;
+    }
+
+    EXPORT void set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
@@ -609,12 +1455,33 @@ public:
     virtual std::unique_ptr<GeneratorBase> create(const std::map<std::string, std::string> &params) const = 0;
 };
 
+typedef std::unique_ptr<Internal::GeneratorBase> (*GeneratorCreateFunc)();
+
+class SimpleGeneratorFactory : public GeneratorFactory {
+public:
+    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &cpp_stub_class_name) 
+        : create_func(create_func), cpp_stub_class_name(cpp_stub_class_name) {
+        internal_assert(create_func != nullptr);
+    }
+
+    std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) const override {
+        auto g = create_func();
+        internal_assert(g.get() != nullptr);
+        g->set_cpp_stub_class_name(cpp_stub_class_name);
+        g->set_generator_param_values(params);
+        return g;
+    }
+private:
+    const GeneratorCreateFunc create_func;
+    const std::string cpp_stub_class_name;
+};
+
 class GeneratorRegistry {
 public:
-    EXPORT static void register_factory(const std::string &name,
-                                        std::unique_ptr<GeneratorFactory> factory);
+    EXPORT static void register_factory(const std::string &name, std::unique_ptr<GeneratorFactory> factory);
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
+    EXPORT static std::string get_cpp_stub_class_name(const std::string &name);
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                         const std::map<std::string, std::string> &params);
 
@@ -640,30 +1507,275 @@ public:
     Generator() :
         Internal::GeneratorBase(sizeof(T),
                                 Internal::Introspection::get_introspection_helper<T>()) {}
+
+    static std::unique_ptr<Internal::GeneratorBase> create() {
+        return std::unique_ptr<Internal::GeneratorBase>(new T());
+    }
+
+private:
+
+    // Implementations for build_pipeline_impl(), specialized on whether we
+    // have build() or generate()/schedule() methods.
+
+    // std::is_member_function_pointer will fail if there is no member of that name,
+    // so we use a little SFINAE to detect if there is a method-shaped member named 'schedule'.
+    template<typename> 
+    struct type_sink { typedef void type; };
+    
+    template<typename T2, typename = void> 
+    struct has_schedule_method : std::false_type {}; 
+    
+    template<typename T2> 
+    struct has_schedule_method<T2, typename type_sink<decltype(std::declval<T2>().schedule())>::type> : std::true_type {};
+
+    template <typename T2 = T,
+              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::build)>::value>::type * = nullptr>
+    Pipeline build_pipeline_impl() {
+        internal_assert(!build_pipeline_called);
+        static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
+        pre_build();
+        Pipeline p = ((T *)this)->build();
+        build_pipeline_called = true;
+        return p;
+    }
+    template <typename T2 = T,
+              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::generate)>::value>::type * = nullptr>
+    Pipeline build_pipeline_impl() {
+        internal_assert(!build_pipeline_called);
+        ((T *)this)->call_generate_impl();
+        ((T *)this)->call_schedule_impl();
+        build_pipeline_called = true;
+        return produce_pipeline();
+    }
+
+    // Implementations for call_generate_impl(), specialized on whether we
+    // have build() or generate()/schedule() methods.
+
+    template <typename T2 = T,
+              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::build)>::value>::type * = nullptr>
+    void call_generate_impl() {
+        user_error << "Unimplemented";
+    }
+
+    template <typename T2 = T,
+              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::generate)>::value>::type * = nullptr>
+    void call_generate_impl() {
+        user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
+        typedef typename std::result_of<decltype(&T::generate)(T)>::type GenerateRetType;
+        static_assert(std::is_void<GenerateRetType>::value, "generate() must return void");
+        pre_generate();
+        ((T *)this)->generate();
+        generate_called = true;
+    }
+
+    // Implementations for call_schedule_impl(), specialized on whether we
+    // have build() or generate()/schedule() methods.
+
+    template <typename T2 = T,
+              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::build)>::value>::type * = nullptr>
+    void call_schedule_impl() {
+        user_error << "Unimplemented";
+    }
+
+    template <typename T2 = T,
+              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::schedule)>::value>::type * = nullptr>
+    void call_schedule_impl() {
+        user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
+        user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
+        typedef typename std::result_of<decltype(&T::schedule)(T)>::type ScheduleRetType;
+        static_assert(std::is_void<ScheduleRetType>::value, "schedule() must return void");
+        ((T *)this)->schedule();
+        schedule_called = true;
+    }
+
 protected:
     Pipeline build_pipeline() override {
-        return ((T *)this)->build();
+        return build_pipeline_impl();
+    }
+
+    void call_generate() override {
+        call_generate_impl();
+    }
+
+    void call_schedule() override {
+        call_schedule_impl();
+    }
+private:
+    friend class Internal::SimpleGeneratorFactory;
+
+    Generator(const Generator &) = delete;
+    void operator=(const Generator &) = delete;
+};
+
+namespace Internal {
+
+template <class StubClass> 
+class RegisterGeneratorAndStub {
+private:
+    static GeneratorCreateFunc init_create_func(GeneratorCreateFunc f) {
+        // This is initialized on the first call; subsequent code flows return existing value
+        static GeneratorCreateFunc create_func_storage = f;
+        return create_func_storage;
+    }
+
+    static const char *init_cpp_stub_class_name(const char *n) {
+        // This is initialized on the first call; subsequent code flows return existing value
+        static const char *init_cpp_stub_class_name_storage = n;
+        return init_cpp_stub_class_name_storage;
+    }
+
+public:
+    static std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) {
+        GeneratorCreateFunc f = init_create_func(nullptr);
+        user_assert(f != nullptr) << "RegisterGeneratorAndStub was not initialized; this is probably a wrong value for cpp_stub_class_name.\n";
+        auto g = f();
+        g->set_cpp_stub_class_name(init_cpp_stub_class_name(nullptr));
+        g->set_generator_param_values(params);
+        return g;
+    }
+
+    RegisterGeneratorAndStub(GeneratorCreateFunc create_func, const char *registry_name, const char *cpp_stub_class_name) {
+        (void) init_create_func(create_func);
+        (void) init_cpp_stub_class_name(cpp_stub_class_name);
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(create_func, cpp_stub_class_name));
+        Internal::GeneratorRegistry::register_factory(registry_name, std::move(f));
     }
 };
 
-template <class T> class RegisterGenerator {
-private:
-    class TFactory : public Internal::GeneratorFactory {
-    public:
-        std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) const override {
-            std::unique_ptr<Internal::GeneratorBase> g(new T());
-            g->set_generator_param_values(params);
-            return g;
-        }
-    };
+}  // namespace Internal
 
+template <class GeneratorClass> class RegisterGenerator {
 public:
-    RegisterGenerator(const std::string &name) {
-        std::unique_ptr<Internal::GeneratorFactory> f(new TFactory());
+    RegisterGenerator(const char* name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, ""));
         Internal::GeneratorRegistry::register_factory(name, std::move(f));
     }
 };
 
+namespace Internal {
+
+class GeneratorStub {
+public:
+    // default ctor
+    GeneratorStub() {}
+
+    // move constructor
+    GeneratorStub(GeneratorStub&& that) : generator(std::move(that.generator)) {}
+
+    // move assignment operator
+    GeneratorStub& operator=(GeneratorStub&& that) {
+        generator = std::move(that.generator);
+        return *this;
+    }
+
+    Target get_target() const { return generator->get_target(); }
+
+    // schedule method
+    void schedule(const std::map<std::string, std::string> &schedule_params,
+                  const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
+        generator->set_schedule_param_values(schedule_params, schedule_params_looplevels);
+        generator->call_schedule();
+    }
+
+    // Overloads for first output
+    operator Func() const { 
+        return get_first_output(); 
+    }
+    
+    template <typename... Args> 
+    FuncRef operator()(Args&&... args) const { 
+        return get_first_output()(std::forward<Args>(args)...); 
+    }
+
+    template <typename ExprOrVar> 
+    FuncRef operator()(std::vector<ExprOrVar> args) const { 
+        return get_first_output()(args); 
+    }
+
+    Realization realize(std::vector<int32_t> sizes) { 
+        check_scheduled("realize");
+        return get_first_output().realize(sizes, get_target()); 
+    }
+    
+    template <typename... Args> 
+    Realization realize(Args&&... args) { 
+        check_scheduled("realize");
+        return get_first_output().realize(std::forward<Args>(args)..., get_target()); 
+    }
+
+    template<typename Dst> 
+    void realize(Dst dst) { 
+        check_scheduled("realize");
+        get_first_output().realize(dst, get_target()); 
+    }
+
+    virtual ~GeneratorStub() {}
+
+protected:
+    typedef std::function<std::unique_ptr<GeneratorBase>(const std::map<std::string, std::string>&)> GeneratorFactory;
+
+    template <typename... Args>
+    GeneratorStub(const GeneratorContext &context,
+            GeneratorFactory generator_factory,
+            const std::map<std::string, std::string> &generator_params,
+            const std::vector<std::vector<Internal::FuncOrExpr>> &inputs) {
+        generator = generator_factory(generator_params);
+        generator->target.set(context.get_target());
+        generator->set_inputs(inputs);
+        generator->call_generate();
+    }
+
+    // Output(s)
+    // TODO: identify vars used
+    Func get_output(const std::string &n) { 
+        return generator->get_output(n); 
+    }
+
+    std::vector<Func> get_output_vector(const std::string &n) { 
+        return generator->get_output_vector(n); 
+    }
+
+    bool has_generator() const { 
+        return generator != nullptr; 
+    }
+
+    template<typename Ratio>
+    static double ratio_to_double() {
+        return (double)Ratio::num / (double)Ratio::den;
+    }
+
+private:
+    std::shared_ptr<GeneratorBase> generator;
+
+    Func get_first_output() const { 
+        return generator->get_first_output(); 
+    }
+    void check_scheduled(const char* m) const { 
+        user_assert(generator->schedule_called) << "Must call schedule() before calling " << m << "()"; 
+    }
+
+    explicit GeneratorStub(const GeneratorStub &) = delete;
+    void operator=(const GeneratorStub &) = delete;
+};
+
+}  // namespace Internal
+
+
 }  // namespace Halide
+
+// Use a little variadic macro hacking to allow two or three arguments.
+// This is suboptimal, but allows us more flexibility to mutate registration in
+// the future with less impact on existing code.
+#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
+    Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); 
+
+#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    Halide::Internal::RegisterGeneratorAndStub<::FULLY_QUALIFIED_STUB_NAME>(GEN_CLASS_NAME::create, GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); 
+
+#define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
+
+#define HALIDE_REGISTER_GENERATOR(...) \
+    _HALIDE_REGISTER_GENERATOR_CHOOSER(__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2)(__VA_ARGS__)
+
 
 #endif  // HALIDE_GENERATOR_H_
