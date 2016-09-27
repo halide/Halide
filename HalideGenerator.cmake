@@ -20,24 +20,6 @@ function(halide_generator_get_exec_path TARGET OUTVAR)
   endif()
 endfunction()
 
-function(halide_generator_add_exec_generator_target EXEC_TARGET)
-  set(options )
-  set(oneValueArgs GENERATOR_TARGET GENFILES_DIR)
-  set(multiValueArgs OUTPUTS GENERATOR_ARGS)
-  cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-  halide_generator_get_exec_path(${args_GENERATOR_TARGET} EXEC_PATH)
-
-  add_custom_command(
-    OUTPUT "${args_OUTPUTS}"
-    DEPENDS "${GENERATOR_TARGET}"
-    COMMAND "${EXEC_PATH}" ${args_GENERATOR_ARGS}
-    WORKING_DIRECTORY "${GENFILES_DIR}"
-  )
-  set(EXEC_GENERATOR_TARGET "${AOT_LIBRARY_TARGET}.exec_generator")
-  add_custom_target(${EXEC_TARGET} DEPENDS "${args_DEPENDS}")
-  set_target_properties(${EXEC_TARGET} PROPERTIES FOLDER "generator")
-endfunction()
 
 # This function adds custom build steps to invoke a Halide generator exectuable
 # and produce a static library containing the generated code.
@@ -97,13 +79,26 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   # GENERATOR_ARGS always come last
   list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
 
-  halide_generator_add_exec_generator_target(
-    "${AOT_LIBRARY_TARGET}.exec_generator"
-    GENERATOR_TARGET ${args_GENERATOR_TARGET} 
-    GENFILES_DIR     ${GENFILES_DIR}
-    OUTPUTS          "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}"
-    EXEC_ARGS        "${GENERATOR_ARGS}"
+  halide_generator_get_exec_path(${args_GENERATOR_TARGET} GENERATOR_EXEC_PATH)
+
+  # Add a custom target to invoke the GENERATOR_TARGET and output the Halide
+  # generated library.
+  add_custom_command(
+    OUTPUT "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}"
+    DEPENDS "${args_GENERATOR_TARGET}"
+    COMMAND "${GENERATOR_EXEC_PATH}" ${GENERATOR_EXEC_ARGS}
+    WORKING_DIRECTORY "${GENFILES_DIR}"
   )
+
+  # Use a custom target to force it to run the generator before the
+  # object file for the runner. 
+  set(EXEC_GENERATOR_TARGET "${AOT_LIBRARY_TARGET}.exec_generator")
+  add_custom_target(${EXEC_GENERATOR_TARGET}
+                    DEPENDS "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}")
+
+  # Place the target in a special folder in IDEs
+  set_target_properties(${EXEC_GENERATOR_TARGET} PROPERTIES FOLDER "generator")
+
 endfunction(halide_add_aot_library)
 
 # Usage:
@@ -111,9 +106,11 @@ endfunction(halide_add_aot_library)
 function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
     halide_generator_genfiles_dir(${AOT_LIBRARY_TARGET} GENFILES_DIR)
   
-    add_dependencies("${TARGET}" "${AOT_LIBRARY_TARGET}.exec_generator")
-
     set(FILTER_LIB "${AOT_LIBRARY_TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+
+    set(EXEC_GENERATOR_TARGET "${AOT_LIBRARY_TARGET}.exec_generator")
+    add_dependencies("${TARGET}" "${EXEC_GENERATOR_TARGET}")
+
     target_link_libraries("${TARGET}" PRIVATE "${GENFILES_DIR}/${FILTER_LIB}")
     target_include_directories("${TARGET}" PRIVATE "${GENFILES_DIR}")
 
@@ -127,6 +124,7 @@ function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
     else()
       target_link_libraries("${TARGET}" PRIVATE dl pthread z)
     endif()
+
 endfunction(halide_add_aot_library_dependency)
 
 function(halide_add_generator NAME)
