@@ -284,7 +284,14 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 }
                 return gen->build_module(name);
             };
-        compile_multitarget(function_name, output_files, targets, module_producer, emit_options.substitutions);
+        if (targets.size() > 1 || !emit_options.substitutions.empty()) {
+            compile_multitarget(function_name, output_files, targets, module_producer, emit_options.substitutions);
+        } else {
+            user_assert(emit_options.substitutions.empty()) << "substitutions not supported for single-target";
+            // compile_multitarget() will fail if we request anything but library and/or header,
+            // so defer directly to Module::compile if there is a single target.
+            module_producer(function_name, targets[0]).compile(output_files);
+        }
     }
 
     return 0;
