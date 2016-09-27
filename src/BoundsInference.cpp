@@ -515,11 +515,9 @@ public:
                     lets.push_back(make_pair(query_name, query_buf));
                     Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
-                    if (!args[j].is_image_param()) {
-                        // Do not annotate ImageParams: the buffer_t itself should be filled by the caller;
-                        // if we mark it here, we might mask a missed initialization.
-                        buffers_to_annotate.push_back(bounds_inference_args.back());
-                    }
+                    // Although we expect ImageParams to be properly initialized and sanitized by the caller,
+                    // we create a copy with copy_buffer_t (not msan-aware), so we need to annotate it as initialized.
+                    buffers_to_annotate.push_back(bounds_inference_args.back());
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
                 }
@@ -578,7 +576,7 @@ public:
             Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
             check = LetStmt::make(result_name, e, check);
-    
+
             if (annotate.defined()) {
                 check = Block::make(annotate, check);
             }
@@ -624,7 +622,7 @@ public:
 
     BoundsInference(const vector<Function> &f,
                     const vector<Function> &outputs,
-                    const FuncValueBounds &fb, 
+                    const FuncValueBounds &fb,
                     const Target &target) :
         funcs(f), func_bounds(fb), target(target) {
         internal_assert(!f.empty());
