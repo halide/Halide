@@ -6,6 +6,21 @@ function(halide_generator_genfiles_dir NAME OUTVAR)
   set(${OUTVAR} "${GENFILES_DIR}" PARENT_SCOPE)
 endfunction()
 
+function(halide_generator_get_exec_path TARGET OUTVAR)
+  if(MSVC)
+    # In MSVC, the generator executable will be placed in a configuration specific
+    # directory specified by ${CMAKE_CFG_INTDIR}.
+    set(${OUTVAR} "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${TARGET}${CMAKE_EXECUTABLE_SUFFIX}" PARENT_SCOPE)
+  elseif(XCODE)
+    # In Xcode, the generator executable will be placed in a configuration specific
+    # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom build script.
+    set(${OUTVAR} "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${TARGET}${CMAKE_EXECUTABLE_SUFFIX}" PARENT_SCOPE)
+  else()
+    set(${OUTVAR} "${CMAKE_BINARY_DIR}/bin/${TARGET}${CMAKE_EXECUTABLE_SUFFIX}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+
 # This function adds custom build steps to invoke a Halide generator exectuable
 # and produce a static library containing the generated code.
 #
@@ -51,37 +66,27 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   set(FILTER_LIB "${AOT_LIBRARY_TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${AOT_LIBRARY_TARGET}.h")
 
-  set(generator_exec_args "-o" "${GENFILES_DIR}")
+  set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
   if (NOT ${args_GENERATED_FUNCTION} STREQUAL "")
-    list(APPEND generator_exec_args "-f" "${args_GENERATED_FUNCTION}" )
+    list(APPEND GENERATOR_EXEC_ARGS "-f" "${args_GENERATED_FUNCTION}" )
   endif()
   if (NOT ${args_GENERATOR_NAME} STREQUAL "")
-    list(APPEND generator_exec_args "-g" "${args_GENERATOR_NAME}")
+    list(APPEND GENERATOR_EXEC_ARGS "-g" "${args_GENERATOR_NAME}")
   endif()
   if (NOT ${args_GENERATOR_OUTPUTS} STREQUAL "")
-    list(APPEND generator_exec_args "-e" ${args_GENERATOR_OUTPUTS})
+    list(APPEND GENERATOR_EXEC_ARGS "-e" ${args_GENERATOR_OUTPUTS})
   endif()
   # GENERATOR_ARGS always come last
-  list(APPEND generator_exec_args ${args_GENERATOR_ARGS})
+  list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
 
-  if(MSVC)
-    # In MSVC, the generator executable will be placed in a configuration specific
-    # directory specified by ${CMAKE_CFG_INTDIR}.
-    set(generator_exec "${CMAKE_BINARY_DIR}/bin/${CMAKE_CFG_INTDIR}/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
-  elseif(XCODE)
-    # In Xcode, the generator executable will be placed in a configuration specific
-    # directory, so the Xcode variable $(CONFIGURATION) is passed in the custom build script.
-    set(generator_exec "${CMAKE_BINARY_DIR}/bin/$(CONFIGURATION)/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
-  else()
-    set(generator_exec "${CMAKE_BINARY_DIR}/bin/${args_GENERATOR_TARGET}${CMAKE_EXECUTABLE_SUFFIX}")
-  endif()
+  halide_generator_get_exec_path(${args_GENERATOR_TARGET} GENERATOR_EXEC_PATH)
 
   # Add a custom target to invoke the GENERATOR_TARGET and output the Halide
   # generated library.
   add_custom_command(
     OUTPUT "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}"
     DEPENDS "${args_GENERATOR_TARGET}"
-    COMMAND "${generator_exec}" ${generator_exec_args}
+    COMMAND "${GENERATOR_EXEC_PATH}" ${GENERATOR_EXEC_ARGS}
     WORKING_DIRECTORY "${GENFILES_DIR}"
   )
 
