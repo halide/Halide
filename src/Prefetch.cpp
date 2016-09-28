@@ -179,7 +179,7 @@ private:
         // Create a buffer_t object for this prefetch.
         vector<Expr> args(dims*3 + 2);
 
-        Expr first_elem = Load::make(t, varname, 0, Buffer(), Parameter());
+        Expr first_elem = Load::make(t, varname, 0, BufferPtr(), Parameter());
         args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
         args[1] = make_zero(t);
         for (int i = 0; i < dims; i++) {
