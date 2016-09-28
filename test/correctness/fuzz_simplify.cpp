@@ -22,7 +22,8 @@ std::string fuzz_var(int i) {
 }
 
 Expr random_var() {
-    return Variable::make(Int(0), fuzz_var(rng()%fuzz_var_count));
+    int fuzz_count = rng()%fuzz_var_count;
+    return Variable::make(Int(0), fuzz_var(fuzz_count));
 }
 
 Type random_type(int width) {
@@ -40,7 +41,8 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
     if (T.is_scalar()) {
         int var = rng()%fuzz_var_count + 1;
         if (!imm_only && var < fuzz_var_count) {
-            return cast(T, random_var());
+            auto v1 = random_var();
+            return cast(T, v1);
         } else {
             if (overflow_undef) {
                 // For Int(32), we don't care about correctness during
@@ -53,11 +55,12 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
         }
     } else {
         if (rng() % 2 == 0) {
-            return Ramp::make(random_leaf(T.element_of(), overflow_undef),
-                              random_leaf(T.element_of(), overflow_undef),
-                              T.lanes());
+            auto e1 = random_leaf(T.element_of(), overflow_undef);
+            auto e2 = random_leaf(T.element_of(), overflow_undef);
+            return Ramp::make(e1, e2, T.lanes());
         } else {
-            return Broadcast::make(random_leaf(T.element_of(), overflow_undef), T.lanes());
+            auto e1 = random_leaf(T.element_of(), overflow_undef);
+            return Broadcast::make(e1, T.lanes());
         }
     }
 }
@@ -118,27 +121,30 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     int op = rng() % op_count;
     switch(op) {
     case 0: return random_leaf(T);
-    case 1: return Select::make(random_condition(T, depth, true),
-                                random_expr(T, depth, overflow_undef),
-                                random_expr(T, depth, overflow_undef));
-
+    case 1: {
+        auto c = random_condition(T, depth, true);
+        auto e1 = random_expr(T, depth, overflow_undef);
+        auto e2 = random_expr(T, depth, overflow_undef);
+        return Select::make(c, e1, e2);
+    }
     case 2:
         if (T.lanes() != 1) {
-            return Broadcast::make(random_expr(T.element_of(), depth, overflow_undef),
-                                   T.lanes());
+            auto e1 = random_expr(T.element_of(), depth, overflow_undef);
+            return Broadcast::make(e1, T.lanes());
         }
         break;
     case 3:
         if (T.lanes() != 1) {
-            return Ramp::make(random_expr(T.element_of(), depth, overflow_undef),
-                              random_expr(T.element_of(), depth, overflow_undef),
-                              T.lanes());
+            auto e1 = random_expr(T.element_of(), depth, overflow_undef);
+            auto e2 = random_expr(T.element_of(), depth, overflow_undef);
+            return Ramp::make(e1, e2, T.lanes());
         }
         break;
 
     case 4:
         if (T.is_bool()) {
-            return Not::make(random_expr(T, depth));
+            auto e1 = random_expr(T, depth);
+            return Not::make(e1);
         }
         break;
 
@@ -156,7 +162,8 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         do {
             subT = random_type(T.lanes());
         } while (subT == T || (subT.is_int() && subT.bits() == 32));
-        return Cast::make(T, random_expr(subT, depth, overflow_undef));
+        auto e1 = random_expr(subT, depth, overflow_undef);
+        return Cast::make(T, e1);
     }
 
     default:
