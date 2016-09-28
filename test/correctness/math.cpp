@@ -63,7 +63,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                           \
         ImageParam input(type_of<type>(), 1);                                 \
         test_##name(x) = name(input(x));                                      \
-        Buffer in_buffer(type_of<type>(), in_buf);                            \
+        Image<type> in_buffer(*in_buf);                                       \
         input.set(in_buffer);                                                 \
         if (target.has_gpu_feature()) {                                       \
             test_##name.gpu_tile(x, 8);                                       \
@@ -91,7 +91,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                                 \
         ImageParam input(type_of<type>(), 2);                                       \
         test_##name(x) = name(input(0, x), input(1, x));                            \
-        Buffer in_buffer(type_of<type>(), in_buf);                                  \
+        Image<type> in_buffer(*in_buf);                                             \
         input.set(in_buffer);                                                       \
         if (target.has_gpu_feature()) {                                             \
             test_##name.gpu_tile(x, 8);                                             \

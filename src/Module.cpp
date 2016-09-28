@@ -82,7 +82,7 @@ struct ModuleContents {
     mutable RefCount ref_count;
     std::string name;
     Target target;
-    std::vector<Buffer> buffers;
+    std::vector<Internal::BufferPtr> buffers;
     std::vector<Internal::LoweredFunc> functions;
 };
 
@@ -124,7 +124,7 @@ const std::string &Module::name() const {
     return contents->name;
 }
 
-const std::vector<Buffer> &Module::buffers() const {
+const std::vector<Internal::BufferPtr> &Module::buffers() const {
     return contents->buffers;
 }
 
@@ -132,7 +132,7 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
-void Module::append(const Buffer &buffer) {
+void Module::append(const Internal::BufferPtr &buffer) {
     contents->buffers.push_back(buffer);
 }
 
@@ -267,7 +267,8 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
 void compile_multitarget(const std::string &fn_name,
                          const Outputs &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer) {
+                         ModuleProducer module_producer,
+                         const std::map<std::string, std::string> &suffixes) {
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
 
@@ -310,6 +311,7 @@ void compile_multitarget(const std::string &fn_name,
             Target::CPlusPlusMangling,
             Target::JIT,
             Target::Matlab,
+            Target::MSAN,
             Target::NoRuntime,
             Target::UserContext,
         }};
@@ -320,8 +322,14 @@ void compile_multitarget(const std::string &fn_name,
             }
         }
 
-        // Each sub-target has a function name that is the 'real' name plus the target string.
-        auto suffix = "_" + replace_all(target.to_string(), "-", "_");
+        // Each sub-target has a function name that is the 'real' name plus a suffix
+        // (which defaults to the target string but can be customized via the suffixes map)
+        std::string suffix = replace_all(target.to_string(), "-", "_");
+        auto it = suffixes.find(suffix);
+        if (it != suffixes.end()) {
+          suffix = it->second;
+        }
+        suffix = "_" + suffix;
         std::string sub_fn_name = fn_name + suffix;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.

@@ -229,7 +229,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
+Expr Load::make(Type type, std::string name, Expr index, BufferPtr image, Parameter param) {
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
 
@@ -495,7 +495,7 @@ Stmt Evaluate::make(Expr v) {
 
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                 IntrusivePtr<FunctionContents> func, int value_index,
-                Buffer image, Parameter param) {
+                BufferPtr image, Parameter param) {
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of undefined\n";
     }
@@ -525,7 +525,7 @@ Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, Call
     return node;
 }
 
-Expr Variable::make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain) {
+Expr Variable::make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;

@@ -29,6 +29,7 @@ void check_constant_exterior(const Image<T> &input, T exterior, Func f,
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -51,6 +52,7 @@ void check_repeat_edge(const Image<T> &input, Func f,
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -71,6 +73,7 @@ void check_repeat_image(const Image<T> &input, Func f,
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -95,6 +98,7 @@ void check_mirror_image(const Image<T> &input, Func f,
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -123,6 +127,7 @@ void check_mirror_interior(const Image<T> &input, Func f,
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -145,10 +150,9 @@ int main(int argc, char **argv) {
     const int W = 32;
     const int H = 32;
     Image<uint8_t> input(W, H);
-
     for (int32_t y = 0; y < H; y++) {
         for (int32_t x = 0; x < W; x++) {
-          input(x, y) = x + y * W;
+            input(x, y) = x + y * W;
         }
     }
 

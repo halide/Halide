@@ -22,7 +22,7 @@
 
 #include "HalideRuntime.h"
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 namespace Halide {
 namespace Tools {

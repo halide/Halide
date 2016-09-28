@@ -14,7 +14,7 @@ int test_lut1d() {
     Var y("y");
     Var c("c");
 
-    Image<uint8_t> input(8, 8, 3, "input");
+    Image<uint8_t> input(8, 8, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             float v = (1.0f / 16.0f) + (float)x / 8.0f;
@@ -37,7 +37,7 @@ int test_lut1d() {
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
 
-    Image<float> out0(8, 8, 3, "out");
+    Image<float> out0(8, 8, 3);
     f0.realize(out0);
 
     out0.copy_to_host();

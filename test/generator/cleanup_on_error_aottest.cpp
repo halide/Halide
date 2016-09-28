@@ -1,5 +1,5 @@
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 // Grab the internal device_interface functions
 #define WEAK
@@ -10,13 +10,13 @@
 
 #include "cleanup_on_error.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int size = 64;
 
 int successful_mallocs = 0, failed_mallocs = 0, frees = 0, errors = 0, device_mallocs = 0, device_frees = 0;
 
- void *my_halide_malloc(void *user_context, size_t x) {
+void *my_halide_malloc(void *user_context, size_t x) {
     // Only the first malloc succeeds
     if (successful_mallocs) {
         failed_mallocs++;

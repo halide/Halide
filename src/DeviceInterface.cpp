@@ -7,6 +7,21 @@
 #include "runtime/HalideRuntimeOpenGL.h"
 #include "runtime/HalideRuntimeOpenGLCompute.h"
 
+#ifdef _MSC_VER
+// We want to export the functions below from Halide.dll, but we can't
+// use conventional EXPORT qualifiers because these are all declared
+// in HalideRuntime.h without them. Instead we use a pragma that adds
+// a linker flag. Because the pragma is in a macro, we use __pragma
+// instead of #pragma
+#ifdef _WIN64
+#define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:" #n))  
+#else
+#define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:_" #n)) 
+#endif
+#else
+#define EXPORT_SYM(n)
+#endif
+
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -44,14 +59,16 @@ void halide_device_release(void *user_context, const halide_device_interface *de
         (*fn)(user_context, device_interface);
     }
 }
+EXPORT_SYM(halide_device_release)
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
 int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
     user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_copy_to_host\n";
     // Skip if there is no device buffer.
-    if (buf->dev == 0)
+    if (buf->dev == 0) {
         return 0;
+    }
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
     if (lookup_runtime_routine("halide_copy_to_host", target, fn)) {
@@ -59,6 +76,7 @@ int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
     }
     return -1;
 }
+EXPORT_SYM(halide_copy_to_host)
 
 /** Copy image data from host memory to device memory. This should not
  * be called directly; Halide handles copying to the device
@@ -67,15 +85,16 @@ int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
  * used. Otherwise if the dev field is 0 and interface is nullptr, an
  * error is returned. */
 int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                          const halide_device_interface *device_interface) {
+                                 const halide_device_interface *device_interface) {
     user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_copy_to_device", target, fn)) {
-      return (*fn)(user_context, buf, device_interface);
+        return (*fn)(user_context, buf, device_interface);
     }
     return -1;
 }
+EXPORT_SYM(halide_copy_to_device)
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
@@ -84,10 +103,11 @@ int halide_device_sync(void *user_context, struct buffer_t *buf) {
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf);
     if (lookup_runtime_routine("halide_device_sync", target, fn)) {
-      return (*fn)(user_context, buf);
+        return (*fn)(user_context, buf);
     }
     return -1;
 }
+EXPORT_SYM(halide_device_sync)
 
 /** Allocate device memory to back a buffer_t. */
 int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface) {
@@ -95,10 +115,11 @@ int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface *device_interface);
     if (lookup_runtime_routine("halide_device_malloc", target, fn)) {
-      return (*fn)(user_context, buf, device_interface);
+        return (*fn)(user_context, buf, device_interface);
     }
     return -1;
 }
+EXPORT_SYM(halide_device_malloc)
 
 int halide_device_free(void *user_context, struct buffer_t *buf) {
     user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_device_free\n";
@@ -117,6 +138,7 @@ int halide_device_free(void *user_context, struct buffer_t *buf) {
         return 0;
     }
 }
+EXPORT_SYM(halide_device_free)
 
 const struct halide_device_interface *halide_cuda_device_interface() {
     Target target(get_host_target());
@@ -127,6 +149,7 @@ const struct halide_device_interface *halide_cuda_device_interface() {
     }
     return nullptr;
 }
+EXPORT_SYM(halide_cuda_device_interface)
 
 const struct halide_device_interface *halide_opencl_device_interface() {
     Target target(get_host_target());
@@ -137,6 +160,7 @@ const struct halide_device_interface *halide_opencl_device_interface() {
     }
     return nullptr;
 }
+EXPORT_SYM(halide_opencl_device_interface)
 
 const struct halide_device_interface *halide_opengl_device_interface() {
     Target target(get_host_target());
@@ -147,6 +171,7 @@ const struct halide_device_interface *halide_opengl_device_interface() {
     }
     return nullptr;
 }
+EXPORT_SYM(halide_opengl_device_interface)
 
 int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t tex) {
     Target target(get_host_target());
@@ -157,6 +182,7 @@ int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr
     }
     return 0;
 }
+EXPORT_SYM(halide_opengl_wrap_texture)
 
 uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf) {
     Target target(get_host_target());
@@ -167,7 +193,7 @@ uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf)
     }
     return 0;
 }
-
+EXPORT_SYM(halide_opengl_detach_texture)
 
 const struct halide_device_interface *halide_openglcompute_device_interface() {
     Target target(get_host_target());
@@ -178,6 +204,7 @@ const struct halide_device_interface *halide_openglcompute_device_interface() {
     }
     return nullptr;
 }
+EXPORT_SYM(halide_openglcompute_device_interface)
 
 const struct halide_device_interface *halide_renderscript_device_interface() {
     Target target(get_host_target());
@@ -188,6 +215,7 @@ const struct halide_device_interface *halide_renderscript_device_interface() {
     }
     return nullptr;
 }
+EXPORT_SYM(halide_renderscript_device_interface)
 
 const struct halide_device_interface *halide_metal_device_interface() {
     Target target(get_host_target());
@@ -198,5 +226,6 @@ const struct halide_device_interface *halide_metal_device_interface() {
     }
     return nullptr;
 }
+EXPORT_SYM(halide_metal_device_interface)
 
 }

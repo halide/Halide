@@ -166,8 +166,8 @@ void check(string op, int vector_width, Expr e) {
 
     bool can_run_the_code = can_run_code();
     if (can_run_the_code) {
-        Realization r = error.realize(0, target.without_feature(Target::NoRuntime));
-        double e = Image<double>(r[0])(0);
+        Realization r = error.realize(target.without_feature(Target::NoRuntime));
+        double e = Image<double>(r[0])();
         // Use a very loose tolerance for floating point tests. The
         // kinds of bugs we're looking for are codegen bugs that
         // return the wrong value entirely, not floating point
@@ -1874,7 +1874,7 @@ int main(int argc, char **argv) {
     if (can_run_code()) {
         for (ImageParam p : image_params) {
             // Make a buffer filled with noise to use as a sample input.
-            Buffer b(p.type(), {W*4+H, H});
+            Image<> b(p.type(), {W*4+H, H});
             Expr r;
             if (p.type().is_float()) {
                 r = cast(p.type(), random_float() * 1024 - 512);

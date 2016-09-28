@@ -2,6 +2,7 @@
 
 #include "FastIntegerDivide.h"
 #include "IntegerDivisionTable.h"
+#include "IROperator.h"
 
 namespace Halide {
 
