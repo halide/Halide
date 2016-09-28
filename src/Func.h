@@ -229,7 +229,7 @@ public:
     EXPORT Stage &allow_race_conditions();
 
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
-    EXPORT Stage &prefetch(VarOrRVar var, Expr offset);
+    EXPORT Stage &prefetch(VarOrRVar var, Expr offset = 1);
     // @}
 };
 
@@ -1451,9 +1451,9 @@ public:
     EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
 
     /** Prefetch data for a given loop and an optionally specified offset.
-     * All data read by this loop will be prefetched 'offset' iterations
-     * ahead.  The prefetch scheduling directive is intended for L2
-     * prefetching in outer loops, not inner vectorized loops. */
+     * All data read by this loop will be prefetched 'offset' iterations ahead.
+     * The prefetch scheduling directive is intended for L2 prefetching in
+     * outer loops, not inner vectorized loops. */
     EXPORT Func &prefetch(VarOrRVar var, Expr offset = 1); 
 
     /** Specify how the storage for the function is laid out. These
