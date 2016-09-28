@@ -1098,7 +1098,6 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         }
     }
 
-#if 0
     for (const Definition &def : definitions) {
         const Schedule &s = def.schedule();
         for (const Dim &d : s.dims()) {
@@ -1110,7 +1109,6 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             }
         }
     }
-#endif
 
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
