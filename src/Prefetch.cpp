@@ -22,25 +22,25 @@ using std::vector;
 using std::stack;
 using std::pair;
 
-// Prefetch debug levels
-int dbg_prefetch1 = 1;
-int dbg_prefetch2 = 2;
-int dbg_prefetch3 = 3;
-int dbg_prefetch4 = 4;
-int dbg_prefetch5 = 5;
-
-#define MIN(x,y)        (((x)<(y)) ? (x) : (y))
-#define MAX(x,y)        (((x)>(y)) ? (x) : (y))
-
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e)
-        : env(e) { }
+    InjectPrefetch(const map<string, Function> &e, int dbg1, int dbg2, int dbg3, int dbg4, int dbg5)
+        : env(e),
+          dbg_prefetch1(dbg1), dbg_prefetch2(dbg2), dbg_prefetch3(dbg3),
+          dbg_prefetch4(dbg4), dbg_prefetch5(dbg5) { }
+
 private:
     const map<string, Function> &env;   // Environment
     Scope<Interval> scope;              // Interval scope
     Scope<int> rscope;                  // Realize scope
     unsigned long ptmp = 0;             // ID for all tmp vars in a prefetch op
+
+    // Prefetch debug levels
+    int dbg_prefetch1;
+    int dbg_prefetch2;
+    int dbg_prefetch3;
+    int dbg_prefetch4;
+    int dbg_prefetch5;
 
 private:
     using IRMutator::visit;
@@ -327,19 +327,21 @@ private:
 
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
 {
+    int dbg1 = 1, dbg2 = 2, dbg3 = 3, dbg4 = 4, dbg5 = 5;
+
     size_t read;
     std::string lvl = get_env_variable("HL_DEBUG_PREFETCH", read);
     if (read) {
         int dbg_level = atoi(lvl.c_str());
-        dbg_prefetch1 = MAX(dbg_prefetch1 - dbg_level, 0);
-        dbg_prefetch2 = MAX(dbg_prefetch2 - dbg_level, 0);
-        dbg_prefetch3 = MAX(dbg_prefetch3 - dbg_level, 0);
-        dbg_prefetch4 = MAX(dbg_prefetch4 - dbg_level, 0);
-        dbg_prefetch5 = MAX(dbg_prefetch5 - dbg_level, 0);
+        dbg1 = std::max(dbg1 - dbg_level, 0);
+        dbg2 = std::max(dbg2 - dbg_level, 0);
+        dbg3 = std::max(dbg3 - dbg_level, 0);
+        dbg4 = std::max(dbg4 - dbg_level, 0);
+        dbg5 = std::max(dbg5 - dbg_level, 0);
     }
 
-    debug(dbg_prefetch1) << "prefetch:\n";
-    return InjectPrefetch(env).mutate(s);
+    debug(dbg1) << "prefetch:\n";
+    return InjectPrefetch(env, dbg1, dbg2, dbg3, dbg4, dbg5).mutate(s);
 }
 
 }
