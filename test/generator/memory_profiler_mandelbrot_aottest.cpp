@@ -6,10 +6,10 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "memory_profiler_mandelbrot.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 using std::map;
 using std::string;
 

@@ -80,9 +80,6 @@ def main():
     # templatized Image type we can use. We'll make an 800 x 600
     # image.
     output = gradient.realize(800, 600)
-    assert type(output) == h.Realization
-
-    output = h.Image(h.Int(32), output)
     assert type(output) == h.Image_int32
 
     # Halide does type inference for you. Var objects represent
@@ -113,4 +110,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

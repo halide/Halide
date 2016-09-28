@@ -33,7 +33,7 @@
  *
  * Our image data type:
  *
- * Halide::Image
+ * Halide::Buffer
  *
  * For passing around and reusing halide expressions:
  *

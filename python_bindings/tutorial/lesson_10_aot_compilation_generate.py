@@ -39,7 +39,7 @@ from halide import *
 def main():
 
     # We'll define a simple one-stage pipeline:
-    brighter = Func("brighter") 
+    brighter = Func("brighter")
     x, y = Var("x"), Var("y")
 
     # The pipeline will depend on one scalar parameter.
@@ -72,14 +72,7 @@ def main():
     # For AOT-compiled code, we need to explicitly declare the
     # arguments to the routine. This routine takes two. Arguments are
     # usually Params or ImageParams.
-    args = ArgumentsVector()
-    args.append(input)
-    args.append(offset)
-
-    brighter.compile_to_file("lesson_10_halide", args)
-
-    # If you're using C++11, you can just say:
-    # brighter.compile_to_file("lesson_10_halide", {input, offset})
+    brighter.compile_to_file("lesson_10_halide", [input, offset])
 
     print("Halide pipeline compiled, but not yet run.")
 
@@ -90,4 +83,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

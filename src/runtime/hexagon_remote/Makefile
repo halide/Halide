@@ -24,7 +24,7 @@
 #
 
 HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.0
-HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/HEXAGON_Tools/8.0/Tools
+HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/HEXAGON_Tools/8.0.05/Tools
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
 
@@ -106,7 +106,7 @@ bin/%/log.o: log.cpp
 # Build rules for the hexagon implementation.
 bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/log.o
 	mkdir -p $(@D)
-	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -o $@
+	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
 	mkdir -p $(@D)

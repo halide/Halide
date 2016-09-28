@@ -41,8 +41,8 @@ std::string compute_base_path(const std::string &output_dir,
 }
 
 std::string get_extension(const std::string& def, const GeneratorBase::EmitOptions &options) {
-    auto it = options.extensions.find(def);
-    if (it != options.extensions.end()) {
+    auto it = options.substitutions.find(def);
+    if (it != options.substitutions.end()) {
         return it->second;
     }
     return def;
@@ -126,7 +126,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
                           "[assembly, bitcode, cpp, h, html, o, static_library, stmt]. If omitted, default value is [static_library, h].\n"
-                          "  -x  A comma separated list of file extension pairs to substitute during file naming, "
+                          "  -x  A comma separated list of file extension (or file-suffix) pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
@@ -238,18 +238,18 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
-    auto extension_flags = split_string(flags_info["-x"], ",");
-    for (const std::string &x : extension_flags) {
+    auto substitution_flags = split_string(flags_info["-x"], ",");
+    for (const std::string &x : substitution_flags) {
         if (x.empty()) {
             continue;
         }
-        auto ext_pair = split_string(x, "=");
-        if (ext_pair.size() != 2) {
+        auto subst_pair = split_string(x, "=");
+        if (subst_pair.size() != 2) {
             cerr << "Malformed -x option: " << x << "\n";
             cerr << kUsage;
             return 1;
         }
-        emit_options.extensions[ext_pair[0]] = ext_pair[1];
+        emit_options.substitutions[subst_pair[0]] = subst_pair[1];
     }
 
     const auto target_string = generator_args["target"];
@@ -284,9 +284,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 }
                 return gen->build_module(name);
             };
-        if (targets.size() > 1) {
-            compile_multitarget(function_name, output_files, targets, module_producer);
+        if (targets.size() > 1 || !emit_options.substitutions.empty()) {
+            compile_multitarget(function_name, output_files, targets, module_producer, emit_options.substitutions);
         } else {
+            user_assert(emit_options.substitutions.empty()) << "substitutions not supported for single-target";
             // compile_multitarget() will fail if we request anything but library and/or header,
             // so defer directly to Module::compile if there is a single target.
             module_producer(function_name, targets[0]).compile(output_files);
@@ -331,7 +332,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 
 /* static */
 std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name,
-                                                         const GeneratorParamValues &params) {
+                                                         const std::map<std::string, std::string> &params) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
@@ -356,14 +357,12 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper) : si
 
 GeneratorBase::~GeneratorBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
-void GeneratorBase::rebuild_params() {
-    params_built = false;
-    filter_arguments.clear();
-    generator_params.clear();
-    build_params();
-}
-
-void GeneratorBase::build_params() {
+void GeneratorBase::build_params(bool force) {
+    if (force) {
+        params_built = false;
+        filter_arguments.clear();
+        generator_params.clear();
+    }
     if (!params_built) {
         std::set<std::string> names;
         std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
@@ -400,16 +399,8 @@ void GeneratorBase::build_params() {
     }
 }
 
-GeneratorParamValues GeneratorBase::get_generator_param_values() {
-    build_params();
-    GeneratorParamValues results;
-    for (auto param : generator_params) {
-        results[param->name] = param->to_string();
-    }
-    return results;
-}
-
-void GeneratorBase::set_generator_param_values(const GeneratorParamValues &params) {
+void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
+    user_assert(!generator_params_set) << "set_generator_param_values() must be called at most once per Generator instance.\n";
     build_params();
     std::map<std::string, GeneratorParamBase *> m;
     for (auto param : generator_params) {
@@ -420,38 +411,18 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
         const std::string &value = key_value.second;
         auto p = m.find(key);
         user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
-        p->second->from_string(value);
+        p->second->set_from_string(value);
     }
-}
-
-std::vector<Argument> GeneratorBase::get_filter_output_types() {
-    std::vector<Argument> output_types;
-    Pipeline pipeline = build_pipeline();
-    std::vector<Func> pipeline_results = pipeline.outputs();
-    for (Func func : pipeline_results) {
-        for (Halide::Type t : func.output_types()) {
-            std::string name = "result_" + std::to_string(output_types.size());
-            output_types.push_back(Halide::Argument(name, Halide::Argument::OutputBuffer, t, func.dimensions()));
-        }
-    }
-    return output_types;
+    generator_params_set = true;
 }
 
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
     build_params();
     Pipeline pipeline = build_pipeline();
-    // Building the pipeline may mutate the params and imageparams.
-    rebuild_params();
-    return pipeline.compile_to_module(get_filter_arguments(), function_name, target, linkage_type);
-}
-
-void GeneratorBase::emit_filter(const std::string &output_dir,
-                                const std::string &function_name,
-                                const std::string &file_base_name,
-                                const EmitOptions &options) {
-    std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
-    compile_module_to_filter(build_module(function_name), base_path, options);
+    // Building the pipeline may mutate the params and imageparams, so force a rebuild.
+    build_params(true);
+    return pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
 }
 
 void generator_test() {

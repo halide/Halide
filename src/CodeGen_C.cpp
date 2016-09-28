@@ -609,7 +609,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 }
 
-void CodeGen_C::compile(const Buffer &buffer) {
+void CodeGen_C::compile(const BufferPtr &buffer) {
     // Don't define buffers in headers.
     if (is_header()) {
         return;

@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
@@ -10,7 +10,7 @@
 #endif
 
 #include "gpu_only.h"
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)

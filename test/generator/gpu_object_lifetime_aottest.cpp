@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 
 #if COMPILING_FOR_CUDA
@@ -14,7 +14,7 @@
 
 #include "../common/gpu_object_lifetime.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 void my_halide_print(void *user_context, const char *str) {
     printf("%s", str);

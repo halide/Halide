@@ -467,7 +467,7 @@ bool f_mod() {
 
     // Compute modulus result and check it.
     Func f;
-    f(_) = a % b;  // Using Halide mod operation.
+    f(_) = a(_) % b(_);  // Using Halide mod operation.
     f.realize(out);
 
     // Explicit checks of the simplifier for consistency with runtime computation

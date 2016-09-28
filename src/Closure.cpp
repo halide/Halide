@@ -48,14 +48,8 @@ void Closure::visit(const Load *op) {
 
         // If reading an image/buffer, compute the size.
         if (op->image.defined()) {
+            ref.size = op->image.size_in_bytes();
             ref.dimensions = op->image.dimensions();
-            // The size is the offset of one beyond the last element.
-            // TODO(abadams): replace this with halide_buffer_t::size_in_bytes.
-            ref.size = 1;
-            for (int i = 0; i < op->image.dimensions(); i++) {
-                ref.size += (op->image.extent(i) - 1)*op->image.stride(i);
-            }
-            ref.size *= op->image.type().bytes();
         }
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";

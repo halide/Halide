@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     buf.stride[2] = 0;
     buf.elem_size = 1;
 
-    Buffer param_buf(UInt(8), &buf);
+    Image<uint8_t> param_buf(buf);
     ImageParam input(UInt(8), 3);
     input.set(param_buf);
 

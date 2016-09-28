@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
         h(x) = in(g(g(g(x))));
 
-        in.set(Buffer());
+        in.reset();
         h.infer_input_bounds(output);
         Image<float> in_buf = in.get();
 
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         Func h;
         h(x) = in(fs[19](x)[0] + fs[19](x)[1]);
 
-        in.set(Buffer());
+        in.reset();
         h.infer_input_bounds(output);
         Image<float> in_buf = in.get();
 

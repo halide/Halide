@@ -3,10 +3,10 @@
 #include <assert.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "user_context.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 static void *context_pointer = (void *)0xf00dd00d;
 

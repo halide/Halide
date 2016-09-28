@@ -68,7 +68,8 @@ int main(int argc, char **argv) {
     output.compile_jit();
 
     Image<bool> bitmap_buf(10, 10);
-    bitmap_buf(5, 5) = 1;
+    bitmap_buf.fill(false);
+    bitmap_buf(5, 5) = true;
     bitmap.set(bitmap_buf);
 
     Image<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);
