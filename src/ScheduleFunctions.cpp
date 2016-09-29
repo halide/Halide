@@ -1209,14 +1209,12 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<string> &order,
                         const map<string, Function> &env,
                         const Target &target,
-                        bool &any_memoized,
-                        bool &any_prefetch) {
+                        bool &any_memoized) {
 
     string root_var = LoopLevel::root().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
-    any_prefetch = false;
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1239,7 +1237,6 @@ Stmt schedule_functions(const vector<Function> &outputs,
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
         any_memoized = any_memoized || f.schedule().memoized();
-        any_prefetch = any_prefetch || !f.schedule().prefetches().empty();
         debug(2) << s << '\n';
     }
 

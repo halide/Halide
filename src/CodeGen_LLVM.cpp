@@ -2818,8 +2818,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 #endif
         value = call;
     } else if (op->is_intrinsic(Call::prefetch_buffer_t)) {
-        user_warning << "CodeGen_LLVM::visit Call: prefetch not supported by "
-                     << get_target().to_string() << " target.\n";
+        // Convert to a no-op since prefetch was not supported by target
         value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"

@@ -88,10 +88,9 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     simplify_specializations(env);
 
     bool any_memoized = false;
-    bool any_prefetch = false;
 
     debug(1) << "Creating initial loop nests...\n";
-    Stmt s = schedule_functions(outputs, order, env, t, any_memoized, any_prefetch);
+    Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
     if (any_memoized) {
@@ -102,18 +101,9 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Skipping injecting memoization...\n";
     }
 
-    size_t no_prefetch;
-    get_env_variable("HL_NO_PREFETCH", no_prefetch);
-    if (no_prefetch) {
-        any_prefetch = false;
-    }
-    if (any_prefetch) {
-        debug(1) << "Injecting prefetches...\n";
-        s = inject_prefetch(s, env);
-        debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
-    } else {
-        debug(1) << "Skipping injecting prefetches...\n";
-    }
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);

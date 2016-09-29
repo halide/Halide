@@ -1386,22 +1386,17 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if (op->is_intrinsic(Call::prefetch_buffer_t)) {
         string fetch = "halide_hexagon_prefetch_buffer_t";
-        internal_assert(op->args.size() == 4);
-
-        Value *dim = codegen(op->args[0]);
-        Value *elem_size = codegen(op->args[1]);
-        Value *num_elem = codegen(op->args[2]);
-        Value *pbuf = codegen(op->args[3]);
-
         llvm::Function *fn = module->getFunction(fetch);
-        vector<Value *> args;
-        args.push_back(dim);
-        args.push_back(elem_size);
-        args.push_back(num_elem);
-        args.push_back(pbuf);
-        Value *ret = builder->CreateCall(fn, args);
-        value = ret;
 
+        internal_assert(op->args.size() == 4);
+        vector<Value *> args = {
+            codegen(op->args[0]),  // dim_count
+            codegen(op->args[1]),  // elem_size
+            codegen(op->args[2]),  // num_elem
+            codegen(op->args[3])   // pbuf
+        };
+
+        value = builder->CreateCall(fn, args);
         return;
     }
 
