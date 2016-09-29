@@ -434,14 +434,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
 namespace {
 
-uint32_t simple_string_hash(const string &s) {
-    uint32_t result = 0;
-    for (char c : s) {
-        result = result * 101 + c;
-    }
-    return result;
-}
-
 // Link all modules together and with the result in modules[0], all
 // other input modules are destroyed. Sets the datalayout and target
 // triple appropriately for the target.
