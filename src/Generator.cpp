@@ -97,13 +97,6 @@ Outputs compute_outputs(const Target &target,
     return output_files;
 }
 
-void compile_module_to_filter(const Module &m,
-                              const std::string &base_path,
-                              const GeneratorBase::EmitOptions &options) {
-    Outputs output_files = compute_outputs(m.target(), base_path, options);
-    m.compile(output_files);
-}
-
 }  // namespace
 
 const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
