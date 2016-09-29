@@ -165,9 +165,8 @@ string print_loop_nest(const vector<Function> &outputs) {
     }
 
     bool any_memoized = false;
-    bool any_prefetch = false;
     // Schedule the functions.
-    Stmt s = schedule_functions(outputs, order, env, target, any_memoized, any_prefetch);
+    Stmt s = schedule_functions(outputs, order, env, target, any_memoized);
 
     // Now convert that to pseudocode
     std::ostringstream sstr;
