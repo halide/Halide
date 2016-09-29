@@ -317,10 +317,7 @@ void Schedule::accept(IRVisitor *visitor) const {
         }
     }
     for (const Prefetch &p : prefetches()) {
-        debug(4) << "Schedule::accept prefetches\n";
         if (p.offset.defined()) {
-            debug(4) << "Prefetch: " << p.var
-                               << " " << p.offset << "\n";
             p.offset.accept(visitor);
         }
     }
