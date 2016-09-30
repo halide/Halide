@@ -671,6 +671,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
                 Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
                 update_def.schedule().dims().push_back(d);
             }
+
+	    update_def.implicit_args() = contents->init_def.implicit_args();
         }
     }
 
