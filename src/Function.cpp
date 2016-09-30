@@ -793,7 +793,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
 }
 
-// TODO: Handle implicit arguments
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
@@ -823,7 +822,7 @@ void Function::define_extern(const std::string &function_name,
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
-    auto pure_def_args = contents->init_def.all_args();
+    std::vector<Expr> &pure_def_args = contents->init_def.explicit_args();
     pure_def_args.resize(dimensionality);
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
