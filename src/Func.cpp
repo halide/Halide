@@ -1441,9 +1441,6 @@ Stage &Stage::hexagon(VarOrRVar x) {
 }
 
 Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
-    debug(4) << "Stage::prefetch " << var.name() 
-                             << " " << offset << "\n";
-
     Prefetch prefetch = {var.name(), offset};
     definition.schedule().prefetches().push_back(prefetch);
 

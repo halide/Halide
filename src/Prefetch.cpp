@@ -22,6 +22,8 @@ using std::vector;
 using std::stack;
 using std::pair;
 
+namespace {
+
 class HasRealization : public IRVisitor {
 public:
     std::string realization_name;
@@ -132,7 +134,7 @@ private:
                              << ", dims:" << dims << ")\n";
 
         // TODO: Opt: check box if it should be prefetched?
-        // TODO       - Only prefetch if varying by loop_var_name?
+        // TODO       - Only prefetch if varying by p.var?
         // TODO       - Don't prefetch if "small" all constant dimensions?
         // TODO         e.g. see: camera_pipe.cpp corrected matrix(4,3)
 
@@ -222,7 +224,6 @@ private:
         Stmt body = op->body;
 
         string func_name = tuple_func(op->name);
-        string loop_var_name = tuple_var(op->name);
         const vector<Prefetch> &prefetches = get_func(func_name).schedule().prefetches();
 
         // Add loop variable to interval scope for any inner loop prefetch
@@ -233,19 +234,19 @@ private:
         body = mutate(body);
 
         for (const Prefetch &p : prefetches) {
-            if (p.var != loop_var_name) {
+            if (!ends_with(op->name, "." + p.var)) {
                 continue;
             }
             debug(1) << " " << func_name
-                                 << " prefetch(" << loop_var_name << ", " << p.offset << ")\n";
+                                 << " prefetch(" << p.var << ", " << p.offset << ")\n";
 
             // Add loop variable + prefetch offset to interval scope for box computation
             // Expr loop_var = Variable::make(Int(32), op->name);
             Interval prein(loop_var + p.offset, loop_var + p.offset);
             intervals.push(op->name, prein);
 
-            map<string, Box> boxes;
-            boxes = boxes_required(body, intervals);
+            map<string, Box> boxes = boxes_required(body, intervals);
+
             // TODO: Opt: prefetch the difference from previous iteration
             //            to the requested iteration (2 calls to boxes_required)
 
@@ -269,6 +270,8 @@ private:
     }
 
 };
+
+} // Anonymous namespace
 
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
 {

@@ -485,6 +485,7 @@ HEADER_FILES = \
   Param.h \
   PartitionLoops.h \
   Pipeline.h \
+  Prefetch.h \
   Profiling.h \
   Qualify.h \
   Random.h \
