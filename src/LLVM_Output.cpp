@@ -97,8 +97,12 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
     for (auto &src : src_files) {
         llvm::Expected<llvm::NewArchiveMember> new_member =
             llvm::NewArchiveMember::getFile(src, /*Deterministic=*/true);
-        internal_assert((bool)new_member)
-            << src << ": " << llvm::toString(new_member.takeError()) << "\n";
+        if (!new_member) {
+            // Don't use internal_assert: the call to new_member.takeError() will be evaluated
+            // even if the assert does not fail, leaving new_member in an indeterminate
+            // state.
+            internal_error << src << ": " << llvm::toString(new_member.takeError()) << "\n";
+        }
         new_members.push_back(std::move(*new_member));
     }
 #elif LLVM_VERSION == 38
