@@ -123,6 +123,8 @@ public:
 
     /** Check if two loop levels are exactly the same. */
     EXPORT bool operator==(const LoopLevel &other) const;
+
+    bool operator!=(const LoopLevel &other) const { return !(*this == other); }
 };
 
 namespace Internal {

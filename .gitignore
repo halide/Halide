@@ -121,6 +121,11 @@
 /apps/HelloNaCl/halide_game_of_life.h
 /apps/fft/bench_fft
 /apps/fft/*.html
+bazel-bin
+bazel-genfiles
+bazel-Halide
+bazel-out
+bazel-testlogs
 bin/*
 build-64/*
 build-ios/*
