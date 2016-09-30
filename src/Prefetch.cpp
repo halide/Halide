@@ -68,13 +68,6 @@ private:
         return v[0];
     }
 
-    // Strip down the tuple name, e.g. f.*.var into var
-    string tuple_var(const string &name) {
-        vector<string> v = split_string(name, ".");
-        internal_assert(v.size() > 0);
-        return v[v.size()-1];
-    }
-
     // Lookup a function in the environment
     Function get_func(const string &name) {
         map<string, Function>::const_iterator iter = env.find(name);
