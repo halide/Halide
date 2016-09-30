@@ -131,9 +131,6 @@ private:
         // TODO       - Don't prefetch if "small" all constant dimensions?
         // TODO         e.g. see: camera_pipe.cpp corrected matrix(4,3)
 
-        string varname_prefetch_buf = varname + "_prefetch_" + pstr + "_buf";
-        Expr var_prefetch_buf = Variable::make(Int(32), varname_prefetch_buf);
-
         // Establish the variables for buffer strides, box min & max
         vector<Expr> stride_var(dims);
         vector<Expr> extent_var(dims);
@@ -173,7 +170,6 @@ private:
         // Create the create_buffer_t call
         Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
                               args, Call::Intrinsic);
-        plets.push_back(make_pair(varname_prefetch_buf, prefetch_buf));
 
         // Create the prefetch call
         Expr num_elem = stride_var[dims-1] * extent_var[dims-1];
@@ -181,7 +177,7 @@ private:
             dims,
             elem_size_bytes,
             num_elem,
-            var_prefetch_buf
+            prefetch_buf
         };
         Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
                               args_prefetch, Call::Intrinsic));
