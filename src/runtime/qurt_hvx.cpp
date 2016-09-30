@@ -52,18 +52,17 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
     halide_qurt_hvx_unlock(user_context);
 }
 
-/////////////////////////////////////////////////////////////////////////////
-//
-// halide_hexagon_prefetch_buffer_t
-//
-// Prefetch a multi-dimensional box (subset) from a larger array
-//
-//   dim_count  number of dimensions in array
-//   elem_size  size in bytes of one element
-//   num_elem   total number of elements in array
-//   buf        buffer_t describing box to prefetch
-//              (note: extent/stride/min are all assumed to be positive)
-//
+namespace {
+
+// Construct a prefetch descriptor.
+inline uint64_t make_prefetch_desc(uint16_t width, uint16_t height, uint16_t stride, uint16_t dir = 1) {
+    return
+        (static_cast<uint64_t>(dir)    << 48) |
+        (static_cast<uint64_t>(stride) << 32) |
+        (static_cast<uint64_t>(width)  << 16) |
+        (static_cast<uint64_t>(height) << 0);
+}
+
 // Notes:
 //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
 //  - If 3 are already pending, the oldest request is dropped
@@ -71,109 +70,60 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 //  - A l2fetch with any subfield set to zero cancels all pending prefetches
 //  - The l2fetch starting address must be in mapped memory but the range
 //    prefetched can go into unmapped memory without raising an exception
-//
-// TODO: Opt: Generate more control code for prefetch_buffer_t directly in
-// TODO       Prefetch.cpp to avoid passing box info through a buffer_t
-// TODO       (which results in ~30 additional stores/loads)
-//
-#define MAX_PREFETCH    3
-#define MASK16          0xFFFF
-#define MIN(x,y)        (((x)<(y)) ? (x) : (y))
-#define MAX(x,y)        (((x)>(y)) ? (x) : (y))
-//
-WEAK int halide_hexagon_prefetch_buffer_t(const uint32_t dim_count, const int32_t elem_size,
-                const uint32_t num_elem, const buffer_t *buf)
-{
-    // Extract needed fields from buffer_t
-    unsigned char *addr   = buf->host;
-    const int32_t *extent = buf->extent;
-    const int32_t *stride = buf->stride;
-    const int32_t *min    = buf->min;
-    const unsigned char *addr_beg = addr;
-    const unsigned char *addr_end = addr + (num_elem * elem_size);
+inline void l2_fetch_desc(const void *addr, uint64_t desc) {
+    __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(desc));
+}
 
-    // Compute starting position of box
-    int32_t startpos = 0;
-    for (uint32_t i = 0; i < dim_count; i++) {
-        startpos += min[i] * stride[i];
-    }
-    addr += startpos * elem_size;
+inline void l2_fetch(const void *addr, uint16_t width, uint16_t height, uint16_t stride, uint16_t dir = 1) {
+    l2_fetch_desc(addr, make_prefetch_desc(width, height, stride, dir));
+}
 
-    // Range check starting address
-    if ((addr < addr_beg) || (addr >= addr_end)) {
-        return 0;
+const int uint16_max = (1 << 16) - 1;
+
+uint16_t uint16_sat(int x) {
+    return static_cast<uint16_t>(min(x, uint16_max));
+}
+
+// Prefetch the memory indicated by dimensions [0, dim] in buf.
+inline void prefetch_buffer_dim(int dim, const uint8_t *host, const buffer_t *buf) {
+    if (buf->extent[dim] == 0) {
+        // Nothing to do for this dimension.
+        if (dim > 0) {
+            // Move to the next dimension.
+            prefetch_buffer_dim(dim - 1, host, buf);
+        } else {
+            // This buffer was empty.
+        }
+        return;
     }
 
-    // Compute the 2-D prefetch descriptor fields
-    uint32_t pdir    = 1;       // Prefetch direction: 0=rows, 1=columns
-    uint32_t pstride = stride[0] * elem_size;  // Stride ignored for 1-D
-    uint32_t pwidth  = extent[0] * elem_size;  // 1-D width in bytes
-    uint32_t pheight = 1;       // Initially a 1-D descriptor
+    const int elem_size = buf->elem_size;
 
-    uint32_t iterdim = 1;       // Dimension to iterate over
-    if (dim_count > 1) {        // Potential for 2-D descriptor
-        uint32_t newpstride = stride[1] * elem_size;
-        if (newpstride == (newpstride & MASK16)) {   // If stride fits...
-            pstride = newpstride;       // 2-D stride in bytes
-            pheight = extent[1];        // 2-D height (rows)
-            iterdim++;                  // Iterate over next dimension
+    if (dim == 0) {
+        // prefetch a linear range of memory.
+        l2_fetch(host, uint16_sat(buf->extent[0] * elem_size), 1, 1);
+    } else if (dim == 1 && buf->stride[1] * elem_size <= uint16_max) {
+        // Prefetch the first 2 dimensions of buf.
+        l2_fetch(host,
+                 uint16_sat(buf->extent[0] * elem_size),
+                 uint16_sat(buf->extent[1]),
+                 buf->stride[1] * elem_size);
+    } else {
+        // We need to prefetch a higher dimensional region, do it recursively.
+        const int extent_dim = buf->extent[dim];
+        const int stride_dim = buf->stride[dim];
+        for (int i = 0; i < extent_dim; i++) {
+            prefetch_buffer_dim(dim - 1, host, buf);
+            host += stride_dim * elem_size;
         }
     }
+}
 
-    // Create the prefetch descriptor for l2fetch
-    //   l2fetch(Rs,Rtt): 48 bit descriptor
-    pdir    = pdir & 0x1;           // bit  48
-    pstride = MIN(pstride, MASK16); // bits 47:32
-    pwidth  = MIN(pwidth,  MASK16); // bits 31:16
-    pheight = MIN(pheight, MASK16); // bits 15:0
+}  // namespace
 
-    uint64_t pdir64    = pdir;
-    uint64_t pstride64 = pstride;
-    uint64_t pdesc = (pdir64<<48) | (pstride64<<32) | (pwidth<<16) | pheight;
-
-    const uint32_t pbytes = pwidth * pheight;   // Bytes in prefetch descriptor
-    uint32_t tbytes = 0;                        // Total bytes prefetched
-    uint32_t tcnt = 0;                          // Total count of prefetch ops
-
-    // If iterdim extent is unity then move to next higher dimension
-    while ((iterdim < dim_count) && (extent[iterdim] == 1)) {
-        iterdim++;
-    }
-
-    if (iterdim >= dim_count) {       // No dimension remaining to iterate over
-
-        // Perform a single prefetch
-        __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
-        tbytes += pbytes;
-        tcnt++;
-
-    } else {    // Iterate for higher dimension boxes
-
-        // Get iteration stride and extents
-        int32_t iterstride = stride[iterdim] * elem_size;
-        int32_t iterextent = extent[iterdim];
-        iterextent = MIN(iterextent, MAX_PREFETCH);   // Limit # of prefetches
-
-        // TODO: Add support for iterating over multiple higher dimensions?
-        // TODO  Currently just iterating over one outer (non-unity) dimension
-        // TODO  since only MAX_PREFETCH prefetches can be queued anyway.
-
-        for (int32_t i = 0; i < iterextent; i++) {
-            // Range check starting address
-            if ((addr >= addr_beg) && (addr < addr_end)) {
-                // Perform prefetch
-                __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(addr), "r"(pdesc));
-                tbytes += pbytes;
-                tcnt++;
-            }
-            addr += iterstride;
-        }
-    }
-
-    // TODO: Opt: Return the number of prefetch instructions (tcnt) issued?
-    //       to not exceed MAX_PREFETCH in a sequence of prefetch ops
-    // TODO: Opt: Return the size in bytes (tbytes) prefetched?
-    //       to avoid prefetching too much data in one sequence
+WEAK int halide_hexagon_prefetch_buffer_t(const buffer_t *buf) {
+    // Start at the outermost dimension.
+    prefetch_buffer_dim(3, buf->host, buf);
     return 0;
 }
 
