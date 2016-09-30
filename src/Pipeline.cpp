@@ -256,7 +256,8 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
 void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const vector<Argument> &args,
                                          const Target &target) {
-    Module m = compile_to_module(args, filename_prefix, target);
+    string fn_name = split_string(filename_prefix, "/").back();
+    Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = static_library_outputs(filename_prefix, target);
     m.compile(outputs);
 }
@@ -274,7 +275,8 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
 void Pipeline::compile_to_file(const string &filename_prefix,
                                const vector<Argument> &args,
                                const Target &target) {
-    Module m = compile_to_module(args, filename_prefix, target);
+    string fn_name = split_string(filename_prefix, "/").back();
+    Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
     if (target.arch == Target::PNaCl) {
