@@ -547,7 +547,7 @@ public:
         // empty by default; it's mainly useful in build environments where the default
         // extensions are problematic, and avoids the need to rename output files
         // after the fact.
-        std::map<std::string, std::string> extensions;
+        std::map<std::string, std::string> substitutions;
         EmitOptions()
             : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
               emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true) {}
