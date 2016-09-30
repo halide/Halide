@@ -41,8 +41,8 @@ std::string compute_base_path(const std::string &output_dir,
 }
 
 std::string get_extension(const std::string& def, const GeneratorBase::EmitOptions &options) {
-    auto it = options.extensions.find(def);
-    if (it != options.extensions.end()) {
+    auto it = options.substitutions.find(def);
+    if (it != options.substitutions.end()) {
         return it->second;
     }
     return def;
@@ -97,13 +97,6 @@ Outputs compute_outputs(const Target &target,
     return output_files;
 }
 
-void compile_module_to_filter(const Module &m,
-                              const std::string &base_path,
-                              const GeneratorBase::EmitOptions &options) {
-    Outputs output_files = compute_outputs(m.target(), base_path, options);
-    m.compile(output_files);
-}
-
 }  // namespace
 
 const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
@@ -126,7 +119,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
                           "[assembly, bitcode, cpp, h, html, o, static_library, stmt]. If omitted, default value is [static_library, h].\n"
-                          "  -x  A comma separated list of file extension pairs to substitute during file naming, "
+                          "  -x  A comma separated list of file extension (or file-suffix) pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" },
@@ -238,18 +231,18 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         }
     }
 
-    auto extension_flags = split_string(flags_info["-x"], ",");
-    for (const std::string &x : extension_flags) {
+    auto substitution_flags = split_string(flags_info["-x"], ",");
+    for (const std::string &x : substitution_flags) {
         if (x.empty()) {
             continue;
         }
-        auto ext_pair = split_string(x, "=");
-        if (ext_pair.size() != 2) {
+        auto subst_pair = split_string(x, "=");
+        if (subst_pair.size() != 2) {
             cerr << "Malformed -x option: " << x << "\n";
             cerr << kUsage;
             return 1;
         }
-        emit_options.extensions[ext_pair[0]] = ext_pair[1];
+        emit_options.substitutions[subst_pair[0]] = subst_pair[1];
     }
 
     const auto target_string = generator_args["target"];
@@ -284,9 +277,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 }
                 return gen->build_module(name);
             };
-        if (targets.size() > 1) {
-            compile_multitarget(function_name, output_files, targets, module_producer);
+        if (targets.size() > 1 || !emit_options.substitutions.empty()) {
+            compile_multitarget(function_name, output_files, targets, module_producer, emit_options.substitutions);
         } else {
+            user_assert(emit_options.substitutions.empty()) << "substitutions not supported for single-target";
             // compile_multitarget() will fail if we request anything but library and/or header,
             // so defer directly to Module::compile if there is a single target.
             module_producer(function_name, targets[0]).compile(output_files);

@@ -1,3 +1,11 @@
+#ifdef __MINGW32__
+#include <stdio.h>
+// Mingw doesn't support weak linkage
+int main(int argc, char **argv) {
+    printf("Skipping test on mingw");
+    return 0;
+}
+#else
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
 
@@ -61,16 +69,41 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
 }
 
 enum {
+  expect_bounds_inference_buffer,
   expect_intermediate_buffer,
+  expect_output_buffer,
   expect_intermediate_contents,
   expect_output_contents,
-} annotate_stage = expect_intermediate_buffer;
+} annotate_stage = expect_bounds_inference_buffer;
 const void* output_base = nullptr;
 const void* output_previous = nullptr;
+int bounds_inference_count = 0;
+
+void reset_state(const void* base) {
+    annotate_stage = expect_bounds_inference_buffer;
+    output_base = base;
+    output_previous = nullptr;
+    bounds_inference_count = 0;
+}
 
 extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
     printf("%d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int) len);
-    if (annotate_stage == expect_intermediate_buffer) {
+    if (annotate_stage == expect_bounds_inference_buffer) {
+        if (output_previous != nullptr || len != sizeof(buffer_t)) {
+            fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
+        bounds_inference_count += 1;
+        if (bounds_inference_count == 4) {
+            annotate_stage = expect_intermediate_buffer;
+        }
+    } else if (annotate_stage == expect_intermediate_buffer) {
+        if (output_previous != nullptr || len != sizeof(buffer_t)) {
+            fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
+        annotate_stage = expect_output_buffer;
+    } else if (annotate_stage == expect_output_buffer) {
         if (output_previous != nullptr || len != sizeof(buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
             exit(-1);
@@ -122,9 +155,7 @@ int main()
     printf("Testing interleaved...\n");
     {
         auto out = Buffer<int32_t>::make_interleaved(4, 4, 3);
-        annotate_stage = expect_intermediate_buffer;
-        output_base = out.host_ptr();
-        output_previous = nullptr;
+        reset_state(out.host_ptr());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -146,9 +177,7 @@ int main()
         };
         std::vector<int32_t> data(((4 * 3) + kPad) * 4);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
-        annotate_stage = expect_intermediate_buffer;
-        output_base = out.host_ptr();
-        output_previous = nullptr;
+        reset_state(out.host_ptr());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -162,9 +191,7 @@ int main()
     printf("Testing planar...\n");
     {
         auto out = Buffer<int32_t>(4, 4, 3);
-        annotate_stage = expect_intermediate_buffer;
-        output_base = out.host_ptr();
-        output_previous = nullptr;
+        reset_state(out.host_ptr());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -185,9 +212,7 @@ int main()
         };
         std::vector<int32_t> data((4 + kPad) * 4 * 3);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
-        annotate_stage = expect_intermediate_buffer;
-        output_base = out.host_ptr();
-        output_previous = nullptr;
+        reset_state(out.host_ptr());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -201,9 +226,7 @@ int main()
     printf("Testing error case...\n");
     {
         auto out = Buffer<int32_t>(1, 1, 1);
-        annotate_stage = expect_intermediate_buffer;
-        output_base = out.host_ptr();
-        output_previous = nullptr;
+        reset_state(out.host_ptr());
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);
@@ -217,3 +240,5 @@ int main()
     printf("Success!\n");
     return 0;
 }
+
+#endif

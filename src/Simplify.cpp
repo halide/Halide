@@ -2973,7 +2973,8 @@ private:
                 expr = mutate(sub_b->b < make_zero(sub_b->b.type()));
             } else if (sub_b &&
                        is_const(a) &&
-                       is_const(sub_b->a)) {
+                       is_const(sub_b->a) &&
+                       !is_const(sub_b->b)) {
                 // (c1 < c2 - x) -> (x < c2 - c1)
                 expr = mutate(sub_b->b < (sub_b->a - a));
             } else if (mul_a &&
@@ -5826,6 +5827,13 @@ void simplify_test() {
             e = max(e, 1)/2;
         }
         check(e, e);
+    }
+
+    // This expression is used to cause infinite recursion.
+    {
+        Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
+        Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
+        check(e, expected);
     }
 
     std::cout << "Simplify test passed" << std::endl;
