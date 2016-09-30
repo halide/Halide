@@ -68,13 +68,6 @@ private:
         return v[0];
     }
 
-    // Strip down the tuple name, e.g. f.*.var into var
-    string tuple_var(const string &name) {
-        vector<string> v = split_string(name, ".");
-        internal_assert(v.size() > 0);
-        return v[v.size()-1];
-    }
-
     // Lookup a function in the environment
     Function get_func(const string &name) {
         map<string, Function>::const_iterator iter = env.find(name);
@@ -107,12 +100,7 @@ private:
     // Generate the required prefetch code (lets and statements) for the
     // specified varname and box
     //
-    Stmt prefetch_box(const string &varname, const Box &box)
-    {
-        vector<pair<string, Expr>> plets;  // Prefetch let assignments
-        vector<Stmt> pstmts;               // Prefetch stmt sequence
-
-        int dims = box.size();
+    Stmt prefetch_box(const string &varname, const Box &box) {
         bool has_static_type = true;
         Type t = get_type(varname, has_static_type);
         string elem_size_name = varname + ".elem_size";
@@ -125,85 +113,39 @@ private:
             elem_size_bytes = elem_size_var;
         }
 
-        std::ostringstream ss; ss << t;
-        string type_name = ss.str();
-        string pstr = unique_name('p');
-        debug(1) << "  prefetch #" << pstr << ": "
-                             << varname << " ("
-                             << (has_static_type ? type_name : elem_size_name)
-                             << ", dims:" << dims << ")\n";
-
-        // TODO: Opt: check box if it should be prefetched?
-        // TODO       - Only prefetch if varying by p.var?
-        // TODO       - Don't prefetch if "small" all constant dimensions?
-        // TODO         e.g. see: camera_pipe.cpp corrected matrix(4,3)
-
-        string varname_prefetch_buf = varname + "_prefetch_" + pstr + "_buf";
+        string varname_prefetch_buf = varname + "_prefetch_buf";
         Expr var_prefetch_buf = Variable::make(Int(32), varname_prefetch_buf);
 
         // Establish the variables for buffer strides, box min & max
-        vector<Expr> stride_var(dims);
-        vector<Expr> extent_var(dims);
-        vector<Expr> min_var(dims);
-        vector<Expr> max_var(dims);
-        for (int i = 0; i < dims; i++) {
-            string istr = std::to_string(i);
-            // string extent_name = varname + ".extent." + istr;
-            string stride_name = varname + ".stride." + istr;
-            string extent_name = varname + ".extent." + istr;
-            string min_name = varname + "_prefetch_" + pstr + "_min_" + istr;
-            string max_name = varname + "_prefetch_" + pstr + "_max_" + istr;
-
-            stride_var[i] = Variable::make(Int(32), stride_name);
-            extent_var[i] = Variable::make(Int(32), extent_name);
-            min_var[i] = Variable::make(Int(32), min_name);
-            max_var[i] = Variable::make(Int(32), max_name);
-
-            // Record let assignments
-            // except for stride, already defined elsewhere
-            plets.push_back(make_pair(min_name, box[i].min));
-            plets.push_back(make_pair(max_name, box[i].max));
-        }
-
-        // Create a buffer_t object for this prefetch.
         vector<Expr> args;
 
         Expr first_elem = Load::make(t, varname, 0, BufferPtr(), Parameter());
         args.push_back(Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic));
-        args.push_back(make_zero(t));
-        for (int i = 0; i < dims; i++) {
-            args.push_back(min_var[i]);
-            args.push_back(max_var[i] - min_var[i] + 1);
-            args.push_back(stride_var[i]);
+        args.push_back(elem_size_bytes);
+        for (size_t i = 0; i < box.size(); i++) {
+            string dim_name = std::to_string(i);
+            Expr buffer_min = Variable::make(Int(32), varname + ".min." + dim_name);
+            Expr buffer_extent = Variable::make(Int(32), varname + ".extent." + dim_name);
+            Expr buffer_stride = Variable::make(Int(32), varname + ".stride." + dim_name);
+
+            Expr buffer_max = buffer_min + buffer_extent - 1;
+
+            Expr prefetch_min = clamp(box[i].min, buffer_min, buffer_max);
+            Expr prefetch_max = clamp(box[i].max, buffer_min, buffer_max);
+
+            args.push_back(prefetch_min);
+            args.push_back(prefetch_max - prefetch_min + 1);
+            args.push_back(buffer_stride);
         }
 
-        // Create the create_buffer_t call
+        // Create a call to prefetch_buffer_t.
         Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                              args, Call::Intrinsic);
-        plets.push_back(make_pair(varname_prefetch_buf, prefetch_buf));
-
-        // Create the prefetch call
-        Expr num_elem = stride_var[dims-1] * extent_var[dims-1];
-        vector<Expr> args_prefetch = {
-            dims,
-            elem_size_bytes,
-            num_elem,
-            var_prefetch_buf
-        };
-        Stmt stmt_prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
-                              args_prefetch, Call::Intrinsic));
-        // TODO: Opt: Generate more control code for prefetch_buffer_t in Prefetch.cpp?
-        // TODO       Passing box info through a buffer_t results in ~30 additional stores/loads
-
-        pstmts.push_back(stmt_prefetch);
-
-        // No guard needed, address range checked in prefetch runtime
-        Stmt pbody = Block::make(pstmts);
-        for (size_t i = plets.size(); i > 0; i--) {
-            pbody = LetStmt::make(plets[i-1].first, plets[i-1].second, pbody);
-        }
-
-        return pbody;
+                                       args, Call::Intrinsic);
+        string prefetch_buf_name = "prefetch_" + varname + "_buf";
+        Expr prefetch_buf_var = Variable::make(type_of<struct buffer_t *>(), prefetch_buf_name);
+        Stmt prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
+                                                  {prefetch_buf_var}, Call::Intrinsic));
+        return LetStmt::make(prefetch_buf_name, prefetch_buf, prefetch);
     }
 
     void visit(const Let *op) {
@@ -238,7 +180,7 @@ private:
                 continue;
             }
             debug(1) << " " << func_name
-                                 << " prefetch(" << p.var << ", " << p.offset << ")\n";
+                     << " prefetch(" << p.var << ", " << p.offset << ")\n";
 
             // Add loop variable + prefetch offset to interval scope for box computation
             // Expr loop_var = Variable::make(Int(32), op->name);
@@ -273,8 +215,7 @@ private:
 
 } // Anonymous namespace
 
-Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env)
-{
+Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env) {
     debug(1) << "prefetch:\n";
     return InjectPrefetch(env).mutate(s);
 }
