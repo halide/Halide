@@ -1384,19 +1384,20 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
     }
 
-    if (op->is_intrinsic(Call::prefetch_buffer_t)) {
-        string fetch = "halide_hexagon_prefetch_buffer_t";
-        llvm::Function *fn = module->getFunction(fetch);
+    if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
+        llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
+        internal_assert(prefetch_fn);
+        vector<llvm::Value *> args;
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
 
-        internal_assert(op->args.size() == 4);
-        vector<Value *> args = {
-            codegen(op->args[0]),  // dim_count
-            codegen(op->args[1]),  // elem_size
-            codegen(op->args[2]),  // num_elem
-            codegen(op->args[3])   // pbuf
-        };
-
-        value = builder->CreateCall(fn, args);
+        value = builder->CreateCall(prefetch_fn, args);
         return;
     }
 
