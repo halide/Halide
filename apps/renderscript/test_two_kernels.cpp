@@ -24,6 +24,6 @@ int main(int argc, char** argv) {
     g.vectorize(c);
 
     Target target = get_target_from_environment();
-    std::string filename(target.arch == Target::Arch::ARM? "generated_test_two_kernels": "generated_test_two_kernels");
-    g.compile_to_file(filename + (argc > 1? argv[1]: ""), {input});
+    std::string fn_name = std::string("generated_test_two_kernels") + (argc > 1? argv[1]: "");
+    g.compile_to_file(fn_name, {input}, fn_name);
 }
