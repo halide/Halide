@@ -99,13 +99,6 @@ Outputs compute_outputs(const Target &target,
     return output_files;
 }
 
-void compile_module_to_filter(const Module &m,
-                              const std::string &base_path,
-                              const GeneratorBase::EmitOptions &options) {
-    Outputs output_files = compute_outputs(m.target(), base_path, options);
-    m.compile(output_files);
-}
-
 Argument to_argument(const Internal::Parameter &param) {
     Expr def, min, max;
     if (!param.is_buffer()) {
