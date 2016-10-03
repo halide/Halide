@@ -108,8 +108,10 @@ private:
             prefetch_extent.push_back(box[i].max - box[i].min + 1);
         }
 
-        // Construct an array of index variables. The first 2 dimensions are handled
-        // by (up to) 2D prefetches, the rest we will generate loops to define.
+        // Construct an array of index expressions to construct
+        // address_of calls with. The first 2 dimensions are handled
+        // by (up to) 2D prefetches, the rest we will generate loops
+        // to define.
         vector<string> index_names(box.size());
         vector<Expr> indices(box.size());
         for (size_t i = 0; i < box.size(); i++) {
@@ -178,7 +180,10 @@ private:
                 // have good locality.
                 // TODO: This is not a good assumption. It would be better to have the
                 // prefetch directive specify the buffer that we want to prefetch, instead
-                // of trying to figure out which buffers should be prefetched.
+                // of trying to figure out which buffers should be prefetched. This would also
+                // mean that we don't need the "make_similar_load" hack, because we can make
+                // calls the standard way (using the ImageParam/Function object referenced in
+                // the prefetch).
                 map<string, Box> boxes_written = boxes_provided(body, bounds);
                 for (const auto &b : boxes_written) {
                     auto it = boxes_read.find(b.first);
