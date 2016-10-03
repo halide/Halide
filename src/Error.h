@@ -130,7 +130,7 @@ struct ErrorReport {
      * this by only actually throwing if there isn't an exception in
      * flight already.
      */
-#if __cplusplus >= 201100
+#if __cplusplus >= 201100 || _MSC_VER >= 1900
     ~ErrorReport() noexcept(false) {
 #else
     ~ErrorReport() {

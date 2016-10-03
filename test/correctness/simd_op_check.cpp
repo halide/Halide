@@ -166,8 +166,8 @@ void check(string op, int vector_width, Expr e) {
 
     bool can_run_the_code = can_run_code();
     if (can_run_the_code) {
-        Realization r = error.realize(0, target.without_feature(Target::NoRuntime));
-        double e = Image<double>(r[0])(0);
+        Realization r = error.realize(target.without_feature(Target::NoRuntime));
+        double e = Image<double>(r[0])();
         // Use a very loose tolerance for floating point tests. The
         // kinds of bugs we're looking for are codegen bugs that
         // return the wrong value entirely, not floating point
@@ -1010,6 +1010,12 @@ void check_neon_all() {
         check(arm32 ? "vqneg.s32" : "sqneg", 2*w, -max(i32_1, -max_i32));
 
         // VQRDMULH I       -       Saturating Rounding Doubling Multiply Returning High Half
+        // Note: division in Halide always rounds down (not towards
+        // zero). Otherwise these patterns would be more complicated.
+        check(arm32 ? "vqrdmulh.s16" : "sqrdmulh", 4*w, i16_sat((i32(i16_1) * i32(i16_2) + (1<<14)) / (1 << 15)));
+        check(arm32 ? "vqrdmulh.s32" : "sqrdmulh", 2*w, i32_sat((i64(i32_1) * i64(i32_2) + (1<<30)) /
+                                                                (Expr(int64_t(1)) << 31)));
+
         // VQRSHL   I       -       Saturating Rounding Shift Left
         // VQRSHRN  I       -       Saturating Rounding Shift Right Narrow
         // VQRSHRUN I       -       Saturating Rounding Shift Right Unsigned Narrow
@@ -1031,7 +1037,11 @@ void check_neon_all() {
 
         // VQSHRN   I       -       Saturating Shift Right Narrow
         // VQSHRUN  I       -       Saturating Shift Right Unsigned Narrow
+        check(arm32 ? "vqshrn.s16"  : "sqshrn",  8*w,  i8_sat(i16_1/16));
+        check(arm32 ? "vqshrn.s32"  : "sqshrn",  4*w, i16_sat(i32_1/16));
         check(arm32 ? "vqshrn.s64"  : "sqshrn",  2*w, i32_sat(i64_1/16));
+        check(arm32 ? "vqshrun.s16" : "sqshrun", 8*w,  u8_sat(i16_1/16));
+        check(arm32 ? "vqshrun.s32" : "sqshrun", 4*w, u16_sat(i32_1/16));
         check(arm32 ? "vqshrun.s64" : "sqshrun", 2*w, u32_sat(i64_1/16));
         check(arm32 ? "vqshrn.u16"  : "uqshrn", 8*w,  u8(min(u16_1/16, max_u8)));
         check(arm32 ? "vqshrn.u32"  : "uqshrn", 4*w, u16(min(u32_1/16, max_u16)));
@@ -1323,6 +1333,23 @@ void check_hvx_all() {
     check("valign(v*,v*,r*)", hvx_width/1, in_u16(x + 4));
     check("valign(v*,v*,r*)", hvx_width/1, in_u16(x + hvx_width - 4));
 
+    check("vunpack(v*.ub)", hvx_width/1, u16(u8_1));
+    check("vunpack(v*.ub)", hvx_width/1, i16(u8_1));
+    check("vunpack(v*.uh)", hvx_width/2, u32(u16_1));
+    check("vunpack(v*.uh)", hvx_width/2, i32(u16_1));
+    check("vunpack(v*.b)", hvx_width/1, u16(i8_1));
+    check("vunpack(v*.b)", hvx_width/1, i16(i8_1));
+    check("vunpack(v*.h)", hvx_width/2, u32(i16_1));
+    check("vunpack(v*.h)", hvx_width/2, i32(i16_1));
+
+    check("vunpack(v*.ub)", hvx_width/1, u32(u8_1));
+    check("vunpack(v*.ub)", hvx_width/1, i32(u8_1));
+    check("vunpack(v*.b)", hvx_width/1, u32(i8_1));
+    check("vunpack(v*.b)", hvx_width/1, i32(i8_1));
+
+#if 0
+    // It's quite difficult to write a single expression that tests vzxt
+    // and vsxt, because it gets rewritten as vpack/vunpack.
     check("vzxt(v*.ub)", hvx_width/1, u16(u8_1));
     check("vzxt(v*.ub)", hvx_width/1, i16(u8_1));
     check("vzxt(v*.uh)", hvx_width/2, u32(u16_1));
@@ -1336,6 +1363,7 @@ void check_hvx_all() {
     check("vzxt(v*.ub)", hvx_width/1, i32(u8_1));
     check("vsxt(v*.b)", hvx_width/1, u32(i8_1));
     check("vsxt(v*.b)", hvx_width/1, i32(i8_1));
+#endif
 
     check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
     check("vadd(v*.h,v*.h)", hvx_width/2, u16_1 + u16_2);
@@ -1437,29 +1465,38 @@ void check_hvx_all() {
     check("vpacke(v*.w,v*.w)", hvx_width/2, i16(u32_1));
     check("vpacke(v*.w,v*.w)", hvx_width/2, i16(i32_1));
 
+    check("vpacko(v*.h,v*.h)", hvx_width/1, u8(u16_1 >> 8));
+    check("vpacko(v*.h,v*.h)", hvx_width/1, u8(i16_1 >> 8));
+    check("vpacko(v*.h,v*.h)", hvx_width/1, i8(u16_1 >> 8));
+    check("vpacko(v*.h,v*.h)", hvx_width/1, i8(i16_1 >> 8));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, u16(u32_1 >> 16));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, u16(i32_1 >> 16));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, i16(u32_1 >> 16));
+    check("vpacko(v*.w,v*.w)", hvx_width/2, i16(i32_1 >> 16));
+
     // vpack doesn't interleave its inputs, which means it doesn't
     // simplify with widening. This is preferable for when the
     // pipeline doesn't widen to begin with, as in the above
     // tests. However, if the pipeline does widen, we want to generate
     // different instructions that have a built in interleaving that
     // we can cancel with the deinterleaving from widening.
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16(u8_1) << 4));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16(i8_1) << 4));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(u16(u8_1) << 4));
-    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16(i8_1) << 4));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32(u16_1) << 8));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32(i16_1) << 8));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(u32(u16_1) << 8));
-    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32(i16_1) << 8));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(u16(u8_1) * 127));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, u8(i16(i8_1) * 63));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(u16(u8_1) * 127));
+    check("vshuffe(v*.b,v*.b)", hvx_width/1, i8(i16(i8_1) * 63));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(u32(u16_1) * 32767));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, u16(i32(i16_1) * 16383));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(u32(u16_1) * 32767));
+    check("vshuffe(v*.h,v*.h)", hvx_width/2, i16(i32(i16_1) * 16383));
 
-    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(u16_1 >> 8));
-    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8(i16_1 >> 8));
-    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8(u16_1 >> 8));
-    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8(i16_1 >> 8));
-    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(u32_1 >> 16));
-    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16(i32_1 >> 16));
-    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(u32_1 >> 16));
-    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16(i32_1 >> 16));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8((u16(u8_1) * 127) >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, u8((i16(i8_1) * 63) >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((u16(u8_1) * 127) >> 8));
+    check("vshuffo(v*.b,v*.b)", hvx_width/1, i8((i16(i8_1) * 63) >> 8));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((u32(u16_1) * 32767) >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, u16((i32(i16_1) * 16383) >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((u32(u16_1) * 32767) >> 16));
+    check("vshuffo(v*.h,v*.h)", hvx_width/2, i16((i32(i16_1) * 16383) >> 16));
 
     check("vpacke(v*.h,v*.h)", hvx_width/1, in_u8(2*x));
     check("vpacke(v*.w,v*.w)", hvx_width/2, in_u16(2*x));
@@ -1480,6 +1517,7 @@ void check_hvx_all() {
     check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8_sat(i16_1));
     check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width/2, u16_sat(i32_1));
     check("v*.h = vpack(v*.w,v*.w):sat", hvx_width/2, i16_sat(i32_1));
+
     // vpack doesn't interleave its inputs, which means it doesn't
     // simplify with widening. This is preferable for when the
     // pipeline doesn't widen to begin with, as in the above
@@ -1843,7 +1881,7 @@ int main(int argc, char **argv) {
     if (can_run_code()) {
         for (ImageParam p : image_params) {
             // Make a buffer filled with noise to use as a sample input.
-            Buffer b(p.type(), {W*4+H, H});
+            Image<> b(p.type(), {W*4+H, H});
             Expr r;
             if (p.type().is_float()) {
                 r = cast(p.type(), random_float() * 1024 - 512);

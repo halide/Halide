@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<int> input(100, 50, "input");
+    Image<int> input(100, 50);
 
     // This image represents the range [100, 199]*[50, 99]
     input.set_min(100, 50);

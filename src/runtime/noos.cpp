@@ -15,6 +15,8 @@ WEAK halide_free_t custom_free = NULL;
 WEAK halide_get_symbol_t custom_get_symbol = NULL;
 WEAK halide_load_library_t custom_load_library = NULL;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = NULL;
+WEAK halide_do_task_t custom_do_task = NULL;
+WEAK halide_do_par_for_t custom_do_par_for = NULL;
 
 }}} // namespace Halide::Runtime::Interna
 
@@ -55,6 +57,29 @@ WEAK halide_print_t halide_set_custom_print(halide_print_t print) {
     custom_print = print;
     return result;
 }
+
+WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
+    halide_do_task_t result = custom_do_task;
+    custom_do_task = f;
+    return result;
+}
+
+WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
+    halide_do_par_for_t result = custom_do_par_for;
+    custom_do_par_for = f;
+    return result;
+}
+
+WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
+                        uint8_t *closure) {
+    return (*custom_do_task)(user_context, f, idx, closure);
+}
+
+WEAK int halide_do_par_for(void *user_context, halide_task_t f,
+                           int min, int size, uint8_t *closure) {
+  return (*custom_do_par_for)(user_context, f, min, size, closure);
+}
+
 
 WEAK void halide_print(void *user_context, const char *msg) {
     (*custom_print)(user_context, msg);

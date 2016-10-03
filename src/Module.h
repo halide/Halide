@@ -7,9 +7,10 @@
  */
 
 #include <functional>
- 
+
+#include "Argument.h"
+#include "BufferPtr.h"
 #include "IR.h"
-#include "Buffer.h"
 #include "ModulusRemainder.h"
 #include "Outputs.h"
 #include "Target.h"
@@ -54,14 +55,8 @@ struct LoweredFunc {
     /** The linkage of this function. */
     LinkageType linkage;
 
-    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
-        : name(name), args(args), body(body), linkage(linkage) {}
-    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
-        : name(name), body(body), linkage(linkage) {
-        for (const Argument &i : args) {
-            this->args.push_back(i);
-        }
-    }
+    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage);
+    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
 };
 
 }
@@ -86,13 +81,13 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    EXPORT const std::vector<Buffer> &buffers() const;
+    EXPORT const std::vector<Internal::BufferPtr> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
     // @}
 
     /** Add a declaration to this module. */
     // @{
-    EXPORT void append(const Buffer &buffer);
+    EXPORT void append(const Internal::BufferPtr &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
     // @}
 
@@ -116,10 +111,11 @@ EXPORT Outputs compile_standalone_runtime(const Outputs &output_files, Target t)
 
 typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
 
-EXPORT void compile_multitarget(const std::string &fn_name, 
+EXPORT void compile_multitarget(const std::string &fn_name,
                                 const Outputs &output_files,
-                                const std::vector<Target> &targets, 
-                                ModuleProducer module_producer);
+                                const std::vector<Target> &targets,
+                                ModuleProducer module_producer,
+                                const std::map<std::string, std::string> &suffixes = {});
 
 }
 

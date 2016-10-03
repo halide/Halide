@@ -16,23 +16,38 @@ void reset_stats() {
 }
 
 void my_print(void *, const char *msg) {
-    float this_ms;
+    float this_ms, this_threads;
     int idx, this_percentage, this_heap_peak;
     int this_num_mallocs, this_malloc_avg, this_stack_peak;
     int val;
 
     //printf("%s", msg);
+    val = sscanf(msg, " g_%d: %fms (%d%%) threads: %f peak: %d num: %d avg: %d",
+                 &idx, &this_ms, &this_percentage, &this_threads, &this_heap_peak,
+                 &this_num_mallocs, &this_malloc_avg);
+    if (val == 7) {
+        heap_peak = this_heap_peak;
+        num_mallocs = this_num_mallocs;
+        malloc_avg = this_malloc_avg;
+    }
+
     val = sscanf(msg, " g_%d: %fms (%d%%) peak: %d num: %d avg: %d",
-        &idx, &this_ms, &this_percentage, &this_heap_peak,
-        &this_num_mallocs, &this_malloc_avg);
+                 &idx, &this_ms, &this_percentage, &this_heap_peak,
+                 &this_num_mallocs, &this_malloc_avg);
     if (val == 6) {
         heap_peak = this_heap_peak;
         num_mallocs = this_num_mallocs;
         malloc_avg = this_malloc_avg;
     }
 
+    val = sscanf(msg, " g_%d: %fms (%d%%) threads: %f stack: %d",
+                 &idx, &this_ms, &this_percentage, &this_threads, &this_stack_peak);
+    if (val == 5) {
+        stack_peak = this_stack_peak;
+    }
+
     val = sscanf(msg, " g_%d: %fms (%d%%) stack: %d",
-        &idx, &this_ms, &this_percentage, &this_stack_peak);
+                 &idx, &this_ms, &this_percentage, &this_stack_peak);
     if (val == 4) {
         stack_peak = this_stack_peak;
     }

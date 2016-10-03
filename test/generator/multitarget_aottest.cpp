@@ -3,9 +3,13 @@
 #include <tuple>
 #include "HalideRuntime.h"
 #include "multitarget.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
+
+void my_error_handler(void *user_context, const char *message) {
+    printf("Saw Error: (%s)\n", message);
+}
 
 std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
     if (env_var_name) {
@@ -36,7 +40,7 @@ bool use_debug_feature() {
 
 static std::atomic<int> can_use_count;
 
-extern "C" int halide_can_use_target_features(uint64_t features) {
+int my_can_use_target_features(uint64_t features) {
     can_use_count += 1;
     if (features & (1ULL << halide_target_feature_debug)) {
         if (use_debug_feature()) {
@@ -52,8 +56,10 @@ int main(int argc, char **argv) {
     const int W = 32, H = 32;
     Image<uint32_t> output(W, H);
 
-    buffer_t *o_buf = output;
-    if (HalideTest::multitarget(o_buf) != 0) {
+    halide_set_error_handler(my_error_handler);
+    halide_set_custom_can_use_target_features(my_can_use_target_features);
+
+    if (HalideTest::multitarget(output) != 0) {
         printf("Error at multitarget\n");
     }
 
@@ -72,13 +78,24 @@ int main(int argc, char **argv) {
     // halide_can_use_target_features() should be called exactly once, with the
     // result cached; call this a few more times to verify.
     for (int i = 0; i < 10; ++i) {
-        if (HalideTest::multitarget(o_buf) != 0) {
+        if (HalideTest::multitarget(output) != 0) {
             printf("Error at multitarget\n");
         }
     }
     if (can_use_count != 1) {
         printf("Error: halide_can_use_target_features was called %d times!\n", (int) can_use_count);
         return -1;
+    }
+
+    {
+        // Verify that the multitarget wrapper code propagates nonzero error
+        // results back to the caller properly.
+        Image<uint8_t> bad_elem_size(W, H);
+        int result = HalideTest::multitarget(bad_elem_size);
+        if (result != halide_error_code_bad_elem_size) {
+            printf("Error: expected to fail with halide_error_code_bad_elem_size (%d) but actually got %d!\n", (int) halide_error_code_bad_elem_size, result);
+            return -1;
+        }
     }
 
     printf("Success: Saw %x for debug=%d\n", output(0, 0), use_debug_feature());

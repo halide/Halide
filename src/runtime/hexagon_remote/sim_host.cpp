@@ -1,16 +1,18 @@
-#include "../HalideRuntime.h"
-#include "HexagonWrapper.h"
-#include "sim_protocol.h"
-
 #include <vector>
 #include <sstream>
 #include <cassert>
 #include <memory>
 
+#include <HalideRuntime.h>
+#include <HexagonWrapper.h>
+
+#include "sim_protocol.h"
+
 typedef unsigned int handle_t;
 
 std::unique_ptr<HexagonWrapper> sim;
 
+bool debug_mode = false;
 int init_sim() {
     if (sim) return 0;
 
@@ -85,6 +87,8 @@ int init_sim() {
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::ConfigureRemoteDebug failed: %d\n", status);
             return -1;
+        } else {
+            debug_mode = true;
         }
     }
 
@@ -109,19 +113,30 @@ int write_memory(int dest, const void *src, int size) {
         // WriteMemory only works with powers of 2, so align down. It
         // also only writes up to 8 bytes, so we need to do this
         // repeatedly until we've finished copying the buffer.
-        int next = 1;
-        if (size >= 8) next = 8;
-        else if (size >= 4) next = 4;
-        else if (size >= 2) next = 2;
-        HEXAPI_Status status = sim->WriteMemory(dest, next, *reinterpret_cast<const HEX_8u_t*>(src));
+        HEX_8u_t src_chunk;
+        int chunk_size;
+        if (size >= 8) {
+            src_chunk = *reinterpret_cast<const HEX_8u_t*>(src);
+            chunk_size = 8;
+        } else if (size >= 4) {
+            src_chunk = *reinterpret_cast<const HEX_4u_t*>(src);
+            chunk_size = 4;
+        } else if (size >= 2) {
+            src_chunk = *reinterpret_cast<const HEX_2u_t*>(src);
+            chunk_size = 2;
+        } else {
+            src_chunk = *reinterpret_cast<const HEX_1u_t*>(src);
+            chunk_size = 1;
+        }
+        HEXAPI_Status status = sim->WriteMemory(dest, chunk_size, src_chunk);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::WriteMemory failed: %d\n", status);
             return -1;
         }
 
-        size -= next;
-        dest += next;
-        src = reinterpret_cast<const char *>(src) + next;
+        size -= chunk_size;
+        dest += chunk_size;
+        src = reinterpret_cast<const char *>(src) + chunk_size;
     }
     return 0;
 }
@@ -147,6 +162,9 @@ int read_memory(void *dest, int src, int size) {
     }
     return 0;
 }
+
+// A frequently-updated local copy of the remote profiler state.
+int profiler_current_func;
 
 int send_message(int msg, const std::vector<int> &arguments) {
     assert(sim);
@@ -180,8 +198,27 @@ int send_message(int msg, const std::vector<int> &arguments) {
         return -1;
     }
 
+    // Get the remote address of the current func. There's a remote
+    // pointer to it, so we need to walk through a few levels of
+    // indirection.
+    HEX_4u_t remote_profiler_current_func_addr_addr = 0;
+    HEX_4u_t remote_profiler_current_func_addr = 0;
+    status = sim->ReadSymbolValue("profiler_current_func_addr",
+                                  &remote_profiler_current_func_addr_addr);
+    if (status != HEX_STAT_SUCCESS) {
+        printf("HexagonWrapper::ReadSymbolValue(profiler_current_func_addr) failed: %d\n", status);
+        return -1;
+    }
+    if (read_memory(&remote_profiler_current_func_addr,
+                    remote_profiler_current_func_addr_addr,
+                    sizeof(HEX_4u_t))) {
+        return -1;
+    }
+
     HEXAPI_CoreState state;
-    if (msg == Message::Break) {
+    // If we are debugging using LLDB, then we cannot use sim->Step, but
+    // we need to use sim->Run to allow LLDB to take over.
+    if (msg == Message::Break || (debug_mode && (msg == Message::Run))) {
         // If we're trying to end the remote simulation, just run
         // until completion.
         HEX_4u_t result;
@@ -208,6 +245,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
                 }
                 return ret;
             }
+
+            // Grab the remote profiler state in case we're profiling
+            read_memory(&profiler_current_func, remote_profiler_current_func_addr, sizeof(int));
         } while (state == HEX_CORE_SUCCESS);
         printf("HexagonWrapper::StepTime failed: %d\n", state);
         return -1;
@@ -394,6 +434,14 @@ void *halide_hexagon_host_malloc(size_t x) {
 
 void halide_hexagon_host_free(void *ptr) {
     free(((void**)ptr)[-1]);
+}
+
+int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    // The stepping code periodically grabs the remote value of
+    // current_func for us.
+    *func = profiler_current_func;
+    *threads = 1;
+    return 0;
 }
 
 }  // extern "C"

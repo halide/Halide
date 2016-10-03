@@ -458,7 +458,7 @@ void CodeGen_JavaScript::compile(const LoweredFunc &f) {
            << "}\n";
 }
 
-void CodeGen_JavaScript::compile(const Buffer &buffer) {
+void CodeGen_JavaScript::compile(const BufferPtr &buffer) {
     string name = print_name(buffer.name());
     buffer_t b = *(buffer.raw_buffer());
 
@@ -1990,7 +1990,7 @@ void CodeGen_JavaScript::test() {
 
     ostringstream source;
     CodeGen_JavaScript cg(source);
-    cg.compile(s, "test1", args, vector<Buffer>());
+    cg.compile(s, "test1", args, vector<BufferPtr>());
 
     string src = source.str();
     string correct_source = preamble +

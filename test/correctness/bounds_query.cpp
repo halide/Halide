@@ -25,8 +25,8 @@ int main(int argc, char **argv) {
     second.infer_input_bounds(out);
 
     // Check the buffer was allocated and is of the expected size.
-    Buffer b = tmp.get();
-    assert(b.defined());
+    Image<int> b = tmp.get();
+    assert(b.data());
     assert(b.extent(0) == 1028);
     assert(b.extent(1) == 1026);
 

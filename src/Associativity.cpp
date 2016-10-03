@@ -200,7 +200,7 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
 
         expr = common_subexpression_elimination(expr);
         expr = simplify(expr);
-        expr = solve_expression(expr, op_x); // Move 'x' to the left as possible
+        expr = solve_expression(expr, op_x).result; // Move 'x' to the left as possible
         if (!expr.defined()) {
             return std::make_pair(false, vector<AssociativeOp>());
         }

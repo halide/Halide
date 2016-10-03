@@ -29,8 +29,8 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
     // and then back at the end to ensure proper rounding, etc.
     // There is likely a better way to handle this.
     if (result_type != computation_type) {
-        zero_val = Cast::make(computation_type, zero_val - bias_value);
-        one_val =  Cast::make(computation_type, one_val  - bias_value);
+        zero_val = Cast::make(computation_type, zero_val) - Cast::make(computation_type, bias_value);
+        one_val =  Cast::make(computation_type, one_val)  - Cast::make(computation_type, bias_value);
     }
 
     if (result_type.is_bool()) {

@@ -5,8 +5,6 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
-#define O_TRUNC 00001000
-
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
 struct ion_device_handle {
@@ -33,6 +31,8 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              remote_buffer*, int);
 typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
+typedef void (*remote_poll_profiler_state_fn)(int *, int *);
+typedef int (*remote_power_fn)();
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -43,6 +43,9 @@ WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
+WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
+WEAK remote_power_fn remote_power_hvx_on = NULL;
+WEAK remote_power_fn remote_power_hvx_off = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
@@ -59,7 +62,9 @@ WEAK void poll_log(void *user_context) {
         int read = 0;
         int result = remote_poll_log(&message[0], sizeof(message), &read);
         if (result != 0) {
-            error(user_context) << "Hexagon: remote_poll_log failed " << result << "\n";
+            // Don't make this an error, otherwise we might obscure
+            // more information about errors that would come later.
+            print(user_context) << "Hexagon: remote_poll_log failed " << result << "\n";
             return;
         }
 
@@ -71,8 +76,17 @@ WEAK void poll_log(void *user_context) {
     }
 }
 
+WEAK void get_remote_profiler_state(int *func, int *threads) {
+    if (!remote_poll_profiler_state) {
+        // This should only have been called if there's a remote profiler func installed.
+        error(NULL) << "Hexagon: remote_poll_profiler_func not found\n";
+    }
+
+    remote_poll_profiler_state(func, threads);
+}
+
 template <typename T>
-void get_symbol(void *user_context, const char* name, T &sym, bool required = true) {
+__attribute__((always_inline)) void get_symbol(void *user_context, const char* name, T &sym, bool required = true) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
     sym = (T)halide_hexagon_host_get_symbol(user_context, name);
     debug(user_context) << "        " << (void *)sym << "\n";
@@ -109,8 +123,13 @@ WEAK int init_hexagon_runtime(void *user_context) {
     get_symbol(user_context, "halide_hexagon_host_free", host_free);
     if (!host_free) return -1;
 
-    // This symbol is optional.
+    // These symbols are optional.
     get_symbol(user_context, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
+    get_symbol(user_context, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
+
+    // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
+    get_symbol(user_context, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
+    get_symbol(user_context, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
 
     host_malloc_init();
 
@@ -152,6 +171,10 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                         << ", code_size: " << (int)code_size << ")\n";
     halide_assert(user_context, state_ptr != NULL);
 
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     // Create the state object if necessary. This only happens once,
     // regardless of how many times halide_hexagon_initialize_kernels
     // or halide_hexagon_device_release is called.
@@ -188,6 +211,11 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     } else {
         debug(user_context) << "    re-using existing module " << (*state)->module << "\n";
     }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
 
     return result != 0 ? -1 : 0;
 }
@@ -285,6 +313,14 @@ WEAK int halide_hexagon_run(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    // If remote profiling is supported, tell the profiler to call
+    // get_remote_profiler_func to retrieve the current
+    // func. Otherwise leave it alone - the cost of remote running
+    // will be billed to the calling Func.
+    if (remote_poll_profiler_state) {
+        halide_profiler_get_state()->get_remote_profiler_state = get_remote_profiler_state;
+    }
+
     // Call the pipeline on the device side.
     debug(user_context) << "    halide_hexagon_remote_run -> ";
     result = remote_run(module, *function,
@@ -298,9 +334,11 @@ WEAK int halide_hexagon_run(void *user_context,
         return result;
     }
 
+    halide_profiler_get_state()->get_remote_profiler_state = NULL;
+
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return result != 0 ? -1 : 0;
@@ -585,6 +623,72 @@ WEAK int halide_hexagon_device_and_host_free(void *user_context, struct buffer_t
     halide_hexagon_device_free(user_context, buf);
     buf->host = NULL;
     return 0;
+}
+
+WEAK int halide_hexagon_power_hvx_on(void *user_context) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_power_hvx_on\n";
+    if (!remote_power_hvx_on) {
+        // The function is not available in this version of the
+        // runtime, this runtime always powers HVX on.
+        return 0;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    debug(user_context) << "    remote_power_hvx_on -> ";
+    result = remote_power_hvx_on();
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_power_hvx_on failed.\n";
+        return result;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK int halide_hexagon_power_hvx_off(void *user_context) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_power_hvx_off\n";
+    if (!remote_power_hvx_off) {
+        // The function is not available in this version of the
+        // runtime, this runtime always powers HVX on.
+        return 0;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    debug(user_context) << "    remote_power_hvx_off -> ";
+    result = remote_power_hvx_off();
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_power_hvx_off failed.\n";
+        return result;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
+    halide_hexagon_power_hvx_off(user_context);
 }
 
 WEAK const halide_device_interface *halide_hexagon_device_interface() {

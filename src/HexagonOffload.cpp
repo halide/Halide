@@ -3,15 +3,15 @@
 #include <memory>
 
 #include "HexagonOffload.h"
-#include "IRMutator.h"
-#include "Substitute.h"
 #include "Closure.h"
-#include "Param.h"
-#include "Image.h"
-#include "LLVM_Output.h"
-#include "RemoveTrivialForLoops.h"
 #include "InjectHostDevBufferCopies.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "LLVM_Output.h"
 #include "LLVM_Headers.h"
+#include "Param.h"
+#include "RemoveTrivialForLoops.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -55,6 +55,23 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
+// Wrap the stmt in a call to power_hvx_on, calling power_hvx_off
+// as a destructor if successful.
+Stmt power_hvx_on(Stmt stmt) {
+    Expr power_on = Call::make(Int(32), "halide_hexagon_power_hvx_on", {}, Call::Extern);
+    string power_on_result_name = unique_name("power_on_result");
+    Expr power_on_result_var = Variable::make(Int(32), power_on_result_name);
+    Stmt check_power_on = LetStmt::make(power_on_result_name, power_on,
+                                        AssertStmt::make(EQ::make(power_on_result_var, 0), power_on_result_var));
+
+    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
+    Expr power_off = Call::make(Int(32), Call::register_destructor,
+                                {Expr("halide_hexagon_power_hvx_off_as_destructor"), dummy_obj}, Call::Intrinsic);
+
+    stmt = Block::make(Evaluate::make(power_off), stmt);
+    stmt = Block::make(check_power_on, stmt);
+    return stmt;
+}
 
 class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_vars;
@@ -68,9 +85,10 @@ class InjectHexagonRpc : public IRMutator {
     Expr state_var(const std::string& name, Type type) {
         Expr& var = state_vars[name];
         if (!var.defined()) {
-            Buffer storage(type, {}, nullptr, name + "_buf");
-            *(void **)storage.host_ptr() = nullptr;
-            var = Load::make(type_of<void*>(), name + "_buf", 0, storage, Parameter());
+            Image<void *> storage = Image<void *>::make_scalar();
+            storage() = nullptr;
+            BufferPtr buf(storage, name + "_buf");
+            var = Load::make(type_of<void*>(), name + "_buf", 0, buf, Parameter());
         }
         return var;
     }
@@ -91,10 +109,10 @@ class InjectHexagonRpc : public IRMutator {
     // Create a Buffer containing the given buffer/size, and return an
     // expression for a pointer to the first element.
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
-        Buffer code(type_of<uint8_t>(), {(int)size}, nullptr, name);
-        memcpy(code.host_ptr(), buffer, (int)size);
-
-        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
+        Image<uint8_t> code((int)size);
+        memcpy(code.data(), buffer, (int)size);
+        BufferPtr buf(code, name);
+        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, buf, Parameter());
         return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
     }
 
@@ -246,6 +264,12 @@ public:
             return s;
         }
 
+        // If we got here, it means the pipeline runs at least one
+        // Hexagon kernel. To reduce overhead of individual
+        // sub-pipelines running on Hexagon, we can power on HVX once
+        // for the duration of this pipeline.
+        s = power_hvx_on(s);
+
         // Compile the device code.
         // TODO: Currently, this requires shelling out to
         // hexagon-clang from the Qualcomm Hexagon SDK, because the
@@ -270,6 +294,9 @@ public:
         }
         for (auto &fn : llvm_module->functions()) {
             fn.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+            for (size_t i = 0; i < fn.arg_size(); i++) {
+                fn.removeAttribute(i, llvm::Attribute::WriteOnly);
+            }
         }
         #endif
 
@@ -347,6 +374,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
     // llvm currently disagrees with hexagon clang as to what
     // constitutes valid debug info.
     static const Target::Feature shared_features[] = {
+        Target::Profile,
         Target::NoAsserts,
         Target::HVX_64,
         Target::HVX_128,

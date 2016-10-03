@@ -44,16 +44,15 @@ def main():
         # slowly. x is the column and y is the row, so this is a
         # row-major traversal.
         print("Evaluating gradient row-major")
-        output_realization = gradient.realize(4, 4)
-        output = Image(Int(32), output_realization)
+        output = gradient.realize(4, 4)
 
         # The equivalent C is:
         print("Equivalent C:")
         for yy in range(4):
             for xx in range(4):
                 print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
-            
-        
+
+
         print("\n")
 
         # Tracing is one useful way to understand what a schedule is
@@ -68,7 +67,7 @@ def main():
         #   for y:
         #     for x:
         #       gradient(...) = ...
-    
+
 
     # Reorder variables.
     if True:
@@ -90,8 +89,7 @@ def main():
         # traversal.
 
         print("Evaluating gradient column-major")
-        output_realization = gradient.realize(4, 4)
-        output = Image(Int(32), output_realization)
+        output = gradient.realize(4, 4)
 
         print("Equivalent C:")
         for yy in range(4):
@@ -105,7 +103,7 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-    
+
 
     # Split a variable into two.
     if True:
@@ -129,9 +127,7 @@ def main():
         # also added within the loops.
 
         print("Evaluating gradient with x split into x_outer and x_inner ")
-        output_realization = gradient.realize(4, 4)
-        output = Image(Int(32), output_realization)
-
+        output = gradient.realize(4, 4)
 
         print("Equivalent C:")
         for yy in range(4):
@@ -150,7 +146,7 @@ def main():
         # change! Splitting by itself does nothing, but it does open
         # up all of the scheduling possibilities that we will explore
         # below.
-    
+
 
     # Fuse two variables into one.
     if True:
@@ -167,21 +163,20 @@ def main():
         gradient.fuse(x, y, fused)
 
         print("Evaluating gradient with x and y fused")
-        output_realization = gradient.realize(4, 4)
-        output = Image(Int(32), output_realization)
+        output = gradient.realize(4, 4)
 
         print("Equivalent C:")
         for fused in range(4*4):
             yy = fused / 4
             xx = fused % 4
             print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
-        
+
         print()
 
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-    
+
 
     # Evaluating in tiles.
     if True:
@@ -208,8 +203,7 @@ def main():
         # gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)
 
         print("Evaluating gradient in 2x2 tiles")
-        output_realization = gradient.realize(4, 4)
-        output = Image(Int(32), output_realization)
+        output = gradient.realize(4, 4)
 
         print("Equivalent C:")
         for y_outer in range(2):
@@ -225,7 +219,7 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-    
+
 
     # Evaluating in vectors.
     if True:
@@ -262,9 +256,7 @@ def main():
         # This time we'll evaluate over an 8x4 box, so that we have
         # more than one vector of work per scanline.
         print("Evaluating gradient with x_inner vectorized ")
-        output_realization = gradient.realize(8, 4)
-        output = Image(Int(32), output_realization)
-
+        output = gradient.realize(8, 4)
 
         print("Equivalent C:")
         for yy in range(4):
@@ -291,7 +283,7 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-    
+
 
     # Unrolling a loop.
     if True:
@@ -313,8 +305,7 @@ def main():
         # gradient.unroll(x, 2)
 
         print("Evaluating gradient unrolled by a factor of two")
-        result_realization = gradient.realize(4, 4)
-        result = Image(Int(32), result_realization)
+        result = gradient.realize(4, 4)
 
 
         print("Equivalent C:")
@@ -331,13 +322,13 @@ def main():
                     x_inner = 1
                     xx = x_outer * 2 + x_inner
                     print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
-        
+
         print()
 
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-    
+
 
     # Splitting by factors that don't divide the extent.
     if True:
@@ -356,9 +347,7 @@ def main():
         gradient.split(x, x_outer, x_inner, 2)
 
         print("Evaluating gradient over a 5x4 box with x split by two ")
-        output_realization = gradient.realize(5, 4)
-        output = Image(Int(32), output_realization)
-
+        output = gradient.realize(5, 4)
 
         print("Equivalent C:")
         for yy in range(4):
@@ -402,7 +391,7 @@ def main():
         # the same point multiple times, so we won't apply this
         # trick. Instead the range of values computed will be rounded
         # up to the next multiple of the split factor.
-    
+
 
     # Fusing, tiling, and parallelizing.
     if True:
@@ -442,9 +431,7 @@ def main():
 
 
         print("Evaluating gradient tiles in parallel")
-        output_realization = gradient.realize(4, 4)
-        output = Image(Int(32), output_realization)
-
+        output = gradient.realize(4, 4)
 
         # The tiles should occur in arbitrary order, but within each
         # tile the pixels will be traversed in row-major order.
@@ -465,7 +452,7 @@ def main():
         print("Pseudo-code for the schedule:")
         gradient.print_loop_nest()
         print()
-    
+
 
     # Putting it all together.
     if True:
@@ -505,8 +492,7 @@ def main():
         # If you like you can turn on tracing, but it's going to
         # produce a lot of prints. Instead we'll compute the answer
         # both in C and Halide and see if the answers match.
-        result_realization = gradient_fast.realize(800, 600)
-        result = Image(Int(32), result_realization)
+        result = gradient_fast.realize(800, 600)
 
         print("Checking Halide result against equivalent C...")
         for tile_index in range(4*3):
@@ -540,9 +526,9 @@ def main():
                             if result(x_vec[i], y_vec[i]) != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
                                 return -1
-                            
-                        
-                    
+
+
+
                     if True:
                         # y_pairs = 1
                         yy = y_base + 1

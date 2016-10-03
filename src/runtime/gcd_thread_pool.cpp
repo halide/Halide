@@ -65,6 +65,8 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
 
 namespace Halide { namespace Runtime { namespace Internal {
 
+WEAK int custom_num_threads = 0;
+
 struct gcd_mutex {
     dispatch_once_t once;
     dispatch_semaphore_t semaphore;
@@ -98,6 +100,18 @@ WEAK void halide_do_gcd_task(void *job, size_t idx) {
 
 WEAK int default_do_par_for(void *user_context, halide_task_t f,
                             int min, int size, uint8_t *closure) {
+    if (custom_num_threads == 1 || size == 1) {
+        // GCD doesn't really allow us to limit the threads,
+        // so ensure that there's no parallelism by executing serially.
+        for (int x = min; x < min + size; x++) {
+            int result = halide_do_task(user_context, f, x, closure);
+            if (result) {
+                return result;
+            }
+        }
+        return 0;
+    }
+
     halide_gcd_job job;
     job.f = f;
     job.user_context = user_context;
@@ -138,8 +152,13 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
 WEAK void halide_shutdown_thread_pool() {
 }
 
-WEAK int halide_set_num_threads(int) {
-    return 1;
+WEAK int halide_set_num_threads(int n) {
+    if (n < 0) {
+        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+    }
+    int old_custom_num_threads = custom_num_threads;
+    custom_num_threads = n;
+    return old_custom_num_threads;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {

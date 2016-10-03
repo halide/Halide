@@ -28,11 +28,10 @@ struct Test {
 
         Image<float> out = g.realize(W, H);
 
-        Buffer buf(out);
         // best of 10 x 5 runs.
         time = benchmark(10, 5, [&]() {
-                g.realize(buf);
-                buf.device_sync();
+                g.realize(out);
+                out.device_sync();
         });
 
         printf("%-20s: %f us\n", name, time * 1e6);
@@ -55,10 +54,9 @@ struct Test {
         Image<float> out = g.realize(W, H);
 
         // best of 3 x 3 runs.
-        Buffer buf(out);
         time = benchmark(3, 3, [&]() {
-                g.realize(buf);
-                buf.device_sync();
+                g.realize(out);
+                out.device_sync();
         });
 
         printf("%-20s: %f us\n", name, time * 1e6);

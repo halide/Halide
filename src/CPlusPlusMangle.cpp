@@ -116,23 +116,28 @@ std::string one_qualifier_set(bool is_const, bool is_volatile, bool is_restrict,
     }
 }
 
-std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &target) {
+struct QualsState {
+    bool last_is_pointer{false};
+
+    const Type &type;
+    const std::string base_mode;
     std::string result;
-    std::string base_mode = (target.bits == 64) ? "E" : "";
 
-    bool last_is_pointer = false;
-    bool last_is_const = false;
-    bool last_is_volatile = false;
-    bool last_is_restrict = false;
-    for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
+    bool finished{false};
+
+    QualsState(const Type &type, const std::string &base_mode) : type(type), base_mode(base_mode) { }
+
+    void handle_modifier(uint8_t modifier) {
         bool is_pointer = modifier & halide_handle_cplusplus_type::Pointer;
-        last_is_const = modifier & halide_handle_cplusplus_type::Const;
-        last_is_volatile = modifier & halide_handle_cplusplus_type::Volatile;
-        last_is_restrict = modifier & halide_handle_cplusplus_type::Restrict;
+        bool last_is_const = modifier & halide_handle_cplusplus_type::Const;
+        bool last_is_volatile = modifier & halide_handle_cplusplus_type::Volatile;
+        bool last_is_restrict = modifier & halide_handle_cplusplus_type::Restrict;
 
-        if (!is_pointer && !last_is_pointer &&
-            type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference) {
-            break;
+        if (finished ||
+            (!is_pointer && !last_is_pointer &&
+             type.handle_type->reference_type == halide_handle_cplusplus_type::NotReference)) {
+            finished = true;
+            return;
         }
 
         result = one_qualifier_set(last_is_const, last_is_volatile, last_is_restrict, last_is_pointer, base_mode) + result;
@@ -142,21 +147,38 @@ std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &tar
 
         last_is_pointer = is_pointer;
         if (!is_pointer) {
-            break;
+            finished = true;
         }
     }
 
-    if (last_is_pointer) {
-        result = one_qualifier_set(false, false, false, last_is_pointer, base_mode) + result;
+    void final() {
+        if (!finished) {
+            handle_modifier(0);
+        }
+        if (last_is_pointer) {
+            result = one_qualifier_set(false, false, false, last_is_pointer, base_mode) + result;
+        }
+
+        if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
+            result = "A" + base_mode + result; // Or is it "R"?
+        } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
+            result = "$$Q" + base_mode + result;
+        }
     }
 
-    if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
-        result = "A" + base_mode + result; // Or is it "R"?
-    } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
-        result = "$$Q" + base_mode + result;
+    const std::string &get_result() {
+        return result;
     }
+};
 
-    return result;
+std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &target) {
+    QualsState state(type, (target.bits == 64) ? "E" : "");
+    for (uint8_t modifier : type.handle_type->cpp_type_modifiers) {
+        state.handle_modifier(modifier);
+    }
+    state.final();
+
+    return state.get_result();
 }
 
 MangledNamePart mangle_inner_name(const Type &type, const Target &target, PreviousDeclarations &prev_decls) {
@@ -775,7 +797,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()) }, target));
 
     halide_handle_cplusplus_type enclosed_type_info(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),
@@ -789,8 +811,8 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer()),
-                                                   ExternFuncArgument(Buffer()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()),
+                                                   ExternFuncArgument(BufferPtr()) }, target));
 
     halide_handle_cplusplus_type qual1(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),

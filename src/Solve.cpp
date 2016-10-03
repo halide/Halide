@@ -35,11 +35,6 @@ public:
     using IRMutator::mutate;
 
     Expr mutate(Expr e) {
-        // If the solve has already failed. Bail out.
-        if (failed) {
-            return e;
-        }
-
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.
@@ -88,6 +83,7 @@ private:
     // Return the negative of an expr. Does some eager simplification
     // to avoid injecting pointless -1s.
     Expr negate(Expr e) {
+        internal_assert(!e.type().is_uint()) << "Negating unsigned is not legal\n";
         const Mul *mul = e.as<Mul>();
         if (mul && is_const(mul->b)) {
             return mul->a * simplify(-1*mul->b);
@@ -114,17 +110,24 @@ private:
     void visit(const Add *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         const Add *add_a = a.as<Add>();
@@ -137,26 +140,26 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (sub_a) {
+            if (sub_a && !a_failed) {
                 // (f(x) - a) + b -> f(x) + (b - a)
                 expr = mutate(sub_a->a + (b - sub_a->b));
-            } else if (add_a) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) + b -> f(x) + (a + b)
                 expr = mutate(add_a->a + (add_a->b + b));
             }
         } else if (a_uses_var && b_uses_var) {
             if (equal(a, b)) {
                 expr = mutate(a*2);
-            } else if (add_a) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) + g(x) -> (f(x) + g(x)) + a
                 expr = mutate((add_a->a + b) + add_a->b);
-            } else if (add_b) {
+            } else if (add_b && !b_failed) {
                 // f(x) + (g(x) + a) -> (f(x) + g(x)) + a
                 expr = mutate((a + add_b->a) + add_b->b);
-            } else if (sub_a) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) + g(x) -> (f(x) + g(x)) - a
                 expr = mutate((sub_a->a + b) - sub_a->b);
-            } else if (sub_b) {
+            } else if (sub_b && !b_failed) {
                 // f(x) + (g(x) - a) -> (f(x) + g(x)) - a
                 expr = mutate((a + sub_b->a) - sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -193,13 +196,19 @@ private:
     void visit(const Sub *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
@@ -211,34 +220,43 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (sub_a) {
+            if (sub_a && !a_failed) {
                 // (f(x) - a) - b -> f(x) - (a + b)
                 expr = mutate(sub_a->a - (sub_a->b + b));
-            } else if (add_a) {
+            } else if (add_a && !a_failed) {
                 // (f(x) + a) - b -> f(x) + (a - b)
                 expr = mutate(add_a->a + (add_a->b - b));
             }
         } else if (b_uses_var && !a_uses_var) {
-            if (sub_b) {
+            if (op->type.is_uint()) {
+                if (sub_b && b_failed) {
+                    // a - (b - f(x)) -> f(x) + (a - b)
+                    failed = old_failed || a_failed;
+                    expr = mutate(sub_b->b + (a - sub_b->a));
+                } else {
+                    // Negating unsigned is not legal
+                    fail(a - b);
+                }
+            } else if (sub_b && !b_failed) {
                 // a - (f(x) - b) -> -f(x) + (a + b)
                 expr = mutate(negate(sub_b->a) + (a + sub_b->b));
-            } else if (add_b) {
+            } else if (add_b && !b_failed) {
                 // a - (f(x) + b) -> -f(x) + (a - b)
                 expr = mutate(negate(add_b->a) + (a - add_b->b));
             } else {
                 expr = mutate(negate(b) + a);
             }
         } else if (a_uses_var && b_uses_var) {
-            if (add_a) {
+            if (add_a && !a_failed) {
                 // (f(x) + a) - g(x) -> (f(x) - g(x)) + a
                 expr = mutate(add_a->a - b + add_a->b);
-            } else if (add_b) {
+            } else if (add_b && !b_failed) {
                 // f(x) - (g(x) + a) -> (f(x) - g(x)) - a
                 expr = mutate(a - add_b->a - add_b->b);
-            } else if (sub_a) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) - g(x) -> (f(x) - g(x)) - a
                 expr = mutate(sub_a->a - b - sub_a->b);
-            } else if (sub_b) {
+            } else if (sub_b && !b_failed) {
                 // f(x) - (g(x) - a) -> (f(x) - g(x)) - a
                 expr = mutate(a - sub_b->a - sub_b->b);
             } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
@@ -269,15 +287,21 @@ private:
     void visit(const Mul *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         internal_assert(!is_const(op->a) || !a_uses_var) << op->a << ", " << uses_var << "\n";
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -286,17 +310,18 @@ private:
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         expr = Expr();
         if (a_uses_var && !b_uses_var) {
-            if (add_a) {
+            if (add_a && !a_failed) {
                 // (f(x) + a) * b -> f(x) * b + a * b
                 expr = mutate(add_a->a * b + add_a->b * b);
-            } else if (sub_a) {
+            } else if (sub_a && !a_failed) {
                 // (f(x) - a) * b -> f(x) * b - a * b
                 expr = mutate(sub_a->a * b - sub_a->b * b);
-            } else if (mul_a) {
+            } else if (mul_a && !a_failed) {
                 // (f(x) * a) * b -> f(x) * (a * b)
                 expr = mutate(mul_a->a * (mul_a->b * b));
             }
@@ -334,17 +359,24 @@ private:
     void visit_min_max_op(const T *op, bool is_min) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         const Add *add_a = a.as<Add>();
@@ -359,7 +391,7 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (t_a) {
+            if (t_a && !a_failed) {
                 // op(op(f(x), a), b) -> op(f(x), op(a, b))
                 expr = mutate(T::make(t_a->a, T::make(t_a->b, b)));
             }
@@ -367,10 +399,10 @@ private:
             if (equal(a, b)) {
                 // op(f(x), f(x)) -> f(x)
                 expr = a;
-            } else if (t_a) {
+            } else if (t_a && !a_failed) {
                 // op(op(f(x), a), g(x)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(t_a->a, b), t_a->b));
-            } else if (t_b) {
+            } else if (t_b && !b_failed) {
                 // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
             } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
@@ -440,17 +472,24 @@ private:
     void visit_and_or_op(const T *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
             std::swap(a_uses_var, b_uses_var);
+            std::swap(a_failed, b_failed);
         }
 
         const T *t_a = a.as<T>();
@@ -459,7 +498,7 @@ private:
         expr = Expr();
 
         if (a_uses_var && !b_uses_var) {
-            if (t_a) {
+            if (t_a && !a_failed) {
                 // op(op(f(x), a), b) -> op(f(x), op(a, b))
                 expr = mutate(T::make(t_a->a, T::make(t_a->b, b)));
             }
@@ -467,10 +506,10 @@ private:
             if (equal(a, b)) {
                 // op(f(x), f(x)) -> f(x)
                 expr = a;
-            } else if (t_a) {
+            } else if (t_a && !a_failed) {
                 // op(op(f(x), a), g(x)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(t_a->a, b), t_a->b));
-            } else if (t_b) {
+            } else if (t_b && !b_failed) {
                 // op(f(x), op(g(x), a)) -> op(op(f(x), g(x)), a)
                 expr = mutate(T::make(T::make(a, t_b->a), t_b->b));
             } else {
@@ -504,13 +543,19 @@ private:
     void visit_cmp(const Cmp *op) {
         bool old_uses_var = uses_var;
         uses_var = false;
+        bool old_failed = failed;
+        failed = false;
         Expr a = mutate(op->a);
         bool a_uses_var = uses_var;
+        bool a_failed = failed;
 
         uses_var = false;
+        failed = false;
         Expr b = mutate(op->b);
         bool b_uses_var = uses_var;
+        bool b_failed = failed;
         uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             expr = mutate(Opp::make(b, a));
@@ -533,10 +578,10 @@ private:
 
         if (a_uses_var && !b_uses_var) {
             // We have f(x) < y. Try to unwrap f(x)
-            if (add_a) {
+            if (add_a && !a_failed) {
                 // f(x) + b < c -> f(x) < c - b
                 expr = mutate(Cmp::make(add_a->a, (b - add_a->b)));
-            } else if (sub_a) {
+            } else if (sub_a && !a_failed) {
                 // f(x) - b < c -> f(x) < c + b
                 expr = mutate(Cmp::make(sub_a->a, (b + sub_a->b)));
             } else if (mul_a) {
@@ -550,6 +595,9 @@ private:
                 } else if (is_const(mul_a->b, -1)) {
                     expr = mutate(Opp::make(mul_a->a, make_zero(b.type()) - b));
                 } else if (is_negative_const(mul_a->b)) {
+                    // It shouldn't have been unsigned since the is_negative_const
+                    // check is true, but put an assertion anyway.
+                    internal_assert(!b.type().is_uint()) << "Negating unsigned is not legal\n";
                     expr = mutate(Opp::make(mul_a->a * negate(mul_a->b), negate(b)));
                 } else {
                     // Don't use operator/ and operator % to sneak
@@ -587,6 +635,9 @@ private:
                     if (is_eq || is_ne) {
                         // Can't do anything with this
                     } else if (is_negative_const(div_a->b)) {
+                        // It shouldn't have been unsigned since the is_negative_const
+                        // check is true, but put an assertion anyway.
+                        internal_assert(!a.type().is_uint()) << "Negating unsigned is not legal\n";
                         // With Euclidean division, (a/(-b)) == -(a/b)
                         expr = mutate(Cmp::make(negate(div_a->a / negate(div_a->b)), b));
                     } else if (is_positive_const(div_a->b)) {
@@ -867,12 +918,12 @@ class SolveForInterval : public IRVisitor {
 
         const Variable *v = le->a.as<Variable>();
         if (!already_solved) {
-            Expr solved = solve_expression(le, var, scope);
-            if (!solved.defined()) {
+            SolverResult solved = solve_expression(le, var, scope);
+            if (!solved.fully_solved) {
                 fail();
             } else {
                 already_solved = true;
-                solved.accept(this);
+                solved.result.accept(this);
                 already_solved = false;
             }
         } else if (v && v->name == var) {
@@ -924,12 +975,12 @@ class SolveForInterval : public IRVisitor {
 
         const Variable *v = ge->a.as<Variable>();
         if (!already_solved) {
-            Expr solved = solve_expression(ge, var, scope);
-            if (!solved.defined()) {
+            SolverResult solved = solve_expression(ge, var, scope);
+            if (!solved.fully_solved) {
                 fail();
             } else {
                 already_solved = true;
-                solved.accept(this);
+                solved.result.accept(this);
                 already_solved = false;
             }
         } else if (v && v->name == var) {
@@ -1261,19 +1312,15 @@ public:
 
 } // Anonymous namespace
 
-Expr solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
+SolverResult solve_expression(Expr e, const std::string &variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
     Expr new_e = solver.mutate(e);
-    if (solver.failed) {
-        return Expr();
-    } else {
-        // The process has expanded lets. Re-collect them.
-        new_e = common_subexpression_elimination(new_e);
-        debug(3) << "Solved expr for " << variable << " :\n"
-                 << "  " << e << "\n"
-                 << "  " << new_e << "\n";
-        return new_e;
-    }
+    // The process has expanded lets. Re-collect them.
+    new_e = common_subexpression_elimination(new_e);
+    debug(3) << "Solved expr for " << variable << " :\n"
+             << "  " << e << "\n"
+             << "  " << new_e << "\n";
+    return {new_e, !solver.failed};
 }
 
 
@@ -1315,10 +1362,10 @@ Expr and_condition_over_domain(Expr e, const Scope<Interval> &varying) {
 namespace {
 
 void check_solve(Expr a, Expr b) {
-    Expr c = solve_expression(a, "x");
-    internal_assert(equal(c, b))
+    SolverResult solved = solve_expression(a, "x");
+    internal_assert(equal(solved.result, b))
         << "Expression: " << a << "\n"
-        << " solved to " << c << "\n"
+        << " solved to " << solved.result << "\n"
         << " instead of " << b << "\n";
 }
 
@@ -1385,8 +1432,8 @@ void solve_test() {
         for (int i = 0; i < 10; i++) {
             e *= (e + 1);
         }
-        Expr c = solve_expression(x + e < e*e, "x");
-        internal_assert(c.as<Let>());
+        SolverResult solved = solve_expression(x + e < e*e, "x");
+        internal_assert(solved.fully_solved && solved.result.as<Let>());
     }
 
     // Solving inequalities for integers is a pain to get right with
@@ -1398,7 +1445,9 @@ void solve_test() {
             Expr in[] = {x*den < num, x*den <= num, x*den == num, x*den != num, x*den >= num, x*den > num,
                          x/den < num, x/den <= num, x/den == num, x/den != num, x/den >= num, x/den > num};
             for (int j = 0; j < 12; j++) {
-                Expr out = simplify(solve_expression(in[j], "x"));
+                SolverResult solved = solve_expression(in[j], "x");
+                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << in[j] << "\n";
+                Expr out = simplify(solved.result);
                 for (int i = -10; i < 10; i++) {
                     Expr in_val = substitute("x", i, in[j]);
                     Expr out_val = substitute("x", i, out);
@@ -1418,13 +1467,13 @@ void solve_test() {
     for (int i = 0; i < 20; i++) {
         e += (e + 1) * y;
     }
-    e = solve_expression(e, "x");
-    internal_assert(e.defined());
+    SolverResult solved = solve_expression(e, "x");
+    internal_assert(solved.fully_solved && solved.result.defined());
 
     // Check some things that we don't expect to work.
 
     // Quadratics:
-    internal_assert(!solve_expression(x*x < 4, "x").defined());
+    internal_assert(!solve_expression(x*x < 4, "x").fully_solved);
 
     // Function calls, cast nodes, or multiplications by unknown sign
     // don't get inverted, but the bit containing x still gets moved
@@ -1489,8 +1538,8 @@ void solve_test() {
     {
         // This case used to break due to signed integer overflow in
         // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer(), Parameter());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer(), Parameter());
+        Expr a16 = Load::make(Int(16), "a", {x}, BufferPtr(), Parameter());
+        Expr b16 = Load::make(Int(16), "b", {x}, BufferPtr(), Parameter());
         Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
         Scope<Interval> s;
@@ -1517,8 +1566,27 @@ void solve_test() {
         solve_for_inner_interval(t <= 5, "t");
     }
 
-    debug(0) << "Solve test passed\n";
+    // Check for partial results
+    check_solve(max(min(y, x), x), max(min(x, y), x));
+    check_solve(min(y, x) + max(y, 2*x), min(x, y) + max(x*2, y));
+    check_solve((min(x, y) + min(y, x))*max(y, x), (min(x, y)*2)*max(x, y));
+    check_solve(max((min((y*x), x) + min((1 + y), x)), (y + 2*x)),
+                max((min((x*y), x) + min(x, (1 + y))), (x*2 + y)));
 
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        Expr z = Variable::make(UInt(32), "z");
+        check_solve(5 - (4 - 4*x), x*(4) + 1);
+        check_solve(z - (y - x), x + (z - y));
+        check_solve(z - (y - x) == 2, x  == 2 - (z - y));
+
+        // This is used to cause infinite recursion
+        Expr expr = Add::make(z, Sub::make(x, y));
+        SolverResult solved = solve_expression(expr, "y");
+    }
+
+    debug(0) << "Solve test passed\n";
 }
 
 }

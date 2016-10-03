@@ -79,8 +79,7 @@ bool test(int vec_width, const Target &target) {
         }
     }
 
-    Image<B> output(W, H);
-    f.realize(output);
+    Image<B> output = f.realize(W, H);
 
     /*
     for (int y = 0; y < H; y++) {

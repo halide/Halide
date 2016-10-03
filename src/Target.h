@@ -63,7 +63,6 @@ struct Target {
         OpenGLCompute = halide_target_feature_openglcompute,
         Renderscript = halide_target_feature_renderscript,
         UserContext = halide_target_feature_user_context,
-        RegisterMetadata = halide_target_feature_register_metadata,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
@@ -74,6 +73,9 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        FuzzFloatStores = halide_target_feature_fuzz_float_stores,
+        SoftFloatABI = halide_target_feature_soft_float_abi,
+        MSAN = halide_target_feature_msan,
         JavaScript = halide_target_feature_javascript,
         JavaScript_SIMD = halide_target_feature_javascript_simd,
         JavaScript_V8 = halide_target_feature_javascript_v8,
@@ -208,8 +210,8 @@ struct Target {
      *
      *   arch-bits-os-feature1-feature2...featureN.
      *
-     * Note that is guaranteed that t2.from_string(t1.to_string()) == t1,
-     * but not that from_string(s).to_string() == s (since there can be
+     * Note that is guaranteed that Target(t1.to_string()) == t1,
+     * but not that Target(s).to_string() == s (since there can be
      * multiple strings that parse to the same Target)...
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).

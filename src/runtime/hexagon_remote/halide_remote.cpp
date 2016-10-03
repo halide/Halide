@@ -1,22 +1,15 @@
-extern "C" {
-
 #include "bin/src/halide_hexagon_remote.h"
-#include <memory.h>
+#include <HalideRuntime.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <qurt.h>
 
+extern "C" {
 #include "HAP_farf.h"
 #include "HAP_power.h"
-
 }
-
-#include <HalideRuntime.h>
-
-#include <qurt.h>
 
 #include "elf.h"
 #include "pipeline_context.h"
@@ -28,29 +21,24 @@ const int stack_size = 1024 * 1024;
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
-// Use a 64 KB circular buffer to store log messages.
-Log global_log(1024 * 64);
-
-void log_printf(const char *fmt, ...) {
-    char message[1024] = { 0, };
-    va_list ap;
-    va_start(ap, fmt);
-    int message_size = vsnprintf(message, sizeof(message) - 1, fmt, ap);
-    va_end(ap);
-    global_log.write(message, message_size);
-}
-
 extern "C" {
 
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
-    log_printf("%s", str);
+    if (str) {
+        log_printf("%s", str);
+    }
 }
 
 void halide_error(void *user_context, const char *str) {
-    halide_print(user_context, str);
+    if (!str) {
+        log_printf("Unknown error\n");
+    } else if (*str == '\0' || str[strlen(str) - 1] != '\n') {
+        log_printf("Error: %s\n", str);
+    } else {
+        log_printf("Error: %s", str);
+    }
 }
-
 
 namespace {
 
@@ -113,7 +101,6 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(const char *),
                              void *(*)(void *, const char *));
 
-int context_count = 0;
 PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
@@ -151,12 +138,51 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     }
     *module_ptr = reinterpret_cast<handle_t>(lib);
 
-    if (context_count == 0) {
+    return 0;
+}
+
+handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+}
+
+volatile int power_ref_count = 0;
+
+int halide_hexagon_remote_power_hvx_on() {
+    if (power_ref_count == 0) {
+        HAP_power_response_t power_info;
+
+        power_info.type = HAP_power_get_max_mips;
+        int retval = HAP_power_get(NULL, &power_info);
+        if (0 != retval) {
+            log_printf("HAP_power_get(HAP_power_get_max_mips) failed (%d)\n", retval);
+            return -1;
+        }
+        unsigned int max_mips = power_info.max_mips;
+
+        power_info.type = HAP_power_get_max_bus_bw;
+        retval = HAP_power_get(NULL, &power_info);
+        if (0 != retval) {
+            log_printf("HAP_power_get(HAP_power_get_max_bus_bw) failed (%d)\n", retval);
+            return -1;
+        }
+        uint64 max_bus_bw = power_info.max_bus_bw;
+
+        // The above API under-reports the max bus bw. If we use it as
+        // reported, performance is bad. Experimentally, this only
+        // needs to be ~10, but since it's wrong, we might as well
+        // have a safety factor...
+        max_bus_bw *= 1000;
+
+        // Since max_bus_bw is bad, might as well make sure max_mips
+        // isn't bad too.
+        max_mips *= 1000;
+
+
         HAP_power_request_t request;
 
         request.type = HAP_power_set_apptype;
         request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-        int retval = HAP_power_set(NULL, &request);
+        retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
             log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
             return -1;
@@ -172,10 +198,10 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 
         request.type = HAP_power_set_mips_bw;
         request.mips_bw.set_mips = TRUE;
-        request.mips_bw.mipsPerThread = 500;
-        request.mips_bw.mipsTotal = 1000;
+        request.mips_bw.mipsPerThread = max_mips;
+        request.mips_bw.mipsTotal = max_mips;
         request.mips_bw.set_bus_bw = TRUE;
-        request.mips_bw.bwBytePerSec = static_cast<uint64_t>(12000) * 1000000;
+        request.mips_bw.bwBytePerSec = max_bus_bw;
         request.mips_bw.busbwUsagePercentage = 100;
         request.mips_bw.set_latency = TRUE;
         request.mips_bw.latency = 1;
@@ -185,14 +211,45 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
             return -1;
         }
     }
-
-    context_count++;
-
+    power_ref_count++;
     return 0;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+int halide_hexagon_remote_power_hvx_off() {
+    power_ref_count--;
+    if (power_ref_count == 0) {
+        HAP_power_request_t request;
+
+        request.type = HAP_power_set_HVX;
+        request.hvx.power_up = FALSE;
+        int retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", retval);
+            return -1;
+        }
+
+        request.type = HAP_power_set_mips_bw;
+        request.mips_bw.set_mips = TRUE;
+        request.mips_bw.mipsPerThread = 0;
+        request.mips_bw.mipsTotal = 0;
+        request.mips_bw.set_bus_bw = TRUE;
+        request.mips_bw.bwBytePerSec = 0;
+        request.mips_bw.busbwUsagePercentage = 0;
+        request.mips_bw.set_latency = TRUE;
+        request.mips_bw.latency = -1;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen,
+                                        handle_t *sym_ptr) {
+    *sym_ptr = reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    return *sym_ptr != 0 ? 0 : -1;
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
@@ -232,25 +289,37 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         *next_arg = input_scalarsPtrs[i].data;
     }
 
-    // Call the pipeline and return the result.
-    return run_context.run(pipeline, args);
-}
+    // Prior to running the pipeline, power HVX on (if it was not already on).
+    int result = halide_hexagon_remote_power_hvx_on();
+    if (result != 0) {
+        return result;
+    }
 
-int halide_hexagon_remote_poll_log(char *out, int size, int *read_size) {
-    // Leave room for appending a null terminator.
-    *read_size = global_log.read(out, size - 1);
-    out[*read_size - 1] = 0;
-    return 0;
+    // Call the pipeline and return the result.
+    result = run_context.run(pipeline, args);
+
+    // Power HVX off.
+    halide_hexagon_remote_power_hvx_off();
+
+    return result;
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
     obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
-
-    if (context_count-- == 0) {
-        HAP_power_request(0, 0, -1);
-    }
-
     return 0;
 }
+
+int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
+    *func = halide_profiler_get_state()->current_func;
+    *threads = halide_profiler_get_state()->active_threads;
+    return 0;
+}
+
+halide_profiler_state *halide_profiler_get_state() {
+    static halide_profiler_state hvx_profiler_state;
+    return &hvx_profiler_state;
+}
+
+
 
 }  // extern "C"

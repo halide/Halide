@@ -1,4 +1,4 @@
-#include <Halide.h>
+#include "Halide.h"
 using namespace Halide;
 
 // Order a pair of Exprs, treating undefined Exprs as infinity

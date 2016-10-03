@@ -3,5 +3,4 @@
 
 void defineVarOrRVar();
 
-
-#endif // FUNC_VARORRVAR_H
+#endif  // FUNC_VARORRVAR_H

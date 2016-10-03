@@ -32,6 +32,13 @@ public:
     Param<double> scale_d{"scale_d", 0};
     Param<int32_t *> ptr{"ptr", 0};
     Param<int32_t const *> const_ptr{"const_ptr", 0};
+    Param<void *> void_ptr{"void_ptr", 0};
+    Param<void const *> const_void_ptr{"const_void_ptr", 0};
+    // 'string' is just a convenient struct-like thing that isn't special
+    // cased by Halide; it will be generated as a void* (but const-ness
+    // should be preserved).
+    Param<std::string *> string_ptr{"string_ptr", 0};
+    Param<std::string const *> const_string_ptr{"const_string_ptr", 0};
 
     Func build() {
         assert(get_target().has_feature(Target::CPlusPlusMangling));

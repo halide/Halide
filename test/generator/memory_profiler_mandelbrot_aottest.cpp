@@ -6,10 +6,10 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "memory_profiler_mandelbrot.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 using std::map;
 using std::string;
 
@@ -60,7 +60,7 @@ void validate(halide_profiler_state *s) {
 
 
 int launcher_task(void *user_context, int index, uint8_t *closure) {
-    Image<float> output(width, height);
+    Image<int> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
     memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
                                output.width(), output.height(), output);

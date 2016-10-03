@@ -11,6 +11,14 @@
 
 namespace Halide {
 
+class Func;
+struct VarOrRVar;
+
+namespace Internal {
+class Function;
+struct FunctionContents;
+}  // namespace Internal
+
 /** Different ways to handle a tail case in a split when the
  * factor does not provably divide the extent. */
 enum class TailStrategy {
@@ -56,60 +64,73 @@ enum class TailStrategy {
     Auto
 };
 
-namespace Internal {
-
-class IRMutator;
-struct ReductionVariable;
-
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
  * dimensions. We schedule the inputs to that function by
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
-struct LoopLevel {
-    std::string func, var;
+class LoopLevel {
+    // Note: func_ is nullptr for inline or root.
+    Internal::IntrusivePtr<Internal::FunctionContents> function_contents;
+    // TODO: these two fields should really be VarOrRVar, 
+    // but cyclical include dependencies make this challenging.
+    std::string var_name;
+    bool is_rvar;
 
+    EXPORT LoopLevel(Internal::IntrusivePtr<Internal::FunctionContents> f, const std::string &var_name, bool is_rvar);
+    EXPORT std::string func_name() const;
+
+public:
     /** Identify the loop nest corresponding to some dimension of some function */
-    LoopLevel(std::string f, std::string v) : func(f), var(v) {}
+    // @{
+    EXPORT LoopLevel(Internal::Function f, VarOrRVar v);
+    EXPORT LoopLevel(Func f, VarOrRVar v);
+    // @}
 
     /** Construct an empty LoopLevel, which is interpreted as
      * 'inline'. This is a special LoopLevel value that implies
      * that a function should be inlined away */
-    LoopLevel() {}
+    LoopLevel() : function_contents(nullptr), var_name(""), is_rvar(false) {}
+
+    /** Return the Func. Asserts if the LoopLevel is_root() or is_inline(). */
+    EXPORT Func func() const;
+
+    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
+    EXPORT VarOrRVar var() const;
 
     /** Test if a loop level corresponds to inlining the function */
-    bool is_inline() const {return var.empty();}
+    EXPORT bool is_inline() const;
 
     /** root is a special LoopLevel value which represents the
      * location outside of all for loops */
-    static LoopLevel root() {
-        return LoopLevel("", "__root");
-    }
+    EXPORT static LoopLevel root();
+
     /** Test if a loop level is 'root', which describes the site
      * outside of all for loops */
-    bool is_root() const {return var == "__root";}
+    EXPORT bool is_root() const;
+
+    /** Return a string of the form func.var -- note that this is safe
+     * to call for root or inline LoopLevels. */
+    EXPORT std::string to_string() const;
 
     /** Compare this loop level against the variable name of a for
      * loop, to see if this loop level refers to the site
      * immediately inside this loop. */
-    bool match(const std::string &loop) const {
-        return starts_with(loop, func + ".") && ends_with(loop, "." + var);
-    }
+    EXPORT bool match(const std::string &loop) const;
 
-    bool match(const LoopLevel &other) const {
-        return (func == other.func &&
-                (var == other.var ||
-                 ends_with(var, "." + other.var) ||
-                 ends_with(other.var, "." + var)));
-    }
+    EXPORT bool match(const LoopLevel &other) const;
 
     /** Check if two loop levels are exactly the same. */
-    bool operator==(const LoopLevel &other) const {
-        return func == other.func && var == other.var;
-    }
+    EXPORT bool operator==(const LoopLevel &other) const;
 
+    bool operator!=(const LoopLevel &other) const { return !(*this == other); }
 };
+
+namespace Internal {
+
+class IRMutator;
+struct ReductionVariable;
 
 struct Split {
     std::string old_var, outer, inner;
@@ -155,7 +176,7 @@ struct Dim {
 
 struct Bound {
     std::string var;
-    Expr min, extent;
+    Expr min, extent, modulus, remainder;
 };
 
 struct ScheduleContents;
@@ -243,8 +264,9 @@ public:
     std::vector<StorageDim> &storage_dims();
     // @}
 
-    /** You may explicitly bound some of the dimensions of a
-     * function. See \ref Func::bound */
+    /** You may explicitly bound some of the dimensions of a function,
+     * or constrain them to lie on multiples of a given factor. See
+     * \ref Func::bound and \ref Func::align_bounds */
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
