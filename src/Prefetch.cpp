@@ -27,7 +27,7 @@ public:
     const std::vector<Expr> &args;
     Expr load;
 
-    MakeSimilarLoad(std::string name, const std::vector<Expr> &args)
+    MakeSimilarLoad(const std::string &name, const std::vector<Expr> &args)
         : buf_name(name), args(args) {}
 
 private:
