@@ -33,8 +33,11 @@ namespace {
     explicit WriteBitcodePass(raw_ostream &o, bool ShouldPreserveUseListOrder)
         : ModulePass(ID), OS(o),
           ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {}
-
+#if LLVM_VERSION >= 40
+    llvm::StringRef getPassName() const { return "Bitcode Writer"; }
+#else
     const char *getPassName() const { return "Bitcode Writer"; }
+#endif
 
     bool runOnModule(Module &M) {
       bool Changed = false;
