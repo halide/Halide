@@ -951,7 +951,11 @@ void CodeGen_LLVM::optimize_module() {
     public:
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         virtual void add(Pass *p) override {
+#if LLVM_VERSION >= 40
+            debug(2) << "Adding function pass: " << p->getPassName().str() << "\n";
+#else
             debug(2) << "Adding function pass: " << p->getPassName() << "\n";
+#endif
             legacy::FunctionPassManager::add(p);
         }
     };
@@ -959,7 +963,11 @@ void CodeGen_LLVM::optimize_module() {
     class MyModulePassManager : public legacy::PassManager {
     public:
         virtual void add(Pass *p) override {
+#if LLVM_VERSION >= 40
+            debug(2) << "Adding module pass: " << p->getPassName().str() << "\n";
+#else
             debug(2) << "Adding module pass: " << p->getPassName() << "\n";
+#endif
             legacy::PassManager::add(p);
         }
     };
