@@ -1391,6 +1391,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
         for (Expr i : op->args) {
             args.push_back(codegen(i));
         }
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
+
         value = builder->CreateCall(prefetch_fn, args);
         return;
     }
