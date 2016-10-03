@@ -23,11 +23,11 @@ namespace {
 // different args.
 class MakeSimilarLoad : public IRVisitor {
 public:
-    const std::string &buf_name;
-    const std::vector<Expr> &args;
+    const string &buf_name;
+    const vector<Expr> &args;
     Expr load;
 
-    MakeSimilarLoad(const std::string &name, const std::vector<Expr> &args)
+    MakeSimilarLoad(const string &name, const vector<Expr> &args)
         : buf_name(name), args(args) {}
 
 private:
@@ -42,7 +42,7 @@ private:
     }
 };
 
-Expr make_similar_load(Stmt s, const std::string &name, const std::vector<Expr> &args) {
+Expr make_similar_load(Stmt s, const string &name, const vector<Expr> &args) {
     MakeSimilarLoad v(name, args);
     s.accept(&v);
     return v.load;
@@ -198,7 +198,7 @@ private:
                 // This should use boxes_touched (instead of boxes_required) so we exclude memory
                 // either read or written.
                 for (const auto &b : boxes_read) {
-                    const std::string &buf_name = b.first;
+                    const string &buf_name = b.first;
 
                     // Only prefetch the region that is in bounds.
                     Box bounds = buffer_bounds(buf_name, b.second.size());
@@ -220,7 +220,7 @@ private:
 
 } // namespace
 
-Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env) {
+Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
     return InjectPrefetch(env).mutate(s);
 }
 
