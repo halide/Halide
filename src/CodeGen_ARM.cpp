@@ -705,16 +705,43 @@ void CodeGen_ARM::visit(const Store *op) {
             args[i] = codegen(call->args[i]);
         }
 
-        // Declare the function
+#if LLVM_VERSION > 39
+        Value *shuffle_part1, *shuffle_part2;
+        if (num_vecs > 2) {
+            unsigned maskSize = 2 * t.lanes();
+            SmallVector<Constant*, 256> constants;
+            for(unsigned j = 0; j < maskSize; j++) {
+                Constant *constant = ConstantInt::get(i32_t, j);
+                constants.push_back(constant);
+            }
+            Constant* constantsV = ConstantVector::get(constants);
+
+            shuffle_part1 = builder->CreateShuffleVector(args[0], args[1], constantsV);
+
+            Value *args3;
+            if(num_vecs == 3) {
+                llvm::Type *store_type = llvm_type_of(t);
+                Value *undef = UndefValue::get(store_type);
+                args3 = undef;
+            } else {
+                args3 = args[3];
+            }
+
+            shuffle_part2 = builder->CreateShuffleVector(args[2], args3, constantsV);
+        } else {
+            shuffle_part1 = args[0];
+            shuffle_part2 = args[1];
+        }
+        llvm::Type *store_return_type = llvm_type_of(t.with_lanes(intrin_type.lanes() * num_vecs));
+        llvm::Type *store_return_pointer_type = store_return_type->getPointerTo();
+#else
+        // Declare intrinsic function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-#if LLVM_VERSION > 37
-                   << ".p0i8"
-#endif
-                  << ".v"
+                  << ".p0i8.v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
@@ -737,16 +764,31 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
         llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
         internal_assert(fn);
+#endif
 
-        // How many vst instructions do we need to generate?
+        // How many stores/vst instructions do we need to generate?
+        // LLVM > 39 turns each shuffle + vector store pattern below into a vst.
         int slices = t.lanes() / intrin_type.lanes();
-
         internal_assert(slices >= 1);
+
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
             Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
-
+#if LLVM_VERSION > 39
+            SmallVector<Constant*, 256> constants;
+            for (int j = 0; j < intrin_type.lanes(); j++) {
+                for (int k = 0; k < num_vecs; k++) {
+                    Constant *constant = ConstantInt::get(i32_t, i + j + k*t.lanes());
+                    constants.push_back(constant);
+                }
+            }
+            Constant* constantsV = ConstantVector::get(constants);
+            Value* all_shuffle = builder->CreateShuffleVector(shuffle_part1, shuffle_part2, constantsV);
+            Value *bitcast = builder->CreateBitOrPointerCast(ptr, store_return_pointer_type);
+            StoreInst *store = cast<StoreInst>(builder->CreateStore(all_shuffle, bitcast));
+            store->setAlignment(alignment);
+#else
             vector<Value *> slice_args = args;
             // Take a slice of each arg
             for (int j = 0; j < num_vecs ; j++) {
@@ -764,8 +806,8 @@ void CodeGen_ARM::visit(const Store *op) {
                 // Set the pointer argument
                 slice_args.push_back(ptr);
             }
-
             CallInst *store = builder->CreateCall(fn, slice_args);
+#endif
             add_tbaa_metadata(store, op->name, slice_ramp);
         }
 
