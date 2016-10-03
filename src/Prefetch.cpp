@@ -1,16 +1,11 @@
 #include <algorithm>
 #include <map>
 #include <string>
-#include <limits>
 
 #include "Prefetch.h"
-#include "CodeGen_Internal.h"
 #include "IRMutator.h"
-#include "IROperator.h"
 #include "Bounds.h"
 #include "Scope.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Util.h"
 
 namespace Halide {
@@ -19,204 +14,208 @@ namespace Internal {
 using std::map;
 using std::string;
 using std::vector;
-using std::stack;
-using std::pair;
 
 namespace {
 
-class HasRealization : public IRVisitor {
+// We need to be able to make loads from a buffer that refer to the
+// same original image/param/etc. This visitor finds a load to the
+// buffer we want to load from, and generates a similar load, but with
+// different args.
+class MakeSimilarLoad : public IRVisitor {
 public:
-    std::string realization_name;
-    bool has = false;
+    const std::string &buf_name;
+    const std::vector<Expr> &args;
+    Expr load;
 
-    HasRealization(std::string name) : realization_name(name) { }
+    MakeSimilarLoad(std::string name, const std::vector<Expr> &args)
+        : buf_name(name), args(args) {}
 
 private:
     using IRVisitor::visit;
 
-    void visit(const Realize *op) {
-        if (op->name == realization_name) {
-            has = true;
+    void visit(const Call *op) {
+        if (op->name == buf_name) {
+            load = Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
         } else {
             IRVisitor::visit(op);
         }
     }
 };
 
-bool has_realization(Stmt s, const std::string &name) {
-    HasRealization v(name);
+Expr make_similar_load(Stmt s, const std::string &name, const std::vector<Expr> &args) {
+    MakeSimilarLoad v(name, args);
     s.accept(&v);
-    return v.has;
+    return v.load;
+}
+
+// Build a Box representing the bounds of a buffer.
+Box buffer_bounds(const string &buf_name, int dims) {
+    Box bounds;
+    for (int i = 0; i < dims; i++) {
+        string dim_name = std::to_string(i);
+
+        Expr buf_min_i = Variable::make(Int(32), buf_name + ".min." + dim_name);
+        Expr buf_extent_i = Variable::make(Int(32), buf_name + ".extent." + dim_name);
+        Expr buf_max_i = buf_min_i + buf_extent_i - 1;
+
+        bounds.push_back(Interval(buf_min_i, buf_max_i));
+    }
+    return bounds;
 }
 
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e)
-        : env(e) { }
+    InjectPrefetch(const map<string, Function> &e) : env(e) { }
 
 private:
     const map<string, Function> &env;
-    Scope<Interval> intervals;          // Interval scope for boxes_required
+    const vector<Prefetch> *prefetches = nullptr;
+    Scope<Interval> bounds;
 
 private:
     using IRMutator::visit;
 
-    // Strip down the tuple name, e.g. f.*.var into f
-    string tuple_func(const string &name) {
-        vector<string> v = split_string(name, ".");
-        internal_assert(v.size() > 0);
-        return v[0];
-    }
-
-    // Lookup a function in the environment
-    Function get_func(const string &name) {
-        map<string, Function>::const_iterator iter = env.find(name);
-        internal_assert(iter != env.end()) << "function not in environment.\n";
-        return iter->second;
-    }
-
-    // Determine the static type of a named buffer (if available)
-    //
-    // Note: If the type cannot be determined, the variable will
-    //       be flagged as not having a static type (e.g. the type
-    //       of input is only known at runtime, input.elem_size).
-    //
-    Type get_type(string varname, bool &has_static_type) {
-        has_static_type = false;
-        Type t = UInt(8);       // default type
-        map<string, Function>::const_iterator varit = env.find(varname);
-        if (varit != env.end()) {
-            Function varf = varit->second;
-            if (varf.outputs()) {
-                vector<Type> varts = varf.output_types();
-                t = varts[0];
-                has_static_type = true;
-            }
-        }
-
-        return t;
-    }
-
-    // Generate the required prefetch code (lets and statements) for the
-    // specified varname and box
-    //
-    Stmt prefetch_box(const string &varname, const Box &box) {
-        bool has_static_type = true;
-        Type t = get_type(varname, has_static_type);
-        string elem_size_name = varname + ".elem_size";
-        Expr elem_size_bytes;
-
-        if (has_static_type) {
-            elem_size_bytes = t.bytes();
-        } else {   // Use element size for inputs that don't have static types
-            Expr elem_size_var = Variable::make(Int(32), elem_size_name);
-            elem_size_bytes = elem_size_var;
-        }
-
-        string varname_prefetch_buf = varname + "_prefetch_buf";
-        Expr var_prefetch_buf = Variable::make(Int(32), varname_prefetch_buf);
-
-        // Establish the variables for buffer strides, box min & max
-        vector<Expr> args;
-
-        Expr first_elem = Load::make(t, varname, 0, BufferPtr(), Parameter());
-        args.push_back(Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic));
-        args.push_back(elem_size_bytes);
-        for (size_t i = 0; i < box.size(); i++) {
-            string dim_name = std::to_string(i);
-            Expr buffer_min = Variable::make(Int(32), varname + ".min." + dim_name);
-            Expr buffer_extent = Variable::make(Int(32), varname + ".extent." + dim_name);
-            Expr buffer_stride = Variable::make(Int(32), varname + ".stride." + dim_name);
-
-            Expr buffer_max = buffer_min + buffer_extent - 1;
-
-            Expr prefetch_min = clamp(box[i].min, buffer_min, buffer_max);
-            Expr prefetch_max = clamp(box[i].max, buffer_min, buffer_max);
-
-            args.push_back(prefetch_min);
-            args.push_back(prefetch_max - prefetch_min + 1);
-            args.push_back(buffer_stride);
-        }
-
-        // Create a call to prefetch_buffer_t.
-        Expr prefetch_buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                       args, Call::Intrinsic);
-        string prefetch_buf_name = "prefetch_" + varname + "_buf";
-        Expr prefetch_buf_var = Variable::make(type_of<struct buffer_t *>(), prefetch_buf_name);
-        Stmt prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_buffer_t,
-                                                  {prefetch_buf_var}, Call::Intrinsic));
-        return LetStmt::make(prefetch_buf_name, prefetch_buf, prefetch);
-    }
-
     void visit(const Let *op) {
-        Interval in = bounds_of_expr_in_scope(op->value, intervals);
-        intervals.push(op->name, in);
+        Interval in = bounds_of_expr_in_scope(op->value, bounds);
+        bounds.push(op->name, in);
         IRMutator::visit(op);
-        intervals.pop(op->name);
+        bounds.pop(op->name);
     }
 
     void visit(const LetStmt *op) {
-        Interval in = bounds_of_expr_in_scope(op->value, intervals);
-        intervals.push(op->name, in);
+        Interval in = bounds_of_expr_in_scope(op->value, bounds);
+        bounds.push(op->name, in);
         IRMutator::visit(op);
-        intervals.pop(op->name);
+        bounds.pop(op->name);
+    }
+
+    void visit(const ProducerConsumer *op) {
+        const vector<Prefetch> *old_prefetches = prefetches;
+
+        map<string, Function>::const_iterator iter = env.find(op->name);
+        internal_assert(iter != env.end()) << "function not in environment.\n";
+        prefetches = &iter->second.schedule().prefetches();
+        IRMutator::visit(op);
+        prefetches = old_prefetches;
+    }
+
+    Stmt add_prefetch(const string &buf_name, const Box &box, Stmt body) {
+        // Construct the bounds to be prefetched.
+        vector<Expr> prefetch_min;
+        vector<Expr> prefetch_extent;
+        for (size_t i = 0; i < box.size(); i++) {
+            prefetch_min.push_back(box[i].min);
+            prefetch_extent.push_back(box[i].max - box[i].min + 1);
+        }
+
+        // Construct an array of index variables. The first 2 dimensions are handled
+        // by (up to) 2D prefetches, the rest we will generate loops to define.
+        vector<string> index_names(box.size());
+        vector<Expr> indices(box.size());
+        for (size_t i = 0; i < box.size(); i++) {
+            index_names[i] = "prefetch_" + buf_name + "." + std::to_string(i);
+            indices[i] = i < 2 ? prefetch_min[i] : Variable::make(Int(32), index_names[i]);
+        }
+
+        // Make a load at the index and get the address.
+        Expr prefetch_load = make_similar_load(body, buf_name, indices);
+        internal_assert(prefetch_load.defined());
+        Type type = prefetch_load.type();
+        Expr prefetch_addr = Call::make(Handle(), Call::address_of, {prefetch_load}, Call::Intrinsic);
+
+        Stmt prefetch;
+        Expr stride_0 = Variable::make(Int(32), buf_name + ".stride.0");
+        // TODO: This is only correct if stride_0 is 1. We need to assert that this is true.
+        Expr extent_0_bytes = prefetch_extent[0] * type.bytes();
+        if (box.size() == 1) {
+            // The prefetch is only 1 dimensional, just emit a flat prefetch.
+            prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch,
+                                                 {prefetch_addr, extent_0_bytes},
+                                                 Call::PureIntrinsic));
+        } else {
+            // Make a 2D prefetch.
+            Expr stride_1 = Variable::make(Int(32), buf_name + ".stride.1");
+            Expr stride_1_bytes = stride_1 * type.bytes();
+            prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_2d,
+                                                 {prefetch_addr, extent_0_bytes, prefetch_extent[1], stride_1_bytes},
+                                                 Call::PureIntrinsic));
+
+            // Make loops for the rest of the dimensions (possibly zero).
+            for (size_t i = 2; i < box.size(); i++) {
+                prefetch = For::make(index_names[i], prefetch_min[i], prefetch_extent[i],
+                                     ForType::Serial, DeviceAPI::None,
+                                     prefetch);
+            }
+        }
+
+        // We should only prefetch buffers that are used.
+        if (box.maybe_unused()) {
+            prefetch = IfThenElse::make(box.used, prefetch);
+        }
+
+        return Block::make({prefetch, body});
     }
 
     void visit(const For *op) {
-        Stmt body = op->body;
-
-        string func_name = tuple_func(op->name);
-        const vector<Prefetch> &prefetches = get_func(func_name).schedule().prefetches();
-
         // Add loop variable to interval scope for any inner loop prefetch
         Expr loop_var = Variable::make(Int(32), op->name);
-        Interval prein(loop_var, loop_var);
-        intervals.push(op->name, prein);
+        bounds.push(op->name, Interval(loop_var, loop_var));
+        Stmt body = mutate(op->body);
+        bounds.pop(op->name);
 
-        body = mutate(body);
-
-        for (const Prefetch &p : prefetches) {
-            if (!ends_with(op->name, "." + p.var)) {
-                continue;
-            }
-            debug(1) << " " << func_name
-                     << " prefetch(" << p.var << ", " << p.offset << ")\n";
-
-            // Add loop variable + prefetch offset to interval scope for box computation
-            // Expr loop_var = Variable::make(Int(32), op->name);
-            Interval prein(loop_var + p.offset, loop_var + p.offset);
-            intervals.push(op->name, prein);
-
-            map<string, Box> boxes = boxes_required(body, intervals);
-
-            // TODO: Opt: prefetch the difference from previous iteration
-            //            to the requested iteration (2 calls to boxes_required)
-
-            for (auto &b : boxes) {
-                const string &varname = b.first;
-                const Box &box = b.second;
-                if (has_realization(body, varname)) {
-                    debug(1) << "  Info: not prefetching realized " << varname << "\n";
+        if (prefetches) {
+            for (const Prefetch &p : *prefetches) {
+                if (!ends_with(op->name, "." + p.var)) {
                     continue;
                 }
-                Stmt pbody = prefetch_box(varname, box);
-                body = Block::make({pbody, body});
-            }
+                // Add loop variable + prefetch offset to interval scope for box computation
+                Expr fetch_at = loop_var + p.offset;
+                bounds.push(op->name, Interval(fetch_at, fetch_at));
+                map<string, Box> boxes_read = boxes_required(body, bounds);
+                bounds.pop(op->name);
 
-            intervals.pop(op->name);
+                // Don't prefetch buffers that are written to. We assume that these already
+                // have good locality.
+                // TODO: This is not a good assumption. It would be better to have the
+                // prefetch directive specify the buffer that we want to prefetch, instead
+                // of trying to figure out which buffers should be prefetched.
+                map<string, Box> boxes_written = boxes_provided(body, bounds);
+                for (const auto &b : boxes_written) {
+                    auto it = boxes_read.find(b.first);
+                    if (it != boxes_read.end()) {
+                        debug(2) << "Not prefetching buffer " << it->first
+                                 << " also written in loop " << op->name << "\n";
+                        boxes_read.erase(it);
+                    }
+                }
+
+                // TODO: Only prefetch the newly accessed data from the previous iteration.
+                // This should use boxes_touched (instead of boxes_required) so we exclude memory
+                // either read or written.
+                for (const auto &b : boxes_read) {
+                    const std::string &buf_name = b.first;
+
+                    // Only prefetch the region that is in bounds.
+                    Box bounds = buffer_bounds(buf_name, b.second.size());
+                    Box prefetch_box = box_intersection(b.second, bounds);
+
+                    body = add_prefetch(buf_name, prefetch_box, body);
+                }
+            }
         }
 
-        intervals.pop(op->name);
-
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        if (!body.same_as(op->body)) {
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        } else {
+            stmt = op;
+        }
     }
 
 };
 
-} // Anonymous namespace
+} // namespace
 
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env) {
-    debug(1) << "prefetch:\n";
     return InjectPrefetch(env).mutate(s);
 }
 
