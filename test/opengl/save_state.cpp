@@ -225,7 +225,7 @@ class KnownState
 
     public:
 
-    bool errors;
+    bool errors{false};
 
 
     // This sets most values to generated or arbitrary values, which the
