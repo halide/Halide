@@ -161,8 +161,8 @@ private:
     /** Emit spaces according to the current indentation level */
     std::string ind();
 
+    void emit_inputs_struct();
     void emit_params_struct(bool schedule_only);
-    void emit_inputs();
 };
 
 std::string StubEmitter::ind() {
@@ -176,18 +176,16 @@ std::string StubEmitter::ind() {
 void StubEmitter::emit_params_struct(bool is_schedule_params) {
     const auto &v = is_schedule_params ? schedule_params : generator_params;
     std::string name = is_schedule_params ? "ScheduleParams" : "GeneratorParams";
-    stream << ind() << "struct " << name << " {\n";
+    stream << ind() << "struct " << name << " final {\n";
     indent++;
     for (auto p : v) {
         stream << ind() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
     }
     stream << "\n";
 
-    stream << ind() << "// default ctor\n";
     stream << ind() << name << "() {}\n";
     stream << "\n";
 
-    stream << ind() << "// ctor with inputs\n";
     stream << ind() << name << "(\n";
     indent++;
     std::string comma = "";
@@ -240,15 +238,53 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     stream << "\n";
 }
 
-void StubEmitter::emit_inputs() {
-    stream << ind() << "const Halide::GeneratorContext& context\n";
+void StubEmitter::emit_inputs_struct() {
+    struct InInfo {
+        std::string c_type;
+        std::string name;
+    };
+    std::vector<InInfo> in_info;
     for (auto input : inputs) {
-        std::string type(input->kind() == IOKind::Function ? "Halide::Func" : "Halide::Expr");
+        std::string c_type(input->kind() == IOKind::Function ? "Halide::Func" : "Halide::Expr");
         if (input->is_array()) {
-            type = "const std::vector<" + type + ">&";
+            c_type = "std::vector<" + c_type + ">";
         }
-        stream << ind() << ", " << type << " " << input->name() << "\n";
+        in_info.push_back({c_type, input->name()});
     }
+
+    const std::string name = "Inputs";
+    stream << ind() << "struct " << name << " final {\n";
+    indent++;
+    for (auto in : in_info) {
+        stream << ind() << in.c_type << " " << in.name << ";\n";
+    }
+    stream << "\n";
+
+    stream << ind() << name << "() {}\n";
+    stream << "\n";
+
+    stream << ind() << name << "(\n";
+    indent++;
+    std::string comma = "";
+    for (auto in : in_info) {
+        stream << ind() << comma << "const " << in.c_type << "& " << in.name << "\n";
+        comma = ", ";
+    }
+    indent--;
+    stream << ind() << ") : \n";
+    indent++;
+    comma = "";
+    for (auto in : in_info) {
+        stream << ind() << comma << in.name << "(" << in.name << ")\n";
+        comma = ", ";
+    }
+    indent--;
+    stream << ind() << "{\n";
+    stream << ind() << "}\n";
+
+    indent--;
+    stream << ind() << "};\n";
+    stream << "\n";
 }
 
 void StubEmitter::emit() {
@@ -321,25 +357,25 @@ void StubEmitter::emit() {
     stream << ind() << "public:\n";
     indent++;
 
+    emit_inputs_struct();
     emit_params_struct(true);
     emit_params_struct(false);
 
-    stream << ind() << "// default ctor\n";
     stream << ind() << class_name << "() {}\n";
     stream << "\n";
 
-    stream << ind() << "// ctor with inputs\n";
     stream << ind() << class_name << "(\n";
     indent++;
-    emit_inputs();
-    stream << ind() << ", const GeneratorParams& params = GeneratorParams()\n";
+    stream << ind() << "const Halide::GeneratorContext& context,\n";
+    stream << ind() << "const Inputs& inputs,\n";
+    stream << ind() << "const GeneratorParams& params = GeneratorParams()\n";
     indent--;
     stream << ind() << ")\n";
     indent++;
     stream << ind() << ": GeneratorStub(context, &factory, params.to_string_map(), {\n";
     indent++;
     for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << ind() << "Halide::Internal::to_func_or_expr_vector(" << inputs[i]->name() << ")";
+        stream << ind() << "Halide::Internal::to_func_or_expr_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
     indent--;
@@ -373,11 +409,7 @@ void StubEmitter::emit() {
     }
     indent--;
     stream << ind() << ">\n";
-    stream << ind() << "static " << class_name << " make(\n";
-    indent++;
-    emit_inputs();
-    indent--;
-    stream << ind() << ") {\n";
+    stream << ind() << "static " << class_name << " make(const Halide::GeneratorContext& context, const Inputs& inputs) {\n";
     indent++;
     stream << ind() << "GeneratorParams gp(\n";
     indent++;
@@ -395,12 +427,7 @@ void StubEmitter::emit() {
     }
     indent--;
     stream << ind() << ");\n";
-    stream << ind() << "return " << class_name << "(context, \n";
-    indent++;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << ind() << inputs[i]->name() << ",\n";
-    }
-    stream << ind() << "gp);\n";
+    stream << ind() << "return " << class_name << "(context, inputs, gp);\n";
     indent--;
     indent--;
     stream << ind() << "}\n";
