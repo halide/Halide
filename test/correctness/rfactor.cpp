@@ -134,12 +134,9 @@ int multi_split_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm2.name(), g.name()}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {intm1.name(), intm2.name()}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {f.name(), intm1.name()}},
+            {g.name(), {intm2.name(), g.name()}},
+            {intm2.name(), {intm1.name(), intm2.name()}},
+            {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
