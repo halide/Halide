@@ -68,9 +68,12 @@ int main(int argc, char **argv) {
     // is most convenient.
     auto gen = StubTest::make<float, int16_t, kArrayCount>(
         context, 
-        { Func(src[0]), Func(src[1]) },
-        1.234f, 
-        int_args_expr);
+        // Use aggregate-initialization syntax to fill in an Inputs struct.
+        {
+            { Func(src[0]), Func(src[1]) },
+            1.234f, 
+            int_args_expr
+        });
 
     StubTest::ScheduleParams sp;
     // This generator default intermediate_level to "undefined", 

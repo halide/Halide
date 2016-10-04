@@ -17,6 +17,14 @@ public:
 
     void generate() {
 
+        // We'll explicit fill in the struct fields by name, just to show
+        // it as an option. (Alternately, we could fill it in by using
+        // C++11 aggregate-initialization syntax.)
+        StubTest::Inputs inputs;
+        inputs.input = { input };
+        inputs.float_arg = 1.234f;
+        inputs.int_arg = { int_arg };
+
         // Since we need to propagate types passed to us via our own GeneratorParams,
         // we can't (easily) use the templated constructor; instead, pass on the 
         // values via the Stub's GeneratorParams struct.
@@ -26,8 +34,7 @@ public:
         // Override array_count to only expect 1 input and provide one output for g
         gp.array_count = 1;
 
-        Expr float_arg_expr(1.234f);
-        stub = StubTest(context(), { input }, float_arg_expr, { int_arg }, gp);
+        stub = StubTest(context(), inputs, gp);
 
         const float kOffset = 2.f;
         output(x, y, c) = cast(output_type, stub.f(x, y, c)[1] + kOffset);
