@@ -1,0 +1,33 @@
+load("@halide//:halide.bzl", "halide_runtime_linkopts", "halide_library", "halide_opengl_linkopts")
+
+halide_library(
+    name = "halide_blur_glsl",
+    srcs = ["halide_blur_glsl_generator.cpp"],
+    halide_target_features = [
+        "opengl",
+        "debug",
+    ],
+    includes = ["."],
+)
+
+halide_library(
+    name = "halide_ycc_glsl",
+    srcs = ["halide_ycc_glsl_generator.cpp"],
+    halide_target_features = [
+        "opengl",
+        "debug",
+    ],
+    includes = ["."],
+)
+
+cc_test(
+    name = "opengl_test",
+    srcs = [
+        "opengl_test.cpp",
+    ],
+    linkopts = halide_runtime_linkopts() + halide_opengl_linkopts(),
+    deps = [
+        ":halide_blur_glsl",
+        ":halide_ycc_glsl",
+    ],
+)
