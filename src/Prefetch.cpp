@@ -127,8 +127,14 @@ private:
 
         Stmt prefetch;
         Expr stride_0 = Variable::make(Int(32), buf_name + ".stride.0");
-        // TODO: This is only correct if stride_0 is 1. We need to assert that this is true.
-        Expr extent_0_bytes = prefetch_extent[0] * type.bytes();
+        // TODO: This is inefficient if stride_0 != 1, because memory
+        // potentially not accessed will be prefetched, and it will be
+        // fetched multiple times. The right way to handle this would
+        // be to set up a prefetch for each individual element of the
+        // buffer, in case it is sparse, and then try to optimize the
+        // prefetch to fetch dense ranges of addresses. This is hard
+        // to do statically.
+        Expr extent_0_bytes = prefetch_extent[0] * stride_0 * type.bytes();
         if (box.size() == 1) {
             // The prefetch is only 1 dimensional, just emit a flat prefetch.
             prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch,
