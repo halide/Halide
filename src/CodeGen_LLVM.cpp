@@ -569,6 +569,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     // Make our function
     FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
+    set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -3193,6 +3194,7 @@ void CodeGen_LLVM::visit(const For *op) {
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par_for_" + function->getName() + "_" + op->name, module.get());
         function->setDoesNotAlias(3);
+        set_function_attributes_for_target(function, target);
 
         // Make the initial basic block and jump the builder into the new function
         IRBuilderBase::InsertPoint call_site = builder->saveIP();
