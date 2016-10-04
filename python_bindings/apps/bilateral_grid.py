@@ -102,6 +102,7 @@ def generate_compiled_file(bilateral_grid):
     arguments.append(Argument('input', InputBuffer, UInt(16), 2))
     bilateral_grid.compile_to_file("bilateral_grid",
                                    arguments,
+                                   "bilateral_grid",
                                    target)
     print("Generated compiled file for bilateral_grid function.")
     return
