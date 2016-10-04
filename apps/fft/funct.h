@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <Halide.h>
+#include "Halide.h"
 
 template <typename T>
 class FuncRefT : public T {

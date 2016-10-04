@@ -78,19 +78,12 @@ function(halide_define_jit_test NAME)
                  "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_jittest.cpp")
 endfunction(halide_define_jit_test)
 
-function(halide_add_generator NAME)
-  set(options )
-  set(oneValueArgs )
-  set(multiValueArgs )
-  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-  halide_project("${NAME}.generator" 
-                 "generator" 
-                 "${CMAKE_SOURCE_DIR}/tools/GenGen.cpp" 
-                 "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp")
-endfunction(halide_add_generator)
-
 include(../HalideGenerator.cmake)
+
+function(add_test_generator NAME)
+  halide_add_generator("${NAME}.generator"
+                       SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp")
+endfunction(add_test_generator)
 
 # Usage:
 #   halide_define_aot_test(NAME <basename>
@@ -173,34 +166,34 @@ if (WITH_TEST_GENERATORS)
 
   # Explicitly define the generator targets; each has a build target
   # of the form "name.generator"
-  halide_add_generator(acquire_release)
-  halide_add_generator(argvcall)
-  halide_add_generator(can_use_target)
-  halide_add_generator(cleanup_on_error)
-  halide_add_generator(cxx_mangling_define_extern)
-  halide_add_generator(cxx_mangling)
-  halide_add_generator(embed_image)
-  halide_add_generator(error_codes)
-  halide_add_generator(example)
-  halide_add_generator(extended_buffer_t)
-  halide_add_generator(float16_t)
-  halide_add_generator(gpu_object_lifetime)
-  halide_add_generator(gpu_only)
-  halide_add_generator(image_from_array)
-  halide_add_generator(mandelbrot)
-  halide_add_generator(matlab)
-  halide_add_generator(memory_profiler_mandelbrot)
-  halide_add_generator(metadata_tester)
-  halide_add_generator(msan)
-  halide_add_generator(multitarget)
-  halide_add_generator(nested_externs)
-  halide_add_generator(paramtest)
-  halide_add_generator(pyramid)
-  halide_add_generator(tiled_blur_blur)
-  halide_add_generator(tiled_blur)
-  halide_add_generator(user_context)
-  halide_add_generator(user_context_insanity)
-  halide_add_generator(variable_num_threads)
+  add_test_generator(acquire_release)
+  add_test_generator(argvcall)
+  add_test_generator(can_use_target)
+  add_test_generator(cleanup_on_error)
+  add_test_generator(cxx_mangling_define_extern)
+  add_test_generator(cxx_mangling)
+  add_test_generator(embed_image)
+  add_test_generator(error_codes)
+  add_test_generator(example)
+  add_test_generator(extended_buffer_t)
+  add_test_generator(float16_t)
+  add_test_generator(gpu_object_lifetime)
+  add_test_generator(gpu_only)
+  add_test_generator(image_from_array)
+  add_test_generator(mandelbrot)
+  add_test_generator(matlab)
+  add_test_generator(memory_profiler_mandelbrot)
+  add_test_generator(metadata_tester)
+  add_test_generator(msan)
+  add_test_generator(multitarget)
+  add_test_generator(nested_externs)
+  add_test_generator(paramtest)
+  add_test_generator(pyramid)
+  add_test_generator(tiled_blur_blur)
+  add_test_generator(tiled_blur)
+  add_test_generator(user_context)
+  add_test_generator(user_context_insanity)
+  add_test_generator(variable_num_threads)
 
   # Tests with no special requirements
   halide_define_aot_test(acquire_release)
@@ -218,7 +211,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(mandelbrot)
   halide_define_aot_test(matlab)
   halide_define_aot_test(memory_profiler_mandelbrot)
-  halide_define_aot_test(pyramid)
   halide_define_aot_test(variable_num_threads)
 
   # Tests that require nonstandard targets, namespaces, etc.
@@ -235,6 +227,9 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(cxx_mangling 
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::cxx_mangling)
+
+  halide_define_aot_test(pyramid
+                         GENERATOR_ARGS levels=10)
 
   halide_define_aot_test(msan
                          GENERATOR_HALIDE_TARGET host-msan)

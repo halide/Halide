@@ -618,7 +618,11 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     for (size_t i = 0; i < vars_rename.size(); i++) {
         update_args[i + args.size()] = vars_rename[i];
-        substitution_map[rvars_kept[i].name()] = vars_rename[i];
+        RVar rvar_kept = rvars_kept[i];
+        // Find the full name of rvar_kept in rvars
+        const auto iter = std::find_if(rvars.begin(), rvars.end(),
+            [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
+        substitution_map[iter->var] = vars_rename[i];
     }
     for (size_t i = 0; i < args.size(); i++) {
         Expr arg = substitute(substitution_map, args[i]);
@@ -2469,14 +2473,16 @@ void Func::print_loop_nest() {
 
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
+                           const std::string &fn_name,
                            const Target &target) {
-    pipeline().compile_to_file(filename_prefix, args, target);
+    pipeline().compile_to_file(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_static_library(const string &filename_prefix,
                                      const vector<Argument> &args,
+                                     const std::string &fn_name,
                                      const Target &target) {
-    pipeline().compile_to_static_library(filename_prefix, args, target);
+    pipeline().compile_to_static_library(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_multitarget_static_library(const std::string &filename_prefix,
