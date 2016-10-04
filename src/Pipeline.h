@@ -160,17 +160,17 @@ public:
     EXPORT void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
-     * arguments. Also names the C function to match the filename
-     * argument. */
+     * arguments. */
     EXPORT void compile_to_file(const std::string &filename_prefix,
                                 const std::vector<Argument> &args,
+                                const std::string &fn_name,
                                 const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
-     * arguments. Also names the C function to match the filename
-     * argument. */
+     * arguments. */
     EXPORT void compile_to_static_library(const std::string &filename_prefix,
                                           const std::vector<Argument> &args,
+                                          const std::string &fn_name,
                                           const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;

@@ -53,8 +53,8 @@ void blur_float(std::string suffix, ImageParam input8, const int channels) {
 
     std::vector<Argument> args;
     args.push_back(input8);
-    std::string filename("generated_blur");
-    result.compile_to_file(filename + suffix + "_float", args);
+    std::string fn_name = "generated_blur" + suffix + "_float";
+    result.compile_to_file(fn_name, args, fn_name);
 }
 
 void copy_float(std::string suffix, ImageParam input8, const int channels) {
@@ -88,8 +88,8 @@ void copy_float(std::string suffix, ImageParam input8, const int channels) {
 
     std::vector<Argument> args;
     args.push_back(input8);
-    std::string filename("generated_copy");
-    result.compile_to_file(filename + suffix + "_float", args);
+    std::string fn_name = "generated_copy" + suffix + "_float";
+    result.compile_to_file(fn_name, args, fn_name);
 }
 
 void blur_uint8(std::string suffix, ImageParam input8, const int channels) {
@@ -146,8 +146,8 @@ void blur_uint8(std::string suffix, ImageParam input8, const int channels) {
 
     std::vector<Argument> args;
     args.push_back(input8);
-    std::string filename("generated_blur");
-    result.compile_to_file(filename + suffix + "_uint8", args);
+    std::string fn_name = "generated_blur" + suffix + "_uint8";
+    result.compile_to_file(fn_name, args, fn_name);
 }
 
 void copy_uint8(std::string suffix, ImageParam input8, const int channels) {
@@ -181,8 +181,8 @@ void copy_uint8(std::string suffix, ImageParam input8, const int channels) {
 
     std::vector<Argument> args;
     args.push_back(input8);
-    std::string filename("generated_copy");
-    result.compile_to_file(filename + suffix + "_uint8", args);
+    std::string fn_name = "generated_copy" + suffix + "_uint8";
+    result.compile_to_file(fn_name, args, fn_name);
 }
 
 int main(int argc, char **argv) {

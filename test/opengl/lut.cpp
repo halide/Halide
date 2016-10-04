@@ -9,6 +9,9 @@ using namespace Halide;
 
 int test_lut1d() {
 
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
     Var x("x");
     Var y("y");
     Var c("c");
@@ -40,45 +43,8 @@ int test_lut1d() {
 
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
-    f0.realize(out0);
+    f0.realize(out0, target);
     out0.copy_to_host();
-
-#if 0
-    printf("Input:\n");
-    for (int c = 0; c != input.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y = 0; y != input.extent(1); ++y) {
-            for (int x = 0; x != input.extent(0); ++x) {
-                printf("%d ", (int)input(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-    printf("\n");
-
-    printf("LUT:\n");
-    for (int c = 0; c != lut1d.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y=0; y != lut1d.extent(1); ++y) {
-            for (int x = 0; x != lut1d.extent(0); ++x) {
-                printf("%1.1f ", lut1d(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-    printf("\n");
-
-    printf("Output:\n");
-    for (int c = 0; c != out0.extent(2); ++c) {
-        printf("c == %d\n",c);
-        for (int y = 0; y != out0.extent(1); ++y) {
-            for (int x = 0; x != out0.extent(0); ++x) {
-                printf("%1.1f ", out0(x, y, c));
-            }
-            printf("\n");
-        }
-    }
-#endif
 
     for (int c = 0; c != out0.extent(2); ++c) {
         for (int y = 0; y != out0.extent(1); ++y) {
@@ -109,13 +75,6 @@ int test_lut1d() {
 }
 
 int main() {
-
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL))  {
-        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
 
     if (test_lut1d() == 0) {
         printf("PASSED\n");

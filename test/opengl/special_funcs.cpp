@@ -14,20 +14,17 @@ double square(double x) {
 
 template <typename T>
 void test_function(Expr e, Image<T> &cpu_result, Image<T> &gpu_result) {
-    Func cpu, gpu;
+    Func cpu("cpu"), gpu("gpu");
 
     Target cpu_target = get_host_target();
-    Target gpu_target = get_host_target();
-    gpu_target.set_feature(Target::OpenGL);
+    Target gpu_target = get_host_target().with_feature(Target::OpenGL);
     cpu(x, y, c) = e;
     gpu(x, y, c) = e;
-    cpu.compile_jit(cpu_target);
-    gpu.compile_jit(gpu_target);
 
-    cpu.realize(cpu_result);
+    cpu.realize(cpu_result, cpu_target);
 
     gpu.bound(c, 0, 3).glsl(x, y, c);
-    gpu.realize(gpu_result);
+    gpu.realize(gpu_result, gpu_target);
     gpu_result.copy_to_host();
 
 }
