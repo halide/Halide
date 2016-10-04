@@ -9,6 +9,9 @@ using namespace Halide;
 // GLSL
 int shifted_domains() {
 
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
     int errors = 0;
 
     Func gradient("gradient");
@@ -20,7 +23,7 @@ int shifted_domains() {
 
     printf("Evaluating gradient from (0, 0) to (7, 7)\n");
     Image<float> result(8, 8, 1);
-    gradient.realize(result);
+    gradient.realize(result, target);
     result.copy_to_host();
 
     for (int y = 0; y < 8; y++) {
@@ -40,7 +43,7 @@ int shifted_domains() {
 
     printf("Evaluating gradient from (100, 50) to (104, 56)\n");
 
-    gradient.realize(shifted);
+    gradient.realize(shifted, target);
     shifted.copy_to_host();
 
     for (int y = 50; y < 57; y++) {
@@ -60,7 +63,7 @@ int shifted_domains() {
 
     printf("Evaluating gradient from (-100, -50) to (-96, -44)\n");
 
-    gradient.realize(shifted);
+    gradient.realize(shifted, target);
     shifted.copy_to_host();
 
     for (int y = -50; y < -44; y++) {
@@ -79,14 +82,6 @@ int shifted_domains() {
 }
 
 int main() {
-
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL)) {
-        fprintf(stderr, "ERROR: This test must be run with an OpenGL target, "
-                        "e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
 
     if (shifted_domains() == 0) {
         printf("PASSED\n");

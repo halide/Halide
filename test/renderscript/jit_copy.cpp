@@ -209,7 +209,7 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
             new ValidateInterleavedVectorizedPipeline(channels):
             new ValidateInterleavedPipeline(channels));
 
-    result.compile_jit();
+    result.compile_jit(get_jit_target_from_environment().with_feature(Target::Renderscript));
 }
 
 int main(int argc, char **argv) {

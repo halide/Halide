@@ -1090,23 +1090,18 @@ warning_%: $(BIN_DIR)/warning_%
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
 
-opengl_%: HL_JIT_TARGET ?= host-opengl
 opengl_%: $(BIN_DIR)/opengl_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(CURDIR)/$< 2>&1
+	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1
 	@-echo
 
-renderscript_jit_%: HL_JIT_TARGET = host-renderscript
-renderscript_jit_%: HL_TARGET =
-renderscript_aot_%: HL_TARGET = arm-32-android-armv7s-renderscript
-renderscript_aot_%: HL_JIT_TARGET =
 renderscript_%_error: $(BIN_DIR)/renderscript_%_error
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; HL_JIT_TARGET=$(HL_JIT_TARGET) HL_TARGET=$(HL_TARGET) $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
+	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
 	@-echo
 renderscript_%: $(BIN_DIR)/renderscript_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; HL_JIT_TARGET=$(HL_JIT_TARGET) HL_TARGET=$(HL_TARGET) $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
 generator_%: $(BIN_DIR)/generator_%
