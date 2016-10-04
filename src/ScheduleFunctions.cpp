@@ -721,17 +721,16 @@ private:
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func, target);
 
-        Stmt body;
+        Stmt producer;
         if (realization.first.defined() && realization.second.defined()) {
-            body = Block::make(realization.first, realization.second);
+            producer = Block::make(realization.first, realization.second);
         } else if (realization.first.defined()) {
-            body = realization.first;
+            producer = realization.first;
         } else {
             internal_assert(realization.second.defined());
-            body = realization.second;
+            producer = realization.second;
         }
-
-        Stmt producer = ProducerConsumer::make(func.name(), true, body);
+        producer = ProducerConsumer::make(func.name(), true, producer);
         Stmt consumer = ProducerConsumer::make(func.name(), false, s);
 
         return Block::make(producer, consumer);
