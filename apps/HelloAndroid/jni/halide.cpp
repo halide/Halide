@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     Func sharper;
     sharper(x, y) = 9*curved(x, y) - 2*(curved(x-1, y) + curved(x+1, y) + curved(x, y-1) + curved(x, y+1));
 
-    Func result("result");
+    Func result;
     result(x, y) = u8(clamp(sharper(x, y), 0, 255));
 
     tone_curve.compute_root();
@@ -55,9 +55,7 @@ int main(int argc, char **argv) {
     curved.specialize(input.stride(0) == 1);
     curved.specialize(input.stride(0) == -1);
         
-    std::vector<Argument> args;
-    args.push_back(input);
-    result.compile_to_file("halide_generated", args);
+    result.compile_to_file("halide_generated", {input}, "halide_generated");
 
     return 0;
 }
