@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <algorithm>
+#include <numeric>
 #include <functional>
 #include <map>
 
