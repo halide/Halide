@@ -1450,11 +1450,11 @@ public:
      * Hexagon, that loop is executed on a Hexagon DSP. */
     EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
 
-    /** Prefetch data for a given loop and an optionally specified offset.
-     * All data read by this loop will be prefetched 'offset' iterations ahead.
-     * The prefetch scheduling directive is intended for L2 prefetching in
-     * outer loops, not inner vectorized loops. */
-    EXPORT Func &prefetch(VarOrRVar var, Expr offset = 1); 
+    /** Prefetch data read by a subsequent loop iteration, at an
+     * optionally specified iteration offset. This is currently only
+     * implemented on Hexagon, prefetch directives are ignored on
+     * other targets. */
+    EXPORT Func &prefetch(VarOrRVar var, Expr offset = 1);
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
