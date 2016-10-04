@@ -267,7 +267,8 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
 void compile_multitarget(const std::string &fn_name,
                          const Outputs &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer) {
+                         ModuleProducer module_producer,
+                         const std::map<std::string, std::string> &suffixes) {
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
 
@@ -321,8 +322,14 @@ void compile_multitarget(const std::string &fn_name,
             }
         }
 
-        // Each sub-target has a function name that is the 'real' name plus the target string.
-        auto suffix = "_" + replace_all(target.to_string(), "-", "_");
+        // Each sub-target has a function name that is the 'real' name plus a suffix
+        // (which defaults to the target string but can be customized via the suffixes map)
+        std::string suffix = replace_all(target.to_string(), "-", "_");
+        auto it = suffixes.find(suffix);
+        if (it != suffixes.end()) {
+          suffix = it->second;
+        }
+        suffix = "_" + suffix;
         std::string sub_fn_name = fn_name + suffix;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.

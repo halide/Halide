@@ -1,0 +1,6 @@
+[Unit]
+Description=Dummy X server providing DISPLAY=:0.0"
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/Xorg -noreset +extension GLX +extension RANDR +extension RENDER -config /dev/null -logfile /var/log/Xorg.log :0

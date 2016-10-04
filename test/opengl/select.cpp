@@ -6,6 +6,9 @@ using namespace Halide;
 
 int test_per_channel_select() {
 
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
     Func gpu("gpu"), cpu("cpu");
     Var x("x"), y("y"), c("c");
 
@@ -20,7 +23,7 @@ int test_per_channel_select() {
     cpu(x, y, c) = gpu(x, y, c);
 
     Image<uint8_t> out(10, 10, 4);
-    cpu.realize(out);
+    cpu.realize(out, target);
 
     // Verify the result
     for (int y=0; y!=out.height(); ++y) {
@@ -50,6 +53,9 @@ int test_per_channel_select() {
 
 int test_flag_scalar_select() {
 
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
     Func gpu("gpu"), cpu("cpu");
     Var x("x"), y("y"), c("c");
 
@@ -68,7 +74,7 @@ int test_flag_scalar_select() {
     cpu(x, y, c) = gpu(x, y, c);
 
     Image<uint8_t> out(10, 10, 4);
-    cpu.realize(out);
+    cpu.realize(out, target);
 
     // Verify the result
     for (int y=0; y!=out.height(); ++y) {
@@ -91,6 +97,9 @@ int test_flag_scalar_select() {
 }
 
 int test_flag_pixel_select() {
+
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Func gpu("gpu"), cpu("cpu");
     Var x("x"), y("y"), c("c");
@@ -119,7 +128,7 @@ int test_flag_pixel_select() {
     cpu(x, y, c) = gpu(x, y, c);
 
     Image<uint8_t> out(10, 10, 4);
-    cpu.realize(out);
+    cpu.realize(out, target);
 
     // Verify the result
     for (int y=0; y!=out.height(); ++y) {
@@ -144,13 +153,6 @@ int test_flag_pixel_select() {
 
 
 int main() {
-
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL))  {
-        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
 
     int err = 0;
 

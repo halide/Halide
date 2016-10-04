@@ -315,7 +315,7 @@ std::string dir_make_temp() {
         internal_assert(hr == S_OK);
         std::ostringstream name;
         name << std::hex
-	     << std::setfill('0')
+             << std::setfill('0')
              << std::setw(8)
              << guid.Data1
              << std::setw(4)

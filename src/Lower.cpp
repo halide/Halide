@@ -37,7 +37,6 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
-#include "Sanitizers.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "SkipStages.h"
@@ -124,7 +123,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, outputs, order, env, func_bounds);
+    s = bounds_inference(s, outputs, order, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
@@ -206,14 +205,6 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
-    }
-
-    // Note that this must come *after* GPU injections (since it may need to adjust
-    // halide_copy_to_host calls)
-    if (t.has_feature(Target::MSAN)) {
-        debug(1) << "Injecting MSAN helpers...\n";
-        s = inject_msan_helpers(s);
-        debug(2) << "Lowering after injecting MSAN helpers:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
