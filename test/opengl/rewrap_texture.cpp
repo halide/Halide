@@ -11,10 +11,11 @@ int main() {
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
-#include "../src/runtime/mini_opengl.h"
 
 #include "Halide.h"
 #include "HalideRuntimeOpenGL.h"
+
+#include "runtime/mini_opengl.h"
 
 using namespace Halide;
 
