@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         initial.output_buffer().set_bounds(2, 0, 3);
         initial.output_buffer().set_stride(0, 3);
         initial.output_buffer().set_stride(2, 1);
-        initial.compile_to_file("reaction_diffusion_2_init", {cx, cy});
+        initial.compile_to_file("reaction_diffusion_2_init", {cx, cy}, "reaction_diffusion_2_init");
     }
 
     // Then the function that updates the state. Also depends on user input.
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
         new_state.output_buffer().set_extent(2, 3);
         new_state.output_buffer().set_stride(0, 3);
         new_state.output_buffer().set_stride(2, 1);
-        new_state.compile_to_file("reaction_diffusion_2_update", args);
+        new_state.compile_to_file("reaction_diffusion_2_update", args, "reaction_diffusion_2_update");
     }
 
     // Now the function that converts the state into an bgra8 image.
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
         state.set_stride(0, 3);
         render.gpu_tile(x, y, 32, 4);
 
-        render.compile_to_file("reaction_diffusion_2_render", {state});
+        render.compile_to_file("reaction_diffusion_2_render", {state}, "reaction_diffusion_2_render");
     }
 
     return 0;

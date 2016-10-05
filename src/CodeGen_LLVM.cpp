@@ -569,6 +569,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     // Make our function
     FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
+    set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -3109,22 +3110,16 @@ void CodeGen_LLVM::return_with_error_code(llvm::Value *error_code) {
 }
 
 void CodeGen_LLVM::visit(const ProducerConsumer *op) {
-    BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
+    string name;
+    if (op->is_producer) {
+        name = std::string("produce ") + op->name;
+    } else {
+        name = std::string("consume ") + op->name;
+    }
+    BasicBlock *produce = BasicBlock::Create(*context, name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);
-    codegen(op->produce);
-
-    if (op->update.defined()) {
-        BasicBlock *update = BasicBlock::Create(*context, std::string("update ") + op->name, function);
-        builder->CreateBr(update);
-        builder->SetInsertPoint(update);
-        codegen(op->update);
-    }
-
-    BasicBlock *consume = BasicBlock::Create(*context, std::string("consume ") + op->name, function);
-    builder->CreateBr(consume);
-    builder->SetInsertPoint(consume);
-    codegen(op->consume);
+    codegen(op->body);
 }
 
 void CodeGen_LLVM::visit(const For *op) {
@@ -3193,6 +3188,7 @@ void CodeGen_LLVM::visit(const For *op) {
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par_for_" + function->getName() + "_" + op->name, module.get());
         function->setDoesNotAlias(3);
+        set_function_attributes_for_target(function, target);
 
         // Make the initial basic block and jump the builder into the new function
         IRBuilderBase::InsertPoint call_site = builder->saveIP();
