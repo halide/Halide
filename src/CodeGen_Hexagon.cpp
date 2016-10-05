@@ -1383,6 +1383,24 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
     }
+
+    if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
+        llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
+        internal_assert(prefetch_fn);
+        vector<llvm::Value *> args;
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
+
+        value = builder->CreateCall(prefetch_fn, args);
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 

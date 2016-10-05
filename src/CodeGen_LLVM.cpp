@@ -630,19 +630,19 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
-    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()        
-    // happen for every output buffer if the function succeeds.       
-    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {     
-        llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");       
-        internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";       
-        annotate_buffer_fn->setDoesNotAlias(0);       
-        for (const auto &arg : f.args) {      
-            if (arg.kind == Argument::OutputBuffer) {     
-                register_destructor(annotate_buffer_fn, sym_get(arg.name), OnSuccess);        
-            }     
-        }     
-    }     
-       
+    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
+    // happen for every output buffer if the function succeeds.
+    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {
+        llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
+        internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
+        annotate_buffer_fn->setDoesNotAlias(0);
+        for (const auto &arg : f.args) {
+            if (arg.kind == Argument::OutputBuffer) {
+                register_destructor(annotate_buffer_fn, sym_get(arg.name), OnSuccess);
+            }
+        }
+    }
+
      // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
@@ -719,8 +719,8 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     switch (when) {
         case Always:    should_call = ConstantInt::get(i1_t, 1); break;
         case OnError:   should_call = builder->CreateIsNotNull(error_code); break;
-        case OnSuccess: should_call = builder->CreateIsNull(error_code); break;       
-    }     
+        case OnSuccess: should_call = builder->CreateIsNull(error_code); break;
+    }
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
@@ -2826,6 +2826,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::CallInst *call = builder->CreateCall(phi, call_args);
 #endif
         value = call;
+    } else if (op->is_intrinsic(Call::prefetch) ||
+               op->is_intrinsic(Call::prefetch_2d)) {
+        // Convert to a no-op since prefetch was not supported by target
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
