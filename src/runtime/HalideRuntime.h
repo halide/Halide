@@ -281,11 +281,10 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_begin_realization = 2,
                               halide_trace_end_realization = 3,
                               halide_trace_produce = 4,
-                              halide_trace_update = 5,
-                              halide_trace_consume = 6,
-                              halide_trace_end_consume = 7,
-                              halide_trace_begin_pipeline = 8,
-                              halide_trace_end_pipeline = 9};
+                              halide_trace_consume = 5,
+                              halide_trace_end_consume = 6,
+                              halide_trace_begin_pipeline = 7,
+                              halide_trace_end_pipeline = 8};
 
 #pragma pack(push, 1)
 struct halide_trace_event {

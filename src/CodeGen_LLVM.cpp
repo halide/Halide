@@ -3110,22 +3110,16 @@ void CodeGen_LLVM::return_with_error_code(llvm::Value *error_code) {
 }
 
 void CodeGen_LLVM::visit(const ProducerConsumer *op) {
-    BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
+    string name;
+    if (op->is_producer) {
+        name = std::string("produce ") + op->name;
+    } else {
+        name = std::string("consume ") + op->name;
+    }
+    BasicBlock *produce = BasicBlock::Create(*context, name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);
-    codegen(op->produce);
-
-    if (op->update.defined()) {
-        BasicBlock *update = BasicBlock::Create(*context, std::string("update ") + op->name, function);
-        builder->CreateBr(update);
-        builder->SetInsertPoint(update);
-        codegen(op->update);
-    }
-
-    BasicBlock *consume = BasicBlock::Create(*context, std::string("consume ") + op->name, function);
-    builder->CreateBr(consume);
-    builder->SetInsertPoint(consume);
-    codegen(op->consume);
+    codegen(op->body);
 }
 
 void CodeGen_LLVM::visit(const For *op) {

@@ -303,16 +303,13 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt ProducerConsumer::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
-    internal_assert(produce.defined()) << "ProducerConsumer of undefined\n";
-    // update is allowed to be null
-    internal_assert(consume.defined()) << "ProducerConsumer of undefined\n";
+Stmt ProducerConsumer::make(std::string name, bool is_producer, Stmt body) {
+    internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
     ProducerConsumer *node = new ProducerConsumer;
     node->name = name;
-    node->produce = produce;
-    node->update = update;
-    node->consume = consume;
+    node->is_producer = is_producer;
+    node->body = body;
     return node;
 }
 
