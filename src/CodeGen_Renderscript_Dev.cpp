@@ -167,6 +167,7 @@ void CodeGen_Renderscript_Dev::add_kernel(Stmt stmt, const std::string &kernel_n
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage,
                                       kernel_name, module.get());
+    set_function_attributes_for_target(function, target);
 
     vector<string> arg_sym_names;
 

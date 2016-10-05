@@ -102,9 +102,7 @@ protected:
         for_nest_level = 0;
         in_pipeline = true;
 
-        assert(op->produce.defined());
-        assert(!op->update.defined());
-        assert(op->consume.defined());
+        assert(op->body.defined());
 
         IRMutator::visit(op);
         stmt = Evaluate::make(0);
@@ -209,7 +207,7 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
             new ValidateInterleavedVectorizedPipeline(channels):
             new ValidateInterleavedPipeline(channels));
 
-    result.compile_jit();
+    result.compile_jit(get_jit_target_from_environment().with_feature(Target::Renderscript));
 }
 
 int main(int argc, char **argv) {

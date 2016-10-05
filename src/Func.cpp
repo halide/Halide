@@ -2473,14 +2473,16 @@ void Func::print_loop_nest() {
 
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
+                           const std::string &fn_name,
                            const Target &target) {
-    pipeline().compile_to_file(filename_prefix, args, target);
+    pipeline().compile_to_file(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_static_library(const string &filename_prefix,
                                      const vector<Argument> &args,
+                                     const std::string &fn_name,
                                      const Target &target) {
-    pipeline().compile_to_static_library(filename_prefix, args, target);
+    pipeline().compile_to_static_library(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_multitarget_static_library(const std::string &filename_prefix,
