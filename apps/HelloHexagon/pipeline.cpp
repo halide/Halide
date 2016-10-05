@@ -55,9 +55,10 @@ int main(int argc, char **argv) {
         // into chunks of multiples of the vector size, computing the
         // blur in y at each chunk. We use the RoundUp tail strategy to
         // keep the last chunk's memory accesses aligned.
-        Var yo("xo");
+        Var yo("yo");
         blur.compute_root()
             .hexagon()
+            .prefetch(y, 2)
             .split(y, yo, y, 128).parallel(yo)
             .vectorize(x, vector_size * 2, TailStrategy::RoundUp);
         blur_y
