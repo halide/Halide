@@ -261,21 +261,29 @@ class MetalContextHolder {
     objc_id pool;
     void *user_context;
 
+    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
+    void save(void *user_context, bool create);
+    void restore();
+
 public:
     mtl_device *device;
     mtl_command_queue *queue;
     int error;
 
-    MetalContextHolder(void *user_context, bool create) : user_context(user_context) {
-        pool = create_autorelease_pool();
-        error = halide_metal_acquire_context(user_context, device, queue, create);
-    }
-
-    ~MetalContextHolder() {
-        halide_metal_release_context(user_context);
-        drain_autorelease_pool(pool);
-    }
+    __attribute__((always_inline)) MetalContextHolder(void *user_context, bool create) { save(user_context, create); }
+    __attribute__((always_inline)) ~MetalContextHolder() { restore(); }
 };
+
+WEAK void MetalContextHolder::save(void *user_context_arg, bool create) {
+    user_context = user_context_arg;
+    pool = create_autorelease_pool();
+    error = halide_metal_acquire_context(user_context, device, queue, create);
+}
+
+WEAK void MetalContextHolder::restore() {
+    halide_metal_release_context(user_context);
+    drain_autorelease_pool(pool);
+}
 
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;
@@ -447,7 +455,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 
 namespace {
 
-inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buffer_t *buffer) {
+WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buffer_t *buffer) {
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
     if (buffer != NULL) {
         mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
