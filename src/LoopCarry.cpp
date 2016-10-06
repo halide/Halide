@@ -493,12 +493,14 @@ class LoopCarry : public IRMutator {
     Scope<int> in_consume;
 
     void visit(const ProducerConsumer *op) {
-        Stmt produce = mutate(op->produce);
-        Stmt update = mutate(op->update);
-        in_consume.push(op->name, 0);
-        Stmt consume = mutate(op->consume);
-        in_consume.pop(op->name);
-        stmt = ProducerConsumer::make(op->name, produce, update, consume);
+        if (op->is_producer) {
+            IRMutator::visit(op);
+        } else {
+            in_consume.push(op->name, 0);
+            Stmt body = mutate(op->body);
+            in_consume.pop(op->name);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+        }
     }
 
     void visit(const For *op) {

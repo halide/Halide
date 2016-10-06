@@ -349,9 +349,8 @@ void IRComparer::visit(const ProducerConsumer *op) {
     const ProducerConsumer *s = stmt.as<ProducerConsumer>();
 
     compare_names(s->name, op->name);
-    compare_stmt(s->produce, op->produce);
-    compare_stmt(s->update, op->update);
-    compare_stmt(s->consume, op->consume);
+    compare_scalar(s->is_producer, op->is_producer);
+    compare_stmt(s->body, op->body);
 }
 
 void IRComparer::visit(const For *op) {

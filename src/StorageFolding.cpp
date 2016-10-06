@@ -29,7 +29,7 @@ class CountProducers : public IRVisitor {
     const std::string &name;
 
     void visit(const ProducerConsumer *op) {
-        if (op->name == name) {
+        if (op->is_producer && (op->name == name)) {
             count++;
         } else {
             IRVisitor::visit(op);
