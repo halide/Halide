@@ -38,6 +38,7 @@ function(tests folder)
     # Test links against libHalide
     halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
     list(APPEND TEST_NAMES "${folder}_${name}")
+    target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_SOURCE_DIR}")
   endforeach()
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
