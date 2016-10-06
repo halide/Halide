@@ -107,7 +107,11 @@ void IRPrinter::test() {
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x, Parameter());
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
-    Stmt pipeline = ProducerConsumer::make("buf", for_loop, Stmt(), for_loop2);
+
+    Stmt producer = ProducerConsumer::make("buf", true, for_loop);
+    Stmt consumer = ProducerConsumer::make("buf", false, for_loop2);
+    Stmt pipeline = Block::make(producer, consumer);
+
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
                                                          {string("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
@@ -125,8 +129,10 @@ void IRPrinter::test() {
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
         "  }\n"
         "}\n"
-        "vectorized (x, 0, y) {\n"
-        "  out[x] = (buf((x % 3)) + 1)\n"
+        "consume buf {\n"
+        "  vectorized (x, 0, y) {\n"
+        "    out[x] = (buf((x % 3)) + 1)\n"
+        "  }\n"
         "}\n";
 
     if (source.str() != correct_source) {
@@ -492,26 +498,17 @@ void IRPrinter::visit(const AssertStmt *op) {
 }
 
 void IRPrinter::visit(const ProducerConsumer *op) {
-
     do_indent();
-    stream << "produce " << op->name << " {\n";
-    indent += 2;
-    print(op->produce);
-    indent -= 2;
-
-    if (op->update.defined()) {
-        do_indent();
-        stream << "} update " << op->name << " {\n";
-        indent += 2;
-        print(op->update);
-        indent -= 2;
+    if (op->is_producer) {
+        stream << "produce " << op->name << " {\n";
+    } else {
+        stream << "consume " << op->name << " {\n";
     }
-
+    indent += 2;
+    print(op->body);
+    indent -= 2;
     do_indent();
     stream << "}\n";
-
-    print(op->consume);
-
 }
 
 void IRPrinter::visit(const For *op) {

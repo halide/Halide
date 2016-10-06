@@ -182,14 +182,19 @@ private:
     }
 
     void visit(const ProducerConsumer *op) {
-        int idx = get_func_id(op->name);
-
-        stack.push_back(idx);
-        Stmt produce = mutate(op->produce);
-        Stmt update = op->update.defined() ? mutate(op->update) : Stmt();
-        stack.pop_back();
-
-        Stmt consume = mutate(op->consume);
+        int idx;
+        Stmt body;
+        if (op->is_producer) {
+            idx = get_func_id(op->name);
+            stack.push_back(idx);
+            body = mutate(op->body);
+            stack.pop_back();
+        } else {
+            body = mutate(op->body);
+            // At the beginning of the consume step, set the current task
+            // back to the outer one.
+            idx = stack.back();
+        }
 
         Expr profiler_token = Variable::make(Int(32), "profiler_token");
         Expr profiler_state = Variable::make(Handle(), "profiler_state");
@@ -198,15 +203,9 @@ private:
         Expr set_task = Call::make(Int(32), "halide_profiler_set_current_func",
                                    {profiler_state, profiler_token, idx}, Call::Extern);
 
-        // At the beginning of the consume step, set the current task
-        // back to the outer one.
-        Expr set_outer_task = Call::make(Int(32), "halide_profiler_set_current_func",
-                                         {profiler_state, profiler_token, stack.back()}, Call::Extern);
+        body = Block::make(Evaluate::make(set_task), body);
 
-        produce = Block::make(Evaluate::make(set_task), produce);
-        consume = Block::make(Evaluate::make(set_outer_task), consume);
-
-        stmt = ProducerConsumer::make(op->name, produce, update, consume);
+        stmt = ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
     void visit(const For *op) {

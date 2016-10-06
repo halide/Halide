@@ -971,7 +971,6 @@ public:
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
     }
-
 };
 
 

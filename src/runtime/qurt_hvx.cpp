@@ -52,4 +52,27 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
     halide_qurt_hvx_unlock(user_context);
 }
 
+WEAK int halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
+    // Notes:
+    //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
+    //  - If 3 are already pending, the oldest request is dropped
+    //  - USR:PFA status bit is set to indicate that prefetches are in progress
+    //  - A l2fetch with any subfield set to zero cancels all pending prefetches
+    //  - The l2fetch starting address must be in mapped memory but the range
+    //    prefetched can go into unmapped memory without raising an exception
+    const int dir = 1;
+    uint64_t desc =
+        (static_cast<uint64_t>(dir) << 48) |
+        (static_cast<uint64_t>(stride_bytes) << 32) |
+        (static_cast<uint64_t>(width_bytes) << 16) |
+        (static_cast<uint64_t>(height) << 0);
+    __asm__ __volatile__ ("l2fetch(%0,%1)" : : "r"(ptr), "r"(desc));
+    return 0;
+}
+
+WEAK int halide_prefetch(const void *ptr, int size) {
+    halide_prefetch_2d(ptr, size, 1, 1);
+    return 0;
+}
+
 }
