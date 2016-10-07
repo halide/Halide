@@ -1,85 +1,93 @@
 #ifndef GPU_OBJECT_LIFETIME_H
 #define GPU_OBJECT_LIFETIME_H
 
+#include <array>
 #include <stdio.h>
 #include <string.h>
 
-struct ObjectType {
-    const char *created;
-    const char *destroyed;
-    bool is_global;
-    int total_created;
-    int live_count;
+namespace Halide {
+namespace Internal {
 
-    ObjectType(const char *created, const char *destroyed, bool is_global = false) :
-        created(created), destroyed(destroyed),
-        is_global(is_global), total_created(0), live_count(0) {}
-};
+class GpuObjectLifetimeTracker {
+    struct ObjectType {
+        const char * const created;
+        const char * const destroyed;
+        bool const is_global;
+        int total_created;
+        int live_count;
 
-ObjectType object_types[] = {
-    // OpenCL objects
-    ObjectType("clCreateContext", "clReleaseContext", true),
-    ObjectType("clCreateCommandQueue", "clReleaseCommandQueue", true),
-    // This handles both "clCreateProgramWithSource" and
-    // "clCreateProgramWithBinary".
-    ObjectType("clCreateProgram", "clReleaseProgram"),
-    ObjectType("clCreateBuffer", "clReleaseMemObject"),
-    ObjectType("clCreateKernel", "clReleaseKernel"),
+        ObjectType(const char *created, const char *destroyed, bool is_global = false) :
+            created(created), destroyed(destroyed),
+            is_global(is_global), total_created(0), live_count(0) {}
+    };
 
-    // CUDA objects
-    ObjectType("cuCtxCreate", "cuCtxDestroy", true),
-    ObjectType("cuModuleLoad", "cuModuleUnload"),
-    ObjectType("cuMemAlloc", "cuMemFree"),
+    std::array<ObjectType, 13> object_types = {{
+        // OpenCL objects
+        {"clCreateContext", "clReleaseContext", true},
+        {"clCreateCommandQueue", "clReleaseCommandQueue", true},
+        // This handles both "clCreateProgramWithSource" and
+        // "clCreateProgramWithBinary".
+        {"clCreateProgram", "clReleaseProgram"},
+        {"clCreateBuffer", "clReleaseMemObject"},
+        {"clCreateKernel", "clReleaseKernel"},
 
-    // Metal objects
-    ObjectType("Allocating: MTLCreateSystemDefaultDevice", "Releasing: MTLCreateSystemDefaultDevice", true),
-    ObjectType("Allocating: new_command_queue", "Releasing: new_command_queue"),
-    ObjectType("Allocating: new_library_with_source", "Releasing: new_library_with_source"),
+        // CUDA objects
+        {"cuCtxCreate", "cuCtxDestroy", true},
+        {"cuModuleLoad", "cuModuleUnload"},
+        {"cuMemAlloc", "cuMemFree"},
 
-    // Hexagon objects
-    ObjectType("halide_remote_initialize_kernels", "halide_remote_release_kernels"),
-    ObjectType("ion_alloc", "ion_free"),
-};
+        // Metal objects
+        {"Allocating: MTLCreateSystemDefaultDevice", "Releasing: MTLCreateSystemDefaultDevice", true},
+        {"Allocating: new_command_queue", "Releasing: new_command_queue"},
+        {"Allocating: new_library_with_source", "Releasing: new_library_with_source"},
 
-const int object_type_count = sizeof(object_types)/sizeof(object_types[0]);
+        // Hexagon objects
+        {"halide_remote_initialize_kernels", "halide_remote_release_kernels"},
+        {"ion_alloc", "ion_free"},
+    }};
 
-// Parse a line of output from gpu_debug and update object counts.
-static void record_gpu_debug(const char *str) {
-    for (int i = 0; i < object_type_count; ++i) {
-        if (strstr(str, object_types[i].created)) {
-            object_types[i].total_created++;
-            object_types[i].live_count++;
-        }
-        else if (strstr(str, object_types[i].destroyed)) {
-            object_types[i].live_count--;
+public:
+    // Parse a line of output from gpu_debug and update object counts.
+    void record_gpu_debug(const char *str) {
+        for (auto &o : object_types) {
+            if (strstr(str, o.created)) {
+                o.total_created++;
+                o.live_count++;
+            }
+            else if (strstr(str, o.destroyed)) {
+                o.live_count--;
+            }
         }
     }
-}
 
-// Check that there are no live objects remaining, and we created at least one object.
-static int validate_gpu_object_lifetime(bool allow_globals, bool allow_none, int max_globals) {
-    int total = 0;
-    for (int i = 0; i < object_type_count; i++) {
-        if (object_types[i].live_count != 0 &&
-            !(allow_globals && object_types[i].is_global)) {
-            printf("Error! %d objects created by %s still live\n",
-                   object_types[i].live_count, object_types[i].created);
+    // Check that there are no live objects remaining, and we created at least one object.
+    int validate_gpu_object_lifetime(bool allow_globals, bool allow_none, int max_globals) {
+        int total = 0;
+        for (auto &o : object_types) {
+            if (o.live_count != 0 &&
+                !(allow_globals && o.is_global)) {
+                printf("Error! %d objects created by %s still live\n",
+                       o.live_count, o.created);
+                return -1;
+            }
+            if (o.is_global && o.total_created > max_globals) {
+                printf("Error! %d global objects created by %s, max is %d\n",
+                       o.total_created, o.created, max_globals);
+                return -1;
+            }
+
+            total += o.total_created;
+        }
+        if (!allow_none && total == 0) {
+            printf("Error! No objects created. Ensure gpu_debug is set, ");
+            printf("and record_gpu_debug is called from halide_print.\n");
             return -1;
         }
-        if (object_types[i].is_global && object_types[i].total_created > max_globals) {
-            printf("Error! %d global objects created by %s, max is %d\n",
-                   object_types[i].total_created, object_types[i].created, max_globals);
-            return -1;
-        }
+        return 0;
+    }
+};
 
-        total += object_types[i].total_created;
-    }
-    if (!allow_none && total == 0) {
-        printf("Error! No objects created. Ensure gpu_debug is set, ");
-        printf("and record_gpu_debug is called from halide_print.\n");
-        return -1;
-    }
-    return 0;
-}
+}  // namespace Halide
+}  // namespace Internal
 
 #endif
