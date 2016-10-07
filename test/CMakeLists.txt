@@ -102,6 +102,7 @@ function(halide_define_aot_test NAME)
   add_executable("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_aottest.cpp")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
+  target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
   set_target_properties("${TARGET}" PROPERTIES FOLDER "generator")
 
   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
