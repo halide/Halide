@@ -972,7 +972,7 @@ $(BIN_DIR)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/nested_exter
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.a/.h (but not libHalide).
 $(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
 
 $(BIN_DIR)/generator_aot_multitarget: $(ROOT_DIR)/test/generator/multitarget_aottest.cpp $(FILTERS_DIR)/multitarget.a $(FILTERS_DIR)/multitarget.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
 	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
