@@ -31,7 +31,6 @@
 #include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
-#include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -100,10 +99,6 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
-
-    debug(1) << "Injecting prefetches...\n";
-    s = inject_prefetch(s, env);
-    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);
