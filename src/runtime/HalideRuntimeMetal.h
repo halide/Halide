@@ -66,12 +66,12 @@ struct halide_metal_command_queue;
 /** This prototype is exported as applications will typically need to
  * replace it to get Halide filters to execute on the same device and
  * command queue used for other purposes. The halide_metal_device is an
- * id <MTLDevice> and halide_metal_command_queue is an id <MTLCommandQueue>.
+ * id \<MTLDevice\> and halide_metal_command_queue is an id \<MTLCommandQueue\>.
  * No reference counting is done by Halide on these objects. They must remain
  * valid until all off the following are true:
  * - A balancing halide_metal_release_context has occurred for each
  *     halide_metal_acquire_context which returned the device/queue
- * - All Halide filters using the context information have completed 
+ * - All Halide filters using the context information have completed
  * - All buffer_t objects on the device have had halide_device_free called or
  *     have been detached via halide_metal_detach_buffer.
  * - halide_device_release has been called on the interface returned from
