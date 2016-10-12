@@ -109,15 +109,15 @@ private:
     }
 
     void visit(const ProducerConsumer *op) {
+        in_pipeline.push(op->name, 0);
         if (op->is_producer) {
-            in_pipeline.push(op->name, 0);
             if (op->name != buffer) {
                 op->body.accept(this);
             }
-            in_pipeline.pop(op->name);
         } else {
             IRVisitor::visit(op);
         }
+        in_pipeline.pop(op->name);
     }
 
     // Logical operators with eager constant folding

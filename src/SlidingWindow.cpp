@@ -259,7 +259,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // the last stage to cover values produced by stages
             // before the last one. Because, e.g., an intermediate
             // stage may be unrolled, expanding its bounds provided.
-
             if (!func.updates().empty()) {
                 Box b = box_provided(op->body, func.name());
                 if (can_slide_up) {
