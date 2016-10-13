@@ -190,6 +190,33 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Implicit with Var::outermost() used in scheduling
+    {
+        Var x("x"), y("y");
+	IVar w("w");
+
+	Func top("top");
+	Func middle("middle");
+	Func f("f"), g("g");
+	Func common("common");
+  
+	common(x, y) = w * (x + y);
+	f(x, y) = common(x, y) *.5f;
+	g(x, y) = common(x, y) *2.0f;
+
+	middle(x, y) = f(x, y) + g(x, y);
+	top(x, y, w) = middle(x, y);
+
+	f.compute_at(middle, y);
+	g.compute_at(middle, y);
+	middle.compute_at(top, x);
+	common.compute_at(middle, Var::outermost());
+
+	top.print_loop_nest();
+	top.compile_to_lowered_stmt("/tmp/top.stmt", { });
+	Image<float> result = top.realize(3, 3, 3);
+    }
+
     // Implicit used with define_extern
     {
         Var x, y, c;

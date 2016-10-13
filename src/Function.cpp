@@ -145,7 +145,12 @@ struct CheckVars : public IRGraphVisitor {
         if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
-                if (!pure_args[i].empty()) {
+                if (i >= pure_args.size()) {
+                    user_assert(var && var->unique_ivar_or_zero != 0)
+                        << "In definition of Func \"" << name << "\":\n"
+                        << "Call has argument beyond number of pure arguments in definition: "
+                        << op->args[i] << "\n";
+                } else if (!pure_args[i].empty()) {
                     user_assert(var && var->name == pure_args[i])
                         << "In definition of Func \"" << name << "\":\n"
                         << "All of a functions recursive references to itself"
@@ -620,10 +625,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         for (Definition &def: contents->updates) {
             def.mutate(&rewrite_self_calls);
         }
-        for (size_t i = 0; i < values.size(); i++) {
-            values[i] = rewrite_self_calls.mutate(values[i]);
-        }
-
         contents->init_def.implicit_args() = merged;
 
         // Schedule dims and output buffers have to be resized as well.
@@ -657,6 +658,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
         // Handle schedule for any previous update definitions
         for (Definition &update_def : contents->updates) {
+            // Clear out previous implicits and outermost.
             update_def.schedule().dims().erase(update_def.schedule().dims().end() - prev_implicits - 1, update_def.schedule().dims().end());
 
             // Then add the implicit vars outside of that.
@@ -672,8 +674,15 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
                 update_def.schedule().dims().push_back(d);
             }
 
-	    update_def.implicit_args() = contents->init_def.implicit_args();
+            update_def.implicit_args() = contents->init_def.implicit_args();
         }
+    }
+
+    RewriteSelfCallImplicits rewrite_self_calls(name(),
+                                                contents->init_def.explicit_args().size(),
+                                                contents->init_def.implicit_args());
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = rewrite_self_calls.mutate(values[i]);
     }
 
     // Freeze all called functions

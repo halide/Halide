@@ -947,6 +947,22 @@ public:
     }
     // @}
 
+    /** ivar_level returns the loop level of the implicit variable
+     *  or Var::outermost() if there are no implicit levels. It can
+     *  be used with scheduling directives to schedule onto a Func
+     *  just outside of all of its explicit dimensions. Generally
+     *  intended to be used by code which does not need to know about
+     *  implicit dimensions it is invoked with, but should schedule
+     *  inside of them rather than using Var::outermost or compute_root.
+     *  The returned LoopLevel always has this Func as its Func part.
+     *
+     *  If the implicit vars are reordered, this level will potentially
+     *  move.
+     *
+     *  TODO: example code
+     */
+    LoopLevel ivar_level() const;
+
     /** Creates and returns a new Func that wraps this Func. During
      * compilation, Halide replaces all calls to this Func done by 'f'
      * with calls to the wrapper. If this Func is already wrapped for

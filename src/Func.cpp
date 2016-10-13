@@ -1447,6 +1447,16 @@ void Func::invalidate_cache() {
     }
 }
 
+LoopLevel Func::ivar_level() const {
+    if (!func.implicit_args().empty()) {
+        const Variable *v = func.implicit_args().begin()->as<Variable>();
+        // 
+        return LoopLevel(func, VarOrRVar(v->name, false));
+    } else {
+        return LoopLevel(func, Var::outermost());
+    }
+}
+
 Func Func::in(const Func &f) {
     invalidate_cache();
     user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
@@ -2336,7 +2346,15 @@ Stage FuncTupleElementRef::operator=(const FuncRef &e) {
 }
 
 FuncTupleElementRef::operator Expr() const {
-    return Internal::Call::make(func_ref.function(), args, idx);
+    if (!func_ref.function().implicit_args().empty()) {
+        std::vector<Expr> args_with_ivars = args;
+        for (const Expr &e : func_ref.function().implicit_args()) {
+            args_with_ivars.push_back(e);
+        }
+        return Internal::Call::make(func_ref.function(), args_with_ivars, idx);
+    } else {
+        return Internal::Call::make(func_ref.function(), args, idx);
+    }
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
