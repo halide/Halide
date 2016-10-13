@@ -1,22 +1,22 @@
 include ../support/Makefile.inc
 
-all: filter
+all: $(BIN)/filter
 
-bilateral_grid: bilateral_grid.cpp
-	$(CXX) $(CXXFLAGS) bilateral_grid.cpp -g $(LIB_HALIDE) -o bilateral_grid -lz $(LDFLAGS) \
-	$(LLVM_SHARED_LIBS)
+$(BIN)/bilateral_grid.a: bilateral_grid_generator.cpp
+	@-mkdir -p $(BIN)
+	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -o $(BIN) -s $^ target=host
 
-bilateral_grid.a: bilateral_grid
-	./bilateral_grid 8
+$(BIN)/filter: $(BIN)/bilateral_grid.a filter.cpp
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) filter.cpp $(BIN)/bilateral_grid.a -o $@ $(PNGFLAGS) $(LDFLAGS)
 
-filter: bilateral_grid.a filter.cpp
-	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.a -o filter  $(PNGFLAGS) $(LDFLAGS)
+$(BIN)/bilateral_grid.mp4: bilateral_grid_generator.cpp viz.sh
+	@-mkdir -p $(BIN)
+	bash viz.sh $(BIN)
 
-bilateral_grid.mp4: bilateral_grid.cpp viz.sh
-	bash viz.sh
-
-out.png: filter
-	./filter ../images/gray.png out.png 0.1 10
+$(BIN)/out.png: $(BIN)/filter
+	@-mkdir -p $(BIN)
+	$(BIN)/filter $(IMAGES)/gray.png $(BIN)/out.png 0.1 10
 
 clean:
-	rm -f bilateral_grid bilateral_grid.mp4 bilateral_grid.a bilateral_grid.h bilateral filter
+	rm -rf $(BIN)

@@ -1,6 +1,8 @@
 HALIDE_BIN_PATH ?= ../..
 HALIDE_SRC_PATH ?= ../..
 LDFLAGS ?= 
+BIN ?= ./bin
+IMAGES ?= ../images
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
