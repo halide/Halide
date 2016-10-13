@@ -1,4 +1,5 @@
 /tutorial/figures/tmp/trace.bin
+/apps/*/bin
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
 /apps/local_laplacian/local_laplacian_gen
