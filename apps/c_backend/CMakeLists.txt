@@ -3,6 +3,7 @@ function(halide_add_aot_cpp_dependency TARGET AOT_LIBRARY_TARGET)
     add_dependencies("${TARGET}" "${AOT_LIBRARY_TARGET}.exec_generator")
 
     add_library(${AOT_LIBRARY_TARGET}.cpplib STATIC "${GENFILES_DIR}/${AOT_LIBRARY_TARGET}.cpp")
+    target_compile_options(${AOT_LIBRARY_TARGET}.cpplib PRIVATE "-std=c++11")
     target_link_libraries("${TARGET}" PRIVATE ${AOT_LIBRARY_TARGET}.cpplib)
     target_include_directories("${TARGET}" PRIVATE "${GENFILES_DIR}")
 endfunction(halide_add_aot_cpp_dependency)
