@@ -1,32 +1,30 @@
 include ../support/Makefile.inc
 
-all: process
+all: $(BIN)/process
 
 TIMING_ITERATIONS ?= 5
 
-camera_pipe: ../../ camera_pipe.cpp
-	$(CXX) $(CXXFLAGS) camera_pipe.cpp -g $(LIB_HALIDE) -o camera_pipe $(LDFLAGS)
+$(BIN)/camera_pipe.a: camera_pipe_generator.cpp
+	@-mkdir -p $(BIN)
+	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -o $(BIN) -s $^ target=host
 
-curved.a: camera_pipe
-	./camera_pipe 8 # 8-bit output,
-
-fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
+$(BIN)/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
 
-fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
+$(BIN)/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
 
-process: process.cpp curved.a fcam/Demosaic.o fcam/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 $^ -o $@ $(PNGFLAGS) -ldl -lpthread
+$(BIN)/process: process.cpp $(BIN)/camera_pipe.a $(BIN)/Demosaic.o $(BIN)/Demosaic_ARM.o
+	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN) $^ -o $@ $(PNGFLAGS) $(LDFLAGS)
 
-out.png: process
-	./process ../images/bayer_raw.png 3700 2.0 50 $(TIMING_ITERATIONS) out.png
+$(BIN)/out.png: $(BIN)/process
+	$(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 $(TIMING_ITERATIONS) $@ $(BIN)/fcam_c.png $(BIN)/fcam_arm.png
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
-camera_pipe.avi: camera_pipe.cpp viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
-	bash viz.sh
+$(BIN)/camera_pipe.avi: $(BIN)/process viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
+	bash viz.sh $(BIN)
 
 clean:
-	rm -f out.png process curved.a camera_pipe fcam/*.o
+	rm -rf $(BIN)
