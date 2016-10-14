@@ -68,6 +68,23 @@ enum class TailStrategy {
     Auto
 };
 
+/** Different ways to handle the case when the start/end of the loops of stages
+ * computed with (fused) are not aligned. */
+enum class AlignStrategy {
+    /** Shift the start of the fused loops to align. */
+    AlignStart,
+
+    /** Shift the end of the fused loops to align. */
+    AlignEnd,
+
+    /** compute_with will make no attemp to align the start/end of the
+     * fused loops. */
+    NoAlign,
+
+    /** By default, AlignStrategy is set to NoAlign. */
+    Auto
+};
+
 /** Different ways to handle accesses outside the original extents in a prefetch. */
 enum class PrefetchBoundStrategy {
     /** Clamp the prefetched exprs by intersecting the prefetched region with
@@ -93,7 +110,11 @@ enum class PrefetchBoundStrategy {
  * function is done by generating a loop nest that spans its
  * dimensions. We schedule the inputs to that function by
  * recursively injecting realizations for them at particular sites
- * in this loop nest. A LoopLevel identifies such a site. */
+ * in this loop nest. A LoopLevel identifies such a site. The site
+ * can either be a specific loopness within all stages of a function
+ * or it can refer to a loopness within a particular function's
+ * stage (initial definition or updates).
+ */
 class LoopLevel {
     template <typename T> friend class ScheduleParam;
     friend class ::Halide::Internal::ScheduleParamBase;
@@ -101,7 +122,7 @@ class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
-    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
+    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar, int stage);
 
     /** Mutate our contents to match the contents of 'other'. This is a potentially
      * dangerous operation to do if you aren't careful, and exists solely to make
@@ -109,10 +130,14 @@ class LoopLevel {
     EXPORT void copy_from(const LoopLevel &other);
 
 public:
+    /** Return the function stage associated with this loop level.
+     * Asserts if undefined */
+    EXPORT int stage() const;
+
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    EXPORT LoopLevel(Internal::Function f, VarOrRVar v);
-    EXPORT LoopLevel(Func f, VarOrRVar v);
+    EXPORT LoopLevel(Internal::Function f, VarOrRVar v, int stage = -1);
+    EXPORT LoopLevel(Func f, VarOrRVar v, int stage = -1);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
@@ -158,6 +183,15 @@ public:
     EXPORT bool operator==(const LoopLevel &other) const;
 
     bool operator!=(const LoopLevel &other) const { return !(*this == other); }
+};
+
+struct FuseLoopLevel {
+    LoopLevel level;
+    std::map<std::string, AlignStrategy> align;
+
+    FuseLoopLevel() : level(LoopLevel::inlined()) {}
+    FuseLoopLevel(const LoopLevel &level, const std::map<std::string, AlignStrategy> &align)
+        : level(level), align(align) {}
 };
 
 namespace Internal {
@@ -222,6 +256,44 @@ struct StorageDim {
     Expr alignment;
     Expr fold_factor;
     bool fold_forward;
+};
+
+/** This indicates two function stages which loopness are fused from outermost
+ * to a specific loop level: "func_1" at stage "stage_1" is fused with "func_2"
+ * at stage "stage_2" from outermost to loop level "var_name", and "func_1" is
+ * to be computed before "func_2". */
+struct FusedPair {
+    std::string func_1;
+    std::string func_2;
+    size_t stage_1;
+    size_t stage_2;
+    std::string var_name;
+
+    FusedPair() {}
+    FusedPair(const std::string &f1, size_t s1, const std::string &f2,
+              size_t s2, const std::string &var)
+        : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {}
+
+    bool operator==(const FusedPair &other) const {
+        return (func_1 == other.func_1) && (func_2 == other.func_2) &&
+               (stage_1 == other.stage_1) && (stage_2 == other.stage_2) &&
+               (var_name == other.var_name);
+    }
+    bool operator<(const FusedPair &other) const {
+        if (func_1 != other.func_1) {
+            return func_1 < other.func_1;
+        }
+        if (func_2 != other.func_2) {
+            return func_2 < other.func_2;
+        }
+        if (var_name != other.var_name) {
+            return var_name < other.var_name;
+        }
+        if (stage_1 != other.stage_1) {
+            return stage_1 < other.stage_1;
+        }
+        return stage_2 < other.stage_2;
+    }
 };
 
 struct PrefetchDirective {
@@ -366,12 +438,30 @@ public:
     std::vector<Dim> &dims();
     // @}
 
+    /** Until which loop level (starting from outermost) we should fuse
+     * computation of this function stage with another function stage? The
+     * function we are fusing this function with and this function should
+     * be independent of each other. See \ref Func::compute_with and
+     * \ref Stage::compute_with */
+    // @{
+    const FuseLoopLevel &fuse_level() const;
+    FuseLoopLevel &fuse_level();
+    // @}
+
+	/** List of function stages that are to be fused with this function stage
+     * from the outermost loop to a certain loop level. Those function stages
+     * are to be computed AFTER this function stage at the last fused loop level.
+     * See \ref Func::compute_with and \ref Stage::compute_with */
+    // @{
+    const std::vector<FusedPair> &fused_pairs() const;
+    std::vector<FusedPair> &fused_pairs();
+    // @}
+
     /** You may perform prefetching in some of the dimensions of a
      * function. See \ref Func::prefetch */
     // @{
     const std::vector<PrefetchDirective> &prefetches() const;
     std::vector<PrefetchDirective> &prefetches();
-    // @}
 
     /** Are race conditions permitted? */
     // @{

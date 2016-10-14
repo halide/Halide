@@ -54,7 +54,7 @@ public:
         g_gb(x, y) = deinterleaved(x, y, 3);
 
         // These are the ones we need to interpolate
-        Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
+        Func b_r, b_gr, r_gr, b_gb, r_gb, r_b;
 
         // First calculate green at the red and blue sites
 
@@ -137,11 +137,6 @@ public:
         output(x, y, c) = select(c == 0, r(x, y),
                                  c == 1, g(x, y),
                                          b(x, y));
-
-        // These are the stencil stages we want to schedule
-        // separately. Everything else we'll just inline.
-        intermediates.push_back(g_r);
-        intermediates.push_back(g_b);
     }
 
     void schedule() {
@@ -152,12 +147,15 @@ public:
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
-        for (Func f : intermediates) {
+        auto apply_schedule_to_intermediate = [](Func& f){
             f.compute_at(intermed_compute_at)
                 .store_at(intermed_store_at)
                 .vectorize(x, 2*vec, TailStrategy::RoundUp)
-                .fold_storage(y, 2);
-        }
+                .fold_storage(y, 4);
+        };
+        apply_schedule_to_intermediate(g_b);
+        apply_schedule_to_intermediate(g_r);
+        g_b.compute_with(g_r, x, {{x, AlignStrategy::AlignStart}, {y, AlignStrategy::AlignStart}});
         output.compute_at(output_compute_at)
             .vectorize(x)
             .unroll(y)
@@ -173,7 +171,7 @@ public:
 
 private:
     // Intermediate stencil stages to schedule
-    vector<Func> intermediates;
+    Func g_b, g_r;
 };
 
 class CameraPipe : public Halide::Generator<CameraPipe> {
@@ -230,7 +228,7 @@ Func CameraPipe::color_correct(Func input) {
     // calibrated matrices using inverse kelvin.
     Expr kelvin = color_temp;
 
-    Func matrix;
+    Func matrix("matrix");
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
@@ -318,7 +316,7 @@ Func CameraPipe::build() {
     // to make a 2560x1920 output image, just like the FCam pipe, so
     // shift by 16, 12. We also convert it to be signed, so we can deal
     // with values that fall below 0 during processing.
-    Func shifted;
+    Func shifted("shifted");
     shifted(x, y) = cast<int16_t>(input(x+16, y+12));
 
     Func denoised = hot_pixel_suppression(shifted);
@@ -356,7 +354,7 @@ Func CameraPipe::build() {
         .vectorize(xi)
         .unroll(yi);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
-        .fold_storage(y, 4)
+        .fold_storage(y, 8)
         .reorder(c, x, y)
         .vectorize(x, 2*vec, TailStrategy::RoundUp)
         .unroll(c);

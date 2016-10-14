@@ -15,7 +15,7 @@ ScheduleParamBase::ScheduleParamBase(const Type &t, const std::string &name, boo
       // We choose to use an "invalid" possibility here so that if we neglect
       // to set it, a scheduling error results; alternately, we could default
       // to LoopLevel::root() or LoopLevel::inlined().
-      loop_level("__invalid_func_name", "__invalid_var_name", false) {
+      loop_level("__invalid_func_name", "__invalid_var_name", false, -1) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::ScheduleParam, this, nullptr);
 }
 
