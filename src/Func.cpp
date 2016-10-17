@@ -1440,6 +1440,13 @@ Stage &Stage::hexagon(VarOrRVar x) {
     return *this;
 }
 
+Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
+    Prefetch prefetch = {var.name(), offset};
+    definition.schedule().prefetches().push_back(prefetch);
+
+    return *this;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -1828,6 +1835,12 @@ Func &Func::glsl(Var x, Var y, Var c) {
 Func &Func::hexagon(VarOrRVar x) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).hexagon(x);
+    return *this;
+}
+
+Func &Func::prefetch(VarOrRVar var, Expr offset) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, offset);
     return *this;
 }
 
