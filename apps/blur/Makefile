@@ -2,9 +2,13 @@ include ../support/Makefile.inc
 
 all: $(BIN)/test
 
-$(BIN)/halide_blur.a: halide_blur_generator.cpp
+$(BIN)/halide_blur_exec: halide_blur_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -o $(BIN) -s $^ target=host
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+
+$(BIN)/halide_blur.a: $(BIN)/halide_blur_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) target=host
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
