@@ -13,8 +13,6 @@ public:
     // currently allow 8-bit computations
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
-    // The camera pipe is specialized on the 2592x1968 images that
-    // come in, so we'll just use an image instead of a uniform image.
     ImageParam input{UInt(16), 2, "input"};
     ImageParam matrix_3200{Float(32), 2, "matrix_3200"};
     ImageParam matrix_7000{Float(32), 2, "matrix_7000"};

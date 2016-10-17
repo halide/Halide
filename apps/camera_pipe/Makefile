@@ -4,9 +4,13 @@ all: $(BIN)/process
 
 TIMING_ITERATIONS ?= 5
 
-$(BIN)/camera_pipe.a: camera_pipe_generator.cpp
+$(BIN)/camera_pipe_exec: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -o $(BIN) -s $^ target=host
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+
+$(BIN)/camera_pipe.a: $(BIN)/camera_pipe_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) target=host
 
 $(BIN)/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@

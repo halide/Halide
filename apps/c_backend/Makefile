@@ -6,24 +6,32 @@ test: $(BIN)/run $(BIN)/run_cpp
 
 all: $(BIN)/test
 
-$(BIN)/pipeline_c.cpp: pipeline_generator.cpp
+$(BIN)/pipeline_exec: pipeline_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -f pipeline_c -e cpp,h -o $(BIN) -s $^ target=host
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
 
-$(BIN)/pipeline_native.a: pipeline_generator.cpp
+$(BIN)/pipeline_native.a: $(BIN)/pipeline_exec
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -f pipeline_native -e static_library,h -o $(BIN) -s $^ target=host
+	$^ -o $(BIN) -f pipeline_native -e static_library,h target=host
+
+$(BIN)/pipeline_c.cpp: $(BIN)/pipeline_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_c -e cpp,h target=host
 
 $(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) $(LDFLAGS) -o $@ 
 
-$(BIN)/pipeline_cpp_cpp.cpp: pipeline_cpp_generator.cpp
+$(BIN)/pipeline_cpp_exec: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -f pipeline_cpp_cpp -e cpp,h -o $(BIN) -s $^ target=host-c_plus_plus_name_mangling
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
 
-$(BIN)/pipeline_cpp_native.a: pipeline_cpp_generator.cpp
+$(BIN)/pipeline_cpp_cpp.cpp: $(BIN)/pipeline_cpp_exec
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -f pipeline_cpp_native -e static_library,h -o $(BIN) -s $^ target=host-c_plus_plus_name_mangling
+	$^ -o $(BIN) -f pipeline_cpp_cpp -e cpp,h target=host-c_plus_plus_name_mangling
+
+$(BIN)/pipeline_cpp_native.a: $(BIN)/pipeline_cpp_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_cpp_native -e static_library,h target=host-c_plus_plus_name_mangling
 
 $(BIN)/run_cpp: run_cpp.cpp $(BIN)/pipeline_cpp_cpp.cpp $(BIN)/pipeline_cpp_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) $(LDFLAGS) -o $@ 

@@ -2,9 +2,13 @@ include ../support/Makefile.inc
 
 all: $(BIN)/filter
 
-$(BIN)/bilateral_grid.a: bilateral_grid_generator.cpp
+$(BIN)/bilateral_grid_exec: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c $(CXX) -l $(LIB_HALIDE) -o $(BIN) -s $^ target=host
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+
+$(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) target=host
 
 $(BIN)/filter: $(BIN)/bilateral_grid.a filter.cpp
 	@-mkdir -p $(BIN)
