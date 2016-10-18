@@ -111,16 +111,45 @@ Argument to_argument(const Internal::Parameter &param) {
         param.type(), param.dimensions(), def, min, max);
 }
 
+namespace {
+std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_depth) {
+    int64_t int_part = floor(d);
+    double float_part = d - int_part;
+    if (max_depth == 0 || float_part == 0.0) {
+        return {int_part, 1};
+    } else {
+        auto r = rational_approximation_helper(1.0/float_part, max_depth - 1);
+        std::swap(r.first, r.second);
+        if (mul_would_overflow(64, int_part, r.second) ||
+            add_would_overflow(64, r.first, int_part * r.second)) {
+            return {0, 0};
+        }
+        r.first += int_part * r.second;
+        return r;
+    }
+}
+}
+    
 std::pair<int64_t, int64_t> rational_approximation(double d) {
-    if (std::isnan(d)) return {0, 0};
-    if (!std::isfinite(d)) return {(d < 0) ? -1 : 1, 0};
-    // TODO: fix this abomination to something more intelligent
-    const double kDenom = 1e9;
-    const int64_t num = (int64_t)(d * kDenom);
-    const int64_t den = (int64_t)kDenom;
-    user_assert(std::abs((double)num / (double)den - kDenom) <= kDenom) 
-        << "The value " << d << " cannot be accurately approximated as a ratio\n";
-    return { num, den };
+    // The most accurate rationals to approximate a real come from
+    // truncating its continued fraction representation.  We want the
+    // largest continued fraction possible, but at some point they'll
+    // overflow our rational type, and because they're evaluated
+    // backwards it's not easy to stop at the point which will not
+    // trigger overflow. Use binary search to find the right depth.
+    std::pair<int64_t, int64_t> best {0, 0};
+    int lo = 0, hi = 64; 
+    while (lo + 1 < hi) {
+        int mid = (lo + hi)/2;
+        auto next = rational_approximation_helper(d, mid);
+        if (next.first == 0 && next.second == 0) {
+            hi = mid;
+        } else {
+            lo = mid;
+            best = next;
+        }
+    }
+    return best;
 }
 
 std::vector<Type> parse_halide_type_list(const std::string &types) {
