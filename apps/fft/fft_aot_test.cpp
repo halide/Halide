@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string.h>
+#include <cstdlib>
 
 #include "fft_forward_r2c.h"
 #include "fft_inverse_c2r.h"
