@@ -15,7 +15,7 @@ const int kSize = 32;
 Halide::Var x, y, c;
 
 template<typename Type>
-Image<Type> MakeImage(int extra) {
+Image<Type> make_image(int extra) {
     Image<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
@@ -55,8 +55,8 @@ int main(int argc, char **argv) {
     constexpr int kArrayCount = 2;
 
     Image<float> src[kArrayCount] = {
-        MakeImage<float>(0),
-        MakeImage<float>(1)
+        make_image<float>(0),
+        make_image<float>(1)
     };
 
     std::vector<int> int_args = { 33, 66 };
@@ -64,9 +64,7 @@ int main(int argc, char **argv) {
     // the Stub wants Expr, so make a conversion in place
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
-    // We statically know the types we want, so the templated construction method
-    // is most convenient.
-    auto gen = StubTest::make<>(
+    auto gen = StubTest(
         context, 
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
