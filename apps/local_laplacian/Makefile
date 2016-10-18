@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 BIN ?= bin
 
-all: process
+all: $(BIN)/process
 
 $(BIN)/local_laplacian_exec: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
