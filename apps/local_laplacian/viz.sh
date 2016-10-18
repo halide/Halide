@@ -1,5 +1,4 @@
 #!/bin/bash
-set -eux
 export HL_TRACE=3
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
