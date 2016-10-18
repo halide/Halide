@@ -112,8 +112,9 @@ Argument to_argument(const Internal::Parameter &param) {
 }
 
 namespace {
+
 std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_depth) {
-    int64_t int_part = floor(d);
+    int64_t int_part = std::floor(d);
     double float_part = d - int_part;
     if (max_depth == 0 || float_part == 0.0) {
         return {int_part, 1};
@@ -128,7 +129,8 @@ std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_dept
         return r;
     }
 }
-}
+
+}  // namespace
     
 std::pair<int64_t, int64_t> rational_approximation(double d) {
     // The most accurate rationals to approximate a real come from
