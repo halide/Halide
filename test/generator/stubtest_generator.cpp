@@ -71,6 +71,6 @@ namespace {
 // If the fully-qualified stub name specified for third argument hasn't been declared
 // properly, a compile error will result. The fully-qualified name *must* have at least one
 // namespace (i.e., a name at global scope is not acceptable).
-auto register_me = HALIDE_REGISTER_GENERATOR(StubTest, "stubtest", StubNS1::StubNS2::StubTest);
+HALIDE_REGISTER_GENERATOR(StubTest, "stubtest", StubNS1::StubNS2::StubTest)
 
 }  // namespace
