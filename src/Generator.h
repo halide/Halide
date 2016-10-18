@@ -1827,10 +1827,10 @@ private:
 // This is suboptimal, but allows us more flexibility to mutate registration in
 // the future with less impact on existing code.
 #define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
-    Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); 
+    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
 
 #define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
-    Halide::Internal::RegisterGeneratorAndStub<::FULLY_QUALIFIED_STUB_NAME>(GEN_CLASS_NAME::create, GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); 
+    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::Internal::RegisterGeneratorAndStub<::FULLY_QUALIFIED_STUB_NAME>(GEN_CLASS_NAME::create, GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); }
 
 #define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
 

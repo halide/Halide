@@ -39,9 +39,9 @@ private:
 };
 
 // Note that HALIDE_REGISTER_GENERATOR() with just two args is functionally
-// identical to the old HalideRegister<> syntax: no stub being defined,
+// identical to the old Halide::RegisterGenerator<> syntax: no stub being defined,
 // just AOT usage. (If you try to generate a stub for this class you'll
 // fail with an error at generation time.)
-auto register_me = HALIDE_REGISTER_GENERATOR(StubUser, "stubuser");
+HALIDE_REGISTER_GENERATOR(StubUser, "stubuser")
 
 }  // namespace
