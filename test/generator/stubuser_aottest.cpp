@@ -8,7 +8,7 @@ using namespace Halide;
 const int kSize = 32;
 
 template<typename Type>
-Image<Type> MakeImage() {
+Image<Type> make_image() {
     Image<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
@@ -42,7 +42,7 @@ void verify(const Image<InputType> &input, const Image<OutputType> &output) {
 
 int main(int argc, char **argv) {
 
-  Image<uint8_t> input = MakeImage<uint8_t>();
+  Image<uint8_t> input = make_image<uint8_t>();
   Image<uint8_t> output(kSize, kSize, 3);
 
   stubuser(input, output);
