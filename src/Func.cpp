@@ -183,9 +183,7 @@ EXPORT const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) return 0;
-    // TODO: Figure out what to do here...
-    return func.explicit_args().size();
+    return defined() ? func.explicit_args().size() : 0;
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
@@ -352,6 +350,7 @@ class SubstituteSelfReference : public IRMutator {
 
     const string func;
     const Function substitute;
+    const size_t implicits_count;
     const vector<Var> new_args;
 
     void visit(const Call *c) {
@@ -366,14 +365,15 @@ class SubstituteSelfReference : public IRMutator {
                      << "\"" << substitute.name() << "\"\n";
             vector<Expr> args;
             args.insert(args.end(), c->args.begin(), c->args.end());
-            args.insert(args.end(), new_args.begin(), new_args.end());
+            args.insert(args.end() - implicits_count,
+                        new_args.begin(), new_args.end());
             expr = Call::make(substitute, args, c->value_index);
         }
     }
 public:
     SubstituteSelfReference(const string &func, const Function &substitute,
-                            const vector<Var> &new_args)
-            : func(func), substitute(substitute), new_args(new_args) {
+                            size_t implicits_count, const vector<Var> &new_args)
+      : func(func), substitute(substitute), implicits_count(implicits_count), new_args(new_args) {
         internal_assert(substitute.get_contents().defined());
     }
 };
@@ -381,9 +381,9 @@ public:
 /** Substitute all self-reference calls to 'func' with 'substitute' which
  * args (LHS) is the old args (LHS) plus 'new_args' in that order.
  * Expect this method to be called on the value (RHS) of an update definition. */
-Expr substitute_self_reference(Expr val, const string &func, const Function &substitute,
+Expr substitute_self_reference(Expr val, const string &func, const Function &substitute, size_t implicits_count,
                                const vector<Var> &new_args) {
-    SubstituteSelfReference subs(func, substitute, new_args);
+    SubstituteSelfReference subs(func, substitute, implicits_count, new_args);
     val = subs.mutate(val);
     return val;
 }
@@ -478,14 +478,16 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         func_name = tmp[0];
     }
 
-    vector<Expr> args = definition.all_args();
+    // Start with all args, including ivars, changes to only explicit args below.
+    vector<Expr> args = definition.explicit_args();
+    vector<Expr> all_args = definition.all_args();
     vector<Expr> &values = definition.values();
 
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
     bool is_assoc;
     vector<AssociativeOp> ops;
-    std::tie(is_assoc, ops) = prove_associativity(func_name, args, values);
+    std::tie(is_assoc, ops) = prove_associativity(func_name, all_args, values);
     user_assert(is_assoc)
         << "Failed to call rfactor() on " << stage_name
         << " since it can't prove associativity of the operator\n";
@@ -651,11 +653,11 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         Expr val = substitute(substitution_map, values[i]);
         // Need to update the self-reference in the update definition to point
         // to the new intermediate Func
-        val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
+        val = substitute_self_reference(val, func_name, intm.function(),
+                                        definition.implicit_args().size(), vars_rename);
         update_vals[i] = val;
     }
     intm(update_args) = Tuple(update_vals);
-
 
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original
@@ -666,7 +668,8 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // Copy over the storage order of the original pure dims
     vector<StorageDim> &intm_storage_dims = intm.function().schedule().storage_dims();
     internal_assert(intm_storage_dims.size() == storage_dims.size() + vars_rename.size());
-    for (size_t i = 0; i < storage_dims.size(); ++i) {
+    internal_Assert(storage_dims.size() >= args.size());
+    for (size_t i = 0; i < args.size(); ++i) {
         intm_storage_dims[i] = storage_dims[i];
     }
 
@@ -685,7 +688,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
             [&v](const Dim& dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
             Dim d = {v.name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
-            dims.insert(dims.end()-1, d);
+            dims.insert(dims.end() - 1 - intm.function().implicit_args().size(), d);
         }
     }
     // Then, we need to remove lifted RVars from the dims list
@@ -714,10 +717,14 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // Update value of the new update definition. It loads values from
     // the intermediate Func.
     vector<Expr> f_values(values.size());
+    std::vector<Expr> call_args = f_store_args;
+    for (const auto &v : definition.implicit_args()) {
+        call_args.push_back(v);
+    }
     if (values.size() > 1) {
         for (size_t i = 0; i < f_values.size(); ++i) {
             Expr prev_val = Call::make(intm.output_types()[i], func_name,
-                                       f_store_args, Call::CallType::Halide,
+                                       call_args, Call::CallType::Halide,
                                        nullptr, i);
             const AssociativeOp &op = ops[i];
             Expr val = substitute(op.y.first, intm(f_load_args)[i], op.op);
@@ -732,7 +739,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         }
     } else {
         Expr prev_val = Call::make(intm.output_types()[0], func_name,
-                                   f_store_args, Call::CallType::Halide);
+                                   call_args, Call::CallType::Halide);
         const AssociativeOp &op = ops[0];
         Expr val = substitute(op.y.first, intm(f_load_args), op.op);
         if (!op.x.first.empty()) {
@@ -746,7 +753,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
 
     // Update the definition
-    args.swap(f_store_args);
+    definition.explicit_args() = f_store_args;
     values.swap(f_values);
 
     return intm;

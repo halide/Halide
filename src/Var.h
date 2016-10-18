@@ -159,12 +159,12 @@ c     * placeholder ("_") appears in its argument list. Defining a
     }
 
     /** Return whether this is an IVar. */
-    bool is_ivar() { return unique_ivar_or_zero != 0; }
+    bool is_ivar() const { return unique_ivar_or_zero != 0; }
 
     /** Return whether this var/ivar sorts earlier than another.
      * All Vars sort before all IVars, but there is no ordering between
      * non-IVar Vars. */
-    bool earlier_ivar(const Var &other) {
+    bool earlier_ivar(const Var &other) const {
         return unique_ivar_or_zero < other.unique_ivar_or_zero;
     }
 

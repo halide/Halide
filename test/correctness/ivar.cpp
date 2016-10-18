@@ -68,6 +68,60 @@ int fact_cxx(int x) {
     return fact;
 }
 
+void histogram_test(bool use_rfactor) {
+    Var x("x"), y("y");
+    IVar x_implicit("x_implicit"), y_implicit("y_implicit");
+    Func input("input"), f("f"), g("g"), h("h"), output("output");
+
+    Func hist_in("hist_in");
+    hist_in(x, y) = cast<uint8_t>(x + 3 * x_implicit + 5 * (y + 3 * y_implicit)) & ~1;
+
+    Var bin;
+    Func histogram("histogram");
+    RDom range(0, 3, 0, 3);
+    histogram(hist_in(range.x, range.y)) += 1;
+
+    if (use_rfactor) {
+        Var yi("yi");
+        Func inner = histogram.update(0).rfactor(range.y, yi);
+        inner.compute_root().update(0).parallel(yi);
+    }
+    histogram.compute_root();
+
+    output(x_implicit, y_implicit, bin) = histogram(bin);
+    Image<int32_t> hists = output.realize(2, 2, 31);
+
+    uint8_t input_data[2][2][3][3];
+    for (int32_t x_i = 0; x_i < 2; x_i++) {
+        for (int32_t y_i = 0; y_i < 2; y_i++) {
+            for (int32_t x = 0; x < 3; x++) {
+                for (int32_t y = 0; y < 3; y++) {
+                    input_data[x_i][y_i][x][y] = (uint8_t)(x + 3 * x_i + 5 * (y + 3 * y_i)) & ~1;
+                }
+            }
+        }
+    }
+    int32_t hists_cxx[2][2][31];
+    memset(hists_cxx, 0, sizeof(hists_cxx));
+    for (int32_t x_i = 0; x_i < 2; x_i++) {
+        for (int32_t y_i = 0; y_i < 2; y_i++) {
+            for (int32_t x = 0; x < 3; x++) {
+                for (int32_t y = 0; y < 3; y++) {
+                    hists_cxx[x_i][y_i][input_data[x_i][y_i][x][y]] += 1;
+                }
+            }
+        }
+    }
+
+    for (int y = 0; y < 2; y++) {
+        for (int x = 0; x < 2; x++) {
+            for (int bin = 0; bin < 31; bin++) {
+                assert(hists(x, y, bin) == hists_cxx[x][y][bin]);
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     // Implicit based input function used in pointwise function
     {
@@ -92,53 +146,13 @@ int main(int argc, char **argv) {
     }
 
     // Implicit based input function used in reduction
-    {
-        Var x("x"), y("y");
-        IVar x_implicit("x_implicit"), y_implicit("y_implicit");
-        Func input("input"), f("f"), g("g"), h("h"), output("output");
+    histogram_test(false);
 
-        Func hist_in("hist_in");
-        hist_in(x, y) = cast<uint8_t>(x + 3 * x_implicit + 5 * (y + 3 * y_implicit)) & ~1;
+    // Implicit based input function used in reduction with rfactor
+    histogram_test(true);
 
-        Var bin;
-        Func histogram("histogram");
-        RDom range(0, 3, 0, 3);
-        histogram(hist_in(range.x, range.y)) += 1;
-        histogram.compute_root();
-
-        output(x_implicit, y_implicit, bin) = histogram(bin);
-        Image<int32_t> hists = output.realize(2, 2, 31);
-
-        uint8_t input_data[2][2][3][3];
-        for (int32_t x_i = 0; x_i < 2; x_i++) {
-            for (int32_t y_i = 0; y_i < 2; y_i++) {
-                for (int32_t x = 0; x < 3; x++) {
-                    for (int32_t y = 0; y < 3; y++) {
-                        input_data[x_i][y_i][x][y] = (uint8_t)(x + 3 * x_i + 5 * (y + 3 * y_i)) & ~1;
-                    }
-                }
-            }
-        }
-        int32_t hists_cxx[2][2][31];
-        memset(hists_cxx, 0, sizeof(hists_cxx));
-        for (int32_t x_i = 0; x_i < 2; x_i++) {
-            for (int32_t y_i = 0; y_i < 2; y_i++) {
-                for (int32_t x = 0; x < 3; x++) {
-                    for (int32_t y = 0; y < 3; y++) {
-                        hists_cxx[x_i][y_i][input_data[x_i][y_i][x][y]] += 1;
-                    }
-                }
-            }
-        }
-
-        for (int y = 0; y < 2; y++) {
-            for (int x = 0; x < 2; x++) {
-                for (int bin = 0; bin < 31; bin++) {
-                    assert(hists(x, y, bin) == hists_cxx[x][y][bin]);
-                }
-            }
-        }
-    }
+    // TODO: make test case where ivar breaks associativity and try
+    // rfactor, may need to go in errors cases.
 
     // Implicit used in expression only
     {
@@ -193,28 +207,29 @@ int main(int argc, char **argv) {
     // Implicit with Var::outermost() used in scheduling
     {
         Var x("x"), y("y");
-	IVar w("w");
+        IVar w("w");
 
-	Func top("top");
-	Func middle("middle");
-	Func f("f"), g("g");
-	Func common("common");
+        Func top("top");
+        Func middle("middle");
+        Func f("f"), g("g");
+        Func common("common");
   
-	common(x, y) = w * (x + y);
-	f(x, y) = common(x, y) *.5f;
-	g(x, y) = common(x, y) *2.0f;
+        common(x, y) = w * (x + y);
+        f(x, y) = common(x, y) *.5f;
+        g(x, y) = common(x, y) *2.0f;
 
-	middle(x, y) = f(x, y) + g(x, y);
-	top(x, y, w) = middle(x, y);
+        middle(x, y) = f(x, y) + g(x, y);
+        top(x, y, w) = middle(x, y);
 
-	f.compute_at(middle, y);
-	g.compute_at(middle, y);
-	middle.compute_at(top, x);
-	common.compute_at(middle, Var::outermost());
+        f.compute_at(middle, y);
+        g.compute_at(middle, y);
+        middle.compute_at(top, x);
+        common.compute_at(middle, Var::outermost());
 
-	top.print_loop_nest();
-	top.compile_to_lowered_stmt("/tmp/top.stmt", { });
-	Image<float> result = top.realize(3, 3, 3);
+        // TODO: convert to an assertion
+        top.print_loop_nest();
+        top.compile_to_lowered_stmt("/tmp/top.stmt", { });
+        Image<float> result = top.realize(3, 3, 3);
     }
 
     // Implicit used with define_extern
@@ -248,6 +263,40 @@ int main(int argc, char **argv) {
                 }
             }
         }
+    }
+
+    // IVar used with implciit argument deduction
+    {
+        Var x, y;
+        IVar tx("tx"), ty("ty");
+
+        Func f("f");
+        f(x, y) = x * y + (tx * 256) + (ty * 1024);
+
+        Func g("g");
+        g(x, _) = f(x, _);
+        Func h("h");
+        h(_) = g(_);
+        Func i("i");
+        i(_, tx, ty) = g(_);
+
+        Image<int32_t> result = i.realize(16, 16, 2, 2);
+
+
+        for (int32_t ty = 0; ty < 2; ty++) {
+            for (int32_t tx = 0; tx < 2; tx++) {
+                for (int32_t y = 0; y < 16; y++) {
+                    for (int32_t x = 0; x < 16; x++) {
+                        assert(result(x, y, tx, ty) == x * y + (tx * 256) + (ty * 1024));
+                    }
+                }
+            }
+        }
+    }
+
+    // Ivar used with rfactor
+    {
+      
     }
 
     printf("Success!\n");

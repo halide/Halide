@@ -93,7 +93,7 @@ public:
      *  defining the function, this list may be added to.
      */
     // @{
-    std::set<Expr , IVarOrdering> &implicit_args();
+    std::set<Expr, IVarOrdering> &implicit_args();
     const std::set<Expr, IVarOrdering> &implicit_args() const;
 
     /** Get list of both explicit args and implicit args. This is the argument
