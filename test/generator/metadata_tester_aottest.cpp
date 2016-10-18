@@ -395,6 +395,33 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "input_not_nod",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "input_nod",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "input_not",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "array_input_0",
           halide_argument_kind_input_buffer,
           3,
@@ -683,6 +710,9 @@ int main(int argc, char **argv) {
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>
+        input,             // Input<Func> 
+        input,             // Input<Func> 
+        input,             // Input<Func> 
         input, input,      // Input<Func[]>
         input, input,      // Input<Func[2]>
         0, 0,              // Input<int8_t[]>
@@ -715,6 +745,9 @@ int main(int argc, char **argv) {
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>
+        input,             // Input<Func> 
+        input,             // Input<Func> 
+        input,             // Input<Func> 
         input, input,      // Input<Func[]>
         input, input,      // Input<Func[2]>
         0, 0,              // Input<int8_t[]>

@@ -123,6 +123,26 @@ std::pair<int64_t, int64_t> rational_approximation(double d) {
     return { num, den };
 }
 
+std::vector<Type> parse_halide_type_list(const std::string &types) {
+    const auto &e = get_halide_type_enum_map();
+    std::vector<Type> result;
+    for (auto t : split_string(types, ",")) {
+        auto it = e.find(t);
+        user_assert(it != e.end()) << "Type not found: " << t;
+        result.push_back(it->second);
+    }
+    return result;
+}
+
+template<typename T>
+T parse_scalar(const std::string &value) {
+    std::istringstream iss(value);
+    T t;
+    iss >> t;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << value;
+    return t;
+}
+
 }  // namespace
 
 class StubEmitter {
@@ -935,6 +955,7 @@ Func GeneratorBase::get_output(const std::string &n) {
     build_params();
     for (auto output : filter_outputs) {
         if (output->name() == n) {
+            user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
             user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_output_vector()\n";
             Func f = output->funcs().at(0);
             user_assert(f.defined()) << "Output " << n << " was not defined.\n";
@@ -951,6 +972,7 @@ std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
     build_params();
     for (auto output : filter_outputs) {
         if (output->name() == n) {
+            user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
             for (const auto &f : output->funcs()) {
                 user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
             }
@@ -964,18 +986,61 @@ std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
 void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
     user_assert(!generator_params_set) << "set_generator_param_values() must be called at most once per Generator instance.\n";
     build_params();
-    std::map<std::string, GeneratorParamBase *> m;
-    for (auto param : generator_params) {
-        m[param->name] = param;
+    std::map<std::string, GeneratorParamBase *> generator_param_names;
+    for (auto p : generator_params) {
+        generator_param_names[p->name] = p;
+    }
+    std::map<std::string, GIOBase *> type_names, dim_names, array_size_names;
+    for (auto i : filter_inputs) {
+        if (i->kind() == IOKind::Function) {
+            type_names[i->name() + ".type"] = i;
+            dim_names[i->name() + ".dim"] = i;
+        }
+        if (i->is_array()) {
+            array_size_names[i->name() + ".size"] = i;    
+        }
+    }
+    for (auto o : filter_outputs) {
+        if (o->kind() == IOKind::Function) {
+            type_names[o->name() + ".type"] = o;
+            dim_names[o->name() + ".dim"] = o;
+        }
+        if (o->is_array()) {
+            array_size_names[o->name() + ".size"] = o;    
+        }
     }
     for (auto key_value : params) {
         const std::string &key = key_value.first;
         const std::string &value = key_value.second;
-        auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
-        // It's OK to set schedule params here.
-        // user_assert(!p->second->is_schedule_param());
-        p->second->set_from_string(value);
+        {
+            auto p = generator_param_names.find(key);
+            if (p != generator_param_names.end()) {
+                p->second->set_from_string(value);
+                continue;
+            }
+        }
+        {
+            auto p = type_names.find(key);
+            if (p != type_names.end()) {
+                p->second->types_ = parse_halide_type_list(value);
+                continue;
+            }
+        }
+        {
+            auto p = dim_names.find(key);
+            if (p != dim_names.end()) {
+                p->second->dimensions_ = parse_scalar<int>(value);
+                continue;
+            }
+        }
+        {
+            auto p = array_size_names.find(key);
+            if (p != array_size_names.end()) {
+                p->second->array_size_ = parse_scalar<size_t>(value);
+                continue;
+            }
+        }
+        user_error << "Generator has no GeneratorParam named: " << key;
     }
     generator_params_set = true;
 }
@@ -1052,11 +1117,11 @@ Pipeline GeneratorBase::produce_pipeline() {
             user_assert(f.dimensions() == output->dimensions()) << "Output \"" << f.name() 
                 << "\" requires dimensions=" << output->dimensions() 
                 << " but was defined as dimensions=" << f.dimensions() << ".\n";
-            user_assert((int)f.outputs() == (int)output->type_size()) << "Output \"" << f.name() 
-                    << "\" requires a Tuple of size " << output->type_size() 
+            user_assert((int)f.outputs() == (int)output->types().size()) << "Output \"" << f.name() 
+                    << "\" requires a Tuple of size " << output->types().size() 
                     << " but was defined as Tuple of size " << f.outputs() << ".\n";
             for (size_t i = 0; i < f.output_types().size(); ++i) {
-                Type expected = output->type_at(i);
+                Type expected = output->types().at(i);
                 Type actual = f.output_types()[i];
                 user_assert(expected == actual) << "Output \"" << f.name() 
                     << "\" requires type " << expected 
@@ -1097,22 +1162,76 @@ void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     emit.emit();
 }
 
-GIOBase::GIOBase(const ArraySizeArg &array_size, 
+GIOBase::GIOBase(size_t array_size, 
                  const std::string &name, 
                  IOKind kind,             
-                 const std::vector<TypeArg> &types,
-                 const DimensionArg &dimensions) 
+                 const std::vector<Type> &types,
+                 int dimensions) 
     : array_size_(array_size), name_(name), kind_(kind), types_(types), dimensions_(dimensions) {
-    user_assert(array_size_.value() >= 0) << "Generator Input/Output Arrays must have positive size.";
 }
 
 GIOBase::~GIOBase() { 
     // nothing
 }
 
+bool GIOBase::array_size_defined() const {
+    return array_size_ != -1;  
+}
+
+size_t GIOBase::array_size() const { 
+    internal_assert(array_size_defined()) << "ArraySize is unspecified for " << name() 
+        << "; you need to explicit set it via the resize() method or by setting " 
+        << name() << ".size = value in your build rules.";
+    return (size_t) array_size_; 
+}
+
+bool GIOBase::is_array() const { 
+    internal_error << "Unimplemented"; return false; 
+}
+
+const std::string &GIOBase::name() const { 
+    return name_; 
+}
+
+IOKind GIOBase::kind() const { 
+    return kind_; 
+}
+
+bool GIOBase::types_defined() const {
+    return !types_.empty();  
+}
+
+const std::vector<Type> &GIOBase::types() const { 
+    internal_assert(types_defined()) << "Type is unspecified for " << name() << "\n";
+    return types_; 
+}
+
+Type GIOBase::type() const { 
+    internal_assert(types_.size() == 1) << "Expected types_.size() == 1, saw " << types_.size() << " for " << name() << "\n";
+    return types_.at(0); 
+}
+
+bool GIOBase::dimensions_defined() const {
+    return dimensions_ != -1;  
+}
+
+int GIOBase::dimensions() const { 
+    internal_assert(dimensions_defined()) << "Dimensions unspecified for " << name() << "\n";
+    return dimensions_; 
+}
+
+const std::vector<Func> &GIOBase::funcs() const {
+    internal_assert(funcs_.size() == array_size() && exprs_.empty());
+    return funcs_;
+}
+
+const std::vector<Expr> &GIOBase::exprs() const {
+    internal_assert(exprs_.size() == array_size() && funcs_.empty());
+    return exprs_;
+}
+
 void GIOBase::verify_internals() const {
-    user_assert(array_size_.value() >= 0) << "Generator Input/Output Arrays must have positive values";
-    user_assert(dimensions_.value() >= 0) << "Generator Input/Output Dimensions must have positive values";
+    user_assert(dimensions_ >= 0) << "Generator Input/Output Dimensions must have positive values";
 
     if (kind() == IOKind::Function) {
         for (const Func &f : funcs()) {
@@ -1153,12 +1272,39 @@ std::string GIOBase::array_name(size_t i) const {
     return n;
 }
 
-GeneratorInputBase::GeneratorInputBase(const ArraySizeArg &array_size,
+// If our type(s) are defined, ensure it matches the ones passed in, asserting if not.
+// If our type(s) are not defined, just set to the ones passed in.
+// (Ditto for dims.)
+void GIOBase::check_matching_type_and_dim(const std::vector<Type> &t, int d) {
+    if (types_defined()) {
+        user_assert(types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << types().size() << " types but saw " << t.size();
+        for (size_t i = 0; i < t.size(); ++i) {
+            user_assert(types().at(i) == t.at(i)) << "Type mismatch for " << name() << ": expected " << types().at(i) << " saw " << t.at(i);
+        }
+    } else {
+        types_ = t;
+    }
+    if (dimensions_defined()) {
+        user_assert(dimensions() == d) << "Dimensions mismatch for " << name() << ": expected " << dimensions() << " saw " << d;
+    } else {
+        dimensions_ = d;
+    }
+}
+
+void GIOBase::check_matching_array_size(size_t size) {
+    if (array_size_defined()) {
+        user_assert(array_size() == size) << "ArraySize mismatch for " << name() << ": expected " << array_size() << " saw " << size;
+    } else {
+        array_size_ = size;
+    }
+}
+
+GeneratorInputBase::GeneratorInputBase(size_t array_size,
                                        const std::string &name, 
                                        IOKind kind, 
-                                       const TypeArg &t, 
-                                       const DimensionArg &d) 
-    : GIOBase(array_size, name, kind, {t}, d) {
+                                       const std::vector<Type> &t, 
+                                       int d) 
+    : GIOBase(array_size, name, kind, t, d) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
 }
 
@@ -1183,6 +1329,10 @@ void GeneratorInputBase::verify_internals() const {
 }
 
 void GeneratorInputBase::init_internals() {
+    user_assert(array_size_defined()) << "ArraySize is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
+    user_assert(types_defined()) << "Type is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
+    user_assert(dimensions_defined()) << "Dimensions is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
+
     init_parameters();
 
     exprs_.clear();
@@ -1209,27 +1359,28 @@ void GeneratorInputBase::init_internals() {
 }
 
 void GeneratorInputBase::set_inputs(const std::vector<FuncOrExpr> &inputs) {
-    // must re-init parameters in case some GeneratorParams changed, since
-    // it can affect the expected length of parameters_.
-    init_parameters();
-
     exprs_.clear();
     funcs_.clear();
-    user_assert(inputs.size() == array_size()) << "Expected inputs.size() == " 
-        << array_size() << ", saw " << inputs.size() << " for " << name() << "\n";
+    check_matching_array_size(inputs.size());
     for (const FuncOrExpr & i : inputs) {
         user_assert(i.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
+            check_matching_type_and_dim(i.func().output_types(), i.func().dimensions());
             funcs_.push_back(i.func());
         } else {
+            check_matching_type_and_dim({i.expr().type()}, 0);
             exprs_.push_back(i.expr());
         }
     }
     
+    // must re-init parameters in case some GeneratorParams changed, since
+    // it can affect the expected length of parameters_.
+    init_parameters();
+
     verify_internals();
 }
 
-GeneratorOutputBase::GeneratorOutputBase(const ArraySizeArg &array_size, const std::string &name, const std::vector<TypeArg> &t, const DimensionArg &d) 
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, const std::vector<Type> &t, int d) 
     : GIOBase(array_size, name, IOKind::Function, t, d) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
@@ -1240,12 +1391,27 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 }
 
 void GeneratorOutputBase::init_internals() {
+    // user_assert(array_size_defined()) << "ArraySize is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
+    // user_assert(types_defined()) << "Type is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
+    // user_assert(dimensions_defined()) << "Dimensions is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
+
     exprs_.clear();
     funcs_.clear();
-    for (size_t i = 0; i < array_size(); ++i) {
-        funcs_.push_back(Func(array_name(i)));
+    if (array_size_defined()) {
+        for (size_t i = 0; i < array_size(); ++i) {
+            funcs_.push_back(Func(array_name(i)));
+        }
     }
 }
+
+void GeneratorOutputBase::resize(size_t size) {
+    internal_assert(is_array());
+    internal_assert(!array_size_defined()) << "You may only call " << name() 
+        << ".resize() when then size is undefined\n";
+    array_size_ = (int) size;
+    init_internals();
+}
+
 
 void generator_test() {
     GeneratorParam<int> gp("gp", 1);
