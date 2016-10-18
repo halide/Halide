@@ -2,8 +2,6 @@
 /apps/*/bin
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
-/apps/local_laplacian/local_laplacian_gen
-/apps/local_laplacian/process_viz
 /apps/HelloAndroid/jni/halide.h
 /apps/HelloNaCl/build_32/halide_game_of_life.h
 /apps/HelloNaCl/build_32/halide_game_of_life.s
@@ -188,8 +186,6 @@ apps/*/passes.txt
 apps/*/*.ll
 apps/*/*.sass
 apps/*/filter
-apps/local_laplacian/local_laplacian
-apps/local_laplacian/local_laplacian.h
 apps/interpolate/interpolate
 apps/resize/resize
 apps/seam_carving/seam_carving.h
@@ -199,8 +195,6 @@ apps/wavelet/haar_x.h
 apps/wavelet/inverse_daubechies_x.h
 apps/wavelet/inverse_haar_x.h
 apps/wavelet/wavelet
-apps/local_laplacian/ispc/process
-apps/local_laplacian/process
 apps/HelloAndroid*/bin
 apps/HelloAndroid*/gen
 apps/HelloAndroid*/obj
