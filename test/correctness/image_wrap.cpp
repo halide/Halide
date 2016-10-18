@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include "../common/check_call_graphs.h"
+#include "test/common/check_call_graphs.h"
 
 #include <stdio.h>
 #include <map>
