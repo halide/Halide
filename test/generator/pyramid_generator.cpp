@@ -8,9 +8,11 @@ public:
 
     Input<Func> input{ "input", Float(32), 2 };
 
-    Output<Func[]> pyramid{ levels, "pyramid", Float(32), 2 }; 
+    Output<Func[]> pyramid{ "pyramid", Float(32), 2 }; 
 
     void generate() {
+        pyramid.resize(levels);
+
         pyramid[0](x, y) = input(x, y);
 
         for (size_t i = 1; i < pyramid.size(); i++) {

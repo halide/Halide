@@ -262,14 +262,21 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(msan
                          GENERATOR_HALIDE_TARGET host-msan)
 
-  # Tests that require additional dependencies
+  # stubtest has input and output funcs with undefined types; this is fine for stub
+  # usage (the types can be inferred), but for AOT compilation, we must make the types
+  # concrete via generator args.
+  halide_define_aot_test(stubtest
+                         GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32)
+
+  # Tests that require additional dependencies, args, etc
+  set(MDTEST_GEN_ARGS input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2)
   halide_define_aot_test(metadata_tester
-                         GENERATOR_ARGS input_type=uint8 input_dim=3 output_type=float32 output_dim=3 array_count=2)
+                         GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
                                  AOT_LIBRARY_TARGET metadata_tester_ucon
                                  GENERATED_FUNCTION metadata_tester_ucon
                                  GENERATOR_HALIDE_TARGET host-user_context
-                                 GENERATOR_ARGS input_type=uint8 input_dim=3 output_type=float32 output_dim=3 array_count=2)
+                                 GENERATOR_ARGS ${MDTEST_GEN_ARGS})
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur

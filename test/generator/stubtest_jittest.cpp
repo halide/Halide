@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 
     // We statically know the types we want, so the templated construction method
     // is most convenient.
-    auto gen = StubTest::make<float, int16_t, kArrayCount>(
+    auto gen = StubTest::make<>(
         context, 
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         });
 
     StubTest::ScheduleParams sp;
-    // This generator default intermediate_level to "undefined", 
+    // This generator defaults intermediate_level to "undefined", 
     // so we *must* specify something for it (else we'll crater at
     // Halide compile time). We'll use this:
     sp.intermediate_level = LoopLevel(gen.f, Var("y"));
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
 
     Halide::Realization f_realized = gen.realize(kSize, kSize, 3);
     Image<float> f0 = f_realized[0];
-    Image<int16_t> f1 = f_realized[1];
+    Image<float> f1 = f_realized[1];
     verify(src[0], 1.234f, 0, f0);
     verify(src[0], 1.234f, 33, f1);
 

@@ -7,13 +7,10 @@ namespace {
 
 class StubUser : public Halide::Generator<StubUser> {
 public:
-    GeneratorParam<Type> input_type{ "input_type", UInt(8) };
-    GeneratorParam<Type> output_type{ "output_type", UInt(8) };
     GeneratorParam<int32_t> int_arg{ "int_arg", 33 };
 
-    Input<Func> input{ "input", input_type, 3 };
-
-    Output<Func> output{"output", output_type, 3};
+    Input<Func> input{ "input", UInt(8), 3 };
+    Output<Func> output{"output", UInt(8), 3};
 
     void generate() {
 
@@ -25,19 +22,10 @@ public:
         inputs.float_arg = 1.234f;
         inputs.int_arg = { int_arg };
 
-        // Since we need to propagate types passed to us via our own GeneratorParams,
-        // we can't (easily) use the templated constructor; instead, pass on the 
-        // values via the Stub's GeneratorParams struct.
-        StubTest::GeneratorParams gp;
-        gp.input_type = input_type;
-        gp.output_type = output_type;
-        // Override array_count to only expect 1 input and provide one output for g
-        gp.array_count = 1;
-
-        stub = StubTest(context(), inputs, gp);
+        stub = StubTest(context(), inputs);
 
         const float kOffset = 2.f;
-        output(x, y, c) = cast(output_type, stub.f(x, y, c)[1] + kOffset);
+        output(x, y, c) = cast<uint8_t>(stub.f(x, y, c)[1] + kOffset);
     }
 
     void schedule() {
