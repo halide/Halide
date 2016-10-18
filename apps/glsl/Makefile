@@ -14,7 +14,7 @@ all: $(BIN)/opengl_test
 
 $(BIN)/halide_blur_glsl_exec: halide_blur_glsl_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/halide_blur_glsl.a: $(BIN)/halide_blur_glsl_exec
 	@-mkdir -p $(BIN)
@@ -22,14 +22,14 @@ $(BIN)/halide_blur_glsl.a: $(BIN)/halide_blur_glsl_exec
 
 $(BIN)/halide_ycc_glsl_exec: halide_ycc_glsl_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/halide_ycc_glsl.a: $(BIN)/halide_ycc_glsl_exec
 	@-mkdir -p $(BIN)
 	$^ -o $(BIN) target=host-opengl-debug
 
 $(BIN)/opengl_test: opengl_test.cpp $(BIN)/halide_blur_glsl.a $(BIN)/halide_ycc_glsl.a
-	$(CXX) $(CXXFLAGS) -I$(BIN) $^ -o $@ -ldl -lpthread -L$(TOP)/bin $(OPENGL_LIBS)
+	$(CXX) $(CXXFLAGS) -I$(BIN) $^ -o $@ $(LDFLAGS) -L$(TOP)/bin $(OPENGL_LIBS)
 
 run: $(BIN)/opengl_test
 	LD_LIBRARY_PATH=../../bin $(BIN)/opengl_test
