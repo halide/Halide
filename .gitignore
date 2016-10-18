@@ -194,11 +194,6 @@ apps/interpolate/interpolate
 apps/resize/resize
 apps/seam_carving/seam_carving.h
 apps/snake/halide_snake
-apps/wavelet/daubechies_x.h
-apps/wavelet/haar_x.h
-apps/wavelet/inverse_daubechies_x.h
-apps/wavelet/inverse_haar_x.h
-apps/wavelet/wavelet
 apps/local_laplacian/ispc/process
 apps/local_laplacian/process
 apps/HelloAndroid*/bin
