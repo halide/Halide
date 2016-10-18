@@ -28,7 +28,7 @@ bench_64x64: $(BIN)/bench_fft
 
 $(BIN)/fft_generator_exec: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
 $(BIN)/fft_forward_r2c.a: $(BIN)/fft_generator_exec
