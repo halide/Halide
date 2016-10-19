@@ -68,14 +68,17 @@ public:
         definition.schedule().touched() = true;
     }
 
-    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
+    Stage(Internal::Definition d, const std::string &n, const std::vector<Expr> &args,
           const std::vector<Internal::StorageDim> &sdims)
             : definition(d), stage_name(n), storage_dims(sdims) {
         definition.schedule().touched() = true;
 
-        std::vector<Var> dim_vars(args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            dim_vars[i] = Var(args[i]);
+        std::vector<Var> dim_vars;
+        dim_vars.reserve(args.size());
+        for (const auto &e : args) {
+            const Internal::Variable *v = e.as<Internal::Variable>();
+            internal_assert(v);
+            dim_vars.emplace_back(v->name);
         }
         internal_assert(definition.explicit_args().size() == dim_vars.size());
     }

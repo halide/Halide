@@ -151,9 +151,6 @@ int main(int argc, char **argv) {
     // Implicit based input function used in reduction with rfactor
     histogram_test(true);
 
-    // TODO: make test case where ivar breaks associativity and try
-    // rfactor, may need to go in errors cases.
-
     // Implicit used in expression only
     {
         Var x("x");
@@ -282,7 +279,6 @@ int main(int argc, char **argv) {
 
         Image<int32_t> result = i.realize(16, 16, 2, 2);
 
-
         for (int32_t ty = 0; ty < 2; ty++) {
             for (int32_t tx = 0; tx < 2; tx++) {
                 for (int32_t y = 0; y < 16; y++) {
@@ -294,9 +290,41 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Ivar used with rfactor
+    // Ivar used with rename in scheduling
     {
-      
+        Var x, y;
+        IVar tx("tx"), ty("ty");
+
+        Func in("in");
+        in(x, y) = select((tx % 2) == (ty % 2), 1.0f, 0.0f);
+
+        Func blur_x("blur_x"), blur_y("blur_y");
+        blur_x(x, y) = (in(x - 1, y) + in (x, y) + in(x + 1, y)) / 3.0f;
+        blur_y(x, y) = (blur_x(x, y - 1) + blur_x (x, y) + blur_x(x, y + 1)) / 3.0f;
+        Func out("out");
+
+        out(x, y, tx, ty) = blur_y(x, y);
+
+        Var bx("bx"), by("by");
+
+        out.rename(tx, bx);
+        out.rename(ty, by);
+
+        out.unroll(bx, 2);
+        out.unroll(by, 2);
+
+        blur_x.compute_root();
+
+        Image<float> result = out.realize(16, 16, 4, 4);
+        for (int32_t ty = 0; ty < 4; ty++) {
+            for (int32_t tx = 0; tx < 4; tx++) {
+                for (int32_t y = 0; y < 16; y++) {
+                    for (int32_t x = 0; x < 16; x++) {
+                          assert(result(x, y, tx, ty) == (((tx & 1) == (ty & 1)) ? 1.0f : 0.0f));
+                    }
+                }
+            }
+        }
     }
 
     printf("Success!\n");

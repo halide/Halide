@@ -32,7 +32,7 @@ public:
     /** Get the name of a Var */
     const std::string &name() const {return _name;}
 
-    /** Test if two Vars are the same. This simply compares the names. */
+    /** Test if two Vars are the same. */
     bool same_as(const Var &other) const {
         return _name == other._name &&
                unique_ivar_or_zero == other.unique_ivar_or_zero;
@@ -41,7 +41,7 @@ public:
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments
      * to the function are fewer than its dimensionality and a
-c     * placeholder ("_") appears in its argument list. Defining a
+     * placeholder ("_") appears in its argument list. Defining a
      * function to equal an expression containing implicit variables
      * similarly appends those implicit variables, in the same order,
      * to the left-hand-side of the definition where the placeholder

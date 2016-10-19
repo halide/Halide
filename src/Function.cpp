@@ -857,18 +857,11 @@ const Definition &Function::definition() const {
     return contents->init_def;
 }
 
-const std::vector<std::string> Function::explicit_args() const {
-    const auto &pure_def_args = contents->init_def.explicit_args();
-    std::vector<std::string> arg_names(pure_def_args.size());
-    for (size_t i = 0; i < pure_def_args.size(); i++) {
-        const Variable *var = pure_def_args[i].as<Variable>();
-        internal_assert(var);
-        arg_names[i] = var->name;
-    }
-    return arg_names;
+const std::vector<Expr> &Function::explicit_args() const {
+    return contents->init_def.explicit_args();
 }
 
-const std::vector<std::string> Function::all_args() const {
+std::vector<std::string> Function::all_args() const {
     const auto &pure_def_args = contents->init_def.all_args();
     std::vector<std::string> arg_names(pure_def_args.size());
     size_t i;
@@ -881,8 +874,7 @@ const std::vector<std::string> Function::all_args() const {
     return arg_names;
 }
 
-
-const std::set<Expr, IVarOrdering> Function::implicit_args() const {
+const std::set<Expr, IVarOrdering> &Function::implicit_args() const {
     return contents->init_def.implicit_args();
 }
 

@@ -59,12 +59,14 @@ const string &Func::name() const {
 
 /** Get the pure arguments. */
 std::vector<Var> Func::args() const {
-    const std::vector<std::string> arg_names = func.explicit_args();
-    std::vector<Var> args(arg_names.size());
-    for (size_t i = 0; i < arg_names.size(); i++) {
-        args[i] = Var(arg_names[i]);
+    std::vector<Var> result;
+    result.reserve(func.explicit_args().size());
+    for (const auto &e : func.explicit_args()) {
+        const Variable *var = e.as<Variable>();
+        internal_assert(var);
+        result.emplace_back(var->name);
     }
-    return args;
+    return result;
 }
 
 /** The right-hand-side value of the pure definition of this
@@ -668,7 +670,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // Copy over the storage order of the original pure dims
     vector<StorageDim> &intm_storage_dims = intm.function().schedule().storage_dims();
     internal_assert(intm_storage_dims.size() == storage_dims.size() + vars_rename.size());
-    internal_Assert(storage_dims.size() >= args.size());
+    internal_assert(storage_dims.size() >= args.size());
     for (size_t i = 0; i < args.size(); ++i) {
         intm_storage_dims[i] = storage_dims[i];
     }
