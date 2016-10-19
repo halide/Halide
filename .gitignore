@@ -89,13 +89,6 @@
 /apps/HelloNaCl/hello_nacl.zip
 /apps/HelloNaCl/lib32
 /apps/HelloNaCl/lib64
-/apps/modules/flip_impl.h
-/apps/modules/generate_pipeline
-/apps/modules/my_library/flip
-/apps/modules/my_library/vignette
-/apps/modules/pipeline.h
-/apps/modules/run_pipeline
-/apps/modules/vignette_impl.h
 /apps/nacl_demos/game_of_life_init.h
 /apps/nacl_demos/game_of_life_render.h
 /apps/nacl_demos/game_of_life_update.h
