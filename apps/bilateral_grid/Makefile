@@ -4,7 +4,7 @@ all: $(BIN)/filter
 
 $(BIN)/bilateral_grid_exec: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@-mkdir -p $(BIN)
