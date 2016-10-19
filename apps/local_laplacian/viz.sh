@@ -2,8 +2,8 @@
 export HL_TRACE=3
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
-make process_viz && \
-./process_viz ../images/rgb_small.png 4 1 1 0 out_small.png | \
+make bin/process_viz && \
+./bin/process_viz ../images/rgb_small.png 4 1 1 0 ./bin/out_small.png | \
 ../../bin/HalideTraceViz -s 1920 1080 -t 3000 \
 -f input           0 65535 2 0 1 1     30 100 1 0 0 1 0 0 \
 -l input "input" 30 32 10 \
@@ -30,5 +30,5 @@ make process_viz && \
 -f outGPyramid[5]  0 1    -1 0 1 320 1500 1038 1 0 0 1 \
 -f local_laplacian 0 65535 2 0 1 4   1700 100 1 0 0 1 0 0 \
 -l local_laplacian "output" 1700 32 10 |\
-avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 local_laplacian.mp4
+avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 ./bin/local_laplacian.mp4
 #mplayer -demuxer rawvideo -rawvideo w=1920:h=1080:format=rgba:fps=30 -idle -fixed-vo -
