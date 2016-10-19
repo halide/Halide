@@ -3,6 +3,7 @@ include ../support/Makefile.inc
 all: $(BIN)/process
 
 TIMING_ITERATIONS ?= 5
+TARGET ?= host
 
 $(BIN)/camera_pipe_exec: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
@@ -10,7 +11,7 @@ $(BIN)/camera_pipe_exec: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/camera_pipe.a: $(BIN)/camera_pipe_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) target=host
+	$^ -o $(BIN) target=$(TARGET)
 
 $(BIN)/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
