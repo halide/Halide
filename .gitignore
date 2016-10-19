@@ -114,8 +114,6 @@
 /apps/nacl_demos/reaction_diffusion_render.h
 /apps/nacl_demos/reaction_diffusion_update.h
 /apps/HelloNaCl/halide_game_of_life.h
-/apps/fft/bench_fft
-/apps/fft/*.html
 bazel-bin
 bazel-genfiles
 bazel-Halide
@@ -187,14 +185,8 @@ apps/*/*.ll
 apps/*/*.sass
 apps/*/filter
 apps/interpolate/interpolate
-apps/resize/resize
 apps/seam_carving/seam_carving.h
 apps/snake/halide_snake
-apps/wavelet/daubechies_x.h
-apps/wavelet/haar_x.h
-apps/wavelet/inverse_daubechies_x.h
-apps/wavelet/inverse_haar_x.h
-apps/wavelet/wavelet
 apps/HelloAndroid*/bin
 apps/HelloAndroid*/gen
 apps/HelloAndroid*/obj
