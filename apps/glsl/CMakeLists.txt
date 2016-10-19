@@ -1,33 +1,29 @@
-#Generators
+# Generators
 find_package(OpenGL)
 if (OpenGL_FOUND)
 
-halide_project(glsl_halide_blur "apps" halide_blur.cpp)
-set(hb_header "${CMAKE_CURRENT_BINARY_DIR}/blur.h")
-set(hb_lib "${CMAKE_CURRENT_BINARY_DIR}/blur${CMAKE_STATIC_LIBRARY_SUFFIX}")
-halide_project(glsl_halide_ycc "apps" halide_ycc.cpp)
-set(hycc_header "${CMAKE_CURRENT_BINARY_DIR}/ycc.h")
-set(hycc_lib "${CMAKE_CURRENT_BINARY_DIR}/ycc${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    # Generators
+    halide_add_generator(halide_blur_glsl.generator
+                         SRCS halide_blur_glsl_generator.cpp)
+    halide_add_aot_library(halide_blur_glsl
+                           GENERATOR_TARGET halide_blur_glsl.generator
+                           GENERATOR_ARGS target=host-opengl-debug)
 
-# Final executable
-add_executable(opengl_test opengl_test.cpp ${hb_header} ${hycc_header})
-target_link_libraries(opengl_test PRIVATE Halide ${OPENGL_LIBRARIES}
-                    "${hb_lib}" "${hycc_lib}")
-IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-target_link_libraries(opengl_test PRIVATE pthread dl X11 GL)
-endif()
-target_include_directories(opengl_test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+    halide_add_generator(halide_ycc_glsl.generator
+                         SRCS halide_ycc_glsl_generator.cpp)
+    halide_add_aot_library(halide_ycc_glsl
+                           GENERATOR_TARGET halide_ycc_glsl.generator
+                           GENERATOR_ARGS target=host-opengl-debug)
 
-# FIXME: The environment variable HL_TARGET needs setting
-add_custom_command(OUTPUT "${hb_header}" "${hb_lib}"
-                 COMMAND glsl_halide_blur
-                 COMMENT "Generating halide_blur files"
-                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-                 )
-add_custom_command(OUTPUT "${hycc_header}" "${hycc_lib}"
-                 COMMAND glsl_halide_ycc
-                 COMMENT "Generating halide_blur files"
-                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-                )
+    # Final executable
+    add_executable(opengl_test opengl_test.cpp)
+    halide_add_aot_library_dependency(opengl_test halide_blur_glsl)
+    halide_add_aot_library_dependency(opengl_test halide_ycc_glsl)
+    target_compile_options(opengl_test PRIVATE "-std=c++11")
+
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        target_link_libraries(opengl_test PRIVATE pthread dl X11 GL)
+    endif()
+
 endif()
 
