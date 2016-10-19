@@ -111,28 +111,33 @@ Argument to_argument(const Internal::Parameter &param) {
         param.type(), param.dimensions(), def, min, max);
 }
 
-namespace {
-
 std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_depth) {
-    int64_t int_part = std::floor(d);
-    double float_part = d - int_part;
+    const int64_t int_part = static_cast<int64_t>(std::floor(d));
+    const double float_part = d - int_part;
     if (max_depth == 0 || float_part == 0.0) {
         return {int_part, 1};
-    } else {
-        auto r = rational_approximation_helper(1.0/float_part, max_depth - 1);
-        std::swap(r.first, r.second);
-        if (mul_would_overflow(64, int_part, r.second) ||
-            add_would_overflow(64, r.first, int_part * r.second)) {
-            return {0, 0};
-        }
-        r.first += int_part * r.second;
-        return r;
     }
-}
 
-}  // namespace
+    const auto r = rational_approximation_helper(1.0/float_part, max_depth - 1);
+    const int64_t num = r.second;
+    const int64_t den = r.first;
+    if (mul_would_overflow(64, int_part, den) ||
+        add_would_overflow(64, num, int_part * den)) {
+        return {0, 0};
+    }
+
+    return {num + int_part * den, den};
+}
     
 std::pair<int64_t, int64_t> rational_approximation(double d) {
+    // Special-case non-finite numbers.
+    if (std::isnan(d)) return {0, 0};
+
+    const int64_t sign = (d < 0) ? -1 : 1;
+    if (!std::isfinite(d)) return {sign, 0};
+
+    d = std::abs(d);
+
     // The most accurate rationals to approximate a real come from
     // truncating its continued fraction representation.  We want the
     // largest continued fraction possible, but at some point they'll
@@ -151,7 +156,8 @@ std::pair<int64_t, int64_t> rational_approximation(double d) {
             best = next;
         }
     }
-    return best;
+    
+    return {best.first * sign, best.second};
 }
 
 std::vector<Type> parse_halide_type_list(const std::string &types) {
@@ -1464,6 +1470,39 @@ void generator_test() {
 
     // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
     Tuple t(gp, gp, gp);
+
+    // Test rational_approximation
+    auto check_ratio = [](double d, std::pair<int64_t, int64_t> expected) {
+        auto actual = rational_approximation(d);
+        internal_assert(actual == expected) 
+            << "rational_approximation(" << d << ") failed:"
+            << " expected " << expected.first << "/" << expected.second
+            << " actual " << actual.first << "/" << actual.second << "\n";
+    };
+
+    // deliberately use fractional values that are exactly representable so that
+    // we minimize testing variation across compilers
+    const double kFrac1 = 1234.125;
+    const double kFrac2 = 123412341234.125;
+    const double kFrac3 = 1.0/65536.0;
+
+    check_ratio(0.0,        {0, 1});
+    check_ratio(1.0,        {1, 1});
+    check_ratio(2.0,        {2, 1});
+    check_ratio(kFrac1,     {9873, 8});
+    check_ratio(kFrac2,     {987298729873, 8});
+    check_ratio(kFrac3,     {1, 65536});
+
+    check_ratio(-0.0,       {0, 1});
+    check_ratio(-1.0,       {-1, 1});
+    check_ratio(-2.0,       {-2, 1});
+    check_ratio(-kFrac1,    {-9873, 8});
+    check_ratio(-kFrac2,    {-987298729873, 8});
+    check_ratio(-kFrac3,    {-1, 65536});
+
+    check_ratio(NAN, {0, 0});
+    check_ratio(INFINITY, {1, 0});
+    check_ratio(-INFINITY, {-1, 0});
 }
 
 }  // namespace Internal
