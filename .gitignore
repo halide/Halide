@@ -116,8 +116,6 @@
 /apps/nacl_demos/reaction_diffusion_render.h
 /apps/nacl_demos/reaction_diffusion_update.h
 /apps/HelloNaCl/halide_game_of_life.h
-/apps/fft/bench_fft
-/apps/fft/*.html
 bazel-bin
 bazel-genfiles
 bazel-Halide
