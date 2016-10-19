@@ -4,7 +4,7 @@ all: $(BIN)/test
 
 $(BIN)/halide_blur_exec: halide_blur_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/halide_blur.a: $(BIN)/halide_blur_exec
 	@-mkdir -p $(BIN)
