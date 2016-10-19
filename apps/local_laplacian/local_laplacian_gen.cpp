@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    output.compile_to_static_library("local_laplacian", {levels, alpha, beta, input}, target);
+    output.compile_to_static_library("local_laplacian", {levels, alpha, beta, input}, "local_laplacian", target);
 
     return 0;
 }

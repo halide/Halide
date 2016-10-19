@@ -1450,6 +1450,13 @@ Stage &Stage::hexagon(VarOrRVar x) {
     return *this;
 }
 
+Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
+    Prefetch prefetch = {var.name(), offset};
+    definition.schedule().prefetches().push_back(prefetch);
+
+    return *this;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -1848,6 +1855,12 @@ Func &Func::glsl(Var x, Var y, Var c) {
 Func &Func::hexagon(VarOrRVar x) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).hexagon(x);
+    return *this;
+}
+
+Func &Func::prefetch(VarOrRVar var, Expr offset) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, offset);
     return *this;
 }
 
@@ -2508,14 +2521,16 @@ void Func::print_loop_nest() {
 
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
+                           const std::string &fn_name,
                            const Target &target) {
-    pipeline().compile_to_file(filename_prefix, args, target);
+    pipeline().compile_to_file(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_static_library(const string &filename_prefix,
                                      const vector<Argument> &args,
+                                     const std::string &fn_name,
                                      const Target &target) {
-    pipeline().compile_to_static_library(filename_prefix, args, target);
+    pipeline().compile_to_static_library(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_multitarget_static_library(const std::string &filename_prefix,

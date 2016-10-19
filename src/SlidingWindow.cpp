@@ -107,7 +107,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     void visit(const ProducerConsumer *op) {
-        if (op->name != func.name()) {
+        if (!op->is_producer || (op->name != func.name())) {
             IRMutator::visit(op);
         } else {
 
@@ -259,9 +259,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // the last stage to cover values produced by stages
             // before the last one. Because, e.g., an intermediate
             // stage may be unrolled, expanding its bounds provided.
-            if (op->update.defined()) {
-                Box b = box_provided(op->produce, func.name());
-                merge_boxes(b, box_provided(op->update, func.name()));
+            if (!func.updates().empty()) {
+                Box b = box_provided(op->body, func.name());
                 if (can_slide_up) {
                     string n = prefix + dim + ".min";
                     Expr var = Variable::make(Int(32), n);
@@ -272,8 +271,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     stmt = LetStmt::make(n, max(var, b[dim_idx].max), stmt);
                 }
             }
-
-
         }
     }
 

@@ -96,12 +96,12 @@ int main(int argc, char **argv) {
     // Now that we've setup our input and output buffers, we can call
     // our function. Looking in the header file, its signature is:
 
-    // int lesson_10_halide(buffer_t *_input_buffer, uint8_t _offset, buffer_t *_brighter_buffer);
+    // int brighter(buffer_t *_input_buffer, uint8_t _offset, buffer_t *_brighter_buffer);
 
     // The return value is an error code. It's zero on success.
 
     int offset = 5;
-    int error = lesson_10_halide(&input_buf, offset, &output_buf);
+    int error = brighter(&input_buf, offset, &output_buf);
 
     if (error) {
         printf("Halide returned an error: %d\n", error);

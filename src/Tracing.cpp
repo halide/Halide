@@ -203,28 +203,21 @@ private:
             }
 
             Expr call;
-            Stmt new_update;
-            if (op->update.defined()) {
-                args[1] = halide_trace_update;
+            if (op->is_producer) {
+                args[1] = halide_trace_produce;
                 call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-                new_update = Block::make(Evaluate::make(call), op->update);
+            } else {
+                args[1] = halide_trace_end_consume;
+                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+                Stmt new_body = Block::make(op->body, Evaluate::make(call));
+
+                stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
+
+                args[1] = halide_trace_consume;
+                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
             }
-
-            args[1] = halide_trace_consume;
-            call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            Stmt new_consume = Block::make(Evaluate::make(call), op->consume);
-
-            args[1] = halide_trace_end_consume;
-            call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            new_consume = Block::make(new_consume, Evaluate::make(call));
-
-            stmt = ProducerConsumer::make(op->name, op->produce, new_update, new_consume);
-
-            args[1] = halide_trace_produce;
-            call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
             stmt = LetStmt::make(f.name() + ".trace_id", call, stmt);
         }
-
     }
 };
 

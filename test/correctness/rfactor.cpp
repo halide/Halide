@@ -1,108 +1,14 @@
 #include "Halide.h"
-#include <assert.h>
+#include "test/common/check_call_graphs.h"
+
 #include <stdio.h>
-#include <algorithm>
-#include <functional>
 #include <map>
-#include <numeric>
 
 using std::map;
-using std::vector;
 using std::string;
 
 using namespace Halide;
 using namespace Halide::Internal;
-
-typedef map<string, vector<string>> CallGraphs;
-
-class CheckCalls : public IRVisitor {
-public:
-    CallGraphs calls; // Caller -> vector of callees
-    string producer = "";
-private:
-    using IRVisitor::visit;
-
-    void visit(const ProducerConsumer *op) {
-        string old_producer = producer;
-        producer = op->name;
-        calls[producer]; // Make sure each producer is allocated a slot
-        op->produce.accept(this);
-        producer = old_producer;
-
-        if (op->update.defined()) {
-            // Just lump all the update stages together
-            producer = op->name + ".update(" + std::to_string(0) + ")";
-            calls[producer]; // Make sure each producer is allocated a slot
-            op->update.accept(this);
-            producer = old_producer;
-        }
-        op->consume.accept(this);
-        producer = old_producer;
-    }
-
-    void visit(const Load *op) {
-        IRVisitor::visit(op);
-        if (!producer.empty()) {
-            assert(calls.count(producer) > 0);
-            vector<string> &callees = calls[producer];
-            if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
-                callees.push_back(op->name);
-            }
-        }
-    }
-};
-
-
-int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
-    if (result.size() != expected.size()) {
-        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
-        return -1;
-    }
-    for (auto &iter : expected) {
-        if (result.count(iter.first) == 0) {
-            printf("Expect %s to be in the call graphs\n", iter.first.c_str());
-            return -1;
-        }
-        vector<string> &expected_callees = iter.second;
-        vector<string> &result_callees = result[iter.first];
-        std::sort(expected_callees.begin(), expected_callees.end());
-        std::sort(result_callees.begin(), result_callees.end());
-        if (expected_callees != result_callees) {
-            string expected_str = std::accumulate(
-                expected_callees.begin(), expected_callees.end(), std::string{},
-                [](const string &a, const string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
-            string result_str = std::accumulate(
-                result_callees.begin(), result_callees.end(), std::string{},
-                [](const string &a, const string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
-
-            printf("Expect calless of %s to be (%s); got (%s) instead\n",
-                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
-            return -1;
-        }
-
-    }
-    return 0;
-}
-
-int check_image(const Image<int> &im, const std::function<int(int,int,int)> &func) {
-    for (int z = 0; z < im.channels(); z++) {
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = func(x, y, z);
-                if (im(x, y, z) != correct) {
-                    printf("im(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, im(x, y, z), correct);
-                    return -1;
-                }
-            }
-        }
-    }
-    return 0;
-}
 
 int simple_rfactor_test(bool compile_module) {
     Func f("f"), g("g");
@@ -129,10 +35,8 @@ int simple_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm.name(), g.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {f.name(), intm.name()}},
+            {g.name(), {intm.name(), g.name()}},
+            {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -179,12 +83,9 @@ int reorder_split_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm2.name(), g.name()}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {intm1.name(), intm2.name()}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {f.name(), intm1.name()}},
+            {g.name(), {intm2.name(), g.name()}},
+            {intm2.name(), {intm1.name(), intm2.name()}},
+            {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -233,12 +134,9 @@ int multi_split_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm2.name(), g.name()}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {intm1.name(), intm2.name()}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {f.name(), intm1.name()}},
+            {g.name(), {intm2.name(), g.name()}},
+            {intm2.name(), {intm1.name(), intm2.name()}},
+            {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -287,11 +185,9 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm.name(), g.name()}},
+            {g.name(), {intm.name(), g.name()}},
             {wrapper.name(), {f.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {wrapper.name(), intm.name()}},
+            {intm.name(), {wrapper.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -361,10 +257,8 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
 
             CallGraphs expected = {
                 {g.name(), {f.name()}},
-                {f.name(), {}},
-                {f.update(0).name(), {f.name(), intm.name()}},
-                {intm.name(), {}},
-                {intm.update(0).name(), {a.name(), b.name(), c.name(), intm.name()}},
+                {f.name(), {f.name(), intm.name()}},
+                {intm.name(), {a.name(), b.name(), c.name(), intm.name()}},
                 {a.name(), {}},
                 {b.name(), {}},
                 {c.name(), {}},
@@ -411,10 +305,8 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {f.name(), intm.name(), g.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {f.name(), intm.name()}},
+            {g.name(), {f.name(), intm.name(), g.name()}},
+            {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -472,10 +364,8 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm.name(), g.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {f.name(), intm.name()}},
+            {g.name(), {intm.name(), g.name()}},
+            {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -536,10 +426,8 @@ int histogram_rfactor_test(bool compile_module) {
 
         CallGraphs expected = {
             {g.name(), {hist.name()}},
-            {hist.name(), {}},
-            {hist.update(0).name(), {intm.name(), hist.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {in_buf.name(), intm.name()}},
+            {hist.name(), {intm.name(), hist.name()}},
+            {intm.name(), {in_buf.name(), intm.name()}},
 
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -603,12 +491,9 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {dot.name(), {}},
-            {dot.update(0).name(), {intm1.name(), dot.name()}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {intm2.name(), intm1.name()}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {a.name(), b.name(), intm2.name()}},
+            {dot.name(), {intm1.name(), dot.name()}},
+            {intm1.name(), {intm2.name(), intm1.name()}},
+            {intm2.name(), {a.name(), b.name(), intm2.name()}},
             {a.name(), {}},
             {b.name(), {}},
         };
@@ -665,15 +550,12 @@ int tuple_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm1.name() + ".0", intm1.name() + ".1",
-                                  g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {intm2.name() + ".0", intm2.name() + ".1",
-                                      intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm2.name() + ".0", intm2.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", intm1.name() + ".1",
+                        g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1",
+                            intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", f.name() + ".1",
+                            intm2.name() + ".0", intm2.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -746,23 +628,18 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm1.name() + ".0", intm1.name() + ".1",
-                                  intm4.name() + ".0", intm4.name() + ".1",
-                                  g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {intm2.name() + ".0", intm2.name() + ".1",
-                                      intm3.name() + ".0", intm3.name() + ".1",
-                                      intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm2.name() + ".0", intm2.name() + ".1"}},
-            {intm3.name(), {}},
-            {intm3.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm3.name() + ".0", intm3.name() + ".1"}},
-            {intm4.name(), {}},
-            {intm4.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm4.name() + ".0", intm4.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", intm1.name() + ".1",
+                        intm4.name() + ".0", intm4.name() + ".1",
+                        g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1",
+                            intm3.name() + ".0", intm3.name() + ".1",
+                            intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", f.name() + ".1",
+                            intm2.name() + ".0", intm2.name() + ".1"}},
+            {intm3.name(), {f.name() + ".0", f.name() + ".1",
+                            intm3.name() + ".0", intm3.name() + ".1"}},
+            {intm4.name(), {f.name() + ".0", f.name() + ".1",
+                            intm4.name() + ".0", intm4.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {

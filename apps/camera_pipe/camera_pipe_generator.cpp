@@ -1,20 +1,49 @@
 #include "Halide.h"
 #include <stdint.h>
 
+namespace {
+
 using namespace Halide;
 
-Target target;
+using Scheduler = std::function<void(Func processed)>;
 
-Var x, y, yi("yi"), yo("yo"), c("c");
-Func processed("processed");
+class CameraPipe : public Halide::Generator<CameraPipe> {
+public:
+    // Parameterized output type, because LLVM PTX (GPU) backend does not
+    // currently allow 8-bit computations
+    GeneratorParam<Type> result_type{"result_type", UInt(8)};
+
+    ImageParam input{UInt(16), 2, "input"};
+    ImageParam matrix_3200{Float(32), 2, "matrix_3200"};
+    ImageParam matrix_7000{Float(32), 2, "matrix_7000"};
+    Param<float> color_temp{"color_temp"};
+    Param<float> gamma{"gamma"};
+    Param<float> contrast{"contrast"};
+    Param<int> blackLevel{"blackLevel"};
+    Param<int> whiteLevel{"whiteLevel"};
+
+    Func build();
+
+private:
+    Expr avg(Expr a, Expr b);
+    Func hot_pixel_suppression(Func input);
+    Func interleave_x(Func a, Func b);
+    Func interleave_y(Func a, Func b);
+    Func deinterleave(Func raw);
+    std::pair<Func, Scheduler> demosaic(Func deinterleaved);
+    Func apply_curve(Func input);
+    Func color_correct(Func input);
+
+    Var x, y, c, yi, yo, yii, xi;
+};
 
 // Average two positive values rounding up
-Expr avg(Expr a, Expr b) {
+Expr CameraPipe::avg(Expr a, Expr b) {
     Type wider = a.type().with_bits(a.type().bits() * 2);
     return cast(a.type(), (cast(wider, a) + b + 1)/2);
 }
 
-Func hot_pixel_suppression(Func input) {
+Func CameraPipe::hot_pixel_suppression(Func input) {
 
     Expr a = max(max(input(x-2, y), input(x+2, y)),
                  max(input(x, y-2), input(x, y+2)));
@@ -25,19 +54,19 @@ Func hot_pixel_suppression(Func input) {
     return denoised;
 }
 
-Func interleave_x(Func a, Func b) {
+Func CameraPipe::interleave_x(Func a, Func b) {
     Func out;
     out(x, y) = select((x%2)==0, a(x/2, y), b(x/2, y));
     return out;
 }
 
-Func interleave_y(Func a, Func b) {
+Func CameraPipe::interleave_y(Func a, Func b) {
     Func out;
     out(x, y) = select((y%2)==0, a(x, y/2), b(x, y/2));
     return out;
 }
 
-Func deinterleave(Func raw) {
+Func CameraPipe::deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved;
 
@@ -48,7 +77,7 @@ Func deinterleave(Func raw) {
     return deinterleaved;
 }
 
-Func demosaic(Func deinterleaved) {
+std::pair<Func, Scheduler> CameraPipe::demosaic(Func deinterleaved) {
     // These are the values we already know from the input
     // x_y = the value of channel x at a site in the input of channel y
     // gb refers to green sites in the blue rows
@@ -145,40 +174,43 @@ Func demosaic(Func deinterleaved) {
                              c == 1, g(x, y),
                                      b(x, y));
 
+    Scheduler scheduler = [=](Func processed) mutable {
+        assert(g_r.defined());
+        int vec = get_target().natural_vector_size(UInt(16));
+        if (get_target().has_feature(Target::HVX_64)) {
+            vec = 32;
+        } else if (get_target().has_feature(Target::HVX_128)) {
+            vec = 64;
+        }
+        assert(processed.defined());
+        g_r.compute_at(processed, yi)
+            .store_at(processed, yo)
+            .vectorize(x, vec, TailStrategy::RoundUp)
+            .fold_storage(y, 2);
+        g_b.compute_at(processed, yi)
+            .store_at(processed, yo)
+            .vectorize(x, vec, TailStrategy::RoundUp)
+            .fold_storage(y, 2);
+        output.compute_at(processed, x)
+            .vectorize(x)
+            .unroll(y)
+            .reorder(c, x, y)
+            .unroll(c);
 
-    /* THE SCHEDULE */
-    int vec = target.natural_vector_size(UInt(16));
-    if (target.has_feature(Target::HVX_64)) {
-        vec = 32;
-    } else if (target.has_feature(Target::HVX_128)) {
-        vec = 64;
-    }
-    g_r.compute_at(processed, yi)
-        .store_at(processed, yo)
-        .vectorize(x, vec, TailStrategy::RoundUp)
-        .fold_storage(y, 2);
-    g_b.compute_at(processed, yi)
-        .store_at(processed, yo)
-        .vectorize(x, vec, TailStrategy::RoundUp)
-        .fold_storage(y, 2);
-    output.compute_at(processed, x)
-        .vectorize(x)
-        .unroll(y)
-        .reorder(c, x, y)
-        .unroll(c);
+        if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+            g_r.align_storage(x, vec);
+            g_b.align_storage(x, vec);
+        }
+    };
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        g_r.align_storage(x, vec);
-        g_b.align_storage(x, vec);
-    }
-
-    return output;
+    return {output, scheduler};
 }
 
 
-Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, Param<float> kelvin) {
+Func CameraPipe::color_correct(Func input) {
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
+    Expr kelvin = color_temp;
 
     Func matrix;
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
@@ -205,8 +237,7 @@ Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, P
     return corrected;
 }
 
-Func apply_curve(Func input, Type result_type, Expr gamma, Expr contrast,
-                 Expr blackLevel, Expr whiteLevel) {
+Func CameraPipe::apply_curve(Func input) {
     // copied from FCam
     Func curve("curve");
 
@@ -215,7 +246,7 @@ Func apply_curve(Func input, Type result_type, Expr gamma, Expr contrast,
 
     // How much to upsample the LUT by when sampling it.
     int lutResample = 1;
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
         // On HVX, LUT lookups are much faster if they are to LUTs not
         // greater than 256 elements, so we reduce the tonemap to 256
         // elements and use linear interpolation to upsample it.
@@ -263,32 +294,35 @@ Func apply_curve(Func input, Type result_type, Expr gamma, Expr contrast,
     return curved;
 }
 
-Func process(Func raw, Type result_type,
-             ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp,
-             Param<float> gamma, Param<float> contrast, Param<int> blackLevel, Param<int> whiteLevel) {
+Func CameraPipe::build() {
+    // shift things inwards to give us enough padding on the
+    // boundaries so that we don't need to check bounds. We're going
+    // to make a 2560x1920 output image, just like the FCam pipe, so
+    // shift by 16, 12. We also convert it to be signed, so we can deal
+    // with values that fall below 0 during processing.
+    Func shifted;
+    shifted(x, y) = cast<int16_t>(input(x+16, y+12));
 
-    Var yii, xi;
-
-    Func denoised = hot_pixel_suppression(raw);
+    Func denoised = hot_pixel_suppression(shifted);
     Func deinterleaved = deinterleave(denoised);
-    Func demosaiced = demosaic(deinterleaved);
-    Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
-    Func curved = apply_curve(corrected, result_type, gamma, contrast, blackLevel, whiteLevel);
-
-    processed(x, y, c) = curved(x, y, c);
+    Func demosaiced; Scheduler demosaiced_scheduler;
+    std::tie(demosaiced, demosaiced_scheduler) = demosaic(deinterleaved);
+    Func corrected = color_correct(demosaiced);
+    Func processed = apply_curve(corrected);
 
     // Schedule
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
 
     int strip_size = 32;
-    int vec = target.natural_vector_size(UInt(16));
-    if (target.has_feature(Target::HVX_64)) {
+    int vec = get_target().natural_vector_size(UInt(16));
+    if (get_target().has_feature(Target::HVX_64)) {
         vec = 32;
-    } else if (target.has_feature(Target::HVX_128)) {
+    } else if (get_target().has_feature(Target::HVX_128)) {
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
+        .prefetch(y, 2)
         .fold_storage(y, 8)
         .vectorize(x, vec);
     deinterleaved.compute_at(processed, yi).store_at(processed, yo)
@@ -308,7 +342,9 @@ Func process(Func raw, Type result_type,
         .vectorize(xi, 2*vec)
         .parallel(yo);
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    demosaiced_scheduler(processed);
+
+    if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
         processed.hexagon();
         denoised.align_storage(x, vec);
         deinterleaved.align_storage(x, vec);
@@ -322,44 +358,10 @@ Func process(Func raw, Type result_type,
         .bound(y, 0, (out_height/strip_size)*strip_size);
 
     return processed;
-}
+};
 
-int main(int argc, char **argv) {
-    // The camera pipe is specialized on the 2592x1968 images that
-    // come in, so we'll just use an image instead of a uniform image.
-    ImageParam input(UInt(16), 2);
-    ImageParam matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000");
-    Param<float> color_temp("color_temp"); //, 3200.0f);
-    Param<float> gamma("gamma"); //, 1.8f);
-    Param<float> contrast("contrast"); //, 10.0f);
-    Param<int> blackLevel("blackLevel"); //, 25);
-    Param<int> whiteLevel("whiteLevel"); //, 1023);
 
-    // shift things inwards to give us enough padding on the
-    // boundaries so that we don't need to check bounds. We're going
-    // to make a 2560x1920 output image, just like the FCam pipe, so
-    // shift by 16, 12. We also convert it to be signed, so we can deal
-    // with values that fall below 0 during processing.
-    Func shifted;
-    shifted(x, y) = cast<int16_t>(input(x+16, y+12));
+Halide::RegisterGenerator<CameraPipe> register_me{"camera_pipe"};
 
-    // Parameterized output type, because LLVM PTX (GPU) backend does not
-    // currently allow 8-bit computations
-    int bit_width = atoi(argv[1]);
-    Type result_type = UInt(bit_width);
+}  // namespace
 
-    // Pick a target
-    target = get_target_from_environment();
-
-    // Build the pipeline
-    Func processed = process(shifted, result_type, matrix_3200, matrix_7000,
-                             color_temp, gamma, contrast, blackLevel, whiteLevel);
-
-    std::vector<Argument> args = {color_temp, gamma, contrast, blackLevel, whiteLevel,
-                                  input, matrix_3200, matrix_7000};
-    // TODO: it would be more efficient to call compile_to() a single time with the right arguments
-    processed.compile_to_static_library("curved", args, target);
-    processed.compile_to_assembly("curved.s", args, target);
-
-    return 0;
-}
