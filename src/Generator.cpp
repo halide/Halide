@@ -235,33 +235,37 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     std::string name = is_schedule_params ? "ScheduleParams" : "GeneratorParams";
     stream << ind() << "struct " << name << " final {\n";
     indent++;
-    for (auto p : v) {
-        stream << ind() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
+    if (!v.empty()) {
+        for (auto p : v) {
+            stream << ind() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
+        }
+        stream << "\n";
     }
-    stream << "\n";
 
     stream << ind() << name << "() {}\n";
     stream << "\n";
 
-    stream << ind() << name << "(\n";
-    indent++;
-    std::string comma = "";
-    for (auto p : v) {
-        stream << ind() << comma << p->get_c_type() << " " << p->name << "\n";
-        comma = ", ";
+    if (!v.empty()) {
+        stream << ind() << name << "(\n";
+        indent++;
+        std::string comma = "";
+        for (auto p : v) {
+            stream << ind() << comma << p->get_c_type() << " " << p->name << "\n";
+            comma = ", ";
+        }
+        indent--;
+        stream << ind() << ") : \n";
+        indent++;
+        comma = "";
+        for (auto p : v) {
+            stream << ind() << comma << p->name << "(" << p->name << ")\n";
+            comma = ", ";
+        }
+        indent--;
+        stream << ind() << "{\n";
+        stream << ind() << "}\n";
+        stream << "\n";
     }
-    indent--;
-    stream << ind() << ") : \n";
-    indent++;
-    comma = "";
-    for (auto p : v) {
-        stream << ind() << comma << p->name << "(" << p->name << ")\n";
-        comma = ", ";
-    }
-    indent--;
-    stream << ind() << "{\n";
-    stream << ind() << "}\n";
-    stream << "\n";
 
     stream << ind() << "inline NO_INLINE std::map<std::string, std::string> to_string_map() const {\n";
     indent++;
@@ -445,50 +449,52 @@ void StubEmitter::emit() {
     stream << ind() << "}\n";
     stream << "\n";
 
-    stream << ind() << "// templated construction method with inputs\n";
-    stream << ind() << "template<\n";
-    std::string comma = "";
-    indent++;
-    for (auto p : generator_params) {
-        std::string type = p->get_template_type();
-        std::string value = p->get_template_value();
-        if (type == "float" || type == "double") {
-            // floats and doubles can't be used as template value arguments;
-            // it turns out to be pretty uncommon use floating point types
-            // in GeneratorParams, but to avoid breaking these cases entirely, 
-            // use std::ratio as an approximation for the default value.
-            auto ratio = rational_approximation(std::atof(value.c_str()));
-            stream << ind() << comma << "typename" << " " << p->name << " = std::ratio<" << ratio.first << ", " << ratio.second << ">\n";
-        } else {
-            stream << ind() << comma << type << " " << p->name << " = " << value << "\n";
+    if (!generator_params.empty()) {
+        stream << ind() << "// templated construction method with inputs\n";
+        stream << ind() << "template<\n";
+        std::string comma = "";
+        indent++;
+        for (auto p : generator_params) {
+            std::string type = p->get_template_type();
+            std::string value = p->get_template_value();
+            if (type == "float" || type == "double") {
+                // floats and doubles can't be used as template value arguments;
+                // it turns out to be pretty uncommon use floating point types
+                // in GeneratorParams, but to avoid breaking these cases entirely, 
+                // use std::ratio as an approximation for the default value.
+                auto ratio = rational_approximation(std::atof(value.c_str()));
+                stream << ind() << comma << "typename" << " " << p->name << " = std::ratio<" << ratio.first << ", " << ratio.second << ">\n";
+            } else {
+                stream << ind() << comma << type << " " << p->name << " = " << value << "\n";
+            }
+            comma = ", ";
         }
-        comma = ", ";
-    }
-    indent--;
-    stream << ind() << ">\n";
-    stream << ind() << "static " << class_name << " make(const GeneratorContext& context, const Inputs& inputs) {\n";
-    indent++;
-    stream << ind() << "GeneratorParams gp(\n";
-    indent++;
-    comma = "";
-    for (auto p : generator_params) {
-        std::string type = p->get_template_type();
-        if (type == "typename") {
-            stream << ind() << comma << "Halide::type_of<" << p->name << ">()\n";
-        } else if (type == "float" || type == "double") {
-            stream << ind() << comma << "ratio_to_double<" << p->name << ">()\n";
-        } else {
-            stream << ind() << comma << p->name << "\n";
+        indent--;
+        stream << ind() << ">\n";
+        stream << ind() << "static " << class_name << " make(const GeneratorContext& context, const Inputs& inputs) {\n";
+        indent++;
+        stream << ind() << "GeneratorParams gp(\n";
+        indent++;
+        comma = "";
+        for (auto p : generator_params) {
+            std::string type = p->get_template_type();
+            if (type == "typename") {
+                stream << ind() << comma << "Halide::type_of<" << p->name << ">()\n";
+            } else if (type == "float" || type == "double") {
+                stream << ind() << comma << "ratio_to_double<" << p->name << ">()\n";
+            } else {
+                stream << ind() << comma << p->name << "\n";
+            }
+            comma = ", ";
         }
-        comma = ", ";
+        indent--;
+        stream << ind() << ");\n";
+        stream << ind() << "return " << class_name << "(context, inputs, gp);\n";
+        indent--;
+        indent--;
+        stream << ind() << "}\n";
+        stream << "\n";
     }
-    indent--;
-    stream << ind() << ");\n";
-    stream << ind() << "return " << class_name << "(context, inputs, gp);\n";
-    indent--;
-    indent--;
-    stream << ind() << "}\n";
-    stream << "\n";
 
     stream << ind() << "// schedule method\n";
     stream << ind() << "void schedule(const ScheduleParams& params = ScheduleParams()) {\n";
