@@ -264,7 +264,7 @@ public:
     }
 
     std::string get_c_type() const override {
-        return "Halide::Target";
+        return "Target";
     }
 };
 
@@ -422,7 +422,7 @@ public:
     }
 
     std::string get_c_type() const override {
-        return "Halide::Type";
+        return "Type";
     }
 
     std::string get_template_type() const override {
@@ -454,13 +454,13 @@ public:
         return oss.str();
     }
     std::string get_c_type() const override {
-        return "Halide::LoopLevel";
+        return "LoopLevel";
     }
 
     std::string get_default_value() const override {
         if (def == "undefined") return "Halide::Internal::get_halide_undefined_looplevel()";
-        if (def == "root") return "Halide::LoopLevel::root()";
-        if (def == "inline") return "Halide::LoopLevel()";
+        if (def == "root") return "LoopLevel::root()";
+        if (def == "inline") return "LoopLevel()";
         user_error << "LoopLevel value " << def << " not found.\n";
         return "";
     }
@@ -745,21 +745,6 @@ public:
         return expr_;
     }
 };
-
-template <typename T>
-std::vector<FuncOrExpr> to_func_or_expr_vector(const T &t) {
-    return { FuncOrExpr(t) };
-}
-
-template <typename T>
-std::vector<FuncOrExpr> to_func_or_expr_vector(const std::vector<T> &v) {
-    std::vector<FuncOrExpr> r;
-    std::copy(v.begin(), v.end(), std::back_inserter(r));
-    return r;
-}
-
-void verify_same_funcs(Func a, Func b);
-void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
 
 class GIOBase {
 public:
@@ -1350,6 +1335,11 @@ public:
     }
 };
 
+class GeneratorContext {
+public:
+    virtual Target get_target() const = 0;
+};
+
 class NamesInterface {
     // Names in this class are only intended for use in derived classes.
 protected:
@@ -1358,6 +1348,7 @@ protected:
     using Expr = Halide::Expr;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
+    using GeneratorContext = Halide::GeneratorContext;
     using ImageParam = Halide::ImageParam;
     using LoopLevel = Halide::LoopLevel;
     using Pipeline = Halide::Pipeline;
@@ -1377,11 +1368,6 @@ protected:
     static inline Type Float(int bits, int lanes = 1) { return Halide::Float(bits, lanes); }
     static inline Type Int(int bits, int lanes = 1) { return Halide::Int(bits, lanes); }
     static inline Type UInt(int bits, int lanes = 1) { return Halide::UInt(bits, lanes); }
-};
-
-class GeneratorContext {
-public:
-    virtual Target get_target() const = 0;
 };
 
 class JITGeneratorContext : public GeneratorContext {
@@ -1445,7 +1431,7 @@ public:
     EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
 
-    const GeneratorContext& context() const { return *this; }
+    const Halide::GeneratorContext& context() const { return *this; }
 
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
@@ -1714,7 +1700,7 @@ public:
 
 namespace Internal {
 
-class GeneratorStub {
+class GeneratorStub : public NamesInterface {
 public:
     // default ctor
     GeneratorStub() {}
@@ -1803,6 +1789,21 @@ protected:
     static double ratio_to_double() {
         return (double)Ratio::num / (double)Ratio::den;
     }
+
+    template <typename T>
+    static std::vector<FuncOrExpr> to_func_or_expr_vector(const T &t) {
+        return { FuncOrExpr(t) };
+    }
+
+    template <typename T>
+    static std::vector<FuncOrExpr> to_func_or_expr_vector(const std::vector<T> &v) {
+        std::vector<FuncOrExpr> r;
+        std::copy(v.begin(), v.end(), std::back_inserter(r));
+        return r;
+    }
+
+    void verify_same_funcs(Func a, Func b);
+    void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
 
 private:
     std::shared_ptr<GeneratorBase> generator;
