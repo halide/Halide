@@ -1,5 +1,6 @@
 include ../support/Makefile.inc
 
+BIN ?== bin
 CXXFLAGS += -g -O0
 
 UNAME := $(shell uname)
@@ -9,26 +10,30 @@ endif
 
 HALIDE_LIBS = $(LIB_HALIDE) -ldl $(LLVM_LDFLAGS)
 
-all: opengl_test
+all: $(BIN)/opengl_test
 
-run: opengl_test
-	LD_LIBRARY_PATH=../../bin ./opengl_test
+$(BIN)/halide_blur_glsl_exec: halide_blur_glsl_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-opengl_test: blur.a ycc.a opengl_test.o
-	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin $(OPENGL_LIBS)
+$(BIN)/halide_blur_glsl.a: $(BIN)/halide_blur_glsl_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) target=host-opengl-debug
 
-blur.h blur.a: halide_blur
-	HL_TARGET=host-opengl-debug ./halide_blur
+$(BIN)/halide_ycc_glsl_exec: halide_ycc_glsl_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-ycc.h ycc.a: halide_ycc
-	HL_TARGET=host-opengl-debug ./halide_ycc
+$(BIN)/halide_ycc_glsl.a: $(BIN)/halide_ycc_glsl_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) target=host-opengl-debug
 
-halide_blur: halide_blur.cpp $(HALIDE_LIB)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
+$(BIN)/opengl_test: opengl_test.cpp $(BIN)/halide_blur_glsl.a $(BIN)/halide_ycc_glsl.a
+	$(CXX) $(CXXFLAGS) -I$(BIN) $^ -o $@ $(LDFLAGS) -L$(TOP)/bin $(OPENGL_LIBS)
 
-halide_ycc: halide_ycc.cpp $(HALIDE_LIB)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(CXXFLAGS) $(HALIDE_LIBS)
+run: $(BIN)/opengl_test
+	LD_LIBRARY_PATH=../../bin $(BIN)/opengl_test
 
 .PHONY: clean
 clean:
-	rm -f opengl_test test_jit halide_blur halide_ycc *.o *.a blur.h ycc.h
+	rm -rf $(BIN)
