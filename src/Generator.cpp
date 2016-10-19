@@ -277,9 +277,9 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
 
     if (is_schedule_params) {
         stream << "\n";
-        stream << ind() << "inline NO_INLINE std::map<std::string, Halide::LoopLevel> to_looplevel_map() const {\n";
+        stream << ind() << "inline NO_INLINE std::map<std::string, LoopLevel> to_looplevel_map() const {\n";
         indent++;
-        stream << ind() << "std::map<std::string, Halide::LoopLevel> m;\n";
+        stream << ind() << "std::map<std::string, LoopLevel> m;\n";
         for (auto p : v) {
             if (!p->is_looplevel_param()) continue;
             stream << ind() << "if (" << p->name << " != " << p->get_default_value() << ") "
@@ -302,7 +302,7 @@ void StubEmitter::emit_inputs_struct() {
     };
     std::vector<InInfo> in_info;
     for (auto input : inputs) {
-        std::string c_type(input->kind() == IOKind::Function ? "Halide::Func" : "Halide::Expr");
+        std::string c_type(input->kind() == IOKind::Function ? "Func" : "Expr");
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
         }
@@ -364,7 +364,7 @@ void StubEmitter::emit() {
     for (auto output : outputs) {
         out_info.push_back({
             output->name(),
-            output->is_array() ? "std::vector<Halide::Func>" : "Halide::Func",
+            output->is_array() ? "std::vector<Func>" : "Func",
             std::string(output->is_array() ? "get_output_vector" : "get_output") + "(\"" + output->name() + "\")"
         });
     }
@@ -423,7 +423,7 @@ void StubEmitter::emit() {
 
     stream << ind() << class_name << "(\n";
     indent++;
-    stream << ind() << "const Halide::GeneratorContext& context,\n";
+    stream << ind() << "const GeneratorContext& context,\n";
     stream << ind() << "const Inputs& inputs,\n";
     stream << ind() << "const GeneratorParams& params = GeneratorParams()\n";
     indent--;
@@ -432,7 +432,7 @@ void StubEmitter::emit() {
     stream << ind() << ": GeneratorStub(context, &factory, params.to_string_map(), {\n";
     indent++;
     for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << ind() << "Halide::Internal::to_func_or_expr_vector(inputs." << inputs[i]->name() << ")";
+        stream << ind() << "to_func_or_expr_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
     indent--;
@@ -466,7 +466,7 @@ void StubEmitter::emit() {
     }
     indent--;
     stream << ind() << ">\n";
-    stream << ind() << "static " << class_name << " make(const Halide::GeneratorContext& context, const Inputs& inputs) {\n";
+    stream << ind() << "static " << class_name << " make(const GeneratorContext& context, const Inputs& inputs) {\n";
     indent++;
     stream << ind() << "GeneratorParams gp(\n";
     indent++;
@@ -526,9 +526,9 @@ void StubEmitter::emit() {
     stream << ind() << "// TODO: identify vars used\n";
     for (auto output : outputs) {
         if (output->is_array()) {
-            stream << ind() << "std::vector<Halide::Func> " << output->name() << ";\n";
+            stream << ind() << "std::vector<Func> " << output->name() << ";\n";
         } else {
-            stream << ind() << "Halide::Func " << output->name() << ";\n";
+            stream << ind() << "Func " << output->name() << ";\n";
         }
     }
     stream << "\n";
@@ -541,7 +541,6 @@ void StubEmitter::emit() {
     indent++;
     stream << ind() << "void verify() {\n";
     indent++;
-    stream << ind() << "using Halide::Internal::verify_same_funcs;\n";
     for (const auto &out : out_info) {
         stream << ind() << "verify_same_funcs(" << out.name << ", " << out.getter << ");\n";
     }
@@ -572,12 +571,12 @@ void StubEmitter::emit() {
     stream << ind() << "#endif  // " << guard.str() << "\n";
 }
 
-void verify_same_funcs(Func a, Func b) {
+void GeneratorStub::verify_same_funcs(Func a, Func b) {
     user_assert(a.function().get_contents().same_as(b.function().get_contents())) 
         << "Expected Func " << a.name() << " and " << b.name() << " to match.\n";
 }
 
-void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b) {
+void GeneratorStub::verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b) {
     user_assert(a.size() == b.size()) << "Mismatch in Function vector length.\n";
     for (size_t i = 0; i < a.size(); ++i) {
         verify_same_funcs(a[i], b[i]);
