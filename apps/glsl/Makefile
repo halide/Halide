@@ -1,14 +1,6 @@
 include ../support/Makefile.inc
 
-BIN ?== bin
 CXXFLAGS += -g -O0
-
-UNAME := $(shell uname)
-ifeq ($(UNAME), Linux)
-OPENGL_LIBS = -lX11 -lGL
-endif
-
-HALIDE_LIBS = $(LIB_HALIDE) -ldl $(LLVM_LDFLAGS)
 
 all: $(BIN)/opengl_test
 
@@ -29,7 +21,7 @@ $(BIN)/halide_ycc_glsl.a: $(BIN)/halide_ycc_glsl_exec
 	$^ -o $(BIN) target=host-opengl-debug
 
 $(BIN)/opengl_test: opengl_test.cpp $(BIN)/halide_blur_glsl.a $(BIN)/halide_ycc_glsl.a
-	$(CXX) $(CXXFLAGS) -I$(BIN) $^ -o $@ $(LDFLAGS) -L$(TOP)/bin $(OPENGL_LIBS)
+	$(CXX) $(CXXFLAGS) -I$(BIN) $^ -o $@ $(LDFLAGS) -L$(TOP)/bin $(PLATFORM_OPENGL_LDFLAGS)
 
 run: $(BIN)/opengl_test
 	LD_LIBRARY_PATH=../../bin $(BIN)/opengl_test
