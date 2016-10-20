@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
     // This generator defaults intermediate_level to "undefined", 
     // so we *must* specify something for it (else we'll crater at
     // Halide compile time). We'll use this:
-    sp.intermediate_level = LoopLevel(gen.f, Var("y"));
+    sp.intermediate_level = LoopLevel(gen.f, gen.f.args().at(1));
     // ...but any of the following would also be OK:
     // sp.intermediate_level = LoopLevel::root();
     // sp.intermediate_level = LoopLevel(gen.f, Var("x"));
