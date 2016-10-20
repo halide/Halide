@@ -177,7 +177,6 @@ apps/*/passes.txt
 apps/*/*.ll
 apps/*/*.sass
 apps/*/filter
-apps/interpolate/interpolate
 apps/seam_carving/seam_carving.h
 apps/snake/halide_snake
 apps/HelloAndroid*/bin
