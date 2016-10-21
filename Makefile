@@ -946,6 +946,12 @@ $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generat
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
+# matlab needs to be generated with matlab in TARGET
+$(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-matlab
+
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
