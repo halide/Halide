@@ -7,10 +7,18 @@
 
 # This script assumes that you're in the tutorials directory, and the
 # generator has been compiled for the current system and is called
-# "lesson_15_generate".
+# "lesson_15_generate". (Optionally, you can pass a full path
+# to lesson_15_generate as the first argument.)
 
 # To run this script:
-# bash lesson_15_generators_build.sh
+# bash lesson_15_generators_build.sh [/path/to/lesson_15_generate]
+
+if [ ! -z $1 ] 
+then 
+    LESSON_15_GENERATE=$1
+else
+    LESSON_15_GENERATE=./lesson_15_generate
+fi
 
 # First we define a helper function that checks that a file exists
 check_file_exists()
@@ -29,7 +37,7 @@ check_symbol()
     SYM=$2
     if !(nm $FILE | grep $SYM > /dev/null); then
         echo "$SYM not found in $FILE"
-	exit -1
+        exit -1
     fi
 }
 
@@ -45,7 +53,7 @@ export DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../bin
 #########################
 
 # First let's compile the first generator for the host system:
-./lesson_15_generate -g my_first_generator -o . target=host
+$LESSON_15_GENERATE -g my_first_generator -o . target=host
 
 # That should create a pair of files in the current directory:
 # "my_first_generator.a", and "my_first_generator.h", which define a
@@ -63,7 +71,7 @@ check_symbol my_first_generator.a my_first_generator
 # target. Let's cross-compile a windows 32-bit object file and header
 # for the first generator:
 
-./lesson_15_generate \
+$LESSON_15_GENERATE \
     -g my_first_generator \
     -f my_first_generator_win32 \
     -o . \
@@ -117,19 +125,19 @@ check_file_exists my_first_generator_win32.h
 # Let's now generate some human-readable pseudocode for the first
 # generator:
 
-./lesson_15_generate -g my_first_generator -e stmt -o . target=host
+$LESSON_15_GENERATE -g my_first_generator -e stmt -o . target=host
 
 check_file_exists my_first_generator.stmt
 
 # The second generator has generator params, which can be specified on
 # the command-line after the target. Let's compile a few different variants:
-./lesson_15_generate -g my_second_generator -f my_second_generator_1 -o . \
+$LESSON_15_GENERATE -g my_second_generator -f my_second_generator_1 -o . \
 target=host parallel=false scale=3.0 rotation=ccw output_type=uint16
 
-./lesson_15_generate -g my_second_generator -f my_second_generator_2 -o . \
+$LESSON_15_GENERATE -g my_second_generator -f my_second_generator_2 -o . \
 target=host scale=9.0 rotation=ccw output_type=float32
 
-./lesson_15_generate -g my_second_generator -f my_second_generator_3 -o . \
+$LESSON_15_GENERATE -g my_second_generator -f my_second_generator_3 -o . \
 target=host parallel=false output_type=float64
 
 check_file_exists my_second_generator_1.a
@@ -162,7 +170,7 @@ check_runtime()
 {
     if !(nm $1 | grep "[TSW] _\?halide_" > /dev/null); then
         echo "Halide runtime not found in $1"
-	exit -1
+        exit -1
     fi
 }
 
@@ -170,7 +178,7 @@ check_no_runtime()
 {
     if nm $1 | grep "[TSW] _\?halide_" > /dev/null; then
         echo "Halide runtime found in $1"
-	exit -1
+        exit -1
     fi
 }
 
@@ -192,21 +200,21 @@ check_no_runtime()
 # instead of static libraries, so that we can easily link them all into a 
 # single static library.)
 
-./lesson_15_generate \
+$LESSON_15_GENERATE \
     -g my_first_generator \
     -f my_first_generator_basic \
     -e o,h \
     -o . \
     target=host-x86-64-no_runtime
 
-./lesson_15_generate \
+$LESSON_15_GENERATE \
     -g my_first_generator \
     -f my_first_generator_sse41 \
     -e o,h \
     -o . \
     target=host-x86-64-sse41-no_runtime
 
-./lesson_15_generate \
+$LESSON_15_GENERATE \
     -g my_first_generator \
     -f my_first_generator_avx \
     -e o,h \
@@ -222,7 +230,7 @@ check_no_runtime my_first_generator_avx.o
 check_symbol     my_first_generator_avx.o my_first_generator_avx
 
 # We can then use the generator to emit just the runtime:
-./lesson_15_generate \
+$LESSON_15_GENERATE \
     -r halide_runtime_x86 \
     -e o,h \
     -o . \
