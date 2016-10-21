@@ -211,11 +211,13 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(gpu_only)
   halide_define_aot_test(image_from_array)
   halide_define_aot_test(mandelbrot)
-  halide_define_aot_test(matlab)
   halide_define_aot_test(memory_profiler_mandelbrot)
   halide_define_aot_test(variable_num_threads)
 
   # Tests that require nonstandard targets, namespaces, etc.
+  halide_define_aot_test(matlab
+                         GENERATOR_HALIDE_TARGET host-matlab)
+
   halide_define_aot_test(multitarget
                          GENERATOR_HALIDE_TARGET host-debug-c_plus_plus_name_mangling,host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::multitarget)
