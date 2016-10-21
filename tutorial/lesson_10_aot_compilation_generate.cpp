@@ -72,11 +72,7 @@ int main(int argc, char **argv) {
     // For AOT-compiled code, we need to explicitly declare the
     // arguments to the routine. This routine takes two. Arguments are
     // usually Params or ImageParams.
-    std::vector<Argument> args = {input, offset};
-    brighter.compile_to_static_library("lesson_10_halide", args, "brighter");
-
-    // If you're using C++11, you can just say:
-    // brighter.compile_to_static_library("lesson_10_halide", {input, offset}, "brighter");
+    brighter.compile_to_static_library("lesson_10_halide", {input, offset}, "brighter");
 
     printf("Halide pipeline compiled, but not yet run.\n");
 
