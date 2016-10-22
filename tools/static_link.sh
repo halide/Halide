@@ -60,9 +60,10 @@ LIST=`$5 -o /dev/null -shared $TMP/*.o -Wl,-t $3 -lc++ $6 | egrep libLLVM`
 UNIQUE=0
 cd $TMP
 for LINE in $LIST; do
-    # expect each line to be /path/to/some.a(some.o)
-    ARCHIVE=`echo "${LINE}" | sed -E -e 's/(.+)\((.+)\)/\1/'`
-    OBJ=`echo "${LINE}" | sed -E -e 's/(.+)\((.+)\)/\2/'`
+    # expect each line to be  /path/to/some.a(some.o)
+    # or                     (/path/to/some.a)some.o
+    ARCHIVE=`echo "${LINE}" | sed -E -e 's/[(]*(.+\.a)[()].*/\1/'`
+    OBJ=`echo "${LINE}" | sed -E -e 's/[(]*.+\.a[()](.*\.o).*/\1/'`
     ar x $WD/$ARCHIVE $OBJ; mv $OBJ llvm_${UNIQUE}_${OBJ}
     UNIQUE=$((UNIQUE + 1))
 done
