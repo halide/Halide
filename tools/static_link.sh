@@ -61,8 +61,8 @@ UNIQUE=0
 cd $TMP
 for LINE in $LIST; do
     # expect each line to be /path/to/some.a(some.o)
-    ARCHIVE=`echo ${LINE} | sed -e 's/(\(.*\))\(.*\)/\1/'`
-    OBJ=`echo ${LINE} | sed -e 's/(\(.*\))\(.*\)/\2/'`
+    ARCHIVE=`echo "${LINE}" | sed -E -e 's/(.+)\((.+)\)/\1/'`
+    OBJ=`echo "${LINE}" | sed -E -e 's/(.+)\((.+)\)/\2/'`
     ar x $WD/$ARCHIVE $OBJ; mv $OBJ llvm_${UNIQUE}_${OBJ}
     UNIQUE=$((UNIQUE + 1))
 done
