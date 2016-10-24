@@ -469,9 +469,6 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -479,13 +476,13 @@ public:
             alloc = other.alloc;
             incref();
         }
+        ty = other.ty;
+        dims = other.dims;
+        buf = other.buf;
         return *this;
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -493,6 +490,9 @@ public:
             alloc = other.alloc;
             incref();
         }
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
         return *this;
     }
 
@@ -502,9 +502,6 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -512,13 +509,13 @@ public:
             alloc = other.alloc;
             other.alloc = nullptr;
         }
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
         return *this;
     }
 
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -526,6 +523,9 @@ public:
             alloc = other.alloc;
             other.alloc = nullptr;
         }
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
         return *this;
     }
 
