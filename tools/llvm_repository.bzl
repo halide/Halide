@@ -48,6 +48,7 @@ def _find_locally_or_download_impl(repository_ctx):
   repository_ctx.symlink(_llvm_config(repository_ctx, cfg, '--libdir') + '/../lib', 'static_libs')
   llvm_version = _llvm_config(repository_ctx, cfg, '--version')
   llvm_components = _llvm_config(repository_ctx, cfg, '--components').split(' ')
+  llvm_libs = _llvm_config(repository_ctx, cfg, '--libs').split(' ')
   llvm_static_libs = _llvm_config(repository_ctx, cfg, '--libnames').split(' ')
   llvm_ldflags = _llvm_config(repository_ctx, cfg, '--ldflags').split(' ')
   llvm_cxxflags = _llvm_config(repository_ctx, cfg, '--cxxflags').split(' ')
@@ -59,6 +60,7 @@ def _find_locally_or_download_impl(repository_ctx):
     {
       "%{llvm_version}": repr(llvm_version[0] + llvm_version[2]),
       "%{llvm_components}": repr(llvm_components),
+      "%{llvm_libs}": repr(llvm_libs),
       "%{llvm_static_libs}": repr(llvm_static_libs),
       "%{llvm_system_libs}": repr(llvm_system_libs),
       "%{llvm_ldflags}": repr(llvm_ldflags),

@@ -12,10 +12,9 @@ set -eu
 
 # $1 = scratch directory
 # $2 = .a to use for linkage baseline (e.g. libHalide.a)
-# $3 = list of .a's to decompose and intelligently strip
-# $4 = final output archive
-# $5 = CXX + CFlags to use
-# $6 = linkopts to use
+# $3 = final output archive
+# $4 = CXX + CFlags to use
+# $5 = linkopts to use
 # (Note that all paths are assumed to be relative to curdir on entry)
 
 # $2 can be a list in -c=opt mode; if there are multiple entries,
@@ -49,11 +48,17 @@ cd $TMP
 ar x $WD/$BEST_ARCHIVE
 cd $WD
 
+# fake-link line must include -lc++ on Darwin, but not Linux
+LINKOPTS=
+if [[ $(uname) == "Darwin" ]]; then
+    LINKOPTS=-lc++
+fi
+
 # Determine the relevant object files from llvm with a dummy
 # compilation. Passing -t to the linker gets it to list which
 # object files in which archives it uses to resolve
 # symbols. We only care about the libLLVM ones.
-LIST=`$5 -o /dev/null -shared $TMP/*.o -Wl,-t $3 -lc++ $6 | egrep libLLVM`
+LIST=`$4 -o /dev/null -shared $TMP/*.o -Wl,-t ${LINKOPTS} $5 | egrep libLLVM`
 
 # Extract the necessary object files from the llvm archives.
 # Make each name unique as we go along, in case there are dupes.
@@ -64,19 +69,19 @@ for LINE in $LIST; do
     # or                     (/path/to/some.a)some.o
     ARCHIVE=`echo "${LINE}" | sed -E -e 's/[(]*(.+\.a)[()].*/\1/'`
     OBJ=`echo "${LINE}" | sed -E -e 's/[(]*.+\.a[()](.*\.o).*/\1/'`
-    ar x $WD/$ARCHIVE $OBJ; mv $OBJ llvm_${UNIQUE}_${OBJ}
+    ar x $ARCHIVE $OBJ; mv $OBJ llvm_${UNIQUE}_${OBJ}
     UNIQUE=$((UNIQUE + 1))
 done
 cd $WD
 
 # Archive together all the halide and llvm object files. Start by
 # just copying over the previous 
-cp $BEST_ARCHIVE $4
-chmod +w $4
+cp $BEST_ARCHIVE $3
+chmod +w $3
 
 # (Use xargs because ar breaks on MinGW with all objects at the same time.)
-echo $TMP/llvm_*.o* | xargs -n200 ar q $4
-ranlib $4
+echo $TMP/llvm_*.o* | xargs -n200 ar q $3
+ranlib $3
 
 rm -rf $TMP
 

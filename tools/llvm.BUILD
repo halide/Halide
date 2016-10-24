@@ -21,7 +21,6 @@ filegroup(
 
 cc_library(
     name = "llvm",
-    srcs = get_llvm_static_libs(),
     hdrs = glob([
         "include/llvm/**/*.def",
         "include/llvm/**/*.h",

@@ -223,7 +223,7 @@ genrule(
     name = "halide_fully_static",
     srcs = [
         ":lib_halide_internal",
-        "@llvm//:llvm_static_libs",
+        "@llvm//:llvm_static_libs",  # static_link.sh needs file-path access to these
     ],
     outs = [
         "libHalide.a",
@@ -233,7 +233,6 @@ genrule(
         "$(location //tools:static_link.sh)",
         "$(@D)",
         "\"$(locations :lib_halide_internal)\"",  # TODO: locations because -c opt produces both .a and .pic.a
-        "\"$(locations @llvm//:llvm_static_libs)\"",
         "$@",
         "\"$(CC) $(CC_FLAGS)\"",
         "\"%s\"" % " ".join(get_llvm_linkopts()),
