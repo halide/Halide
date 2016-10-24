@@ -1431,8 +1431,6 @@ public:
     EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
 
-    const Halide::GeneratorContext& context() const { return *this; }
-
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
@@ -1760,16 +1758,10 @@ public:
 protected:
     typedef std::function<std::unique_ptr<GeneratorBase>(const std::map<std::string, std::string>&)> GeneratorFactory;
 
-    template <typename... Args>
-    GeneratorStub(const GeneratorContext &context,
-            GeneratorFactory generator_factory,
-            const std::map<std::string, std::string> &generator_params,
-            const std::vector<std::vector<Internal::FuncOrExpr>> &inputs) {
-        generator = generator_factory(generator_params);
-        generator->target.set(context.get_target());
-        generator->set_inputs(inputs);
-        generator->call_generate();
-    }
+    GeneratorStub(const GeneratorContext *context,
+                  GeneratorFactory generator_factory,
+                  const std::map<std::string, std::string> &generator_params,
+                  const std::vector<std::vector<Internal::FuncOrExpr>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
