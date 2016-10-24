@@ -167,6 +167,7 @@ class Buffer {
                 fn(alloc);
             }
             alloc = nullptr;
+            buf.host = nullptr;
         }
     }
 
@@ -566,6 +567,12 @@ public:
         alloc->ref_count = 1;
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
+    }
+
+    /** Drop reference to any owned memory, freeing it. Retains the
+     * shape of the buffer. */
+    void deallocate() {
+        decref();
     }
 
     /** Allocate a new image of the given size with a runtime
@@ -989,7 +996,8 @@ public:
     }
 
     /** Add a new dimension with a min of zero and an extent of
-     * one. The new dimension is the last dimension. This is a
+     * one. The stride is the extent of the outermost dimension times
+     * its stride. The new dimension is the last dimension. This is a
      * special case of embed. It requires that the actual number of
      * dimensions is less than template parameter D. */
     void add_dimension() {
@@ -1003,6 +1011,16 @@ public:
             buf.stride[dims] = buf.extent[dims-1] * buf.stride[dims-1];
         }
         dims++;
+    }
+
+    /** Add a new dimension with a min of zero, an extent of one, and
+     * the specified stride. The new dimension is the last
+     * dimension. This is a special case of embed. It requires that
+     * the actual number of dimensions is less than template parameter
+     * D. */
+    void add_dimension_with_stride(int s) {
+        add_dimension();
+        buf.stride[dims-1] = s;
     }
 
     /** Call a callable at each location within the image. See
