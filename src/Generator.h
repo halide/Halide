@@ -134,16 +134,15 @@ inline std::string halide_looplevel_to_enum_string(const LoopLevel &loop_level){
 
 // Convert a Halide Type into a string representation of its C source.
 // e.g., Int(32) -> "Halide::Int(32)"
-std::string halide_type_to_c_source(const Type &t);
+EXPORT std::string halide_type_to_c_source(const Type &t);
 
 // Convert a Halide Type into a string representation of its C Source.
 // e.g., Int(32) -> "int32_t"
-std::string halide_type_to_c_type(const Type &t);
+EXPORT std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
- * compile_to_files();
- * it can be trivially wrapped by a "real" main() to produce a command-line utility
- * for ahead-of-time filter compilation. */
+ * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a 
+ * command-line utility for ahead-of-time filter compilation. */
 EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:
@@ -220,7 +219,7 @@ private:
 template<typename T>
 class GeneratorParamImpl : public GeneratorParamBase {
 public:
-    explicit GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
+    GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
 
     T value() const { return value_; }
 
@@ -247,7 +246,7 @@ private:
 template<typename T>
 class GeneratorParam_Target : public GeneratorParamImpl<T> {
 public:
-    explicit GeneratorParam_Target(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
+    GeneratorParam_Target(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
 
     void set_from_string(const std::string &new_value_string) override {
         this->set(Target(new_value_string));
@@ -271,10 +270,10 @@ public:
 template<typename T>
 class GeneratorParam_Arithmetic : public GeneratorParamImpl<T> {
 public:
-    explicit GeneratorParam_Arithmetic(const std::string &name, 
-                                       const T &value, 
-                                       const T &min = std::numeric_limits<T>::lowest(), 
-                                       const T &max = std::numeric_limits<T>::max())
+    GeneratorParam_Arithmetic(const std::string &name, 
+                              const T &value, 
+                              const T &min = std::numeric_limits<T>::lowest(), 
+                              const T &max = std::numeric_limits<T>::max())
         : GeneratorParamImpl<T>(name, value), min(min), max(max) {
         // call set() to ensure value is clamped to min/max
         this->set(value);
@@ -328,7 +327,7 @@ private:
 template<typename T>
 class GeneratorParam_Bool : public GeneratorParam_Arithmetic<T> {
 public:
-    explicit GeneratorParam_Bool(const std::string &name, const T &value) : GeneratorParam_Arithmetic<T>(name, value) {}
+    GeneratorParam_Bool(const std::string &name, const T &value) : GeneratorParam_Arithmetic<T>(name, value) {}
 
     void set_from_string(const std::string &new_value_string) override {
         bool v = false;
@@ -360,7 +359,7 @@ public:
 template<typename T>
 class GeneratorParam_Enum : public GeneratorParamImpl<T> {
 public:
-    explicit GeneratorParam_Enum(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
+    GeneratorParam_Enum(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
         : GeneratorParamImpl<T>(name, value), enum_map(enum_map) {}
 
     void set_from_string(const std::string &new_value_string) override {
@@ -414,7 +413,7 @@ private:
 template<typename T>
 class GeneratorParam_Type : public GeneratorParam_Enum<T> {
 public:
-    explicit GeneratorParam_Type(const std::string &name, const T &value)
+    GeneratorParam_Type(const std::string &name, const T &value)
         : GeneratorParam_Enum<T>(name, value, get_halide_type_enum_map()) {}
 
     std::string call_to_string(const std::string &v) const override {
@@ -445,7 +444,7 @@ public:
 template<typename T>
 class GeneratorParam_LoopLevel : public GeneratorParam_Enum<T> {
 public:
-    explicit GeneratorParam_LoopLevel(const std::string &name, const std::string &def) 
+    GeneratorParam_LoopLevel(const std::string &name, const std::string &def) 
         : GeneratorParam_Enum<T>(name, enum_from_string(get_halide_looplevel_enum_map(), def), get_halide_looplevel_enum_map()), def(def) {}
 
     std::string call_to_string(const std::string &v) const override {
@@ -534,6 +533,14 @@ public:
         : Internal::GeneratorParamImplBase<T>(name, value) {}
 };
 
+/** ScheduleParam is similar to a GeneratorParam, with two important differences:
+ * 
+ * (1) ScheduleParams are intended for use only within a Generator's schedule()
+ * method (if any); if a Generator has no schedule() method, it should also have no
+ * ScheduleParams
+ *
+ * (2) ScheduleParam can represent a LoopLevel, while GeneratorParam cannot.
+ */
 template <typename T> 
 class ScheduleParam : public GeneratorParam<T> {
 public:
@@ -722,10 +729,14 @@ namespace Internal {
 
 enum class IOKind { Scalar, Function };
 
+// This is a union class that allows for convenient initialization of Stub Inputs
+// via C++11 initializer-list syntax; it is only used in situations where the
+// downstream consumer will be able to explicitly check that each value is
+// of the expected/required kind.
 class FuncOrExpr {
-    IOKind kind_;
-    Halide::Func func_;
-    Halide::Expr expr_;
+    const IOKind kind_;
+    const Halide::Func func_;
+    const Halide::Expr expr_;
 public:
     // *not* explicit 
     FuncOrExpr(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
@@ -746,52 +757,71 @@ public:
     }
 };
 
+/** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
+ * instantiations; it is not part of the public API and should never be
+ * used directly by user code.
+ * 
+ * Every GIOBase instance can be either a single value or an array-of-values;
+ * each of these values can be an Expr or a Func. (Note that for an
+ * array-of-values, the types/dimensions of all values in the array must match.)
+ *
+ * A GIOBase can have multiple Types, in which case it represents a Tuple.
+ * (Note that Tuples are currently only supported for GeneratorOutput, but 
+ * it is likely that GeneratorInput will be extended to support Tuple as well.)
+ *
+ * The array-size, type(s), and dimensions can all be left "unspecified" at 
+ * creation time, in which case they may assume values provided by a Stub.
+ * (It is important to note that attempting to use a GIOBase with unspecified
+ * values will assert-fail; you must ensure that all unspecified values are
+ * filled in prior to use.)
+ */
 class GIOBase {
 public:
-    bool array_size_defined() const;
-    size_t array_size() const;
-    virtual bool is_array() const;
+    EXPORT bool array_size_defined() const;
+    EXPORT size_t array_size() const;
+    EXPORT virtual bool is_array() const;
 
-    const std::string &name() const;
-    IOKind kind() const;
+    EXPORT const std::string &name() const;
+    EXPORT IOKind kind() const;
 
-    bool types_defined() const;
-    const std::vector<Type> &types() const;
-    Type type() const;
+    EXPORT bool types_defined() const;
+    EXPORT const std::vector<Type> &types() const;
+    EXPORT Type type() const;
 
-    bool dimensions_defined() const;
-    int dimensions() const;
+    EXPORT bool dimensions_defined() const;
+    EXPORT int dimensions() const;
 
-    const std::vector<Func> &funcs() const;
-    const std::vector<Expr> &exprs() const;
+    EXPORT const std::vector<Func> &funcs() const;
+    EXPORT const std::vector<Expr> &exprs() const;
 
 protected:
-    GIOBase(size_t array_size, 
+    EXPORT GIOBase(size_t array_size, 
             const std::string &name, 
             IOKind kind,
             const std::vector<Type> &types,
             int dimensions);
-    virtual ~GIOBase();
+    EXPORT virtual ~GIOBase();
 
     friend class GeneratorBase;
 
-    int array_size_;           // always 1 if is_array() == false. -1 if is_array() == true but unspecified.
+    int array_size_;           // always 1 if is_array() == false. 
+                               // -1 if is_array() == true but unspecified.
 
     const std::string name_;
     const IOKind kind_;
     std::vector<Type> types_;  // empty if type is unspecified
     int dimensions_;           // -1 if dim is unspecified
 
-    // Exactly one will have nonzero length
+    // Exactly one of these will have nonzero length
     std::vector<Func> funcs_;
     std::vector<Expr> exprs_;
 
-    std::string array_name(size_t i) const;
+    EXPORT std::string array_name(size_t i) const;
 
-    virtual void verify_internals() const;
+    EXPORT virtual void verify_internals() const;
 
-    void check_matching_array_size(size_t size);
-    void check_matching_type_and_dim(const std::vector<Type> &t, int d);
+    EXPORT void check_matching_array_size(size_t size);
+    EXPORT void check_matching_type_and_dim(const std::vector<Type> &t, int d);
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
@@ -813,7 +843,7 @@ inline const std::vector<Func> &GIOBase::get_values<Func>() const {
 
 class GeneratorInputBase : public GIOBase {
 protected:
-    GeneratorInputBase(size_t array_size,
+    EXPORT GeneratorInputBase(size_t array_size,
                        const std::string &name, 
                        IOKind kind, 
                        const std::vector<Type> &t, 
@@ -822,23 +852,23 @@ protected:
     GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
       : GeneratorInputBase(1, name, kind, t, d) {}
 
-    ~GeneratorInputBase() override;
+    EXPORT ~GeneratorInputBase() override;
 
     friend class GeneratorBase;
 
     std::vector<Parameter> parameters_;
 
-    void init_internals();
-    void set_inputs(const std::vector<FuncOrExpr> &inputs);
+    EXPORT void init_internals();
+    EXPORT void set_inputs(const std::vector<FuncOrExpr> &inputs);
 
     virtual void set_def_min_max() {
         // nothing
     }
 
-    void verify_internals() const override;
+    EXPORT void verify_internals() const override;
 
 private:
-    void init_parameters();
+    EXPORT void init_parameters();
 };
 
 
@@ -1115,7 +1145,6 @@ public:
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    //template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
     GeneratorInput(const std::string &name, IntIfFunc d)
         : Super(name, d) {
     }
@@ -1143,7 +1172,7 @@ namespace Internal {
 
 class GeneratorOutputBase : public GIOBase {
 protected:
-    GeneratorOutputBase(size_t array_size, 
+    EXPORT GeneratorOutputBase(size_t array_size, 
                         const std::string &name, 
                         const std::vector<Type> &t, 
                         int d);
@@ -1153,12 +1182,12 @@ protected:
                         int d)
       : GeneratorOutputBase(1, name, t, d) {}
 
-    ~GeneratorOutputBase() override;
+    EXPORT ~GeneratorOutputBase() override;
 
     friend class GeneratorBase;
 
-    void init_internals();
-    void resize(size_t size);
+    EXPORT void init_internals();
+    EXPORT void resize(size_t size);
 };
 
 template<typename T>
@@ -1335,9 +1364,36 @@ public:
     }
 };
 
+/** GeneratorContext is an abstract interface that is used when constructing a Generator Stub;
+ * it is used to allow the outer context (typically, either a Generator or "top-level" code)
+ * to specify certain information to the inner context to ensure that inner and outer
+ * Generators are compiled in a compatible way; at present, this is used to propagate
+ * the outer Target to the inner Generator. */
 class GeneratorContext {
 public:
     virtual Target get_target() const = 0;
+};
+
+/** JITGeneratorContext is a utility implementation of GeneratorContext that
+ * is intended for use when using Generator Stubs with the JIT; it simply
+ * allows you to wrap a specific Target in a GeneratorContext for use with a stub,
+ * often in conjunction with the Halide::get_target_from_environment() call:
+ *
+ * \code
+ *   auto my_stub = MyStub(
+ *       JITGeneratorContext(get_target_from_environment()), 
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *   );
+ */
+class JITGeneratorContext : public GeneratorContext {
+public:
+    explicit JITGeneratorContext(const Target &t) : target(t) {}
+    Target get_target() const override { return target; }
+private:
+    const Target target;
 };
 
 class NamesInterface {
@@ -1368,14 +1424,6 @@ protected:
     static inline Type Float(int bits, int lanes = 1) { return Halide::Float(bits, lanes); }
     static inline Type Int(int bits, int lanes = 1) { return Halide::Int(bits, lanes); }
     static inline Type UInt(int bits, int lanes = 1) { return Halide::UInt(bits, lanes); }
-};
-
-class JITGeneratorContext : public GeneratorContext {
-public:
-    explicit JITGeneratorContext(const Target &t) : target(t) {}
-    Target get_target() const override { return target; }
-private:
-    const Target target;
 };
 
 namespace Internal {
@@ -1758,7 +1806,7 @@ public:
 protected:
     typedef std::function<std::unique_ptr<GeneratorBase>(const std::map<std::string, std::string>&)> GeneratorFactory;
 
-    GeneratorStub(const GeneratorContext *context,
+    EXPORT GeneratorStub(const GeneratorContext *context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
                   const std::vector<std::vector<Internal::FuncOrExpr>> &inputs);
