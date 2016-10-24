@@ -22,7 +22,7 @@ public:
         inputs.float_arg = 1.234f;
         inputs.int_arg = { int_arg };
 
-        stub = StubTest(*this, inputs);
+        stub = StubTest(this, inputs);
 
         const float kOffset = 2.f;
         output(x, y, c) = cast<uint8_t>(stub.f(x, y, c)[1] + kOffset);

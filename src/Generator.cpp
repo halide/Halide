@@ -427,7 +427,7 @@ void StubEmitter::emit() {
 
     stream << indent() << class_name << "(\n";
     indent_level++;
-    stream << indent() << "const GeneratorContext& context,\n";
+    stream << indent() << "const GeneratorContext* context,\n";
     stream << indent() << "const Inputs& inputs,\n";
     stream << indent() << "const GeneratorParams& params = GeneratorParams()\n";
     indent_level--;
@@ -447,6 +447,18 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << "{\n";
     stream << indent() << "}\n";
+    stream << "\n";
+
+    stream << indent() << "// delegating ctor to allow GeneratorContext-ref\n";
+    stream << indent() << class_name << "(\n";
+    indent_level++;
+    stream << indent() << "const GeneratorContext& context,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    indent_level++;
+    stream << indent() << ": " << class_name << "(&context, inputs, params) {}\n";
     stream << "\n";
 
     if (!generator_params.empty()) {
@@ -471,7 +483,7 @@ void StubEmitter::emit() {
         }
         indent_level--;
         stream << indent() << ">\n";
-        stream << indent() << "static " << class_name << " make(const GeneratorContext& context, const Inputs& inputs) {\n";
+        stream << indent() << "static " << class_name << " make(const GeneratorContext* context, const Inputs& inputs) {\n";
         indent_level++;
         stream << indent() << "GeneratorParams gp(\n";
         indent_level++;
@@ -575,6 +587,17 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << indent() << "#endif  // " << guard.str() << "\n";
+}
+
+GeneratorStub::GeneratorStub(const GeneratorContext *context,
+                             GeneratorFactory generator_factory,
+                             const std::map<std::string, std::string> &generator_params,
+                             const std::vector<std::vector<Internal::FuncOrExpr>> &inputs) {
+    user_assert(context != nullptr) << "Context may not be null";
+    generator = generator_factory(generator_params);
+    generator->target.set(context->get_target());
+    generator->set_inputs(inputs);
+    generator->call_generate();
 }
 
 void GeneratorStub::verify_same_funcs(Func a, Func b) {

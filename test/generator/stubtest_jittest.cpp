@@ -6,6 +6,7 @@ using Halide::Argument;
 using Halide::Expr;
 using Halide::Func;
 using Halide::Image;
+using Halide::JITGeneratorContext;
 using Halide::LoopLevel;
 using Halide::Var;
 using StubNS1::StubNS2::StubTest;
@@ -49,9 +50,7 @@ void verify(const Image<InputType> &input, float float_arg, int int_arg, const I
     }
 }
 
-int main(int argc, char **argv) {
-    Halide::JITGeneratorContext context(Halide::get_target_from_environment());
-    
+int main(int argc, char **argv) {    
     constexpr int kArrayCount = 2;
 
     Image<float> src[kArrayCount] = {
@@ -65,7 +64,7 @@ int main(int argc, char **argv) {
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
     auto gen = StubTest(
-        context, 
+        JITGeneratorContext(Halide::get_target_from_environment()), 
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
             { Func(src[0]), Func(src[1]) },
