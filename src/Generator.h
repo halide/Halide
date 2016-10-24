@@ -83,6 +83,10 @@
  * Your build() method will usually return a Func. If you have a
  * pipeline that outputs multiple Funcs, you can also return a
  * Pipeline object.
+ *
+ * There are newer enhancements to Generator that are not yet documented
+ * here; for more information, see 
+ * https://github.com/halide/Halide/wiki/Generator-Enhancements
  */
 
 #include <algorithm>
