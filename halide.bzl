@@ -2,6 +2,7 @@ def halide_language_copts():
   # TODO: this is wrong for (e.g.) Windows and will need further specialization.
   return [
     "$(STACK_FRAME_UNLIMITED)",
+    "-fno-exceptions",
     "-fno-rtti",
     "-fPIC",
     "-fvisibility-inlines-hidden",
@@ -11,7 +12,7 @@ def halide_language_copts():
 
 
 def halide_language_linkopts():
-  _linux_opts = ["-rdynamic"]
+  _linux_opts = ["-rdynamic", "-ldl", "-lpthread", "-lz"]
   _osx_opts = ["-Wl,-stack_size", "-Wl,1000000"]
   return select({
       "@halide//:halide_host_config_darwin": _osx_opts,
@@ -24,6 +25,7 @@ def halide_language_linkopts():
 def halide_runtime_linkopts():
   # TODO: this is wrong for (e.g.) Windows and will need further specialization.
   return [
+    "-ldl",
     "-lpthread",
   ]
 

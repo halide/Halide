@@ -9,8 +9,6 @@ _components_map = {
   "x86" : "WITH_X86",
 }
 
-_static_libs = %{llvm_static_libs}
-
 def get_llvm_version():
   return %{llvm_version}
 
@@ -25,8 +23,8 @@ def get_llvm_copts():
   return %{llvm_cxxflags}
 
 def get_llvm_linkopts():
-  return %{llvm_ldflags} + %{llvm_system_libs}
+  return %{llvm_ldflags} + %{llvm_libs} + %{llvm_system_libs}
 
 def get_llvm_static_libs():
-  return ["lib/%s" % lib for lib in _static_libs]
+  return ["lib/%s" % lib for lib in %{llvm_static_libs}]
 
