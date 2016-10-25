@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
 #include "stubtest.h"

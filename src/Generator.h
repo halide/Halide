@@ -90,6 +90,7 @@
  */
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -299,6 +300,9 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << this->value();
+        if (std::is_same<T, float>::value) {
+            oss << "f";
+        }
         return oss.str();
     }
 
@@ -800,10 +804,10 @@ public:
 
 protected:
     EXPORT GIOBase(size_t array_size, 
-            const std::string &name, 
-            IOKind kind,
-            const std::vector<Type> &types,
-            int dimensions);
+                   const std::string &name, 
+                   IOKind kind,
+                   const std::vector<Type> &types,
+                   int dimensions);
     EXPORT virtual ~GIOBase();
 
     friend class GeneratorBase;
@@ -853,7 +857,7 @@ protected:
                        const std::vector<Type> &t, 
                        int d);
 
-    GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    EXPORT GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
       : GeneratorInputBase(1, name, kind, t, d) {}
 
     EXPORT ~GeneratorInputBase() override;
@@ -865,9 +869,7 @@ protected:
     EXPORT void init_internals();
     EXPORT void set_inputs(const std::vector<FuncOrExpr> &inputs);
 
-    virtual void set_def_min_max() {
-        // nothing
-    }
+    EXPORT virtual void set_def_min_max();
 
     EXPORT void verify_internals() const override;
 
@@ -992,7 +994,7 @@ public:
         return this->funcs().at(0)(args);
     }
 
-    operator class Func() const { 
+    operator Func() const { 
         return this->funcs().at(0); 
     }
 };
@@ -1181,9 +1183,9 @@ protected:
                         const std::vector<Type> &t, 
                         int d);
 
-    GeneratorOutputBase(const std::string &name, 
-                        const std::vector<Type> &t, 
-                        int d)
+    EXPORT GeneratorOutputBase(const std::string &name, 
+                               const std::vector<Type> &t, 
+                               int d)
       : GeneratorOutputBase(1, name, t, d) {}
 
     EXPORT ~GeneratorOutputBase() override;
@@ -1240,7 +1242,7 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
-    operator class Func() const { 
+    operator Func() const { 
         return get_values<ValueType>().at(0); 
     }
 
@@ -1614,10 +1616,16 @@ private:
     // have build() or generate()/schedule() methods.
 
     // std::is_member_function_pointer will fail if there is no member of that name,
-    // so we use a little SFINAE to detect if there is a method-shaped member named 'schedule'.
+    // so we use a little SFINAE to detect if there are method-shaped members.
     template<typename> 
     struct type_sink { typedef void type; };
     
+    template<typename T2, typename = void> 
+    struct has_generate_method : std::false_type {}; 
+    
+    template<typename T2> 
+    struct has_generate_method<T2, typename type_sink<decltype(std::declval<T2>().generate())>::type> : std::true_type {};
+
     template<typename T2, typename = void> 
     struct has_schedule_method : std::false_type {}; 
     
@@ -1625,7 +1633,7 @@ private:
     struct has_schedule_method<T2, typename type_sink<decltype(std::declval<T2>().schedule())>::type> : std::true_type {};
 
     template <typename T2 = T,
-              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::build)>::value>::type * = nullptr>
+              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
     Pipeline build_pipeline_impl() {
         internal_assert(!build_pipeline_called);
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
@@ -1635,7 +1643,7 @@ private:
         return p;
     }
     template <typename T2 = T,
-              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::generate)>::value>::type * = nullptr>
+              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     Pipeline build_pipeline_impl() {
         internal_assert(!build_pipeline_called);
         ((T *)this)->call_generate_impl();
@@ -1648,13 +1656,13 @@ private:
     // have build() or generate()/schedule() methods.
 
     template <typename T2 = T,
-              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::build)>::value>::type * = nullptr>
+              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
     void call_generate_impl() {
         user_error << "Unimplemented";
     }
 
     template <typename T2 = T,
-              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::generate)>::value>::type * = nullptr>
+              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     void call_generate_impl() {
         user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
         typedef typename std::result_of<decltype(&T::generate)(T)>::type GenerateRetType;
@@ -1668,13 +1676,13 @@ private:
     // have build() or generate()/schedule() methods.
 
     template <typename T2 = T,
-              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::build)>::value>::type * = nullptr>
+              typename std::enable_if<!has_schedule_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
         user_error << "Unimplemented";
     }
 
     template <typename T2 = T,
-              typename std::enable_if<std::is_member_function_pointer<decltype(&T2::schedule)>::value>::type * = nullptr>
+              typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
         user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
         user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
@@ -1686,15 +1694,15 @@ private:
 
 protected:
     Pipeline build_pipeline() override {
-        return build_pipeline_impl();
+        return this->build_pipeline_impl();
     }
 
     void call_generate() override {
-        call_generate_impl();
+        this->call_generate_impl();
     }
 
     void call_schedule() override {
-        call_schedule_impl();
+        this->call_schedule_impl();
     }
 private:
     friend class Internal::SimpleGeneratorFactory;
@@ -1846,8 +1854,8 @@ protected:
         return r;
     }
 
-    void verify_same_funcs(Func a, Func b);
-    void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
+    EXPORT void verify_same_funcs(Func a, Func b);
+    EXPORT void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
 
 private:
     std::shared_ptr<GeneratorBase> generator;
@@ -1879,8 +1887,15 @@ private:
 
 #define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
 
+#ifdef _MSC_VER
+// MSVC flagrantly ignores the spec for __VA_ARGS__; this is an ugly but effective workaround
+#define _HALIDE_VARIADIC_MACRO(MACRO, TUPLE) MACRO TUPLE
 #define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_REGISTER_GENERATOR_CHOOSER(__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2)(__VA_ARGS__)
+    _HALIDE_VARIADIC_MACRO(_HALIDE_REGISTER_GENERATOR_CHOOSER, (__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2, DUMMY))(__VA_ARGS__)
+#else
+#define HALIDE_REGISTER_GENERATOR(...) \
+    _HALIDE_REGISTER_GENERATOR_CHOOSER(__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2, DUMMY)(__VA_ARGS__)
+#endif
 
 
 #endif  // HALIDE_GENERATOR_H_

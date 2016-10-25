@@ -1377,6 +1377,10 @@ GeneratorInputBase::~GeneratorInputBase() {
     ObjectInstanceRegistry::unregister_instance(this); 
 }
 
+void GeneratorInputBase::set_def_min_max() {
+    // nothing
+}
+
 void GeneratorInputBase::init_parameters() {
     parameters_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
