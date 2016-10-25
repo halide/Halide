@@ -118,9 +118,9 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(NestedExternsCombine, "nested_externs_combine");
-HALIDE_REGISTER_GENERATOR(NestedExternsInner, "nested_externs_inner");
-HALIDE_REGISTER_GENERATOR(NestedExternsLeaf, "nested_externs_leaf");
-HALIDE_REGISTER_GENERATOR(NestedExternsRoot, "nested_externs_root");
+HALIDE_REGISTER_GENERATOR(NestedExternsCombine, "nested_externs_combine")
+HALIDE_REGISTER_GENERATOR(NestedExternsInner, "nested_externs_inner")
+HALIDE_REGISTER_GENERATOR(NestedExternsLeaf, "nested_externs_leaf")
+HALIDE_REGISTER_GENERATOR(NestedExternsRoot, "nested_externs_root")
 
 }  // namespace
