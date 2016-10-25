@@ -163,7 +163,7 @@ class KeyInfo {
         while (i < 4 && max_alignment > (1 << i)) {
             i = i + 1;
         }
-        return (size_t)(1 << i);
+        return size_t(1) << i;
     }
 
 // Using the full names in the key results in a (hopefully incredibly
