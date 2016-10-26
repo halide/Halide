@@ -148,14 +148,12 @@ bool Pipeline::defined() const {
 }
 
 Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
-    output.compute_root().store_root();
     output.function().freeze();
     contents->outputs.push_back(output.function());
 }
 
 Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
     for (Func f: outputs) {
-        f.compute_root().store_root();
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -911,7 +909,7 @@ struct JITFuncCallContext {
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
-// params. 
+// params.
 vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
