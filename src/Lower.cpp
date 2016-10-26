@@ -78,6 +78,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     // Create a deep-copy of the entire graph of Funcs.
     std::tie(outputs, env) = deep_copy(outputs, env);
 
+    // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
         Func(f).compute_root().store_root();
     }
