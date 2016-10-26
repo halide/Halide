@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <set>
 #include <stdlib.h>
 #include <atomic>
