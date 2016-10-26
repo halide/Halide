@@ -11,10 +11,6 @@ public:
     Param<bool> negate{"negate"};
 
     Func build() {
-        // This would normally be done in the build file, but this
-        // test is explicitly for matlab, and provides its own Matlab
-        // API implementation.
-        target.set(get_target().with_feature(Target::Matlab));
         Var x, y;
         Func f("f");
         f(x, y) = input(x, y) * scale * select(negate, -1.0f, 1.0f);

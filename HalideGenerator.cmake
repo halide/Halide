@@ -84,6 +84,7 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   # Determine the name of the output files
   set(FILTER_LIB "${AOT_LIBRARY_TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(FILTER_HDR "${AOT_LIBRARY_TARGET}.h")
+  set(FILTER_CPP "${AOT_LIBRARY_TARGET}.cpp")
 
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}")
   if (NOT ${args_GENERATED_FUNCTION} STREQUAL "")
@@ -92,20 +93,43 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   if (NOT ${args_GENERATOR_NAME} STREQUAL "")
     list(APPEND GENERATOR_EXEC_ARGS "-g" "${args_GENERATOR_NAME}")
   endif()
-  if (NOT ${args_GENERATOR_OUTPUTS} STREQUAL "")
-    list(APPEND GENERATOR_EXEC_ARGS "-e" ${args_GENERATOR_OUTPUTS})
+  if (NOT "${args_GENERATOR_OUTPUTS}" STREQUAL "")
+    string(REPLACE ";" "," _tmp "${args_GENERATOR_OUTPUTS}")
+    list(APPEND GENERATOR_EXEC_ARGS "-e" ${_tmp})
   endif()
   # GENERATOR_ARGS always come last
   list(APPEND GENERATOR_EXEC_ARGS ${args_GENERATOR_ARGS})
+
+  if ("${args_GENERATOR_OUTPUTS}" STREQUAL "")
+    set(args_GENERATOR_OUTPUTS static_library h)
+  endif()
+
+  set(OUTPUTS )
+  
+  # This is the CMake idiom for "if foo in list"
+  list(FIND args_GENERATOR_OUTPUTS "static_library" _lib_index)
+  list(FIND args_GENERATOR_OUTPUTS "h" _h_index)
+  list(FIND args_GENERATOR_OUTPUTS "cpp" _cpp_index)
+
+  if (${_lib_index} GREATER -1)
+    list(APPEND OUTPUTS "${GENFILES_DIR}/${FILTER_LIB}")
+  endif()
+  if (${_h_index} GREATER -1)
+    list(APPEND OUTPUTS "${GENFILES_DIR}/${FILTER_HDR}")
+    set_source_files_properties("${GENFILES_DIR}/${FILTER_HDR}" PROPERTIES GENERATED TRUE)
+  endif()
+  if (${_cpp_index} GREATER -1)
+    list(APPEND OUTPUTS "${GENFILES_DIR}/${FILTER_CPP}")
+    set_source_files_properties("${GENFILES_DIR}/${FILTER_HDR}" PROPERTIES GENERATED TRUE)
+  endif()
 
   halide_generator_add_exec_generator_target(
     "${AOT_LIBRARY_TARGET}.exec_generator"
     GENERATOR_TARGET ${args_GENERATOR_TARGET} 
     GENERATOR_ARGS   "${GENERATOR_EXEC_ARGS}"
     GENFILES_DIR     ${GENFILES_DIR}
-    OUTPUTS          "${GENFILES_DIR}/${FILTER_LIB}" "${GENFILES_DIR}/${FILTER_HDR}"
+    OUTPUTS          ${OUTPUTS}
   )
-  set_source_files_properties("${GENFILES_DIR}/${FILTER_HDR}" PROPERTIES GENERATED TRUE)
 endfunction(halide_add_aot_library)
 
 # Usage:

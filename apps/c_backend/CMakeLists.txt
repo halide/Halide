@@ -1,57 +1,54 @@
-# Generator
-halide_project(pipeline "apps" pipeline.cpp)
-halide_project(pipeline_cpp "apps" pipeline_cpp.cpp)
+function(halide_add_aot_cpp_dependency TARGET AOT_LIBRARY_TARGET)
+    halide_generator_genfiles_dir(${AOT_LIBRARY_TARGET} GENFILES_DIR)
+    add_dependencies("${TARGET}" "${AOT_LIBRARY_TARGET}.exec_generator")
 
-set(pipeline_c_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.h")
-set(pipeline_c_src "${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.cpp")
-set(pipeline_native_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.h")
-set(pipeline_native_obj "${CMAKE_CURRENT_BINARY_DIR}/pipeline_native.o")
+    add_library(${AOT_LIBRARY_TARGET}.cpplib STATIC "${GENFILES_DIR}/${AOT_LIBRARY_TARGET}.cpp")
+    target_compile_options(${AOT_LIBRARY_TARGET}.cpplib PRIVATE "-std=c++11")
+    target_link_libraries("${TARGET}" PRIVATE ${AOT_LIBRARY_TARGET}.cpplib)
+    target_include_directories("${TARGET}" PRIVATE "${GENFILES_DIR}")
+endfunction(halide_add_aot_cpp_dependency)
 
-# Final executable
-set(run_target run_c_backend_and_native)
-add_executable(${run_target} run.cpp ${pipeline_c_src} ${pipeline_c_h} ${pipeline_native_h})
-target_compile_options(${run_target} PUBLIC "-std=c++11")
-target_link_libraries(${run_target} PRIVATE ${pipeline_native_obj})
-target_include_directories(${run_target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-if (NOT WIN32)
-  target_link_libraries(${run_target} PRIVATE dl pthread)
-endif()
+# Generator(s)
+halide_add_generator(pipeline.generator
+                     SRCS pipeline_generator.cpp)
+halide_add_aot_library(pipeline_c
+                       GENERATOR_TARGET pipeline.generator
+                       GENERATED_FUNCTION pipeline_c
+                       GENERATOR_OUTPUTS cpp h
+                       GENERATOR_ARGS target=host)
 
-# HACK: Emitted C code isn't valid C code, just compile with
-# C++ compiler for now
-set_property(SOURCE "${pipeline_c_src}" PROPERTY LANGUAGE CXX)
+halide_add_aot_library(pipeline_native
+                       GENERATOR_TARGET pipeline.generator
+                       GENERATED_FUNCTION pipeline_native
+                       GENERATOR_OUTPUTS static_library h
+                       GENERATOR_ARGS target=host)
 
-# FIXME: Cannot use halide_add_generator_dependency() because
-# pipeline.cpp doesn't handle the commandline args passed.
-add_custom_command(OUTPUT "${pipeline_c_h}" "${pipeline_c_src}"
-                          "${pipeline_native_h}" "${pipeline_native_obj}"
-                   COMMAND pipeline
-                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-                   COMMENT "Generating pipeline outputs"
-                  )
+halide_add_generator(pipeline_cpp.generator
+                     SRCS pipeline_cpp_generator.cpp)
+halide_add_aot_library(pipeline_cpp_cpp
+                       GENERATOR_TARGET pipeline_cpp.generator
+                       GENERATED_FUNCTION pipeline_cpp_cpp
+                       GENERATOR_OUTPUTS cpp h
+                       GENERATOR_ARGS target=host-c_plus_plus_name_mangling)
+halide_add_aot_library(pipeline_cpp_native
+                       GENERATOR_TARGET pipeline_cpp.generator
+                       GENERATED_FUNCTION pipeline_cpp_native
+                       GENERATOR_OUTPUTS static_library h
+                       GENERATOR_ARGS target=host-c_plus_plus_name_mangling)
 
-set(pipeline_cpp_cpp_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_cpp_cpp.h")
-set(pipeline_cpp_cpp_src "${CMAKE_CURRENT_BINARY_DIR}/pipeline_cpp_cpp.cpp")
-set(pipeline_cpp_native_h "${CMAKE_CURRENT_BINARY_DIR}/pipeline_cpp_native.h")
-set(pipeline_cpp_native_obj "${CMAKE_CURRENT_BINARY_DIR}/pipeline_cpp_native.o")
+# Final executable(s)
+add_executable(run_c_backend_and_native run.cpp)
+target_compile_options(run_c_backend_and_native PRIVATE "-std=c++11")
+halide_add_aot_cpp_dependency(run_c_backend_and_native pipeline_c)
+halide_add_aot_library_dependency(run_c_backend_and_native pipeline_native)
 
-# Final executable for C++ side
-set(run_target_cpp run_c_backend_and_native_cpp)
-add_executable(${run_target_cpp} run_cpp.cpp ${pipeline_cpp_cpp_src} ${pipeline_cpp_cpp_h} ${pipeline_cpp_native_h})
-target_compile_options(${run_target_cpp} PUBLIC "-std=c++11")
-target_link_libraries(${run_target_cpp} PRIVATE ${pipeline_cpp_native_obj})
-target_include_directories(${run_target_cpp} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-if (NOT WIN32)
-  target_link_libraries(${run_target_cpp} PRIVATE dl pthread)
-endif()
+add_executable(run_c_backend_and_native_cpp run_cpp.cpp)
+target_compile_options(run_c_backend_and_native_cpp PRIVATE "-std=c++11")
+halide_add_aot_cpp_dependency(run_c_backend_and_native_cpp pipeline_cpp_cpp)
+halide_add_aot_library_dependency(run_c_backend_and_native_cpp pipeline_cpp_native)
 
-set_property(SOURCE "${pipeline_cpp_cpp_src}" PROPERTY LANGUAGE CXX)
 
-# FIXME: Cannot use halide_add_generator_dependency() because
-# pipeline.cpp doesn't handle the commandline args passed.
-add_custom_command(OUTPUT "${pipeline_cpp_cpp_h}" "${pipeline_cpp_cpp_src}"
-                          "${pipeline_cpp_native_h}" "${pipeline_cpp_native_obj}"
-                   COMMAND pipeline_cpp
-                   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-                   COMMENT "Generating pipeline outputs"
-                  )
+
+
+
+

@@ -946,6 +946,12 @@ $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generat
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
+# matlab needs to be generated with matlab in TARGET
+$(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-matlab
+
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
@@ -1137,7 +1143,6 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	        $(ROOT_DIR)/apps/blur \
 	        $(ROOT_DIR)/apps/wavelet \
 	        $(ROOT_DIR)/apps/c_backend \
-	        $(ROOT_DIR)/apps/modules \
 	        $(ROOT_DIR)/apps/HelloMatlab \
 	        $(ROOT_DIR)/apps/fft \
 	        $(ROOT_DIR)/apps/images \
@@ -1146,20 +1151,18 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	  cp -r $(ROOT_DIR)/tools .; \
 	fi
 	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/bilateral_grid bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/local_laplacian clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/local_laplacian out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/local_laplacian bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/interpolate clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/interpolate out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/interpolate bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/blur clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/blur test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	apps/blur/test
+	make -C apps/blur bin/test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	apps/blur/bin/test
 	make -C apps/wavelet clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/wavelet test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/c_backend clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/c_backend test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/modules clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/modules out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_16x16  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_32x32  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_48x48  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)

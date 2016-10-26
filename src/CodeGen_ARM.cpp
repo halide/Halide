@@ -325,7 +325,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         op->value.type().is_int() &&
         t.bits() == op->value.type().bits() / 2) {
         const Div *d = op->value.as<Div>();
-        if (d && is_const(d->b, 1 << t.bits())) {
+        if (d && is_const(d->b, int64_t(1) << t.bits())) {
             Type unsigned_type = UInt(t.bits() * 2, t.lanes());
             Expr replacement = cast(t,
                                     cast(unsigned_type, d->a) /
