@@ -94,6 +94,8 @@ function(halide_project name folder)
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
     set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
+    # 4006: "already defined, second definition ignored"
+    set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4006")
     target_compile_definitions("${name}" PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()

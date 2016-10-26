@@ -49,9 +49,9 @@ Image<uint16_t> blur_fast(Image<uint16_t> in) {
                 for (int y = 0; y < 32+2; y++) {
                     const uint16_t *inPtr = &(in(xTile, yTile+y));
                     for (int x = 0; x < 128; x += 8) {
-                        a = _mm_load_si128((__m128i*)(inPtr));
-                        b = _mm_loadu_si128((__m128i*)(inPtr+1));
-                        c = _mm_loadu_si128((__m128i*)(inPtr+2));
+                        a = _mm_load_si128((const __m128i*)(inPtr));
+                        b = _mm_loadu_si128((const __m128i*)(inPtr+1));
+                        c = _mm_loadu_si128((const __m128i*)(inPtr+2));
                         sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
                         avg = _mm_mulhi_epi16(sum, one_third);
                         _mm_store_si128(tmpPtr++, avg);
@@ -147,9 +147,9 @@ Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
                 __m128i *tmpPtr2 = tmp + ((y+2) & 3) * vw;
                 for (int x = 0; x < vw; x++) {
                     // blur horizontally to produce next scanline of tmp
-                    __m128i val = _mm_load_si128((__m128i *)(inPtr));
-                    val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
-                    val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+2)));
+                    __m128i val = _mm_load_si128((const __m128i *)(inPtr));
+                    val = _mm_add_epi16(val, _mm_loadu_si128((const __m128i *)(inPtr+1)));
+                    val = _mm_add_epi16(val, _mm_loadu_si128((const __m128i *)(inPtr+2)));
                     val = _mm_mulhi_epi16(val, one_third);
                     _mm_store_si128(tmpPtr0++, val);
 
