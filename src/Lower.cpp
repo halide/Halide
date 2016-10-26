@@ -17,6 +17,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
@@ -76,6 +77,10 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
 
     // Create a deep-copy of the entire graph of Funcs.
     std::tie(outputs, env) = deep_copy(outputs, env);
+
+    for (Function f: outputs) {
+        Func(f).compute_root().store_root();
+    }
 
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
