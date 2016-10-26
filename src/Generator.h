@@ -1479,6 +1479,7 @@ public:
  * the outer Target to the inner Generator. */
 class GeneratorContext {
 public:
+    virtual ~GeneratorContext() {};
     virtual Target get_target() const = 0;
 };
 
