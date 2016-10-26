@@ -1,48 +1,48 @@
 include ../support/Makefile.inc
 
-BUILD_DIR = build_make
+BIN ?= bin
 
 # If HL_TARGET isn't set, use host
 HL_TARGET ?= host
 
-all: $(BUILD_DIR)/wavelet
+all: $(BIN)/wavelet
 
 clean:
-	@rm -rf $(BUILD_DIR)
+	@rm -rf $(BIN)
 
-# By default, %.generator is produced by building %_generator.cpp
-$(BUILD_DIR)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
+# By default, %_exec is produced by building %_generator.cpp
+$(BIN)/%_exec: %_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator $(filter %_generator.cpp,$^)
-	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(BIN)
 	@$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) -o $@
 
-# By default, %.a/.h are produced by executing %.generator
-$(BUILD_DIR)/%.a $(BUILD_DIR)/%.h: $(BUILD_DIR)/%.generator
+# By default, %.a/.h are produced by executing %_exec
+$(BIN)/%.a $(BIN)/%.h: $(BIN)/%_exec
 	@echo Running Generator $<
-	@mkdir -p $(BUILD_DIR)
-	@$< -g $(notdir $*) -o $(BUILD_DIR) target=$(HL_TARGET)-no_runtime
+	@mkdir -p $(BIN)
+	@$< -g $(notdir $*) -o $(BIN) target=$(HL_TARGET)-no_runtime
 
-$(BUILD_DIR)/runtime_$(HL_TARGET).a: $(BUILD_DIR)/haar_x.generator
+$(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x_exec
 	@echo Compiling Halide runtime for target $(HL_TARGET)
-	@mkdir -p $(BUILD_DIR)
-	@$< -r runtime_$(HL_TARGET) -o $(BUILD_DIR) target=$(HL_TARGET)
+	@mkdir -p $(BIN)
+	@$< -r runtime_$(HL_TARGET) -o $(BIN) target=$(HL_TARGET)
 
 HL_MODULES = \
-	$(BUILD_DIR)/daubechies_x.a \
-	$(BUILD_DIR)/haar_x.a \
-	$(BUILD_DIR)/inverse_daubechies_x.a \
-	$(BUILD_DIR)/inverse_haar_x.a \
-	$(BUILD_DIR)/runtime_$(HL_TARGET).a
+	$(BIN)/daubechies_x.a \
+	$(BIN)/haar_x.a \
+	$(BIN)/inverse_daubechies_x.a \
+	$(BIN)/inverse_haar_x.a \
+	$(BIN)/runtime_$(HL_TARGET).a
 
-$(BUILD_DIR)/wavelet.a: wavelet.cpp $(HL_MODULES)
-	@$(CXX) $(CXXFLAGS) $(LIBPNG_CXX_FLAGS) -I$(BUILD_DIR) -c $< -o $@
+$(BIN)/wavelet.a: wavelet.cpp $(HL_MODULES)
+	@$(CXX) $(CXXFLAGS) $(LIBPNG_CXX_FLAGS) -I$(BIN) -c $< -o $@
 
-$(BUILD_DIR)/wavelet: $(BUILD_DIR)/wavelet.a
+$(BIN)/wavelet: $(BIN)/wavelet.a
 	@$(CXX) $(CXXFLAGS) $^ $(HL_MODULES) $(PNGFLAGS) $(LDFLAGS) -o $@
 
-test: $(BUILD_DIR)/wavelet
+test: $(BIN)/wavelet
 	@echo Testing wavelet...
-	@$< ../images/gray.png $(BUILD_DIR)
+	@$< ../images/gray.png $(BIN)
 
 # Don't auto-delete the generators.
 .SECONDARY:

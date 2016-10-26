@@ -68,23 +68,39 @@ if (WITH_TEST_RENDERSCRIPT)
   tests(renderscript)
 endif()
 
+function(add_test_generator NAME)
+  set(options WITH_STUB)
+  set(oneValueArgs )
+  set(multiValueArgs STUB_DEPS)
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  # convert TRUE|FALSE -> WITH_STUB|emptystring
+  if (${args_WITH_STUB})
+    set(args_WITH_STUB WITH_STUB)
+  else()
+    set(args_WITH_STUB )
+  endif()
+  halide_add_generator("${NAME}.generator"
+                       SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp"
+                       STUB_DEPS ${args_STUB_DEPS}
+                       ${args_WITH_STUB})
+endfunction(add_test_generator)
+
 function(halide_define_jit_test NAME)
   set(options )
   set(oneValueArgs )
-  set(multiValueArgs )
+  set(multiValueArgs STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   halide_project("generator_jit_${NAME}" 
                  "generator" 
                  "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_jittest.cpp")
+  foreach(STUB_DEP ${args_STUB_DEPS})
+    halide_add_generator_stub_dependency(TARGET "generator_jit_${NAME}" 
+                                         STUB_GENERATOR_TARGET ${STUB_DEP})
+  endforeach()
 endfunction(halide_define_jit_test)
 
 include(../HalideGenerator.cmake)
-
-function(add_test_generator NAME)
-  halide_add_generator("${NAME}.generator"
-                       SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp")
-endfunction(add_test_generator)
 
 # Usage:
 #   halide_define_aot_test(NAME <basename>
@@ -94,7 +110,7 @@ endfunction(add_test_generator)
 function(halide_define_aot_test NAME)
   set(options OMIT_DEFAULT_GENERATOR)
   set(oneValueArgs GENERATED_FUNCTION GENERATOR_HALIDE_TARGET)
-  set(multiValueArgs GENERATOR_ARGS)
+  set(multiValueArgs GENERATOR_ARGS STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   set(TARGET "generator_aot_${NAME}")
@@ -104,6 +120,10 @@ function(halide_define_aot_test NAME)
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
   set_target_properties("${TARGET}" PROPERTIES FOLDER "generator")
+  foreach(STUB_DEP ${args_STUB_DEPS})
+    halide_add_generator_stub_dependency(TARGET "${TARGET}" 
+                                         STUB_GENERATOR_TARGET ${STUB_DEP})
+  endforeach()
 
   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
     if (NOT args_GENERATED_FUNCTION)
@@ -155,17 +175,6 @@ endfunction(halide_add_aot_test_dependency)
 
 if (WITH_TEST_GENERATORS)
 
-  # ------ Generator tests for just-in-time mode: ------
-  halide_define_jit_test(example)
-  halide_define_jit_test(paramtest)
-
-  # ------ Generator tests for ahead-of-time mode: ------
-
-  # Create tests for ahead of-time-compiled generators. This will produce two
-  # executables, one containing the generator itself
-  # (e.g. from example_generator.cpp) and used at build time, and the other, the
-  # test that executes the generated code (e.g. from example_aottest.cpp).
-
   # Explicitly define the generator targets; each has a build target
   # of the form "name.generator"
   add_test_generator(acquire_release)
@@ -191,11 +200,28 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(nested_externs)
   add_test_generator(paramtest)
   add_test_generator(pyramid)
+  add_test_generator(stubtest WITH_STUB)
+  # the stubuser generator needs the stub from stubtest
+  add_test_generator(stubuser
+                     STUB_DEPS stubtest.generator)
   add_test_generator(tiled_blur_blur)
   add_test_generator(tiled_blur)
   add_test_generator(user_context)
   add_test_generator(user_context_insanity)
   add_test_generator(variable_num_threads)
+
+  # ------ Generator tests for just-in-time mode: ------
+  halide_define_jit_test(example)
+  halide_define_jit_test(paramtest)
+  halide_define_jit_test(stubtest
+                         STUB_DEPS stubtest.generator)
+
+  # ------ Generator tests for ahead-of-time mode: ------
+
+  # Create tests for ahead of-time-compiled generators. This will produce two
+  # executables, one containing the generator itself
+  # (e.g. from example_generator.cpp) and used at build time, and the other, the
+  # test that executes the generated code (e.g. from example_aottest.cpp).
 
   # Tests with no special requirements
   halide_define_aot_test(acquire_release)
@@ -211,11 +237,13 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(gpu_only)
   halide_define_aot_test(image_from_array)
   halide_define_aot_test(mandelbrot)
-  halide_define_aot_test(matlab)
   halide_define_aot_test(memory_profiler_mandelbrot)
   halide_define_aot_test(variable_num_threads)
 
-  # Tests that require nonstandard targets, namespaces, etc.
+  # Tests that require nonstandard targets, namespaces, args, etc.
+  halide_define_aot_test(matlab
+                         GENERATOR_HALIDE_TARGET host-matlab)
+
   halide_define_aot_test(multitarget
                          GENERATOR_HALIDE_TARGET host-debug-c_plus_plus_name_mangling,host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::multitarget)
@@ -236,12 +264,21 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(msan
                          GENERATOR_HALIDE_TARGET host-msan)
 
-  # Tests that require additional dependencies
-  halide_define_aot_test(metadata_tester)
+  # stubtest has input and output funcs with undefined types; this is fine for stub
+  # usage (the types can be inferred), but for AOT compilation, we must make the types
+  # concrete via generator args.
+  halide_define_aot_test(stubtest
+                         GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32)
+
+  # Tests that require additional dependencies, args, etc
+  set(MDTEST_GEN_ARGS input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2)
+  halide_define_aot_test(metadata_tester
+                         GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
                                  AOT_LIBRARY_TARGET metadata_tester_ucon
                                  GENERATED_FUNCTION metadata_tester_ucon
-                                 GENERATOR_HALIDE_TARGET host-user_context)
+                                 GENERATOR_HALIDE_TARGET host-user_context
+                                 GENERATOR_ARGS ${MDTEST_GEN_ARGS})
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur
