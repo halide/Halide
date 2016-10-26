@@ -10,7 +10,7 @@ using Halide::Image;
 const int kSize = 32;
 
 template<typename Type>
-Image<Type> MakeImage() {
+Image<Type> make_image() {
     Image<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         // the input (otherwise we'll get a buffer type mismatch error).
         Halide::Pipeline p = gen.build();
 
-        Image<float> src = MakeImage<float>();
+        Image<float> src = make_image<float>();
         gen.input.set(src);
         gen.float_arg.set(1.234f);
         gen.int_arg.set(33);

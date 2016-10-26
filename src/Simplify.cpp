@@ -5603,7 +5603,7 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
 
 void check_indeterminate() {
     const int32_t values[] = {
-        -2147483648,
+        int32_t(0x80000000),
         -2147483647,
         -2,
         -1,
