@@ -132,6 +132,7 @@ cc_binary(
     srcs = [
         "lesson_16_rgb_run.cpp",
     ],
+    copts = ["-Wno-unused-variable"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":brighten_either",
