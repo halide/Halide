@@ -388,45 +388,194 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
 }
 
 /** Apply split directives on the reduction variables. Remove the old RVar from
- * the list and add the split result (inner and outer RVars) to the list. */
-void apply_split(const Split &s, vector<ReductionVariable> &rvars) {
+ * the list and add the split result (inner and outer RVars) to the list. Add
+ * new predicates corresponding to the TailStrategy to the RDom predicate list. */
+bool apply_split(const Split &s, vector<ReductionVariable> &rvars, vector<Expr> &predicates,
+                 vector<Expr> &args, vector<Expr> &values,
+                 map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_split());
-    const auto iter = std::find_if(rvars.begin(), rvars.end(),
+    const auto it = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
-    if (iter != rvars.end()) {
-        debug(4) << "  Splitting " << iter->var << " into " << s.outer << " and " << s.inner << "\n";
-        Expr old_extent = iter->extent;
-        iter->var = s.inner;
-        iter->min = 0;
-        iter->extent = s.factor;
 
-        ReductionVariable outer = {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)};
-        rvars.insert(iter + 1, outer);
+    Expr old_max, old_min, old_extent;
+
+    if (it != rvars.end()) {
+        debug(4) << "  Splitting " << it->var << " into " << s.outer << " and " << s.inner << "\n";
+
+        old_max = simplify(it->min + it->extent - 1);
+        old_min = it->min;
+        old_extent = it->extent;
+
+        it->var = s.inner;
+        it->min = 0;
+        it->extent = s.factor;
+
+        rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
+
+        dim_extent_alignment[s.inner] = s.factor;
+
+        map<string, Expr>::iterator iter = dim_extent_alignment.find(s.old_var);
+
+        user_assert(s.tail != TailStrategy::ShiftInwards)
+            << "When splitting RVar " << s.old_var
+            << " ShiftInwards is not a legal tail strategy for update definitions, as"
+            << " it may change the meaning of the algorithm\n";
+
+        if (s.exact) {
+            user_assert(s.tail == TailStrategy::Auto ||
+                        s.tail == TailStrategy::GuardWithIf)
+                << "When splitting RVar " << s.old_var
+                << " the tail strategy must be GuardWithIf or Auto. "
+                << "Anything else may change the meaning of the algorithm\n";
+        }
+
+        TailStrategy tail = s.tail;
+        if (tail == TailStrategy::Auto) {
+            if (s.exact) {
+                tail = TailStrategy::GuardWithIf;
+            } else {
+                tail = TailStrategy::RoundUp;
+            }
+        }
+
+        Expr inner = Variable::make(Int(32), s.inner);
+        Expr outer = Variable::make(Int(32), s.outer);
+        Expr base = outer * s.factor + old_min;
+
+        if ((iter != dim_extent_alignment.end()) &&
+            is_zero(simplify(iter->second % s.factor))) {
+            // We have proved that the split factor divides the
+            // old extent. No need to adjust the base or add an if
+            // statement.
+            dim_extent_alignment[s.outer] = iter->second / s.factor;
+        } else if (is_negative_const(s.factor) || is_zero(s.factor)) {
+            user_error << "Can't split " << s.old_var << " by " << s.factor
+                       << ". Split factors must be strictly positive\n";
+        } else if (is_one(s.factor)) {
+            // The split factor trivially divides the old extent,
+            // but we know nothing new about the outer dimension.
+        } else if (tail == TailStrategy::GuardWithIf) {
+            // It's an exact split but we failed to prove that the
+            // extent divides the factor. Use predication.
+
+            // Make a var representing the original var minus its
+            // min. It's important that this is a single Var so
+            // that bounds inference has a chance of understanding
+            // what it means for it to be limited by the if
+            // statement's condition.
+            Expr rebased = outer * s.factor + inner;
+            for (auto &pred : predicates) {
+                pred = substitute(s.old_var, rebased + old_min, pred);
+            }
+            for (auto &arg : args) {
+                arg = substitute(s.old_var, rebased + old_min, arg);
+            }
+            for (auto &val : values) {
+                val = substitute(s.old_var, rebased + old_min, val);
+            }
+
+            // Tell Halide to optimize for the case in which this
+            // condition is true by partitioning some outer loop.
+            Expr cond = likely(rebased < old_extent);
+            predicates.push_back(cond);
+
+        } else if (tail == TailStrategy::ShiftInwards) {
+            // Adjust the base downwards to not compute off the
+            // end of the realization.
+
+            // We'll only mark the base as likely (triggering a loop
+            // partition) if we're at or inside the innermost
+            // non-trivial loop.
+            base = likely_if_innermost(base);
+
+            base = Min::make(base, old_max + (1 - s.factor));
+        } else {
+            internal_assert(tail == TailStrategy::RoundUp);
+        }
+
+        for (auto &pred : predicates) {
+            pred = substitute(s.old_var, base + inner, pred);
+        }
+        for (auto &arg : args) {
+            arg = substitute(s.old_var, base + inner, arg);
+        }
+        for (auto &val : values) {
+            val = substitute(s.old_var, base + inner, val);
+        }
+        return true;
     }
+    return false;
 }
 
-/** Apply fuse directives on the reduction variables. Remove the fused RVars from
- * the list and add the fused RVar to the list. */
-void apply_fuse(const Split &s, vector<ReductionVariable> &rvars) {
+/** Apply fuse directives on the reduction variables. Remove the
+ * fused RVars from the list and add the fused RVar to the list. */
+bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
+                vector<Expr> &predicates, vector<Expr> &args,
+                vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_fuse());
     const auto iter_outer = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.outer == rv.var); });
     const auto iter_inner = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.inner == rv.var); });
 
+    Expr inner_min, inner_extent, outer_min, outer_extent;
     if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
         debug(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
+
+        inner_min = iter_inner->min;
+        inner_extent = iter_inner->extent;
+        outer_min = iter_outer->min;
+        outer_extent = iter_outer->extent;
+
         Expr extent = iter_outer->extent * iter_inner->extent;
         iter_outer->var = s.old_var;
         iter_outer->min = 0;
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
+
+        // Maintain the known size of the fused dim if
+        // possible. This is important for possible later splits.
+        map<string, Expr>::iterator inner_dim = dim_extent_alignment.find(s.inner);
+        map<string, Expr>::iterator outer_dim = dim_extent_alignment.find(s.outer);
+        if (inner_dim != dim_extent_alignment.end() &&
+            outer_dim != dim_extent_alignment.end()) {
+            dim_extent_alignment[s.old_var] = inner_dim->second * outer_dim->second;
+        }
+
+        // If the inner extent is zero, the loop will never be
+        // entered, but the bounds expressions lifted out might
+        // contain divides or mods by zero. In the cases where
+        // simplification of inner and outer matter, inner_extent
+        // is a constant, so the max will simplify away.
+        Expr factor = max(inner_extent, 1);
+        Expr fused = Variable::make(Int(32), s.old_var);
+        Expr inner = fused % factor + inner_min;
+        Expr outer = fused / factor + outer_min;
+
+        for (auto &pred : predicates) {
+            pred = substitute(s.inner, inner, pred);
+            pred = substitute(s.outer, outer, pred);
+        }
+        for (auto &arg : args) {
+            arg = substitute(s.inner, inner, arg);
+            arg = substitute(s.outer, outer, arg);
+        }
+        for (auto &val : values) {
+            val = substitute(s.inner, inner, val);
+            val = substitute(s.outer, outer, val);
+        }
+        return true;
     }
+    return false;
 }
 
-/** Apply purify directives on the reduction variables. Purify replace a RVar
- * with a Var, thus, the RVar needs to be removed from the list. */
-void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
+/** Apply purify directives on the reduction variables and predicates. Purify
+ * replace a RVar with a Var, thus, the RVar needs to be removed from the list.
+ * Any reference to the RVar in the predicates will be replaced with reference
+ * to a Var. */
+bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
+                  vector<Expr> &predicates, vector<Expr> &args,
+                  vector<Expr> &values) {
     internal_assert(s.is_purify());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
@@ -434,30 +583,64 @@ void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
         debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
+
+        for (auto &pred : predicates) {
+            pred = substitute(s.old_var, Variable::make(Int(32), s.outer), pred);
+        }
+        for (auto &arg : args) {
+            arg = substitute(s.old_var, Variable::make(Int(32), s.outer), arg);
+        }
+        for (auto &val : values) {
+            val = substitute(s.old_var, Variable::make(Int(32), s.outer), val);
+        }
+        return true;
     }
+    return false;
 }
 
 /** Apply rename directives on the reduction variables. */
-void apply_rename(const Split &s, vector<ReductionVariable> &rvars) {
+bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
+                  vector<Expr> &predicates, vector<Expr> &args,
+                  vector<Expr> &values) {
     internal_assert(s.is_rename());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
+
+        for (auto &pred : predicates) {
+            pred = substitute(s.old_var, Variable::make(Int(32), s.outer), pred);
+        }
+        for (auto &arg : args) {
+            arg = substitute(s.old_var, Variable::make(Int(32), s.outer), arg);
+        }
+        for (auto &val : values) {
+            val = substitute(s.old_var, Variable::make(Int(32), s.outer), val);
+        }
+        return true;
     }
+    return false;
 }
 
-/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction variables. */
-void apply_split_directive(const Split &s, vector<ReductionVariable> &rvars) {
+/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction
+ * variables. */
+bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
+                           vector<Expr> &predicates, vector<Expr> &args,
+                           vector<Expr> &values) {
+    map<string, Expr> dim_extent_alignment;
+    for (const ReductionVariable &i : rvars) {
+        dim_extent_alignment[i.var] = i.extent;
+    }
+
     if (s.is_split()) {
-        apply_split(s, rvars);
+        return apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
     } else if (s.is_fuse()) {
-        apply_fuse(s, rvars);
+        return apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
     } else if (s.is_purify()) {
-        apply_purify(s, rvars);
+        return apply_purify(s, rvars, predicates, args, values);
     } else {
-        apply_rename(s, rvars);
+        return apply_rename(s, rvars, predicates, args, values);
     }
 }
 
@@ -481,7 +664,11 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &values = definition.values();
 
     // Check whether the operator is associative and determine the operator and
-    // its identity for each value in the definition if it is a Tuple
+    // its identity for each value in the definition if it is a Tuple.
+    // TODO(psuriana): We should also check for commutativity of the operator
+    // if it is an rfactor on the inner dimension. This is fine for now, since
+    // all the operators we can prove associativity are provably commutative
+    // (e.g. add, multiply, etc.)
     bool is_assoc;
     vector<AssociativeOp> ops;
     std::tie(is_assoc, ops) = prove_associativity(func_name, args, values);
@@ -493,6 +680,8 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Split> &splits = definition.schedule().splits();
     vector<ReductionVariable> &rvars = definition.schedule().rvars();
     vector<Dim> &dims = definition.schedule().dims();
+    vector<Expr> predicates = definition.split_predicate();
+
     Scope<string> scope; // Contains list of RVars lifted to the intermediate Func
     vector<string> rvars_removed;
 
@@ -521,6 +710,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         }
     }
 
+    // We need to apply the split directives on the reduction vars, so that we can
+    // correctly lift the RVars not in 'rvars_kept' and distribute the RVars to the
+    // intermediate and merge Funcs.
+    {
+        vector<Split> temp;
+        for (const Split &s : splits) {
+            // If it's already applied, we should remove it from the split list.
+            if (!apply_split_directive(s, rvars, predicates, args, values)) {
+                temp.push_back(s);
+            }
+        }
+        splits = temp;
+    }
+
     // Reduction domain of the intermediate update definition
     vector<ReductionVariable> intm_rvars;
     for (const auto &rv : rvars) {
@@ -533,16 +736,10 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     RDom intm_rdom(intm_rvars);
 
-    // We need to apply the split directives on the reduction vars, so that we can
-    // correctly lift the RVars not in 'rvars_kept'
-    for (const Split &s : splits) {
-        apply_split_directive(s, rvars);
-    }
-
     // Sort the Rvars kept and their Vars replacement based on the RVars of
     // the reduction domain AFTER applying the split directives, so that we
     // can have a consistent args order for the update definition of the
-    // intermediate and new Func
+    // intermediate and new merge Funcs.
     std::sort(preserved.begin(), preserved.end(),
         [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs){
             const auto iter_lhs = std::find_if(rvars.begin(), rvars.end(),
@@ -578,7 +775,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         rvars.swap(temp);
     }
     RDom f_rdom(rvars);
-
 
     // Init definition of the intermediate Func
 
@@ -630,7 +826,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
 
     // Compute the predicates for the intermediate Func and the new update definition
-    const vector<Expr> predicates = definition.split_predicate();
     for (const Expr &pred : predicates) {
         Expr subs_pred = substitute(substitution_map, pred);
         intm_rdom.where(subs_pred);

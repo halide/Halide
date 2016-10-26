@@ -49,6 +49,8 @@ class ConvertSelfRef : public IRMutator {
             if (op->value_index != value_index) {
                 debug(4) << "Self-reference of " << op->name
                          << " with different index. Cannot prove associativity\n";
+                is_solvable = false;
+                return;
             } else if (is_conditional && (op->value_index == value_index)) {
                 debug(4) << "Self-reference of " << op->name
                          << " inside a conditional. Operation is not associative\n";
@@ -133,10 +135,6 @@ bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
         op.op = x + y;
         op.identity = make_const(t, 0);
         return visit_associative_binary_op<Add>(op_x, op_y, x_part, a->a, a->b, op);
-    } else if (const Sub *s = e.as<Sub>()) {
-        op.op = x + y;
-        op.identity = make_const(t, 0);
-        return visit_associative_binary_op<Sub>(op_x, op_y, x_part, s->a, s->b, op);
     } else if (const Mul *m = e.as<Mul>()) {
         op.op = x * y;
         op.identity = make_const(t, 1);
@@ -340,10 +338,6 @@ void associativity_test() {
     // f(x) = max(f(x) + g(rx), f(x) - 3) -> f(x) + max(g(rx) - 3)
     check_associativity("f", {x}, {max(f_call_0 + g_call, f_call_0 - 3)},
                         true, {{x + y, 0, {"x", f_call_0}, {"y", max(g_call, -3)}}});
-
-    // f(x) = f(x) - g(rx) -> Is associative given that the merging operator is +
-    check_associativity("f", {x}, {f_call_0 - g_call},
-                        true, {{x + y, 0, {"x", f_call_0}, {"y", g_call}}});
 
     // f(x) = min(4, g(rx)) -> trivially associative
     check_associativity("f", {x}, {min(4, g_call)},

@@ -742,40 +742,36 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     return 0;
 }
 
-int subtraction_rfactor_test() {
-    Func f("f"), g("g"), ref("ref");
-    Var x("x"), y("y");
-
-    f(x, y) = x + y;
-    f.compute_root();
-
-    Param<int> inner_extent, outer_extent;
-    RDom r(10, inner_extent, 30, outer_extent);
-    inner_extent.set(20);
-    outer_extent.set(40);
-
-    ref(x, y) = 40;
-    ref(x, y) -= f(r.x, r.y);
-
-    g(x, y) = 40;
-    g(x, y) -= f(r.x, r.y);
-
-    RVar rxi("rxi"), rxo("rxo");
-    g.update(0).split(r.x, rxo, rxi, 2);
-
-    Var u("u");
-    Func intm = g.update(0).rfactor(rxo, u);
-    intm.compute_root();
-    intm.update(0).vectorize(u, 2);
-
-    Image<int> im_ref = ref.realize(80, 80);
-    Image<int> im = g.realize(80, 80);
-    auto func = [&im_ref](int x, int y, int z) {
-        return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return -1;
+int allocation_bound_test_trace(void *user_context, const halide_trace_event *e) {
+    // The schedule implies that f will be stored from 0 to 1
+    if (e->event == 2 && std::string(e->func) == "f") {
+        if (e->coordinates[1] != 2) {
+            printf("Bounds on realization of f were supposed to be [0, 2]\n"
+                   "Instead they are: [%d, %d]\n", e->coordinates[0], e->coordinates[1]);
+            exit(-1);
+        }
     }
+    return 0;
+}
+
+int check_allocation_bound_test() {
+    Var x("x"), u("u");
+    Func f("f"), g("g");
+
+    RDom r(0, 31);
+    f(x) = x;
+    g(x) = 1;
+    g(r.x) += f(r.x);
+
+    RVar rxo("rxo"), rxi("rxi");
+    g.update(0).split(r.x, rxo, rxi, 2);
+    f.compute_at(g, rxo);
+    g.update(0).rfactor({{rxo, u}});
+
+    f.trace_realizations();
+    g.set_custom_trace(allocation_bound_test_trace);
+    g.realize(23);
+
     return 0;
 }
 
@@ -890,9 +886,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running subtraction rfactor test\n");
-    printf("    checking output img correctness...\n");
-    if (subtraction_rfactor_test() != 0) {
+    printf("Running check allocation bound test\n");
+    if (check_allocation_bound_test() != 0) {
         return -1;
     }
 
