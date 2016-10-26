@@ -3,90 +3,192 @@
 
 /** \file
  *
- * Generator is a class used to encapsulate the building of Funcs in user pipelines.
- * A Generator is agnostic to JIT vs AOT compilation; it can be used for either
- * purpose, but is especially convenient to use for AOT compilation.
- *
- * A Generator automatically detects the run-time parameters (Param/ImageParams)
- * associated with the Func and (for AOT code) produces a function signature
- * with the correct params in the correct order.
- *
- * A Generator can also be customized via compile-time parameters (GeneratorParams),
- * which affect code generation.
- *
- * GeneratorParams, ImageParams, and Params are (by convention)
- * always public and always declared at the top of the Generator class,
- * in the order
- *
- *    GeneratorParam(s)
- *    ImageParam(s)
- *    Param(s)
- *
- * Preferred style is to use C++11 in-class initialization style, e.g.
+ * Generator is a class used to encapsulate the building of Funcs in user
+ * pipelines. A Generator is agnostic to JIT vs AOT compilation; it can be used for
+ * either purpose, but is especially convenient to use for AOT compilation.
+ * 
+ * A Generator explicitly declares the Inputs and Outputs associated for a given
+ * pipeline, and separates the code for constructing the outputs from the code from
+ * scheduling them. For instance:
+ * 
  * \code
- *    GeneratorParam<int> magic{"magic", 42};
+ *     class Blur : public Generator<Blur> {
+ *     public:
+ *         Input<Func> input{"input", UInt(16), 2};
+ *         Output<Func> output{"output", UInt(16), 2};
+ *         void generate() {
+ *             blur_x(x, y) = (input(x, y) + input(x+1, y) + input(x+2, y))/3;
+ *             blur_y(x, y) = (blur_x(x, y) + blur_x(x, y+1) + blur_x(x, y+2))/3;
+ *             output(x, y) = blur(x, y);
+ *         }
+ *         void schedule() {
+ *             blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
+ *             blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, 8);
+ *         }
+ *     private:
+ *         Var x, y, xi, yi;
+ *         Func blur_x, blur_y;
+ *     };
  * \endcode
- *
- * Note that the ImageParams/Params will appear in the C function
- * call in the order they are declared. (GeneratorParams are always
- * referenced by name, not position, so their order is irrelevant.)
- *
- * All Param variants declared as Generator members must have explicit
- * names, and all such names must match the regex [A-Za-z][A-Za-z_0-9]*
- * (i.e., essentially a C/C++ variable name, with some extra restrictions
- * on underscore use). By convention, the name should match the member-variable name.
- *
- * Generators are usually added to a global registry to simplify AOT build mechanics;
- * this is done by simply defining an instance of RegisterGenerator at static
- * scope:
+ * 
+ * Halide can compile a Generator into the correct pipeline by introspecting these
+ * values and constructing an appropriate signature based on them.
+ * 
+ * A Generator must provide implementations of two methods:
+ * 
+ *   - generate(), which must fill in all Output Func(s), but should not do any
+ * scheduling 
+ *   - schedule(), which should do scheduling for any intermediate and
+ * output Funcs
+ * 
+ * Inputs can be any C++ scalar type:
+ * 
  * \code
- *    RegisterGenerator<ExampleGen> register_jit_example{"jit_example"};
+ *     Input<float> radius{"radius"};
+ *     Input<int32_t> increment{"increment"};
  * \endcode
- *
- * The registered name of the Generator is provided as an argument
- * (which must match the same rules as Param names, above).
- *
- * (If you are jitting, you may not need to bother registering your Generator,
- * but it's considered best practice to always do so anyway.)
- *
- * Most Generator classes will only need to provide a build() method
- * that the base class will call, and perhaps declare a Param and/or
- * GeneratorParam:
- *
+ * 
+ * An Input<Func> is (essentially) like an ImageParam, except that it may (or may
+ * not) not be backed by an actual buffer, and thus has no defined extents.
+ * 
  * \code
- *  class XorImage : public Generator<XorImage> {
- *  public:
- *      GeneratorParam<int> channels{"channels", 3};
- *      ImageParam input{UInt(8), 3, "input"};
- *      Param<uint8_t> mask{"mask"};
- *
- *      Func build() {
- *          Var x, y, c;
- *          Func f;
- *          f(x, y, c) = input(x, y, c) ^ mask;
- *          f.bound(c, 0, bound).reorder(c, x, y).unroll(c);
- *          return f;
- *      }
- *  };
- *  RegisterGenerator<XorImage> reg_xor{"xor_image"};
+ *     Input<Func> input{"input", Float(32), 2};
  * \endcode
- *
- * By default, this code schedules itself for 3-channel (RGB) images;
- * by changing the value of the "channels" GeneratorParam before calling
- * build() we can produce code suited for different channel counts.
- *
- * Note that a Generator is always executed with a specific Target
- * assigned to it, that you can access via the get_target() method.
- * (You should *not* use the global get_target_from_environment(), etc.
- * methods provided in Target.h)
- *
- * Your build() method will usually return a Func. If you have a
- * pipeline that outputs multiple Funcs, you can also return a
- * Pipeline object.
- *
- * There are newer enhancements to Generator that are not yet documented
- * here; for more information, see 
- * https://github.com/halide/Halide/wiki/Generator-Enhancements
+ * 
+ * You can optionally make the type and/or dimensions of Input<Func> unspecified,
+ * in which case the value is simply inferred from the actual Funcs passed to them.
+ * Of course, if you specify an explicit Type or Dimension, we still require the
+ * input Func to match, or a compilation error results.
+ * 
+ * \code
+ *     Input<Func> input{ "input", 3 };  // require 3-dimensional Func,
+ *                                       // but leave Type unspecified
+ * \endcode
+ * 
+ * A Generator must explicitly list the output(s) it produces:
+ * 
+ * \code
+ *     Output<Func> output{"output", Float(32), 2};
+ * \endcode
+ * 
+ * You can specify an output that returns a Tuple by specifying a list of Types:
+ * 
+ * \code
+ *     class Tupler : Generator<Tupler> {
+ *       Input<Func> input{"input", Int(32), 2};
+ *       Output<Func> output{"output", {Float(32), UInt(8)}, 2};
+ *       void generate() {
+ *         Var x, y;
+ *         Expr a = cast<float>(input(x, y));
+ *         Expr b = cast<uint8_t>(input(x, y));
+ *         output(x, y) = Tuple(a, b);
+ *       }
+ *     };
+ * \endcode
+ * 
+ * You can also specify Output<X> for any scalar type (except for Handle types);
+ * this is merely syntactic sugar on top of a zero-dimensional Func, but can be
+ * quite handy, especially when used with multiple outputs:
+ * 
+ * \code
+ *     Output<float> sum{"sum"};  // equivalent to Output<Func> {"sum", Float(32), 0}
+ * \endcode
+ * 
+ * As with Input<Func>, you can optionally make the type and/or dimensions of an
+ * Output<Func> unspecified; any unspecified types must be resolved via an
+ * implicit GeneratorParam in order to use top-level compilation.
+ * 
+ * You can also declare an *array* of Input or Output, by using an array type
+ * as the type parameter:
+ * 
+ * \code
+ *     // Takes exactly 3 images and outputs exactly 3 sums.
+ *     class SumRowsAndColumns : Generator<SumRowsAndColumns> {
+ *       Input<Func[3]> inputs{"inputs", Float(32), 2};
+ *       Input<int32_t[2]> extents{"extents"};
+ *       Output<Func[3]> sums{"sums", Float(32), 1};
+ *       void generate() {
+ *         assert(inputs.size() == sums.size());
+ *         // assume all inputs are same extent
+ *         Expr width = extent[0];
+ *         Expr height = extent[1];
+ *         for (size_t i = 0; i < inputs.size(); ++i) {
+ *           RDom r(0, width, 0, height);
+ *           sums[i]() = 0.f;
+ *           sums[i]() += inputs[i](r.x, r.y);
+ *          }
+ *       }
+ *     };
+ * 
+ * You can also leave array size unspecified, in which case it will be inferred
+ * from the input vector, or (optionally) explicitly specified via a resize()
+ * method:
+ * 
+ * \code
+ *     class Pyramid : public Generator<Pyramid> {
+ *     public:
+ *         GeneratorParam<int32_t> levels{"levels", 10};
+ *         Input<Func> input{ "input", Float(32), 2 };
+ *         Output<Func[]> pyramid{ "pyramid", Float(32), 2 };
+ *         void generate() {
+ *             pyramid.resize(levels);
+ *             pyramid[0](x, y) = input(x, y);
+ *             for (int i = 1; i < pyramid.size(); i++) {
+ *                 pyramid[i](x, y) = (pyramid[i-1](2*x, 2*y) +
+ *                                    pyramid[i-1](2*x+1, 2*y) +
+ *                                    pyramid[i-1](2*x, 2*y+1) +
+ *                                    pyramid[i-1](2*x+1, 2*y+1))/4;
+ *             }
+ *         }
+ *     };
+ * \endcode
+ * 
+ * A Generator can also be customized via compile-time parameters (GeneratorParams
+ * or ScheduleParams), which affect code generation. While a GeneratorParam can
+ * be used from anywhere inside a Generator (either the generate() or
+ * schedule() method), ScheduleParam should be accessed only within the
+ * schedule() method. (This is not currently a compile-time error but may become
+ * one in the future.)
+ * 
+ * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
+ * public and always declared at the top of the Generator class, in the order
+ * 
+ * \code
+ *     GeneratorParam(s)
+ *     ScheduleParam(s)
+ *     Input<Func>(s)
+ *     Input<non-Func>(s)
+ *     Output<Func>(s)
+ * \endcode
+ * 
+ * Note that the Inputs and Outputs will appear in the C function call in the order
+ * they are declared. All Input<Func> and Output<Func> are represented as buffer_t;
+ * all other Input<> are the appropriate C++ scalar type. (GeneratorParams are
+ * always referenced by name, not position, so their order is irrelevant.)
+ * 
+ * All Inputs and Outputs must have explicit names, and all such names must match
+ * the regex [A-Za-z][A-Za-z_0-9]* (i.e., essentially a C/C++ variable name, with
+ * some extra restrictions on underscore use). By convention, the name should match
+ * the member-variable name.
+ * 
+ * Generators are added to a global registry to simplify AOT build mechanics; this
+ * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
+ * 
+ * \code
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, "jit_example")
+ * \endcode
+ * 
+ * The registered name of the Generator is provided must match the same rules as
+ * Input names, above.
+ * 
+ * Note that a Generator is always executed with a specific Target assigned to it,
+ * that you can access via the get_target() method. (You should *not* use the
+ * global get_target_from_environment(), etc. methods provided in Target.h)
+ * 
+ * (Note that there are older variations of Generator that differ from what's
+ * documented above; these are still supported but not described here. See 
+ * https://github.com/halide/Halide/wiki/Old-Generator-Documentation for
+ * more information.)
  */
 
 #include <algorithm>
