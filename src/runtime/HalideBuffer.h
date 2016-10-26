@@ -167,6 +167,7 @@ class Buffer {
                 fn(alloc);
             }
             alloc = nullptr;
+            buf.host = nullptr;
         }
     }
 
@@ -407,7 +408,7 @@ public:
     /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
      * cannot be constructed from some other Buffer type. */
     template<typename T2, int D2>
-    void assert_can_convert_from(const Buffer<T2, D2> &other) {
+    static void assert_can_convert_from(const Buffer<T2, D2> &other) {
         static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
         static_assert(std::is_same<typename std::remove_const<T>::type,
@@ -468,9 +469,6 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -478,13 +476,13 @@ public:
             alloc = other.alloc;
             incref();
         }
+        ty = other.ty;
+        dims = other.dims;
+        buf = other.buf;
         return *this;
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -492,6 +490,9 @@ public:
             alloc = other.alloc;
             incref();
         }
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
         return *this;
     }
 
@@ -501,9 +502,6 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -511,13 +509,13 @@ public:
             alloc = other.alloc;
             other.alloc = nullptr;
         }
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
         return *this;
     }
 
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
-        buf = other.buf;
-        ty = other.ty;
-        dims = other.dims;
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
@@ -525,6 +523,9 @@ public:
             alloc = other.alloc;
             other.alloc = nullptr;
         }
+        buf = other.buf;
+        ty = other.ty;
+        dims = other.dims;
         return *this;
     }
 
@@ -566,6 +567,12 @@ public:
         alloc->ref_count = 1;
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
+    }
+
+    /** Drop reference to any owned memory, freeing it. Retains the
+     * shape of the buffer. */
+    void deallocate() {
+        decref();
     }
 
     /** Allocate a new image of the given size with a runtime
@@ -626,7 +633,7 @@ public:
     }
 
     /** Make an Buffer that refers to a statically sized array. Does not
-     * take ownership of the data. */
+     * take ownership of the data, and does not set the host_dirty flag. */
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N]) {
         dims = dimensionality_of_array(vals);
@@ -634,12 +641,12 @@ public:
         ty = scalar_type_of_array(vals);
         buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)vals;
-        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer of runtime type from a pointer and some
      * sizes. Assumes dense row-major packing and a min coordinate of
-     * zero. Does not take ownership of the data. */
+     * zero. Does not take ownership of the data and does not set the
+     * host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(halide_type_t t, void *data, int first, Args&&... rest) {
@@ -654,12 +661,11 @@ public:
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
-        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer from a pointer and some sizes. Assumes
      * dense row-major packing and a min coordinate of zero. Does not
-     * take ownership of the data. */
+     * take ownership of the data and does not set the host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(T *data, int first, Args&&... rest) {
@@ -671,12 +677,11 @@ public:
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
-        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
-     * data. */
+     * data, and does not set the host_dirty flag. */
     explicit Buffer(halide_type_t t, void *data, int d, const halide_dimension_t *shape) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
@@ -690,12 +695,11 @@ public:
         }
         buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)data;
-        buf.host_dirty = true;
     }
 
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
-     * data. */
+     * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
         ty = halide_type_of<typename std::remove_cv<T>::type>();
         dims = d;
@@ -706,7 +710,6 @@ public:
         }
         buf.elem_size = ty.bytes();
         buf.host = (uint8_t *)data;
-        buf.host_dirty = true;
     }
 
     /** Destructor. Will release any underlying owned allocation if
@@ -898,7 +901,7 @@ public:
 
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
-        for (int i = 0; i < delta.size(); i++) {
+        for (size_t i = 0; i < delta.size(); i++) {
             translate(i, delta[i]);
         }
     }
@@ -989,7 +992,8 @@ public:
     }
 
     /** Add a new dimension with a min of zero and an extent of
-     * one. The new dimension is the last dimension. This is a
+     * one. The stride is the extent of the outermost dimension times
+     * its stride. The new dimension is the last dimension. This is a
      * special case of embed. It requires that the actual number of
      * dimensions is less than template parameter D. */
     void add_dimension() {
@@ -1003,6 +1007,16 @@ public:
             buf.stride[dims] = buf.extent[dims-1] * buf.stride[dims-1];
         }
         dims++;
+    }
+
+    /** Add a new dimension with a min of zero, an extent of one, and
+     * the specified stride. The new dimension is the last
+     * dimension. This is a special case of embed. It requires that
+     * the actual number of dimensions is less than template parameter
+     * D. */
+    void add_dimension_with_stride(int s) {
+        add_dimension();
+        buf.stride[dims-1] = s;
     }
 
     /** Call a callable at each location within the image. See
@@ -1149,7 +1163,8 @@ public:
     /** Access elements. Use im(...) to get a reference to an element,
      * and use &im(...) to get the address of an element. If you pass
      * fewer arguments than the buffer has dimensions, the rest are
-     * treated as their min coordinate.
+     * treated as their min coordinate. The non-const versions set the
+     * host_dirty flag to true.
      */
     //@{
     template<typename ...Args,

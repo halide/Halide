@@ -67,7 +67,6 @@ endfunction()
 #   GENERATOR_ARGS are optional extra arguments passed to the generator executable during
 #     build.
 function(halide_add_aot_library AOT_LIBRARY_TARGET)
-
   # Parse arguments
   set(options )
   set(oneValueArgs GENERATOR_TARGET GENERATOR_NAME GENERATED_FUNCTION)
@@ -156,13 +155,62 @@ function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
 endfunction(halide_add_aot_library_dependency)
 
 function(halide_add_generator NAME)
-  set(options )
-  set(oneValueArgs )
-  set(multiValueArgs SRCS)
+  set(options WITH_STUB)
+  set(oneValueArgs STUB_GENERATOR_NAME)
+  set(multiValueArgs SRCS STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   halide_project("${NAME}" 
                  "generator" 
                  "${CMAKE_SOURCE_DIR}/tools/GenGen.cpp" 
                  ${args_SRCS})
+
+  # Declare a stub library if requested.
+  if (${args_WITH_STUB})
+    halide_add_generator_stub_library(STUB_GENERATOR_TARGET "${NAME}"
+                                      STUB_GENERATOR_NAME ${args_STUB_GENERATOR_NAME})
+  endif()
+
+  # Add any stub deps passed to us.
+  foreach(STUB ${args_STUB_DEPS})
+    halide_add_generator_stub_dependency(TARGET ${NAME} STUB_GENERATOR_TARGET ${STUB})
+  endforeach()
 endfunction(halide_add_generator)
+
+function(halide_add_generator_stub_library)
+  set(options )
+  set(oneValueArgs STUB_GENERATOR_TARGET STUB_GENERATOR_NAME)
+  set(multiValueArgs )
+  cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  halide_generator_genfiles_dir(${args_STUB_GENERATOR_TARGET} GENFILES_DIR)
+
+  set(STUB_HDR "${GENFILES_DIR}/${args_STUB_GENERATOR_TARGET}.stub.h")
+
+  set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}" "-e" "cpp_stub")
+  if (NOT ${args_STUB_GENERATOR_NAME} STREQUAL "")
+    list(APPEND GENERATOR_EXEC_ARGS "-g" "${args_STUB_GENERATOR_NAME}")
+  endif()
+
+  set(STUBGEN "${args_STUB_GENERATOR_TARGET}.exec_stub_generator")
+  halide_generator_add_exec_generator_target(${STUBGEN}
+    GENERATOR_TARGET ${args_STUB_GENERATOR_TARGET} 
+    GENERATOR_ARGS   "${GENERATOR_EXEC_ARGS}"
+    GENFILES_DIR     ${GENFILES_DIR}
+    OUTPUTS          "${STUB_HDR}"
+  )
+  set_source_files_properties("${STUB_HDR}" PROPERTIES GENERATED TRUE)
+endfunction(halide_add_generator_stub_library)
+
+function(halide_add_generator_stub_dependency)
+  # Parse arguments
+  set(options )
+  set(oneValueArgs TARGET STUB_GENERATOR_TARGET)
+  set(multiValueArgs )
+  cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+  halide_generator_genfiles_dir(${args_STUB_GENERATOR_TARGET} GENFILES_DIR)
+  set(STUBGEN "${args_STUB_GENERATOR_TARGET}.exec_stub_generator")
+  add_dependencies("${args_TARGET}" ${STUBGEN})
+  target_include_directories("${args_TARGET}" PRIVATE "${GENFILES_DIR}")
+endfunction(halide_add_generator_stub_dependency)
