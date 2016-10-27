@@ -280,6 +280,14 @@ public:
         llvm::raw_svector_ostream object_stream(object);
         compile_llvm_module_to_object(*llvm_module, object_stream);
 
+        if (debug::debug_level >= 2) {
+            debug(2) << "Hexagon device code assembly: " << "\n";
+            llvm::SmallString<4096> assembly;
+            llvm::raw_svector_ostream assembly_stream(assembly);
+            compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+            debug(2) << assembly.c_str() << "\n";
+        }
+
         // Wrap the statement in calls to halide_initialize_kernels.
         size_t code_size = object.size();
         Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
