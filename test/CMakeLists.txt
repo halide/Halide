@@ -238,6 +238,7 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(image_from_array)
   halide_define_aot_test(mandelbrot)
   halide_define_aot_test(memory_profiler_mandelbrot)
+  halide_define_aot_test(stubuser)
   halide_define_aot_test(variable_num_threads)
 
   # Tests that require nonstandard targets, namespaces, args, etc.

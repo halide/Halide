@@ -160,10 +160,24 @@ function(halide_add_generator NAME)
   set(multiValueArgs SRCS STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+  set(OBJLIB "${NAME}.objlib")
+  add_library("${OBJLIB}" OBJECT ${args_SRCS})
+  add_dependencies("${OBJLIB}" Halide)
+  target_include_directories("${OBJLIB}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+  target_compile_options("${OBJLIB}" PRIVATE "-std=c++11" "-fno-rtti")
+  foreach(STUB ${args_STUB_DEPS})
+    halide_add_generator_stub_dependency(TARGET ${OBJLIB} STUB_GENERATOR_TARGET ${STUB})
+  endforeach()
+
+  set(ALLSTUBS $<TARGET_OBJECTS:${OBJLIB}>)
+  foreach(STUB ${args_STUB_DEPS})
+    list(APPEND ALLSTUBS $<TARGET_OBJECTS:${STUB}.objlib>)
+  endforeach()
+
   halide_project("${NAME}" 
                  "generator" 
-                 "${CMAKE_SOURCE_DIR}/tools/GenGen.cpp" 
-                 ${args_SRCS})
+                 "${CMAKE_SOURCE_DIR}/tools/GenGen.cpp"
+                 ${ALLSTUBS})
 
   # Declare a stub library if requested.
   if (${args_WITH_STUB})
@@ -172,9 +186,6 @@ function(halide_add_generator NAME)
   endif()
 
   # Add any stub deps passed to us.
-  foreach(STUB ${args_STUB_DEPS})
-    halide_add_generator_stub_dependency(TARGET ${NAME} STUB_GENERATOR_TARGET ${STUB})
-  endforeach()
 endfunction(halide_add_generator)
 
 function(halide_add_generator_stub_library)
