@@ -953,6 +953,16 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     for (int i = 0; i < idx_elements; i += native_idx_elements) {
         Value *idx_i = slice_vector(idx, i, native_idx_elements);
 
+        if (lut_ty->getScalarSizeInBits() == 16) {
+            // vlut16 deinterleaves its output. We can either
+            // interleave the result, or the indices.  It's slightly
+            // cheaper to interleave the indices (they are single
+            // vectors, vs. the result which is a double vector), and
+            // if the indices are constant (which is true for boundary
+            // conditions) this should get lifted out of any loops.
+            idx_i = call_intrin_cast(idx_i->getType(), IPICK(is_128B, Intrinsic::hexagon_V6_vshuffb), {idx_i});
+        }
+
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
@@ -976,17 +986,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
                     }
                 }
             }
-        }
-
-        if (native_result_ty->getScalarSizeInBits() == 16) {
-            // If we used vlut16, the result is a deinterleaved double
-            // vector. Reinterleave it.
-            // TODO: We might be able to do this to the indices
-            // instead of the result. However, I think that requires a
-            // non-native vector width deinterleave, so it's probably
-            // not faster, except where the indices are compile time
-            // constants.
-            result_i = call_intrin(native_result_ty, "halide.hexagon.interleave.vh", {result_i});
         }
 
         result.push_back(result_i);

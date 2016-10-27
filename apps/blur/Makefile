@@ -8,7 +8,7 @@ $(BIN)/halide_blur_exec: halide_blur_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/halide_blur.a: $(BIN)/halide_blur_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) target=host
+	$^ -o $(BIN) target=$(HL_TARGET)
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)

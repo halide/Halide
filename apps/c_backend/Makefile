@@ -12,11 +12,11 @@ $(BIN)/pipeline_exec: pipeline_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/pipeline_native.a: $(BIN)/pipeline_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) -f pipeline_native -e static_library,h target=host
+	$^ -o $(BIN) -f pipeline_native -e static_library,h target=$(HL_TARGET)
 
 $(BIN)/pipeline_c.cpp: $(BIN)/pipeline_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) -f pipeline_c -e cpp,h target=host
+	$^ -o $(BIN) -f pipeline_c -e cpp,h target=$(HL_TARGET)
 
 $(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
