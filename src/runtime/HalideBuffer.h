@@ -777,10 +777,11 @@ public:
     }
     // @}
 
-    /** Make a new image which is a deep copy of this image. Use crop
-     * or slice followed by copy to make a copy of only a portion of
-     * the image. The new image uses the same memory layout as the
-     * original, with holes compacted away. */
+    /** Make a new image which is a deep copy of this image using the
+     * minimum number of calls to memcpy. Use crop or slice followed
+     * by copy to make a copy of only a portion of the image. The new
+     * image uses the same memory layout as the original, with holes
+     * compacted away. */
     Buffer<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
                      void (*deallocate_fn)(void *) = nullptr) const {
         Buffer<T, D> src = *this;
@@ -805,9 +806,9 @@ public:
         Buffer<T, D> src_slice = src;
         Buffer<T, D> dst_slice = dst;
         int64_t slice_size = 1;
-        while (src_slice.dimensions && src_slice.dim(0).stride() == slice_size) {
+        while (src_slice.dimensions() && src_slice.dim(0).stride() == slice_size) {
             assert(dst_slice.dim(0).stride() == slice_size);
-            slice_size *= src_slice.dim(0).stride();
+            slice_size *= src_slice.dim(0).extent();
             src_slice = src_slice.sliced(0, src_slice.dim(0).min());
             dst_slice = dst_slice.sliced(0, dst_slice.dim(0).min());
         }
@@ -825,6 +826,65 @@ public:
         }
 
         return dst;
+    }
+
+    /** Fill a Buffer with the values at the same coordinates in
+     * another Buffer using the minimum number of calls to
+     * memcpy. Restricts itself to coordinates contained within the
+     * intersection of the two buffers. If the two Buffers are not in
+     * the same coordinate system, you will need to translate the
+     * argument Buffer first. E.g. if you're blitting a sprite onto a
+     * framebuffer, you'll want to translate the sprite to the correct
+     * location first like so: \code
+     * framebuffer.copy_from(sprite.translated({x, y})); \endcode
+    */
+    template<typename T2, int D2>
+    void copy_from(const Buffer<T2, D2> &other) {
+        assert_can_convert_from(other);
+        Buffer<T, D> src(*this), dst(other);
+
+        assert(src.dimensions() == dst.dimensions());
+
+        // Trim the copy to the region in common
+        for (int i = 0; i < dimensions(); i++) {
+            int min_coord = std::max(dst.dim(i).min(), src.dim(i).min());
+            int max_coord = std::min(dst.dim(i).max(), src.dim(i).max());
+            if (max_coord < min_coord) {
+                // The buffers do not overlap.
+                return;
+            }
+            dst.crop(i, min_coord, max_coord - min_coord + 1);
+            src.crop(i, min_coord, max_coord - min_coord + 1);
+        }
+
+        // Reorder the dimensions of dst to have strides in increasing
+        // order. Apply the same transposition to src.
+        for (int i = dimensions()-1; i > 0; i--) {
+            for (int j = i; j > 0; j--) {
+                if (dst.dim(j-1).stride() > dst.dim(j).stride()) {
+                    dst.transpose(j-1, j);
+                    src.transpose(j-1, j);
+                }
+            }
+        }
+
+        // Concatenate dense inner dimensions into contiguous memcpy tasks
+        Buffer<T, D> src_slice = src;
+        Buffer<T, D> dst_slice = dst;
+        int64_t slice_size = 1;
+        while (dst_slice.dimensions() &&
+               dst_slice.dim(0).stride() == slice_size &&
+               src_slice.dim(0).stride() == slice_size) {
+            slice_size *= dst_slice.dim(0).extent();
+            dst_slice = dst_slice.sliced(0, dst_slice.dim(0).min());
+            src_slice = src_slice.sliced(0, dst_slice.dim(0).min());
+        }
+        slice_size *= buf.elem_size;
+
+        // Do the memcpys
+        src_slice.for_each_element([&](const int *pos) {
+            memcpy(&dst_slice(pos), &src_slice(pos), slice_size);
+        });
     }
 
     /** Make an image that refers to a sub-range of this image along
