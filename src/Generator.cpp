@@ -185,18 +185,25 @@ T parse_scalar(const std::string &value) {
 class StubEmitter {
 public:
     StubEmitter(std::ostream &dest, 
-                   const std::string &fully_qualified_name,
-                   const std::vector<Internal::GeneratorParamBase *>& generator_params,
-                   const std::vector<Internal::GeneratorInputBase *>& inputs,
-                   const std::vector<Internal::GeneratorOutputBase *>& outputs) 
-        : stream(dest), fully_qualified_name(fully_qualified_name), generator_params(filter_params(generator_params, false)), 
-          schedule_params(filter_params(generator_params, true)), inputs(inputs), outputs(outputs) {
+                const std::string &generator_name,
+                const std::string &fully_qualified_name,
+                const std::vector<Internal::GeneratorParamBase *>& generator_params,
+                const std::vector<Internal::GeneratorInputBase *>& inputs,
+                const std::vector<Internal::GeneratorOutputBase *>& outputs) 
+        : stream(dest), 
+          generator_name(generator_name), 
+          fully_qualified_name(fully_qualified_name), 
+          generator_params(filter_params(generator_params, false)), 
+          schedule_params(filter_params(generator_params, true)), 
+          inputs(inputs), 
+          outputs(outputs) {
         internal_assert(!outputs.empty());
     }
 
     void emit();
 private:
     std::ostream &stream;
+    const std::string generator_name;
     const std::string fully_qualified_name;
     const std::vector<Internal::GeneratorParamBase *> generator_params;
     const std::vector<Internal::GeneratorParamBase *> schedule_params;
@@ -572,7 +579,7 @@ void StubEmitter::emit() {
     indent_level++;
     stream << indent() << "static std::unique_ptr<Halide::Internal::GeneratorBase> factory(const std::map<std::string, std::string>& params) {\n";
     indent_level++;
-    stream << indent() << "return Halide::Internal::RegisterGeneratorAndStub<" << class_name << ">::create(params);\n";
+    stream << indent() << "return Halide::Internal::GeneratorRegistry::create(\"" << generator_name << "\", params);\n";
     indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
@@ -1220,10 +1227,11 @@ Module GeneratorBase::build_module(const std::string &function_name,
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
+    user_assert(!generator_name.empty()) << "Generator has no registered name\n";
     user_assert(!cpp_stub_class_name.empty()) << "Generator has no cpp_stub class\n";
     build_params();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, cpp_stub_class_name, generator_params, filter_inputs, filter_outputs);
+    StubEmitter emit(file, generator_name, cpp_stub_class_name, generator_params, filter_inputs, filter_outputs);
     emit.emit();
 }
 
