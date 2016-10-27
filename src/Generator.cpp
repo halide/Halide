@@ -186,25 +186,21 @@ class StubEmitter {
 public:
     StubEmitter(std::ostream &dest, 
                 const std::string &generator_name,
-                const std::string &fully_qualified_name,
                 const std::vector<Internal::GeneratorParamBase *>& generator_params,
                 const std::vector<Internal::GeneratorInputBase *>& inputs,
                 const std::vector<Internal::GeneratorOutputBase *>& outputs) 
         : stream(dest), 
           generator_name(generator_name), 
-          fully_qualified_name(fully_qualified_name), 
           generator_params(filter_params(generator_params, false)), 
           schedule_params(filter_params(generator_params, true)), 
           inputs(inputs), 
           outputs(outputs) {
-        internal_assert(!outputs.empty());
     }
 
     void emit();
 private:
     std::ostream &stream;
     const std::string generator_name;
-    const std::string fully_qualified_name;
     const std::vector<Internal::GeneratorParamBase *> generator_params;
     const std::vector<Internal::GeneratorParamBase *> schedule_params;
     const std::vector<Internal::GeneratorInputBase *> inputs;
@@ -356,7 +352,21 @@ void StubEmitter::emit_inputs_struct() {
 }
 
 void StubEmitter::emit() {
-    std::vector<std::string> namespaces = split_string(fully_qualified_name, "::");
+    std::vector<std::string> namespaces = split_string(generator_name, "::");
+    if (namespaces.size() <= 1) {
+        // The generator name is (presumably) a legacy name, for which we can't
+        // generate a real stub. Instead, generate an (essentially) empty .stub.h
+        // file, so that build systems like Bazel will still get the output file
+        // they expected. Note that we deliberately don't emit an ifndef header guard,
+        // since we can't reliably assume that the generator_name will be globally unique;
+        // on the other hand, since this file is just a couple of comments, it's
+        // really not an issue if it's included multiple times.
+        stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
+        stream << "/* There is no Stub for the Generator named " << generator_name << " */\n";
+        return;
+    }
+
+    internal_assert(!outputs.empty()) << "Cannot emit stub for Generator with no Output<>s\n";
     internal_assert(namespaces.size() >= 2);
     if (namespaces[0].empty()) {
         // We have a name like ::foo::bar::baz; omit the first empty ns.
@@ -1227,11 +1237,10 @@ Module GeneratorBase::build_module(const std::string &function_name,
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
-    user_assert(!generator_name.empty()) << "Generator has no registered name\n";
-    user_assert(!cpp_stub_class_name.empty()) << "Generator has no cpp_stub class\n";
+    user_assert(!generator_name.empty()) << "Generator has no name.\n";
     build_params();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_name, cpp_stub_class_name, generator_params, filter_inputs, filter_outputs);
+    StubEmitter emit(file, generator_name, generator_params, filter_inputs, filter_outputs);
     emit.emit();
 }
 

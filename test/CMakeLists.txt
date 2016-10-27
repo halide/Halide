@@ -109,7 +109,7 @@ include(../HalideGenerator.cmake)
 #                       [GENERATOR_ARGS extra generator args])
 function(halide_define_aot_test NAME)
   set(options OMIT_DEFAULT_GENERATOR)
-  set(oneValueArgs GENERATED_FUNCTION GENERATOR_HALIDE_TARGET)
+  set(oneValueArgs GENERATED_FUNCTION GENERATOR_NAME GENERATOR_HALIDE_TARGET)
   set(multiValueArgs GENERATOR_ARGS STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -136,7 +136,7 @@ function(halide_define_aot_test NAME)
     set(AOT_LIBRARY_TARGET "${NAME}")
     halide_add_aot_library("${AOT_LIBRARY_TARGET}"
                            GENERATOR_TARGET "${NAME}.generator"
-                           GENERATOR_NAME "${NAME}"
+                           GENERATOR_NAME "${args_GENERATOR_NAME}"
                            GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
                            GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}")
     halide_add_aot_library_dependency("${TARGET}" "${AOT_LIBRARY_TARGET}")
@@ -154,9 +154,6 @@ function(halide_add_aot_test_dependency NAME)
 
   if (NOT args_GENERATOR_TARGET)
     set(args_GENERATOR_TARGET "${NAME}")
-  endif()
-  if (NOT args_GENERATOR_NAME)
-    set(args_GENERATOR_NAME "${args_GENERATOR_TARGET}")
   endif()
   if (NOT args_GENERATED_FUNCTION)
     set(args_GENERATED_FUNCTION "${args_AOT_LIBRARY_TARGET}")

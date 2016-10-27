@@ -1621,7 +1621,6 @@ private:
     bool generator_params_set{false};
     bool schedule_params_set{false};
     bool inputs_set{false};
-    std::string cpp_stub_class_name;
     std::string generator_name;
 
     EXPORT void build_params(bool force = false);
@@ -1643,11 +1642,6 @@ private:
         generator_name = n;
     }
 
-    void set_cpp_stub_class_name(const std::string &n) {
-        internal_assert(cpp_stub_class_name.empty());
-        cpp_stub_class_name = n;
-    }
-
     EXPORT void set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
@@ -1664,8 +1658,8 @@ typedef std::unique_ptr<Internal::GeneratorBase> (*GeneratorCreateFunc)();
 
 class SimpleGeneratorFactory : public GeneratorFactory {
 public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name, const std::string &cpp_stub_class_name) 
-        : create_func(create_func), generator_name(generator_name), cpp_stub_class_name(cpp_stub_class_name) {
+    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name) 
+        : create_func(create_func), generator_name(generator_name) {
         internal_assert(create_func != nullptr);
     }
 
@@ -1673,14 +1667,12 @@ public:
         auto g = create_func();
         internal_assert(g.get() != nullptr);
         g->set_generator_name(generator_name);
-        g->set_cpp_stub_class_name(cpp_stub_class_name);
         g->set_generator_param_values(params);
         return g;
     }
 private:
     const GeneratorCreateFunc create_func;
     const std::string generator_name;
-    const std::string cpp_stub_class_name;
 };
 
 class GeneratorRegistry {
@@ -1821,9 +1813,9 @@ private:
 
 template <class GeneratorClass> class RegisterGenerator {
 public:
-    RegisterGenerator(const char* name, const char *cpp_stub_class_name = "") {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, name, cpp_stub_class_name));
-        Internal::GeneratorRegistry::register_factory(name, std::move(f));
+    RegisterGenerator(const char* generator_name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
+        Internal::GeneratorRegistry::register_factory(generator_name, std::move(f));
     }
 };
 
@@ -1947,26 +1939,8 @@ private:
 
 }  // namespace Halide
 
-// Use a little variadic macro hacking to allow two or three arguments.
-// This is suboptimal, but allows us more flexibility to mutate registration in
-// the future with less impact on existing code.
-#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
+#define HALIDE_REGISTER_GENERATOR(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
     namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
-
-#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
-    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); }
-
-#define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
-
-#ifdef _MSC_VER
-// MSVC flagrantly ignores the spec for __VA_ARGS__; this is an ugly but effective workaround
-#define _HALIDE_VARIADIC_MACRO(MACRO, TUPLE) MACRO TUPLE
-#define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_VARIADIC_MACRO(_HALIDE_REGISTER_GENERATOR_CHOOSER, (__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2, DUMMY))(__VA_ARGS__)
-#else
-#define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_REGISTER_GENERATOR_CHOOSER(__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2, DUMMY)(__VA_ARGS__)
-#endif
 
 
 #endif  // HALIDE_GENERATOR_H_
