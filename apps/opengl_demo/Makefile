@@ -82,7 +82,7 @@ $(BIN)/main.o: \
 # depends on the halide filter source in sample_filter.cpp
 #
 $(BIN)/sample_filter_cpu.o $(BIN)/sample_filter_cpu.h: $(BIN)/generate_sample_filter
-	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_cpu target=host
+	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_cpu target=$(HL_TARGET)
 
 $(BIN)/sample_filter_opengl.o $(BIN)/sample_filter_opengl.h: $(BIN)/generate_sample_filter
 	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_opengl target=host-opengl-debug
