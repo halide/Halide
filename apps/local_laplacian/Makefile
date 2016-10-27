@@ -10,7 +10,7 @@ $(BIN)/local_laplacian_exec: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/local_laplacian.a: $(BIN)/local_laplacian_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) target=host
+	$^ -o $(BIN)  target=$(HL_TARGET)
 
 $(BIN)/process: process.cpp $(BIN)/local_laplacian.a
 	@-mkdir -p $(BIN)
@@ -23,7 +23,7 @@ $(BIN)/out.png: $(BIN)/process
 # Build rules for generating a visualization of the pipeline using HalideTraceViz
 $(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian_exec
 	@-mkdir -p $(BIN)/viz
-	HL_TRACE=3 $^ -o $(BIN)/viz target=host pyramid_levels=6
+	HL_TRACE=3 $^ -o $(BIN)/viz target=$(HL_TARGET) pyramid_levels=6
 
 $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 	@-mkdir -p $(BIN)/viz
