@@ -1123,6 +1123,10 @@ public:
     void device_sync(void *ctx = nullptr) {
         halide_device_sync(ctx, &buf);
     }
+
+    bool has_device_allocation() const {
+        return buf.dev;
+    }
     // @}
 
     /** If you use the (x, y, c) indexing convention, then Halide
