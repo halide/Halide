@@ -124,6 +124,10 @@ function(halide_define_aot_test NAME)
     halide_add_generator_stub_dependency(TARGET "${TARGET}" 
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
   endforeach()
+  if (MSVC)
+    # 4088: "/FORCE used, image may not work"
+    set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/ignore:4088")
+  endif()
 
   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
     if (NOT args_GENERATED_FUNCTION)

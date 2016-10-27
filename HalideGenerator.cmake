@@ -145,7 +145,12 @@ function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
     if (WIN32)
       if (MSVC)
         # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
-        set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
+        # linker warnings disabled: 
+        # 4006: "already defined, second definition ignored"
+        # 4088: "/FORCE used, image may not work"
+        # (Note that MSVC apparently considers 4088 too important to allow us to ignore it;
+        # I'm nevertheless leaving this here to document that we don't care about it.)
+        set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple /ignore:4006 /ignore:4088")
       else()
         set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "-Wl,--allow-multiple-definition")
       endif()
