@@ -1322,6 +1322,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
         { Call::popcount, { "halide.hexagon.popcount", false } },
     };
 
+    if (is_native_interleave(op) || is_native_deinterleave(op)) {
+        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
+            << "Interleave or deinterleave will result in miscompilation, "
+            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+    }
+
     if (starts_with(op->name, "halide.hexagon.")) {
         // Handle all of the intrinsics we generated in
         // hexagon_optimize.  I'm not sure why this is different than
