@@ -656,7 +656,7 @@ public:
      * host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(halide_type_t t, void *data, int first, Args&&... rest) {
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args&&... rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
@@ -689,7 +689,7 @@ public:
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
-    explicit Buffer(halide_type_t t, void *data, int d, const halide_dimension_t *shape) {
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int d, const halide_dimension_t *shape) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
