@@ -160,6 +160,14 @@ function(halide_add_generator NAME)
   set(multiValueArgs SRCS STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+  # We need to generate an "object" library for every generator, so that any
+  # generator that depends on our stub can link in our generator as well. 
+  # Unfortunately, an ordinary static library won't do: CMake has no way to
+  # force "alwayslink=1", and a static library with just a self-registering
+  # Generator is almost certain to get optimized away at link time. Using
+  # an "Object Library" lets us dodge this (it basically just groups .o files
+  # together and presents them at the end), at the cost of some decidedly
+  # ugly bits right here.
   set(OBJLIB "${NAME}.objlib")
   add_library("${OBJLIB}" OBJECT ${args_SRCS})
   add_dependencies("${OBJLIB}" Halide)
