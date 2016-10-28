@@ -1112,24 +1112,26 @@ public:
         buf.dev_dirty = v;
     }
 
-    void copy_to_host(void *ctx = nullptr) {
+    int copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
-            halide_copy_to_host(ctx, &buf);
+            return halide_copy_to_host(ctx, &buf);
         }
+        return 0;
     }
 
-    void copy_to_device(const struct halide_device_interface *device_interface, void *ctx = nullptr) {
+    int copy_to_device(const struct halide_device_interface *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
-            halide_copy_to_device(ctx, &buf, device_interface);
+            return halide_copy_to_device(ctx, &buf, device_interface);
         }
+        return 0;
     }
 
-    void device_free(void *ctx = nullptr) {
-        halide_device_free(ctx, &buf);
+    int device_free(void *ctx = nullptr) {
+        return halide_device_free(ctx, &buf);
     }
 
-    void device_sync(void *ctx = nullptr) {
-        halide_device_sync(ctx, &buf);
+    int device_sync(void *ctx = nullptr) {
+        return halide_device_sync(ctx, &buf);
     }
 
     bool has_device_allocation() const {
