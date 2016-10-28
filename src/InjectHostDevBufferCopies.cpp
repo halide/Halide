@@ -312,9 +312,11 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(!device_read && !device_wrote);
                 buf.dev_current = false;
                 debug(4) << "Invalidating dev_current\n";
-            } else if ((device_read || device_wrote) &&
-                       ((!buf.dev_current || (buf.current_device != touching_device)) ||
-                        (!buf.internal || buf.host_touched))) {
+            }
+
+            if ((device_read || device_wrote) &&
+                ((!buf.dev_current || (buf.current_device != touching_device)) ||
+                 (!buf.internal || buf.host_touched))) {
                 // Needs a copy-to-dev. It's OK if the host is also
                 // reading it if it's not being written to on the
                 // device.
