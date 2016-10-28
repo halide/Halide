@@ -1479,6 +1479,7 @@ public:
  * the outer Target to the inner Generator. */
 class GeneratorContext {
 public:
+    virtual ~GeneratorContext() {};
     virtual Target get_target() const = 0;
 };
 
@@ -1538,7 +1539,6 @@ namespace Internal {
 
 class GeneratorStub;
 class SimpleGeneratorFactory;
-template <class T> class RegisterGeneratorAndStub;
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
@@ -1611,7 +1611,6 @@ protected:
 private:
     friend class GeneratorStub;
     friend class SimpleGeneratorFactory;
-    template<typename T> friend class RegisterGeneratorAndStub;
 
     const size_t size;
     std::vector<Internal::Parameter *> filter_params;
@@ -1623,6 +1622,7 @@ private:
     bool schedule_params_set{false};
     bool inputs_set{false};
     std::string cpp_stub_class_name;
+    std::string generator_name;
 
     EXPORT void build_params(bool force = false);
     EXPORT void init_inputs_and_outputs();
@@ -1637,6 +1637,11 @@ private:
     EXPORT Func get_first_output();
     EXPORT Func get_output(const std::string &n);
     EXPORT std::vector<Func> get_output_vector(const std::string &n);
+
+    void set_generator_name(const std::string &n) {
+        internal_assert(generator_name.empty());
+        generator_name = n;
+    }
 
     void set_cpp_stub_class_name(const std::string &n) {
         internal_assert(cpp_stub_class_name.empty());
@@ -1659,20 +1664,22 @@ typedef std::unique_ptr<Internal::GeneratorBase> (*GeneratorCreateFunc)();
 
 class SimpleGeneratorFactory : public GeneratorFactory {
 public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &cpp_stub_class_name) 
-        : create_func(create_func), cpp_stub_class_name(cpp_stub_class_name) {
+    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name, const std::string &cpp_stub_class_name) 
+        : create_func(create_func), generator_name(generator_name), cpp_stub_class_name(cpp_stub_class_name) {
         internal_assert(create_func != nullptr);
     }
 
     std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) const override {
         auto g = create_func();
         internal_assert(g.get() != nullptr);
+        g->set_generator_name(generator_name);
         g->set_cpp_stub_class_name(cpp_stub_class_name);
         g->set_generator_param_values(params);
         return g;
     }
 private:
     const GeneratorCreateFunc create_func;
+    const std::string generator_name;
     const std::string cpp_stub_class_name;
 };
 
@@ -1681,7 +1688,6 @@ public:
     EXPORT static void register_factory(const std::string &name, std::unique_ptr<GeneratorFactory> factory);
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
-    EXPORT static std::string get_cpp_stub_class_name(const std::string &name);
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                         const std::map<std::string, std::string> &params);
 
@@ -1813,47 +1819,10 @@ private:
     void operator=(const Generator &) = delete;
 };
 
-namespace Internal {
-
-template <class StubClass> 
-class RegisterGeneratorAndStub {
-private:
-    static GeneratorCreateFunc init_create_func(GeneratorCreateFunc f) {
-        // This is initialized on the first call; subsequent code flows return existing value
-        static GeneratorCreateFunc create_func_storage = f;
-        return create_func_storage;
-    }
-
-    static const char *init_cpp_stub_class_name(const char *n) {
-        // This is initialized on the first call; subsequent code flows return existing value
-        static const char *init_cpp_stub_class_name_storage = n;
-        return init_cpp_stub_class_name_storage;
-    }
-
-public:
-    static std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) {
-        GeneratorCreateFunc f = init_create_func(nullptr);
-        user_assert(f != nullptr) << "RegisterGeneratorAndStub was not initialized; this is probably a wrong value for cpp_stub_class_name.\n";
-        auto g = f();
-        g->set_cpp_stub_class_name(init_cpp_stub_class_name(nullptr));
-        g->set_generator_param_values(params);
-        return g;
-    }
-
-    RegisterGeneratorAndStub(GeneratorCreateFunc create_func, const char *registry_name, const char *cpp_stub_class_name) {
-        (void) init_create_func(create_func);
-        (void) init_cpp_stub_class_name(cpp_stub_class_name);
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(create_func, cpp_stub_class_name));
-        Internal::GeneratorRegistry::register_factory(registry_name, std::move(f));
-    }
-};
-
-}  // namespace Internal
-
 template <class GeneratorClass> class RegisterGenerator {
 public:
-    RegisterGenerator(const char* name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, ""));
+    RegisterGenerator(const char* name, const char *cpp_stub_class_name = "") {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, name, cpp_stub_class_name));
         Internal::GeneratorRegistry::register_factory(name, std::move(f));
     }
 };
@@ -1985,7 +1954,7 @@ private:
     namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
 
 #define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
-    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::Internal::RegisterGeneratorAndStub<::FULLY_QUALIFIED_STUB_NAME>(GEN_CLASS_NAME::create, GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); }
+    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); }
 
 #define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
 

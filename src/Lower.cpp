@@ -17,6 +17,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
@@ -65,17 +66,24 @@ using std::string;
 using std::vector;
 using std::map;
 
-Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
+           const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : outputs) {
+    for (Function f : output_funcs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
     // Create a deep-copy of the entire graph of Funcs.
-    std::tie(outputs, env) = deep_copy(outputs, env);
+    vector<Function> outputs;
+    std::tie(outputs, env) = deep_copy(output_funcs, env);
+
+    // Output functions should all be computed and stored at root.
+    for (Function f: outputs) {
+        Func(f).compute_root().store_root();
+    }
 
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
