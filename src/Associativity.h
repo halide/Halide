@@ -51,11 +51,10 @@ struct AssociativeOp {
 /**
  * Represent the result of calling \ref prove_associativity on an update definition.
  * 'is_associative' indicates if the operation was successfuly proven as associative.
+ * 'is_commutative' indicates if the operation was successfuly proven as commutative.
  * 'ops' contains the list of AssociativeOps for each Tuple element in the update
- * definition. If it fails to prove associativity, 'ops' is not valid (it will
- * be empty). 'is_commutative' indicates if the operation was successfuly proven
- * as commutative. The update definition may be associative but not commutative,
- * or vice versa. See \ref prove_associativity for more details.
+ * definition. If it fails to prove associativity, 'ops' is not valid (i.e. it will
+ * be empty) as well as 'is_commutative'. See \ref prove_associativity for more details.
  */
 struct ProveAssociativityResult {
     bool is_associative;
@@ -70,10 +69,12 @@ struct ProveAssociativityResult {
 
 /**
  * Given an update definition of a Func 'f', determine its equivalent associative
- * binary/unary operator if there is any. This will also compute the commutativity
- * of the update definition. For a tuple update, this will compute a vector
- * containing the list of AssociativeOps for each Tuple element in the update
- * definition.
+ * binary/unary operator if there is any. For an associative tuple update, this
+ * will compute a vector containing the list of AssociativeOps for each Tuple
+ * element in the update definition. This will also compute the commutativity
+ * of the associative update definition. If the update definition is failed to
+ * be proven as associative, neither the AssociativeOps vector nor the
+ * 'is_commutative' result is valid.
  *
  * For instance, f(x) = min(f(x), g(r.x)) will return true for associativity and
  * commutativity and it will also return {{min(_x_0, _y_0), +inf, {_x_0, f(x)},
