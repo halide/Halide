@@ -194,9 +194,14 @@ ProveAssociativityResult prove_associativity(const string &f, vector<Expr> args,
     }
 
     bool all_commutative = true;
+
     // For a Tuple of exprs to be associative/commutative, each element of the Tuple
     // has to be associative/commutative. This does not handle dependencies across
-    // Tuple's elements
+    // Tuple's elements.
+
+    // Note that if any of the tuple op is failed to be proven as associative,
+    // we return early and hence, the 'is_commutative' result is not valid.
+
     for (size_t idx = 0; idx < exprs.size(); ++idx) {
         string op_x = unique_name("_x_" + std::to_string(idx));
         string op_y = unique_name("_y_" + std::to_string(idx));
