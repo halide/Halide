@@ -760,14 +760,14 @@ int subtraction_rfactor_test() {
     g(x, y) = 40;
     g(x, y) -= f(r.x, r.y);
 
-    RVar rxi("rxi"), rxo("rxo");
-    g.update(0).split(r.x, rxo, rxi, 2);
+    RVar ryi("ryi"), ryo("ryo");
+    g.update(0).split(r.y, ryo, ryi, 2);
 
-    // rfactoring an outer dimension "rxo" is okay since subtraction is
-    // associative. However, rfactoring "rxi" without "rxo" is not okay
-    // since subtraction is non-commutative.
+    // rfactoring the outermost dimension "ryo" is okay since subtraction is
+    // associative. However, rfactoring "ryi" without "ryo" or "r.x" without
+    // "ryi" and "ryo" is not okay since subtraction is non-commutative.
     Var u("u");
-    Func intm = g.update(0).rfactor(rxo, u);
+    Func intm = g.update(0).rfactor(ryo, u);
     intm.compute_root();
     intm.update(0).vectorize(u, 2);
 
