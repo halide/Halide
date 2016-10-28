@@ -664,11 +664,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &values = definition.values();
 
     // Check whether the operator is associative and determine the operator and
-    // its identity for each value in the definition if it is a Tuple.
-    // TODO(psuriana): We should also check for commutativity of the operator
-    // if it is an rfactor on the inner dimension. This is fine for now, since
-    // all the operators we can prove associativity are provably commutative
-    // (e.g. add, multiply, etc.)
+    // its identity for each value in the definition if it is a Tuple
     bool is_assoc;
     vector<AssociativeOp> ops;
     std::tie(is_assoc, ops) = prove_associativity(func_name, args, values);
