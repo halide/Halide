@@ -763,6 +763,9 @@ int subtraction_rfactor_test() {
     RVar rxi("rxi"), rxo("rxo");
     g.update(0).split(r.x, rxo, rxi, 2);
 
+    // rfactoring an outer dimension "rxo" is okay since subtraction is
+    // associative. However, rfactoring "rxi" without "rxo" is not okay
+    // since subtraction is non-commutative.
     Var u("u");
     Func intm = g.update(0).rfactor(rxo, u);
     intm.compute_root();
