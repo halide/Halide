@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-   	Func f("f"), g("g");
+    Func f("f"), g("g");
     Var x("x"), y("y");
 
     f(x, y) = x + y;
@@ -18,14 +18,11 @@ int main(int argc, char **argv) {
     g(x, y) = 40;
     g(x, y) -= f(r.x, r.y);
 
-    RVar rxi("rxi"), rxo("rxo");
-    g.update(0).split(r.x, rxo, rxi, 2);
-
-    // rfactor() on the inner dimensions of a non-commutative operator with
-    // excluding the outer dimensions like subtraction is not valid as it may
-    // change order of computation.
+    // Calling rfactor() on the inner dimensions of a non-commutative operator
+    // with excluding the outer dimensions like subtraction is not valid as it
+    // may change order of computation.
     Var u("u");
-    g.update(0).rfactor(rxi, u);
+    g.update(0).rfactor(r.x, u);
 
     return 0;
 }
