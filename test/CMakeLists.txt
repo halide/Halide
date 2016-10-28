@@ -91,9 +91,15 @@ function(halide_define_jit_test NAME)
   set(multiValueArgs STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+  set(ALLSTUBS )
+  foreach(STUB ${args_STUB_DEPS})
+    list(APPEND ALLSTUBS $<TARGET_OBJECTS:${STUB}.objlib>)
+  endforeach()
+  
   halide_project("generator_jit_${NAME}" 
                  "generator" 
-                 "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_jittest.cpp")
+                 "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_jittest.cpp"
+                 ${ALLSTUBS})
   foreach(STUB_DEP ${args_STUB_DEPS})
     halide_add_generator_stub_dependency(TARGET "generator_jit_${NAME}" 
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
