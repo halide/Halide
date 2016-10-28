@@ -100,7 +100,8 @@ public:
      * operator and identity of the operator. If it can't prove the operation
      * is associative or if it cannot find an identity for that operator, this
      * will throw an error. In addition, commutativity of the operator is required
-     * if rfactor() is called on the inner dimension and not on the outer dimensions.
+     * if rfactor() is called on the inner dimension but excluding the outer
+     * dimensions.
      *
      * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
      * The rvars not listed in 'preserved' are removed from the original Func and

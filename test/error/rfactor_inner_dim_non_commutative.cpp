@@ -21,8 +21,9 @@ int main(int argc, char **argv) {
     RVar rxi("rxi"), rxo("rxo");
     g.update(0).split(r.x, rxo, rxi, 2);
 
-    // rfactor() on the inned dimension of a non-commutative operator like
-    // subtraction is not valid as it may change order of computation.
+    // rfactor() on the inner dimensions of a non-commutative operator with
+    // excluding the outer dimensions like subtraction is not valid as it may
+    // change order of computation.
     Var u("u");
     g.update(0).rfactor(rxi, u);
 
