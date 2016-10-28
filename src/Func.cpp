@@ -531,7 +531,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
                 user_assert(is_rfactored[last_rvar])
                     << "In schedule for " << stage_name
                     << ", can't rfactor an inner dimension " << dims[i].var
-                    << "without rfactoring the outer dimensions, since the "
+                    << " without rfactoring the outer dimensions, since the "
                     << "operator is non-commutative.\n"
                     << dump_argument_list();
             }
