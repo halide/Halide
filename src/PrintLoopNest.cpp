@@ -150,18 +150,19 @@ private:
     }
 };
 
-string print_loop_nest(vector<Function> outputs) {
+string print_loop_nest(const vector<Function> &output_funcs) {
     // Do the first part of lowering:
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : outputs) {
+    for (Function f : output_funcs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
     // Create a deep-copy of the entire graph of Funcs.
-    std::tie(outputs, env) = deep_copy(outputs, env);
+    vector<Function> outputs;
+    std::tie(outputs, env) = deep_copy(output_funcs, env);
 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
