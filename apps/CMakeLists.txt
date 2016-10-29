@@ -20,6 +20,7 @@ add_if_have_libpng(camera_pipe)
 add_subdirectory(glsl)
 add_if_have_libpng(interpolate)
 add_if_have_libpng(local_laplacian)
+add_if_have_libpng(local_laplacian_fixed)
 
 # Don't add this one; it's deliberately standalone
 #add_subdirectory(wavelet)
