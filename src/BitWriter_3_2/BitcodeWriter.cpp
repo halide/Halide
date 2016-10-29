@@ -1637,7 +1637,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
     }
 
   // Emit names for all the instructions etc.
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
   WriteValueSymbolTable(F.getValueSymbolTable(), VE, Stream);
 #else
   WriteValueSymbolTable(&F.getValueSymbolTable(), VE, Stream);

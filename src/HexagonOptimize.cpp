@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
-
+#include <algorithm>
 namespace Halide {
 namespace Internal {
 
@@ -133,14 +133,14 @@ struct Pattern {
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
 
    };
-
+    typedef bool (*predicate_fn)(vector<Expr> &);
     string intrin;        // Name of the intrinsic
     Expr pattern;         // The pattern to match against
     int flags;
-
+    vector<predicate_fn> predicate_fns;
     Pattern() {}
-    Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(p), flags(flags) {}
+    Pattern(const string &intrin, Expr p, int flags = 0, vector<predicate_fn> predicate_fns = {})
+        : intrin(intrin), pattern(p), flags(flags), predicate_fns(predicate_fns) {}
 };
 
 Expr wild_u8 = Variable::make(UInt(8), "*");
@@ -262,7 +262,37 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 
     return op;
 }
+bool not_lossesless_narrow_op0(vector<Expr> matches) {
+    internal_assert(!matches.empty());
+    Expr op0 = matches[0];
+    Type narrow_type = op0.type().with_bits(op0.type().bits()/2);
+    Expr narrow = lossless_cast(narrow_type, op0);
+    if(narrow.defined()) {
+        return false;
+    } else {
+        return true;
+    }
+}
 
+class GenerateWideningMultiplyAccs : public IRMutator {
+private:
+    using IRMutator::visit;
+    void visit(const Add *op) {
+        // static vector<Pattern> adds = {
+        //     // Widening multiply-accumulates with a scalar.
+        //     { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+        //     { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + wild_i16x*bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
+        //     { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + wild_u32x*bc(wild_u32), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 }, 
+        //     { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + bc(wild_u16)*wild_u16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12, {&not_lossesless_narrow_op0} },
+        //     { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + bc(wild_i16)*wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12 },
+        //     { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + bc(wild_u32)*wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 }
+
+
+        // };
+    }
+public:
+    GenerateWideningMultiplyAccs() {}
+};
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
@@ -1095,6 +1125,230 @@ public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
+typedef std::pair<Expr, int> RootWeightPair;
+typedef std::map<Expr, int, IRDeepCompare> WeightedRoots;
+// struct WeightedRoot {
+//     Expr expr;
+//     // Initialized to -1 to indicate a root that hasn't been visited yet.
+//     int weight;
+//     WeightedRoot(Expr e, int wt) : expr(e), weight(wt) {}
+// };
+
+class FindRoots : public IRVisitor {
+    using IRVisitor::visit;
+
+    bool is_associative_or_cummutative(Expr a) {
+        const Add *add = a.as<Add>();
+        const Mul *mul = a.as<Mul>();
+        const And *and_ = a.as<And>();
+        const Or *or_ = a.as<Or>();
+        const Min *min = a.as<Min>();
+        const Max *max = a.as<Max>();
+        if (add || mul || and_ || or_ || min || max) {
+            return true;
+        }
+
+        const Sub *sub = a.as<Sub>();
+        if (sub) {
+            return true;
+        }
+        return false;
+    }
+
+    // Each operand of op is a root, if it is a different
+    // operation than op.
+    //        +   <---- op
+    //       / \
+    //      /   \
+    //     *     * <--- root
+    //    / \   / \
+    //   4  v0 6   v1       
+    template<typename T>
+    void visit_binary(const T *op) {
+        if (op->type.is_vector()) {
+            const T *a = op->a.template as<T>();
+            const T *b = op->b.template as<T>();
+
+            if (!a && is_associative_or_cummutative(op->a)) {
+                weighted_roots[op->a] = -1;
+            }
+            if (!b && is_associative_or_cummutative(op->b)) {
+                weighted_roots[op->b] = -1;
+            }
+            if (is_associative_or_cummutative((Expr) op)) {
+                IRVisitor::visit(op);
+            }
+        }
+    }
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+public:
+    WeightedRoots weighted_roots;
+};
+
+inline WeightedRoots find_roots(const Add *op) {
+    if (op->type.is_vector()) {
+        FindRoots f;
+        op->accept(&f);
+        f.weighted_roots[(Expr) op] = -1;
+        return f.weighted_roots;
+    } else {
+        return {};
+    }
+}
+
+void dump_roots(WeightedRoots &w) {
+    if (!w.empty()) {
+        debug(0) << "Roots are: \n";
+        for (const RootWeightPair &r : w) {
+            debug(0) << "Root:::->\n\t\t" << r.first << "\nWeight:::-> "<< r.second << "\n";
+        }
+    } else {
+        debug(0) << "*** No Roots *** \n";
+    }
+
+}
+struct WeightedLeaf {
+    Expr e;
+    int weight;
+    WeightedLeaf(Expr e, int weight) : e(e), weight(weight) {}
+    static bool Compare(const WeightedLeaf &lhs, const WeightedLeaf &rhs) {
+        return lhs.weight > rhs.weight;
+    }
+};
+
+class LeafPriorityQueue {
+    vector<WeightedLeaf> q;
+public:
+    void push(Expr e, int wt) {
+        if (!q.empty()) {
+            q.push_back(WeightedLeaf(e, wt));
+            std::push_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        } else {
+            q.push_back(WeightedLeaf(e, wt));
+            std::make_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        }
+    }
+    WeightedLeaf pop() {
+        std::pop_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        return q.back();
+    }
+    bool empty() {
+        return q.empty();
+    }
+    size_t size() {
+        return q.size();
+    }
+};
+
+struct GetTreeWeight : public IRVisitor {
+    int weight;
+    template <typename T>
+    void visit_leaf(const T *op) {
+        if (op->type.is_vector()) {
+            weight += 1;
+        }
+    }
+    void vist(const Cast *op) { visit_leaf<Cast>(op); }
+    void visit(const Load *op) { visit_leaf<Load>(op); }
+
+    GetTreeWeight() : weight(0) {}
+};
+class BalanceTree : public IRMutator {
+    using IRMutator::visit;
+    typedef std::vector<Expr> ExprWorkList;
+    int get_weight(Expr e, bool is_root) {
+        GetTreeWeight g;
+        e.accept(&g);
+        int wt = g.weight;
+        if (is_root) {
+            weighted_roots[e] = wt;
+        }
+        return wt;
+    }
+    template<typename T>
+    void visit_binary(const T *op) {
+
+        debug(0) << "BalanceTree: << " << (Expr) op;
+        auto it = weighted_roots.find((Expr) op);
+        internal_assert(it != weighted_roots.end()) << "BalanceTree called on a non-root node\n";
+
+        worklist.push_back(op->a);
+        worklist.push_back(op->b);
+
+        while(!worklist.empty()) {
+            Expr e = worklist.back();
+            worklist.pop_back();
+
+            debug(0) << "Removing from the worklist... " << e << "\n";
+            it = weighted_roots.find(e);
+            if (it != weighted_roots.end()) {
+                debug(0) <<  ".. is a root..balancing\n";
+                // Check if already visited before calling balance tree.
+                Expr leaf = BalanceTree(weighted_roots).mutate(e);
+                debug(0) << "leaf ->" << leaf << "\n";
+                leaves.push(leaf, get_weight(leaf, true /*is_root*/));
+            } else {
+                const T *o = e.as<T>();
+                if (o) {
+                    debug(0) << ".. is the same op, adding children\n";
+                    worklist.push_back(o->a);
+                    worklist.push_back(o->b);
+                } else {
+                    debug(0) << ".. is a leaf\n";
+                    leaves.push(e, get_weight(e, false /*is_root*/));
+                }
+            }
+        }
+        while(leaves.size() > 1) {
+            WeightedLeaf l1 = leaves.pop();
+            WeightedLeaf l2 = leaves.pop();
+            int combined_weight = l1.weight + l2.weight;
+            Expr e = T::make(l1.e, l2.e);
+            leaves.push(e, combined_weight);
+              // return balanced tree.
+        }
+        expr = leaves.pop().e;
+    }
+
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+
+    ExprWorkList worklist;
+    LeafPriorityQueue leaves;
+    // Conv to reference?
+    WeightedRoots weighted_roots;
+public:
+    BalanceTree(WeightedRoots weighted_roots) : weighted_roots(weighted_roots) {}
+
+};
+class BalanceAddMulTrees : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Add *op) {
+        // We traverse the tree top to bottom and stop at the first vector add
+        // and start looking for roots from there.
+        if (op->type.is_vector()) {
+            debug(0) << "Highest Add is << " << (Expr) op << "\n";
+
+            // 1. Find Roots.
+            weighted_roots = find_roots(op);
+            dump_roots(weighted_roots);
+
+            // 2. Balance the tree
+            Expr e = BalanceTree(weighted_roots).mutate((Expr) op);
+
+            if (e.same_as(op)) {
+                expr = op;
+            } else {
+                expr = e;
+            }
+        } else {
+            expr = op;
+        }
+    }
+    WeightedRoots weighted_roots;
+};
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -1102,8 +1356,16 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // dynamic_shuffle (vlut) calls.
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
-
+Stmt generate_widening_multiply_accumulates(Stmt s) {
+    s = BalanceAddMulTrees().mutate(s);
+    return s;
+}
 Stmt optimize_hexagon_instructions(Stmt s) {
+    // Convert a series of widening multiply accumulates into
+    // a good series of vmpaacc or vmpyacc sequences.
+    // s = GenerateWideningMultiplyAccs().mutate(s);
+    s = generate_widening_multiply_accumulates(s);
+
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);
