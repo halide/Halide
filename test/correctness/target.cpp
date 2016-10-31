@@ -58,18 +58,6 @@ int main(int argc, char **argv) {
        return -1;
     }
 
-    // Full specification round-trip, PNacl
-    t1 = Target(Target::NaCl, Target::PNaCl, 32);
-    ts = t1.to_string();
-    if (ts != "pnacl-32-nacl") {
-       printf("to_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-    if (!Target::validate_target_string(ts)) {
-       printf("validate_target_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-
     // Expected failures:
     ts = "host-unknowntoken";
     if (Target::validate_target_string(ts)) {

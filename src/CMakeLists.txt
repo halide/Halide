@@ -52,7 +52,6 @@ set(RUNTIME_CPP
   module_jit_ref_count
   msan
   msan_stubs
-  nacl_host_cpu_count
   noos
   opencl
   opengl
@@ -98,7 +97,6 @@ set (RUNTIME_LL
   hvx_64
   hvx_128
   mips
-  pnacl_math
   posix_math
   ptx_dev
   renderscript_dev
@@ -135,6 +133,7 @@ foreach (i ${RUNTIME_CPP} )
         # win32 uses the stdcall calling convention, which is x86-specific
         set(TARGET "i386-unknown-unknown-unknown")
       ELSE()
+        # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
         set(TARGET "le32-unknown-nacl-unknown")
       ENDIF()
     ELSE()
@@ -231,7 +230,6 @@ set(HEADER_FILES
   CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
-  CodeGen_PNaCl.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
@@ -388,7 +386,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
-  CodeGen_PNaCl.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
@@ -512,10 +509,6 @@ list(APPEND LLVM_COMPONENTS passes)
 # that link against the Halide library inherit those options and definitions
 target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
-
-if (TARGET_NATIVE_CLIENT)
-  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT=1")
-endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)

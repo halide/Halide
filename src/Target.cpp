@@ -179,7 +179,6 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"osx", Target::OSX},
     {"android", Target::Android},
     {"ios", Target::IOS},
-    {"nacl", Target::NaCl},
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
 };
@@ -197,7 +196,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
@@ -342,16 +340,6 @@ bool merge_string(Target &t, const std::string &target) {
         return false;
     }
 
-    // If arch is PNaCl, require explicit setting of os and bits as well.
-    if (arch_specified && t.arch == Target::PNaCl) {
-        if (!os_specified || t.os != Target::NaCl) {
-            return false;
-        }
-        if (!bits_specified || t.bits != 32) {
-            return false;
-        }
-    }
-
     if (bits_specified && t.bits == 0) {
         // bits == 0 is allowed iff arch and os are "unknown" and no features are set,
         // to allow for roundtripping the string for default Target() ctor.
@@ -467,14 +455,10 @@ std::string Target::to_string() const {
 /** Was libHalide compiled with support for this target? */
 bool Target::supported() const {
     bool bad = false;
-#if !defined(WITH_NATIVE_CLIENT)
-    bad |= (arch == Target::PNaCl || os == Target::NaCl);
-#endif
 #if !defined(WITH_ARM)
     bad |= arch == Target::ARM && bits == 32;
 #endif
-#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
-    // In pnacl llvm, the aarch64 backend is crashy.
+#if !defined(WITH_AARCH64)
     bad |= arch == Target::ARM && bits == 64;
 #endif
 #if !defined(WITH_X86)
