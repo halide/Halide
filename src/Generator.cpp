@@ -842,11 +842,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             std::map<std::string, std::string> stub_generator_args;
             stub_generator_args["target"] = Target().to_string();
+            // GeneratorRegistry::create never returns null
             auto gen = GeneratorRegistry::create(generator_name, stub_generator_args);
-            if (gen == nullptr) {
-                cerr << "Unknown generator: " << generator_name << "\n";
-                exit(1);
-            }
             auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -859,11 +856,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     auto sub_generator_args = generator_args;
                     sub_generator_args["target"] = target.to_string();
                     // Must re-create each time since each instance will have a different Target
+                    // GeneratorRegistry::create never returns null
                     auto gen = GeneratorRegistry::create(generator_name, sub_generator_args);
-                    if (gen == nullptr) {
-                        cerr << "Unknown generator: " << generator_name << "\n";
-                        exit(1);
-                    }
                     return gen->build_module(name);
                 };
             if (targets.size() > 1 || !emit_options.substitutions.empty()) {
@@ -921,8 +915,18 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
-    user_assert(it != registry.factories.end()) << "Generator not found: " << name << "\n";
-    return it->second->create(params);
+    if (it == registry.factories.end()) {
+        std::ostringstream o;
+        o << "Generator not found: " << name << "\n";
+        o << "Did you mean:\n";
+        for (const auto &n : registry.factories) {
+            o << "    " << n.first << "\n";
+        }
+        user_error << o.str();
+    }
+    std::unique_ptr<GeneratorBase> g = it->second->create(params);
+    internal_assert(g != nullptr);
+    return g;
 }
 
 /* static */

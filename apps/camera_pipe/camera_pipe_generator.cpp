@@ -185,11 +185,11 @@ std::pair<Func, Scheduler> CameraPipe::demosaic(Func deinterleaved) {
         assert(processed.defined());
         g_r.compute_at(processed, yi)
             .store_at(processed, yo)
-            .vectorize(x, vec, TailStrategy::RoundUp)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
             .fold_storage(y, 2);
         g_b.compute_at(processed, yi)
             .store_at(processed, yo)
-            .vectorize(x, vec, TailStrategy::RoundUp)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
             .fold_storage(y, 2);
         output.compute_at(processed, x)
             .vectorize(x)
