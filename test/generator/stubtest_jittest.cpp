@@ -50,7 +50,7 @@ void verify(const Image<InputType> &input, float float_arg, int int_arg, const I
     }
 }
 
-int main(int argc, char **argv) {    
+int main(int argc, char **argv) {
     constexpr int kArrayCount = 2;
 
     Image<float> src[kArrayCount] = {
@@ -64,16 +64,16 @@ int main(int argc, char **argv) {
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
     auto gen = StubTest(
-        JITGeneratorContext(Halide::get_target_from_environment()), 
+        JITGeneratorContext(Halide::get_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
             { Func(src[0]), Func(src[1]) },
-            1.234f, 
+            1.25f,
             int_args_expr
         });
 
     StubTest::ScheduleParams sp;
-    // This generator defaults intermediate_level to "undefined", 
+    // This generator defaults intermediate_level to "undefined",
     // so we *must* specify something for it (else we'll crater at
     // Halide compile time). We'll use this:
     sp.intermediate_level = LoopLevel(gen.f, gen.f.args().at(1));
@@ -86,8 +86,8 @@ int main(int argc, char **argv) {
     Halide::Realization f_realized = gen.realize(kSize, kSize, 3);
     Image<float> f0 = f_realized[0];
     Image<float> f1 = f_realized[1];
-    verify(src[0], 1.234f, 0, f0);
-    verify(src[0], 1.234f, 33, f1);
+    verify(src[0], 1.25f, 0, f0);
+    verify(src[0], 1.25f, 33, f1);
 
     for (int i = 0; i < kArrayCount; ++i) {
         Halide::Realization g_realized = gen.g[i].realize(kSize, kSize, gen.get_target());
