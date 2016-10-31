@@ -270,12 +270,21 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh_dv),  i16v2, "add.vh.vh.dv",  {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw_dv),  i32v2, "add.vw.vw.dv",  {i32v2, i32v2} },
 
+        // Widening adds
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubh), i16v2, "vh.add.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhw), i32v2, "vw.add.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhw), i32v2, "vw.add.vuh.vuh", {u16v1, u16v1} },
+
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb),     i8v1,  "sub.vb.vb",     {i8v1,  i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh),     i16v1, "sub.vh.vh",     {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw),     i32v1, "sub.vw.vw",     {i32v1, i32v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb_dv),  i8v2,  "sub.vb.vb.dv",  {i8v2,  i8v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh_dv),  i16v2, "sub.vh.vh.dv",  {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw_dv),  i32v2, "sub.vw.vw.dv",  {i32v2, i32v2} },
+
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), i16v2, "vh.add.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "vw.add.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), i32v2, "vw.add.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.
