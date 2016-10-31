@@ -4,6 +4,12 @@ add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 if (MSVC)
+  # disable irrelevant warnings
+  target_compile_options(build_halide_h PUBLIC /wd4996)
+  target_compile_options(bitcode2cpp PUBLIC /wd4996)
+endif()
+
+if (MSVC)
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
@@ -566,7 +572,16 @@ target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 
 if (MSVC)
   # Suppress some warnings
+  # 4244: conversion, possible loss of data
+  # 4267: conversion, possible loss of data
+  # 4800: BOOL -> true or false
+  # 4996: compiler encountered deprecated declaration
   target_compile_options(Halide PUBLIC /wd4244 /wd4267 /wd4800 /wd4996)
+  # Injected from recent LLVM:
+  target_compile_options(Halide PUBLIC /wd4141)  # 'inline' used more than once
+  target_compile_options(Halide PUBLIC /wd4146)  # unary minus applied to unsigned type
+  target_compile_options(Halide PUBLIC /wd4291)  # No matching operator delete found
+
   target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
   # To compile LLVM headers following was taken from LLVM CMake files:
   # Disable sized deallocation if the flag is supported. MSVC fails to compile
