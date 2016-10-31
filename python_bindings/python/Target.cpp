@@ -70,17 +70,14 @@ void defineTarget() {
         .value("OSX", Target::OS::OSX)
         .value("Android", Target::OS::Android)
         .value("IOS", Target::OS::IOS)
-        .value("NaCl", Target::OS::NaCl)
         .export_values();
 
     p::enum_<Target::Arch>("TargetArch",
                            "The architecture used by the target. Determines the "
-                           "instruction set to use. For the PNaCl target, the \"instruction "
-                           " set\" is actually llvm bitcode.")
+                           "instruction set to use.")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
-        .value("PNaCl", Target::Arch::PNaCl)
         .value("MIPS", Target::Arch::MIPS)
         .value("POWERPC", Target::Arch::POWERPC)
         .export_values();
