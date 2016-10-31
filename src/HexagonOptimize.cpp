@@ -1231,7 +1231,9 @@ public:
     }
     WeightedLeaf pop() {
         std::pop_heap(q.begin(), q.end(), WeightedLeaf::Compare);
-        return q.back();
+        WeightedLeaf least_wt_leaf =  q.back();
+        q.pop_back();
+        return least_wt_leaf;
     }
     bool empty() {
         return q.empty();
@@ -1239,18 +1241,53 @@ public:
     size_t size() {
         return q.size();
     }
+    void clear() {
+        q.clear();
+    }
 };
 
 struct GetTreeWeight : public IRVisitor {
     int weight;
+
+    bool is_simple_const(Expr e) {
+        if (e.as<IntImm>()) return true;
+        if (e.as<UIntImm>()) return true;
+        return false;
+    }
+
     template <typename T>
     void visit_leaf(const T *op) {
         if (op->type.is_vector()) {
             weight += 1;
         }
     }
-    void vist(const Cast *op) { visit_leaf<Cast>(op); }
+
+    void visit(const Cast *op) {
+        if (op->type.is_vector()) {
+            // If the value to be cast is a simple
+            // constant (immediate integer value) then
+            // the cost is 0, else, the cost is 1 plus
+            // the cost of the tree rooted at op->value
+            if (!is_simple_const(op->value)) {
+                IRVisitor::visit(op);
+                weight += 1;
+            }
+        }
+
+    }
+
+    template<typename T>
+    void visit_binary(const T *op) {
+        if (op->type.is_vector()) {
+            IRVisitor::visit(op);
+            weight += 1;
+        }
+    }
+
     void visit(const Load *op) { visit_leaf<Load>(op); }
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Sub *op) { visit_binary<Sub>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
 
     GetTreeWeight() : weight(0) {}
 };
@@ -1258,18 +1295,31 @@ class BalanceTree : public IRMutator {
     using IRMutator::visit;
     typedef std::vector<Expr> ExprWorkList;
     int get_weight(Expr e, bool is_root) {
+        if (is_root) {
+            auto it = weighted_roots.find(e);
+            internal_assert(it != weighted_roots.end()) << "Root" << e << " not found in weighted_roots";
+            if (it->second != -1) {
+                debug(0) << "Found " << e << " in weights cache. Wt is " << it->second << "\n";
+                return it->second;
+            }
+        }
+
         GetTreeWeight g;
         e.accept(&g);
         int wt = g.weight;
+
         if (is_root) {
+            debug(0) << "Calculated wt for " << e << " : " << wt << "\n";
             weighted_roots[e] = wt;
         }
+
         return wt;
     }
+
     template<typename T>
     void visit_binary(const T *op) {
 
-        debug(0) << "BalanceTree: << " << (Expr) op;
+        debug(0) << "BalanceTree: << " << (Expr) op << "\n";
         auto it = weighted_roots.find((Expr) op);
         internal_assert(it != weighted_roots.end()) << "BalanceTree called on a non-root node\n";
 
@@ -1281,12 +1331,20 @@ class BalanceTree : public IRMutator {
             worklist.pop_back();
 
             debug(0) << "Removing from the worklist... " << e << "\n";
+
             it = weighted_roots.find(e);
             if (it != weighted_roots.end()) {
                 debug(0) <<  ".. is a root..balancing\n";
                 // Check if already visited before calling balance tree.
                 Expr leaf = BalanceTree(weighted_roots).mutate(e);
                 debug(0) << "leaf ->" << leaf << "\n";
+                if (!leaf.same_as(e)) {
+                    // This means that BalanceTree changed our root. Once
+                    // a root always a root, except now it looks different.
+                    // So make this change in weighted_roots
+                    weighted_roots.erase(it);
+                    weighted_roots[leaf] = -1;
+                }
                 leaves.push(leaf, get_weight(leaf, true /*is_root*/));
             } else {
                 const T *o = e.as<T>();
@@ -1300,15 +1358,20 @@ class BalanceTree : public IRMutator {
                 }
             }
         }
+
         while(leaves.size() > 1) {
             WeightedLeaf l1 = leaves.pop();
             WeightedLeaf l2 = leaves.pop();
-            int combined_weight = l1.weight + l2.weight;
+            int combined_weight = l1.weight + l2.weight + 1;
             Expr e = T::make(l1.e, l2.e);
             leaves.push(e, combined_weight);
               // return balanced tree.
         }
+
+        internal_assert(leaves.size() == 1)
+            << "After balancing a tree should have exactly one leaf, we have " << leaves.size() << "\n";
         expr = leaves.pop().e;
+        leaves.clear();
     }
 
     void visit(const Add *op) { visit_binary<Add>(op); }
@@ -1341,6 +1404,7 @@ class BalanceAddMulTrees : public IRMutator {
             if (e.same_as(op)) {
                 expr = op;
             } else {
+                debug(0) << "Balanced tree ->\n\t" << e << "\n";
                 expr = e;
             }
         } else {
