@@ -112,8 +112,8 @@ int main(int argc, char **argv) {
     // supposed to add the offset to every input pixel.
     for (int y = 0; y < 480; y++) {
         for (int x = 0; x < 640; x++) {
-            uint8_t input_val = input[y * 640 + 480];
-            uint8_t output_val = output[y * 640 + 480];
+            uint8_t input_val = input[y * 640 + x];
+            uint8_t output_val = output[y * 640 + x];
             uint8_t correct_val = input_val + offset;
             if (output_val != correct_val) {
                 printf("output(%d, %d) was %d instead of %d\n",
