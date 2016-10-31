@@ -29,6 +29,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Associativity.h"
+#include "ApplySplits.h"
 
 namespace Halide {
 

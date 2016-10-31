@@ -212,6 +212,7 @@ set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
   AllocationBoundsInference.h
+  ApplySplits.h
   Argument.h
   Associativity.h
   BoundaryConditions.h
@@ -370,6 +371,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
+  ApplySplits.cpp
   Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
@@ -592,7 +594,7 @@ set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} 
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS}
                   RESULT_VARIABLE LLVM_CONFIG_RESULT
                   OUTPUT_VARIABLE LIBS_UNSTRIPPED
                   ERROR_VARIABLE LLVM_CONFIG_ERROR)
