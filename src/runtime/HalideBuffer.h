@@ -168,7 +168,9 @@ class Buffer {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 if (buf.dev) {
-                    device_free();
+                    assert(halide_device_free_weak &&
+                           "Buffer has a device allocation but no Halide Runtime linked");
+                    halide_device_free_weak(nullptr, &buf);
                 }
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
@@ -1127,12 +1129,7 @@ public:
     }
 
     int device_free(void *ctx = nullptr) {
-        if (!halide_device_free) {
-            assert(false && "Can't call device_free with no Halide runtime linked in");
-            return -1;
-        } else {
-            return halide_device_free(ctx, &buf);
-        }
+        return halide_device_free(ctx, &buf);
     }
 
     int device_sync(void *ctx = nullptr) {

@@ -389,11 +389,14 @@ extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 /** Allocate device memory to back a buffer_t. */
 extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
 
-/** Free device memory. If no Halide runtime is linked, this symbol
- * will be nullptr rather than a linker error, allowing code to
- * refer to halide_device_free whether or not a runtime has
- * actually been linked in. */
-extern __attribute__((weak)) int halide_device_free(void *user_context, struct buffer_t *buf);
+/** Free device memory. */
+extern int halide_device_free(void *user_context, struct buffer_t *buf);
+
+/* A weak variant of halide_device_free. If no Halide runtime is
+ * linked, this symbol will be nullptr rather than a linker error,
+ * allowing code to refer to halide_device_free_weak whether or not a
+ * runtime has actually been linked in. */
+extern __attribute__((weak)) int halide_device_free_weak(void *user_context, struct buffer_t *buf);
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
