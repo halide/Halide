@@ -168,9 +168,14 @@ class Buffer {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 if (buf.dev) {
-                    assert(halide_device_free_weak &&
-                           "Buffer has a device allocation but no Halide Runtime linked");
-                    halide_device_free_weak(nullptr, &buf);
+#ifdef _MSC_VER
+					assert((const void **)(halide_device_free_weak) != &halide_null &&
+						"Buffer has a device allocation but no Halide Runtime linked");
+#else
+					assert(halide_device_free_weak &&
+						"Buffer has a device allocation but no Halide Runtime linked");
+#endif
+					halide_device_free_weak(nullptr, &buf);
                 }
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);

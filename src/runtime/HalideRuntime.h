@@ -400,7 +400,7 @@ extern int halide_device_free(void *user_context, struct buffer_t *buf);
 #ifdef _MSC_VER
 extern int halide_device_free_weak(void *user_context, struct buffer_t *buf);
 extern const void *halide_null = nullptr;
-#pragma comment(linker, "/alternatename:_halide_device_free_weak=_halide_null")
+#pragma comment(linker, "/alternatename:halide_device_free_weak=halide_null")
 #else
 extern __attribute__((weak)) int halide_device_free_weak(void *user_context, struct buffer_t *buf);
 #endif
