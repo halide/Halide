@@ -299,8 +299,10 @@ class InjectBufferCopies : public IRMutator {
             }
 
             if ((host_read || host_wrote) && !buf.host_current && (!buf.internal || buf.dev_touched)) {
-                // Needs a copy to host.
-                internal_assert(!device_read && !device_wrote);
+                // Needs a copy to host. It's OK if the device is also
+                // reading it if it's not being written to on the
+                // host.
+                internal_assert(!device_wrote && !(host_wrote && device_read));
                 direction = ToHost;
                 buf.host_current = true;
                 buf.dev_current = buf.dev_current && !host_wrote;
@@ -310,11 +312,15 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(!device_read && !device_wrote);
                 buf.dev_current = false;
                 debug(4) << "Invalidating dev_current\n";
-            } else if ((device_read || device_wrote) &&
-                       ((!buf.dev_current || (buf.current_device != touching_device)) ||
-                        (!buf.internal || buf.host_touched))) {
-                // Needs a copy-to-dev.
-                internal_assert(!host_read && !host_wrote);
+            }
+
+            if ((device_read || device_wrote) &&
+                ((!buf.dev_current || (buf.current_device != touching_device)) ||
+                 (!buf.internal || buf.host_touched))) {
+                // Needs a copy-to-dev. It's OK if the host is also
+                // reading it if it's not being written to on the
+                // device.
+                internal_assert(!host_wrote && !(device_wrote && host_read));
                 direction = ToDevice;
                 // If the buffer will need to be moved from one device to another,
                 // a host allocation will be required.
