@@ -250,7 +250,7 @@ Func CameraPipe::apply_curve(Func input) {
         // On HVX, LUT lookups are much faster if they are to LUTs not
         // greater than 256 elements, so we reduce the tonemap to 256
         // elements and use linear interpolation to upsample it.
-        lutResample = 4;
+        lutResample = 8;
     }
 
     minRaw /= lutResample;
@@ -285,9 +285,9 @@ Func CameraPipe::apply_curve(Func input) {
         // Use linear interpolation to sample the LUT.
         Expr in = input(x, y, c);
         Expr u0 = in/lutResample;
-        Expr u = in - u0*lutResample;
-        Expr y0 = curve(clamp(u0, 0, 255));
-        Expr y1 = curve(clamp(u0 + 1, 0, 255));
+        Expr u = in%lutResample;
+        Expr y0 = curve(clamp(u0, 0, 127));
+        Expr y1 = curve(clamp(u0 + 1, 0, 127));
         curved(x, y, c) = cast<uint8_t>((cast<uint16_t>(y0)*lutResample + (y1 - y0)*u)/lutResample);
     }
 
