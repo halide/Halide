@@ -422,6 +422,7 @@ public:
                                    typename std::remove_const<T2>::type>::value ||
                       T_is_void || Buffer<T2, D2>::T_is_void,
                       "type mismatch constructing Buffer");
+
         if (D < D2) {
             assert(other.dimensions() <= D);
         }
@@ -1127,7 +1128,12 @@ public:
     }
 
     int device_free(void *ctx = nullptr) {
-        return halide_device_free(ctx, &buf);
+        if (!halide_device_free) {
+            assert(false && "Can't call device_free with no Halide runtime linked in");
+            return -1;
+        } else {
+            return halide_device_free(ctx, &buf);
+        }
     }
 
     int device_sync(void *ctx = nullptr) {
