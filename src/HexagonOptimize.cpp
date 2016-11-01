@@ -109,12 +109,13 @@ struct Pattern {
         InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
         SwapOps01 = 1 << 1,  // Swap operands 0 and 1 prior to substitution.
         SwapOps12 = 1 << 2,  // Swap operands 1 and 2 prior to substitution.
-        ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
-        ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
+        SwapOps03 = 1 << 3,  // Swap operands 0 and 3 prior to substitution.
+        ExactLog2Op1 = 1 << 4, // Replace operand 1 with its log base 2, if the log base 2 is exact.
+        ExactLog2Op2 = 1 << 5, // Save as above, but for operand 2.
 
-        DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
-        DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
-        DeinterleaveOp2 = 1 << 7,
+        DeinterleaveOp0 = 1 << 6,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
+        DeinterleaveOp1 = 1 << 7,  // Same as above, but for operand 1.
+        DeinterleaveOp2 = 1 << 8,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
         // Many patterns are instructions that widen only
@@ -122,15 +123,16 @@ struct Pattern {
         // re-interleave the result.
         ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
 
-        NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
-        NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
-        NarrowOp2 = 1 << 12,
+        NarrowOp0 = 1 << 11,  // Replace operand 0 with its half-width equivalent.
+        NarrowOp1 = 1 << 12,  // Same as above, but for operand 1.
+        NarrowOp2 = 1 << 13,
         NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
 
-        NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
-        NarrowUnsignedOp1 = 1 << 16,
-        NarrowUnsignedOp2 = 1 << 17,
-        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
+        NarrowUnsignedOp0 = 1 << 14,  // Similar to the above, but narrow to an unsigned half width type.
+        NarrowUnsignedOp1 = 1 << 15,
+        NarrowUnsignedOp2 = 1 << 16,
+        NarrowUnsignedOp3 = 1 << 17,
+        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2 | NarrowUnsignedOp3,
 
    };
     typedef bool (*predicate_fn)(vector<Expr> &);
@@ -214,6 +216,10 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             if (p.flags & Pattern::SwapOps12) {
                 internal_assert(matches.size() >= 3);
                 std::swap(matches[1], matches[2]);
+            }
+            if (p.flags & Pattern::SwapOps03) {
+                internal_assert(matches.size() >= 4);
+                std::swap(matches[0], matches[3]);
             }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
@@ -345,6 +351,9 @@ private:
             { "halide.hexagon.vh.add.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.vw.add.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.vw.add.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+
+            // Our tree balancing ensures that we only need to match bc*vector and not vector*bc.
+            { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", bc(wild_i16)*wild_i16x + bc(wild_i16)*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp1 | Pattern::NarrowUnsignedOp3 | Pattern::NarrowOp0 | Pattern::NarrowOp2 | Pattern::SwapOps03 },
 
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
@@ -1394,6 +1403,11 @@ class BalanceAddMulTrees : public IRMutator {
 
             // 1. Find Roots.
             weighted_roots = find_roots(op);
+            if (weighted_roots.empty()) {
+                expr = op;
+                return;
+            }
+
             dump_roots(weighted_roots);
 
             // 2. Balance the tree
@@ -1425,7 +1439,6 @@ Stmt generate_widening_multiply_accumulates(Stmt s) {
 Stmt optimize_hexagon_instructions(Stmt s) {
     // Convert a series of widening multiply accumulates into
     // a good series of vmpaacc or vmpyacc sequences.
-    // s = GenerateWideningMultiplyAccs().mutate(s);
     s = generate_widening_multiply_accumulates(s);
 
     // Peephole optimize for Hexagon instructions. These can generate

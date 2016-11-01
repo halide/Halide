@@ -12,6 +12,24 @@ namespace Internal {
 
 /** A code generator that emits Hexagon code from a given Halide stmt. */
 class CodeGen_Hexagon : public CodeGen_Posix {
+    // LLVM's HVX vector intrinsics don't include the type of the
+    // operands, they all operate on vectors of 32 bit integers. To make
+    // it easier to generate code, we define wrapper intrinsics with
+    // the correct type (plus the necessary bitcasts).
+    struct HvxIntrinsic {
+        enum {
+            BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments broadcasted up to 32 bits.
+            InterleaveByteAndBroadcastToWord = 1 << 1, // i8 low, i8 high  = i32 high_low_high_low. Always takes the last two args.
+            ConcatHalves = 1 << 2, // i16 low, i16 high = i32 high_low. Always concatenates the last two args.
+            ConcatVectorOps01 = 1 << 3,
+        };
+        llvm::Intrinsic::ID id;
+        Type ret_type;
+        const char *name;
+        std::vector<Type> arg_types;
+        int flags;
+    };
+
 public:
     /** Create a Hexagon code generator for the given Hexagon target. */
     CodeGen_Hexagon(Target);
@@ -35,11 +53,11 @@ protected:
     llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
                                          const std::string &name,
                                          const std::vector<Type> &arg_types,
-                                         bool broadcast_scalar_word = false);
+                                         int flags = 0);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
                                          std::vector<Type> arg_types,
-                                         bool broadcast_scalar_word = false);
+                                         int flags = 0);
 
     using CodeGen_Posix::visit;
 
