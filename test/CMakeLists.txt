@@ -70,7 +70,7 @@ endif()
 
 function(add_test_generator NAME)
   set(options WITH_STUB)
-  set(oneValueArgs )
+  set(oneValueArgs GENERATOR_NAME)
   set(multiValueArgs STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   # convert TRUE|FALSE -> WITH_STUB|emptystring
@@ -80,6 +80,7 @@ function(add_test_generator NAME)
     set(args_WITH_STUB )
   endif()
   halide_add_generator("${NAME}.generator"
+                       STUB_GENERATOR_NAME "${args_GENERATOR_NAME}"
                        SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp"
                        STUB_DEPS ${args_STUB_DEPS}
                        ${args_WITH_STUB})
@@ -142,6 +143,9 @@ function(halide_define_aot_test NAME)
     if (NOT args_GENERATOR_HALIDE_TARGET)
       set(args_GENERATOR_HALIDE_TARGET "host")
     endif()
+    if (NOT args_GENERATOR_NAME)
+      set(args_GENERATOR_NAME ${NAME})
+    endif()
 
     set(AOT_LIBRARY_TARGET "${NAME}")
     halide_add_aot_library("${AOT_LIBRARY_TARGET}"
@@ -201,15 +205,18 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(mandelbrot)
   add_test_generator(matlab)
   add_test_generator(memory_profiler_mandelbrot)
-  add_test_generator(metadata_tester)
+  add_test_generator(metadata_tester
+                     GENERATOR_NAME Halide::Internal::MetadataTesterStub)
   add_test_generator(msan)
   add_test_generator(multitarget)
   add_test_generator(nested_externs)
   add_test_generator(paramtest)
   add_test_generator(pyramid)
-  add_test_generator(stubtest WITH_STUB)
+  add_test_generator(stubtest WITH_STUB
+                     GENERATOR_NAME StubNS1::StubNS2::StubTest)
   # the stubuser generator needs the stub from stubtest
   add_test_generator(stubuser
+                     GENERATOR_NAME stubuser
                      STUB_DEPS stubtest.generator)
   add_test_generator(tiled_blur_blur)
   add_test_generator(tiled_blur)
@@ -276,11 +283,13 @@ if (WITH_TEST_GENERATORS)
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
   halide_define_aot_test(stubtest
+                         GENERATOR_NAME StubNS1::StubNS2::StubTest
                          GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32)
 
   # Tests that require additional dependencies, args, etc
   set(MDTEST_GEN_ARGS input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2)
   halide_define_aot_test(metadata_tester
+                         GENERATOR_NAME Halide::Internal::MetadataTesterStub
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
                                  AOT_LIBRARY_TARGET metadata_tester_ucon
