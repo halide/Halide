@@ -395,8 +395,15 @@ extern int halide_device_free(void *user_context, struct buffer_t *buf);
 /* A weak variant of halide_device_free. If no Halide runtime is
  * linked, this symbol will be nullptr rather than a linker error,
  * allowing code to refer to halide_device_free_weak whether or not a
- * runtime has actually been linked in. */
+ * runtime has actually been linked in. This requires a different
+ * mechanism on Windows and other platforms. */
+#ifdef _MSC_VER
+extern int halide_device_free_weak(void *user_context, struct buffer_t *buf);
+extern const void *halide_null = nullptr;
+#pragma comment(linker, "/alternatename:_halide_device_free_weak=_halide_null")
+#else
 extern __attribute__((weak)) int halide_device_free_weak(void *user_context, struct buffer_t *buf);
+#endif
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
