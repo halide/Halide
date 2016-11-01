@@ -1651,6 +1651,8 @@ private:
 class GeneratorFactory {
 public:
     virtual ~GeneratorFactory() {}
+    // Note that this method must never return null: 
+    // if it cannot return a valid Generator, it should assert-fail.
     virtual std::unique_ptr<GeneratorBase> create(const std::map<std::string, std::string> &params) const = 0;
 };
 
@@ -1680,6 +1682,8 @@ public:
     EXPORT static void register_factory(const std::string &name, std::unique_ptr<GeneratorFactory> factory);
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
+    // Note that this method will never return null: 
+    // if it cannot return a valid Generator, it should assert-fail.
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                         const std::map<std::string, std::string> &params);
 

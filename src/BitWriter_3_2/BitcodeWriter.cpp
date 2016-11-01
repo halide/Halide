@@ -1642,7 +1642,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
 #else
   WriteValueSymbolTable(&F.getValueSymbolTable(), VE, Stream);
 #endif
-  
+
   if (NeedsMetadataAttachment)
     WriteMetadataAttachment(F, VE, Stream);
   if (VE.shouldPreserveUseListOrder())
@@ -1657,7 +1657,11 @@ static void WriteBlockInfo(const llvm_3_2::ValueEnumerator &VE,
   // We only want to emit block info records for blocks that have multiple
   // instances: CONSTANTS_BLOCK, FUNCTION_BLOCK and VALUE_SYMTAB_BLOCK.  Other
   // blocks can defined their abbrevs inline.
+#if LLVM_VERSION >= 40
+  Stream.EnterBlockInfoBlock();
+#else
   Stream.EnterBlockInfoBlock(2);
+#endif
 
   { // 8-bit fixed-width VST_ENTRY/VST_BBENTRY strings.
     BitCodeAbbrev *Abbv = new BitCodeAbbrev();

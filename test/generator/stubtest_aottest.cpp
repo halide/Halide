@@ -49,10 +49,10 @@ int main(int argc, char **argv) {
     Image<float> f0(kSize, kSize, 3), f1(kSize, kSize, 3);
     Image<int16_t> g0(kSize, kSize), g1(kSize, kSize);
 
-    stubtest(in0, in1, 1.234f, 33, 66, f0, f1, g0, g1);
+    stubtest(in0, in1, 1.25f, 33, 66, f0, f1, g0, g1);
 
-    verify(in0, 1.234f, 0, f0);
-    verify(in0, 1.234f, 33, f1);
+    verify(in0, 1.25f, 0, f0);
+    verify(in0, 1.25f, 33, f1);
     verify(in0, 1.0f, 33, g0);
     verify(in1, 1.0f, 66, g1);
 
