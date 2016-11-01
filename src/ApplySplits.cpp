@@ -13,7 +13,6 @@ namespace {
 
 }
 
-// Return inner -> outer
 ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
                              map<string, Expr> &dim_extent_alignment) {
     ApplySplitResult result;
@@ -118,7 +117,7 @@ ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
     } else if (split.is_fuse()) {
         // Define the inner and outer in terms of the fused var
         Expr fused = Variable::make(Int(32), prefix + split.old_var);
-        Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min"); //TODO(psuriana): How do you handle this???
+        Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min");
         Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
         Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
 

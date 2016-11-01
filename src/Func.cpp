@@ -388,12 +388,55 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
+// Substitute 'exprs' with the values defined by 'let_stmts' in ascending order.
+// If 'reverse' is true, perform the substitution in descending order.
+void substitute_lets_in_exprs(const vector<pair<string, Expr>> &let_stmts,
+                              vector<Expr> &exprs, bool reverse) {
+    if (reverse) {
+        for (int i = let_stmts.size() - 1; i >= 0; --i) {
+            for (auto &expr : exprs) {
+                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < let_stmts.size(); ++i) {
+            for (auto &expr : exprs) {
+                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
+            }
+        }
+    }
+}
+
+void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
+                        const ApplySplitResult &result, vector<Expr> &predicates,
+                        vector<Expr> &args, vector<Expr> &values) {
+
+    predicates.insert(predicates.end(), result.predicates.begin(), result.predicates.end());
+
+    // Apply substitutions to the list of predicates, args, and values
+    substitute_lets_in_exprs(result.substitutions, predicates, false);
+    substitute_lets_in_exprs(result.substitutions, args, false);
+    substitute_lets_in_exprs(result.substitutions, values, false);
+
+    // Make sure we substitute in all the let stmts from 'bounds_let_stmts' and
+    // ApplySplitResult since we are not going to add them to the exprs.
+    // The list of let stmts is ordered from innermost let to outermost let, so
+    // we need to apply the substitution in reverse order.
+    substitute_lets_in_exprs(result.let_stmts, predicates, true);
+    substitute_lets_in_exprs(result.let_stmts, args, true);
+    substitute_lets_in_exprs(result.let_stmts, values, true);
+
+    substitute_lets_in_exprs(bounds_let_stmts, predicates, true);
+    substitute_lets_in_exprs(bounds_let_stmts, args, true);
+    substitute_lets_in_exprs(bounds_let_stmts, values, true);
+}
+
 /** Apply split directives on the reduction variables. Remove the old RVar from
  * the list and add the split result (inner and outer RVars) to the list. Add
  * new predicates corresponding to the TailStrategy to the RDom predicate list. */
-bool apply_split(const Split &s, vector<ReductionVariable> &rvars, vector<Expr> &predicates,
-                 vector<Expr> &args, vector<Expr> &values,
-                 map<string, Expr> &dim_extent_alignment) {
+bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
+                 vector<Expr> &predicates, vector<Expr> &args,
+                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_split());
     const auto it = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
@@ -413,96 +456,10 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars, vector<Expr> 
 
         rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
 
-        dim_extent_alignment[s.inner] = s.factor;
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
-        map<string, Expr>::iterator iter = dim_extent_alignment.find(s.old_var);
-
-        user_assert(s.tail != TailStrategy::ShiftInwards)
-            << "When splitting RVar " << s.old_var
-            << " ShiftInwards is not a legal tail strategy for update definitions, as"
-            << " it may change the meaning of the algorithm\n";
-
-        if (s.exact) {
-            user_assert(s.tail == TailStrategy::Auto ||
-                        s.tail == TailStrategy::GuardWithIf)
-                << "When splitting RVar " << s.old_var
-                << " the tail strategy must be GuardWithIf or Auto. "
-                << "Anything else may change the meaning of the algorithm\n";
-        }
-
-        TailStrategy tail = s.tail;
-        if (tail == TailStrategy::Auto) {
-            if (s.exact) {
-                tail = TailStrategy::GuardWithIf;
-            } else {
-                tail = TailStrategy::RoundUp;
-            }
-        }
-
-        Expr inner = Variable::make(Int(32), s.inner);
-        Expr outer = Variable::make(Int(32), s.outer);
-        Expr base = outer * s.factor + old_min;
-
-        if ((iter != dim_extent_alignment.end()) &&
-            is_zero(simplify(iter->second % s.factor))) {
-            // We have proved that the split factor divides the
-            // old extent. No need to adjust the base or add an if
-            // statement.
-            dim_extent_alignment[s.outer] = iter->second / s.factor;
-        } else if (is_negative_const(s.factor) || is_zero(s.factor)) {
-            user_error << "Can't split " << s.old_var << " by " << s.factor
-                       << ". Split factors must be strictly positive\n";
-        } else if (is_one(s.factor)) {
-            // The split factor trivially divides the old extent,
-            // but we know nothing new about the outer dimension.
-        } else if (tail == TailStrategy::GuardWithIf) {
-            // It's an exact split but we failed to prove that the
-            // extent divides the factor. Use predication.
-
-            // Make a var representing the original var minus its
-            // min. It's important that this is a single Var so
-            // that bounds inference has a chance of understanding
-            // what it means for it to be limited by the if
-            // statement's condition.
-            Expr rebased = outer * s.factor + inner;
-            for (auto &pred : predicates) {
-                pred = substitute(s.old_var, rebased + old_min, pred);
-            }
-            for (auto &arg : args) {
-                arg = substitute(s.old_var, rebased + old_min, arg);
-            }
-            for (auto &val : values) {
-                val = substitute(s.old_var, rebased + old_min, val);
-            }
-
-            // Tell Halide to optimize for the case in which this
-            // condition is true by partitioning some outer loop.
-            Expr cond = likely(rebased < old_extent);
-            predicates.push_back(cond);
-
-        } else if (tail == TailStrategy::ShiftInwards) {
-            // Adjust the base downwards to not compute off the
-            // end of the realization.
-
-            // We'll only mark the base as likely (triggering a loop
-            // partition) if we're at or inside the innermost
-            // non-trivial loop.
-            base = likely_if_innermost(base);
-
-            base = Min::make(base, old_max + (1 - s.factor));
-        } else {
-            internal_assert(tail == TailStrategy::RoundUp);
-        }
-
-        for (auto &pred : predicates) {
-            pred = substitute(s.old_var, base + inner, pred);
-        }
-        for (auto &arg : args) {
-            arg = substitute(s.old_var, base + inner, arg);
-        }
-        for (auto &val : values) {
-            val = substitute(s.old_var, base + inner, val);
-        }
         return true;
     }
     return false;
@@ -534,37 +491,10 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
 
-        // Maintain the known size of the fused dim if
-        // possible. This is important for possible later splits.
-        map<string, Expr>::iterator inner_dim = dim_extent_alignment.find(s.inner);
-        map<string, Expr>::iterator outer_dim = dim_extent_alignment.find(s.outer);
-        if (inner_dim != dim_extent_alignment.end() &&
-            outer_dim != dim_extent_alignment.end()) {
-            dim_extent_alignment[s.old_var] = inner_dim->second * outer_dim->second;
-        }
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
-        // If the inner extent is zero, the loop will never be
-        // entered, but the bounds expressions lifted out might
-        // contain divides or mods by zero. In the cases where
-        // simplification of inner and outer matter, inner_extent
-        // is a constant, so the max will simplify away.
-        Expr factor = max(inner_extent, 1);
-        Expr fused = Variable::make(Int(32), s.old_var);
-        Expr inner = fused % factor + inner_min;
-        Expr outer = fused / factor + outer_min;
-
-        for (auto &pred : predicates) {
-            pred = substitute(s.inner, inner, pred);
-            pred = substitute(s.outer, outer, pred);
-        }
-        for (auto &arg : args) {
-            arg = substitute(s.inner, inner, arg);
-            arg = substitute(s.outer, outer, arg);
-        }
-        for (auto &val : values) {
-            val = substitute(s.inner, inner, val);
-            val = substitute(s.outer, outer, val);
-        }
         return true;
     }
     return false;
@@ -576,7 +506,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
  * to a Var. */
 bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &predicates, vector<Expr> &args,
-                  vector<Expr> &values) {
+                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_purify());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
@@ -585,15 +515,10 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
 
-        for (auto &pred : predicates) {
-            pred = substitute(s.old_var, Variable::make(Int(32), s.outer), pred);
-        }
-        for (auto &arg : args) {
-            arg = substitute(s.old_var, Variable::make(Int(32), s.outer), arg);
-        }
-        for (auto &val : values) {
-            val = substitute(s.old_var, Variable::make(Int(32), s.outer), val);
-        }
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
         return true;
     }
     return false;
@@ -602,7 +527,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
 /** Apply rename directives on the reduction variables. */
 bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &predicates, vector<Expr> &args,
-                  vector<Expr> &values) {
+                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_rename());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
@@ -610,15 +535,10 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
 
-        for (auto &pred : predicates) {
-            pred = substitute(s.old_var, Variable::make(Int(32), s.outer), pred);
-        }
-        for (auto &arg : args) {
-            arg = substitute(s.old_var, Variable::make(Int(32), s.outer), arg);
-        }
-        for (auto &val : values) {
-            val = substitute(s.old_var, Variable::make(Int(32), s.outer), val);
-        }
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
         return true;
     }
     return false;
@@ -630,19 +550,34 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
                            vector<Expr> &predicates, vector<Expr> &args,
                            vector<Expr> &values) {
     map<string, Expr> dim_extent_alignment;
-    for (const ReductionVariable &i : rvars) {
-        dim_extent_alignment[i.var] = i.extent;
+    for (const ReductionVariable &rv : rvars) {
+        dim_extent_alignment[rv.var] = rv.extent;
     }
 
-    if (s.is_split()) {
-        return apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
-    } else if (s.is_fuse()) {
-        return apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
-    } else if (s.is_purify()) {
-        return apply_purify(s, rvars, predicates, args, values);
-    } else {
-        return apply_rename(s, rvars, predicates, args, values);
+    vector<pair<string, Expr>> rvar_bounds;
+    for (const ReductionVariable &rv : rvars) {
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_min", rv.min));
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_max", simplify(rv.min + rv.extent - 1)));
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_extent", rv.extent));
     }
+
+    bool found = false;
+    if (s.is_split()) {
+        found = apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else if (s.is_fuse()) {
+        found = apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else if (s.is_purify()) {
+        found = apply_purify(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else {
+        found = apply_rename(s, rvars, predicates, args, values, dim_extent_alignment);
+    }
+
+    if (found) {
+        substitute_lets_in_exprs(rvar_bounds, predicates, true);
+        substitute_lets_in_exprs(rvar_bounds, args, true);
+        substitute_lets_in_exprs(rvar_bounds, values, true);
+    }
+    return found;
 }
 
 } // anonymous namespace
