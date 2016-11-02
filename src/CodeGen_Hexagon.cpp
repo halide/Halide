@@ -341,8 +341,9 @@ void CodeGen_Hexagon::init_module() {
 
         // vmpa patterns
 
-            // { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", bc(wild_i16)*wild_i16x + bc(wild_i16)*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps1 | Pattern::NarrowUnsignedOps3 | Pattern::NarrowOps0 | Pattern::NarrowOps2 | Pattern::SwapOps03 },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpabus), i16v2, "add_mpy_mpy.vub.vub.b.b", {u8v1, u8v1, i8, i8}, HvxIntrinsic::InterleaveByteAndBroadcastToWord | HvxIntrinsic::ConcatVectorOps01 },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpabus_acc), i16v2, "acc_add_mpy_mpy.vh.vub.vub.b.b", {i16v2, u8v1, u8v1, i8, i8}, HvxIntrinsic::InterleaveByteAndBroadcastToWord | HvxIntrinsic::ConcatVectorOps12 },
+
         // Inconsistencies: both are vector instructions despite the
         // missing 'v', and the signedness is indeed swapped.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybusv), i16v2, "mpy.vub.vb",  {u8v1,  i8v1} },
@@ -537,6 +538,25 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
         args[0] = builder->CreateCall(fn, { args[0], args[1] });
 
         args.erase(args.begin()+1);
+    }
+    if (flags & HvxIntrinsic::ConcatVectorOps12) {
+        internal_assert(args.size() >= 3);
+        internal_assert(args[1]->getType()->isVectorTy());
+        internal_assert(args[2]->getType()->isVectorTy());
+
+        bool is_128B = target.has_feature(Halide::Target::HVX_128);
+        llvm::Type *vector_type = llvm_type_of(Int(32, is_128B ? 32 : 16));
+        if (args[1]->getType() != vector_type) {
+            args[1] = builder->CreateBitCast(args[1], vector_type);
+        }
+        if (args[2]->getType() != vector_type) {
+            args[2] = builder->CreateBitCast(args[2], vector_type);
+        }
+
+        llvm::Function *fn = module->getFunction("halide.hexagon.concat_vectors");
+        args[1] = builder->CreateCall(fn, { args[1], args[2] });
+
+        args.erase(args.begin()+2);
     }
 
     // Replace args with bitcasts if necessary.

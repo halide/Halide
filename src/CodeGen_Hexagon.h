@@ -21,7 +21,8 @@ class CodeGen_Hexagon : public CodeGen_Posix {
             BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments broadcasted up to 32 bits.
             InterleaveByteAndBroadcastToWord = 1 << 1, // i8 low, i8 high  = i32 high_low_high_low. Always takes the last two args.
             ConcatHalves = 1 << 2, // i16 low, i16 high = i32 high_low. Always concatenates the last two args.
-            ConcatVectorOps01 = 1 << 3,
+            ConcatVectorOps01 = 1 << 3, // Op0 is the lower vector and Op1 is the higher vector.
+            ConcatVectorOps12 = 1 << 4, // Op1 is the lower vector and Op2 is the higher vector.
         };
         llvm::Intrinsic::ID id;
         Type ret_type;

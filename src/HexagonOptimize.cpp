@@ -126,12 +126,13 @@ struct Pattern {
         NarrowOp0 = 1 << 11,  // Replace operand 0 with its half-width equivalent.
         NarrowOp1 = 1 << 12,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 13,
-        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
+        NarrowOp3 = 1 << 14,
+        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3,
 
-        NarrowUnsignedOp0 = 1 << 14,  // Similar to the above, but narrow to an unsigned half width type.
-        NarrowUnsignedOp1 = 1 << 15,
-        NarrowUnsignedOp2 = 1 << 16,
-        NarrowUnsignedOp3 = 1 << 17,
+        NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
+        NarrowUnsignedOp1 = 1 << 16,
+        NarrowUnsignedOp2 = 1 << 17,
+        NarrowUnsignedOp3 = 1 << 18,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2 | NarrowUnsignedOp3,
 
    };
@@ -286,6 +287,47 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    string get_suffix(vector<Expr> exprs) {
+        string type_suffix;
+        for (Expr e : exprs) {
+            Type t = e.type();
+            type_suffix = type_suffix + (t.is_vector() ? ".v" : ".");
+            if (t.is_int()) {
+                switch(t.bits()) {
+                case 8:
+                    type_suffix = type_suffix + "b";
+                    break;
+                case 16:
+                    type_suffix = type_suffix + "h";
+                    break;
+                case 32:
+                    type_suffix = type_suffix + "w";
+                    break;
+                }
+            } else {
+                switch(t.bits()) {
+                case 8:
+                    type_suffix = type_suffix + "ub";
+                    break;
+                case 16:
+                    type_suffix = type_suffix + "uh";
+                    break;
+                case 32:
+                    type_suffix = type_suffix + "uw";
+                    break;
+                }
+            }
+        }
+        return type_suffix;
+    }
+
+    Expr halide_hexagon_add_mpy_mpy(Expr v0, Expr v1, Expr c0, Expr c1) {
+        Type t = v0.type();
+        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
+        Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + get_suffix({ v0, v1, c0, c1 }), {v0, v1, c0, c1}, Call::PureExtern);
+        return native_interleave(call);
+    }
+
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
             // Vector by scalar widening multiplies.
@@ -346,6 +388,7 @@ private:
 
     void visit(const Add *op) {
         static vector<Pattern> adds = {
+            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::InterleaveResult },
             // Widening adds. There are other instrucitons that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
             { "halide.hexagon.vh.add.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
@@ -353,6 +396,7 @@ private:
             { "halide.hexagon.vw.add.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
 
             // Our tree balancing ensures that we only need to match bc*vector and not vector*bc.
+            // Generate vmpa(Vx.ub, Rx.b). Todo: Generate vmpa(Vx.h, Rx.b)
             { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", bc(wild_i16)*wild_i16x + bc(wild_i16)*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp1 | Pattern::NarrowUnsignedOp3 | Pattern::NarrowOp0 | Pattern::NarrowOp2 | Pattern::SwapOps03 },
 
             // Widening multiply-accumulates with a scalar.
@@ -408,6 +452,21 @@ private:
             if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
+        if (op->type.is_vector() && !expr.same_as(op)) {
+            // We may have created a vmpa out of op->a or op->b.
+            // Be greedy and see we if can create a vmpa_acc
+            Expr old_expr = expr;
+            const Add *add = old_expr.as<Add>();
+            if (add) {
+                static vector<Pattern> post_process_adds = {
+                    { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            };
+                Expr res = apply_commutative_patterns(add, post_process_adds, this);
+                if (!res.same_as(add)) {
+                    expr = res;
+                }
+            }
+        }
     }
 
     void visit(const Sub *op) {
