@@ -188,22 +188,22 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 if (!matches[i].defined()) is_match = false;
             }
             if (!is_match) continue;
-
-            for (size_t i = 1; i < matches.size() && is_match; i++) {
-                // This flag is mainly to capture shifts. When the
-                // operand of a div or mul is a power of 2, we can use
-                // a shift instead.
-                if (p.flags & (Pattern::ExactLog2Op1 << (i - 1))) {
-                    int pow;
-                    if (is_const_power_of_two_integer(matches[i], &pow)) {
-                        matches[i] = cast(matches[i].type().with_lanes(1), pow);
-                    } else {
-                        is_match = false;
-                    }
+            if (p.flags & Pattern::ExactLog2Op1) {
+                int pow;
+                if (is_const_power_of_two_integer(matches[1], &pow)) {
+                    matches[1] = cast(matches[1].type().with_lanes(1), pow);
+                } else {
+                    continue;
                 }
             }
-            if (!is_match) continue;
-
+            if (p.flags & Pattern::ExactLog2Op2) {
+                int pow;
+                if (is_const_power_of_two_integer(matches[2], &pow)) {
+                    matches[2] = cast(matches[2].type().with_lanes(1), pow);
+                } else {
+                    continue;
+                }
+            }
             for (size_t i = 0; i < matches.size(); i++) {
                 if (p.flags & (Pattern::DeinterleaveOp0 << i)) {
                     internal_assert(matches[i].type().is_vector());
@@ -463,6 +463,7 @@ private:
             };
                 Expr res = apply_commutative_patterns(add, post_process_adds, this);
                 if (!res.same_as(add)) {
+                    debug(0) << "Converted " << old_expr << "\n\t to \t\n" << res << "\n";
                     expr = res;
                 }
             }
