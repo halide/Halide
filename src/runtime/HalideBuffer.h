@@ -935,9 +935,6 @@ public:
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
-        // Drop the reference to any device allocation. It won't be
-        // valid for the cropped image.
-        disown_device_handle();
         im.crop(d, min, extent);
         return im;
     }
@@ -947,7 +944,7 @@ public:
         // assert(dim(d).min() <= min);
         // assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
-        assert(buf.dev == 0 || shift == 0);
+        if (shift) disown_device_handle();
         buf.host += shift * dim(d).stride() * buf.elem_size;
         buf.min[d] = min;
         buf.extent[d] = extent;
@@ -962,7 +959,6 @@ public:
         Buffer<T, D> im = *this;
         // Drop the reference to any device allocation. It won't be
         // valid for the cropped image.
-        disown_device_handle();
         im.crop(rect);
         return im;
     }
@@ -980,13 +976,13 @@ public:
      * coordinate system. Drops any device handle. */
     Buffer<T, D> translated(int d, int dx) const {
         Buffer<T, D> im = *this;
-        disown_device_handle();
         im.translate(d, dx);
         return im;
     }
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
+        disown_device_handle();
         buf.min[d] += delta;
     }
 
@@ -994,13 +990,13 @@ public:
      * the first N dimensions. */
     void translated(const std::vector<int> &delta) {
         Buffer<T, D> im = *this;
-        disown_device_handle();
         im.translate(delta);
         return im;
     }
 
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
+        disown_device_handle();
         for (size_t i = 0; i < delta.size(); i++) {
             translate(i, delta[i]);
         }
@@ -1011,6 +1007,7 @@ public:
     void set_min(Args... args) {
         static_assert(sizeof...(args) <= D, "Too many arguments for dimensionality of Buffer");
         assert(sizeof...(args) <= (size_t)dimensions());
+        disown_device_handle();
         const int x[] = {args...};
         for (size_t i = 0; i < sizeof...(args); i++) {
             buf.min[i] = x[i];
@@ -1033,10 +1030,9 @@ public:
     }
 
     /** Make a lower-dimensional image that refers to one slice of this
-     * image. Drops any device handle. */
+     * image. */
     Buffer<T, D-1> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
-        disown_device_handle();
         im.slice(d, pos);
         return Buffer<T, D-1>(std::move(im));
     }
@@ -1044,6 +1040,7 @@ public:
     /** Slice an image in-place */
     void slice(int d, int pos) {
         // assert(pos >= dim(d).min() && pos <= dim(d).max());
+        disown_device_handle();
         dims--;
         int shift = pos - dim(d).min();
         assert(buf.dev == 0 || shift == 0);
@@ -1058,9 +1055,8 @@ public:
 
     /** Make a new image that views this image as a single slice in a
      * higher-dimensional space. The new dimension has extent one and
-     * the given min. Drops any device handle. This operation is the
-     * opposite of slice. As an example, the following condition is
-     * true:
+     * the given min. This operation is the opposite of slice. As an
+     * example, the following condition is true:
      *
      \code
      im2 = im.embedded(1, 17);
@@ -1070,7 +1066,6 @@ public:
     Buffer<T, D+1> embedded(int d, int pos) const {
         assert(d >= 0 && d <= dimensions());
         Buffer<T, D+1> im(*this);
-        disown_device_handle();
         im.add_dimension();
         im.translate(im.dimensions() - 1, pos);
         for (int i = im.dimensions(); i > d; i--) {
@@ -1099,6 +1094,7 @@ public:
     void add_dimension() {
         // Check there's enough space for a new dimension.
         assert(dims < D);
+        disown_device_handle();
         buf.min[dims] = 0;
         buf.extent[dims] = 1;
         if (dims == 0) {
