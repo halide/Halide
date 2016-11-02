@@ -93,7 +93,6 @@ function(halide_project name folder)
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
-    set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
     # 4006: "already defined, second definition ignored"
     # 4088: "/FORCE used, image may not work"
     # (Note that MSVC apparently considers 4088 too important to allow us to ignore it;
