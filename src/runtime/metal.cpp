@@ -541,7 +541,16 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
         return metal_context.error;
     }
 
-    mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
+    halide_assert(user_context, buffer->host && buffer->dev);
+
+    device_copy c = make_host_to_device_copy(buffer);
+    mtl_buffer *metal_buffer = (mtl_buffer *)c.dst;
+    c.dst = (uint64_t)buffer_contents(metal_buffer);
+
+    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+
+    c.copy_memory(user_context);
+
     if (is_buffer_managed(metal_buffer)) {
         size_t total_size = buf_size(buffer);
         halide_assert(user_context, total_size != 0);
@@ -551,15 +560,6 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
         did_modify_range(metal_buffer, total_extent);
     }
     halide_metal_device_sync_internal(metal_context.queue, buffer);
-
-    halide_assert(user_context, buffer->host && buffer->dev);
-
-    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
-
-    device_copy c = make_host_to_device_copy(buffer);
-    c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
-
-    c.copy_memory(user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
