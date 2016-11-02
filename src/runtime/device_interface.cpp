@@ -257,7 +257,7 @@ WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
     return 0;
 }
 
-WEAK int halide_device_free_weak(void *user_context, struct buffer_t *buf) {
+WEAK int halide_weak_device_free(void *user_context, struct buffer_t *buf) {
     return halide_device_free(user_context, buf);
 }
 
