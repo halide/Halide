@@ -85,6 +85,7 @@ struct AllInts<double, Args...> {
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
     std::atomic<int> ref_count;
+    uint64_t orphan_dev;
 };
 
 /** A templated Buffer class that wraps buffer_t and adds
@@ -167,17 +168,44 @@ class Buffer {
         if (alloc) {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
+                if (buf.dev == 0) {
+                    // Adopt any orphan device allocation so that we can kill it.
+                    buf.dev = alloc->orphan_dev;
+                }
                 if (buf.dev) {
+                    assert((alloc->orphan_dev == 0 || alloc->orphan_dev == buf.dev) &&
+                           "Buffer has multiple device allocations!");
                     halide_device_free_t fn = halide_get_device_free_fn();
-                    assert(fn &&
-                           "Buffer has a device allocation but no Halide Runtime linked");
+                    assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
                     (*fn)(nullptr, &buf);
                 }
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
+            } else {
+                disown_device_handle();
             }
             alloc = nullptr;
             buf.host = nullptr;
+        }
+    }
+
+    /** If we're managing the memory, then losing a dev handle is
+     * problematic. Other buffers that share the same host allocation
+     * may or may not also have a reference to it, so it's not safe to
+     * free it, and it's not safe to just drop it either because we
+     * might be the only buffer holding it. We need to stash it
+     * somewhere and make the last buffer out (the one that frees the
+     * host allocation) responsible for freeing it. Note that there's
+     * no guarantee that the geometry of the orphan dev field matches
+     * the host. The buffer may be a crop of some other buffer that
+     * owned this dev handle, so we can never adopt an orphan dev
+     * field, except to kill it :( */
+    void disown_device_handle() {
+        if (alloc && buf.dev) {
+            assert((alloc->orphan_dev == 0 || alloc->orphan_dev == buf.dev) &&
+                   "Buffer has multiple device allocations!");
+            alloc->orphan_dev = buf.dev;
+            buf.dev = 0;
         }
     }
 
@@ -575,6 +603,7 @@ public:
         alloc = (AllocationHeader *)allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
         alloc->deallocate_fn = deallocate_fn;
         alloc->ref_count = 1;
+        alloc->orphan_dev = 0;
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
@@ -908,7 +937,7 @@ public:
         Buffer<T, D> im = *this;
         // Drop the reference to any device allocation. It won't be
         // valid for the cropped image.
-        im.buf.dev = 0;
+        disown_device_handle();
         im.crop(d, min, extent);
         return im;
     }
@@ -933,7 +962,7 @@ public:
         Buffer<T, D> im = *this;
         // Drop the reference to any device allocation. It won't be
         // valid for the cropped image.
-        im.buf.dev = 0;
+        disown_device_handle();
         im.crop(rect);
         return im;
     }
@@ -951,7 +980,7 @@ public:
      * coordinate system. Drops any device handle. */
     Buffer<T, D> translated(int d, int dx) const {
         Buffer<T, D> im = *this;
-        im.buf.dev = 0;
+        disown_device_handle();
         im.translate(d, dx);
         return im;
     }
@@ -965,7 +994,7 @@ public:
      * the first N dimensions. */
     void translated(const std::vector<int> &delta) {
         Buffer<T, D> im = *this;
-        im.buf.dev = 0;
+        disown_device_handle();
         im.translate(delta);
         return im;
     }
@@ -1007,7 +1036,7 @@ public:
      * image. Drops any device handle. */
     Buffer<T, D-1> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
-        im.buf.dev = 0;
+        disown_device_handle();
         im.slice(d, pos);
         return Buffer<T, D-1>(std::move(im));
     }
@@ -1041,7 +1070,7 @@ public:
     Buffer<T, D+1> embedded(int d, int pos) const {
         assert(d >= 0 && d <= dimensions());
         Buffer<T, D+1> im(*this);
-        im.buf.dev = 0;
+        disown_device_handle();
         im.add_dimension();
         im.translate(im.dimensions() - 1, pos);
         for (int i = im.dimensions(); i > d; i--) {
@@ -1130,7 +1159,15 @@ public:
     }
 
     int device_free(void *ctx = nullptr) {
-        return halide_device_free(ctx, &buf);
+        if (alloc && buf.dev) {
+            // Multiple people may be holding onto this dev field
+            assert(alloc->ref_count == 1 &&
+                   "Multiple Halide::Buffer objects may refer to this device"
+                   " allocation. Freeing it could create dangling references. "
+                   "Don't call device_free on Halide buffers that you have copied.");
+        }
+        int ret = halide_device_free(ctx, &buf);
+        return ret;
     }
 
     int device_sync(void *ctx = nullptr) {
