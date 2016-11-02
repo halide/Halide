@@ -168,7 +168,10 @@ class Buffer {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 if (buf.dev) {
-                    device_free();
+                    halide_device_free_t fn = halide_get_device_free_fn();
+                    assert(fn &&
+                           "Buffer has a device allocation but no Halide Runtime linked");
+                    (*fn)(nullptr, &buf);
                 }
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
