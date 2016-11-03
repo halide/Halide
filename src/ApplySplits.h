@@ -37,9 +37,9 @@ ApplySplitResult apply_splits(
     const std::vector<Split> &splits, bool is_update, std::string prefix,
     std::map<std::string, Expr> &dim_extent_alignment);
 
-/** Compute the bounds of the new dimensions resulting from applying the
- * split schedules using the bounds of the old dimensions. */
-std::vector<std::pair<std::string, Expr>> compute_bounds_after_split(
+/** Compute the loop bounds of the new dimensions resulting from applying the
+ * split schedules using the loop bounds of the old dimensions. */
+std::vector<std::pair<std::string, Expr>> compute_loop_bounds_after_split(
     const Split &split, std::string prefix);
 
 }

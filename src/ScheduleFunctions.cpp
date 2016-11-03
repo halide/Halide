@@ -203,7 +203,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     for (size_t i = splits.size(); i > 0; i--) {
         const Split &split = splits[i-1];
 
-        vector<std::pair<string, Expr>> let_stmts = compute_bounds_after_split(split, prefix);
+        vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
         for (size_t j = 0; j < let_stmts.size(); j++) {
             stmt = LetStmt::make(let_stmts[j].first, let_stmts[j].second, stmt);
         }
