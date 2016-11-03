@@ -30,9 +30,7 @@ std::string output_name(const string &filename, const Module &m, const char* ext
 
 Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.static_library(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.static_library(filename_prefix + ".lib");
     } else {
         outputs = outputs.static_library(filename_prefix + ".a");
@@ -277,9 +275,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".bc");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.object(filename_prefix + ".obj");
     } else {
         outputs = outputs.object(filename_prefix + ".o");
