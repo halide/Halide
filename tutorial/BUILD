@@ -7,7 +7,7 @@ cc_library(
 )
 
 # Several tutorials have set-but-unused variables, which is fine; silence the warnings.
-_IGNORE_UNUSED = ["-Wnounused-but-set-variable", "-Wno-unused-variable"]
+_IGNORE_UNUSED = ["-Wno-unused-but-set-variable", "-Wno-unused-variable"]
 
 # Many of the tutorials have trivial rules
 [cc_binary(
