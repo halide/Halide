@@ -414,6 +414,11 @@ inline halide_device_free_t halide_get_device_free_fn() {
         return &halide_weak_device_free;
     }
 };
+#elif __MINGW32__
+inline halide_device_free_t halide_get_device_free_fn() {
+    // There is no workable mechanism for doing this that we know of on mingw.
+    return &halide_device_free;
+}
 #else
 extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 inline halide_device_free_t halide_get_device_free_fn() {
