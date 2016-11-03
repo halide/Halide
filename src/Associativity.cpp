@@ -104,10 +104,10 @@ std::pair<bool, bool> visit_associative_binary_op(
     const Variable *var_a = lhs.as<Variable>();
     if (!var_a || (var_a->name != op_x)) {
         debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
-        return std::make_pair(false, false);
+        return {false, false};
     } else if (expr_uses_var(rhs, op_x)) {
         debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
-        return std::make_pair(false, false);
+        return {false, false};
     } else {
         // op(x, y)
         op.x = {op_x, x_part};
@@ -115,9 +115,9 @@ std::pair<bool, bool> visit_associative_binary_op(
     }
     if (std::is_same<T, Sub>::value) {
         // Sub is associative but not commutative
-        return std::make_pair(true, false);
+        return {true, false};
     }
-    return std::make_pair(true, true);
+    return {true, true};
 }
 
 // Return a pair of booleans indicating if an operator is associative and commutative
@@ -137,7 +137,7 @@ std::pair<bool, bool> extract_associative_op(
         op.identity = make_const(t, 0);
         op.x = {"", Expr()};
         op.y = {op_y, e};
-        return std::make_pair(true, false);
+        return {true, false};
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -172,9 +172,9 @@ std::pair<bool, bool> extract_associative_op(
         internal_error << "Let should have been substituted before calling this function\n";
     } else {
         debug(4) << "Can't prove associativity of " << e << "\n";
-        return std::make_pair(false, false);
+        return {false, false};
     }
-    return std::make_pair(false, false);
+    return {false, false};
 }
 
 } // anonymous namespace
