@@ -6,8 +6,8 @@ cc_library(
     hdrs = ["clock.h"],
 )
 
-# Several tutorials have set-but-unused variables, which is fine; silence the warnings.
-_IGNORE_UNUSED = ["-Wno-unused-but-set-variable", "-Wno-unused-variable"]
+# Several tutorials have unused variables, which is fine; silence the warnings.
+_IGNORE_UNUSED = ["-Wno-unused-variable"]
 
 # Many of the tutorials have trivial rules
 [cc_binary(
