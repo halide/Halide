@@ -113,10 +113,16 @@ struct Pattern {
         ExactLog2Op1 = 1 << 4, // Replace operand 1 with its log base 2, if the log base 2 is exact.
         ExactLog2Op2 = 1 << 5, // Save as above, but for operand 2.
 
+        FirstExactLog2Op = 1,   // FirstExactLog2Op and NumExactLog2Op ensure that we check only op1 and op2
+        NumExactLog2Op = 2,     // for ExactLog2Op
+
         DeinterleaveOp0 = 1 << 6,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
         DeinterleaveOp1 = 1 << 7,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 8,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
+
+        FirstDeinterleaveOp = 0, // FirstDeinterleaveOp and NumDeinterleaveOp ensure that we check only three
+        NumDeinterleaveOp = 3,   // bits of the flag from DeinterleaveOp0 onwards and apply that only to the first three operands.
 
         // Many patterns are instructions that widen only
         // operand 0, which need to both deinterleave operand 0, and then
@@ -188,24 +194,25 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 if (!matches[i].defined()) is_match = false;
             }
             if (!is_match) continue;
-            if (p.flags & Pattern::ExactLog2Op1) {
-                int pow;
-                if (is_const_power_of_two_integer(matches[1], &pow)) {
-                    matches[1] = cast(matches[1].type().with_lanes(1), pow);
-                } else {
-                    continue;
+            for (size_t i = Pattern::FirstExactLog2Op;
+                 i < (Pattern::FirstExactLog2Op + Pattern::NumExactLog2Op) && is_match; i++) {
+                // This flag is mainly to capture shifts. When the
+                // operand of a div or mul is a power of 2, we can use
+                // a shift instead.
+                if (p.flags & (Pattern::ExactLog2Op1 << (i - Pattern::FirstExactLog2Op))) {
+                    int pow;
+                    if (is_const_power_of_two_integer(matches[i], &pow)) {
+                        matches[i] = cast(matches[i].type().with_lanes(1), pow);
+                    } else {
+                        is_match = false;
+                    }
                 }
             }
-            if (p.flags & Pattern::ExactLog2Op2) {
-                int pow;
-                if (is_const_power_of_two_integer(matches[2], &pow)) {
-                    matches[2] = cast(matches[2].type().with_lanes(1), pow);
-                } else {
-                    continue;
-                }
-            }
-            for (size_t i = 0; i < matches.size(); i++) {
-                if (p.flags & (Pattern::DeinterleaveOp0 << i)) {
+            if (!is_match) continue;
+            for (size_t i = Pattern::FirstDeinterleaveOp;
+                 i < (Pattern::FirstDeinterleaveOp + Pattern::NumDeinterleaveOp); i++) {
+                if (p.flags &
+                    (Pattern::DeinterleaveOp0 << (i - Pattern::FirstDeinterleaveOp))) {
                     internal_assert(matches[i].type().is_vector());
                     matches[i] = native_deinterleave(matches[i]);
                 }
