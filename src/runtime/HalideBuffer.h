@@ -501,6 +501,7 @@ public:
                                      dev_ref_count(other.dev_ref_count) {
         assert_can_convert_from(other);
         other.dev_ref_count = nullptr;
+        other.alloc = nullptr;
     }
 
     Buffer(Buffer<T, D> &&other) : buf(other.buf),
