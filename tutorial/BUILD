@@ -6,11 +6,14 @@ cc_library(
     hdrs = ["clock.h"],
 )
 
+# Several tutorials have set-but-unused variables, which is fine; silence the warnings.
+_IGNORE_UNUSED = ["-Wnounused-but-set-variable", "-Wno-unused-variable"]
+
 # Many of the tutorials have trivial rules
 [cc_binary(
     name = t,
     srcs = ["%s.cpp" % t],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + _IGNORE_UNUSED,
     linkopts = halide_language_linkopts(),
     deps = ["@halide//:language"],
 ) for t in [
@@ -36,7 +39,7 @@ cc_library(
     srcs = [
         "%s.cpp" % t,
     ],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + _IGNORE_UNUSED,
     data = glob(["images/*.png"]),
     linkopts = halide_language_linkopts(),
     deps = [
@@ -55,7 +58,7 @@ cc_library(
 cc_binary(
     name = "lesson_10_aot_compilation_generate_gen",
     srcs = ["lesson_10_aot_compilation_generate.cpp"],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + _IGNORE_UNUSED,
     linkopts = halide_language_linkopts(),
     deps = ["@halide//:language"],
 )
@@ -95,7 +98,7 @@ cc_binary(
 cc_binary(
     name = "lesson_15_generate",
     srcs = ["lesson_15_generators.cpp"],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + _IGNORE_UNUSED,
     linkopts = halide_language_linkopts(),
     deps = [
         "@halide//:language",
@@ -132,7 +135,7 @@ cc_binary(
     srcs = [
         "lesson_16_rgb_run.cpp",
     ],
-    copts = ["-Wno-unused-variable"],
+    copts = _IGNORE_UNUSED,
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":brighten_either",
