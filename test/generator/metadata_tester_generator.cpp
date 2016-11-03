@@ -71,4 +71,4 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(MetadataTester, "Halide::Internal::MetadataTesterStub")
+HALIDE_REGISTER_GENERATOR(MetadataTester, "metadata_tester")

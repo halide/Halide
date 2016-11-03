@@ -348,11 +348,9 @@ void StubEmitter::emit_inputs_struct() {
 }
 
 void StubEmitter::emit() {
-    std::vector<std::string> namespaces = split_string(generator_name, "::");
-    if (namespaces.size() <= 1) {
-        // The generator name is (presumably) a legacy name, for which we can't
-        // generate a real stub. Instead, generate an (essentially) empty .stub.h
-        // file, so that build systems like Bazel will still get the output file
+    if (outputs.empty()) {
+        // The generator can't support a real stub. Instead, generate an (essentially) 
+        // empty .stub.h file, so that build systems like Bazel will still get the output file
         // they expected. Note that we deliberately don't emit an ifndef header guard,
         // since we can't reliably assume that the generator_name will be globally unique;
         // on the other hand, since this file is just a couple of comments, it's
@@ -362,8 +360,8 @@ void StubEmitter::emit() {
         return;
     }
 
-    internal_assert(!outputs.empty()) << "Cannot emit stub for Generator with no Output<>s\n";
-    internal_assert(namespaces.size() >= 2);
+    std::vector<std::string> namespaces = split_string(generator_name, "::");
+    internal_assert(namespaces.size() >= 1);
     if (namespaces[0].empty()) {
         // We have a name like ::foo::bar::baz; omit the first empty ns.
         namespaces.erase(namespaces.begin());
