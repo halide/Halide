@@ -1347,7 +1347,6 @@ struct GetTreeWeight : public IRVisitor {
                 weight += 1;
             }
         }
-
     }
 
     template<typename T>
@@ -1357,11 +1356,34 @@ struct GetTreeWeight : public IRVisitor {
             weight += 1;
         }
     }
-
+    // Constants have 0 weight.
+    // So, no visitors for IntImm, UIntImm, FloatImm, StringImm
+    // Although, we shouldn't be seeing some of these.
     void visit(const Load *op) { visit_leaf<Load>(op); }
     void visit(const Add *op) { visit_binary<Add>(op); }
     void visit(const Sub *op) { visit_binary<Sub>(op); }
     void visit(const Mul *op) { visit_binary<Mul>(op); }
+    void visit(const Div *op) { visit_binary<Div>(op); }
+    void visit(const Mod *op) { visit_binary<Mod>(op); }
+    void visit(const Min *op) { visit_binary<Min>(op); }
+    void visit(const Max *op) { visit_binary<Max>(op); }
+    void visit(const EQ *op) { visit_binary<EQ>(op); }
+    void visit(const NE *op) { visit_binary<NE>(op); }
+    void visit(const LT *op) { visit_binary<LT>(op); }
+    void visit(const LE *op) { visit_binary<LE>(op); }
+    void visit(const GT *op) { visit_binary<GT>(op); }
+    void visit(const GE *op) { visit_binary<GE>(op); }
+    void visit(const And *op) { visit_binary<And>(op); }
+    void visit(const Or *op) { visit_binary<Or>(op); }
+
+    void visit(const Broadcast *op) {
+        if (op->type.is_vector()) {
+            if (!is_simple_const(op->value)) {
+                IRVisitor::visit(op);
+                weight += 1;
+            }
+        }
+    }
 
     GetTreeWeight() : weight(0) {}
 };
