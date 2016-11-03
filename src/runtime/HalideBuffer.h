@@ -158,9 +158,20 @@ class Buffer {
     }
 
     /** Increment the reference count of any owned allocation */
-    void incref() {
+    void incref() const {
         if (alloc) {
             alloc->ref_count++;
+            if (buf.dev) {
+                if (!dev_ref_count) {
+                    // I seem to have a non-zero dev field but no
+                    // reference count for it. I must have been given a
+                    // device allocation by a Halide pipeline, and have
+                    // never been copied from since. Take sole ownership
+                    // of it.
+                    dev_ref_count = new std::atomic<int>(1);
+                }
+                (*dev_ref_count)++;
+            }
         }
     }
 
@@ -173,28 +184,13 @@ class Buffer {
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
             }
+            drop_device_allocation();
             alloc = nullptr;
             buf.host = nullptr;
         }
     }
 
-    /** Another buffer wants to share my dev field. Create a reference
-     * count for it if there isn't already one. */
-    void incref_dev() const {
-        if (alloc && buf.dev) {
-            if (!dev_ref_count) {
-                // I seem to have a non-zero dev field but no
-                // reference count for it. I must have been given a
-                // device allocation by a Halide pipeline, and have
-                // never been copied from since. Take sole ownership
-                // of it.
-                dev_ref_count = new std::atomic<int>(1);
-            }
-            (*dev_ref_count)++;
-        }
-    }
-
-    void decref_dev() {
+    void drop_device_allocation() {
         if (alloc && buf.dev) {
             int new_count = 0;
             if (dev_ref_count) {
@@ -475,8 +471,7 @@ public:
                                           ty(other.ty),
                                           alloc(other.alloc) {
         assert_can_convert_from(other);
-        incref();
-        other.incref_dev();
+        other.incref();
         dev_ref_count = other.dev_ref_count;
     }
 
@@ -484,8 +479,7 @@ public:
                                         dims(other.dims),
                                         ty(other.ty),
                                         alloc(other.alloc) {
-        incref();
-        other.incref_dev();
+        other.incref();
         dev_ref_count = other.dev_ref_count;
     }
 
@@ -519,20 +513,10 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
-        if (dev_ref_count != other.dev_ref_count) {
-            decref_dev();
-        }
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Share other allocation
-            alloc = other.alloc;
-            incref();
-        }
-        if (dev_ref_count != other.dev_ref_count) {
-            other.incref_dev();
-            dev_ref_count = other.dev_ref_count;
-        }
+        other.incref();
+        decref();
+        dev_ref_count = other.dev_ref_count;
+        alloc = other.alloc;
         ty = other.ty;
         dims = other.dims;
         buf = other.buf;
@@ -540,20 +524,10 @@ public:
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
-        if (dev_ref_count != other.dev_ref_count) {
-            decref_dev();
-        }
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Share other allocation
-            alloc = other.alloc;
-            incref();
-        }
-        if (dev_ref_count != other.dev_ref_count) {
-            other.incref_dev();
-            dev_ref_count = other.dev_ref_count;
-        }
+        other.incref();
+        decref();
+        dev_ref_count = other.dev_ref_count;
+        alloc = other.alloc;
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -566,17 +540,8 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Steal other allocation
-            alloc = other.alloc;
-            other.alloc = nullptr;
-        }
-        if (dev_ref_count != other.dev_ref_count) {
-            dev_ref_count = other.dev_ref_count;
-            other.dev_ref_count = nullptr;
-        }
+        std::swap(alloc, other.alloc);
+        std::swap(dev_ref_count, other.dev_ref_count);
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -584,17 +549,8 @@ public:
     }
 
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Steal other allocation
-            alloc = other.alloc;
-            other.alloc = nullptr;
-        }
-        if (dev_ref_count != other.dev_ref_count) {
-            dev_ref_count = other.dev_ref_count;
-            other.dev_ref_count = nullptr;
-        }
+        std::swap(alloc, other.alloc);
+        std::swap(dev_ref_count, other.dev_ref_count);
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -787,7 +743,6 @@ public:
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. */
     ~Buffer() {
-        decref_dev();
         decref();
     }
 
@@ -979,7 +934,7 @@ public:
         // assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
         if (shift) {
-            decref_dev();
+            drop_device_allocation();
         }
         buf.host += shift * dim(d).stride() * buf.elem_size;
         buf.min[d] = min;
@@ -1018,7 +973,7 @@ public:
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
-        decref_dev();
+        drop_device_allocation();
         buf.min[d] += delta;
     }
 
@@ -1032,7 +987,7 @@ public:
 
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
-        decref_dev();
+        drop_device_allocation();
         for (size_t i = 0; i < delta.size(); i++) {
             translate(i, delta[i]);
         }
@@ -1043,7 +998,7 @@ public:
     void set_min(Args... args) {
         static_assert(sizeof...(args) <= D, "Too many arguments for dimensionality of Buffer");
         assert(sizeof...(args) <= (size_t)dimensions());
-        decref_dev();
+        drop_device_allocation();
         const int x[] = {args...};
         for (size_t i = 0; i < sizeof...(args); i++) {
             buf.min[i] = x[i];
@@ -1076,7 +1031,7 @@ public:
     /** Slice an image in-place */
     void slice(int d, int pos) {
         // assert(pos >= dim(d).min() && pos <= dim(d).max());
-        decref_dev();
+        drop_device_allocation();
         dims--;
         int shift = pos - dim(d).min();
         assert(buf.dev == 0 || shift == 0);
