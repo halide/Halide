@@ -977,7 +977,9 @@ public:
         // assert(dim(d).min() <= min);
         // assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
-        if (shift) decref_dev();
+        if (shift) {
+            decref_dev();
+        }
         buf.host += shift * dim(d).stride() * buf.elem_size;
         buf.min[d] = min;
         buf.extent[d] = extent;
