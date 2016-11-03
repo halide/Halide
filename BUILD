@@ -1,4 +1,3 @@
-# TODO: NaCl not supported at all. Possible? Worthwhile?
 # TODO apps/HelloAndroid
 # TODO apps/HelloAndroidCamera2
 # TODO apps/HelloAndroidGL
@@ -7,7 +6,6 @@
 # TODO apps/HelloMatlab
 # TODO apps/HelloiOS
 # TODO apps/linear_algebra
-# TODO apps/nacl_demos
 # TODO apps/opengl_demo
 # TODO apps/openglcompute
 # TODO apps/renderscript
@@ -112,7 +110,6 @@ _RUNTIME_CPP_COMPONENTS = [
     "module_jit_ref_count",
     "msan",
     "msan_stubs",
-    "nacl_host_cpu_count",
     "noos",
     "opencl",
     "opengl",
@@ -158,7 +155,6 @@ _RUNTIME_LL_COMPONENTS = [
     "hvx_64",
     "hvx_128",
     "mips",
-    "pnacl_math",
     "posix_math",
     "powerpc",
     "ptx_dev",
