@@ -457,7 +457,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
         rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
 
         ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
         return true;
@@ -492,7 +492,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
         rvars.erase(iter_inner);
 
         ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
         return true;
@@ -516,7 +516,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
         rvars.erase(iter);
 
         ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
         return true;
@@ -536,7 +536,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
         iter->var = s.outer;
 
         ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_bounds_after_split(s, "");
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
         return true;
