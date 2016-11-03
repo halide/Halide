@@ -1,8 +1,18 @@
-load("@halide//:halide.bzl", "halide_runtime_linkopts", "halide_library")
+load(
+    "@halide//:halide.bzl",
+    "halide_runtime_linkopts",
+    "halide_generator",
+    "halide_library",
+)
+
+halide_generator(
+    name = "halide_blur_generator",
+    srcs = ["halide_blur_generator.cpp"],
+)
 
 halide_library(
     name = "halide_blur",
-    srcs = ["halide_blur_generator.cpp"],
+    generator = ":halide_blur_generator",
     includes = ["."],
 )
 

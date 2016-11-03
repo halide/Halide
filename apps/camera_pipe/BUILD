@@ -1,9 +1,19 @@
-load("@halide//:halide.bzl", "halide_runtime_linkopts", "halide_library")
+load(
+    "@halide//:halide.bzl",
+    "halide_runtime_linkopts",
+    "halide_generator",
+    "halide_library",
+)
 load("@halide//apps/support:exec_test.bzl", "exec_test")
+
+halide_generator(
+    name = "camera_pipe_generator",
+    srcs = ["camera_pipe_generator.cpp"],
+)
 
 halide_library(
     name = "camera_pipe",
-    srcs = ["camera_pipe_generator.cpp"],
+    generator = ":camera_pipe_generator",
     includes = ["."],
 )
 
