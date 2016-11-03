@@ -1,4 +1,11 @@
-load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts", "halide_library", "halide_runtime_linkopts")
+load(
+    "@halide//:halide.bzl",
+    "halide_language_copts",
+    "halide_language_linkopts",
+    "halide_generator",
+    "halide_library",
+    "halide_runtime_linkopts",
+)
 
 cc_library(
     name = "extended_buffer_t_common",
@@ -6,12 +13,64 @@ cc_library(
     includes = ["."],
 )
 
-# ----------------- Generators
+# ----------------- halide_generator
 
-# Generators that don't require any extra args, deps, etc
+# Simple cases
+[halide_generator(
+    name = "%s_generator" % gen[:-14],
+    srcs = [gen],
+    includes = ["."],
+) for gen in glob(
+    ["*_generator.cpp"],
+    exclude = [
+        "extended_buffer_t*",
+        "nested_externs*",
+        "stubtest*",
+        "stubuser*",
+    ],
+)]
+
+# Cases with extra deps and/or irregular generator_name
+halide_generator(
+    name = "extended_buffer_t_generator",
+    srcs = ["extended_buffer_t_generator.cpp"],
+    includes = ["."],
+    deps = [":extended_buffer_t_common"],
+)
+
+[halide_generator(
+    name = "nested_externs_%s_generator" % gen_name,
+    srcs = ["nested_externs_generator.cpp"],
+    generator_name = "nested_externs_%s" % gen_name,
+    includes = ["."],
+) for gen_name in [
+    "combine",
+    "leaf",
+    "inner",
+    "root",
+]]
+
+halide_generator(
+    name = "stubtest_generator",
+    srcs = ["stubtest_generator.cpp"],
+    generator_name = "StubNS1::StubNS2::StubTest",
+    includes = ["."],
+)
+
+halide_generator(
+    name = "stubuser_generator",
+    srcs = ["stubuser_generator.cpp"],
+    generator_name = "stubuser",
+    includes = ["."],
+    deps = [":stubtest_generator"],
+)
+
+# ----------------- halide_library
+
+# Libraries that don't require any generator args, features, etc
 [halide_library(
     name = gen,
-    srcs = ["%s_generator.cpp" % gen],
+    generator = ":%s_generator" % gen,
     includes = ["."],
 ) for gen in [
     "acquire_release",
@@ -21,6 +80,7 @@ cc_library(
     "embed_image",
     "error_codes",
     "example",
+    "extended_buffer_t",
     "float16_t",
     "gpu_object_lifetime",
     "gpu_only",
@@ -36,30 +96,23 @@ cc_library(
 # Generators that need extra args, etc
 halide_library(
     name = "cxx_mangling",
-    srcs = ["cxx_mangling_generator.cpp"],
+    generator = ":cxx_mangling_generator",
     includes = ["."],
     namespace = "HalideTest",
 )
 
 halide_library(
     name = "cxx_mangling_define_extern",
-    srcs = ["cxx_mangling_define_extern_generator.cpp"],
-    filter_deps = [":cxx_mangling"],  # referenced via define_extern
+    generator = ":cxx_mangling_define_extern_generator",
     halide_target_features = ["user_context"],
     includes = ["."],
     namespace = "HalideTest",
-)
-
-halide_library(
-    name = "extended_buffer_t",
-    srcs = ["extended_buffer_t_generator.cpp"],
-    generator_deps = [":extended_buffer_t_common"],
-    includes = ["."],
+    deps = [":cxx_mangling"],  # referenced via define_extern
 )
 
 halide_library(
     name = "matlab",
-    srcs = ["matlab_generator.cpp"],
+    generator = ":matlab_generator",
     halide_target_features = ["matlab"],
     includes = ["."],
 )
@@ -83,7 +136,7 @@ _METADATA_TESTER_GENERATOR_ARGS = " ".join([
 
 halide_library(
     name = "metadata_tester",
-    srcs = ["metadata_tester_generator.cpp"],
+    generator = ":metadata_tester_generator",
     generator_args = _METADATA_TESTER_GENERATOR_ARGS,
     # TODO multitarget builds can subtly change some metadata output
     # (e.g. "output$3" instead of "output"); this should be fixed,
@@ -94,7 +147,7 @@ halide_library(
 
 halide_library(
     name = "metadata_tester_ucon",
-    srcs = ["metadata_tester_generator.cpp"],
+    generator = ":metadata_tester_generator",
     generator_args = _METADATA_TESTER_GENERATOR_ARGS,
     halide_target_features = ["user_context"],
     # TODO multitarget builds can subtly change some metadata output
@@ -106,14 +159,14 @@ halide_library(
 
 halide_library(
     name = "msan",
-    srcs = ["msan_generator.cpp"],
+    generator = ":msan_generator",
     halide_target_features = ["msan"],
     includes = ["."],
 )
 
 halide_library(
     name = "multitarget",
-    srcs = ["multitarget_generator.cpp"],
+    generator = ":multitarget_generator",
     halide_target_map = {"*": [
         "*-debug-c_plus_plus_name_mangling",
         "*-c_plus_plus_name_mangling",
@@ -124,8 +177,7 @@ halide_library(
 
 [halide_library(
     name = "nested_externs_%s" % gen_name,
-    srcs = ["nested_externs_generator.cpp"],
-    generator_name = "nested_externs_%s" % gen_name,
+    generator = ":nested_externs_%s_generator" % gen_name,
     includes = ["."],
 ) for gen_name in [
     "combine",
@@ -134,57 +186,68 @@ halide_library(
 
 halide_library(
     name = "nested_externs_inner",
-    srcs = ["nested_externs_generator.cpp"],
-    filter_deps = [
+    generator = ":nested_externs_inner_generator",
+    includes = ["."],
+    deps = [
         ":nested_externs_combine",
         ":nested_externs_leaf",
     ],
-    generator_name = "nested_externs_inner",
-    includes = ["."],
 )
 
 halide_library(
     name = "nested_externs_root",
-    srcs = ["nested_externs_generator.cpp"],
-    filter_deps = [
+    generator = ":nested_externs_root_generator",
+    includes = ["."],
+    deps = [
         ":nested_externs_combine",
         ":nested_externs_inner",
     ],
-    generator_name = "nested_externs_root",
-    includes = ["."],
 )
 
 halide_library(
     name = "pyramid",
-    srcs = ["pyramid_generator.cpp"],
+    generator = ":pyramid_generator",
     generator_args = "levels=10",
     includes = ["."],
 )
 
 halide_library(
+    name = "stubtest",
+    generator = ":stubtest_generator",
+    generator_args = "input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32",
+    includes = ["."],
+)
+
+halide_library(
+    name = "stubuser",
+    generator = ":stubuser_generator",
+    includes = ["."],
+)
+
+halide_library(
     name = "tiled_blur_interleaved",
-    srcs = ["tiled_blur_generator.cpp"],
+    generator = ":tiled_blur_generator",
     generator_args = "is_interleaved=true",
     includes = ["."],
 )
 
 halide_library(
     name = "tiled_blur_blur_interleaved",
-    srcs = ["tiled_blur_blur_generator.cpp"],
+    generator = ":tiled_blur_blur_generator",
     generator_args = "is_interleaved=true",
     includes = ["."],
 )
 
 halide_library(
     name = "user_context",
-    srcs = ["user_context_generator.cpp"],
+    generator = ":user_context_generator",
     halide_target_features = ["user_context"],
     includes = ["."],
 )
 
 halide_library(
     name = "user_context_insanity",
-    srcs = ["user_context_insanity_generator.cpp"],
+    generator = ":user_context_insanity_generator",
     halide_target_features = ["user_context"],
     includes = ["."],
 )
@@ -219,6 +282,17 @@ halide_library(
     "paramtest",
 ]]
 
+cc_test(
+    name = "stubtest_jittest",
+    srcs = ["stubtest_jittest.cpp"],
+    copts = halide_language_copts(),
+    linkopts = halide_language_linkopts(),
+    deps = [
+        "@halide//:language",
+        ":stubtest_generator",
+    ],
+)
+
 # ----------------- AOT Tests
 
 # Simple AOT tests that predictably depend on a single halide_library of the same name
@@ -248,6 +322,8 @@ halide_library(
     "msan",
     "multitarget",
     "pyramid",
+    "stubtest",
+    "stubuser",
     "user_context",
     "user_context_insanity",
     "variable_num_threads",

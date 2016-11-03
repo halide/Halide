@@ -1,4 +1,8 @@
-load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts")
+load(
+    "@halide//:halide.bzl",
+    "halide_language_copts",
+    "halide_language_linkopts",
+)
 load("@halide//apps/support:exec_test.bzl", "exec_test")
 
 cc_binary(

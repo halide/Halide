@@ -8,5 +8,5 @@ cc_test(
     deps = [
         "@halide//:language",
         "//:internal_test_includes",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
-    ]
+    ],
 )
