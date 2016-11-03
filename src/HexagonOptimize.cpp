@@ -1201,12 +1201,100 @@ public:
 
 typedef std::pair<Expr, int> RootWeightPair;
 typedef std::map<Expr, int, IRDeepCompare> WeightedRoots;
-// struct WeightedRoot {
-//     Expr expr;
-//     // Initialized to -1 to indicate a root that hasn't been visited yet.
-//     int weight;
-//     WeightedRoot(Expr e, int wt) : expr(e), weight(wt) {}
-// };
+class GetHeight : public IRVisitor {
+    std::map<Expr, int, IRDeepCompare> m;
+    using IRVisitor::visit;
+public:
+    int height(Expr e) {
+        auto it = m.find(e);
+        internal_assert(it != m.end())
+            << "Expr " << e << " not found in the heights map\n";
+        return it->second;
+    }
+    vector<int> height(const vector<Expr> &exprs) {
+        vector<int> heights;
+        for (Expr e: exprs) {
+            heights.push_back(height(e));
+        }
+        return heights;
+    }
+    template<typename T>
+    void visit_binary(const T *op) {
+        IRVisitor::visit(op);
+        m[op] = std::max(height(op->a), height(op->b)) + 1;
+    }
+    template<typename T>
+    void visit_leaf(const T *op) {
+        m[op] = 0;
+    }
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Sub *op) { visit_binary<Sub>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+    void visit(const Div *op) { visit_binary<Div>(op); }
+    void visit(const Mod *op) { visit_binary<Mod>(op); }
+    void visit(const Min *op) { visit_binary<Min>(op); }
+    void visit(const Max *op) { visit_binary<Max>(op); }
+    void visit(const EQ *op) { visit_binary<EQ>(op); }
+    void visit(const NE *op) { visit_binary<NE>(op); }
+    void visit(const LT *op) { visit_binary<LT>(op); }
+    void visit(const LE *op) { visit_binary<LE>(op); }
+    void visit(const GT *op) { visit_binary<GT>(op); }
+    void visit(const GE *op) { visit_binary<GE>(op); }
+    void visit(const And *op) { visit_binary<And>(op); }
+    void visit(const Or *op) { visit_binary<Or>(op); }
+
+    void visit(const Load *op) { visit_leaf<Load>(op); }
+    void visit(const IntImm *op) { visit_leaf<IntImm>(op); }
+    void visit(const UIntImm *op) { visit_leaf<UIntImm>(op); }
+    void visit(const FloatImm *op) { visit_leaf<FloatImm>(op); }
+    void visit(const Ramp *op) { visit_leaf<Ramp>(op); }
+
+    void visit(const Cast *op) {
+        IRVisitor::visit(op);
+        m[op] = height(op->value) + 1;
+    }
+    void visit(const Call *op) {
+        IRVisitor::visit(op);
+        vector<int> heights = height(op->args);
+        m[op] = *std::max_element(heights.begin(), heights.end());
+    }
+};
+
+class ExprHeights {
+    std::map<Expr, int, IRDeepCompare> m;
+public:
+    void clear() { m.clear(); }
+    void push(Expr e) {
+        auto it = m.find(e);
+        internal_assert(it == m.end())
+            << "Trying to push an expr that already exists in ExprHeights. Use the update method to update\n";
+        GetHeight g;
+        e.accept(&g);
+
+        m[e] = g.height(e);
+        return;
+    }
+    void push(Expr e, int h) {
+        m[e] = h;
+        return;
+    }
+    void update_height(Expr e, int h) {
+        push(e, h);
+        return;
+    }
+    int height(Expr e) {
+        auto it = m.find(e);
+        if (it != m.end()) {
+            return it->second;
+        } else {
+            GetHeight g;
+            e.accept(&g);
+            int ht = g.height(e);
+            m[e] = ht;
+            return ht;
+        }
+    }
+};
 
 class FindRoots : public IRVisitor {
     using IRVisitor::visit;
@@ -1416,8 +1504,19 @@ class BalanceTree : public IRMutator {
     void visit_binary(const T *op) {
 
         debug(0) << "BalanceTree: << " << (Expr) op << "\n";
+
         auto it = weighted_roots.find((Expr) op);
         internal_assert(it != weighted_roots.end()) << "BalanceTree called on a non-root node\n";
+
+        int a_ht = heights.height(op->a);
+        int b_ht = heights.height(op->b);
+        if (std::abs(a_ht - b_ht) <= 1) {
+            // The sub-tree rooted at op is balanced.
+            // Do nothing.
+            debug(0) << "Expr " << (Expr) op << " is balanced. Returning early from BalanceTree\n";
+            expr = op;
+            return;
+        }
 
         worklist.push_back(op->a);
         worklist.push_back(op->b);
@@ -1432,7 +1531,7 @@ class BalanceTree : public IRMutator {
             if (it != weighted_roots.end()) {
                 debug(0) <<  ".. is a root..balancing\n";
                 // Check if already visited before calling balance tree.
-                Expr leaf = BalanceTree(weighted_roots).mutate(e);
+                Expr leaf = BalanceTree(weighted_roots, heights).mutate(e);
                 debug(0) << "leaf ->" << leaf << "\n";
                 if (!leaf.same_as(e)) {
                     // This means that BalanceTree changed our root. Once
@@ -1477,8 +1576,10 @@ class BalanceTree : public IRMutator {
     LeafPriorityQueue leaves;
     // Conv to reference?
     WeightedRoots weighted_roots;
+    ExprHeights heights;
 public:
-    BalanceTree(WeightedRoots weighted_roots) : weighted_roots(weighted_roots) {}
+    BalanceTree(WeightedRoots weighted_roots) : weighted_roots(weighted_roots) { heights.clear(); }
+    BalanceTree(WeightedRoots weighted_roots, ExprHeights heights) : weighted_roots(weighted_roots), heights(heights) {}
 
 };
 class BalanceAddMulTrees : public IRMutator {
