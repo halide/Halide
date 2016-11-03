@@ -85,7 +85,6 @@ struct AllInts<double, Args...> {
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
     std::atomic<int> ref_count;
-    uint64_t orphan_dev;
 };
 
 /** A templated Buffer class that wraps buffer_t and adds
@@ -130,6 +129,9 @@ class Buffer {
      * own the memory. */
     AllocationHeader *alloc = nullptr;
 
+    /** A reference count for the device allocation owned by this buffer. */
+    mutable std::atomic<int> *dev_ref_count = nullptr;
+
     /** True if T is of type void or const void */
     static const bool T_is_void = std::is_same<typename std::remove_const<T>::type, void>::value;
 
@@ -168,43 +170,45 @@ class Buffer {
         if (alloc) {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
-                if (buf.dev == 0) {
-                    // Adopt any orphan device allocation so that we can kill it.
-                    buf.dev = alloc->orphan_dev;
-                }
-                if (buf.dev) {
-                    assert((alloc->orphan_dev == 0 || alloc->orphan_dev == buf.dev) &&
-                           "Buffer has multiple device allocations!");
-                    halide_device_free_t fn = halide_get_device_free_fn();
-                    assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
-                    (*fn)(nullptr, &buf);
-                }
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
-            } else {
-                disown_device_handle();
             }
             alloc = nullptr;
             buf.host = nullptr;
         }
     }
 
-    /** If we're managing the memory, then losing a dev handle is
-     * problematic. Other buffers that share the same host allocation
-     * may or may not also have a reference to it, so it's not safe to
-     * free it, and it's not safe to just drop it either because we
-     * might be the only buffer holding it. We need to stash it
-     * somewhere and make the last buffer out (the one that frees the
-     * host allocation) responsible for freeing it. Note that there's
-     * no guarantee that the geometry of the orphan dev field matches
-     * the host. The buffer may be a crop of some other buffer that
-     * owned this dev handle, so we can never adopt an orphan dev
-     * field, except to kill it :( */
-    void disown_device_handle() {
+    /** Another buffer wants to share my dev field. Create a reference
+     * count for it if there isn't already one. */
+    void incref_dev() const {
         if (alloc && buf.dev) {
-            assert((alloc->orphan_dev == 0 || alloc->orphan_dev == buf.dev) &&
-                   "Buffer has multiple device allocations!");
-            alloc->orphan_dev = buf.dev;
+            if (!dev_ref_count) {
+                // I seem to have a non-zero dev field but no
+                // reference count for it. I must have been given a
+                // device allocation by a Halide pipeline, and have
+                // never been copied from since. Take sole ownership
+                // of it.
+                dev_ref_count = new std::atomic<int>(1);
+            }
+            (*dev_ref_count)++;
+        }
+    }
+
+    void decref_dev() {
+        if (alloc && buf.dev) {
+            int new_count = 0;
+            if (dev_ref_count) {
+                new_count = --(*dev_ref_count);
+            }
+            if (new_count == 0) {
+                halide_device_free_t fn = halide_get_device_free_fn();
+                assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
+                (*fn)(nullptr, &buf);
+                if (dev_ref_count) {
+                    delete dev_ref_count;
+                    dev_ref_count = nullptr;
+                }
+            }
             buf.dev = 0;
         }
     }
@@ -467,18 +471,22 @@ public:
      * mismatch. */
     template<typename T2, int D2>
     Buffer(const Buffer<T2, D2> &other) : buf(other.buf),
+                                          dims(other.dims),
+                                          ty(other.ty),
+                                          alloc(other.alloc) {
+        assert_can_convert_from(other);
+        incref();
+        other.incref_dev();
+        dev_ref_count = other.dev_ref_count;
+    }
+
+    Buffer(const Buffer<T, D> &other) : buf(other.buf),
                                         dims(other.dims),
                                         ty(other.ty),
                                         alloc(other.alloc) {
         incref();
-        assert_can_convert_from(other);
-    }
-
-    Buffer(const Buffer<T, D> &other) : buf(other.buf),
-                                      dims(other.dims),
-                                      ty(other.ty),
-                                      alloc(other.alloc) {
-        incref();
+        other.incref_dev();
+        dev_ref_count = other.dev_ref_count;
     }
 
     /** Move-construct an Buffer from another Buffer of
@@ -487,17 +495,20 @@ public:
      * mismatch. */
     template<typename T2, int D2>
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
-                                   dims(other.dims),
-                                   ty(other.ty),
-                                   alloc(other.alloc) {
-        other.alloc = nullptr;
+                                     dims(other.dims),
+                                     ty(other.ty),
+                                     alloc(other.alloc),
+                                     dev_ref_count(other.dev_ref_count) {
         assert_can_convert_from(other);
+        other.dev_ref_count = nullptr;
     }
 
     Buffer(Buffer<T, D> &&other) : buf(other.buf),
                                    dims(other.dims),
                                    ty(other.ty),
-                                   alloc(other.alloc) {
+                                   alloc(other.alloc),
+                                   dev_ref_count(other.dev_ref_count) {
+        other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
 
@@ -507,12 +518,19 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
+        if (dev_ref_count != other.dev_ref_count) {
+            decref_dev();
+        }
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
             // Share other allocation
             alloc = other.alloc;
             incref();
+        }
+        if (dev_ref_count != other.dev_ref_count) {
+            other.incref_dev();
+            dev_ref_count = other.dev_ref_count;
         }
         ty = other.ty;
         dims = other.dims;
@@ -521,12 +539,19 @@ public:
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
+        if (dev_ref_count != other.dev_ref_count) {
+            decref_dev();
+        }
         if (alloc != other.alloc) {
             // Drop existing allocation
             decref();
             // Share other allocation
             alloc = other.alloc;
             incref();
+        }
+        if (dev_ref_count != other.dev_ref_count) {
+            other.incref_dev();
+            dev_ref_count = other.dev_ref_count;
         }
         buf = other.buf;
         ty = other.ty;
@@ -547,6 +572,10 @@ public:
             alloc = other.alloc;
             other.alloc = nullptr;
         }
+        if (dev_ref_count != other.dev_ref_count) {
+            dev_ref_count = other.dev_ref_count;
+            other.dev_ref_count = nullptr;
+        }
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -560,6 +589,10 @@ public:
             // Steal other allocation
             alloc = other.alloc;
             other.alloc = nullptr;
+        }
+        if (dev_ref_count != other.dev_ref_count) {
+            dev_ref_count = other.dev_ref_count;
+            other.dev_ref_count = nullptr;
         }
         buf = other.buf;
         ty = other.ty;
@@ -603,7 +636,6 @@ public:
         alloc = (AllocationHeader *)allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
         alloc->deallocate_fn = deallocate_fn;
         alloc->ref_count = 1;
-        alloc->orphan_dev = 0;
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
@@ -754,6 +786,7 @@ public:
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. */
     ~Buffer() {
+        decref_dev();
         decref();
     }
 
@@ -944,7 +977,7 @@ public:
         // assert(dim(d).min() <= min);
         // assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
-        if (shift) disown_device_handle();
+        if (shift) decref_dev();
         buf.host += shift * dim(d).stride() * buf.elem_size;
         buf.min[d] = min;
         buf.extent[d] = extent;
@@ -982,7 +1015,7 @@ public:
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
-        disown_device_handle();
+        decref_dev();
         buf.min[d] += delta;
     }
 
@@ -996,7 +1029,7 @@ public:
 
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
-        disown_device_handle();
+        decref_dev();
         for (size_t i = 0; i < delta.size(); i++) {
             translate(i, delta[i]);
         }
@@ -1007,7 +1040,7 @@ public:
     void set_min(Args... args) {
         static_assert(sizeof...(args) <= D, "Too many arguments for dimensionality of Buffer");
         assert(sizeof...(args) <= (size_t)dimensions());
-        disown_device_handle();
+        decref_dev();
         const int x[] = {args...};
         for (size_t i = 0; i < sizeof...(args); i++) {
             buf.min[i] = x[i];
@@ -1040,7 +1073,7 @@ public:
     /** Slice an image in-place */
     void slice(int d, int pos) {
         // assert(pos >= dim(d).min() && pos <= dim(d).max());
-        disown_device_handle();
+        decref_dev();
         dims--;
         int shift = pos - dim(d).min();
         assert(buf.dev == 0 || shift == 0);
@@ -1094,7 +1127,6 @@ public:
     void add_dimension() {
         // Check there's enough space for a new dimension.
         assert(dims < D);
-        disown_device_handle();
         buf.min[dims] = 0;
         buf.extent[dims] = 1;
         if (dims == 0) {
@@ -1155,14 +1187,18 @@ public:
     }
 
     int device_free(void *ctx = nullptr) {
-        if (alloc && buf.dev) {
+        if (dev_ref_count) {
             // Multiple people may be holding onto this dev field
-            assert(alloc->ref_count == 1 &&
-                   "Multiple Halide::Buffer objects may refer to this device"
-                   " allocation. Freeing it could create dangling references. "
-                   "Don't call device_free on Halide buffers that you have copied.");
+            assert(*dev_ref_count == 1 &&
+                   "Multiple Halide::Buffer objects share this device "
+                   "allocation. Freeing it would create dangling references. "
+                   "Don't call device_free on Halide buffers that you have copied or "
+                   "passed by value.");
         }
         int ret = halide_device_free(ctx, &buf);
+        if (dev_ref_count) {
+            delete dev_ref_count;
+        }
         return ret;
     }
 
