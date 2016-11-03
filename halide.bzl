@@ -80,14 +80,6 @@ _HALIDE_TARGET_MAP_DEFAULT = {
     "x86-32-linux-sse41",
     "x86-32-linux",
   ],
-  "x86-64-nacl": [
-    "x86-64-nacl-sse41",
-    "x86-64-nacl"
-  ],
-  "x86-32-nacl": [
-    "x86-32-nacl-sse41",
-    "x86-32-nacl"
-  ],
 }
 
 def _halide_host_config_settings():
