@@ -205,8 +205,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(mandelbrot)
   add_test_generator(matlab)
   add_test_generator(memory_profiler_mandelbrot)
-  add_test_generator(metadata_tester
-                     GENERATOR_NAME Halide::Internal::MetadataTesterStub)
+  add_test_generator(metadata_tester)
   add_test_generator(msan)
   add_test_generator(multitarget)
   add_test_generator(nested_externs)
@@ -289,7 +288,6 @@ if (WITH_TEST_GENERATORS)
   # Tests that require additional dependencies, args, etc
   set(MDTEST_GEN_ARGS input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2)
   halide_define_aot_test(metadata_tester
-                         GENERATOR_NAME Halide::Internal::MetadataTesterStub
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
                                  AOT_LIBRARY_TARGET metadata_tester_ucon
