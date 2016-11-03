@@ -37,11 +37,6 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
     }
 
-    #if !(WITH_NATIVE_CLIENT)
-    user_assert(target.os != Target::NaCl) << "llvm build not configured with native client enabled\n.";
-    #endif
-
-
     // Generate the cast patterns that can take vector types.  We need
     // to iterate over all 64 and 128 bit integer types relevant for
     // neon.
@@ -785,8 +780,7 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     // We have builtins for strided stores with fixed but unknown stride, but they use inline assembly
-    if (target.os != Target::NaCl /* No inline assembly in NaCl */ &&
-        target.bits != 64 /* Not yet implemented for aarch64 */) {
+    if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_store_"
                 << (op->value.type().is_float() ? 'f' : 'i')
@@ -912,8 +906,7 @@ void CodeGen_ARM::visit(const Load *op) {
     }
 
     // We have builtins for strided loads with fixed but unknown stride, but they use inline assembly.
-    if (target.os != Target::NaCl /* No inline assembly in nacl */ &&
-        target.bits != 64 /* Not yet implemented for aarch64 */) {
+    if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_load_"
                 << (op->type.is_float() ? 'f' : 'i')
