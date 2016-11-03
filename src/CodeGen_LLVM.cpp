@@ -24,7 +24,6 @@
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
-#include "CodeGen_PNaCl.h"
 #include "CodeGen_Hexagon.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
@@ -308,11 +307,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
         }
 #endif
-#ifdef WITH_NATIVE_CLIENT
-        if (target.arch == Target::PNaCl) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl>>(target, context);
-        }
-#endif
 
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
@@ -326,8 +320,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_MIPS>(target, context);
     } else if (target.arch == Target::POWERPC) {
         return make_codegen<CodeGen_PowerPC>(target, context);
-    } else if (target.arch == Target::PNaCl) {
-        return make_codegen<CodeGen_PNaCl>(target, context);
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
     }
@@ -938,10 +930,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    // The optimization passes inject intrinsics that aren't legal for
-    // PNaCl. (e.g. vectorized floor).
-    if (target.arch == Target::PNaCl) return;
-
     if (debug::debug_level >= 3) {
         module->dump();
     }
@@ -976,11 +964,9 @@ void CodeGen_LLVM::optimize_module() {
     MyFunctionPassManager function_pass_manager(module.get());
     MyModulePassManager module_pass_manager;
 
-    #if !WITH_NATIVE_CLIENT
     std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
-    #endif
 
     PassManagerBuilder b;
     b.OptLevel = 3;
@@ -2820,11 +2806,7 @@ void CodeGen_LLVM::visit(const Call *op) {
              call_args.push_back(&arg);
         }
 
-#if !WITH_NATIVE_CLIENT
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
-#else
-        llvm::CallInst *call = builder->CreateCall(phi, call_args);
-#endif
         value = call;
     } else if (op->is_intrinsic(Call::prefetch) ||
                op->is_intrinsic(Call::prefetch_2d)) {

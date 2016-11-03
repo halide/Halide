@@ -280,12 +280,10 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UnsafeFPMath = true;
 
     #if LLVM_VERSION < 40
-    #ifndef WITH_NATIVE_CLIENT
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us. In LLVM 4.0+ this moved to be a
     // function attribute.
     options.Reciprocals.setDefaults("all", false, 0);
-    #endif
     #endif
 
     options.NoInfsFPMath = true;
@@ -295,11 +293,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
     options.FunctionSections = true;
-    #ifdef WITH_NATIVE_CLIENT
-    options.UseInitArray = true;
-    #else
     options.UseInitArray = false;
-    #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     #if LLVM_VERSION >= 39
