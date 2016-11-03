@@ -389,7 +389,37 @@ extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 /** Allocate device memory to back a buffer_t. */
 extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
 
+/** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
+
+/** Get a pointer to halide_device_free if a Halide runtime has been
+ * linked in. Returns null if it has not. This requires a different
+ * mechanism on different platforms. */
+typedef int (*halide_device_free_t)(void *, struct buffer_t *);
+#ifdef _MSC_VER
+extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+// The following pragma tells the windows linker to make
+// halide_device_free_weak the same symbol as halide_dummy_device_free
+// if it can't resolve halide_weak_device_free normally
+#ifdef _WIN64
+#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
+#else
+#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
+#endif
+inline halide_device_free_t halide_get_device_free_fn() {
+    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
+        return nullptr;
+    } else {
+        return &halide_weak_device_free;
+    }
+};
+#else
+extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+inline halide_device_free_t halide_get_device_free_fn() {
+    return &halide_weak_device_free;
+}
+#endif
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
