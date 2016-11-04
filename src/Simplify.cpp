@@ -2851,13 +2851,15 @@ private:
         } else if (sel && is_zero(sel->true_value)) {
             // select(c, 0, f) == 0 -> c || (f == 0)
             expr = mutate(sel->condition || (sel->false_value == zero));
-        } else if (sel && is_const(sel->true_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->true_value) || is_negative_const(sel->true_value))) {
             // select(c, 4, f) == 0 -> !c && (f == 0)
             expr = mutate((!sel->condition) && (sel->false_value == zero));
         } else if (sel && is_zero(sel->false_value)) {
             // select(c, t, 0) == 0 -> !c || (t == 0)
             expr = mutate((!sel->condition) || (sel->true_value == zero));
-        } else if (sel && is_const(sel->false_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->false_value) || is_negative_const(sel->false_value))) {
             // select(c, t, 4) == 0 -> c && (t == 0)
             expr = mutate((sel->condition) && (sel->true_value == zero));
         } else {
@@ -4957,6 +4959,26 @@ void check_vectors() {
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           ramp(const_false(), const_true(), 2),
+                           broadcast(const_false(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = !(ramp(const_true(), const_true(), 2)) ||
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           broadcast(const_true(), 2),
+                           ramp(const_false(), const_true(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = (!ramp(const_true(), const_true(), 2)) &&
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
 }
 
 void check_bounds() {
