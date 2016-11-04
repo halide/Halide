@@ -23,12 +23,7 @@
 #include <llvm/Bitcode/BitstreamWriter.h>
 #include <llvm/Bitcode/LLVMBitCodes.h>
 #include <llvm/IR/Constants.h>
-#if LLVM_VERSION >= 37
 #include <llvm/IR/DebugInfoMetadata.h>
-#endif
-#if WITH_NATIVE_CLIENT
-#include <llvm/IR/DebugInfo.h>
-#endif
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
@@ -643,29 +638,6 @@ static void WriteMDTuple(const MDTuple *N, const llvm_3_2::ValueEnumerator &VE,
   Record.clear();
 }
 
-#if LLVM_VERSION < 37
-static void WriteMDLocation(const MDLocation *N, const llvm_3_2::ValueEnumerator &VE,
-                            BitstreamWriter &Stream,
-                            SmallVectorImpl<uint64_t> &Record,
-                            unsigned Abbrev) {
-  Record.push_back(N->isDistinct());
-  Record.push_back(N->getLine());
-  Record.push_back(N->getColumn());
-  Record.push_back(VE.getMetadataID(N->getScope()));
-  Record.push_back(VE.getMetadataOrNullID(N->getInlinedAt()));
-
-  Stream.EmitRecord(bitc::METADATA_LOCATION, Record, Abbrev);
-  Record.clear();
-}
-#endif
-
-/*
-static void WriteGenericDebugNode(const GenericDebugNode *,
-                                  const llvm_3_2::ValueEnumerator &, BitstreamWriter &,
-                                  SmallVectorImpl<uint64_t> &, unsigned) {
-  llvm_unreachable("unimplemented");
-}*/
-
 #if LLVM_VERSION >= 39
 #define BITC_METADATA_STRING bitc::METADATA_STRING_OLD
 #else
@@ -719,9 +691,6 @@ static void WriteModuleMetadata(const Module *M,
   }
 
   unsigned MDTupleAbbrev = 0;
-#if LLVM_VERSION < 37
-  unsigned MDLocationAbbrev = 0;
-#endif
   //unsigned GenericDebugNodeAbbrev = 0;
   SmallVector<uint64_t, 64> Record;
   for (const Metadata *MD : MDs) {
@@ -729,18 +698,11 @@ static void WriteModuleMetadata(const Module *M,
       switch (N->getMetadataID()) {
       default:
         llvm_unreachable("Invalid MDNode subclass");
-#if LLVM_VERSION >= 37
 #define HANDLE_SPECIALIZED_MDNODE_LEAF(CLASS)
 #define HANDLE_MDNODE_LEAF(CLASS)                                              \
   case Metadata::CLASS##Kind:                                                  \
     Write##CLASS(cast<CLASS>(N), VE, Stream, Record, CLASS##Abbrev);           \
     continue;
-#else
-#define HANDLE_UNIQUABLE_LEAF(CLASS)                                           \
-  case Metadata::CLASS##Kind:                                                  \
-    Write##CLASS(cast<CLASS>(N), VE, Stream, Record, CLASS##Abbrev);           \
-    continue;
-#endif
 #include "llvm/IR/Metadata.def"
       }
     }
@@ -1188,17 +1150,9 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
     break;
 
   case Instruction::GetElementPtr:
-#if LLVM_VERSION < 37
-    Code = bitc::FUNC_CODE_INST_GEP;
-#else
     Code = bitc::FUNC_CODE_INST_GEP_OLD;
-#endif
     if (cast<GEPOperator>(&I)->isInBounds())
-#if LLVM_VERSION < 37
-      Code = bitc::FUNC_CODE_INST_INBOUNDS_GEP;
-#else
       Code = bitc::FUNC_CODE_INST_INBOUNDS_GEP_OLD;
-#endif
     for (unsigned i = 0, e = I.getNumOperands(); i != e; ++i)
       PushValueAndType(I.getOperand(i), InstID, Vals, VE);
     break;
@@ -1347,12 +1301,8 @@ static void WriteInstruction(const Instruction &I, unsigned InstID,
     const LandingPadInst &LP = cast<LandingPadInst>(I);
     Code = bitc::FUNC_CODE_INST_LANDINGPAD;
     Vals.push_back(VE.getTypeID(LP.getType()));
-#if LLVM_VERSION < 37 || WITH_NATIVE_CLIENT
-    PushValueAndType(LP.getPersonalityFn(), InstID, Vals, VE);
-#else
     PushValueAndType(LP.getParent()->getParent()->getPersonalityFn(), InstID,
                      Vals, VE);
-#endif
     Vals.push_back(LP.isCleanup());
     Vals.push_back(LP.getNumClauses());
     for (unsigned I = 0, E = LP.getNumClauses(); I != E; ++I) {
@@ -1600,30 +1550,16 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
 
       // If the instruction has a debug location, emit it.
       DebugLoc DL = I->getDebugLoc();
-#if LLVM_VERSION >= 37
       if (!DL) {
-#else
-      if (DL.isUnknown()) {
-#endif
         // nothing todo.
       } else if (DL == LastDL) {
         // Just repeat the same debug loc as last time.
         Stream.EmitRecord(bitc::FUNC_CODE_DEBUG_LOC_AGAIN, Vals);
       } else {
 
-#if WITH_NATIVE_CLIENT
-        MDNode* Scope = DL.getScope();
-        assert(Scope && "Expected valid scope");
-        MDLocation *IA = DL.getInlinedAt();
-#elif LLVM_VERSION >= 37
         MDNode* Scope = DL.getScope();
         assert(Scope && "Expected valid scope");
         DILocation *IA = DL.getInlinedAt();
-#else
-        MDNode *Scope, *IA;
-        DL.getScopeAndInlinedAt(Scope, IA, I->getContext());
-        assert(Scope && "Expected valid scope");
-#endif
 
         Vals.push_back(DL.getLine());
         Vals.push_back(DL.getCol());
@@ -1642,7 +1578,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
 #else
   WriteValueSymbolTable(&F.getValueSymbolTable(), VE, Stream);
 #endif
-  
+
   if (NeedsMetadataAttachment)
     WriteMetadataAttachment(F, VE, Stream);
   if (VE.shouldPreserveUseListOrder())
@@ -1657,7 +1593,11 @@ static void WriteBlockInfo(const llvm_3_2::ValueEnumerator &VE,
   // We only want to emit block info records for blocks that have multiple
   // instances: CONSTANTS_BLOCK, FUNCTION_BLOCK and VALUE_SYMTAB_BLOCK.  Other
   // blocks can defined their abbrevs inline.
+#if LLVM_VERSION >= 40
+  Stream.EnterBlockInfoBlock();
+#else
   Stream.EnterBlockInfoBlock(2);
+#endif
 
   { // 8-bit fixed-width VST_ENTRY/VST_BBENTRY strings.
     BitCodeAbbrev *Abbv = new BitCodeAbbrev();

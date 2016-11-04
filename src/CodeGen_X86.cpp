@@ -28,10 +28,6 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
     #endif
 
     user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
-
-    #if !(WITH_NATIVE_CLIENT)
-    user_assert(t.os != Target::NaCl) << "llvm build not configured with native client enabled.\n";
-    #endif
 }
 
 namespace {
@@ -423,8 +419,6 @@ string CodeGen_X86::mcpu() const {
 string CodeGen_X86::mattrs() const {
     std::string features;
     std::string separator;
-    #if LLVM_VERSION >= 35
-    // These attrs only exist in llvm 3.5+
     if (target.has_feature(Target::FMA)) {
         features += "+fma";
         separator = ",";
@@ -437,7 +431,6 @@ string CodeGen_X86::mattrs() const {
         features += separator + "+f16c";
         separator = ",";
     }
-    #endif
     return features;
 }
 
