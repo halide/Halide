@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
 
         Pipeline p({f, g, h});
 
-        Image<int> f_im(size_x + 1, size_y);
-        Image<float> g_im(size_x, size_y), h_im(size_x, size_y);
+        Buffer<int> f_im(size_x + 1, size_y);
+        Buffer<float> g_im(size_x, size_y), h_im(size_x, size_y);
         Realization r(f_im, g_im, h_im);
         p.realize(r);
     }

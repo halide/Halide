@@ -55,7 +55,7 @@ def main():
     # way. We can pass it an image we would like it to fill in. The
     # following evaluates our Func into an existing image:
     print("Evaluating gradient from (0, 0) to (7, 7)")
-    result = Image(Int(32), 8, 8)
+    result = Buffer(Int(32), 8, 8)
     gradient.realize(result)
 
     # Let's check it did what we expect:
@@ -64,16 +64,16 @@ def main():
             if result(xx, yy) != xx + yy:
                 print("Something went wrong!")
                 return -1
-            
-        
-    
+
+
+
 
     # Now let's evaluate gradient over a 5 x 7 rectangle that starts
     # somewhere else -- at position (100, 50). So x and y will run
     # from (100, 50) to (104, 56) inclusive.
 
     # We start by creating an image that represents that rectangle:
-    shifted = Image(Int(32), 5, 7) # In the constructor we tell it the size.
+    shifted = Buffer(Int(32), 5, 7) # In the constructor we tell it the size.
     shifted.set_min(100, 50) # Then we tell it the top-left corner.
 
     print("Evaluating gradient from (100, 50) to (104, 56)")
@@ -90,9 +90,9 @@ def main():
             if shifted(xx, yy) != xx + yy:
                 print("Something went wrong!")
                 return -1
-            
-        
-    
+
+
+
     # The image 'shifted' stores the value of our Func over a domain
     # that starts at (100, 50), so asking for shifted(0, 0) would in
     # fact read out-of-bounds and probably crash.

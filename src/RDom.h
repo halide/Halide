@@ -75,7 +75,7 @@ public:
  RDom r(0, 10);
  f(x) = x; // the initial value
  f(r) = f(r) * 2;
- Image<int> result = f.realize(10);
+ Buffer<int> result = f.realize(10);
  \endcode
  *
  * This function creates a single-dimensional buffer of size 10, in
@@ -213,10 +213,10 @@ public:
      * a given Buffer or ImageParam. Has the same dimensionality as
      * the argument. */
     // @{
-    EXPORT RDom(const Image<> &);
+    EXPORT RDom(const Buffer<> &);
     EXPORT RDom(ImageParam);
     template<typename T, int D>
-    NO_INLINE RDom(const Image<T, D> &im) : RDom(Image<>(im)) {}
+    NO_INLINE RDom(const Buffer<T, D> &im) : RDom(Buffer<>(im)) {}
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */

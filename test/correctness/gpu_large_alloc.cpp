@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<int> img = g.realize(W, H, target);
+    Buffer<int> img = g.realize(W, H, target);
 
     for (int i = 0; i < W; i++) {
         for (int j = 0; j < H; j++) {

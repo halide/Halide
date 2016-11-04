@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     f.parallel(y);
     f.parallel(z);
 
-    Image<int> im = f.realize(64, 64, 64);
+    Buffer<int> im = f.realize(64, 64, 64);
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {

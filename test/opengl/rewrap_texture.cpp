@@ -32,10 +32,10 @@ int main() {
     const int width = 255;
     const int height = 10;
 
-    Image<uint8_t> input(width, height, 3);
-    Image<uint8_t> out1(width, height, 3);
-    Image<uint8_t> out2(width, height, 3);
-    Image<uint8_t> out3(width, height, 3);
+    Buffer<uint8_t> input(width, height, 3);
+    Buffer<uint8_t> out1(width, height, 3);
+    Buffer<uint8_t> out2(width, height, 3);
+    Buffer<uint8_t> out3(width, height, 3);
 
     Var x, y, c;
     Func g;

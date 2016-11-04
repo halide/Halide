@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<int> input(100, 50);
+    Buffer<int> input(100, 50);
 
     // This image represents the range [100, 199]*[50, 99]
     input.set_min(100, 50);
@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     f.compile_jit();
 
     // The output will represent the range from [50, 99]*[100, 199]
-    Image<int> result(50, 100);
+    Buffer<int> result(50, 100);
     result.set_min(50, 100);
 
     f.realize(result);

@@ -38,7 +38,7 @@ int double_toggle_trace(void *user_context, const halide_trace_event *e) {
     return 0;
 }
 
-int check_correctness_single(const Image<int> &out, bool toggle) {
+int check_correctness_single(const Buffer<int> &out, bool toggle) {
     for (int x = 0; x < out.width(); ++x) {
         int correct = 1;
         if (toggle) {
@@ -53,7 +53,7 @@ int check_correctness_single(const Image<int> &out, bool toggle) {
     return 0;
 }
 
-int check_correctness_double(const Image<int> &out, bool toggle1, bool toggle2) {
+int check_correctness_double(const Buffer<int> &out, bool toggle1, bool toggle2) {
     for (int x = 0; x < out.width(); ++x) {
         int correct;
         if (toggle1 && toggle2) {
@@ -95,7 +95,7 @@ int single_memoize_test(int index) {
     for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
-        Image<int> out = f2.realize(10);
+        Buffer<int> out = f2.realize(10);
         if (check_correctness_single(out, set_toggle1) != 0) {
             return -1;
         }
@@ -125,8 +125,8 @@ int tuple_memoize_test(int index) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Realization out = f2.realize(128);
-        Image<int> out0 = out[0];
-        Image<int> out1 = out[1];
+        Buffer<int> out0 = out[0];
+        Buffer<int> out1 = out[1];
 
         if (check_correctness_single(out0, set_toggle1) != 0) {
             return -1;
@@ -164,7 +164,7 @@ int non_trivial_allocate_predicate_test(int index) {
         set_toggle1 = toggle_val;
         set_toggle2 = toggle_val;
         toggle.set(set_toggle1);
-        Image<int> out = f3.realize(10);
+        Buffer<int> out = f3.realize(10);
         if (check_correctness_single(out, set_toggle1) != 0) {
             return -1;
         }
@@ -199,7 +199,7 @@ int double_memoize_test(int index) {
             set_toggle2 = toggle_val2;
             toggle1.set(set_toggle1);
             toggle2.set(toggle_val2);
-            Image<int> out = f3.realize(10);
+            Buffer<int> out = f3.realize(10);
             if (check_correctness_double(out, set_toggle1, set_toggle2) != 0) {
                 return -1;
             }

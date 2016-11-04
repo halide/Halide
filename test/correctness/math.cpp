@@ -63,14 +63,14 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                           \
         ImageParam input(type_of<type>(), 1);                                 \
         test_##name(x) = name(input(x));                                      \
-        Image<type> in_buffer(*in_buf);                                       \
+        Buffer<type> in_buffer(*in_buf);                                       \
         input.set(in_buffer);                                                 \
         if (target.has_gpu_feature()) {                                       \
             test_##name.gpu_tile(x, 8);                                       \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Image<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
+        Buffer<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
             type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]); \
 	    if (!relatively_equal(c_result, result(i)))			\
@@ -91,14 +91,14 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                                 \
         ImageParam input(type_of<type>(), 2);                                       \
         test_##name(x) = name(input(0, x), input(1, x));                            \
-        Image<type> in_buffer(*in_buf);                                             \
+        Buffer<type> in_buffer(*in_buf);                                             \
         input.set(in_buffer);                                                       \
         if (target.has_gpu_feature()) {                                             \
             test_##name.gpu_tile(x, 8);                                             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Image<type_ret> result = test_##name.realize(in_buf->extent[1], target);    \
+        Buffer<type_ret> result = test_##name.realize(in_buf->extent[1], target);    \
         for (int i = 0; i < in_buf->extent[1]; i++) {                               \
             type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2], \
                                        reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]); \
@@ -166,7 +166,7 @@ fun_2(uint32_t, uint32_t, absd, absd)
 
 template <typename T>
 struct TestArgs {
-    Image<T> data;
+    Buffer<T> data;
 
     TestArgs(int steps, T start, T end)
       : data(steps) {

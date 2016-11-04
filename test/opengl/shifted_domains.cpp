@@ -22,7 +22,7 @@ int shifted_domains() {
     gradient.glsl(x, y, c);
 
     printf("Evaluating gradient from (0, 0) to (7, 7)\n");
-    Image<float> result(8, 8, 1);
+    Buffer<float> result(8, 8, 1);
     gradient.realize(result, target);
     result.copy_to_host();
 
@@ -38,7 +38,7 @@ int shifted_domains() {
         }
     }
 
-    Image<float> shifted(5, 7, 1);
+    Buffer<float> shifted(5, 7, 1);
     shifted.set_min(100, 50);
 
     printf("Evaluating gradient from (100, 50) to (104, 56)\n");
