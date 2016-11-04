@@ -52,6 +52,12 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
     #endif
 
+    // Enable symbol rewriting. This allows code outside libHalide to
+    // use symbol rewriting when compiling Halide code (for example, by
+    // using cl::ParseCommandLineOption and then passing the appropriate
+    // rewrite options via -mllvm flags).
+    pass_manager.add(llvm::createRewriteSymbolsPass());
+
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
 
@@ -84,15 +90,17 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
                     const std::string &dst_file, bool deterministic) {
     internal_assert(!src_files.empty());
-#if !defined(WITH_NATIVE_CLIENT)
-
 #if LLVM_VERSION >= 39
     std::vector<llvm::NewArchiveMember> new_members;
     for (auto &src : src_files) {
         llvm::Expected<llvm::NewArchiveMember> new_member =
             llvm::NewArchiveMember::getFile(src, /*Deterministic=*/true);
-        internal_assert((bool)new_member)
-            << src << ": " << llvm::toString(new_member.takeError()) << "\n";
+        if (!new_member) {
+            // Don't use internal_assert: the call to new_member.takeError() will be evaluated
+            // even if the assert does not fail, leaving new_member in an indeterminate
+            // state.
+            internal_error << src << ": " << llvm::toString(new_member.takeError()) << "\n";
+        }
         new_members.push_back(std::move(*new_member));
     }
 #elif LLVM_VERSION == 38
@@ -128,22 +136,6 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
 #endif
     internal_assert(!result.second) << "Failed to write archive: " << dst_file
         << ", reason: " << result.second << "\n";
-#else  // <= 3.6 or PNacl
-    // LLVM 3.6-and-earlier don't expose the right API. Halide no longer officially
-    // supports these versions, but we still do some build-and-testing on them
-    // as a way to improve pnacl-llvm coverage (since it's somewhere between 3.6 and 3.7),
-    // so as a stopgap measure to allow Makefiles to rely on static_library output,
-    // shell out to 'ar' to do the work. This will hopefully be short-lived as even
-    // limited support for pre-3.7 shouldn't need to live much longer.
-    // (Also note that we don't use the "deterministic" flag since not all ar implementations
-    // support it.)
-    std::string command = "ar qsv " + dst_file;
-    for (auto &src : src_files) {
-        command += " " + src;
-    }
-    int result = system(command.c_str());
-    internal_assert(result == 0) << "shelling out to ar failed.\n";
-#endif
 }
 
 }  // namespace Halide

@@ -1,16 +1,18 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <string.h>
+#include <cstdlib>
 
-#include "generated/fft_forward_r2c.h"
-#include "generated/fft_inverse_c2r.h"
-#include "generated/fft_forward_c2c.h"
-#include "generated/fft_inverse_c2c.h"
+#include "fft_forward_r2c.h"
+#include "fft_inverse_c2r.h"
+#include "fft_forward_c2c.h"
+#include "fft_inverse_c2c.h"
 
 namespace {
 const float kPi = 3.14159265358979310000f;
 
-const size_t kSize = 16;
+const int32_t kSize = 16;
 }
 
 // Make a buffer_t for real input to the FFT.
@@ -73,7 +75,6 @@ int main(int argc, char **argv) {
 
         int halide_result;
         halide_result = fft_forward_r2c(&in, &out);
-
         if (halide_result != 0) {
             std::cerr << "fft_forward_r2c failed returning " << halide_result << std::endl;
             exit(1);
@@ -153,6 +154,10 @@ int main(int argc, char **argv) {
 
         int halide_result;
         halide_result = fft_inverse_c2r(&in, &out);
+        if (halide_result != 0) {
+            std::cerr << "fft_inverse_c2r failed returning " << halide_result << std::endl;
+            exit(1);
+        }
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {
@@ -193,6 +198,10 @@ int main(int argc, char **argv) {
 
         int halide_result;
         halide_result = fft_forward_c2c(&in, &out);
+        if (halide_result != 0) {
+            std::cerr << "fft_forward_c2c failed returning " << halide_result << std::endl;
+            exit(1);
+        }
 
         for (size_t i = 1; i < 5; i++) {
             // Check horizontal bins
@@ -263,6 +272,10 @@ int main(int argc, char **argv) {
 
         int halide_result;
         halide_result = fft_inverse_c2c(&in, &out);
+        if (halide_result != 0) {
+            std::cerr << "fft_inverse_c2c failed returning " << halide_result << std::endl;
+            exit(1);
+        }
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {

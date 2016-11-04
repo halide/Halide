@@ -24,7 +24,8 @@ int main(int argc, char **argv) {
     ImageParam input(UInt(8), 3);
 
     // Apply a boundary condition to the input.
-    Func input_bounded = BoundaryConditions::repeat_edge(input);
+    Func input_bounded("input_bounded");
+    input_bounded(x, y, c) = BoundaryConditions::repeat_edge(input)(x, y, c);
 
     // Implement this as a separable blur in y followed by x.
     Func blur_y("blur_y");
@@ -54,20 +55,27 @@ int main(int argc, char **argv) {
         // into chunks of multiples of the vector size, computing the
         // blur in y at each chunk. We use the RoundUp tail strategy to
         // keep the last chunk's memory accesses aligned.
-        Var xo("xo"), xi("xi");
+        Var yo("yo");
         blur.compute_root()
             .hexagon()
-            .split(x, xo, xi, vector_size*2, TailStrategy::RoundUp)
-            .vectorize(xi, vector_size)
-            .parallel(y, 16);
-        blur_y.compute_at(blur, y)
+            .prefetch(y, 2)
+            .split(y, yo, y, 128).parallel(yo)
+            .vectorize(x, vector_size * 2, TailStrategy::RoundUp);
+        blur_y
+            .compute_at(blur, y)
+            .vectorize(x, vector_size, TailStrategy::RoundUp);
+
+        // Line buffer the boundary condition, which is expensive. Line
+        // buffering it computes it once per row, instead of 5 times per row.
+        input_bounded
+            .compute_at(blur, y)
+            .store_at(blur, yo)
+            .align_storage(x, 64)
+            .fold_storage(y, 8)
             .vectorize(x, vector_size, TailStrategy::RoundUp);
 
         // Require scanlines of the input and output to be aligned.
         auto blur_buffer = blur.output_buffer();
-
-        input.set_host_alignment(vector_size);
-        blur_buffer.set_host_alignment(vector_size);
 
         input.set_min(0, 0).set_extent(0, (input.extent(0)/vector_size)*vector_size);
         blur_buffer.set_min(0, 0).set_extent(0, (blur_buffer.extent(0)/vector_size)*vector_size);

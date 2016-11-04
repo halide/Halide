@@ -24,7 +24,6 @@
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
-#include "CodeGen_PNaCl.h"
 #include "CodeGen_Hexagon.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
@@ -308,11 +307,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
         }
 #endif
-#ifdef WITH_NATIVE_CLIENT
-        if (target.arch == Target::PNaCl) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PNaCl>>(target, context);
-        }
-#endif
 
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
@@ -326,8 +320,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_MIPS>(target, context);
     } else if (target.arch == Target::POWERPC) {
         return make_codegen<CodeGen_PowerPC>(target, context);
-    } else if (target.arch == Target::PNaCl) {
-        return make_codegen<CodeGen_PNaCl>(target, context);
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
     }
@@ -569,6 +561,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     // Make our function
     FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
+    set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -629,7 +622,20 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
-    // Generate the function body.
+    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
+    // happen for every output buffer if the function succeeds.
+    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {
+        llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
+        internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
+        annotate_buffer_fn->setDoesNotAlias(0);
+        for (const auto &arg : f.args) {
+            if (arg.kind == Argument::OutputBuffer) {
+                register_destructor(annotate_buffer_fn, sym_get(arg.name), OnSuccess);
+            }
+        }
+    }
+
+     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
 
@@ -701,14 +707,16 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     PHINode *error_code = dyn_cast<PHINode>(dtors->begin());
     internal_assert(error_code) << "The destructor block is supposed to start with a phi node\n";
 
-    llvm::Value *should_call =
-        (when == Always) ?
-        ConstantInt::get(i1_t, 1) :
-        builder->CreateIsNotNull(error_code);
-
+    llvm::Value *should_call = nullptr;
+    switch (when) {
+        case Always:    should_call = ConstantInt::get(i1_t, 1); break;
+        case OnError:   should_call = builder->CreateIsNotNull(error_code); break;
+        case OnSuccess: should_call = builder->CreateIsNull(error_code); break;
+    }
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
+    internal_assert(should_call);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
 
@@ -922,10 +930,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    // The optimization passes inject intrinsics that aren't legal for
-    // PNaCl. (e.g. vectorized floor).
-    if (target.arch == Target::PNaCl) return;
-
     if (debug::debug_level >= 3) {
         module->dump();
     }
@@ -936,7 +940,11 @@ void CodeGen_LLVM::optimize_module() {
     public:
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         virtual void add(Pass *p) override {
+#if LLVM_VERSION >= 40
+            debug(2) << "Adding function pass: " << p->getPassName().str() << "\n";
+#else
             debug(2) << "Adding function pass: " << p->getPassName() << "\n";
+#endif
             legacy::FunctionPassManager::add(p);
         }
     };
@@ -944,7 +952,11 @@ void CodeGen_LLVM::optimize_module() {
     class MyModulePassManager : public legacy::PassManager {
     public:
         virtual void add(Pass *p) override {
+#if LLVM_VERSION >= 40
+            debug(2) << "Adding module pass: " << p->getPassName().str() << "\n";
+#else
             debug(2) << "Adding module pass: " << p->getPassName() << "\n";
+#endif
             legacy::PassManager::add(p);
         }
     };
@@ -952,11 +964,9 @@ void CodeGen_LLVM::optimize_module() {
     MyFunctionPassManager function_pass_manager(module.get());
     MyModulePassManager module_pass_manager;
 
-    #if !WITH_NATIVE_CLIENT
     std::unique_ptr<TargetMachine> TM = make_target_machine(*module);
     module_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis() : TargetIRAnalysis()));
-    #endif
 
     PassManagerBuilder b;
     b.OptLevel = 3;
@@ -2796,12 +2806,12 @@ void CodeGen_LLVM::visit(const Call *op) {
              call_args.push_back(&arg);
         }
 
-#if !WITH_NATIVE_CLIENT
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
-#else
-        llvm::CallInst *call = builder->CreateCall(phi, call_args);
-#endif
         value = call;
+    } else if (op->is_intrinsic(Call::prefetch) ||
+               op->is_intrinsic(Call::prefetch_2d)) {
+        // Convert to a no-op since prefetch was not supported by target
+        value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
@@ -3086,22 +3096,16 @@ void CodeGen_LLVM::return_with_error_code(llvm::Value *error_code) {
 }
 
 void CodeGen_LLVM::visit(const ProducerConsumer *op) {
-    BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
+    string name;
+    if (op->is_producer) {
+        name = std::string("produce ") + op->name;
+    } else {
+        name = std::string("consume ") + op->name;
+    }
+    BasicBlock *produce = BasicBlock::Create(*context, name, function);
     builder->CreateBr(produce);
     builder->SetInsertPoint(produce);
-    codegen(op->produce);
-
-    if (op->update.defined()) {
-        BasicBlock *update = BasicBlock::Create(*context, std::string("update ") + op->name, function);
-        builder->CreateBr(update);
-        builder->SetInsertPoint(update);
-        codegen(op->update);
-    }
-
-    BasicBlock *consume = BasicBlock::Create(*context, std::string("consume ") + op->name, function);
-    builder->CreateBr(consume);
-    builder->SetInsertPoint(consume);
-    codegen(op->consume);
+    codegen(op->body);
 }
 
 void CodeGen_LLVM::visit(const For *op) {
@@ -3170,6 +3174,7 @@ void CodeGen_LLVM::visit(const For *op) {
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par_for_" + function->getName() + "_" + op->name, module.get());
         function->setDoesNotAlias(3);
+        set_function_attributes_for_target(function, target);
 
         // Make the initial basic block and jump the builder into the new function
         IRBuilderBase::InsertPoint call_site = builder->saveIP();

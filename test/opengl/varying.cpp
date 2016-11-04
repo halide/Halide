@@ -52,12 +52,8 @@ class CountVarying : public IRMutator {
 
 int main() {
 
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL))  {
-        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Var x("x");
     Var y("y");
@@ -82,7 +78,7 @@ int main() {
     // Run the test
     varyings.clear();
     f0.add_custom_lowering_pass(new CountVarying);
-    f0.realize(out0);
+    f0.realize(out0, target);
 
     // Check for the correct number of varying attributes
     if (varyings.size() != 2) {
@@ -153,7 +149,7 @@ int main() {
     // Run the test
     varyings.clear();
     f1.add_custom_lowering_pass(new CountVarying);
-    f1.realize(out1);
+    f1.realize(out1, target);
 
     // Check for the correct number of varying attributes
     if (varyings.size() != 4) {
@@ -212,7 +208,7 @@ int main() {
     // Run the test
     varyings.clear();
     f2.add_custom_lowering_pass(new CountVarying);
-    f2.realize(out2);
+    f2.realize(out2, target);
 
     // Check for the correct number of varying attributes
     if (varyings.size() != 4) {
@@ -283,7 +279,7 @@ int main() {
     // Run the test
     varyings.clear();
     f3.add_custom_lowering_pass(new CountVarying);
-    f3.realize(out3);
+    f3.realize(out3, target);
 
     // Check for the correct number of varying attributes
     if (varyings.size() != 2) {

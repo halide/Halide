@@ -99,7 +99,9 @@ public:
      * throw an error. rfactor() will automatically infer the associative reduction
      * operator and identity of the operator. If it can't prove the operation
      * is associative or if it cannot find an identity for that operator, this
-     * will throw an error.
+     * will throw an error. In addition, commutativity of the operator is required
+     * if rfactor() is called on the inner dimension but excluding the outer
+     * dimensions.
      *
      * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
      * The rvars not listed in 'preserved' are removed from the original Func and
@@ -229,6 +231,7 @@ public:
     EXPORT Stage &allow_race_conditions();
 
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
+    EXPORT Stage &prefetch(VarOrRVar var, Expr offset = 1);
     // @}
 };
 
@@ -468,7 +471,7 @@ public:
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
-    /** Construct a new Func to wrap an Image. */
+    /** Construct a new Func to wrap a Buffer. */
     template<typename T, int D>
     NO_INLINE explicit Func(const Buffer<T, D> &im) : Func() {
         (*this)(_) = im(_);
@@ -480,7 +483,7 @@ public:
      * been called. If the final stage of the pipeline is on the GPU,
      * data is copied back to the host before being returned. The
      * returned Realization should probably be instantly converted to
-     * an Image class of the appropriate type. That is, do this:
+     * a Buffer class of the appropriate type. That is, do this:
      *
      \code
      f(x) = sin(x);
@@ -543,7 +546,7 @@ public:
     NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
         // It's possible for bounds inference to also manipulate
         // output buffers if their host pointer is null, so we must
-        // take Images by reference and communicate the bounds query
+        // take Buffers by reference and communicate the bounds query
         // result by modifying the argument.
         Realization r(im);
         infer_input_bounds(r);
@@ -630,17 +633,19 @@ public:
     EXPORT void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
-     * arguments. Also names the C function to match the first
-     * argument.
+     * arguments. The name defaults to the same name as this halide
+     * function.
      */
     EXPORT void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
+                                const std::string &fn_name = "",
                                 const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
-     * arguments. Also names the C function to match the first
-     * argument.
+     * arguments. The name defaults to the same name as this halide
+     * function.
      */
     EXPORT void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
+                                          const std::string &fn_name = "",
                                           const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
@@ -1449,6 +1454,12 @@ public:
      * Hexagon, that loop is executed on a Hexagon DSP. */
     EXPORT Func &hexagon(VarOrRVar x = Var::outermost());
 
+    /** Prefetch data read by a subsequent loop iteration, at an
+     * optionally specified iteration offset. This is currently only
+     * implemented on Hexagon, prefetch directives are ignored on
+     * other targets. */
+    EXPORT Func &prefetch(VarOrRVar var, Expr offset = 1);
+
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
      * example, foo.reorder_storage(y, x) tells Halide to use
@@ -1832,6 +1843,37 @@ public:
     EXPORT std::vector<Argument> infer_arguments() const;
 };
 
+namespace Internal {
+
+template <typename Last>
+inline void check_types(const Tuple &t, int idx) {
+    using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
+    user_assert(t[idx].type() == type_of<T>())
+        << "Can't evaluate expression "
+        << t[idx] << " of type " << t[idx].type()
+        << " as a scalar of type " << type_of<T>() << "\n";
+}
+
+template <typename First, typename Second, typename... Rest>
+inline void check_types(const Tuple &t, int idx) {
+    check_types<First>(t, idx);
+    check_types<Second, Rest...>(t, idx+1);
+}
+
+template <typename Last>
+inline void assign_results(Realization &r, int idx, Last last) {
+    using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
+    *last = Buffer<T>(r[idx])();
+}
+
+template <typename First, typename Second, typename... Rest>
+inline void assign_results(Realization &r, int idx, First first, Second second, Rest&&... rest) {
+    assign_results<First>(r, idx, first);
+    assign_results<Second, Rest...>(r, idx+1, second, rest...);
+}
+
+}  // namespace Internal
+
 /** JIT-Compile and run enough code to evaluate a Halide
  * expression. This can be thought of as a scalar version of
  * \ref Func::realize */
@@ -1848,76 +1890,16 @@ NO_INLINE T evaluate(Expr e) {
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
-// @{
-template<typename A, typename B>
-NO_INLINE void evaluate(Tuple t, A *a, B *b) {
-    user_assert(t[0].type() == type_of<A>())
-        << "Can't evaluate expression "
-        << t[0] << " of type " << t[0].type()
-        << " as a scalar of type " << type_of<A>() << "\n";
-    user_assert(t[1].type() == type_of<B>())
-        << "Can't evaluate expression "
-        << t[1] << " of type " << t[1].type()
-        << " as a scalar of type " << type_of<B>() << "\n";
+template <typename First, typename... Rest>
+NO_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
+    Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
     f() = t;
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
+    Internal::assign_results(r, 0, first, rest...);
 }
 
-template<typename A, typename B, typename C>
-NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c) {
-    user_assert(t[0].type() == type_of<A>())
-        << "Can't evaluate expression "
-        << t[0] << " of type " << t[0].type()
-        << " as a scalar of type " << type_of<A>() << "\n";
-    user_assert(t[1].type() == type_of<B>())
-        << "Can't evaluate expression "
-        << t[1] << " of type " << t[1].type()
-        << " as a scalar of type " << type_of<B>() << "\n";
-    user_assert(t[2].type() == type_of<C>())
-        << "Can't evaluate expression "
-        << t[2] << " of type " << t[2].type()
-        << " as a scalar of type " << type_of<C>() << "\n";
-
-    Func f;
-    f() = t;
-    Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
-}
-
-template<typename A, typename B, typename C, typename D>
-NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
-    user_assert(t[0].type() == type_of<A>())
-        << "Can't evaluate expression "
-        << t[0] << " of type " << t[0].type()
-        << " as a scalar of type " << type_of<A>() << "\n";
-    user_assert(t[1].type() == type_of<B>())
-        << "Can't evaluate expression "
-        << t[1] << " of type " << t[1].type()
-        << " as a scalar of type " << type_of<B>() << "\n";
-    user_assert(t[2].type() == type_of<C>())
-        << "Can't evaluate expression "
-        << t[2] << " of type " << t[2].type()
-        << " as a scalar of type " << type_of<C>() << "\n";
-    user_assert(t[3].type() == type_of<D>())
-        << "Can't evaluate expression "
-        << t[3] << " of type " << t[3].type()
-        << " as a scalar of type " << type_of<D>() << "\n";
-
-    Func f;
-    f() = t;
-    Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
-    *d = Buffer<D>(r[3])();
-}
- // @}
 
 namespace Internal {
 
@@ -1954,75 +1936,15 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
 /** JIT-compile and run enough code to evaluate a Halide Tuple. Can
  *  use GPU if jit target from environment specifies one. */
 // @{
-template<typename A, typename B>
-NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
-    user_assert(t[0].type() == type_of<A>())
-        << "Can't evaluate expression "
-        << t[0] << " of type " << t[0].type()
-        << " as a scalar of type " << type_of<A>() << "\n";
-    user_assert(t[1].type() == type_of<B>())
-        << "Can't evaluate expression "
-        << t[1] << " of type " << t[1].type()
-        << " as a scalar of type " << type_of<B>() << "\n";
+template <typename First, typename... Rest>
+NO_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&... rest) {
+    Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-}
-
-template<typename A, typename B, typename C>
-NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
-    user_assert(t[0].type() == type_of<A>())
-        << "Can't evaluate expression "
-        << t[0] << " of type " << t[0].type()
-        << " as a scalar of type " << type_of<A>() << "\n";
-    user_assert(t[1].type() == type_of<B>())
-        << "Can't evaluate expression "
-        << t[1] << " of type " << t[1].type()
-        << " as a scalar of type " << type_of<B>() << "\n";
-    user_assert(t[2].type() == type_of<C>())
-        << "Can't evaluate expression "
-        << t[2] << " of type " << t[2].type()
-        << " as a scalar of type " << type_of<C>() << "\n";
-    Func f;
-    f() = t;
-    Internal::schedule_scalar(f);
-    Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
-}
-
-template<typename A, typename B, typename C, typename D>
-NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
-    user_assert(t[0].type() == type_of<A>())
-        << "Can't evaluate expression "
-        << t[0] << " of type " << t[0].type()
-        << " as a scalar of type " << type_of<A>() << "\n";
-    user_assert(t[1].type() == type_of<B>())
-        << "Can't evaluate expression "
-        << t[1] << " of type " << t[1].type()
-        << " as a scalar of type " << type_of<B>() << "\n";
-    user_assert(t[2].type() == type_of<C>())
-        << "Can't evaluate expression "
-        << t[2] << " of type " << t[2].type()
-        << " as a scalar of type " << type_of<C>() << "\n";
-    user_assert(t[3].type() == type_of<D>())
-        << "Can't evaluate expression "
-        << t[3] << " of type " << t[3].type()
-        << " as a scalar of type " << type_of<D>() << "\n";
-
-    Func f;
-    f() = t;
-    Internal::schedule_scalar(f);
-    Realization r = f.realize();
-    *a = Buffer<A>(r[0])();
-    *b = Buffer<B>(r[1])();
-    *c = Buffer<C>(r[2])();
-    *d = Buffer<D>(r[3])();
+    Internal::assign_results(r, 0, first, rest...);
 }
 // @}
 

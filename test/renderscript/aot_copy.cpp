@@ -30,7 +30,7 @@ void copy_interleaved(bool vectorize, int channels) {
     std::vector<Argument> args;
     args.push_back(input8);
 
-    result.compile_to_file("aot_copy", args);
+    result.compile_to_file("aot_copy", args, "aot_copy", Target("arm-32-android-armv7s-renderscript"));
 }
 
 int main(int argc, char **argv) {

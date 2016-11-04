@@ -19,10 +19,15 @@
 #include <sys/stat.h>
 
 #ifdef __linux__
+#define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#endif
+#ifdef __APPLE__
+#define CAN_GET_RUNNING_PROGRAM_NAME
+#include <mach-o/dyld.h>
 #endif
 
 namespace Halide {
@@ -56,22 +61,27 @@ std::string get_env_variable(char const *env_var_name, size_t &read) {
 }
 
 string running_program_name() {
-    // linux specific currently.
-    #ifndef __linux__
-    return "";
-    #else
-    string program_name;
-    char path[PATH_MAX];
-    ssize_t len = ::readlink("/proc/self/exe", path, sizeof(path)-1);
-    if (len != -1) {
-        path[len] = '\0';
-        string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of("/")+1);
-    }
-    else {
+    #ifndef CAN_GET_RUNNING_PROGRAM_NAME
         return "";
-    }
-    return program_name;
+    #else
+        string program_name;
+        char path[PATH_MAX] = { 0 };
+        uint32_t size = sizeof(path);
+        #if defined(__linux__)
+            ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
+        #elif defined(__APPLE__)
+            ssize_t len = ::_NSGetExecutablePath(path, &size);
+        #endif
+        if (len != -1) {
+            #if defined(__linux__)
+                path[len] = '\0';
+            #endif
+            string tmp = std::string(path);
+            program_name = tmp.substr(tmp.find_last_of("/") + 1);
+        } else {
+            return "";
+        }
+        return program_name;
     #endif
 }
 
@@ -305,7 +315,7 @@ std::string dir_make_temp() {
         internal_assert(hr == S_OK);
         std::ostringstream name;
         name << std::hex
-	     << std::setfill('0')
+             << std::setfill('0')
              << std::setw(8)
              << guid.Data1
              << std::setw(4)

@@ -271,6 +271,10 @@ struct halide_type_t {
                 lanes == other.lanes);
     }
 
+    bool operator!=(const halide_type_t &other) const {
+        return !(*this == other);
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     size_t bytes() const { return (bits + 7) / 8; }
 #endif
@@ -281,11 +285,10 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_begin_realization = 2,
                               halide_trace_end_realization = 3,
                               halide_trace_produce = 4,
-                              halide_trace_update = 5,
-                              halide_trace_consume = 6,
-                              halide_trace_end_consume = 7,
-                              halide_trace_begin_pipeline = 8,
-                              halide_trace_end_pipeline = 9};
+                              halide_trace_consume = 5,
+                              halide_trace_end_consume = 6,
+                              halide_trace_begin_pipeline = 7,
+                              halide_trace_end_pipeline = 8};
 
 #pragma pack(push, 1)
 struct halide_trace_event {
@@ -386,7 +389,42 @@ extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 /** Allocate device memory to back a buffer_t. */
 extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
 
+/** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
+
+/** Get a pointer to halide_device_free if a Halide runtime has been
+ * linked in. Returns null if it has not. This requires a different
+ * mechanism on different platforms. */
+typedef int (*halide_device_free_t)(void *, struct buffer_t *);
+#ifdef _MSC_VER
+extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+// The following pragma tells the windows linker to make
+// halide_device_free_weak the same symbol as halide_dummy_device_free
+// if it can't resolve halide_weak_device_free normally
+#ifdef _WIN64
+#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
+#else
+#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
+#endif
+inline halide_device_free_t halide_get_device_free_fn() {
+    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
+        return nullptr;
+    } else {
+        return &halide_weak_device_free;
+    }
+};
+#elif __MINGW32__
+inline halide_device_free_t halide_get_device_free_fn() {
+    // There is no workable mechanism for doing this that we know of on mingw.
+    return &halide_device_free;
+}
+#else
+extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+inline halide_device_free_t halide_get_device_free_fn() {
+    return &halide_weak_device_free;
+}
+#endif
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -482,6 +520,25 @@ extern void halide_memoization_cache_cleanup();
 extern int halide_create_temp_file(void *user_context,
   const char *prefix, const char *suffix,
   char *path_buf, size_t path_buf_size);
+
+/** Annotate that a given range of memory has been initialized;
+ * only used when Target::MSAN is enabled.
+ *
+ * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
+ */
+extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+
+/** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
+ * using halide_msan_annotate_memory_is_initialized() for marking.
+ *
+ * The default implementation takes pains to only mark the active memory ranges
+ * (skipping padding), and sorting into ranges to always mark the smallest number of
+ * ranges, in monotonically increasing memory order.
+ *
+ * Most client code should never need to replace the default implementation.
+ */
+extern void halide_msan_annotate_buffer_is_initialized(void *user_context, struct buffer_t *buffer);
+extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
 enum halide_error_code_t {
@@ -708,7 +765,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
     halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
-    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
+    halide_target_feature_end = 38 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

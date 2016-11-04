@@ -432,7 +432,7 @@ Stmt build_provide_loop_nest(string func_name,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f) {
+Stmt build_produce(Function f, const Target &target) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -448,6 +448,8 @@ Stmt build_produce(Function f) {
         // Iterate through all of the input args to the extern
         // function building a suitable argument list for the
         // extern function call.
+        vector<Expr> buffers_to_annotate;
+        vector<Expr> buffers_contents_to_annotate;
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
@@ -461,17 +463,28 @@ Stmt build_produce(Function f) {
                     buf_name += ".buffer";
                     Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
+                    buffers_to_annotate.push_back(buffer);
+                    buffers_contents_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
                 BufferPtr b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                Expr buf = Variable::make(type_of<struct buffer_t *>(), b.name() + ".buffer", p);
+                string buf_name = b.name() + ".buffer";
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
                 extern_call_args.push_back(buf);
+                buffers_to_annotate.push_back(buf);
+                buffers_contents_to_annotate.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                Expr buf = Variable::make(type_of<struct buffer_t *>(), p.name() + ".buffer", p);
+                string buf_name = p.name() + ".buffer";
+                Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
                 extern_call_args.push_back(buf);
+                // Do not annotate ImageParams: both the buffer_t itself,
+                // and the contents it points to, should be filled by the caller;
+                // if we mark it here, we might mask a missed initialization.
+                // buffers_to_annotate.push_back(buf);
+                // buffers_contents_to_annotate.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
             }
@@ -491,6 +504,9 @@ Stmt build_produce(Function f) {
                 buf_name += ".buffer";
                 Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
+                // Since this is a temporary, internal-only buffer, make sure it's marked.
+                // (but not the contents! callee is expected to fill that in.)
+                buffers_to_annotate.push_back(buffer);
             }
         } else {
             // Store level doesn't match compute level. Make an output
@@ -530,7 +546,36 @@ Stmt build_produce(Function f) {
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
+                // Since this is a temporary, internal-only buffer, make sure it's marked.
+                // (but not the contents! callee is expected to fill that in.)
+                buffers_to_annotate.push_back(extern_call_args.back());
                 lets.push_back(make_pair(buf_name, output_buffer_t));
+            }
+        }
+
+        Stmt annotate;
+        if (target.has_feature(Target::MSAN)) {
+            // Mark the buffers as initialized before calling out.
+            for (const auto &buffer: buffers_to_annotate) {
+                // Return type is really 'void', but no way to represent that in our IR.
+                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+                Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                if (annotate.defined()) {
+                    annotate = Block::make(annotate, mark_buffer);
+                } else {
+                    annotate = mark_buffer;
+                }
+            }
+            for (const auto &buffer: buffers_contents_to_annotate) {
+                // Return type is really 'void', but no way to represent that in our IR.
+                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+                Stmt mark_contents = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
+                if (annotate.defined()) {
+                    annotate = Block::make(annotate, mark_contents);
+                } else {
+                    annotate = mark_contents;
+                }
             }
         }
 
@@ -550,6 +595,9 @@ Stmt build_produce(Function f) {
             check = LetStmt::make(lets[i].first, lets[i].second, check);
         }
 
+        if (annotate.defined()) {
+            check = Block::make(annotate, check);
+        }
         return check;
     } else {
 
@@ -577,8 +625,8 @@ vector<Stmt> build_update(Function f) {
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(Function func) {
-    Stmt produce = build_produce(func);
+pair<Stmt, Stmt> build_production(Function func, const Target &target) {
+    Stmt produce = build_produce(func, target);
     vector<Stmt> updates = build_update(func);
 
     // Combine the update steps
@@ -671,9 +719,21 @@ private:
     string producing;
 
     Stmt build_pipeline(Stmt s) {
-        pair<Stmt, Stmt> realization = build_production(func);
+        pair<Stmt, Stmt> realization = build_production(func, target);
 
-        return ProducerConsumer::make(func.name(), realization.first, realization.second, s);
+        Stmt producer;
+        if (realization.first.defined() && realization.second.defined()) {
+            producer = Block::make(realization.first, realization.second);
+        } else if (realization.first.defined()) {
+            producer = realization.first;
+        } else {
+            internal_assert(realization.second.defined());
+            producer = realization.second;
+        }
+        producer = ProducerConsumer::make(func.name(), true, producer);
+        Stmt consumer = ProducerConsumer::make(func.name(), false, s);
+
+        return Block::make(producer, consumer);
     }
 
     Stmt build_realize(Stmt s) {
@@ -703,22 +763,19 @@ private:
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        string old = producing;
-        producing = op->name;
-        Stmt produce = mutate(op->produce);
-        Stmt update;
-        if (op->update.defined()) {
-            update = mutate(op->update);
-        }
-        producing = old;
-        Stmt consume = mutate(op->consume);
+        if (op->is_producer) {
+            string old = producing;
+            producing = op->name;
+            Stmt body = mutate(op->body);
+            producing = old;
 
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
-            stmt = op;
+            if (body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            }
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            IRMutator::visit(op);
         }
     }
 
@@ -976,14 +1033,14 @@ class PrintUsesOfFunc : public IRVisitor {
     }
 
     void visit(const ProducerConsumer *op) {
-        string old_caller = caller;
-        caller = op->name;
-        op->produce.accept(this);
-        if (op->update.defined()) {
-            op->update.accept(this);
+        if (op->is_producer) {
+            string old_caller = caller;
+            caller = op->name;
+            op->body.accept(this);
+            caller = old_caller;
+        } else {
+            IRVisitor::visit(op);
         }
-        caller = old_caller;
-        op->consume.accept(this);
     }
 
     void visit(const Call *op) {

@@ -37,11 +37,6 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
         user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
     }
 
-    #if !(WITH_NATIVE_CLIENT)
-    user_assert(target.os != Target::NaCl) << "llvm build not configured with native client enabled\n.";
-    #endif
-
-
     // Generate the cast patterns that can take vector types.  We need
     // to iterate over all 64 and 128 bit integer types relevant for
     // neon.
@@ -325,7 +320,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         op->value.type().is_int() &&
         t.bits() == op->value.type().bits() / 2) {
         const Div *d = op->value.as<Div>();
-        if (d && is_const(d->b, 1 << t.bits())) {
+        if (d && is_const(d->b, int64_t(1) << t.bits())) {
             Type unsigned_type = UInt(t.bits() * 2, t.lanes());
             Expr replacement = cast(t,
                                     cast(unsigned_type, d->a) /
@@ -785,8 +780,7 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     // We have builtins for strided stores with fixed but unknown stride, but they use inline assembly
-    if (target.os != Target::NaCl /* No inline assembly in NaCl */ &&
-        target.bits != 64 /* Not yet implemented for aarch64 */) {
+    if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_store_"
                 << (op->value.type().is_float() ? 'f' : 'i')
@@ -869,8 +863,6 @@ void CodeGen_ARM::visit(const Load *op) {
         alignment = gcd(alignment, 16);
         internal_assert(alignment > 0);
 
-        Value *align = ConstantInt::get(i32_t, alignment);
-
         // Decide what width to slice things into. If not a multiple
         // of 64 or 128 bits, then we can't safely slice it up into
         // some number of vlds, so we hand it over the base class.
@@ -885,72 +877,27 @@ void CodeGen_ARM::visit(const Load *op) {
             return;
         }
 
-        // Declare the intrinsic
-        ostringstream intrin;
-        llvm::FunctionType *fn_type;
-        llvm::Type *return_type;
-        {
-            llvm::Type *one_vec = llvm_type_of(op->type.with_lanes(intrin_lanes));
-            vector<llvm::Type *> elements(stride->value, one_vec);
-            return_type = StructType::get(*context, elements);
+        llvm::Type *load_return_type = llvm_type_of(op->type.with_lanes(intrin_lanes*stride->value));
+        llvm::Type *load_return_pointer_type = load_return_type->getPointerTo();
+        Value *undef = UndefValue::get(load_return_type);
+        SmallVector<Constant*, 256> constants;
+        for(int j = 0; j < intrin_lanes; j++) {
+            Constant *constant = ConstantInt::get(i32_t, j*stride->value+offset);
+            constants.push_back(constant);
         }
-        if (target.bits == 32) {
-            intrin << "llvm.arm.neon.vld"
-                   << stride->value
-                   << ".v" << intrin_lanes
-                   << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits()
-#if LLVM_VERSION > 37
-                   << ".p0i8"
-#endif
-                   ;
-            // The intrinsic takes an i8 pointer and an alignment, and
-            // returns a struct of stride->value vectors of width
-            // intrin_lanes.
-            llvm::Type *arg_types[] = {i8_t->getPointerTo(), i32_t};
-            fn_type = llvm::FunctionType::get(return_type, arg_types, false);
-        } else {
-            intrin << "llvm.aarch64.neon.ld"
-                   << stride->value
-                   << ".v" << intrin_lanes
-                   << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits()
-                   << ".p0"
-                   << (op->type.is_float() ? 'f' : 'i')
-                   << op->type.bits();
-            // The intrinsic takes a pointer to the element type and
-            // returns a struct of stride->value vectors of width
-            // intrin_lanes.
-            llvm::Type *arg_type = llvm_type_of(op->type.element_of())->getPointerTo();
-            llvm::Type *arg_types[] = {arg_type};
-            fn_type = llvm::FunctionType::get(return_type, arg_types, false);
-        }
+        Constant* constantsV = ConstantVector::get(constants);
 
-        // Get the intrinsic
-        llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(intrin.str(), fn_type));
-        internal_assert(fn);
-
-        // Load each slice.
         vector<Value *> results;
         for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
             Expr slice_base = simplify(base + i*ramp->stride);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-            CallInst *call = nullptr;
-            if (target.bits == 32) {
-                // The arm32 versions always take an i8* pointer.
-                ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
-                Value *args[] = {ptr, align};
-                call = builder->CreateCall(fn, args);
-            } else {
-                // The aarch64 versions allow arbitrary alignment.
-                Value *args[] = {ptr};
-                call = builder->CreateCall(fn, args);
-            }
-            add_tbaa_metadata(call, op->name, slice_ramp);
-
-            Value *elt = builder->CreateExtractValue(call, {(unsigned int)offset});
-            results.push_back(elt);
+            Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
+            LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
+            loadI->setAlignment(alignment);
+            add_tbaa_metadata(loadI, op->name, slice_ramp);
+            Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);
+            results.push_back(shuffleInstr);
         }
 
         // Concat the results
@@ -959,8 +906,7 @@ void CodeGen_ARM::visit(const Load *op) {
     }
 
     // We have builtins for strided loads with fixed but unknown stride, but they use inline assembly.
-    if (target.os != Target::NaCl /* No inline assembly in nacl */ &&
-        target.bits != 64 /* Not yet implemented for aarch64 */) {
+    if (target.bits != 64 /* Not yet implemented for aarch64 */) {
         ostringstream builtin;
         builtin << "strided_load_"
                 << (op->type.is_float() ? 'f' : 'i')
@@ -1052,9 +998,10 @@ string CodeGen_ARM::mattrs() const {
 bool CodeGen_ARM::use_soft_float_abi() const {
     // One expects the flag is irrelevant on 64-bit, but we'll make the logic
     // exhaustive anyway. It is not clear the armv7s case is necessary either.
-    return target.bits == 32 &&
-        ((target.os == Target::Android) ||
-         (target.os == Target::IOS && !target.has_feature(Target::ARMv7s)));
+    return target.has_feature(Target::SoftFloatABI) ||
+        (target.bits == 32 &&
+         ((target.os == Target::Android) ||
+          (target.os == Target::IOS && !target.has_feature(Target::ARMv7s))));
 }
 
 int CodeGen_ARM::native_vector_bits() const {
