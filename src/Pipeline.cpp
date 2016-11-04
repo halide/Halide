@@ -30,9 +30,7 @@ std::string output_name(const string &filename, const Module &m, const char* ext
 
 Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.static_library(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.static_library(filename_prefix + ".lib");
     } else {
         outputs = outputs.static_library(filename_prefix + ".a");
@@ -148,14 +146,12 @@ bool Pipeline::defined() const {
 }
 
 Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
-    output.compute_root().store_root();
     output.function().freeze();
     contents->outputs.push_back(output.function());
 }
 
 Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
     for (Func f: outputs) {
-        f.compute_root().store_root();
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -279,9 +275,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".bc");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.object(filename_prefix + ".obj");
     } else {
         outputs = outputs.object(filename_prefix + ".o");
@@ -911,7 +905,7 @@ struct JITFuncCallContext {
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
-// params. 
+// params.
 vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 

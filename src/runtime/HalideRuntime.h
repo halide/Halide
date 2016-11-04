@@ -271,6 +271,10 @@ struct halide_type_t {
                 lanes == other.lanes);
     }
 
+    bool operator!=(const halide_type_t &other) const {
+        return !(*this == other);
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     size_t bytes() const { return (bits + 7) / 8; }
 #endif
@@ -385,7 +389,42 @@ extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 /** Allocate device memory to back a buffer_t. */
 extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
 
+/** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
+
+/** Get a pointer to halide_device_free if a Halide runtime has been
+ * linked in. Returns null if it has not. This requires a different
+ * mechanism on different platforms. */
+typedef int (*halide_device_free_t)(void *, struct buffer_t *);
+#ifdef _MSC_VER
+extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+// The following pragma tells the windows linker to make
+// halide_device_free_weak the same symbol as halide_dummy_device_free
+// if it can't resolve halide_weak_device_free normally
+#ifdef _WIN64
+#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
+#else
+#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
+#endif
+inline halide_device_free_t halide_get_device_free_fn() {
+    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
+        return nullptr;
+    } else {
+        return &halide_weak_device_free;
+    }
+};
+#elif __MINGW32__
+inline halide_device_free_t halide_get_device_free_fn() {
+    // There is no workable mechanism for doing this that we know of on mingw.
+    return &halide_device_free;
+}
+#else
+extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+inline halide_device_free_t halide_get_device_free_fn() {
+    return &halide_weak_device_free;
+}
+#endif
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -490,7 +529,7 @@ extern int halide_create_temp_file(void *user_context,
 extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
 /** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
- * using halide_msan_annotate_memory_is_initialized() for marking. 
+ * using halide_msan_annotate_memory_is_initialized() for marking.
  *
  * The default implementation takes pains to only mark the active memory ranges
  * (skipping padding), and sorting into ranges to always mark the smallest number of
