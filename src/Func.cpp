@@ -482,10 +482,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
-    bool is_assoc;
-    vector<AssociativeOp> ops;
-    std::tie(is_assoc, ops) = prove_associativity(func_name, args, values);
-    user_assert(is_assoc)
+    ProveAssociativityResult prover_result = prove_associativity(func_name, args, values);
+    vector<AssociativeOp> &ops = prover_result.ops;
+    user_assert(prover_result.is_associative)
         << "Failed to call rfactor() on " << stage_name
         << " since it can't prove associativity of the operator\n";
     internal_assert(ops.size() == values.size());
@@ -496,6 +495,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     Scope<string> scope; // Contains list of RVars lifted to the intermediate Func
     vector<string> rvars_removed;
 
+    vector<bool> is_rfactored(dims.size(), false);
     for (const pair<RVar, Var> &i : preserved) {
         const RVar &rv = i.first;
         const Var &v = i.second;
@@ -508,6 +508,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
                 << ", can't perform rfactor() on " << rv.name()
                 << " since it is not in the reduction domain\n"
                 << dump_argument_list();
+            is_rfactored[iter - dims.begin()] = true;
         }
         {
             // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
@@ -518,6 +519,25 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
                 << ", can't rename the rvars " << rv.name() << " into " << v.name()
                 << ", since it is already used in this Func's schedule elsewhere.\n"
                 << dump_argument_list();
+        }
+    }
+
+    // If the operator is associative but non-commutative, rfactor() on inner
+    // dimensions (excluding the outer dimensions) is not valid.
+    if (!prover_result.is_commutative) {
+        int last_rvar = -1;
+        for (int i = dims.size() - 1; i >= 0; --i) {
+            if ((last_rvar != -1) && is_rfactored[i]) {
+                user_assert(is_rfactored[last_rvar])
+                    << "In schedule for " << stage_name
+                    << ", can't rfactor an inner dimension " << dims[i].var
+                    << " without rfactoring the outer dimensions, since the "
+                    << "operator is non-commutative.\n"
+                    << dump_argument_list();
+            }
+            if (dims[i].is_rvar()) {
+                last_rvar = i;
+            }
         }
     }
 
