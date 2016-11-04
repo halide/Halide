@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     identity_uint8.set_error_handler(&halide_error);
 
-    Image<uint8_t> output_buf(buf);
+    Buffer<uint8_t> output_buf(buf);
     Target t = get_jit_target_from_environment();
 
     if (t.bits != 32) {
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         identity_uint8.realize(output_buf);
         assert(!error_occurred);
 
-        Image<uint8_t> output = output_buf;
+        Buffer<uint8_t> output = output_buf;
         assert(output(0, 0, 0) == 42);
         assert(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1) == 42);
     }
