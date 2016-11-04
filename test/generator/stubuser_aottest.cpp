@@ -8,8 +8,8 @@ using namespace Halide;
 const int kSize = 32;
 
 template<typename Type>
-Image<Type> make_image() {
-    Image<Type> im(kSize, kSize, 3);
+Buffer<Type> make_image() {
+    Buffer<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -25,7 +25,7 @@ const int kIntArg = 33;
 const float kOffset = 2.f;
 
 template<typename InputType, typename OutputType>
-void verify(const Image<InputType> &input, const Image<OutputType> &output) {
+void verify(const Buffer<InputType> &input, const Buffer<OutputType> &output) {
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -42,8 +42,8 @@ void verify(const Image<InputType> &input, const Image<OutputType> &output) {
 
 int main(int argc, char **argv) {
 
-  Image<uint8_t> input = make_image<uint8_t>();
-  Image<uint8_t> output(kSize, kSize, 3);
+  Buffer<uint8_t> input = make_image<uint8_t>();
+  Buffer<uint8_t> output(kSize, kSize, 3);
 
   stubuser(input, output);
   verify(input, output);

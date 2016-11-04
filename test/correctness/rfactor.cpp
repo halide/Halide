@@ -92,7 +92,7 @@ int reorder_split_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Image<int> im = g.realize(80, 80);
+        Buffer<int> im = g.realize(80, 80);
         auto func = [](int x, int y, int z) {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
