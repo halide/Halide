@@ -209,7 +209,6 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(msan)
   add_test_generator(multitarget)
   add_test_generator(nested_externs)
-  add_test_generator(paramtest)
   add_test_generator(pyramid)
   add_test_generator(stubtest WITH_STUB
                      GENERATOR_NAME StubNS1::StubNS2::StubTest)
@@ -225,7 +224,6 @@ if (WITH_TEST_GENERATORS)
 
   # ------ Generator tests for just-in-time mode: ------
   halide_define_jit_test(example)
-  halide_define_jit_test(paramtest)
   halide_define_jit_test(stubtest
                          STUB_DEPS stubtest.generator)
 
