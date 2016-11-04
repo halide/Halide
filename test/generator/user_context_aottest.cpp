@@ -8,7 +8,7 @@
 
 using namespace Halide;
 
-static void *context_pointer = (void *)0xf00dd00d;
+static void *context_pointer = (void *)(intptr_t)0xf00dd00d;
 
 static bool called_error = false;
 static bool called_trace = false;

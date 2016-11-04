@@ -89,7 +89,8 @@ DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
-DECLARE_CPP_INITMOD(nacl_host_cpu_count)
+DECLARE_CPP_INITMOD(msan)
+DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(noos)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -127,7 +128,6 @@ DECLARE_CPP_INITMOD(write_debug_image)
 
 // Universal LL Initmods. Please keep sorted alphabetically.
 DECLARE_LL_INITMOD(posix_math)
-DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
 DECLARE_LL_INITMOD(renderscript_dev)
@@ -219,23 +219,15 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-                #if defined(WITH_NATIVE_CLIENT)
-                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-S32");
-                #else
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
-                #endif
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
-            } else if (target.os == Target::NaCl) {
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-n8:16:32-S128");
             } else {
                 // Linux/Android
                 return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
             }
         } else { // 64-bit
-            if (target.os == Target::NaCl) {
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-n8:16:32:64-S128");
-            } else if (target.os == Target::OSX) {
+            if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
@@ -249,8 +241,6 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-v64:32:64-v128:32:128-a:0:32-n32-S32");
-            } else if (target.os == Target::NaCl) {
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S128");
             } else {
                 return llvm::DataLayout("e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64");
             }
@@ -277,8 +267,6 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else {
             return llvm::DataLayout("e-m:e-i64:64-n32:64");
         }
-    } else if (target.arch == Target::PNaCl) {
-        return llvm::DataLayout("e-p:32:32-i64:64-n32");
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
@@ -329,13 +317,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
             if (target.bits == 64) {
                 std::cerr << "Warning: x86-64 android is untested\n";
             }
-        } else if (target.os == Target::NaCl) {
-            #ifdef WITH_NATIVE_CLIENT
-            triple.setOS(llvm::Triple::NaCl);
-            triple.setEnvironment(llvm::Triple::GNU);
-            #else
-            user_error << "This version of Halide was compiled without nacl support.\n";
-            #endif
         } else if (target.os == Target::IOS) {
             // X86 on iOS for the simulator
             triple.setVendor(llvm::Triple::Apple);
@@ -363,14 +344,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::IOS) {
             triple.setOS(llvm::Triple::IOS);
             triple.setVendor(llvm::Triple::Apple);
-        } else if (target.os == Target::NaCl) {
-            user_assert(target.bits == 32) << "ARM NaCl must be 32-bit\n";
-            #ifdef WITH_NATIVE_CLIENT
-            triple.setOS(llvm::Triple::NaCl);
-            triple.setEnvironment(llvm::Triple::EABI);
-            #else
-            user_error << "This version of Halide was compiled without nacl support\b";
-            #endif
         } else if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::GNUEABIHF);
@@ -409,14 +382,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
         #else
         user_error << "PowerPC llvm target not enabled in this build of Halide\n";
         #endif
-    } else if (target.arch == Target::PNaCl) {
-        #if (WITH_NATIVE_CLIENT)
-        triple.setArch(llvm::Triple::le32);
-        triple.setVendor(llvm::Triple::UnknownVendor);
-        triple.setOS(llvm::Triple::NaCl);
-        #else
-        user_error << "This version of Halide was compiled without nacl support.\n";
-        #endif
     } else if (target.arch == Target::Hexagon) {
         triple.setVendor(llvm::Triple::UnknownVendor);
         triple.setArch(llvm::Triple::hexagon);
@@ -431,14 +396,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
 }  // namespace Internal
 
 namespace {
-
-uint32_t simple_string_hash(const string &s) {
-    uint32_t result = 0;
-    for (char c : s) {
-        result = result * 101 + c;
-    }
-    return result;
-}
 
 // Link all modules together and with the result in modules[0], all
 // other input modules are destroyed. Sets the datalayout and target
@@ -657,10 +614,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
 
     internal_assert(t.bits == 32 || t.bits == 64);
-    // NaCl always uses the 32-bit runtime modules, because pointers
-    // and size_t are 32-bit in 64-bit NaCl, and that's the only way
-    // in which the 32- and 64-bit runtimes differ.
-    bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
+    bool bits_64 = (t.bits == 64);
     bool debug = t.has_feature(Target::Debug);
 
     vector<std::unique_ptr<llvm::Module>> modules;
@@ -733,18 +687,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_profiler(c, bits_64, debug));
-            } else if (t.os == Target::NaCl) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
-                modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
-                modules.push_back(get_initmod_thread_pool(c, bits_64, debug));
-                modules.push_back(get_initmod_ssp(c, bits_64, debug));
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -772,8 +714,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_math_ll(c));
                 }
-            } else if (t.arch == Target::PNaCl) {
-                modules.push_back(get_initmod_pnacl_math_ll(c));
             } else {
                 modules.push_back(get_initmod_posix_math_ll(c));
             }
@@ -791,6 +731,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
+
+            if (t.has_feature(Target::MSAN)) {
+                modules.push_back(get_initmod_msan(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));                
+            }
         }
 
         if (module_type != ModuleJITShared) {
@@ -854,6 +800,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
             }
         }
+
     }
 
     if (module_type == ModuleJITShared || module_type == ModuleGPU) {

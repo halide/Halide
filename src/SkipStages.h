@@ -11,7 +11,7 @@ namespace Halide {
 namespace Internal {
 
 /** Avoid computing certain stages if we can infer a runtime condition
- * to check that tells us they won't be used. Does this by aanalyzing
+ * to check that tells us they won't be used. Does this by analyzing
  * all reads of each buffer allocated, and inferring some condition
  * that tells us if the reads occur. If the condition is non-trivial,
  * inject ifs that guard the production. */

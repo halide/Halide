@@ -189,11 +189,7 @@ void Module::compile(const Outputs &output_files) const {
             {
                 debug(1) << "Module.compile(): object_name " << object_name << "\n";
                 auto out = make_raw_fd_ostream(object_name);
-                if (target().arch == Target::PNaCl) {
-                    compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
-                } else {
-                    compile_llvm_module_to_object(*llvm_module, *out);
-                }
+                compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();
             }
 
@@ -206,11 +202,7 @@ void Module::compile(const Outputs &output_files) const {
         if (!output_files.assembly_name.empty()) {
             debug(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
             auto out = make_raw_fd_ostream(output_files.assembly_name);
-            if (target().arch == Target::PNaCl) {
-                compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
-            } else {
-                compile_llvm_module_to_assembly(*llvm_module, *out);
-            }
+            compile_llvm_module_to_assembly(*llvm_module, *out);
         }
         if (!output_files.bitcode_name.empty()) {
             debug(1) << "Module.compile(): bitcode_name " << output_files.bitcode_name << "\n";
@@ -267,7 +259,8 @@ void compile_standalone_runtime(const std::string &object_filename, Target t) {
 void compile_multitarget(const std::string &fn_name,
                          const Outputs &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer) {
+                         ModuleProducer module_producer,
+                         const std::map<std::string, std::string> &suffixes) {
     user_assert(!fn_name.empty()) << "Function name must be specified.\n";
     user_assert(!targets.empty()) << "Must specify at least one target.\n";
 
@@ -284,9 +277,6 @@ void compile_multitarget(const std::string &fn_name,
 
     // JIT makes no sense.
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
-
-    // PNaCl might work, but is untested in this path.
-    user_assert(base_target.arch != Target::PNaCl) << "PNaCl not allowed for compile_multitarget.\n";
 
     // If only one target, don't bother with the runtime feature detection wrapping.
     if (targets.size() == 1) {
@@ -310,6 +300,7 @@ void compile_multitarget(const std::string &fn_name,
             Target::CPlusPlusMangling,
             Target::JIT,
             Target::Matlab,
+            Target::MSAN,
             Target::NoRuntime,
             Target::UserContext,
         }};
@@ -320,8 +311,14 @@ void compile_multitarget(const std::string &fn_name,
             }
         }
 
-        // Each sub-target has a function name that is the 'real' name plus the target string.
-        auto suffix = "_" + replace_all(target.to_string(), "-", "_");
+        // Each sub-target has a function name that is the 'real' name plus a suffix
+        // (which defaults to the target string but can be customized via the suffixes map)
+        std::string suffix = replace_all(target.to_string(), "-", "_");
+        auto it = suffixes.find(suffix);
+        if (it != suffixes.end()) {
+          suffix = it->second;
+        }
+        suffix = "_" + suffix;
         std::string sub_fn_name = fn_name + suffix;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.

@@ -197,14 +197,15 @@ struct TestArgs {
 #define call_1(type, name, steps, start, end)                     \
     {                                                             \
     printf("Testing " #name "(" #type ")\n");                     \
-    TestArgs<type> args(steps, start, end);                       \
+    TestArgs<type> args(steps, (type)(start), (type)(end));       \
     test_##type##_##name(args);                                   \
     }
 
 #define call_2(type, name, steps, start1, end1, start2, end2)     \
     {                                                             \
     printf("Testing " #name "(" #type ")\n");                     \
-    TestArgs<type> args(steps, start1, end1, start2, end2);       \
+    TestArgs<type> args(steps, (type)(start1), (type)(end1),      \
+                               (type)(start2), (type)(end2));     \
     test_##type##_##name(args);                                   \
     }
 

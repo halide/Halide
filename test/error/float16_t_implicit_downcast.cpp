@@ -16,7 +16,7 @@ int main() {
     Halide::Func f;
     Halide::Var x, y;
 
-    // This should throw an error because downcasting will loose precision which
+    // This should throw an error because downcasting will lose precision which
     // should only happen if the user explicitly asks for it
     f(x, y) = 0.1f;
 

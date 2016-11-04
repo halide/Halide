@@ -179,7 +179,7 @@ def generate_compiled_file(local_laplacian):
     arguments.append(Argument('beta', False, float_t))
     arguments.append(Argument('input', True, UInt(16)))
     target = get_target_from_environment()
-    local_laplacian.compile_to_file("local_laplacian", arguments, target)
+    local_laplacian.compile_to_file("local_laplacian", arguments, "local_laplacian", target)
     print("Generated compiled file for local_laplacian function.")
     return
 

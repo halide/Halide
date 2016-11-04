@@ -124,12 +124,13 @@ BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_c0_overloads, func_compile_to_c0
 
 void func_compile_to_file0(h::Func &that, const std::string &filename_prefix,
                            p::list args,
+                           const std::string fn_name = "",
                            const h::Target &target = h::get_target_from_environment()) {
     auto args_vec = python_collection_to_vector<h::Argument>(args);
-    that.compile_to_file(filename_prefix, args_vec, target);
+    that.compile_to_file(filename_prefix, args_vec, fn_name, target);
 }
 
-BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_file0_overloads, func_compile_to_file0, 3, 4)
+BOOST_PYTHON_FUNCTION_OVERLOADS(func_compile_to_file0_overloads, func_compile_to_file0, 3, 5)
 
 void func_compile_to_lowered_stmt0(h::Func &that,
                                    const std::string &filename,
@@ -381,9 +382,9 @@ void defineFunc() {
     func_class.def("compile_to_file",
                    &func_compile_to_file0,
                    func_compile_to_file0_overloads(
-                       p::args("self", "filename_prefix", "args", "target"),
+                       p::args("self", "filename_prefix", "args", "fn_name", "target"),
                        "Compile to object file and header pair, with the given arguments. "
-                       "Also names the C function to match the first argument."));
+                       "The name defaults to the same name as the Halide Func."));
 
     func_class.def("compile_jit", &func_compile_jit1, p::args("self", "target"),
                    "Eagerly jit compile the function to machine code. This "

@@ -95,7 +95,6 @@ int main(int argc, char **argv) {
 
     // We'll now call the various functions we compiled and check the
     // performance of each.
-    uint8_t offset = 1;
 
     // Start the clock
     tick(NULL);

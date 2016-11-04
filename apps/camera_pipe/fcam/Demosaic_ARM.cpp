@@ -110,11 +110,11 @@ void demosaic_ARM(Halide::Buffer<uint16_t> input, Halide::Buffer<uint8_t> out, f
 
     // A buffer to store data after demosiac and color correction
     // but before gamma correction
-    uint16_t out16[BLOCK_WIDTH*BLOCK_HEIGHT*3];
+    __attribute__((aligned(16))) uint16_t out16[BLOCK_WIDTH*BLOCK_HEIGHT*3];
 
     // Various color channels. Only 4 of them are defined before
     // demosaic, all of them are defined after demosiac
-    int16_t scratch[VEC_WIDTH*VEC_HEIGHT*4*12];
+    __attribute__((aligned(16))) int16_t scratch[VEC_WIDTH*VEC_HEIGHT*4*12];
 
 #define R_R_OFF  (VEC_WIDTH*VEC_HEIGHT*4*0)
 #define R_GR_OFF (VEC_WIDTH*VEC_HEIGHT*4*1)
@@ -183,7 +183,6 @@ void demosaic_ARM(Halide::Buffer<uint16_t> input, Halide::Buffer<uint8_t> out, f
 
                 for (int y = 0; y < VEC_HEIGHT; y++) {
                     for (int x = 0; x < VEC_WIDTH/2; x++) {
-
                         asm volatile("# Stage 1) Demux\n");
 
                         // The below needs to be volatile, but

@@ -64,6 +64,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
+    set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {

@@ -158,9 +158,7 @@ void IRVisitor::visit(const AssertStmt *op) {
 }
 
 void IRVisitor::visit(const ProducerConsumer *op) {
-    op->produce.accept(this);
-    if (op->update.defined()) op->update.accept(this);
-    op->consume.accept(this);
+    op->body.accept(this);
 }
 
 void IRVisitor::visit(const For *op) {
@@ -384,9 +382,7 @@ void IRGraphVisitor::visit(const AssertStmt *op) {
 }
 
 void IRGraphVisitor::visit(const ProducerConsumer *op) {
-    include(op->produce);
-    if (op->update.defined()) include(op->update);
-    include(op->consume);
+    include(op->body);
 }
 
 void IRGraphVisitor::visit(const For *op) {

@@ -25,14 +25,12 @@ int my_trace(void *user_context, const halide_trace_event *e) {
                                   "Begin realization ",
                                   "End realization ",
                                   "Produce ",
-                                  "Update ",
                                   "Consume ",
                                   "End consume ",
                                   "Begin pipeline ",
                                   "End pipeline "};
 
     if (e->event == halide_trace_end_realization ||
-        e->event == halide_trace_update ||
         e->event == halide_trace_consume ||
         e->event == halide_trace_end_consume ||
         e->event == halide_trace_end_pipeline) {
@@ -41,7 +39,6 @@ int my_trace(void *user_context, const halide_trace_event *e) {
     }
     if (e->event == halide_trace_begin_realization ||
         e->event == halide_trace_produce ||
-        e->event == halide_trace_update ||
         e->event == halide_trace_consume ||
         e->event == halide_trace_begin_pipeline) {
         // These events signal the start of some new region

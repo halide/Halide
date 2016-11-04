@@ -83,7 +83,7 @@ void simple_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
-void *flakey_malloc(void */* user_context */, size_t x) {
+void *flakey_malloc(void * /* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
     } else {
