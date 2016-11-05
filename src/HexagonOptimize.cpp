@@ -109,16 +109,15 @@ struct Pattern {
         InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
         SwapOps01 = 1 << 1,  // Swap operands 0 and 1 prior to substitution.
         SwapOps12 = 1 << 2,  // Swap operands 1 and 2 prior to substitution.
-        SwapOps03 = 1 << 3,  // Swap operands 0 and 3 prior to substitution.
-        ExactLog2Op1 = 1 << 4, // Replace operand 1 with its log base 2, if the log base 2 is exact.
-        ExactLog2Op2 = 1 << 5, // Save as above, but for operand 2.
+        ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
+        ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
 
         FirstExactLog2Op = 1,   // FirstExactLog2Op and NumExactLog2Op ensure that we check only op1 and op2
         NumExactLog2Op = 2,     // for ExactLog2Op
 
-        DeinterleaveOp0 = 1 << 6,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
-        DeinterleaveOp1 = 1 << 7,  // Same as above, but for operand 1.
-        DeinterleaveOp2 = 1 << 8,
+        DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
+        DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
+        DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
         FirstDeinterleaveOp = 0, // FirstDeinterleaveOp and NumDeinterleaveOp ensure that we check only three
@@ -129,16 +128,16 @@ struct Pattern {
         // re-interleave the result.
         ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
 
-        NarrowOp0 = 1 << 11,  // Replace operand 0 with its half-width equivalent.
-        NarrowOp1 = 1 << 12,  // Same as above, but for operand 1.
-        NarrowOp2 = 1 << 13,
-        NarrowOp3 = 1 << 14,
+        NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
+        NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
+        NarrowOp2 = 1 << 12,
+        NarrowOp3 = 1 << 13,
         NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3,
 
-        NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
-        NarrowUnsignedOp1 = 1 << 16,
-        NarrowUnsignedOp2 = 1 << 17,
-        NarrowUnsignedOp3 = 1 << 18,
+        NarrowUnsignedOp0 = 1 << 14,  // Similar to the above, but narrow to an unsigned half width type.
+        NarrowUnsignedOp1 = 1 << 15,
+        NarrowUnsignedOp2 = 1 << 16,
+        NarrowUnsignedOp3 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2 | NarrowUnsignedOp3,
 
    };
@@ -224,10 +223,6 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             if (p.flags & Pattern::SwapOps12) {
                 internal_assert(matches.size() >= 3);
                 std::swap(matches[1], matches[2]);
-            }
-            if (p.flags & Pattern::SwapOps03) {
-                internal_assert(matches.size() >= 4);
-                std::swap(matches[0], matches[3]);
             }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
@@ -402,9 +397,9 @@ private:
             { "halide.hexagon.vw.add.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.vw.add.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
 
-            // Our tree balancing ensures that we only need to match bc*vector and not vector*bc.
+            // Simplify always puts the constant in a mul to the right. So, we match only wild_i16x*bc(wild_i16) and don't have to match its commutatative version.
             // Generate vmpa(Vx.ub, Rx.b). Todo: Generate vmpa(Vx.h, Rx.b)
-            { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", bc(wild_i16)*wild_i16x + bc(wild_i16)*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp1 | Pattern::NarrowUnsignedOp3 | Pattern::NarrowOp0 | Pattern::NarrowOp2 | Pattern::SwapOps03 },
+            { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp2 | Pattern::NarrowOp1 | Pattern::NarrowOp3 | Pattern::SwapOps12 },
 
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
@@ -1338,14 +1333,27 @@ public:
     void visit(const Cast *op) {
         if (op->type.is_vector()) {
             IRVisitor::visit(op);
-            m[op] = height(op->value) + 1;
+            // A number of HVX operations fold widening and narrowing
+            // into themselves. e.g. widening adds. So count the cast
+            // as adding no height.
+            m[op] = height(op->value);
         }
     }
 
     void visit(const Call *op) {
-        IRVisitor::visit(op);
-        vector<int> heights = height(op->args);
-        m[op] = *std::max_element(heights.begin(), heights.end());
+        if (op->type.is_vector()) {
+            // ht(slice_vector(concat_vectors(x, ..)) = ht(concat_vectors(x, ...))
+            if (op->is_intrinsic(Call::slice_vector)) {
+                const Call *concat_v = op->args[0].as<Call>();
+                if (concat_v && concat_v->is_intrinsic(Call::concat_vectors)) {
+                    int ht = height(op->args[0]);
+                    m[op] = ht;
+                }
+            }
+            IRVisitor::visit(op);
+            vector<int> heights = height(op->args);
+            m[op] = *std::max_element(heights.begin(), heights.end());
+        }
     }
 
 };
@@ -1568,9 +1576,11 @@ class BalanceTree : public IRMutator {
         if (std::abs(a_ht - b_ht) <= 1) {
             // The sub-tree rooted at op is balanced.
             // Do nothing.
-            debug(0) << "Expr " << (Expr) op << " is balanced. Returning early from BalanceTree\n";
+            debug(0) <<  "... is balanced. Returning early from BalanceTree\n";
             expr = op;
             return;
+        } else {
+            debug(0) << "... is imbalanced, left tree ht = " << a_ht << ", right tree ht = " << b_ht << "... balancing now\n";
         }
 
         worklist.push_back(op->a);
