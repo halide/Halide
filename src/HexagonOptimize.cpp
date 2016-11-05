@@ -465,7 +465,7 @@ private:
             };
                 Expr res = apply_commutative_patterns(add, post_process_adds, this);
                 if (!res.same_as(add)) {
-                    debug(0) << "Converted " << old_expr << "\n\t to \t\n" << res << "\n";
+                    debug(4) << "Converted " << old_expr << "\n\t to \t\n" << res << "\n";
                     expr = res;
                 }
             }
@@ -1196,20 +1196,6 @@ public:
 
 typedef std::pair<Expr, int> RootWeightPair;
 typedef std::map<Expr, int, IRDeepCompare> WeightedRoots;
-class GetHeight : public IRVisitor {
-    std::map<Expr, int, IRDeepCompare> m;
-    using IRVisitor::visit;
-public:
-
-    // void visit(const Variable *op) {
-    //     if (vars.contains(op->name)) {
-    //         Expr value = vars.get(op->name);
-    //         value.accept(this);
-    //         m[op] = height(value);
-    //     }
-    // }
-};
-
 class ExprHeights : public IRVisitor {
     std::map<Expr, int, IRDeepCompare> m;
     Scope<int> var_heights;
@@ -1229,8 +1215,6 @@ public:
             << "Trying to push an expr that already exists in ExprHeights. Use the update method to update\n";
 
         e.accept(this);
-
-        // m[e] = g.height(e);
         return;
     }
     void push(Expr e, int h) {
@@ -1423,12 +1407,12 @@ inline WeightedRoots find_roots(const Add *op) {
 
 void dump_roots(WeightedRoots &w) {
     if (!w.empty()) {
-        debug(0) << "Roots are: \n";
+        debug(4) << "Roots are: \n";
         for (const RootWeightPair &r : w) {
-            debug(0) << "Root:::->\n\t\t" << r.first << "\nWeight:::-> "<< r.second << "\n";
+            debug(4) << "Root:::->\n\t\t" << r.first << "\nWeight:::-> "<< r.second << "\n";
         }
     } else {
-        debug(0) << "*** No Roots *** \n";
+        debug(4) << "*** No Roots *** \n";
     }
 
 }
@@ -1546,7 +1530,7 @@ class BalanceTree : public IRMutator {
             auto it = weighted_roots.find(e);
             internal_assert(it != weighted_roots.end()) << "Root" << e << " not found in weighted_roots";
             if (it->second != -1) {
-                debug(0) << "Found " << e << " in weights cache. Wt is " << it->second << "\n";
+                debug(4) << "Found " << e << " in weights cache. Wt is " << it->second << "\n";
                 return it->second;
             }
         }
@@ -1556,7 +1540,7 @@ class BalanceTree : public IRMutator {
         int wt = g.weight;
 
         if (is_root) {
-            debug(0) << "Calculated wt for " << e << " : " << wt << "\n";
+            debug(4) << "Calculated wt for " << e << " : " << wt << "\n";
             weighted_roots[e] = wt;
         }
 
@@ -1566,7 +1550,7 @@ class BalanceTree : public IRMutator {
     template<typename T>
     void visit_binary(const T *op) {
 
-        debug(0) << "BalanceTree: << " << (Expr) op << "\n";
+        debug(4) << "BalanceTree: << " << (Expr) op << "\n";
 
         auto it = weighted_roots.find((Expr) op);
         internal_assert(it != weighted_roots.end()) << "BalanceTree called on a non-root node\n";
@@ -1576,11 +1560,11 @@ class BalanceTree : public IRMutator {
         if (std::abs(a_ht - b_ht) <= 1) {
             // The sub-tree rooted at op is balanced.
             // Do nothing.
-            debug(0) <<  "... is balanced. Returning early from BalanceTree\n";
+            debug(4) <<  ".. is balanced. Returning early from BalanceTree\n";
             expr = op;
             return;
         } else {
-            debug(0) << "... is imbalanced, left tree ht = " << a_ht << ", right tree ht = " << b_ht << "... balancing now\n";
+            debug(4) << ".. is imbalanced, left tree ht = " << a_ht << ", right tree ht = " << b_ht << "... balancing now\n";
         }
 
         worklist.push_back(op->a);
@@ -1590,14 +1574,14 @@ class BalanceTree : public IRMutator {
             Expr e = worklist.back();
             worklist.pop_back();
 
-            debug(0) << "Removing from the worklist... " << e << "\n";
+            debug(4) << "Removing from the worklist... " << e << "\n";
 
             it = weighted_roots.find(e);
             if (it != weighted_roots.end()) {
-                debug(0) <<  ".. is a root..balancing\n";
+                debug(4) <<  ".. is a root..balancing\n";
                 // Check if already visited before calling balance tree.
                 Expr leaf = BalanceTree(weighted_roots, heights.get_var_heights()).mutate(e);
-                debug(0) << "leaf ->" << leaf << "\n";
+                debug(4) << ".. balanced to produce ->" << leaf << "\n";
                 if (!leaf.same_as(e)) {
                     // This means that BalanceTree changed our root. Once
                     // a root always a root, except now it looks different.
@@ -1614,11 +1598,11 @@ class BalanceTree : public IRMutator {
             } else {
                 const T *o = e.as<T>();
                 if (o) {
-                    debug(0) << ".. is the same op, adding children\n";
+                    debug(4) << ".. is the same op, adding children\n";
                     worklist.push_back(o->a);
                     worklist.push_back(o->b);
                 } else {
-                    debug(0) << ".. is a leaf\n";
+                    debug(4) << ".. is a leaf\n";
                     leaves.push(e, get_weight(e, false /*is_root*/));
                 }
             }
@@ -1634,7 +1618,7 @@ class BalanceTree : public IRMutator {
         }
 
         internal_assert(leaves.size() == 1)
-            << "After balancing a tree should have exactly one leaf, we have " << leaves.size() << "\n";
+            << "After balancing, a tree should have exactly one leaf, we have " << leaves.size() << "\n";
         expr = leaves.pop().e;
         leaves.clear();
     }
@@ -1661,7 +1645,7 @@ class BalanceAddMulTrees : public IRMutator {
         // We traverse the tree top to bottom and stop at the first vector add
         // and start looking for roots from there.
         if (op->type.is_vector()) {
-            debug(0) << "Highest Add is << " << (Expr) op << "\n";
+            debug(4) << "Highest Add is << " << (Expr) op << "\n";
 
             // 1. Find Roots.
             weighted_roots = find_roots(op);
@@ -1670,7 +1654,7 @@ class BalanceAddMulTrees : public IRMutator {
                 return;
             }
 
-            dump_roots(weighted_roots);
+            debug(4) << "Found " << weighted_roots.size() << " roots\n";
 
             // 2. Balance the tree
             Expr e = BalanceTree(weighted_roots, h.get_var_heights()).mutate((Expr) op);
@@ -1678,7 +1662,7 @@ class BalanceAddMulTrees : public IRMutator {
             if (e.same_as(op)) {
                 expr = op;
             } else {
-                debug(0) << "Balanced tree ->\n\t" << e << "\n";
+                debug(4) << "Balanced tree ->\n\t" << e << "\n";
                 expr = e;
             }
         } else {
@@ -1692,7 +1676,6 @@ class BalanceAddMulTrees : public IRMutator {
             op->value.accept(&h);
             int ht = h.height(op->value);
             h.push(op->name, ht);
-            debug(0) << "Pre-computing the height of a let variable " << op->name << " with value " << op->value << ": ht is " << ht << "\n";
             body = mutate(op->body);
             h.pop(op->name);
         }
