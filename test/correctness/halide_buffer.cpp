@@ -75,6 +75,9 @@ int main(int argc, char **argv) {
     {
         // Check moving a buffer around
         Buffer<float> a(100, 80, 3);
+        a.for_each_element([&](int x, int y, int c) {
+            a(x, y, c) = x + 100.0f * y + 100000.0f * c;
+        });
         Buffer<float> b(a);
         b.set_min(123, 456, 2);
         b.translate({-123, -456, -2});
