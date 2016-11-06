@@ -24,6 +24,9 @@
 // Shared functionality for legacy function attribute encoding.
 static inline uint64_t encodeLLVMAttributesForBitcode(llvm::AttributeSet A,
                                                       unsigned i) {
+#if LLVM_VERSION >= 40
+  return 0;
+#else
   uint64_t EncodedAttrs = A.Raw(i) & 0xffff;
   if (A.hasAttribute(i, llvm::Attribute::Alignment)) {
     // The alignment is stored as an actual power of 2 value (instead of the
@@ -32,6 +35,8 @@ static inline uint64_t encodeLLVMAttributesForBitcode(llvm::AttributeSet A,
   }
   // There are only 12 remaining attributes (bits 21-32), hence our 0xfff mask.
   EncodedAttrs |= (A.Raw(i) & (0xfffull << 21))  << 11;
+
   return EncodedAttrs;
+#endif
 }
 
