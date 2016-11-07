@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
         // We must call schedule() before calling realize()
         gen.schedule();
 
-        Image<int32_t> img = gen.realize(kSize, kSize, 3);
+        Halide::Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
         verify(img, 2.392f, 1, 3);
     }
 
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
         sp.vectorize = false;
         gen.schedule(sp);
 
-        Image<int32_t> img = gen.realize(kSize, kSize, 3);
+        Halide::Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
         verify(img, 1, 1, 3);
     }
 
