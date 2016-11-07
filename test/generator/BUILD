@@ -87,7 +87,6 @@ halide_generator(
     "image_from_array",
     "mandelbrot",
     "memory_profiler_mandelbrot",
-    "paramtest",
     "tiled_blur_blur",
     "tiled_blur",
     "variable_num_threads",
@@ -254,44 +253,19 @@ halide_library(
 
 # ----------------- JIT Tests
 
-# TODO the jit-tests #include .cpp files which confuses Bazel
-# (and not unreasonably so); create header-only libraries to work around this
-[cc_library(
-    name = "%s_jittest_includes" % test,
-    hdrs = [
-        "%s_generator.cpp" % test,
-    ],
-) for test in [
-    "example",
-    "paramtest",
-]]
-
 [cc_test(
     name = "%s_jittest" % test,
-    srcs = [
-        "%s_jittest.cpp" % test,
-    ],
+    srcs = ["%s_jittest.cpp" % test],
     copts = halide_language_copts(),
     linkopts = halide_language_linkopts(),
     deps = [
-        ":%s_jittest_includes" % test,
+        ":%s_generator" % test,
         "@halide//:language",
     ],
 ) for test in [
     "example",
-    "paramtest",
+    "stubtest",
 ]]
-
-cc_test(
-    name = "stubtest_jittest",
-    srcs = ["stubtest_jittest.cpp"],
-    copts = halide_language_copts(),
-    linkopts = halide_language_linkopts(),
-    deps = [
-        "@halide//:language",
-        ":stubtest_generator",
-    ],
-)
 
 # ----------------- AOT Tests
 
