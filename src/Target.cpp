@@ -234,7 +234,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
-    {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
@@ -482,9 +481,6 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_RENDERSCRIPT)
-    bad |= has_feature(Target::Renderscript);
-#endif
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
@@ -507,7 +503,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::CUDA:          return Target::CUDA;
     case DeviceAPI::OpenCL:        return Target::OpenCL;
     case DeviceAPI::GLSL:          return Target::OpenGL;
-    case DeviceAPI::Renderscript:  return Target::Renderscript;
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
     default:                       return Target::FeatureEnd;
@@ -522,6 +517,7 @@ EXPORT void target_test() {
         t.set_feature(feature.second);
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
+        if (i == halide_target_feature_unused_23) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
     std::cout << "Target test passed" << std::endl;

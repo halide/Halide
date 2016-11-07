@@ -745,7 +745,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_renderscript = 23, ///< Enable the Renderscript runtime.
+    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
 
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
