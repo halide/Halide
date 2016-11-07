@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     int W = 1000, H = 1000;
 
     // Compute a random 8-bit image with a very biased histogram
-    Image<uint8_t> in(W, H);
+    Buffer<uint8_t> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             unsigned r1 = rand();
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     int pixels = in.extent(0)*in.extent(1);
     rescaled(i, _) = cast<uint8_t>((equalized(i, _)*256)/pixels);
 
-    Image<uint8_t> out = rescaled.realize(in.width(), in.height());
+    Buffer<uint8_t> out = rescaled.realize(in.width(), in.height());
 
     // Compute the histogram of the output
     int out_hist[16], in_hist[16];

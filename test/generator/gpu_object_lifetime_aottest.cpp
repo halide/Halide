@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
     // Run the whole program several times.
     for (int i = 0; i < 2; i++) {
-        Image<int> output(80);
+        Buffer<int> output(80);
 
         gpu_object_lifetime(output);
 

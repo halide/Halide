@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         f.add_custom_lowering_pass(new CheckStoreCount(2));
 
         Realization result = f.realize(1024, 1024);
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x + y;
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         f.add_custom_lowering_pass(new CheckStoreCount(3));
 
         Realization result = f.realize(1024, 1024);
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x;
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         f(arg_0, arg_1) = {f(arg_0, arg_1)[0] + 10, f(arg_0, arg_1)[1] + 5};
 
         Realization result = f.realize(1024, 1024);
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = (x == 13) && (y == 23) ? 20 : 0;

@@ -3,11 +3,11 @@
 // Include the machine-generated .stub.h header file.
 #include "example.stub.h"
 
-using Halide::Image;
+using Halide::Buffer;
 
 const int kSize = 32;
 
-void verify(const Image<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
     for (int i = 0; i < kSize; i++) {
         for (int j = 0; j < kSize; j++) {
             for (int c = 0; c < channels; c++) {

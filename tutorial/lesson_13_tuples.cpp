@@ -84,12 +84,12 @@ int main(int argc, char **argv) {
 
     // Realizing a tuple-valued Func returns a collection of
     // Buffers. We call this a Realization. It's equivalent to a
-    // std::vector of Buffer/Image objects:
+    // std::vector of Buffer objects:
     {
         Realization r = multi_valued.realize(80, 60);
         assert(r.size() == 2);
-        Image<int> im0 = r[0];
-        Image<float> im1 = r[1];
+        Buffer<int> im0 = r[0];
+        Buffer<float> im1 = r[1];
         assert(im0(30, 40) == 30 + 40);
         assert(im1(30, 40) == sinf(30 * 40));
     }
@@ -139,10 +139,10 @@ int main(int argc, char **argv) {
         // the reduction to maintain complex state as it walks along
         // its domain. The simplest example is an argmax.
 
-        // First we create an Image to take the argmax over.
+        // First we create a Buffer to take the argmax over.
         Func input_func;
         input_func(x) = sin(x);
-        Image<float> input = input_func.realize(100);
+        Buffer<float> input = input_func.realize(100);
 
         // Then we define a 2-valued Tuple which tracks the index of
         // the maximum value and the value itself.
@@ -179,8 +179,8 @@ int main(int argc, char **argv) {
         // value and index.
         {
             Realization r = arg_max.realize();
-            Image<int> r0 = r[0];
-            Image<float> r1 = r[1];
+            Buffer<int> r0 = r[0];
+            Buffer<float> r1 = r[1];
             assert(arg_max_0 == r0(0));
             assert(arg_max_1 == r1(0));
         }
@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
         escape(x, y) = first_escape[0];
 
         // Realize the pipeline and print the result as ascii art.
-        Image<int> result = escape.realize(61, 25);
+        Buffer<int> result = escape.realize(61, 25);
         const char *code = " .:-~*={}&%#@";
         for (int y = 0; y < result.height(); y++) {
             for (int x = 0; x < result.width(); x++) {

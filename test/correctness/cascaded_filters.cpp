@@ -13,7 +13,7 @@ Func blur(Func in, std::string n) {
 }
 
 int main(int argc, char **argv) {
-    Image<float> input = lambda(x, sin(x) + 1.0f).realize(1000);
+    Buffer<float> input = lambda(x, sin(x) + 1.0f).realize(1000);
 
     std::vector<Func> stages;
     Func first("S0");
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     }
 
     divisor.set(2);
-    Image<float> result = stages.back().realize(10);
+    Buffer<float> result = stages.back().realize(10);
 
     // After all the averaging, the result should be a flat 1.0f
     float err = evaluate_may_gpu<float>(sum(abs(result(RDom(result)) - 1.0f)));

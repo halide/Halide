@@ -72,20 +72,20 @@ public:
     size_t size() const { return images.size(); }
 
     /** Get a reference to one of the images. */
-    Image<> &operator[](size_t x) {
+    Buffer<> &operator[](size_t x) {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
         return images[x].get();
     }
 
     /** Get one of the images. */
-    const Image<> &operator[](size_t x) const {
+    const Buffer<> &operator[](size_t x) const {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
         return images[x].get();
     }
 
     /** Single-element realizations are implicitly castable to Images. */
     template<typename T, int D>
-    operator Image<T, D>() const {
+    operator Buffer<T, D>() const {
         return images[0];
     }
 
@@ -94,16 +94,16 @@ public:
     template<typename T,
              int D,
              typename ...Args,
-             typename = std::enable_if<Internal::all_are_convertible<Image<>, Args...>::value>>
-    Realization(Image<T, D> a, Args&&... args) {
+             typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
+    Realization(Buffer<T, D> a, Args&&... args) {
         images = std::vector<Internal::BufferPtr>{a, std::forward<Args>(args)...};
     }
     //@}
 
-    /** Construct a Realization from a vector of Image<> */
-    explicit Realization(const std::vector<Image<>> &e) {
+    /** Construct a Realization from a vector of Buffer<> */
+    explicit Realization(const std::vector<Buffer<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
-        for (const Image<> &im : e) {
+        for (const Buffer<> &im : e) {
             images.push_back(Internal::BufferPtr(im));
         }
     }
@@ -112,7 +112,7 @@ public:
     struct iterator {
         std::vector<Internal::BufferPtr>::iterator iter;
 
-        Image<> &operator*() {
+        Buffer<> &operator*() {
             return iter->get();
         };
         iterator &operator++() {
@@ -135,7 +135,7 @@ public:
     struct const_iterator {
         std::vector<Internal::BufferPtr>::const_iterator iter;
 
-        const Image<> &operator*() {
+        const Buffer<> &operator*() {
             return iter->get();
         };
         const_iterator &operator++() {

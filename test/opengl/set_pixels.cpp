@@ -13,7 +13,7 @@ int main() {
 
     f(x, y, c) = cast<uint8_t>(42);
 
-    Image<uint8_t> out(10, 10, 3);
+    Buffer<uint8_t> out(10, 10, 3);
     f.bound(c, 0, 3).glsl(x, y, c);
     f.realize(out, target);
 

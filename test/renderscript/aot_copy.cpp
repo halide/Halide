@@ -9,8 +9,8 @@ void copy_interleaved(bool vectorize, int channels) {
         .dim(0).set_stride(channels)
         .dim(2).set_stride(1).set_bounds(0, channels);
 
-    Image<uint8_t> in = Image<uint8_t>::make_interleaved(128, 128, channels);
-    Image<uint8_t> out = Image<uint8_t>::make_interleaved(128, 128, channels);
+    Buffer<uint8_t> in = Buffer<uint8_t>::make_interleaved(128, 128, channels);
+    Buffer<uint8_t> out = Buffer<uint8_t>::make_interleaved(128, 128, channels);
     input8.set(in);
 
     Var x, y, c;

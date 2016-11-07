@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<float> input(1024, 1024);
+    Buffer<float> input(1024, 1024);
 
     Func upsampled("upsampled");
     Func upsampledx("upsampledx");

@@ -41,15 +41,15 @@ public:
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
     template<typename T, int D>
-    NO_INLINE void set(const Image<T, D> &im) {
+    NO_INLINE void set(const Buffer<T, D> &im) {
         set(Internal::BufferPtr(im));
     }
     // @}
 
     /** Get the Image bound to this ImageParam. Only relevant for jitting */
     // @{
-    EXPORT const Image<> &get() const;
-    EXPORT Image<> &get();
+    EXPORT const Buffer<> &get() const;
+    EXPORT Buffer<> &get();
     // @}
 
     /** Unbind any bound Image */
