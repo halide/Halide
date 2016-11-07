@@ -29,6 +29,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Associativity.h"
+#include "ApplySplits.h"
 
 namespace Halide {
 
@@ -387,46 +388,125 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
-/** Apply split directives on the reduction variables. Remove the old RVar from
- * the list and add the split result (inner and outer RVars) to the list. */
-void apply_split(const Split &s, vector<ReductionVariable> &rvars) {
-    internal_assert(s.is_split());
-    const auto iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
-    if (iter != rvars.end()) {
-        debug(4) << "  Splitting " << iter->var << " into " << s.outer << " and " << s.inner << "\n";
-        Expr old_extent = iter->extent;
-        iter->var = s.inner;
-        iter->min = 0;
-        iter->extent = s.factor;
-
-        ReductionVariable outer = {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)};
-        rvars.insert(iter + 1, outer);
+// Substitute 'exprs' with the values defined by 'let_stmts' in ascending order.
+// If 'reverse' is true, perform the substitution in descending order.
+void substitute_lets_in_exprs(const vector<pair<string, Expr>> &let_stmts,
+                              vector<Expr> &exprs, bool reverse) {
+    if (reverse) {
+        for (int i = let_stmts.size() - 1; i >= 0; --i) {
+            for (auto &expr : exprs) {
+                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < let_stmts.size(); ++i) {
+            for (auto &expr : exprs) {
+                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
+            }
+        }
     }
 }
 
-/** Apply fuse directives on the reduction variables. Remove the fused RVars from
- * the list and add the fused RVar to the list. */
-void apply_fuse(const Split &s, vector<ReductionVariable> &rvars) {
+void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
+                        const ApplySplitResult &result, vector<Expr> &predicates,
+                        vector<Expr> &args, vector<Expr> &values) {
+
+    predicates.insert(predicates.end(), result.predicates.begin(), result.predicates.end());
+
+    // Apply substitutions to the list of predicates, args, and values
+    substitute_lets_in_exprs(result.substitutions, predicates, false);
+    substitute_lets_in_exprs(result.substitutions, args, false);
+    substitute_lets_in_exprs(result.substitutions, values, false);
+
+    // Make sure we substitute in all the let stmts from 'bounds_let_stmts' and
+    // ApplySplitResult since we are not going to add them to the exprs.
+    // The list of let stmts is ordered from innermost let to outermost let, so
+    // we need to apply the substitution in reverse order.
+    substitute_lets_in_exprs(result.let_stmts, predicates, true);
+    substitute_lets_in_exprs(result.let_stmts, args, true);
+    substitute_lets_in_exprs(result.let_stmts, values, true);
+
+    substitute_lets_in_exprs(bounds_let_stmts, predicates, true);
+    substitute_lets_in_exprs(bounds_let_stmts, args, true);
+    substitute_lets_in_exprs(bounds_let_stmts, values, true);
+}
+
+/** Apply split directives on the reduction variables. Remove the old RVar from
+ * the list and add the split result (inner and outer RVars) to the list. Add
+ * new predicates corresponding to the TailStrategy to the RDom predicate list. */
+bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
+                 vector<Expr> &predicates, vector<Expr> &args,
+                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
+    internal_assert(s.is_split());
+    const auto it = std::find_if(rvars.begin(), rvars.end(),
+        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
+
+    Expr old_max, old_min, old_extent;
+
+    if (it != rvars.end()) {
+        debug(4) << "  Splitting " << it->var << " into " << s.outer << " and " << s.inner << "\n";
+
+        old_max = simplify(it->min + it->extent - 1);
+        old_min = it->min;
+        old_extent = it->extent;
+
+        it->var = s.inner;
+        it->min = 0;
+        it->extent = s.factor;
+
+        rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
+    }
+    return false;
+}
+
+/** Apply fuse directives on the reduction variables. Remove the
+ * fused RVars from the list and add the fused RVar to the list. */
+bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
+                vector<Expr> &predicates, vector<Expr> &args,
+                vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_fuse());
     const auto iter_outer = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.outer == rv.var); });
     const auto iter_inner = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.inner == rv.var); });
 
+    Expr inner_min, inner_extent, outer_min, outer_extent;
     if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
         debug(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
+
+        inner_min = iter_inner->min;
+        inner_extent = iter_inner->extent;
+        outer_min = iter_outer->min;
+        outer_extent = iter_outer->extent;
+
         Expr extent = iter_outer->extent * iter_inner->extent;
         iter_outer->var = s.old_var;
         iter_outer->min = 0;
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
     }
+    return false;
 }
 
-/** Apply purify directives on the reduction variables. Purify replace a RVar
- * with a Var, thus, the RVar needs to be removed from the list. */
-void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
+/** Apply purify directives on the reduction variables and predicates. Purify
+ * replace a RVar with a Var, thus, the RVar needs to be removed from the list.
+ * Any reference to the RVar in the predicates will be replaced with reference
+ * to a Var. */
+bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
+                  vector<Expr> &predicates, vector<Expr> &args,
+                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_purify());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
@@ -434,31 +514,70 @@ void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
         debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
     }
+    return false;
 }
 
 /** Apply rename directives on the reduction variables. */
-void apply_rename(const Split &s, vector<ReductionVariable> &rvars) {
+bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
+                  vector<Expr> &predicates, vector<Expr> &args,
+                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_rename());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
     }
+    return false;
 }
 
-/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction variables. */
-void apply_split_directive(const Split &s, vector<ReductionVariable> &rvars) {
-    if (s.is_split()) {
-        apply_split(s, rvars);
-    } else if (s.is_fuse()) {
-        apply_fuse(s, rvars);
-    } else if (s.is_purify()) {
-        apply_purify(s, rvars);
-    } else {
-        apply_rename(s, rvars);
+/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction
+ * variables. */
+bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
+                           vector<Expr> &predicates, vector<Expr> &args,
+                           vector<Expr> &values) {
+    map<string, Expr> dim_extent_alignment;
+    for (const ReductionVariable &rv : rvars) {
+        dim_extent_alignment[rv.var] = rv.extent;
     }
+
+    vector<pair<string, Expr>> rvar_bounds;
+    for (const ReductionVariable &rv : rvars) {
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_min", rv.min));
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_max", simplify(rv.min + rv.extent - 1)));
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_extent", rv.extent));
+    }
+
+    bool found = false;
+    if (s.is_split()) {
+        found = apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else if (s.is_fuse()) {
+        found = apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else if (s.is_purify()) {
+        found = apply_purify(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else {
+        found = apply_rename(s, rvars, predicates, args, values, dim_extent_alignment);
+    }
+
+    if (found) {
+        substitute_lets_in_exprs(rvar_bounds, predicates, true);
+        substitute_lets_in_exprs(rvar_bounds, args, true);
+        substitute_lets_in_exprs(rvar_bounds, values, true);
+    }
+    return found;
 }
 
 } // anonymous namespace
@@ -492,6 +611,8 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Split> &splits = definition.schedule().splits();
     vector<ReductionVariable> &rvars = definition.schedule().rvars();
     vector<Dim> &dims = definition.schedule().dims();
+    vector<Expr> predicates = definition.split_predicate();
+
     Scope<string> scope; // Contains list of RVars lifted to the intermediate Func
     vector<string> rvars_removed;
 
@@ -541,6 +662,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         }
     }
 
+    // We need to apply the split directives on the reduction vars, so that we can
+    // correctly lift the RVars not in 'rvars_kept' and distribute the RVars to the
+    // intermediate and merge Funcs.
+    {
+        vector<Split> temp;
+        for (const Split &s : splits) {
+            // If it's already applied, we should remove it from the split list.
+            if (!apply_split_directive(s, rvars, predicates, args, values)) {
+                temp.push_back(s);
+            }
+        }
+        splits = temp;
+    }
+
     // Reduction domain of the intermediate update definition
     vector<ReductionVariable> intm_rvars;
     for (const auto &rv : rvars) {
@@ -553,16 +688,10 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     RDom intm_rdom(intm_rvars);
 
-    // We need to apply the split directives on the reduction vars, so that we can
-    // correctly lift the RVars not in 'rvars_kept'
-    for (const Split &s : splits) {
-        apply_split_directive(s, rvars);
-    }
-
     // Sort the Rvars kept and their Vars replacement based on the RVars of
     // the reduction domain AFTER applying the split directives, so that we
     // can have a consistent args order for the update definition of the
-    // intermediate and new Func
+    // intermediate and new merge Funcs.
     std::sort(preserved.begin(), preserved.end(),
         [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs){
             const auto iter_lhs = std::find_if(rvars.begin(), rvars.end(),
@@ -598,7 +727,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         rvars.swap(temp);
     }
     RDom f_rdom(rvars);
-
 
     // Init definition of the intermediate Func
 
@@ -650,7 +778,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
 
     // Compute the predicates for the intermediate Func and the new update definition
-    const vector<Expr> predicates = definition.split_predicate();
     for (const Expr &pred : predicates) {
         Expr subs_pred = substitute(substitution_map, pred);
         intm_rdom.where(subs_pred);
