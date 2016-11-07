@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(true);
-        Image<uint8_t> result1 = f4.realize(10);
+        Buffer<uint8_t> result1 = f4.realize(10);
         for (int32_t i = 0; i < 10; i++) {
             assert(result1(i) == i + 1);
         }
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(false);
-        Image<uint8_t> result2 = f4.realize(10);
+        Buffer<uint8_t> result2 = f4.realize(10);
         for (int32_t i = 0; i < 10; i++) {
             assert(result2(i) == i + 2);
         }

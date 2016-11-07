@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     g.compute_root().specialize(gpu_g).gpu_tile(x, 16);
     h.compute_root().specialize(gpu_h).gpu_tile(x, 16);
 
-    Image<int> out(128), reference(128), input(256);
+    Buffer<int> out(128), reference(128), input(256);
 
     lambda(x, x * 17 + 43 + x * x).realize(input);
     in.set(input);

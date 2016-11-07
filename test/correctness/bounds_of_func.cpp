@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x;
     ImageParam in(Float(32), 1);
-    Image<float> output(1024);
+    Buffer<float> output(1024);
 
     {
         // Check that we can infer that a func has a limited range
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 
         g.infer_input_bounds(output);
 
-        Image<float> in_buf = in.get();
+        Buffer<float> in_buf = in.get();
 
         assert(in_buf.min(0) == 10 && in_buf.extent(0) == 11);
 
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         p.set(20);
         g.infer_input_bounds(output);
 
-        Image<float> in_buf = in.get();
+        Buffer<float> in_buf = in.get();
 
         assert(in_buf.min(0) == 10 && in_buf.extent(0) == 11);
 
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 
         in.reset();
         h.infer_input_bounds(output);
-        Image<float> in_buf = in.get();
+        Buffer<float> in_buf = in.get();
 
         assert(in_buf.min(0) == 0 && in_buf.extent(0) == 91);
     }
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
 
         in.reset();
         h.infer_input_bounds(output);
-        Image<float> in_buf = in.get();
+        Buffer<float> in_buf = in.get();
 
         assert(in_buf.min(0) == -1049600 && in_buf.extent(0) == 2097153);
     }

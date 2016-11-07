@@ -23,28 +23,28 @@ namespace p = boost::python;
 
 p::object realization_to_python_object(const h::Realization &r) {
     if (r.size() == 1) {
-        return image_to_python_object(r[0]);
+        return buffer_to_python_object(r[0]);
     } else {
         p::list elts;
-        for (const h::Image<> &im : r) {
-            elts.append(image_to_python_object(im));
+        for (const h::Buffer<> &im : r) {
+            elts.append(buffer_to_python_object(im));
         }
         return p::tuple(elts);
     }
 }
 
 h::Realization python_object_to_realization(p::object obj) {
-    std::vector<h::Image<>> images;
+    std::vector<h::Buffer<>> buffers;
     p::extract<p::tuple> tuple_extract(obj);
     if (tuple_extract.check()) {
         p::tuple tup = tuple_extract();
         for (ssize_t i = 0; i < p::len(tup); i++) {
-            images.push_back(python_object_to_image(tup[i]));
+            buffers.push_back(python_object_to_buffer(tup[i]));
         }
     } else {
-        images.push_back(python_object_to_image(obj));
+        buffers.push_back(python_object_to_buffer(obj));
     }
-    return h::Realization(images);
+    return h::Realization(buffers);
 }
 
 template <typename... Args>
@@ -279,52 +279,52 @@ void defineFunc() {
         .def("realize", &func_realize<int, int, int, int, h::Target>,
              p::args("self", "x", "y", "z", "w", "target"),
              realize_doc)
-        .def("realize", &func_realize_into<h::Image<uint8_t>>,
+        .def("realize", &func_realize_into<h::Buffer<uint8_t>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<uint8_t>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<uint8_t>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<uint16_t>>,
+        .def("realize", &func_realize_into<h::Buffer<uint16_t>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<uint16_t>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<uint16_t>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<uint32_t>>,
+        .def("realize", &func_realize_into<h::Buffer<uint32_t>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<uint32_t>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<uint32_t>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<int8_t>>,
+        .def("realize", &func_realize_into<h::Buffer<int8_t>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<int8_t>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<int8_t>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<int16_t>>,
+        .def("realize", &func_realize_into<h::Buffer<int16_t>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<int16_t>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<int16_t>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<int32_t>>,
+        .def("realize", &func_realize_into<h::Buffer<int32_t>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<int32_t>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<int32_t>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<float>>,
+        .def("realize", &func_realize_into<h::Buffer<float>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<float>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<float>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<double>>,
+        .def("realize", &func_realize_into<h::Buffer<double>>,
              p::args("self", "output"),
              realize_into_doc)
-        .def("realize", &func_realize_into<h::Image<double>, h::Target>,
+        .def("realize", &func_realize_into<h::Buffer<double>, h::Target>,
              p::args("self", "output", "target"),
              realize_into_doc)
         .def("realize", &func_realize_tuple<>,

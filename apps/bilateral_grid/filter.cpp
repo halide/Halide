@@ -18,17 +18,18 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    float r_sigma = atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
-    Image<float> input = Tools::load_image(argv[1]);
-    Image<float> output(input.width(), input.height(), 1);
+    Buffer<float> input = Tools::load_image(argv[1]);
+    Buffer<float> output(input.width(), input.height(), 1);
 
-    bilateral_grid(atof(argv[3]), input, output);
+    bilateral_grid(input, r_sigma, output);
 
     // Timing code. Timing doesn't include copying the input data to
     // the gpu or copying the output back.
     double min_t = benchmark(timing_iterations, 10, [&]() {
-        bilateral_grid(atof(argv[3]), input, output);
+        bilateral_grid(input, r_sigma, output);
     });
     printf("Time: %gms\n", min_t * 1e3);
 

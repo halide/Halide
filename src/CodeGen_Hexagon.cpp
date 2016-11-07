@@ -64,6 +64,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
                                     "Halide HVX internal compiler\n");
 
         std::vector<const char *> options = {
+            "halide-hvx-be",
             // Don't put small objects into .data sections, it causes
             // issues with position independent code.
             "-hexagon-small-data-threshold=0"
@@ -1006,6 +1007,16 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     for (int i = 0; i < idx_elements; i += native_idx_elements) {
         Value *idx_i = slice_vector(idx, i, native_idx_elements);
 
+        if (lut_ty->getScalarSizeInBits() == 16) {
+            // vlut16 deinterleaves its output. We can either
+            // interleave the result, or the indices.  It's slightly
+            // cheaper to interleave the indices (they are single
+            // vectors, vs. the result which is a double vector), and
+            // if the indices are constant (which is true for boundary
+            // conditions) this should get lifted out of any loops.
+            idx_i = call_intrin_cast(idx_i->getType(), IPICK(is_128B, Intrinsic::hexagon_V6_vshuffb), {idx_i});
+        }
+
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
@@ -1029,17 +1040,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
                     }
                 }
             }
-        }
-
-        if (native_result_ty->getScalarSizeInBits() == 16) {
-            // If we used vlut16, the result is a deinterleaved double
-            // vector. Reinterleave it.
-            // TODO: We might be able to do this to the indices
-            // instead of the result. However, I think that requires a
-            // non-native vector width deinterleave, so it's probably
-            // not faster, except where the indices are compile time
-            // constants.
-            result_i = call_intrin(native_result_ty, "halide.hexagon.interleave.vh", {result_i});
         }
 
         result.push_back(result_i);
@@ -1222,11 +1222,12 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
+    std::stringstream attrs("+hvx");
     if (target.has_feature(Halide::Target::HVX_128)) {
-        return "+hvx,+hvx-double";
-    } else {
-        return "+hvx";
+        attrs << ",+hvx-double";
     }
+    attrs << ",+long-calls";
+    return attrs.str();
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
@@ -1374,6 +1375,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
         { Call::count_leading_zeros, { "halide.hexagon.clz", false } },
         { Call::popcount, { "halide.hexagon.popcount", false } },
     };
+
+    if (is_native_interleave(op) || is_native_deinterleave(op)) {
+        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
+            << "Interleave or deinterleave will result in miscompilation, "
+            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+    }
 
     if (starts_with(op->name, "halide.hexagon.")) {
         // Handle all of the intrinsics we generated in

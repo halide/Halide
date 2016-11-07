@@ -22,13 +22,13 @@ int32_t extract_value_ns(const int32_t *arg) {
 }
 
 int main(int argc, char **argv) {
-    Image<uint8_t> input(100);
+    Buffer<uint8_t> input(100);
 
     for (int32_t i = 0; i < 100; i++) {
         input(i) = i;
     }
 
-    Image<double> result(100);
+    Buffer<double> result(100);
 
     const halide_filter_metadata_t *m = HalideTest::cxx_mangling_metadata();
     assert(m != NULL);
@@ -43,11 +43,14 @@ int main(int argc, char **argv) {
     std::string *string_ptr = nullptr;
     const std::string *const_string_ptr = nullptr;
 
-    assert(HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
+    int r = HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
                                     -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
                                     int_ptr, const_int_ptr, void_ptr, const_void_ptr, 
-                                    string_ptr, const_string_ptr, result) == 0);
-
+                                    string_ptr, const_string_ptr, result);
+    if (r != 0) {
+        fprintf(stderr, "Failure!\n");
+        exit(1);
+    }
     printf("Success!\n");
     return 0;
 }

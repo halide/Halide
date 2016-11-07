@@ -41,6 +41,11 @@
 #endif
 #endif
 
+// On windows, Halide needs a larger stack than the default MSVC provides
+#ifdef _MSC_VER
+#pragma comment(linker, "/STACK:8388608,1048576")
+#endif
+
 namespace Halide {
 namespace Internal {
 

@@ -602,6 +602,14 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Add>(op);
+            } else {
+                expr = hoist_slice_vector<Add>(Add::make(a, b));
+            }
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -1410,7 +1418,15 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (broadcast_a && broadcast_b) {
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Mul>(op);
+            } else {
+                expr = hoist_slice_vector<Mul>(Mul::make(a, b));
+            }
+        }else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -2371,6 +2387,14 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Min>(op);
+            } else {
+                expr = hoist_slice_vector<Min>(min(a, b));
+            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2723,6 +2747,14 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Max>(op);
+            } else {
+                expr = hoist_slice_vector<Max>(max(a, b));
+            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2819,13 +2851,15 @@ private:
         } else if (sel && is_zero(sel->true_value)) {
             // select(c, 0, f) == 0 -> c || (f == 0)
             expr = mutate(sel->condition || (sel->false_value == zero));
-        } else if (sel && is_const(sel->true_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->true_value) || is_negative_const(sel->true_value))) {
             // select(c, 4, f) == 0 -> !c && (f == 0)
             expr = mutate((!sel->condition) && (sel->false_value == zero));
         } else if (sel && is_zero(sel->false_value)) {
             // select(c, t, 0) == 0 -> !c || (t == 0)
             expr = mutate((!sel->condition) || (sel->true_value == zero));
-        } else if (sel && is_const(sel->false_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->false_value) || is_negative_const(sel->false_value))) {
             // select(c, t, 4) == 0 -> c && (t == 0)
             expr = mutate((sel->condition) && (sel->true_value == zero));
         } else {
@@ -4086,6 +4120,59 @@ private:
             IRMutator::visit(op);
         }
     }
+    template <typename T>
+    Expr hoist_slice_vector(Expr e) {
+        const T *op = e.as<T>();
+        internal_assert(op);
+        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
+
+        const Call *call_a = op->a.template as<Call>();
+        const Call *call_b = op->b.template as<Call>();
+
+        internal_assert(call_a && call_b &&
+                        call_a->is_intrinsic(Call::slice_vector) &&
+                        call_b->is_intrinsic(Call::slice_vector));
+
+        if (!equal(call_a->args[1], call_b->args[1]) ||
+            !equal(call_a->args[2], call_b->args[2])) {
+            debug(4) << " ...unable to hoist - slice vector arguments don't match\n";
+            return e;
+        }
+
+        const Call *concat_a = call_a->args[0].as<Call>();
+        const Call *concat_b = call_b->args[0].as<Call>();
+        if (!concat_a || !concat_b) {
+            debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
+            return e;
+        }
+
+        const std::vector<Expr> &slices_a = concat_a->args;
+        const std::vector<Expr> &slices_b = concat_b->args;
+        if (slices_a.size() != slices_b.size()) {
+            return e;
+        }
+
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            if (slices_a[i].type() != slices_b[i].type()) {
+                debug(4) << " ...unable to hoist - type mismatch\n";
+                return e;
+            }
+        }
+
+        vector<Expr> new_slices;
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            new_slices.push_back(T::make(slices_a[i], slices_b[i]));
+        }
+
+        Expr start_lane = call_a->args[1];
+        Expr result_lanes = call_a->args[3];
+        Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
+        Expr ret_expr = Call::make(op->type, Call::slice_vector,
+                                   {concat_v, start_lane, call_a->args[2], result_lanes},
+                                   Call::PureIntrinsic);
+        debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
+        return ret_expr;
+    }
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
@@ -4117,14 +4204,19 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
-
+            const Call *call = new_value.as<Call>();
             const Variable *var_b = nullptr;
+            const Variable *var_a = nullptr;
             if (add) {
                 var_b = add->b.as<Variable>();
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       (call->args.size() == 2)) {
+                var_a = call->args[0].as<Variable>();
+                var_b = call->args[1].as<Variable>();
             }
 
             if (is_const(new_value)) {
@@ -4172,6 +4264,20 @@ private:
                 new_value = cast->value;
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
+            } else if (call && call->is_intrinsic(Call::slice_vector)) {
+                new_value = call->args[0];
+                new_var = Variable::make(new_value.type(), new_name);
+                replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
+                                                              {new_var, call->args[1], call->args[2], call->args[3]},
+                                                              Call::PureIntrinsic), replacement);
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       ((var_a && !var_b) || (!var_a && var_b))) {
+                new_var = Variable::make(var_a ? call->args[1].type() : call->args[0].type(), new_name);
+                Expr op_a = var_a ? call->args[0] : new_var;
+                Expr op_b = var_a ? new_var : call->args[1];
+                replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
+                                                              {op_a, op_b}, Call::PureIntrinsic), replacement);
+                new_value = var_a ? call->args[1] : call->args[0];
             } else {
                 break;
             }
@@ -4435,15 +4541,14 @@ private:
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
 
-            // We're just going to use the first name, so if the
-            // second name is different we need to rewrite it.
-            if (let_rest->name != let_first->name) {
-                new_block = substitute(let_rest->name,
-                                       Variable::make(let_first->value.type(), let_first->name),
-                                       new_block);
-            }
+            // We need to make a new name since we're pulling it out to a
+            // different scope.
+            string var_name = unique_name('t');
+            Expr new_var = Variable::make(let_first->value.type(), var_name);
+            new_block = substitute(let_first->name, new_var, new_block);
+            new_block = substitute(let_rest->name, new_var, new_block);
 
-            stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+            stmt = LetStmt::make(var_name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&
                    equal(if_first->condition, if_rest->condition)) {
@@ -4854,6 +4959,26 @@ void check_vectors() {
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           ramp(const_false(), const_true(), 2),
+                           broadcast(const_false(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = !(ramp(const_true(), const_true(), 2)) ||
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           broadcast(const_true(), 2),
+                           ramp(const_false(), const_true(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = (!ramp(const_true(), const_true(), 2)) &&
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
 }
 
 void check_bounds() {
@@ -5604,7 +5729,7 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
 
 void check_indeterminate() {
     const int32_t values[] = {
-        -2147483648,
+        int32_t(0x80000000),
         -2147483647,
         -2,
         -1,
