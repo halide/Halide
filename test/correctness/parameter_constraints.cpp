@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
         Var x, y;
         Param<float> p;
 
-        Image<float> input(100, 100);
+        Buffer<float> input(100, 100);
 
         p.set_range(1, 10);
 
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
         Var x, y;
         // initial value: 2, min: 1, max: 10
         Param<float> p(2, 1, 10);
-        Image<float> input(100, 100);
+        Buffer<float> input(100, 100);
 
         g(x, y) = input(x, y) + 1.0f;
 

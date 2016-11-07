@@ -113,8 +113,8 @@ void match_argument(const halide_filter_argument_t &e, const halide_filter_argum
 }
 
 template <typename Type>
-Image<Type> make_image() {
-    Image<Type> im(kSize, kSize, 3);
+Buffer<Type> make_image() {
+    Buffer<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -126,19 +126,18 @@ Image<Type> make_image() {
 }
 
 template <typename InputType, typename OutputType>
-void verify(const Image<InputType> &input, 
-            const Image<OutputType> &output0, 
-            const Image<OutputType> &output1, 
-            const Image<OutputType> &output_scalar, 
-            const Image<OutputType> &output_array0, 
-            const Image<OutputType> &output_array1) {
-    // Image doesn't allow for zero-dimensional buffers -- use 1-dimensional for now
-    if (output_scalar.dimensions() != 1 || output_scalar.width() != 1) {
+void verify(const Buffer<InputType> &input, 
+            const Buffer<OutputType> &output0, 
+            const Buffer<OutputType> &output1, 
+            const Buffer<OutputType> &output_scalar, 
+            const Buffer<OutputType> &output_array0, 
+            const Buffer<OutputType> &output_array1) {
+    if (output_scalar.dimensions() != 0) {
         fprintf(stderr, "output_scalar should be zero-dimensional\n");
         exit(-1);
     }
     if (output_scalar() != 1234.25f) {
-        fprintf(stderr, "output_scalar value is wrong (%f)\n", output_scalar(0));
+        fprintf(stderr, "output_scalar value is wrong (%f)\n", output_scalar());
         exit(-1);
     }
     for (int x = 0; x < kSize; x++) {
@@ -687,14 +686,14 @@ int main(int argc, char **argv) {
 
     int result;
 
-    Image<uint8_t> input = make_image<uint8_t>();
+    Buffer<uint8_t> input = make_image<uint8_t>();
 
-    Image<float> output0(kSize, kSize, 3);
-    Image<float> output1(kSize, kSize, 3);
-    Image<float> output_scalar(1);  // Image doesn't allow for zero-dimensional buffers
-    Image<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Image<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Image<float> output_array3[2] = {{1}, {1}};
+    Buffer<float> output0(kSize, kSize, 3);
+    Buffer<float> output1(kSize, kSize, 3);
+    Buffer<float> output_scalar = Buffer<float>::make_scalar();
+    Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array3[2] = {{1}, {1}};
 
     result = metadata_tester(
         input,             // Input<Func>

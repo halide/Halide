@@ -2391,13 +2391,13 @@ Realization Func::realize(const Target &target) {
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
-    vector<Image<>> outputs(func.outputs());
+    vector<Buffer<>> outputs(func.outputs());
     int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
         // We're not actually going to read from these outputs, so
         // make the allocation tiny, then expand them with unsafe
         // cropping.
-        Image<> im = Image<>::make_scalar(func.output_types()[i]);
+        Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
         for (int s : sizes) {
             if (!s) break;
             im.add_dimension();

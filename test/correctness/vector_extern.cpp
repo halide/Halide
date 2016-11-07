@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     f(x) = sqrt(cast<float>(x));
 
     f.vectorize(x, 4);
-    Image<float> im = f.realize(32);
+    Buffer<float> im = f.realize(32);
 
     for (int i = 0; i < 32; i++) {
         float correct = sqrtf((float)i);

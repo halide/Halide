@@ -31,10 +31,10 @@ int main(int argc, char **argv) {
     }
 
     u.set(17);
-    Image<int> out_17 = f.realize(1024, target);
+    Buffer<int> out_17 = f.realize(1024, target);
 
     u.set(123);
-    Image<int> out_123 = f.realize(1024, target);
+    Buffer<int> out_123 = f.realize(1024, target);
 
     for (int i = 0; i < 1024; i++) {
         if (out_17(i) != 17 || out_123(i) != 123) {

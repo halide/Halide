@@ -21,8 +21,8 @@ int main(int argc, char **argv) {
     float r_sigma = atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
-    Image<float> input = Tools::load_image(argv[1]);
-    Image<float> output(input.width(), input.height(), 1);
+    Buffer<float> input = Tools::load_image(argv[1]);
+    Buffer<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(input, r_sigma, output);
 

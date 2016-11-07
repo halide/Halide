@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     h.set_custom_allocator(my_malloc, my_free);
     h.set_error_handler(my_error_handler);
 
-    Image<int> im = h.realize(g_size+100);
+    Buffer<int> im = h.realize(g_size+100);
 
     printf("%d %d\n", (int)malloc_count, (int)free_count);
 
