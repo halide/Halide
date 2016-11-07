@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     f(r.x, r.y, c) = f(r.x-1, r.y, c) + h(r.x, r.y, c);
 
     f.set_error_handler(&halide_error);
-    Image<int32_t> result = f.realize(100, 5, 3);
+    Buffer<int32_t> result = f.realize(100, 5, 3);
 
     assert(error_occurred);
     printf("Success!\n");

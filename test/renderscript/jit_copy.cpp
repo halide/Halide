@@ -184,7 +184,7 @@ void copy_interleaved(bool vectorized = false, int channels = 4) {
         .set_stride(1, Halide::Expr())
         .set_stride(2, 1)
         .set_bounds(2, 0, channels);  // expecting interleaved image
-    Image<uint8_t> in = Image<uint8_t>::make_interleaved(128, 128, channels);
+    Buffer<uint8_t> in = Buffer<uint8_t>::make_interleaved(128, 128, channels);
     input8.set(in);
 
     Var x, y, c;

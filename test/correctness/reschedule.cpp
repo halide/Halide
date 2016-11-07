@@ -27,11 +27,11 @@ int main(int argc, char **argv) {
     f.set_custom_trace(&my_trace);
     f.trace_stores();
 
-    Image<int> result_1 = f.realize(10);
+    Buffer<int> result_1 = f.realize(10);
 
     f.vectorize(x, 4);
 
-    Image<int> result_2 = f.realize(10);
+    Buffer<int> result_2 = f.realize(10);
 
     // There should have been vector stores and scalar stores.
     if (!vector_store || !scalar_store) {

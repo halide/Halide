@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         g.split(x, xo, xi, 4).gpu_threads(xo).vectorize(xi);
         g.update().split(x, xo, xi, 4).gpu_threads(xo).vectorize(xi);
 
-        Image<int> out = h.realize(512);
+        Buffer<int> out = h.realize(512);
 
         for (int x = 0; x < out.width(); x++) {
             int correct = 4*x + 90;

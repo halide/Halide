@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
 
     // On large-buffer targets try an internal allocation of size just larger than 2^63
     extent.set(1 << 16);
-    Image<uint8_t> result = grand_total.realize();
+    Buffer<uint8_t> result = grand_total.realize();
     assert(error_occurred);
 
     // On small-buffer targets try an internal allocation of size just larger than 2^31

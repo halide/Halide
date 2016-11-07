@@ -12,7 +12,7 @@ int main() {
     f(x, y, c) = sum(cast<float>(r));
     f.bound(c, 0, 3).glsl(x, y, c);
 
-    Image<float> result = f.realize(100, 100, 3, target);
+    Buffer<float> result = f.realize(100, 100, 3, target);
 
     for (int c = 0; c < result.channels(); c++) {
         for (int y = 0; y < result.height(); y++) {

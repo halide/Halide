@@ -10,7 +10,7 @@ int main() {
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
-    Image<uint8_t> input(255, 10, 3);
+    Buffer<uint8_t> input(255, 10, 3);
     for (int y=0; y<input.height(); y++) {
         for (int x=0; x<input.width(); x++) {
             for (int c=0; c<3; c++) {
@@ -29,7 +29,7 @@ int main() {
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
 
-    Image<uint8_t> out(255, 10, 3);
+    Buffer<uint8_t> out(255, 10, 3);
     g.realize(out, target);
     out.copy_to_host();
 
