@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     f(r) = f(r-1) + f(r+1);
 
     f.set_error_handler(&halide_error);
-    Image<int> result = f.realize(10);
+    Buffer<int> result = f.realize(10);
 
     if (!error_occurred) {
         printf("There should have been an out-of-bounds error\n");

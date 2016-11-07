@@ -14,7 +14,7 @@ uint8_t max3(uint8_t a, uint8_t b, uint8_t c) {
 int main(int argc, char **argv) {
     // Generate random input image.
     const int W = 128, H = 48;
-    Image<uint8_t> in(W, H);
+    Buffer<uint8_t> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = rand() & 0xff;
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     }
 
     // Run the pipeline and verify the results are correct.
-    Image<uint8_t> out = dilate3x3.realize(W, H, target);
+    Buffer<uint8_t> out = dilate3x3.realize(W, H, target);
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {

@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
 
         Realization result = f.realize(1024, 1024);
 
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
 
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
 
         Realization result = f.realize(1024, 1024);
 
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
 
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 
         Realization result = f.realize(1024, 1024);
 
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
 
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
 
         Realization result = f.realize(1024, 1024);
 
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
 
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {

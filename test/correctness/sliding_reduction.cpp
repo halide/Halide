@@ -17,7 +17,7 @@ extern "C" DLLEXPORT int call_count(int x) {
 }
 HalideExtern_1(int, call_count, int);
 
-void check(Image<int> im) {
+void check(Buffer<int> im) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = 99*3;

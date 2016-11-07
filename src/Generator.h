@@ -403,6 +403,11 @@ public:
         std::ostringstream oss;
         oss << this->value();
         if (std::is_same<T, float>::value) {
+            // If the constant has no decimal point ("1")
+            // we must append one before appending "f"
+            if (oss.str().find(".") == std::string::npos) {
+                oss << ".";
+            }
             oss << "f";
         }
         return oss.str();
@@ -1527,7 +1532,7 @@ protected:
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using ScheduleParam = Halide::ScheduleParam<T>;
-    template <typename T = void, int D = 4> using Image = Halide::Image<T, D>;
+    template <typename T = void, int D = 4> using Buffer = Halide::Buffer<T, D>;
     template <typename T> using Param = Halide::Param<T>;
     static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
     static inline Type Float(int bits, int lanes = 1) { return Halide::Float(bits, lanes); }

@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     // way. We can pass it an image we would like it to fill in. The
     // following evaluates our Func into an existing image:
     printf("Evaluating gradient from (0, 0) to (7, 7)\n");
-    Image<int> result(8, 8);
+    Buffer<int> result(8, 8);
     gradient.realize(result);
 
     // Let's check it did what we expect:
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
     // from (100, 50) to (104, 56) inclusive.
 
     // We start by creating an image that represents that rectangle:
-    Image<int> shifted(5, 7); // In the constructor we tell it the size.
+    Buffer<int> shifted(5, 7); // In the constructor we tell it the size.
     shifted.set_min(100, 50); // Then we tell it the top-left corner.
 
     printf("Evaluating gradient from (100, 50) to (104, 56)\n");

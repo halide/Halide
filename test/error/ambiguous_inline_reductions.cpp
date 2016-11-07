@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     // reduction domains.
     f(r1, y) += product(sum(r2, r1 + r2 + r3));
 
-    Image<int> result = f.realize(10, 10);
+    Buffer<int> result = f.realize(10, 10);
 
     return 0;
 }

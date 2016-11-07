@@ -356,7 +356,7 @@ public:
     EXPORT void realize(Realization dst, const Target &target = Target());
 
     template<typename T, int D>
-    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
+    NO_INLINE void realize(Buffer<T, D> &dst, const Target &target = Target()) {
         Realization r(dst);
         realize(r, target);
         dst = r[0];
@@ -373,7 +373,7 @@ public:
     EXPORT void infer_input_bounds(Realization dst);
 
     template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
+    NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
         // It's possible for bounds inference to also manipulate
         // output buffers if their host pointer is null, so we must
         // take Images by reference and communicate the bounds query
