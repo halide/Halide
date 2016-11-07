@@ -196,7 +196,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(cxx_mangling)
   add_test_generator(embed_image)
   add_test_generator(error_codes)
-  add_test_generator(example)
+  add_test_generator(example WITH_STUB)
   add_test_generator(extended_buffer_t)
   add_test_generator(float16_t)
   add_test_generator(gpu_object_lifetime)
@@ -223,7 +223,8 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(variable_num_threads)
 
   # ------ Generator tests for just-in-time mode: ------
-  halide_define_jit_test(example)
+  halide_define_jit_test(example
+                         STUB_DEPS example.generator)
   halide_define_jit_test(stubtest
                          STUB_DEPS stubtest.generator)
 
