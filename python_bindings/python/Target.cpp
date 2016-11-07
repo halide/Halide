@@ -113,7 +113,6 @@ void defineTarget() {
         .value("CLDoubles", Target::Feature::CLDoubles)
 
         .value("OpenGL", Target::Feature::OpenGL)
-        .value("Renderscript", Target::Feature::Renderscript)
         .value("UserContext", Target::Feature::UserContext)
         .value("Matlab", Target::Feature::Matlab)
         .value("Metal", Target::Feature::Metal)
