@@ -1593,7 +1593,7 @@ static void WriteBlockInfo(const llvm_3_2::ValueEnumerator &VE,
   // We only want to emit block info records for blocks that have multiple
   // instances: CONSTANTS_BLOCK, FUNCTION_BLOCK and VALUE_SYMTAB_BLOCK.  Other
   // blocks can defined their abbrevs inline.
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
   Stream.EnterBlockInfoBlock();
 #else
   Stream.EnterBlockInfoBlock(2);
