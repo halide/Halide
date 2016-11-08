@@ -1573,7 +1573,7 @@ static void WriteFunction(const Function &F, llvm_3_2::ValueEnumerator &VE,
     }
 
   // Emit names for all the instructions etc.
-#if LLVM_VERSION >= 40 && CAUGHTUP
+#if LLVM_VERSION >= 40
   WriteValueSymbolTable(F.getValueSymbolTable(), VE, Stream);
 #else
   WriteValueSymbolTable(&F.getValueSymbolTable(), VE, Stream);
@@ -1593,7 +1593,7 @@ static void WriteBlockInfo(const llvm_3_2::ValueEnumerator &VE,
   // We only want to emit block info records for blocks that have multiple
   // instances: CONSTANTS_BLOCK, FUNCTION_BLOCK and VALUE_SYMTAB_BLOCK.  Other
   // blocks can defined their abbrevs inline.
-#if LLVM_VERSION >= 40 && CAUGHTUP
+#if LLVM_VERSION >= 40
   Stream.EnterBlockInfoBlock();
 #else
   Stream.EnterBlockInfoBlock(2);

@@ -1638,7 +1638,7 @@ public:
     }
 
 };
-class BalanceAddMulTrees : public IRMutator {
+class BalanceExpressionTrees : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Add *op) {
@@ -1697,14 +1697,14 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // dynamic_shuffle (vlut) calls.
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
-Stmt generate_widening_multiply_accumulates(Stmt s) {
-    s = BalanceAddMulTrees().mutate(s);
+Stmt balance_expression_trees(Stmt s) {
+    s = BalanceExpressionTrees().mutate(s);
     return s;
 }
 Stmt optimize_hexagon_instructions(Stmt s) {
     // Convert a series of widening multiply accumulates into
     // a good series of vmpaacc or vmpyacc sequences.
-    s = generate_widening_multiply_accumulates(s);
+    s = balance_expression_trees(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
