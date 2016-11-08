@@ -70,7 +70,6 @@ WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
-WITH_RENDERSCRIPT ?= not-empty
 ifeq ($(OS), Windows_NT)
     WITH_INTROSPECTION ?=
 else
@@ -106,8 +105,6 @@ METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
 
 OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 
-RENDERSCRIPT_CXX_FLAGS=$(if $(WITH_RENDERSCRIPT), -DWITH_RENDERSCRIPT=1, )
-
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
@@ -129,7 +126,6 @@ CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
-CXX_FLAGS += $(RENDERSCRIPT_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
@@ -172,12 +168,6 @@ endif
 ifneq ($(WITH_OPENCL), )
 ifneq (,$(findstring opencl,$(HL_TARGET)))
 TEST_OPENCL = 1
-endif
-endif
-
-ifneq ($(WITH_RENDERSCRIPT), )
-ifneq (,$(findstring renderscript,$(HL_TARGET)))
-TEST_RENDERSCRIPT = 1
 endif
 endif
 
@@ -280,7 +270,6 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
-  CodeGen_Renderscript_Dev.cpp \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -374,11 +363,6 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WrapCalls.cpp
 
-BITWRITER_SOURCE_FILES = \
-  BitWriter_3_2/BitcodeWriter.cpp \
-  BitWriter_3_2/BitcodeWriterPass.cpp \
-  BitWriter_3_2/ValueEnumerator.cpp
-
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
   AddImageChecks.h \
@@ -406,7 +390,6 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
-  CodeGen_Renderscript_Dev.h \
   CodeGen_X86.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -512,7 +495,6 @@ HEADER_FILES = \
   WrapCalls.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
-OBJECTS += $(BITWRITER_SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 RUNTIME_CPP_COMPONENTS = \
@@ -570,7 +552,6 @@ RUNTIME_CPP_COMPONENTS = \
   profiler_inlined \
   qurt_allocator \
   qurt_hvx \
-  renderscript \
   runtime_api \
   ssp \
   thread_pool \
@@ -596,7 +577,6 @@ RUNTIME_LL_COMPONENTS = \
   posix_math \
   powerpc \
   ptx_dev \
-  renderscript_dev \
   win32_math \
   x86 \
   x86_avx \
@@ -610,7 +590,6 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
-                            $(INCLUDE_DIR)/HalideRuntimeRenderscript.h \
                             $(INCLUDE_DIR)/HalideBuffer.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
@@ -733,10 +712,6 @@ $(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 	$(CXX) $(BUILD_BIT_SIZE) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
-$(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/%.o: $(SRC_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/%.cpp $(BUILD_DIR)/llvm_ok
-	@-mkdir -p $(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)
-	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/$*.d -MT $(BUILD_DIR)/BitWriter_3_2$(BITWRITER_VERSION)/$*.o
-
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
@@ -759,7 +734,6 @@ PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls $(ROOT_DIR)/test/opengl/*.cpp)
-RENDERSCRIPT_TESTS := $(shell ls $(ROOT_DIR)/test/renderscript/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 
@@ -771,7 +745,6 @@ test_tutorials: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
-test_renderscript: $(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=renderscript_%)
 
 # There are two types of tests for generators:
 # 1) Externally-written aot-based tests
@@ -780,14 +753,13 @@ test_generators:  \
   $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_aot_%)  \
   $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=generator_jit_%)
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators test_renderscript
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=time_compilation_opengl_%)
-time_compilation_renderscript: init_time_compilation_renderscript $(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=time_compilation_renderscript_%)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=time_compilation_generator_%)
 
 init_time_compilation_%:
@@ -804,8 +776,7 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=$(BIN_DIR)/warning_%) \
 	$(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/generator_aot_%) \
-	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
-	$(RENDERSCRIPT_TESTS:$(ROOT_DIR)/test/renderscript/%.cpp=$(BIN_DIR)/renderscript_%)
+	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%)
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generators
 
@@ -843,9 +814,6 @@ $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHAR
 
 $(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) $(OPENGL_LD_FLAGS) -o $@
-
-$(BIN_DIR)/renderscript_%: $(ROOT_DIR)/test/renderscript/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
 
 
 # TODO(srj): this doesn't auto-delete, why not?
@@ -1110,15 +1078,6 @@ opengl_%: $(BIN_DIR)/opengl_%
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1
 	@-echo
 
-renderscript_%_error: $(BIN_DIR)/renderscript_%_error
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
-	@-echo
-renderscript_%: $(BIN_DIR)/renderscript_%
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
-	@-echo
-
 generator_%: $(BIN_DIR)/generator_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
@@ -1141,9 +1100,6 @@ time_compilation_performance_%: $(BIN_DIR)/performance_%
 
 time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 	$(TIME_COMPILATION) compile_times_opengl.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_opengl_%=opengl_%)
-
-time_compilation_renderscript_%: $(BIN_DIR)/renderscript_%
-	$(TIME_COMPILATION) compile_times_renderscript.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_renderscript_%=renderscript_%)
 
 time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)

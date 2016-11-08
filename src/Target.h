@@ -61,7 +61,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
-        Renderscript = halide_target_feature_renderscript,
         UserContext = halide_target_feature_user_context,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,

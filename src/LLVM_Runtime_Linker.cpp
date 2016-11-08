@@ -111,7 +111,6 @@ DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(qurt_hvx)
-DECLARE_CPP_INITMOD(renderscript)
 DECLARE_CPP_INITMOD(runtime_api)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(thread_pool)
@@ -130,7 +129,6 @@ DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
-DECLARE_LL_INITMOD(renderscript_dev)
 
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
@@ -846,8 +844,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
 
-        } else if (t.has_feature(Target::Renderscript)) {
-            modules.push_back(get_initmod_renderscript(c, bits_64, debug));
         } else if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
             if (t.arch == Target::ARM) {
@@ -944,20 +940,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     modules[0]->setDataLayout(dl);
 
     return std::move(modules[0]);
-}
-#endif
-
-#ifdef WITH_RENDERSCRIPT
-std::unique_ptr<llvm::Module> get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c) {
-    std::unique_ptr<llvm::Module> m(get_initmod_renderscript_dev_ll(c));
-
-    llvm::Triple triple("armv7-none-linux-gnueabi");
-    m->setTargetTriple(triple.str());
-
-    llvm::DataLayout dl("e-m:e-p:32:32-i64:64-v128:64:128-n32-S64");
-    m->setDataLayout(dl);
-
-    return m;
 }
 #endif
 
