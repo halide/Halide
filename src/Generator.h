@@ -403,6 +403,11 @@ public:
         std::ostringstream oss;
         oss << this->value();
         if (std::is_same<T, float>::value) {
+            // If the constant has no decimal point ("1")
+            // we must append one before appending "f"
+            if (oss.str().find(".") == std::string::npos) {
+                oss << ".";
+            }
             oss << "f";
         }
         return oss.str();
