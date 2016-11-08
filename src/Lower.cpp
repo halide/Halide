@@ -174,7 +174,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL) || t.has_feature(Target::Renderscript)) {
+    if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting image intrinsics...\n";
         s = inject_image_intrinsics(s, env);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
@@ -195,7 +195,6 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute) ||
         t.has_feature(Target::OpenGL) ||
-        t.has_feature(Target::Renderscript) ||
         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128})))) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
@@ -213,8 +212,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     }
 
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute) ||
-        t.has_feature(Target::Renderscript)) {
+        t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";

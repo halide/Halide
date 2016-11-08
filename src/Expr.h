@@ -306,7 +306,6 @@ enum class DeviceAPI {
     CUDA,
     OpenCL,
     GLSL,
-    Renderscript,
     OpenGLCompute,
     Metal,
     Hexagon
@@ -320,7 +319,6 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::CUDA,
                                      DeviceAPI::OpenCL,
                                      DeviceAPI::GLSL,
-                                     DeviceAPI::Renderscript,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon};

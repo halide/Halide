@@ -79,7 +79,6 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
-  renderscript
   runtime_api
   ssp
   thread_pool
@@ -105,7 +104,6 @@ set (RUNTIME_LL
   mips
   posix_math
   ptx_dev
-  renderscript_dev
   win32_math
   x86
   x86_avx
@@ -240,7 +238,6 @@ set(HEADER_FILES
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
-  CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
@@ -360,15 +357,8 @@ configure_file(runtime/HalideRuntimeMetal.h "${CMAKE_BINARY_DIR}/include" COPYON
 configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideBuffer.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
-
-set(BITWRITER_FILES
-  BitWriter_3_2/BitcodeWriter.cpp
-  BitWriter_3_2/BitcodeWriterPass.cpp
-  BitWriter_3_2/ValueEnumerator.cpp
-)
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
@@ -397,7 +387,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
-  CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
@@ -491,7 +480,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   VaryingAttributes.cpp
   VectorizeLoops.cpp
   WrapCalls.cpp
-  ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
   ${INITIAL_MODULES}
