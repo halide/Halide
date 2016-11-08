@@ -145,7 +145,12 @@ function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
     if (WIN32)
       if (MSVC)
         # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
-        set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
+        # linker warnings disabled: 
+        # 4006: "already defined, second definition ignored"
+        # 4088: "/FORCE used, image may not work"
+        # (Note that MSVC apparently considers 4088 too important to allow us to ignore it;
+        # I'm nevertheless leaving this here to document that we don't care about it.)
+        set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple /ignore:4006 /ignore:4088")
       else()
         set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "-Wl,--allow-multiple-definition")
       endif()
@@ -204,11 +209,15 @@ function(halide_add_generator_stub_library)
 
   halide_generator_genfiles_dir(${args_STUB_GENERATOR_TARGET} GENFILES_DIR)
 
-  set(STUB_HDR "${GENFILES_DIR}/${args_STUB_GENERATOR_TARGET}.stub.h")
+  # STUBNAME_BASE = strip_suffix(STUB_GENERATOR_TARGET, ".generator")
+  string(REGEX REPLACE "\\.generator*$" "" STUBNAME_BASE ${args_STUB_GENERATOR_TARGET})
+
+  set(STUB_HDR "${GENFILES_DIR}/${STUBNAME_BASE}.stub.h")
 
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}" "-e" "cpp_stub")
   if (NOT ${args_STUB_GENERATOR_NAME} STREQUAL "")
     list(APPEND GENERATOR_EXEC_ARGS "-g" "${args_STUB_GENERATOR_NAME}")
+    list(APPEND GENERATOR_EXEC_ARGS "-n" "${STUBNAME_BASE}")
   endif()
 
   set(STUBGEN "${args_STUB_GENERATOR_TARGET}.exec_stub_generator")

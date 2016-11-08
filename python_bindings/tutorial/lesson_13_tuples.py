@@ -94,8 +94,8 @@ def main():
     # std::vector of Buffer/Image objects:
     if True:
         (im1, im2) = multi_valued.realize(80, 60)
-        assert type(im1) is Image_int32
-        assert type(im2) is Image_float32
+        assert type(im1) is Buffer_int32
+        assert type(im2) is Buffer_float32
         assert im1(30, 40) == 30 + 40
         assert numpy.isclose(im2(30, 40), math.sin(30 * 40))
 
@@ -150,7 +150,7 @@ def main():
         input_func = Func()
         input_func[x] = sin(x)
         input = input_func.realize(100)
-        assert type(input) is Image_float32
+        assert type(input) is Buffer_float32
 
         # Then we defined a 2-valued Tuple which tracks the maximum value
         # its index.
@@ -189,8 +189,8 @@ def main():
         if True:
             (r0, r1) = arg_max.realize()
 
-            assert type(r0) is Image_int32
-            assert type(r1) is Image_float32
+            assert type(r0) is Buffer_int32
+            assert type(r1) is Buffer_float32
             assert arg_max_0 == r0(0)
             assert numpy.isclose(arg_max_1, r1(0))
 
@@ -290,7 +290,7 @@ def main():
 
         # Realize the pipeline and print the result as ascii art.
         result = escape.realize(61, 25)
-        assert type(result) is Image_int32
+        assert type(result) is Buffer_int32
         code = " .:-~*={&%#@"
         for yy in range(result.height()):
             for xx in range(result.width()):

@@ -121,65 +121,6 @@ If you have a 32-bit libpng, you can also run the apps in 32-bit:
 The tests should pass, but the tutorials will fail to compile unless
 you manually supply a 32-bit libpng.
 
-
-#### Building Halide with Native Client support
-
-Halide is capable of generating Native Client (NaCl) object files and
-Portable Native Client (PNaCl) bitcode.  JIT compilation is not
-supported. For both NaCl and PNaCl, the PNaCl llvm tree is used as it
-contains required llvm headers and libraries for compiling to all
-Native Client targets.
-
-In order to build Halide with Native Client support, one will need the
-PNaCl llvm tree from:
-
-    https://chromium.googlesource.com/native_client/pnacl-llvm.git
-
-and, for good measure, PNaCl's version of clang:
-
-    https://chromium.googlesource.com/native_client/pnacl-clang.git
-
-To check these out:
-
-    % git clone https://chromium.googlesource.com/native_client/pnacl-llvm.git pnacl-llvm
-    % cd pnacl-llvm/tools
-    % git clone https://chromium.googlesource.com/native_client/pnacl-clang.git clang
-    % cd ../..
-
-To enable all Halide targets, build it like so:
-
-    % mkdir build
-    % cd build
-    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_TERMINFO=OFF -DCMAKE_BUILD_TYPE=Release ..
-    % make -j8
-
-It will possibly be helpful to get the entire dev tree for
-PNaCl. Documentation for this is here:
-
-    http://www.chromium.org/nativeclient/pnacl/developing-pnacl
-
-To use generated code in an application, you'll of course also need
-the Native Client SDK:
-
-    https://developer.chrome.com/native-client/sdk/download
-
-Once The Native Client prerequisites are in place, set the following
-variables (on the command line or by editing the Makefile):
-
-Point LLVM_CONFIG to the llvm-config that lives in your pnacl llvm build. E.g:
-
-    % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/build/bin/llvm-config
-
-Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
-
-    % export WITH_NATIVE_CLIENT=true
-
-With these variables set, run make. This will build a Halide lib
-capable of generating native client objects. Neither the tests nor
-most of the apps Makefiles have been updated to work with cross
-compilation however. Try the app HelloNacl for a working example.
-
-
 Some useful environment variables
 =================================
 

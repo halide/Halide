@@ -146,7 +146,7 @@ void defineRDom() {
                                       "The following global functions can be used for inline reductions::\n\n"
                                       "    minimum, maximum, product, sum",
                                       p::init<>(p::arg("self"), "Construct an undefined reduction domain."))
-                          .def(p::init<h::Image<>>(p::args("self", "buffer"),
+                          .def(p::init<h::Buffer<>>(p::args("self", "buffer"),
                                                    "Construct a reduction domain that iterates over all points in "
                                                    "a given Buffer, Image, or ImageParam. "
                                                    "Has the same dimensionality as the argument."))

@@ -397,12 +397,16 @@ extern int halide_device_free(void *user_context, struct buffer_t *buf);
  * mechanism on different platforms. */
 typedef int (*halide_device_free_t)(void *, struct buffer_t *);
 #ifdef _MSC_VER
-extern const void *halide_dummy_device_free = nullptr;
+extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
 extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 // The following pragma tells the windows linker to make
 // halide_device_free_weak the same symbol as halide_dummy_device_free
 // if it can't resolve halide_weak_device_free normally
+#ifdef _WIN64
 #pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
+#else
+#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
+#endif
 inline halide_device_free_t halide_get_device_free_fn() {
     if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
         return nullptr;
@@ -410,6 +414,11 @@ inline halide_device_free_t halide_get_device_free_fn() {
         return &halide_weak_device_free;
     }
 };
+#elif __MINGW32__
+inline halide_device_free_t halide_get_device_free_fn() {
+    // There is no workable mechanism for doing this that we know of on mingw.
+    return &halide_device_free;
+}
 #else
 extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 inline halide_device_free_t halide_get_device_free_fn() {
@@ -736,7 +745,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_renderscript = 23, ///< Enable the Renderscript runtime.
+    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
 
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 

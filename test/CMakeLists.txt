@@ -5,7 +5,6 @@ option(WITH_TEST_WARNING "Build warning tests" ON)
 option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
 option(WITH_TEST_GENERATORS "Build Generator tests" ON)
-option(WITH_TEST_RENDERSCRIPT "Build Renderscript tests" ON)
 
 if (MSVC)
 else()
@@ -64,13 +63,10 @@ if (WITH_TEST_OPENGL)
     endforeach()
   endif()
 endif()
-if (WITH_TEST_RENDERSCRIPT)
-  tests(renderscript)
-endif()
 
 function(add_test_generator NAME)
   set(options WITH_STUB)
-  set(oneValueArgs )
+  set(oneValueArgs GENERATOR_NAME)
   set(multiValueArgs STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   # convert TRUE|FALSE -> WITH_STUB|emptystring
@@ -80,6 +76,7 @@ function(add_test_generator NAME)
     set(args_WITH_STUB )
   endif()
   halide_add_generator("${NAME}.generator"
+                       STUB_GENERATOR_NAME "${args_GENERATOR_NAME}"
                        SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp"
                        STUB_DEPS ${args_STUB_DEPS}
                        ${args_WITH_STUB})
@@ -115,7 +112,7 @@ include(../HalideGenerator.cmake)
 #                       [GENERATOR_ARGS extra generator args])
 function(halide_define_aot_test NAME)
   set(options OMIT_DEFAULT_GENERATOR)
-  set(oneValueArgs GENERATED_FUNCTION GENERATOR_HALIDE_TARGET)
+  set(oneValueArgs GENERATED_FUNCTION GENERATOR_NAME GENERATOR_HALIDE_TARGET)
   set(multiValueArgs GENERATOR_ARGS STUB_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -130,6 +127,10 @@ function(halide_define_aot_test NAME)
     halide_add_generator_stub_dependency(TARGET "${TARGET}" 
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
   endforeach()
+  if (MSVC)
+    # 4088: "/FORCE used, image may not work"
+    set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/ignore:4088")
+  endif()
 
   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
     if (NOT args_GENERATED_FUNCTION)
@@ -138,11 +139,14 @@ function(halide_define_aot_test NAME)
     if (NOT args_GENERATOR_HALIDE_TARGET)
       set(args_GENERATOR_HALIDE_TARGET "host")
     endif()
+    if (NOT args_GENERATOR_NAME)
+      set(args_GENERATOR_NAME ${NAME})
+    endif()
 
     set(AOT_LIBRARY_TARGET "${NAME}")
     halide_add_aot_library("${AOT_LIBRARY_TARGET}"
                            GENERATOR_TARGET "${NAME}.generator"
-                           GENERATOR_NAME "${NAME}"
+                           GENERATOR_NAME "${args_GENERATOR_NAME}"
                            GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
                            GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}")
     halide_add_aot_library_dependency("${TARGET}" "${AOT_LIBRARY_TARGET}")
@@ -160,9 +164,6 @@ function(halide_add_aot_test_dependency NAME)
 
   if (NOT args_GENERATOR_TARGET)
     set(args_GENERATOR_TARGET "${NAME}")
-  endif()
-  if (NOT args_GENERATOR_NAME)
-    set(args_GENERATOR_NAME "${args_GENERATOR_TARGET}")
   endif()
   if (NOT args_GENERATED_FUNCTION)
     set(args_GENERATED_FUNCTION "${args_AOT_LIBRARY_TARGET}")
@@ -191,8 +192,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(cxx_mangling)
   add_test_generator(embed_image)
   add_test_generator(error_codes)
-  add_test_generator(example)
-  add_test_generator(extended_buffer_t)
+  add_test_generator(example WITH_STUB)
   add_test_generator(float16_t)
   add_test_generator(gpu_object_lifetime)
   add_test_generator(gpu_only)
@@ -204,11 +204,12 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(msan)
   add_test_generator(multitarget)
   add_test_generator(nested_externs)
-  add_test_generator(paramtest)
   add_test_generator(pyramid)
-  add_test_generator(stubtest WITH_STUB)
+  add_test_generator(stubtest WITH_STUB
+                     GENERATOR_NAME StubNS1::StubNS2::StubTest)
   # the stubuser generator needs the stub from stubtest
   add_test_generator(stubuser
+                     GENERATOR_NAME stubuser
                      STUB_DEPS stubtest.generator)
   add_test_generator(tiled_blur_blur)
   add_test_generator(tiled_blur)
@@ -217,8 +218,8 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(variable_num_threads)
 
   # ------ Generator tests for just-in-time mode: ------
-  halide_define_jit_test(example)
-  halide_define_jit_test(paramtest)
+  halide_define_jit_test(example
+                         STUB_DEPS example.generator)
   halide_define_jit_test(stubtest
                          STUB_DEPS stubtest.generator)
 
@@ -237,7 +238,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(embed_image)
   halide_define_aot_test(error_codes)
   halide_define_aot_test(example)
-  halide_define_aot_test(extended_buffer_t)
   halide_define_aot_test(float16_t)
   halide_define_aot_test(gpu_object_lifetime)
   halide_define_aot_test(gpu_only)
@@ -275,6 +275,7 @@ if (WITH_TEST_GENERATORS)
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
   halide_define_aot_test(stubtest
+                         GENERATOR_NAME StubNS1::StubNS2::StubTest
                          GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32)
 
   # Tests that require additional dependencies, args, etc

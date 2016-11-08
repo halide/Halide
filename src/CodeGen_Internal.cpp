@@ -148,7 +148,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_run",
         "halide_opengl_run",
         "halide_openglcompute_run",
-        "halide_renderscript_run",
         "halide_metal_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
@@ -167,7 +166,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
-        "halide_renderscript_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
     };
@@ -280,12 +278,10 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UnsafeFPMath = true;
 
     #if LLVM_VERSION < 40
-    #ifndef WITH_NATIVE_CLIENT
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us. In LLVM 4.0+ this moved to be a
     // function attribute.
     options.Reciprocals.setDefaults("all", false, 0);
-    #endif
     #endif
 
     options.NoInfsFPMath = true;
@@ -295,11 +291,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
     options.FunctionSections = true;
-    #ifdef WITH_NATIVE_CLIENT
-    options.UseInitArray = true;
-    #else
     options.UseInitArray = false;
-    #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     #if LLVM_VERSION >= 39

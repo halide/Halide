@@ -39,8 +39,6 @@ public:
             default_api = DeviceAPI::CUDA;
         } else if (target.has_feature(Target::OpenGLCompute)) {
             default_api = DeviceAPI::OpenGLCompute;
-        } else if (target.has_feature(Target::Renderscript)) {
-            default_api = DeviceAPI::Renderscript;
         } else if (target.has_feature(Target::OpenGL)) {
             default_api = DeviceAPI::GLSL;
         } else {

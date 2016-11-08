@@ -179,7 +179,6 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"osx", Target::OSX},
     {"android", Target::Android},
     {"ios", Target::IOS},
-    {"nacl", Target::NaCl},
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
 };
@@ -197,7 +196,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
@@ -236,7 +234,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
-    {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
@@ -340,16 +337,6 @@ bool merge_string(Target &t, const std::string &target) {
 
     if (arch_specified && !bits_specified) {
         return false;
-    }
-
-    // If arch is PNaCl, require explicit setting of os and bits as well.
-    if (arch_specified && t.arch == Target::PNaCl) {
-        if (!os_specified || t.os != Target::NaCl) {
-            return false;
-        }
-        if (!bits_specified || t.bits != 32) {
-            return false;
-        }
     }
 
     if (bits_specified && t.bits == 0) {
@@ -467,14 +454,10 @@ std::string Target::to_string() const {
 /** Was libHalide compiled with support for this target? */
 bool Target::supported() const {
     bool bad = false;
-#if !defined(WITH_NATIVE_CLIENT)
-    bad |= (arch == Target::PNaCl || os == Target::NaCl);
-#endif
 #if !defined(WITH_ARM)
     bad |= arch == Target::ARM && bits == 32;
 #endif
-#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
-    // In pnacl llvm, the aarch64 backend is crashy.
+#if !defined(WITH_AARCH64)
     bad |= arch == Target::ARM && bits == 64;
 #endif
 #if !defined(WITH_X86)
@@ -498,9 +481,6 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_RENDERSCRIPT)
-    bad |= has_feature(Target::Renderscript);
-#endif
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
@@ -523,7 +503,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::CUDA:          return Target::CUDA;
     case DeviceAPI::OpenCL:        return Target::OpenCL;
     case DeviceAPI::GLSL:          return Target::OpenGL;
-    case DeviceAPI::Renderscript:  return Target::Renderscript;
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
     default:                       return Target::FeatureEnd;
@@ -538,6 +517,7 @@ EXPORT void target_test() {
         t.set_feature(feature.second);
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
+        if (i == halide_target_feature_unused_23) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
     std::cout << "Target test passed" << std::endl;

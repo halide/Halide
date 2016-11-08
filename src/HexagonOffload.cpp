@@ -85,7 +85,7 @@ class InjectHexagonRpc : public IRMutator {
     Expr state_var(const std::string& name, Type type) {
         Expr& var = state_vars[name];
         if (!var.defined()) {
-            Image<void *> storage = Image<void *>::make_scalar();
+            Buffer<void *> storage = Buffer<void *>::make_scalar();
             storage() = nullptr;
             BufferPtr buf(storage, name + "_buf");
             var = Load::make(type_of<void*>(), name + "_buf", 0, buf, Parameter());
@@ -109,7 +109,7 @@ class InjectHexagonRpc : public IRMutator {
     // Create a Buffer containing the given buffer/size, and return an
     // expression for a pointer to the first element.
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
-        Image<uint8_t> code((int)size);
+        Buffer<uint8_t> code((int)size);
         memcpy(code.data(), buffer, (int)size);
         BufferPtr buf(code, name);
         Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, buf, Parameter());
@@ -270,89 +270,27 @@ public:
         // for the duration of this pipeline.
         s = power_hvx_on(s);
 
-        // Compile the device code.
-        // TODO: Currently, this requires shelling out to
-        // hexagon-clang from the Qualcomm Hexagon SDK, because the
-        // Hexagon LLVM target is not fully open source yet. When the
-        // LLVM Hexagon target is fully open sourced, we can instead
-        // just compile the module to an object, and find a way to
-        // link it to a shared object.
+        // Compile the device code
         debug(1) << "Hexagon device code module: " << device_code << "\n";
 
-        // First compile the module to an llvm module
         llvm::LLVMContext context;
-        std::unique_ptr<llvm::Module> llvm_module =
-            compile_module_to_llvm_module(device_code, context);
+        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
-        #if LLVM_VERSION >= 39
-        // Then mess with it, to fix up version differences between
-        // our LLVM and hexagon-clang. Yuck.
-        for (auto &gv : llvm_module->globals()) {
-            // hexagon-clang doesn't understand the local_unnamed_addr
-            // attribute, so we must strip it.
-            gv.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
+        llvm::SmallVector<char, 4096> object;
+        llvm::raw_svector_ostream object_stream(object);
+        compile_llvm_module_to_object(*llvm_module, object_stream);
+
+        if (debug::debug_level >= 2) {
+            debug(2) << "Hexagon device code assembly: " << "\n";
+            llvm::SmallString<4096> assembly;
+            llvm::raw_svector_ostream assembly_stream(assembly);
+            compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+            debug(2) << assembly.c_str() << "\n";
         }
-        for (auto &fn : llvm_module->functions()) {
-            fn.setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::None);
-            for (size_t i = 0; i < fn.arg_size(); i++) {
-                fn.removeAttribute(i, llvm::Attribute::WriteOnly);
-            }
-        }
-        #endif
-
-        // Dump the llvm module to a temp file as .ll
-        TemporaryFile tmp_bitcode("hex", ".ll");
-        TemporaryFile tmp_shared_object("hex", ".o");
-        std::unique_ptr<llvm::raw_fd_ostream> ostream =
-            make_raw_fd_ostream(tmp_bitcode.pathname());
-        compile_llvm_module_to_llvm_assembly(*llvm_module, *ostream);
-        ostream->flush();
-
-        // Shell out to hexagon clang to compile it.
-        string hex_command;
-
-        const char *path = getenv("HL_HEXAGON_CLANG");
-        if (path && path[0]) {
-            hex_command = path;
-        } else {
-            path = getenv("HL_HEXAGON_TOOLS");
-            if (path && path[0]) {
-                hex_command = string(path) + "/bin/hexagon-clang";
-            } else {
-                user_error << "Unable to find hexagon-clang: neither HL_HEXAGON_CLANG nor HL_HEXAGON_TOOLS are set properly.";
-            }
-        }
-
-        hex_command += " -c ";
-        hex_command += tmp_bitcode.pathname();
-        if (0) { // This path should also work, if we want to use PIC code
-            hex_command += " -fpic -O3 -Wno-override-module ";
-        } else {
-            hex_command += " -fno-pic -G 0 -mlong-calls -O3 -Wno-override-module ";
-        }
-        if (device_code.target().has_feature(Target::HVX_v62)) {
-            hex_command += " -mv62";
-        }
-        if (device_code.target().has_feature(Target::HVX_128)) {
-            hex_command += " -mhvx-double";
-        } else {
-            hex_command += " -mhvx";
-        }
-        hex_command += " -o " + tmp_shared_object.pathname();
-        int result = system(hex_command.c_str());
-        internal_assert(result == 0) << "hexagon-clang failed\n";
-
-        // Read the compiled object back in and put it in a buffer in the module
-        std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
-        internal_assert(so.good()) << "failed to open temporary shared object.";
-        std::vector<uint8_t> object(so.tellg());
-        so.seekg(0, std::ios::beg);
-        so.read(reinterpret_cast<char*>(&object[0]), object.size());
-
-        size_t code_size = object.size();
-        Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
 
         // Wrap the statement in calls to halide_initialize_kernels.
+        size_t code_size = object.size();
+        Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
         Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
                                                    {module_state_ptr(), code_ptr, Expr((uint64_t) code_size)});
         s = Block::make(init_kernels, s);
