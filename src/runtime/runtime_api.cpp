@@ -3,7 +3,6 @@
 #include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeRenderscript.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeQurt.h"
@@ -152,9 +151,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_qurt_hvx_unlock_as_destructor,
     (void *)&halide_release_jit_module,
-    (void *)&halide_renderscript_device_interface,
-    (void *)&halide_renderscript_initialize_kernels,
-    (void *)&halide_renderscript_run,
     (void *)&halide_set_custom_can_use_target_features,
     (void *)&halide_set_custom_do_par_for,
     (void *)&halide_set_custom_do_task,

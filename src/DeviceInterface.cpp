@@ -211,17 +211,6 @@ const struct halide_device_interface *halide_openglcompute_device_interface() {
 }
 EXPORT_SYM(halide_openglcompute_device_interface)
 
-const struct halide_device_interface *halide_renderscript_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::Renderscript);
-    struct halide_device_interface *(*fn)();
-    if (lookup_runtime_routine("halide_renderscript_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
-}
-EXPORT_SYM(halide_renderscript_device_interface)
-
 const struct halide_device_interface *halide_metal_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::Metal);
