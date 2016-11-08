@@ -20,9 +20,49 @@ namespace Internal {
 
 class IRVisitor;
 
-/** A class representing a type of IR node (e.g. Add, or Mul, or
- * For). We use it for rtti (without having to compile with rtti). */
-struct IRNodeType {};
+/** All our IR node types get unique IDs for the purposes of RTTI */
+enum class IRNodeType {
+    IntImm,
+    UIntImm,
+    FloatImm,
+    StringImm,
+    Cast,
+    Variable,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Min,
+    Max,
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+    And,
+    Or,
+    Not,
+    Select,
+    Load,
+    Ramp,
+    Broadcast,
+    Call,
+    Let,
+    LetStmt,
+    AssertStmt,
+    ProducerConsumer,
+    For,
+    Store,
+    Provide,
+    Allocate,
+    Free,
+    Realize,
+    Block,
+    IfThenElse,
+    Evaluate
+};
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
@@ -47,7 +87,7 @@ struct IRNode {
      * injects run-time type identification stuff everywhere (and
      * often breaks when linking external libraries compiled
      * without it), and we only want it for IR nodes. */
-    virtual const IRNodeType *type_info() const = 0;
+    virtual IRNodeType type_info() const = 0;
 };
 
 template<>
@@ -82,15 +122,13 @@ struct BaseExprNode : public IRNode {
 template<typename T>
 struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType *type_info() const {return &_type_info;}
-    static EXPORT IRNodeType _type_info;
+    virtual IRNodeType type_info() const {return T::_type_info;}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType *type_info() const {return &_type_info;}
-    static EXPORT IRNodeType _type_info;
+    virtual IRNodeType type_info() const {return T::_type_info;}
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -116,12 +154,13 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr && ptr->type_info() == &T::_type_info) {
+        if (ptr && ptr->type_info() == T::_type_info) {
             return (const T *)ptr;
         }
         return nullptr;
     }
 };
+
 
 /** Integer constants */
 struct IntImm : public ExprNode<IntImm> {
@@ -143,6 +182,8 @@ struct IntImm : public ExprNode<IntImm> {
         node->value = value;
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::IntImm;
 };
 
 /** Unsigned integer constants */
@@ -164,6 +205,8 @@ struct UIntImm : public ExprNode<UIntImm> {
         node->value = value;
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::UIntImm;
 };
 
 /** Floating point constants */
@@ -191,6 +234,8 @@ struct FloatImm : public ExprNode<FloatImm> {
 
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::FloatImm;
 };
 
 /** String constants */
@@ -203,6 +248,8 @@ struct StringImm : public ExprNode<StringImm> {
         node->value = val;
         return node;
     }
+
+    static const IRNodeType _type_info = IRNodeType::StringImm;
 };
 
 }  // namespace Internal
@@ -275,7 +322,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::Renderscript,
                                      DeviceAPI::OpenGLCompute,
-                                     DeviceAPI::Metal};
+                                     DeviceAPI::Metal,
+                                     DeviceAPI::Hexagon};
 
 namespace Internal {
 

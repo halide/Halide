@@ -46,9 +46,9 @@ int main(int argc, char **argv) {
     f.compute_at(g, x);
 
     use_gpu.set(get_jit_target_from_environment().has_gpu_feature());
-    Image<int> out1 = h.realize(1024, 1024);
+    Buffer<int> out1 = h.realize(1024, 1024);
     use_gpu.set(false);
-    Image<int> out2 = h.realize(1024, 1024);
+    Buffer<int> out2 = h.realize(1024, 1024);
 
     for (int y = 0; y < out1.height(); y++) {
         for (int x = 0; x < out1.width(); x++) {

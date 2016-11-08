@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
             f.update(i*4 + 3).gpu_threads(x);
         }
 
-        Image<int> out = g.realize(100, 100);
+        Buffer<int> out = g.realize(100, 100);
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 7*100 + 9;
@@ -91,7 +91,6 @@ int main(int argc, char **argv) {
                 }
             }
         }
-
     }
 
     {
@@ -126,7 +125,7 @@ int main(int argc, char **argv) {
         // non-undef definitions, and one between f and g.
         g.add_custom_lowering_pass(new CheckBarrierCount(2));
 
-        Image<int> out = g.realize(100, 100);
+        Buffer<int> out = g.realize(100, 100);
     }
 
     printf("Success!\n");

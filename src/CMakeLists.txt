@@ -4,6 +4,12 @@ add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 if (MSVC)
+  # disable irrelevant warnings
+  target_compile_options(build_halide_h PUBLIC /wd4996)
+  target_compile_options(bitcode2cpp PUBLIC /wd4996)
+endif()
+
+if (MSVC)
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
@@ -23,8 +29,6 @@ set(RUNTIME_CPP
   android_clock
   android_host_cpu_count
   android_io
-  android_ion
-  android_mman
   android_opengl_context
   android_tempfile
   arm_cpu_features
@@ -34,7 +38,6 @@ set(RUNTIME_CPP
   destructors
   device_interface
   errors
-  fake_ion
   fake_thread_pool
   float16_t
   gcd_thread_pool
@@ -43,7 +46,6 @@ set(RUNTIME_CPP
   ios_io
   linux_clock
   linux_host_cpu_count
-  linux_mman
   linux_opengl_context
   matlab
   metadata
@@ -54,7 +56,8 @@ set(RUNTIME_CPP
   mips_cpu_features
   module_aot_ref_count
   module_jit_ref_count
-  nacl_host_cpu_count
+  msan
+  msan_stubs
   noos
   opencl
   opengl
@@ -70,7 +73,7 @@ set(RUNTIME_CPP
   posix_io
   posix_print
   posix_tempfile
-  posix_thread_pool
+  posix_threads
   powerpc_cpu_features
   profiler
   profiler_inlined
@@ -79,6 +82,7 @@ set(RUNTIME_CPP
   renderscript
   runtime_api
   ssp
+  thread_pool
   to_string
   tracing
   windows_clock
@@ -87,7 +91,7 @@ set(RUNTIME_CPP
   windows_io
   windows_opencl
   windows_tempfile
-  windows_thread_pool
+  windows_threads
   write_debug_image
   x86_cpu_features
 )
@@ -99,7 +103,6 @@ set (RUNTIME_LL
   hvx_64
   hvx_128
   mips
-  pnacl_math
   posix_math
   ptx_dev
   renderscript_dev
@@ -131,24 +134,17 @@ set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    IF (LLVM_VERSION LESS 36)
-      IF (${j} EQUAL 32)
+    IF (${j} EQUAL 32)
+      IF (${i} MATCHES "windows_.*")
+        # win32 uses the stdcall calling convention, which is x86-specific
         set(TARGET "i386-unknown-unknown-unknown")
       ELSE()
-        set(TARGET "x86_64-unknown-unknown-unknown")
+        # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
+        set(TARGET "le32-unknown-nacl-unknown")
       ENDIF()
     ELSE()
-      IF (${j} EQUAL 32)
-        IF (${i} MATCHES "windows_.*")
-          # win32 uses the stdcall calling convention, which is x86-specific
-          set(TARGET "i386-unknown-unknown-unknown")
-        ELSE()
-          set(TARGET "le32-unknown-nacl-unknown")
-        ENDIF()
-      ELSE()
-        # generic 64-bit code
-        set(TARGET "le64-unknown-unknown-unknown")
-      ENDIF()
+      # generic 64-bit code
+      set(TARGET "le64-unknown-unknown-unknown")
     ENDIF()
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
     set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
@@ -221,12 +217,13 @@ set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
   AllocationBoundsInference.h
+  ApplySplits.h
   Argument.h
   Associativity.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
-  Buffer.h
+  BufferPtr.h
   CSE.h
   Closure.h
   CodeGen_ARM.h
@@ -240,7 +237,6 @@ set(HEADER_FILES
   CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
-  CodeGen_PNaCl.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
@@ -266,6 +262,8 @@ set(HEADER_FILES
   Float16.h
   Func.h
   Function.h
+  FuseGPUThreadLoops.h
+  FuzzFloatStores.h
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
@@ -276,7 +274,6 @@ set(HEADER_FILES
   IROperator.h
   IRPrinter.h
   IRVisitor.h
-  Image.h
   ImageParam.h
   Interval.h
   InjectHostDevBufferCopies.h
@@ -308,6 +305,7 @@ set(HEADER_FILES
   Parameter.h
   PartitionLoops.h
   Pipeline.h
+  Prefetch.h
   Profiling.h
   Qualify.h
   RDom.h
@@ -344,6 +342,7 @@ set(HEADER_FILES
   VectorizeLoops.h
   WrapCalls.h
   runtime/HalideRuntime.h
+  runtime/HalideBuffer.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -362,32 +361,26 @@ configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYO
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
+configure_file(runtime/HalideBuffer.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
 
-IF ((LLVM_VERSION LESS 36) OR (TARGET_NATIVE_CLIENT))
-  set(BITWRITER_FILES
-    BitWriter_3_2.35/BitcodeWriter.cpp
-    BitWriter_3_2.35/BitcodeWriterPass.cpp
-    BitWriter_3_2.35/ValueEnumerator.cpp
-  )
-ELSE()
-  set(BITWRITER_FILES
-    BitWriter_3_2/BitcodeWriter.cpp
-    BitWriter_3_2/BitcodeWriterPass.cpp
-    BitWriter_3_2/ValueEnumerator.cpp
-  )
-ENDIF()
+set(BITWRITER_FILES
+  BitWriter_3_2/BitcodeWriter.cpp
+  BitWriter_3_2/BitcodeWriterPass.cpp
+  BitWriter_3_2/ValueEnumerator.cpp
+)
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
+  ApplySplits.cpp
   Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
-  Buffer.cpp
+  BufferPtr.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
@@ -401,7 +394,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
-  CodeGen_PNaCl.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
@@ -426,6 +418,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Func.cpp
   Function.cpp
   FuseGPUThreadLoops.cpp
+  FuzzFloatStores.cpp
   Generator.cpp
   HexagonOffload.cpp
   HexagonOptimize.cpp
@@ -436,7 +429,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IROperator.cpp
   IRPrinter.cpp
   IRVisitor.cpp
-  Image.cpp
   ImageParam.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
@@ -464,6 +456,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PartitionLoops.cpp
   Pipeline.cpp
   PrintLoopNest.cpp
+  Prefetch.cpp
   Profiling.cpp
   Qualify.cpp
   RDom.cpp
@@ -516,11 +509,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 # This list will be appended to depending on the targets we need to support
 # See the output of ``llvm-config --components`` for a list of possible components
 set(LLVM_COMPONENTS mcjit;bitwriter;linker)
-if (LLVM_VERSION GREATER 36)
-  list(APPEND LLVM_COMPONENTS passes)
-else()
-  list(APPEND LLVM_COMPONENTS ipo)
-endif()
+list(APPEND LLVM_COMPONENTS passes)
 
 # Set definitions and compiler flags
 
@@ -528,10 +517,6 @@ endif()
 # that link against the Halide library inherit those options and definitions
 target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
-
-if (TARGET_NATIVE_CLIENT)
-  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT=1")
-endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
@@ -582,7 +567,16 @@ target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 
 if (MSVC)
   # Suppress some warnings
+  # 4244: conversion, possible loss of data
+  # 4267: conversion, possible loss of data
+  # 4800: BOOL -> true or false
+  # 4996: compiler encountered deprecated declaration
   target_compile_options(Halide PUBLIC /wd4244 /wd4267 /wd4800 /wd4996)
+  # Injected from recent LLVM:
+  target_compile_options(Halide PUBLIC /wd4141)  # 'inline' used more than once
+  target_compile_options(Halide PUBLIC /wd4146)  # unary minus applied to unsigned type
+  target_compile_options(Halide PUBLIC /wd4291)  # No matching operator delete found
+
   target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
   # To compile LLVM headers following was taken from LLVM CMake files:
   # Disable sized deallocation if the flag is supported. MSVC fails to compile
@@ -608,7 +602,13 @@ set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS}
+                  RESULT_VARIABLE LLVM_CONFIG_RESULT
+                  OUTPUT_VARIABLE LIBS_UNSTRIPPED
+                  ERROR_VARIABLE LLVM_CONFIG_ERROR)
+  if (${LLVM_CONFIG_RESULT})
+    message(FATAL_ERROR "llvm-config failed: ${LLVM_CONFIG_ERROR}")
+  endif()
   string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
@@ -621,11 +621,7 @@ endif()
 target_link_libraries(Halide PRIVATE ${LIBS})
 
 if (NOT MSVC)
-  if (${LLVM_VERSION} GREATER 34)
-    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  else()
-    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
-  endif()
+  execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")

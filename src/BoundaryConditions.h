@@ -79,7 +79,7 @@ inline NO_INLINE Func func_like_to_func(T func_like) {
  *  constant, though the code currently allows accessing the arguments
  *  of source.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -99,14 +99,14 @@ template <typename T>
 inline NO_INLINE Func constant_exterior(T func_like, Tuple value) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
     }
 
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
 }
 template <typename T>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
-    return constant_exterior(func_like, Tuple({value}));
+    return constant_exterior(func_like, Tuple(value));
 }
 
 template <typename T, typename ...Bounds>
@@ -119,14 +119,14 @@ inline NO_INLINE Func constant_exterior(T func_like, Tuple value,
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value,
                                         Bounds... bounds) {
-    return constant_exterior(func_like, Tuple({value}), bounds...);
+    return constant_exterior(func_like, Tuple(value), bounds...);
 }
 // @}
 
 /** Impose a boundary condition such that the nearest edge sample is returned
  *  everywhere outside the given region.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -143,7 +143,7 @@ template <typename T>
 inline NO_INLINE Func repeat_edge(T func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
     }
 
     return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
@@ -161,7 +161,7 @@ inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -178,7 +178,7 @@ template <typename T>
 inline NO_INLINE Func repeat_image(T func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
     }
 
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
@@ -195,7 +195,7 @@ inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
  *  tiled with copies of the image abutted against each other, but mirror
  *  them such that adjacent edges are the same.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -212,7 +212,7 @@ template <typename T>
 inline NO_INLINE Func mirror_image(T func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
     }
 
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
@@ -232,7 +232,7 @@ inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
  *
  *  This produces an error if any extent is 1 or less. (TODO: check this.)
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -249,7 +249,7 @@ template <typename T>
 inline NO_INLINE Func mirror_interior(T func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
     }
 
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);

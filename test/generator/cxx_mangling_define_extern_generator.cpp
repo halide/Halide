@@ -5,8 +5,12 @@ class CPlusPlusNameManglingDefineExternGenerator :
 public:
     // Use all the parameter types to make sure mangling works for each of them.
     ImageParam input{UInt(8), 1, "input"};
-    Param<int32_t *> ptr{"ptr", 0};
-    Param<int32_t const *> const_ptr{"const_ptr", 0};
+    Param<int32_t *> int_ptr{"int_ptr", 0};
+    Param<int32_t const *> const_int_ptr{"const_int_ptr", 0};
+    Param<void *> void_ptr{"void_ptr", 0};
+    Param<void const *> const_void_ptr{"const_void_ptr", 0};
+    Param<std::string *> string_ptr{"string_ptr", 0};
+    Param<std::string const *> const_string_ptr{"const_string_ptr", 0};
 
     Func build() {
         assert(get_target().has_feature(Target::CPlusPlusMangling));
@@ -30,8 +34,12 @@ public:
         args.push_back(cast<bool>(9 == 9));
         args.push_back(cast<float>(10.0f));
         args.push_back(Expr(11.0));
-        args.push_back(ptr);
-        args.push_back(const_ptr);
+        args.push_back(int_ptr);
+        args.push_back(const_int_ptr);
+        args.push_back(void_ptr);
+        args.push_back(const_void_ptr);
+        args.push_back(string_ptr);
+        args.push_back(const_string_ptr);
         f.define_extern("HalideTest::cxx_mangling",
                         args, Float(64), 1, true);
 

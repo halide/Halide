@@ -2,11 +2,11 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "pipeline_c.h"
 #include "pipeline_native.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 extern "C" int an_extern_func(int x, int y) {
     return x + y;
@@ -37,7 +37,7 @@ extern "C" int an_extern_stage(buffer_t *in, buffer_t *out) {
 }
 
 int main(int argc, char **argv) {
-    Image<uint16_t> in(1432, 324);
+    Buffer<uint16_t> in(1432, 324);
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
@@ -45,8 +45,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image<uint16_t> out_native(423, 633);
-    Image<uint16_t> out_c(423, 633);
+    Buffer<uint16_t> out_native(423, 633);
+    Buffer<uint16_t> out_c(423, 633);
 
     pipeline_native(in, out_native);
 

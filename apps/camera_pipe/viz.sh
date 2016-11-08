@@ -2,8 +2,8 @@
 export HL_TRACE=3
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
-rm -f camera_pipe.avi
-./process ../images/bayer_small.png 3700 1.8 50 1 out.png |
+rm -f $1/camera_pipe.avi
+$1/process ../images/bayer_small.png 3700 1.8 50 1 $1/out.png |
 ../../bin/HalideTraceViz -t 1000 -s 1920 1080 \
 -f input         0 1024  -1 1 1 10   348 1 0 0 1 \
 -f denoised      0 1024  -1 1 1 305  360 1 0 0 1 \
@@ -23,5 +23,5 @@ rm -f camera_pipe.avi
 -f demosaiced    0 1024   2 1 1 1140 360 1 0 0 1 0 0 \
 -f corrected     0 1024   2 1 1 1400 360 1 0 0 1 0 0 \
 -f processed     0 256    2 1 1 1660 360 1 0 0 1 0 0 | \
-avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 camera_pipe.avi
+avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 $1/camera_pipe.avi
 #mplayer -demuxer rawvideo -rawvideo w=1920:h=1080:format=rgba:fps=30 -idle -fixed-vo -

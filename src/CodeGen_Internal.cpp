@@ -35,11 +35,7 @@ StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_
     return struct_t;
 }
 
-void pack_closure(llvm::Type *
-#if LLVM_VERSION >= 37
-                  type
-#endif
-                  ,
+void pack_closure(llvm::Type *type,
                   Value *dst,
                   const Closure& closure,
                   const Scope<Value *> &src,
@@ -51,11 +47,7 @@ void pack_closure(llvm::Type *
     vector<string> nm = closure.names();
     vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
     for (size_t i = 0; i < nm.size(); i++) {
-#if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
-#else
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
-#endif
         Value *val;
         if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
             val = src.get(nm[i]);
@@ -73,11 +65,7 @@ void pack_closure(llvm::Type *
 
 void unpack_closure(const Closure& closure,
                     Scope<Value *> &dst,
-                    llvm::Type *
-#if LLVM_VERSION >= 37
-                    type
-#endif
-                    ,
+                    llvm::Type *type,
                     Value *src,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
@@ -85,15 +73,11 @@ void unpack_closure(const Closure& closure,
     LLVMContext &context = builder->getContext();
     vector<string> nm = closure.names();
     for (size_t i = 0; i < nm.size(); i++) {
-#if LLVM_VERSION >= 37
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-#else
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
-#endif
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            LLVMMDNodeArgumentType md_args[] = {MDString::get(context, nm[i])};
+            llvm::Metadata *md_args[] = {MDString::get(context, nm[i])};
             load->setMetadata("tbaa", MDNode::get(context, md_args));
         }
         dst.push(nm[i], load);
@@ -135,7 +119,12 @@ bool function_takes_user_context(const std::string &name) {
         "halide_current_time_ns",
         "halide_debug_to_file",
         "halide_device_free",
+        "halide_device_host_nop_free",
+        "halide_device_free_as_destructor",
+        "halide_device_and_host_free",
+        "halide_device_and_host_free_as_destructor",
         "halide_device_malloc",
+        "halide_device_and_host_malloc",
         "halide_device_sync",
         "halide_do_par_for",
         "halide_do_task",
@@ -161,9 +150,16 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_run",
         "halide_renderscript_run",
         "halide_metal_run",
+        "halide_msan_annotate_buffer_is_initialized_as_destructor",
+        "halide_msan_annotate_buffer_is_initialized",
+        "halide_msan_annotate_memory_is_initialized",
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
+        "halide_hexagon_host_get_symbol",
+        "halide_hexagon_power_hvx_on",
+        "halide_hexagon_power_hvx_off",
+        "halide_hexagon_power_hvx_off_as_destructor",
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
@@ -231,29 +227,27 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // Match this non-overflowing C code
         /*
           T r = a % b;
-          r = r + (r < 0 ? abs(b) : 0);
+          T sign_mask = (r >> (sizeof(r)*8 - 1));
+          r = r + sign_mask & abs(b);
         */
 
-        r = select(r < 0, r + abs(b), r);
+        Expr sign_mask = r >> (a.type().bits()-1);
+        r += sign_mask & abs(b);
         return common_subexpression_elimination(r);
     } else {
         return r;
     }
 }
 
-bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
     }
-    #if LLVM_VERSION < 36
-    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
-    #else
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
     if (!cam) {
         return false;
     }
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
-    #endif
     if (!c) {
         return false;
     }
@@ -261,28 +255,16 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
     return true;
 }
 
-bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
         result = "";
         return false;
     }
-    #if LLVM_VERSION < 36
-    if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
-        result = "";
-        return true;
-    }
-    llvm::ConstantDataArray *c = llvm::cast<llvm::ConstantDataArray>(value);
-    if (c) {
-        result = c->getAsCString();
-        return true;
-    }
-    #else
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
         result = c->getString();
         return true;
     }
-    #endif
     return false;
 }
 
@@ -297,36 +279,21 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
-    #if LLVM_VERSION >= 37
-    #ifndef WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 40
     // Turn off approximate reciprocals for division. It's too
-    // inaccurate even for us.
+    // inaccurate even for us. In LLVM 4.0+ this moved to be a
+    // function attribute.
     options.Reciprocals.setDefaults("all", false, 0);
-    #endif
     #endif
 
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
-    #if LLVM_VERSION < 37
-    options.NoFramePointerElim = false;
-    options.UseSoftFloat = false;
-    #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-    #if LLVM_VERSION < 37
-    options.DisableTailCalls = false;
-    #endif
     options.StackAlignmentOverride = 0;
-    #if LLVM_VERSION < 37
-    options.TrapFuncName = "";
-    #endif
     options.FunctionSections = true;
-    #ifdef WITH_NATIVE_CLIENT
-    options.UseInitArray = true;
-    #else
     options.UseInitArray = false;
-    #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     #if LLVM_VERSION >= 39
@@ -347,20 +314,12 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 
     std::string mcpu;
     if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
-        #if LLVM_VERSION < 36
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::ConstantDataArray::getString(context, mcpu));
-        #else
         to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
-        #endif
     }
 
     std::string mattrs;
     if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
-        #if LLVM_VERSION < 36
-        to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
-        #else
         to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
-        #endif
     }
 }
 
@@ -385,6 +344,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 llvm::Reloc::PIC_,
                                                 llvm::CodeModel::Default,
                                                 llvm::CodeGenOpt::Aggressive));
+}
+
+void set_function_attributes_for_target(llvm::Function *fn, Target t) {
+    #if LLVM_VERSION >= 40
+    // Turn off approximate reciprocals for division. It's too
+    // inaccurate even for us.
+    fn->addFnAttr("reciprocal-estimates", "none");
+    #endif
 }
 
 }

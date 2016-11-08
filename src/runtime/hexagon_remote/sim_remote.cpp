@@ -1,28 +1,24 @@
-#include "sim_protocol.h"
-#include "../HalideRuntime.h"
+#include "bin/src/halide_hexagon_remote.h"
+#include <HalideRuntime.h>
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
+#include <hexagon_standalone.h>
 
-#include "hexagon_standalone.h"
+#include "sim_protocol.h"
+#include "log.h"
+#include "elf.h"
 
-typedef struct _buffer__seq_octet _buffer__seq_octet;
-typedef _buffer__seq_octet buffer;
-struct _buffer__seq_octet {
-   unsigned char* data;
-   int dataLen;
-};
-typedef unsigned int handle_t;
-
-typedef handle_t handle_t;
+typedef halide_hexagon_remote_handle_t handle_t;
+typedef halide_hexagon_remote_buffer buffer;
 
 const int hvx_alignment = 128;
 
-// Provide an implementation of qurt to redirect to the appropriate
-// simulator calls.
 extern "C" {
 
+// Provide an implementation of qurt to redirect to the appropriate
+// simulator calls.
 int qurt_hvx_lock(int mode) {
     SIM_ACQUIRE_HVX;
     if (mode == 0) {
@@ -38,10 +34,71 @@ int qurt_hvx_unlock() {
     return 0;
 }
 
+// More symbols we need to support from halide_get_symbol.
+extern int __hexagon_muldf3;
+extern int __hexagon_divdf3;
+extern int __hexagon_adddf3;
+extern int __hexagon_divsf3;
+extern int __hexagon_udivdi3;
+extern int __hexagon_udivsi3;
+extern int __hexagon_umodsi3;
+extern int __hexagon_divsi3;
+extern int __hexagon_modsi3;
+extern int __hexagon_subdf3;
+extern int sqrtf;
+extern int sqrt;
+extern int expf;
+extern int exp;
+extern int logf;
+extern int log;
+extern int powf;
+extern int pow;
+extern int sinf;
+extern int sin;
+extern int cosf;
+extern int cos;
+extern int tanf;
+extern int tan;
+extern int asinf;
+extern int asin;
+extern int acosf;
+extern int acos;
+extern int atanf;
+extern int atan;
+extern int atan2f;
+extern int atan2;
+extern int sinhf;
+extern int sinh;
+extern int coshf;
+extern int cosh;
+extern int tanhf;
+extern int tanh;
+extern int asinhf;
+extern int asinh;
+extern int acoshf;
+extern int acosh;
+extern int atanhf;
+extern int atanh;
+extern int nearbyintf;
+extern int nearbyint;
+extern int truncf;
+extern int trunc;
+extern int floorf;
+extern int floor;
+extern int ceilf;
+extern int ceil;
+
 }  // extern "C"
 
+void log_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
 void halide_print(void *user_context, const char *str) {
-    fprintf(stderr, "%s", str);
+    log_printf("%s", str);
 }
 
 // This is a basic implementation of the Halide runtime for Hexagon.
@@ -73,7 +130,86 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void halide_mutex_destroy(halide_mutex *) {}
+
 void *halide_get_symbol(const char *name) {
+    // dlsym is just a stub on the simulator, so we need to support
+    // the symbols we need manually.
+    struct known_sym {
+        const char *name;
+        char *addr;
+    };
+    static known_sym known_syms[] = {
+        {"close", (char *)(&close)},
+        {"abort", (char *)(&abort)},
+        {"memcpy", (char *)(&memcpy)},
+        {"memmove", (char *)(&memmove)},
+        {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
+        {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
+        {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
+        {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
+        {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
+        {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
+        {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
+        {"__hexagon_subdf3", (char *)(&__hexagon_subdf3)},
+        {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
+        {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
+        {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
+        {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
+        {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
+        {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
+        {"__hexagon_sqrtf", (char *)(&sqrtf)},
+        {"sqrtf", (char *)(&sqrtf)},
+        {"sqrt", (char *)(&sqrt)},
+        {"sinf", (char *)(&sinf)},
+        {"expf", (char *)(&expf)},
+        {"exp", (char *)(&exp)},
+        {"logf", (char *)(&logf)},
+        {"log", (char *)(&log)},
+        {"powf", (char *)(&powf)},
+        {"pow", (char *)(&pow)},
+        {"sin", (char *)(&sin)},
+        {"cosf", (char *)(&cosf)},
+        {"cos", (char *)(&cos)},
+        {"tanf", (char *)(&tanf)},
+        {"tan", (char *)(&tan)},
+        {"asinf", (char *)(&asinf)},
+        {"asin", (char *)(&asin)},
+        {"acosf", (char *)(&acosf)},
+        {"acos", (char *)(&acos)},
+        {"atanf", (char *)(&atanf)},
+        {"atan", (char *)(&atan)},
+        {"atan2f", (char *)(&atan2f)},
+        {"atan2", (char *)(&atan2)},
+        {"sinhf", (char *)(&sinhf)},
+        {"sinh", (char *)(&sinh)},
+        {"coshf", (char *)(&coshf)},
+        {"cosh", (char *)(&cosh)},
+        {"tanhf", (char *)(&tanhf)},
+        {"tanh", (char *)(&tanh)},
+        {"asinhf", (char *)(&asinhf)},
+        {"asinh", (char *)(&asinh)},
+        {"acoshf", (char *)(&acoshf)},
+        {"acosh", (char *)(&acosh)},
+        {"atanhf", (char *)(&atanhf)},
+        {"atanh", (char *)(&atanh)},
+        {"nearbyintf", (char *)(&nearbyintf)},
+        {"nearbyint", (char *)(&nearbyint)},
+        {"truncf", (char *)(&truncf)},
+        {"trunc", (char *)(&trunc)},
+        {"floorf", (char *)(&floorf)},
+        {"floor", (char *)(&floor)},
+        {"ceilf", (char *)(&ceilf)},
+        {"ceil", (char *)(&ceil)},
+        {NULL, NULL} // Null terminator.
+    };
+
+    for (int i = 0; known_syms[i].name; i++) {
+        if (strncmp(name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
+            return known_syms[i].addr;
+        }
+    }
+
     return dlsym(RTLD_DEFAULT, name);
 }
 
@@ -97,11 +233,9 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 int initialize_kernels(const unsigned char *code, int codeLen,
                        handle_t *module_ptr) {
-    const char *filename = (const char *)code;
-    void *lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
+    elf_t *lib = obj_dlopen_mem(code, codeLen);
     if (!lib) {
-        halide_print(NULL, "dlopen failed\n");
-        halide_print(NULL, dlerror());
+        halide_print(NULL, "dlopen_mem failed\n");
         return -1;
     }
 
@@ -109,9 +243,9 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+    set_runtime_t set_runtime = (set_runtime_t)obj_dlsym(lib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        dlclose(lib);
+        obj_dlclose(lib);
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -126,7 +260,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        dlclose(lib);
+        obj_dlclose(lib);
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
@@ -136,7 +270,7 @@ int initialize_kernels(const unsigned char *code, int codeLen,
 }
 
 handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -181,8 +315,17 @@ int run(handle_t module_ptr, handle_t function,
 }
 
 int release_kernels(handle_t module_ptr, int codeLen) {
-    dlclose(reinterpret_cast<void*>(module_ptr));
+    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
     return 0;
+}
+
+extern "C" {
+halide_profiler_state profiler_state;
+int *profiler_current_func_addr = &profiler_state.current_func;
+}
+
+halide_profiler_state *halide_profiler_get_state() {
+    return (halide_profiler_state *)(&profiler_state);
 }
 
 extern "C" {
@@ -213,13 +356,6 @@ void set_rpc_return(int value) {
 }
 
 int main(int argc, const char **argv) {
-    // The simulator needs this call to enable dlopen to work...
-    char libgcc[] = "libgcc.so";
-    char libc[] = "libc.so";
-    char libstdcpp[] = "libstdc++.so";
-    char *builtin[] = {libgcc, libc, libstdcpp};
-    dlinit(3, builtin);
-
     while(true) {
         switch (rpc_call) {
         case Message::None:
@@ -262,10 +398,10 @@ int main(int argc, const char **argv) {
         case Message::Break:
             return 0;
         default:
-            fprintf(stderr, "Unknown message: %d\n", rpc_call);
+            log_printf("Unknown message: %d\n", rpc_call);
             return -1;
         }
     }
-    fprintf(stderr, "Unreachable!\n");
+    log_printf("Unreachable!\n");
     return 0;
 }

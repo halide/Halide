@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     f.parallel(x);
 
-    Image<int> im = f.realize(16);
+    Buffer<int> im = f.realize(16);
 
     for (int i = 0; i < 16; i++) {
         if (im(i) != i*3) {

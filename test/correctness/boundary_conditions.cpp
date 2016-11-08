@@ -20,15 +20,16 @@ void schedule_test(Func f, int vector_width, const Target &t) {
 }
 
 template <typename T>
-void check_constant_exterior(const Image<T> &input, T exterior, Func f,
+void check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
                              int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                              int vector_width,
                              Target t = get_jit_target_from_environment()) {
-    Image<T> result(test_extent_x, test_extent_y);
+    Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -42,15 +43,16 @@ void check_constant_exterior(const Image<T> &input, T exterior, Func f,
 }
 
 template <typename T>
-void check_repeat_edge(const Image<T> &input, Func f,
+void check_repeat_edge(const Buffer<T> &input, Func f,
                        int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                        int vector_width,
                        Target t = get_jit_target_from_environment()) {
-    Image<T> result(test_extent_x, test_extent_y);
+    Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -62,15 +64,16 @@ void check_repeat_edge(const Image<T> &input, Func f,
 }
 
 template <typename T>
-void check_repeat_image(const Image<T> &input, Func f,
+void check_repeat_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                         int vector_width,
                         Target t = get_jit_target_from_environment()) {
-    Image<T> result(test_extent_x, test_extent_y);
+    Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -86,15 +89,16 @@ void check_repeat_image(const Image<T> &input, Func f,
 }
 
 template <typename T>
-void check_mirror_image(const Image<T> &input, Func f,
+void check_mirror_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                         int vector_width,
                         Target t = get_jit_target_from_environment()) {
-    Image<T> result(test_extent_x, test_extent_y);
+    Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -114,15 +118,16 @@ void check_mirror_image(const Image<T> &input, Func f,
 }
 
 template <typename T>
-void check_mirror_interior(const Image<T> &input, Func f,
+void check_mirror_interior(const Buffer<T> &input, Func f,
                            int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                            int vector_width,
                            Target t = get_jit_target_from_environment()) {
-    Image<T> result(test_extent_x, test_extent_y);
+    Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
     schedule_test(f, vector_width, t);
     f.realize(result, t);
+    result.copy_to_host();
 
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
@@ -144,11 +149,10 @@ int main(int argc, char **argv) {
 
     const int W = 32;
     const int H = 32;
-    Image<uint8_t> input(W, H);
-
+    Buffer<uint8_t> input(W, H);
     for (int32_t y = 0; y < H; y++) {
         for (int32_t x = 0; x < W; x++) {
-          input(x, y) = x + y * W;
+            input(x, y) = x + y * W;
         }
     }
 

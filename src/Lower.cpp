@@ -17,8 +17,10 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
+#include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
@@ -30,6 +32,7 @@
 #include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
@@ -63,17 +66,24 @@ using std::string;
 using std::vector;
 using std::map;
 
-Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &t, const vector<IRMutator *> &custom_passes) {
+Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
+           const Target &t, const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : outputs) {
+    for (Function f : output_funcs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
     // Create a deep-copy of the entire graph of Funcs.
-    std::tie(outputs, env) = deep_copy(outputs, env);
+    vector<Function> outputs;
+    std::tie(outputs, env) = deep_copy(output_funcs, env);
+
+    // Output functions should all be computed and stored at root.
+    for (Function f: outputs) {
+        Func(f).compute_root().store_root();
+    }
 
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
@@ -99,6 +109,10 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
         debug(1) << "Skipping injecting memoization...\n";
     }
 
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
+
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
@@ -122,7 +136,7 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, outputs, order, env, func_bounds);
+    s = bounds_inference(s, outputs, order, env, func_bounds, t);
     debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
@@ -243,7 +257,13 @@ Stmt lower(vector<Function> outputs, const string &pipeline_name, const Target &
     if (t.has_feature(Target::Profile)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
+        debug(2) << "Lowering after injecting profiling:\n" << s << "\n\n";
+    }
+
+    if (t.has_feature(Target::FuzzFloatStores)) {
+        debug(1) << "Fuzzing floating point stores...\n";
+        s = fuzz_float_stores(s);
+        debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";

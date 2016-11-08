@@ -28,10 +28,14 @@ private:
     }
 
     void visit(const Internal::ProducerConsumer *op) {
-        bool old_in_produce = in_produce;
-        in_produce = true;
-        Internal::IRVisitor::visit(op);
-        in_produce = old_in_produce;
+        if (op->is_producer) {
+            bool old_in_produce = in_produce;
+            in_produce = true;
+            Internal::IRVisitor::visit(op);
+            in_produce = old_in_produce;
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 };
 
@@ -57,7 +61,7 @@ int main(int argc, char **argv) {
         }
 
         // Also check the output is correct
-        Image<int> im = f.realize(100);
+        Buffer<int> im = f.realize(100);
         for (int x = 0; x < im.width(); x++) {
             int correct = x;
             correct += (x > 10 && x < 20) ? 1 : 0;
@@ -91,7 +95,7 @@ int main(int argc, char **argv) {
         }
 
         // Also check the output is correct
-        Image<int> im = f.realize(100, 100);
+        Buffer<int> im = f.realize(100, 100);
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
@@ -129,7 +133,7 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-        Image<int> hist_result = hist.realize(256);
+        Buffer<int> hist_result = hist.realize(256);
 
         // Also check the output is correct.
         Func true_hist;
@@ -138,7 +142,7 @@ int main(int argc, char **argv) {
             true_hist(x) = 0;
             true_hist(f(r.x, r.y)) += 1;
         }
-        Image<int> true_hist_result = true_hist.realize(256);
+        Buffer<int> true_hist_result = true_hist.realize(256);
 
         for (int i = 0; i < 256; i++) {
             if (hist_result(i) != true_hist_result(i)) {
@@ -189,7 +193,7 @@ int main(int argc, char **argv) {
 
         f.update(0).gpu_tile(r.x, r.y, 4, 4);
 
-        Image<int> im = f.realize(200, 200);
+        Buffer<int> im = f.realize(200, 200);
 
         // There should be no selects after trim_no_ops runs. The select should
         // be lifted out as if condition. We can't trim gpu loop r.x based on the

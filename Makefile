@@ -43,8 +43,6 @@ OPTIMIZE ?= -O3
 #  such a compiler handy. One still needs to have 32-bit llvm libraries, etc.)
 BUILD_BIT_SIZE ?=
 
-GENGEN_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/tools/GenGen.cpp
-
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
@@ -54,13 +52,16 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # edit this file, add "WITH_FOO=" (no assigned value) to the make
 # line, or define an environment variable WITH_FOO that has an empty
 # value.
-WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 ifeq ($(LLVM_VERSION_TIMES_10),39)
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
 else
+ifeq ($(LLVM_VERSION_TIMES_10),40)
+WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
+else
 WITH_HEXAGON ?=
+endif
 endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
@@ -80,9 +81,6 @@ WITH_EXCEPTIONS ?=
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
 HL_JIT_TARGET ?= host
-
-NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
-NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 
 X86_CXX_FLAGS=$(if $(WITH_X86), -DWITH_X86=1, )
 X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
@@ -123,7 +121,6 @@ CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qua
 CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
-CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
 CXX_FLAGS += $(HEXAGON_CXX_FLAGS)
@@ -143,26 +140,16 @@ CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 # to propagate exceptions and causes a test failure.
 CXX_FLAGS += -funwind-tables
 
-ifeq ($(LLVM_VERSION_TIMES_10), 35)
-LLVM_OLD_JIT_COMPONENT = jit
-endif
-
 print-%:
 	@echo '$*=$($*)'
 
-ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
-LLVM_SHARED_LIBS =
-else
-LLVM_STATIC_LIBS =
-LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
-endif
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
 
 LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 
 UNAME = $(shell uname)
 
-TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
+TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
@@ -207,6 +194,7 @@ endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
 endif
+OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
 endif
 
@@ -221,6 +209,7 @@ endif
 ifneq ($(TEST_METAL), )
 STATIC_TEST_LIBS ?= -framework Metal
 endif
+OPENGL_LD_FLAGS ?= -framework OpenGL
 HOST_OS=os_x
 endif
 
@@ -269,11 +258,12 @@ SOURCE_FILES = \
   AddParameterChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
+  ApplySplits.cpp \
   Associativity.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
-  Buffer.cpp \
+  BufferPtr.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
@@ -287,7 +277,6 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
-  CodeGen_PNaCl.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
@@ -311,10 +300,10 @@ SOURCE_FILES = \
   Func.cpp \
   Function.cpp \
   FuseGPUThreadLoops.cpp \
+  FuzzFloatStores.cpp \
   Generator.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
-  Image.cpp \
   ImageParam.cpp \
   Interval.cpp \
   InjectHostDevBufferCopies.cpp \
@@ -348,6 +337,7 @@ SOURCE_FILES = \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
+  Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
   Qualify.cpp \
@@ -384,16 +374,10 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WrapCalls.cpp
 
-ifeq ($(LLVM_VERSION_TIMES_10),35)
-BITWRITER_VERSION=.35
-else
-BITWRITER_VERSION=
-endif
-
 BITWRITER_SOURCE_FILES = \
-  BitWriter_3_2$(BITWRITER_VERSION)/BitcodeWriter.cpp \
-  BitWriter_3_2$(BITWRITER_VERSION)/BitcodeWriterPass.cpp \
-  BitWriter_3_2$(BITWRITER_VERSION)/ValueEnumerator.cpp
+  BitWriter_3_2/BitcodeWriter.cpp \
+  BitWriter_3_2/BitcodeWriterPass.cpp \
+  BitWriter_3_2/ValueEnumerator.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
@@ -401,12 +385,13 @@ HEADER_FILES = \
   AddParameterChecks.h \
   AlignLoads.h \
   AllocationBoundsInference.h \
+  ApplySplits.h \
   Argument.h \
   Associativity.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
-  Buffer.h \
+  BufferPtr.h \
   Closure.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
@@ -418,7 +403,6 @@ HEADER_FILES = \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
-  CodeGen_PNaCl.h \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
@@ -446,11 +430,12 @@ HEADER_FILES = \
   Func.h \
   Function.h \
   FuseGPUThreadLoops.h \
+  FuzzFloatStores.h \
   Generator.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   runtime/HalideRuntime.h \
-  Image.h \
+  runtime/HalideBuffer.h \
   ImageParam.h \
   Interval.h \
   InjectHostDevBufferCopies.h \
@@ -489,6 +474,7 @@ HEADER_FILES = \
   Param.h \
   PartitionLoops.h \
   Pipeline.h \
+  Prefetch.h \
   Profiling.h \
   Qualify.h \
   Random.h \
@@ -521,6 +507,7 @@ HEADER_FILES = \
   UnrollLoops.h \
   Util.h \
   Var.h \
+  VaryingAttributes.h \
   VectorizeLoops.h \
   WrapCalls.h
 
@@ -533,8 +520,6 @@ RUNTIME_CPP_COMPONENTS = \
   android_clock \
   android_host_cpu_count \
   android_io \
-  android_ion \
-  android_mman \
   android_opengl_context \
   android_tempfile \
   arm_cpu_features \
@@ -544,7 +529,6 @@ RUNTIME_CPP_COMPONENTS = \
   destructors \
   device_interface \
   errors \
-  fake_ion \
   fake_thread_pool \
   float16_t \
   gcd_thread_pool \
@@ -553,7 +537,6 @@ RUNTIME_CPP_COMPONENTS = \
   ios_io \
   linux_clock \
   linux_host_cpu_count \
-  linux_mman \
   linux_opengl_context \
   matlab \
   metadata \
@@ -564,8 +547,9 @@ RUNTIME_CPP_COMPONENTS = \
   mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
+  msan \
+  msan_stubs \
   noos \
-  nacl_host_cpu_count \
   opencl \
   opengl \
   openglcompute \
@@ -580,7 +564,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_io \
   posix_print \
   posix_tempfile \
-  posix_thread_pool \
+  posix_threads \
   powerpc_cpu_features \
   profiler \
   profiler_inlined \
@@ -589,6 +573,7 @@ RUNTIME_CPP_COMPONENTS = \
   renderscript \
   runtime_api \
   ssp \
+  thread_pool \
   to_string \
   tracing \
   windows_clock \
@@ -597,7 +582,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_io \
   windows_opencl \
   windows_tempfile \
-  windows_thread_pool \
+  windows_threads \
   write_debug_image \
   x86_cpu_features
 
@@ -608,7 +593,6 @@ RUNTIME_LL_COMPONENTS = \
   hvx_64 \
   hvx_128 \
   mips \
-  pnacl_math \
   posix_math \
   powerpc \
   ptx_dev \
@@ -626,7 +610,8 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
-                            $(INCLUDE_DIR)/HalideRuntimeRenderscript.h
+                            $(INCLUDE_DIR)/HalideRuntimeRenderscript.h \
+                            $(INCLUDE_DIR)/HalideBuffer.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
@@ -648,7 +633,6 @@ endif
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
-ifeq ($(USE_LLVM_SHARED_LIB), )
 $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# Determine the relevant object files from llvm with a dummy
 	# compilation. Passing -t to the linker gets it to list which
@@ -666,17 +650,10 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# ar breaks on MinGW with all objects at the same time.
 	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
 	ranlib $(LIB_DIR)/libHalide.a
-else
-$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
-	@-mkdir -p $(BIN_DIR)
-	@rm -f $(LIB_DIR)/libHalide.a
-	ar q $(LIB_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES)
-	ranlib $(LIB_DIR)/libHalide.a
-endif
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(LIB_DIR)/libHalide.a
 	@-mkdir -p $(BIN_DIR)
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LD_FLAGS) $(LLVM_SHARED_LIBS) $(LIBDL) -lz -lpthread -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LD_FLAGS) $(LIBDL) -lz -lpthread -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -690,20 +667,21 @@ $(INCLUDE_DIR)/HalideRuntime%: $(SRC_DIR)/runtime/HalideRuntime%
 	mkdir -p $(INCLUDE_DIR)
 	cp $< $(INCLUDE_DIR)/
 
+$(INCLUDE_DIR)/HalideBuffer.h: $(SRC_DIR)/runtime/HalideBuffer.h
+	echo Copying $<
+	mkdir -p $(INCLUDE_DIR)
+	cp $< $(INCLUDE_DIR)/
+
 $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 	$(CXX) $< -o $@
 
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
 
-ifeq ($(LLVM_VERSION_TIMES_10),35)
-RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
-RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
-else
 # Compile generic 32- or 64-bit code
+# (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
 RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
 RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
-endif
 
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
@@ -831,9 +809,15 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generators
 
+LIBHALIDE_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
+
+$(BIN_DIR)/GenGen.o: $(ROOT_DIR)/tools/GenGen.cpp $(INCLUDE_DIR)/Halide.h
+	@mkdir -p $(BIN_DIR)
+	$(CXX) -c $< $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -o $@
+
 # Make an empty generator for generating runtimes.
-$(BIN_DIR)/runtime.generator: $(ROOT_DIR)/tools/GenGen.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
-	$(CXX) $(TEST_CXX_FLAGS) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+$(BIN_DIR)/runtime.generator: $(BIN_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) $< $(TEST_LD_FLAGS) -o $@
 
 # Generate a standalone runtime for a given target string
 $(RUNTIMES_DIR)/runtime_%.a: $(BIN_DIR)/runtime.generator
@@ -845,7 +829,7 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(S
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
@@ -858,91 +842,141 @@ $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHAR
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) $(OPENGL_LD_FLAGS) -o $@
 
 $(BIN_DIR)/renderscript_%: $(ROOT_DIR)/test/renderscript/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
 
 
 # TODO(srj): this doesn't auto-delete, why not?
-.INTERMEDIATE: $(FILTERS_DIR)/%.generator
+.INTERMEDIATE: $(BIN_DIR)/%.generator
 
 # By default, %.generator is produced by building %_generator.cpp
 # Note that the rule includes all _generator.cpp files, so that generators with define_extern
 # usage can just add deps later.
-$(FILTERS_DIR)/%.generator: $(ROOT_DIR)/test/generator/%_generator.cpp $(GENGEN_DEPS)
-	@mkdir -p $(FILTERS_DIR)
-	$(CXX) -g $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) $(filter %_generator.cpp,$^) $(ROOT_DIR)/tools/GenGen.cpp $(TEST_LD_FLAGS) -o $@
+$(BIN_DIR)/%_generator.o: $(ROOT_DIR)/test/generator/%_generator.cpp $(INCLUDE_DIR)/Halide.h
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -I$(CURDIR)/$(FILTERS_DIR) -c $< -o $@
+
+$(BIN_DIR)/%.generator: $(BIN_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/%_generator.o
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
 NON_EMPTY_TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
-$(FILTERS_DIR)/%.a: $(FILTERS_DIR)/%.generator
+$(FILTERS_DIR)/%.a: $(BIN_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -g $* -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
 $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
 	@echo $@ produced implicitly by $^
 
+$(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -n $* -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
+
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
-$(FILTERS_DIR)/cxx_mangling.a: $(FILTERS_DIR)/cxx_mangling.generator
+$(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling"
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling"
 
-$(FILTERS_DIR)/cxx_mangling_define_extern.a: $(FILTERS_DIR)/cxx_mangling_define_extern.generator
+$(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_extern.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -g $(notdir $*) -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling_define_extern"
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling-user_context -f "HalideTest::cxx_mangling_define_extern"
 
-$(FILTERS_DIR)/tiled_blur_interleaved.a: $(FILTERS_DIR)/tiled_blur.generator
+$(FILTERS_DIR)/tiled_blur_interleaved.a: $(BIN_DIR)/tiled_blur.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -g tiled_blur -f tiled_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
+	cd $(TMP_DIR); $(CURDIR)/$< -f tiled_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
 
-$(FILTERS_DIR)/tiled_blur_blur_interleaved.a: $(FILTERS_DIR)/tiled_blur_blur.generator
+$(FILTERS_DIR)/tiled_blur_blur_interleaved.a: $(BIN_DIR)/tiled_blur_blur.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
+	cd $(TMP_DIR); $(CURDIR)/$< -f tiled_blur_blur_interleaved -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime is_interleaved=true
+
+# pyramid needs a custom arg
+$(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -f pyramid -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET) levels=10
+
+METADATA_TESTER_GENERATOR_ARGS=input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 \
+	input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 \
+	array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2
 
 # metadata_tester is built with and without user-context
-$(FILTERS_DIR)/metadata_tester.a: $(FILTERS_DIR)/metadata_tester.generator
+$(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-register_metadata-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
-$(FILTERS_DIR)/metadata_tester_ucon.a: $(FILTERS_DIR)/metadata_tester.generator
+$(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-register_metadata-no_runtime
+	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester_ucon -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(BIN_DIR)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
-$(FILTERS_DIR)/multitarget.a: $(FILTERS_DIR)/multitarget.generator
+$(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f "HalideTest::multitarget" -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
 
+$(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(LD_PATH_SETUP) $(CURDIR)/$< -f msan -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-msan
+
+# MSAN test doesn't use the standard runtime
+$(BIN_DIR)/generator_aot_msan: $(ROOT_DIR)/test/generator/msan_aottest.cpp $(FILTERS_DIR)/msan.a $(FILTERS_DIR)/msan.h $(INCLUDE_DIR)/HalideRuntime.h
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+
 # user_context needs to be generated with user_context as the first argument to its calls
-$(FILTERS_DIR)/user_context.a: $(FILTERS_DIR)/user_context.generator
+$(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
 
 # ditto for user_context_insanity
-$(FILTERS_DIR)/user_context_insanity.a: $(FILTERS_DIR)/user_context_insanity.generator
+$(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generator
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-user_context
+
+# matlab needs to be generated with matlab in TARGET
+$(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-matlab
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
 # (2) Ensuring the extra .a is linked into the final output.
 
-# tiled_blur also needs tiled_blur_blur, due to an extern_generator dependency.
-$(FILTERS_DIR)/tiled_blur.generator: $(ROOT_DIR)/test/generator/tiled_blur_blur_generator.cpp
 # TODO(srj): we really want to say "anything that depends on tiled_blur.a also depends on tiled_blur_blur.a";
 # is there a way to specify that in Make?
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.a
 $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.a
 $(BIN_DIR)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.a
+
+$(BIN_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
+$(BIN_DIR)/stubuser.generator: $(BIN_DIR)/stubtest_generator.o
+
+# stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
+# usage (the types can be inferred), but for AOT compilation, we must make the types
+# concrete via generator args.
+$(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -f stubtest -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -950,34 +984,35 @@ $(BIN_DIR)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling
 # some special casing to get right.  First, make a special rule to
 # build each of the Generators in nested_externs_generator.cpp (which
 # all have the form nested_externs_*).
-$(FILTERS_DIR)/nested_externs_%.a: $(FILTERS_DIR)/nested_externs.generator
+$(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -g nested_externs_$* -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime
 
 $(BIN_DIR)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.a $(FILTERS_DIR)/nested_externs_inner.a $(FILTERS_DIR)/nested_externs_combine.a $(FILTERS_DIR)/nested_externs_leaf.a $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.a/.h (but not libHalide).
 $(BIN_DIR)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
 
 $(BIN_DIR)/generator_aot_multitarget: $(ROOT_DIR)/test/generator/multitarget_aottest.cpp $(FILTERS_DIR)/multitarget.a $(FILTERS_DIR)/multitarget.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) -o $@
 
 # The matlab tests needs "-matlab" in the runtime
 $(BIN_DIR)/generator_aot_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.a $(FILTERS_DIR)/matlab.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET)-matlab.a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) $(TEST_LD_FLAGS) -o $@
 
 # acquire_release is the only test that explicitly uses CUDA/OpenCL APIs, so link only those here.
 $(BIN_DIR)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.a $(FILTERS_DIR)/acquire_release.h $(INCLUDE_DIR)/HalideRuntime.h $(RUNTIMES_DIR)/runtime_$(HL_TARGET).a
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -lpthread $(LIBDL) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
 
-# By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
-$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.$(SHARED_EXT),$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support $(TEST_LD_FLAGS) -o $@
+# By default, %_jittest.cpp depends on libHalide, plus the stubs for the Generator. These are external tests that use the JIT.
+$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(FILTERS_DIR)/%.stub.h $(BIN_DIR)/%_generator.o
+	$(CXX) -g $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support $(TEST_LD_FLAGS) -o $@
 
 # generator_aot_multitarget is run multiple times, with different env vars.
 generator_aot_multitarget: $(BIN_DIR)/generator_aot_multitarget
+	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; HL_MULTITARGET_TEST_USE_DEBUG_FEATURE=0 $(LD_PATH_SETUP) $(CURDIR)/$<
 	cd $(TMP_DIR) ; HL_MULTITARGET_TEST_USE_DEBUG_FEATURE=1 $(LD_PATH_SETUP) $(CURDIR)/$<
@@ -1000,19 +1035,19 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@;\
 	fi
 
-$(BIN_DIR)/tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(ROOT_DIR)/tools/GenGen.cpp \
+$(BIN_DIR)/tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(BIN_DIR)/GenGen.o
+	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@
 
 tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh $(BIN_DIR)/tutorial_lesson_15_generators
 	@-mkdir -p $(TMP_DIR)
 	cp $(BIN_DIR)/tutorial_lesson_15_generators $(TMP_DIR)/lesson_15_generate; \
 	cd $(TMP_DIR); \
-	source $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
+	PATH="$${PATH}:$(CURDIR)/$(BIN_DIR)" source $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
 	@-echo
 
 $(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_generate.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(ROOT_DIR)/tools/GenGen.cpp \
+	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_lesson_16_rgb_run: $(ROOT_DIR)/tutorial/lesson_16_rgb_run.cpp $(BIN_DIR)/tutorial_lesson_16_rgb_generate
@@ -1062,7 +1097,7 @@ performance_%: $(BIN_DIR)/performance_%
 
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
+	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error|Assertion.*failed"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%
@@ -1070,23 +1105,18 @@ warning_%: $(BIN_DIR)/warning_%
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
 
-opengl_%: HL_JIT_TARGET ?= host-opengl
 opengl_%: $(BIN_DIR)/opengl_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(CURDIR)/$< 2>&1
+	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1
 	@-echo
 
-renderscript_jit_%: HL_JIT_TARGET = host-renderscript
-renderscript_jit_%: HL_TARGET =
-renderscript_aot_%: HL_TARGET = arm-32-android-armv7s-renderscript
-renderscript_aot_%: HL_JIT_TARGET =
 renderscript_%_error: $(BIN_DIR)/renderscript_%_error
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; HL_JIT_TARGET=$(HL_JIT_TARGET) HL_TARGET=$(HL_TARGET) $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
+	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
 	@-echo
 renderscript_%: $(BIN_DIR)/renderscript_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; HL_JIT_TARGET=$(HL_JIT_TARGET) HL_TARGET=$(HL_TARGET) $(CURDIR)/$<
+	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
 generator_%: $(BIN_DIR)/generator_%
@@ -1115,14 +1145,14 @@ time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 time_compilation_renderscript_%: $(BIN_DIR)/renderscript_%
 	$(TIME_COMPILATION) compile_times_renderscript.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_renderscript_%=renderscript_%)
 
-time_compilation_generator_%: $(FILTERS_DIR)/%.generator
+time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
 
-time_compilation_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.generator
+time_compilation_generator_tiled_blur_interleaved: $(BIN_DIR)/tiled_blur.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(FILTERS_DIR)/tiled_blur_interleaved.a
 
 .PHONY: test_apps
-test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
+test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
 	mkdir -p apps
 	# Make a local copy of the apps if we're building out-of-tree,
 	# because the app Makefiles are written to build in-tree
@@ -1134,7 +1164,6 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	        $(ROOT_DIR)/apps/blur \
 	        $(ROOT_DIR)/apps/wavelet \
 	        $(ROOT_DIR)/apps/c_backend \
-	        $(ROOT_DIR)/apps/modules \
 	        $(ROOT_DIR)/apps/HelloMatlab \
 	        $(ROOT_DIR)/apps/fft \
 	        $(ROOT_DIR)/apps/images \
@@ -1143,20 +1172,18 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	  cp -r $(ROOT_DIR)/tools .; \
 	fi
 	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/bilateral_grid out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/bilateral_grid bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/local_laplacian clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/local_laplacian out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/local_laplacian bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/interpolate clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/interpolate out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	make -C apps/interpolate bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/blur clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/blur test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	apps/blur/test
+	make -C apps/blur bin/test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+	apps/blur/bin/test
 	make -C apps/wavelet clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/wavelet test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/c_backend clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/c_backend test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/modules clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/modules out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_16x16  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_32x32  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_48x48  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
@@ -1189,7 +1216,7 @@ ifneq (,$(findstring clang version 3.9,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
-ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
+ifneq (,$(findstring clang version 4.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
@@ -1213,7 +1240,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 37 38 39 40 41 42))
 LLVM_OK=yes
 endif
 
@@ -1245,6 +1272,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	mkdir -p $(PREFIX)/include $(PREFIX)/bin $(PREFIX)/lib $(PREFIX)/share/halide/tutorial/images $(PREFIX)/share/halide/tools $(PREFIX)/share/halide/tutorial/figures
 	cp $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(PREFIX)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(PREFIX)/include
+	cp $(INCLUDE_DIR)/HalideBuffer.h $(PREFIX)/include
 	cp $(INCLUDE_DIR)/HalideRuntim*.h $(PREFIX)/include
 	cp $(ROOT_DIR)/tutorial/images/*.png $(PREFIX)/share/halide/tutorial/images
 	cp $(ROOT_DIR)/tutorial/figures/*.gif $(PREFIX)/share/halide/tutorial/figures
@@ -1255,7 +1283,6 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
-	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
 
@@ -1264,6 +1291,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
 	cp $(INCLUDE_DIR)/Halide.h $(DISTRIB_DIR)/include
+	cp $(INCLUDE_DIR)/HalideBuffer.h $(DISTRIB_DIR)/include
 	cp $(INCLUDE_DIR)/HalideRuntim*.h $(DISTRIB_DIR)/include
 	cp $(ROOT_DIR)/tutorial/images/*.png $(DISTRIB_DIR)/tutorial/images
 	cp $(ROOT_DIR)/tutorial/figures/*.gif $(DISTRIB_DIR)/tutorial/figures
@@ -1274,12 +1302,11 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(ROOT_DIR)/tutorial/*.sh $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/lib halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h halide/tools/halide_image_info.h
+	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/lib halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image_io.h halide/tools/halide_image_info.h
 	rm -rf halide
 
 .PHONY: distrib

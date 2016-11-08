@@ -64,6 +64,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
                                     "Halide HVX internal compiler\n");
 
         std::vector<const char *> options = {
+            "halide-hvx-be",
             // Don't put small objects into .data sections, it causes
             // issues with position independent code.
             "-hexagon-small-data-threshold=0"
@@ -139,7 +140,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Optimizing shuffles...\n";
-    body = optimize_hexagon_shuffles(body);
+    // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
+    const int lut_alignment = 64;
+    body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";
@@ -224,6 +227,12 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16v2,  "sxt.vb",  {i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32v2,  "sxt.vh",  {i16v1} },
 
+        // Similar to zxt/sxt, but without deinterleaving the result.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackub), u16v2, "unpack.vub", {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackuh), u32v2, "unpack.vuh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackb),  i16v2, "unpack.vb",  {i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackh),  i32v2, "unpack.vh",  {i16v1} },
+
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
@@ -248,6 +257,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16v1, "pack_sath.vw",  {i32v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8v1,  "pack.vh",       {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16v1, "pack.vw",       {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackob),      i8v1,  "packhi.vh",     {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackoh),      i16v1, "packhi.vw",     {i32v2} },
+
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
@@ -577,15 +589,15 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty,
 
 Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
+    llvm::Type *v_ty = v[0]->getType();
+    llvm::Type *element_ty = v_ty->getVectorElementType();
+    int element_bits = element_ty->getScalarSizeInBits();
+    int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
+    int result_elements = v_ty->getVectorNumElements()*v.size();
     if (v.size() == 2) {
+        // Interleaving two vectors.
         Value *a = v[0];
         Value *b = v[1];
-        // Interleaving two vectors.
-        llvm::Type *v_ty = v[0]->getType();
-        llvm::Type *element_ty = v_ty->getVectorElementType();
-        int element_bits = element_ty->getScalarSizeInBits();
-        int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
-        int result_elements = v_ty->getVectorNumElements()*2;
 
         if (result_elements == native_elements && (element_bits == 8 || element_bits == 16)) {
             llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
@@ -614,6 +626,23 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
                 ret.push_back(ret_i);
             }
             return concat_vectors(ret);
+        }
+    } else if (v.size() == 3) {
+        // Interleaving 3 vectors - this generates awful code if we let LLVM do it,
+        // so we use vlut if we can. This is actually pretty general, it might be
+        // useful for other interleavings, though the LUT grows impractically
+        // large quite quickly.
+        if (element_bits == 8 || element_bits == 16) {
+            Value *lut = concat_vectors(v);
+
+            std::vector<int> indices;
+            for (unsigned i = 0; i < v_ty->getVectorNumElements(); i++) {
+                for (size_t j = 0; j < v.size(); j++) {
+                    indices.push_back(j * v_ty->getVectorNumElements() + i);
+                }
+            }
+
+            return vlut(lut, indices);
         }
     }
     return CodeGen_Posix::interleave_vectors(v);
@@ -915,39 +944,48 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     // The result will have the same number of elements as idx.
     int idx_elements = idx_ty->getVectorNumElements();
 
-    // Each LUT has 2 mask values for HVX 64, 4 mask values for HVX 128.
-    int lut_passes = is_128B ? 4 : 2;
+    // Each LUT has 1 pair of even/odd mask values for HVX 64, 2 for
+    // HVX 128.  We may not need all of the passes, if the LUT has
+    // fewer than half of the elements in an HVX 128 vector.
+    int lut_passes = is_128B ? 2 : 1;
 
     vector<Value *> result;
     for (int i = 0; i < idx_elements; i += native_idx_elements) {
         Value *idx_i = slice_vector(idx, i, native_idx_elements);
 
+        if (lut_ty->getScalarSizeInBits() == 16) {
+            // vlut16 deinterleaves its output. We can either
+            // interleave the result, or the indices.  It's slightly
+            // cheaper to interleave the indices (they are single
+            // vectors, vs. the result which is a double vector), and
+            // if the indices are constant (which is true for boundary
+            // conditions) this should get lifted out of any loops.
+            idx_i = call_intrin_cast(idx_i->getType(), IPICK(is_128B, Intrinsic::hexagon_V6_vshuffb), {idx_i});
+        }
+
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
-                Value *mask = ConstantInt::get(i32_t, lut_passes*j + k);
+                int pass_index = lut_passes * j + k;
+                Value *mask[2] = {
+                    ConstantInt::get(i32_t, 2 * pass_index + 0),
+                    ConstantInt::get(i32_t, 2 * pass_index + 1),
+                };
                 if (result_i == nullptr) {
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut_id,
-                                                {idx_i, lut_slices[j], mask});
-                } else {
+                                                {idx_i, lut_slices[j], mask[0]});
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
+                                                {result_i, idx_i, lut_slices[j], mask[1]});
+                } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
-                    result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
-                                                {result_i, idx_i, lut_slices[j], mask});
+                    for (int m = 0; m < 2; m++) {
+                        result_i = call_intrin_cast(native_result_ty, vlut_acc_id,
+                                                    {result_i, idx_i, lut_slices[j], mask[m]});
+                    }
                 }
             }
-        }
-
-        if (native_result_ty->getScalarSizeInBits() == 16) {
-            // If we used vlut16, the result is a deinterleaved double
-            // vector. Reinterleave it.
-            // TODO: We might be able to do this to the indices
-            // instead of the result. However, I think that requires a
-            // non-native vector width deinterleave, so it's probably
-            // not faster, except where the indices are compile time
-            // constants.
-            result_i = call_intrin(native_result_ty, "halide.hexagon.interleave.vh", {result_i});
         }
 
         result.push_back(result_i);
@@ -976,7 +1014,69 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
         llvm_indices.push_back(ConstantInt::get(i8_t, i));
     }
 
-    return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
+    if (max_index <= 255) {
+        // If we can do this with one vlut, do it now.
+        return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
+    }
+
+    llvm::Type *i8x_t = VectorType::get(i8_t, indices.size());
+    llvm::Type *i16x_t = VectorType::get(i16_t, indices.size());
+
+    // We use i16 indices because we can't support LUTs with more than
+    // 32k elements anyways without massive stack spilling (the LUT
+    // must fit in registers), and it costs some runtime performance
+    // due to the conversion to 8 bit. This is also crazy and should
+    // never happen.
+    internal_assert(max_index < std::numeric_limits<int16_t>::max())
+        << "vlut of more than 32k elements not supported \n";
+
+    // We need to break the index up into ranges of up to 256, and mux
+    // the ranges together after using vlut on each range. This vector
+    // contains the result of each range, and a condition vector
+    // indicating whether the result should be used.
+    vector<std::pair<Value *, Value *>> ranges;
+    for (int min_index_i = 0; min_index_i < max_index; min_index_i += 256) {
+        // Make a vector of the indices shifted such that the min of
+        // this range is at 0.
+        vector<Constant *> llvm_indices;
+        llvm_indices.reserve(indices.size());
+        for (int i : indices) {
+            llvm_indices.push_back(ConstantInt::get(i16_t, i - min_index_i));
+        }
+        Value *llvm_index = ConstantVector::get(llvm_indices);
+
+        // Create a condition value for which elements of the range are valid for this index.
+        // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend.
+        Value *minus_one = codegen(make_const(UInt(16, indices.size()), -1));
+        Value *use_index = call_intrin(i16x_t, "halide.hexagon.gt.vh.vh", {llvm_index, minus_one});
+
+        // After we've eliminated the invalid elements, we can
+        // truncate to 8 bits, as vlut requires.
+        llvm_index = call_intrin(i8x_t, "halide.hexagon.pack.vh", {llvm_index});
+        use_index = call_intrin(i8x_t, "halide.hexagon.pack.vh", {use_index});
+
+        int range_extent_i = std::min(max_index - min_index_i, 255);
+        Value *range_i = vlut(slice_vector(lut, min_index_i, range_extent_i), llvm_index, 0, range_extent_i);
+
+        ranges.push_back(std::make_pair(range_i, use_index));
+    }
+
+    // TODO: This could be reduced hierarchically instead of in
+    // order. However, this requires the condition for the mux to be
+    // quite tricky.
+    Value *result = ranges[0].first;
+    llvm::Type *element_ty = result->getType()->getVectorElementType();
+    string mux = "halide.hexagon.mux";
+    switch (element_ty->getScalarSizeInBits()) {
+    case 8: mux += ".vb.vb"; break;
+    case 16: mux += ".vh.vh"; break;
+    case 32: mux += ".vw.vw"; break;
+    default: internal_error << "Cannot constant select vector of " << element_ty->getScalarSizeInBits() << "\n";
+    }
+    for (size_t i = 1; i < ranges.size(); i++) {
+        result = call_intrin(result->getType(), mux, {ranges[i].second, ranges[i].first, result});
+    }
+    return result;
 }
 
 namespace {
@@ -1068,11 +1168,12 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
+    std::stringstream attrs("+hvx");
     if (target.has_feature(Halide::Target::HVX_128)) {
-        return "+hvx,+hvx-double";
-    } else {
-        return "+hvx";
+        attrs << ",+hvx-double";
     }
+    attrs << ",+long-calls";
+    return attrs.str();
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
@@ -1221,6 +1322,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
         { Call::popcount, { "halide.hexagon.popcount", false } },
     };
 
+    if (is_native_interleave(op) || is_native_deinterleave(op)) {
+        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
+            << "Interleave or deinterleave will result in miscompilation, "
+            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+    }
+
     if (starts_with(op->name, "halide.hexagon.")) {
         // Handle all of the intrinsics we generated in
         // hexagon_optimize.  I'm not sure why this is different than
@@ -1255,8 +1362,52 @@ void CodeGen_Hexagon::visit(const Call *op) {
             Value *idx = codegen(op->args[1]);
             value = vlut(lut, idx, *min_index, *max_index);
             return;
+        } else if (op->is_intrinsic(Call::select_mask)) {
+            internal_assert(op->args.size() == 3);
+            // eliminate_bool_vectors has replaced all boolean vectors
+            // with integer vectors of the appropriate size, so we
+            // just need to convert the select_mask intrinsic to a
+            // hexagon mux intrinsic.
+            value = call_intrin(op->type,
+                                "halide.hexagon.mux" +
+                                type_suffix(op->args[1], op->args[2], false),
+                                op->args);
+            return;
+        } else if (op->is_intrinsic(Call::bool_to_mask)) {
+            internal_assert(op->args.size() == 1);
+            if (op->args[0].type().is_vector()) {
+                // The argument is already a mask of the right width.
+                op->args[0].accept(this);
+            } else {
+                // The argument is a scalar bool. Converting it to
+                // all-ones or all-zeros is sufficient for HVX masks
+                // (mux just looks at the LSB of each byte).
+                Expr equiv = -Cast::make(op->type, op->args[0]);
+                equiv.accept(this);
+            }
+            return;
+        } else if (op->is_intrinsic(Call::cast_mask)) {
+            internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
     }
+
+    if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
+        llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
+        internal_assert(prefetch_fn);
+        vector<llvm::Value *> args;
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
+
+        value = builder->CreateCall(prefetch_fn, args);
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -1278,9 +1429,15 @@ void CodeGen_Hexagon::visit(const Max *op) {
                             "halide.hexagon.max" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->a, op->b}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Min *op) {
@@ -1289,54 +1446,25 @@ void CodeGen_Hexagon::visit(const Min *op) {
                             "halide.hexagon.min" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->b, op->a}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    if (op->type.is_vector() && op->condition.type().is_vector()) {
-        // eliminate_bool_vectors has replaced all boolean vectors
-        // with integer vectors of the appropriate size, and this
-        // condition is of the form 'cond != 0'. We just need to grab
-        // cond and use that as the operand for vmux.
-        Expr cond = op->condition;
-        const NE *cond_ne_0 = cond.as<NE>();
-        if (cond_ne_0) {
-            internal_assert(is_zero(cond_ne_0->b));
-            cond = cond_ne_0->a;
-        }
-        Expr t = op->true_value;
-        Expr f = op->false_value;
-        value = call_intrin(op->type,
-                            "halide.hexagon.mux" + type_suffix(t, f, false),
-                            {cond, t, f});
-    } else if (op->type.is_vector()) {
-        // Implement scalar conditions with if-then-else.
-        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
+    internal_assert(op->condition.type().is_scalar()) << Expr(op) << "\n";
 
-        builder->SetInsertPoint(true_bb);
-        Value *true_value = codegen(op->true_value);
-        builder->CreateBr(after_bb);
-        // The true value might have jumped to a new block (e.g. if there was a
-        // nested select). To generate a correct PHI node, grab the current
-        // block.
-        BasicBlock *true_pred = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(false_bb);
-        Value *false_value = codegen(op->false_value);
-        builder->CreateBr(after_bb);
-        BasicBlock *false_pred = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(after_bb);
-        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-        phi->addIncoming(true_value, true_pred);
-        phi->addIncoming(false_value, false_pred);
-
-        value = phi;
+    if (op->type.is_vector()) {
+        // Implement scalar conditions on vector values with if-then-else.
+        value = codegen(Call::make(op->type, Call::if_then_else,
+                                   {op->condition, op->true_value, op->false_value},
+                                   Call::Intrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }

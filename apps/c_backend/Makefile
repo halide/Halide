@@ -1,25 +1,40 @@
 include ../support/Makefile.inc
 
-pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline $(LDFLAGS) -g
+test: $(BIN)/run $(BIN)/run_cpp
+	$(BIN)/run
+	$(BIN)/run_cpp
 
-pipeline_c.cpp: pipeline
-	./pipeline
+all: $(BIN)/test
 
-pipeline_c.h: pipeline
-	./pipeline
+$(BIN)/pipeline_exec: pipeline_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-pipeline_native.h: pipeline
-	./pipeline
+$(BIN)/pipeline_native.a: $(BIN)/pipeline_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_native -e static_library,h target=$(HL_TARGET)
 
-pipeline_native.o: pipeline
-	./pipeline
+$(BIN)/pipeline_c.cpp: $(BIN)/pipeline_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_c -e cpp,h target=$(HL_TARGET)
 
-run: run.cpp pipeline_native.h pipeline_c.cpp
-	$(CXX) $(CXXFLAGS) -Wall run.cpp pipeline_c.cpp pipeline_native.o $(LDFLAGS) -o run
+$(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
+	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
 
-test: run
-	./run
+$(BIN)/pipeline_cpp_exec: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+$(BIN)/pipeline_cpp_cpp.cpp: $(BIN)/pipeline_cpp_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_cpp_cpp -e cpp,h target=host-c_plus_plus_name_mangling
+
+$(BIN)/pipeline_cpp_native.a: $(BIN)/pipeline_cpp_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_cpp_native -e static_library,h target=host-c_plus_plus_name_mangling
+
+$(BIN)/run_cpp: run_cpp.cpp $(BIN)/pipeline_cpp_cpp.cpp $(BIN)/pipeline_cpp_native.a
+	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
 
 clean:
-	rm -f run pipeline_native.{h,o} pipeline_c.{cpp,h} pipeline
+	rm -rf $(BIN)
