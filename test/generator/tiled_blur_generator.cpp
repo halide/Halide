@@ -2,13 +2,11 @@
 
 namespace {
 
-template<int channels = 3>
-Halide::Expr is_interleaved(const Halide::OutputImageParam &p) {
+Halide::Expr is_interleaved(const Halide::OutputImageParam &p, int channels = 3) {
     return p.stride(0) == channels && p.stride(2) == 1 && p.extent(2) == channels;
 }
 
-template<int channels = 3>
-Halide::Expr is_planar(const Halide::OutputImageParam &p) {
+Halide::Expr is_planar(const Halide::OutputImageParam &p, int channels = 3) {
     return p.stride(0) == 1 && p.extent(2) == channels;
 }
 
