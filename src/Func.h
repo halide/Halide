@@ -1441,7 +1441,7 @@ public:
     // @}
 
     /** Schedule for execution using coordinate-based hardware api.
-     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * GLSL is an example of this. Conceptually, this is
      * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
      * individual output pixels in parallel) and vectorization over 'c'
      * (since GLSL/RS implicitly vectorizes the color channel). */
