@@ -12,14 +12,18 @@ int main(int argc, char **argv) {
     Func selector("selector");
     selector(x, y) = select(pred(x, y), 1, 0);
 
-    // Load a vector of 8 bools
+    // Load a vector of 16 bools
+    // TODO: should be 8, but working around https://llvm.org/bugs/show_bug.cgi?id=30947
     pred.compute_root();
-    selector.compute_root().vectorize(x, 8);
+    selector.compute_root().vectorize(x, 16);
 
+    Func result;
     RDom range(0, 100, 0, 100);
-    int32_t result = evaluate_may_gpu<int32_t>(sum(selector(range.x, range.y)));
+    result() = sum(selector(range.x, range.y));
 
-    assert(result == 4950);
+    int32_t r = evaluate_may_gpu<int32_t>(result());
+
+    assert(r == 4950);
 
     printf("Success!\n");
     return 0;
