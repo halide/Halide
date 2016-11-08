@@ -403,6 +403,11 @@ public:
         std::ostringstream oss;
         oss << this->value();
         if (std::is_same<T, float>::value) {
+            // If the constant has no decimal point ("1")
+            // we must append one before appending "f"
+            if (oss.str().find(".") == std::string::npos) {
+                oss << ".";
+            }
             oss << "f";
         }
         return oss.str();
@@ -1527,7 +1532,7 @@ protected:
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using ScheduleParam = Halide::ScheduleParam<T>;
-    template <typename T = void, int D = 4> using Image = Halide::Image<T, D>;
+    template <typename T = void, int D = 4> using Buffer = Halide::Buffer<T, D>;
     template <typename T> using Param = Halide::Param<T>;
     static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
     static inline Type Float(int bits, int lanes = 1) { return Halide::Float(bits, lanes); }
@@ -1621,7 +1626,6 @@ private:
     bool generator_params_set{false};
     bool schedule_params_set{false};
     bool inputs_set{false};
-    std::string cpp_stub_class_name;
     std::string generator_name;
 
     EXPORT void build_params(bool force = false);
@@ -1643,11 +1647,6 @@ private:
         generator_name = n;
     }
 
-    void set_cpp_stub_class_name(const std::string &n) {
-        internal_assert(cpp_stub_class_name.empty());
-        cpp_stub_class_name = n;
-    }
-
     EXPORT void set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
@@ -1657,6 +1656,8 @@ private:
 class GeneratorFactory {
 public:
     virtual ~GeneratorFactory() {}
+    // Note that this method must never return null: 
+    // if it cannot return a valid Generator, it should assert-fail.
     virtual std::unique_ptr<GeneratorBase> create(const std::map<std::string, std::string> &params) const = 0;
 };
 
@@ -1664,8 +1665,8 @@ typedef std::unique_ptr<Internal::GeneratorBase> (*GeneratorCreateFunc)();
 
 class SimpleGeneratorFactory : public GeneratorFactory {
 public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name, const std::string &cpp_stub_class_name) 
-        : create_func(create_func), generator_name(generator_name), cpp_stub_class_name(cpp_stub_class_name) {
+    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name) 
+        : create_func(create_func), generator_name(generator_name) {
         internal_assert(create_func != nullptr);
     }
 
@@ -1673,14 +1674,12 @@ public:
         auto g = create_func();
         internal_assert(g.get() != nullptr);
         g->set_generator_name(generator_name);
-        g->set_cpp_stub_class_name(cpp_stub_class_name);
         g->set_generator_param_values(params);
         return g;
     }
 private:
     const GeneratorCreateFunc create_func;
     const std::string generator_name;
-    const std::string cpp_stub_class_name;
 };
 
 class GeneratorRegistry {
@@ -1688,6 +1687,8 @@ public:
     EXPORT static void register_factory(const std::string &name, std::unique_ptr<GeneratorFactory> factory);
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
+    // Note that this method will never return null: 
+    // if it cannot return a valid Generator, it should assert-fail.
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                         const std::map<std::string, std::string> &params);
 
@@ -1821,9 +1822,9 @@ private:
 
 template <class GeneratorClass> class RegisterGenerator {
 public:
-    RegisterGenerator(const char* name, const char *cpp_stub_class_name = "") {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, name, cpp_stub_class_name));
-        Internal::GeneratorRegistry::register_factory(name, std::move(f));
+    RegisterGenerator(const char* generator_name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
+        Internal::GeneratorRegistry::register_factory(generator_name, std::move(f));
     }
 };
 
@@ -1947,26 +1948,8 @@ private:
 
 }  // namespace Halide
 
-// Use a little variadic macro hacking to allow two or three arguments.
-// This is suboptimal, but allows us more flexibility to mutate registration in
-// the future with less impact on existing code.
-#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
+#define HALIDE_REGISTER_GENERATOR(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
     namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
-
-#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
-    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); }
-
-#define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
-
-#ifdef _MSC_VER
-// MSVC flagrantly ignores the spec for __VA_ARGS__; this is an ugly but effective workaround
-#define _HALIDE_VARIADIC_MACRO(MACRO, TUPLE) MACRO TUPLE
-#define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_VARIADIC_MACRO(_HALIDE_REGISTER_GENERATOR_CHOOSER, (__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2, DUMMY))(__VA_ARGS__)
-#else
-#define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_REGISTER_GENERATOR_CHOOSER(__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2, DUMMY)(__VA_ARGS__)
-#endif
 
 
 #endif  // HALIDE_GENERATOR_H_

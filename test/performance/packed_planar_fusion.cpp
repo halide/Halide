@@ -6,7 +6,7 @@
 
 using namespace Halide;
 
-double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
+double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
     Var x, y, c;
     Func f;
     f(x, y, c) = src(x, y, c);
@@ -38,12 +38,12 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
     return benchmark(5, 10, [&]() { return f.realize(dst); });
 }
 
-Image<uint8_t> make_packed(uint8_t *host, int W, int H) {
-    return Image<uint8_t>::make_interleaved(host, W, H, 3);
+Buffer<uint8_t> make_packed(uint8_t *host, int W, int H) {
+    return Buffer<uint8_t>::make_interleaved(host, W, H, 3);
 }
 
-Image<uint8_t> make_planar(uint8_t *host, int W, int H) {
-    return Image<uint8_t>(host, W, H, 3);
+Buffer<uint8_t> make_planar(uint8_t *host, int W, int H) {
+    return Buffer<uint8_t>(host, W, H, 3);
 }
 
 int main(int argc, char **argv) {

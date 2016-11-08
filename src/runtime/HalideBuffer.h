@@ -700,10 +700,39 @@ public:
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
-        ty = halide_type_of<typename std::remove_cv<T>::type>();
+        ty = static_halide_type();
         initialize_shape(0, first, int(rest)...);
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
+        buf.host = (uint8_t *)data;
+    }
+
+    /** Initialize an Buffer from a pointer and a vector of
+     * sizes. Assumes dense row-major packing and a min coordinate of
+     * zero. Does not take ownership of the data and does not set the
+     * host_dirty flag. */
+    explicit Buffer(T *data, const std::vector<int> &sizes) {
+        assert(sizes.size() <= D);
+        initialize_shape(sizes);
+        ty = static_halide_type();
+        buf.elem_size = ty.bytes();
+        dims = (int)sizes.size();
+        buf.host = (uint8_t *)data;
+    }
+
+    /** Initialize an Buffer of runtime type from a pointer and a
+     * vector of sizes. Assumes dense row-major packing and a min
+     * coordinate of zero. Does not take ownership of the data and
+     * does not set the host_dirty flag. */
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, const std::vector<int> &sizes) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        assert(sizes.size() <= D);
+        initialize_shape(sizes);
+        ty = t;
+        buf.elem_size = ty.bytes();
+        dims = (int)sizes.size();
         buf.host = (uint8_t *)data;
     }
 
@@ -1591,7 +1620,7 @@ void for_each_element(const buffer_t &buf, Fn &&f) {
     for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
 }
 
-// Temporary code to make Image an alias for Buffer. Will be deprecated very soon.
+// Image is an alias for Buffer. Will be deprecated.
 template<typename T = void, int D = 4> using Image = Buffer<T, D>;
 
 

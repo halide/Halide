@@ -180,7 +180,7 @@ def main():
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
     assert input_data.shape[2] == 4
-    input_image = Image(input_data)
+    input_image = Buffer(input_data)
     input.set(input_image)
 
     input_width, input_height = input_data.shape[:2]
@@ -190,7 +190,7 @@ def main():
     t1 = datetime.now()
     print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
 
-    output_data = image_to_ndarray(output_image)
+    output_data = buffer_to_ndarray(output_image)
 
     # save results
     input_path = "interpolate_input.png"

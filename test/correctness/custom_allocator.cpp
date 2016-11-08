@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     g.set_custom_allocator(my_malloc, my_free);
 
-    Image<int> im = g.realize(100000);
+    Buffer<int> im = g.realize(100000);
 
     assert(custom_malloc_called);
     assert(custom_free_called);
