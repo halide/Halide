@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     // The amount of shared memory required varies with x
 
-    Image<int> out = g.realize(100);
+    Buffer<int> out = g.realize(100);
     for (int x = 0; x < 100; x++) {
         int correct = 3*x;
         if (out(x) != correct) {

@@ -19,8 +19,8 @@ int main(int argc, char **argv) {
 
     assert(ext1.name() != ext2.name() && "Programmer-specified function names have not been made unique!");
 
-    Image<int> out1 = ext1.realize(10);
-    Image<int> out2 = ext2.realize(10);
+    Buffer<int> out1 = ext1.realize(10);
+    Buffer<int> out2 = ext2.realize(10);
 
     for (int i = 0; i < 10; i++) {
         assert(out1(i) == i + 1 && "Incorrect result from call to ext1");
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     Func out1_as_func(out1);
     Func ext3 = add2(out1_as_func);
 
-    Image<int> out3 = ext3.realize(10);
+    Buffer<int> out3 = ext3.realize(10);
 
     for (int i = 0; i < 10; i++) {
         assert(out3(i) == i + 3 && "Incorrect result from call to add2");

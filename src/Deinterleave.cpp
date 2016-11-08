@@ -464,7 +464,9 @@ class Interleaver : public IRMutator {
     void visit(const Mod *op) {
         const Ramp *r = op->a.as<Ramp>();
         for (int i = 2; i <= 4; ++i) {
-            if (r && is_const(op->b, i)) {
+            if (r &&
+                is_const(op->b, i) &&
+                (r->type.lanes() % i) == 0) {
                 should_deinterleave = true;
                 num_lanes = i;
                 break;
@@ -578,7 +580,7 @@ class Interleaver : public IRMutator {
             std::vector<int> offsets(stores.size());
 
             std::string load_name;
-            Buffer load_image;
+            BufferPtr load_image;
             Parameter load_param;
             for (size_t i = 0; i < stores.size(); ++i) {
                 const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
@@ -711,9 +713,9 @@ void deinterleave_vector_test() {
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
-    check(Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter()),
-          Load::make(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));
+    check(Load::make(ramp.type(), "buf", ramp, BufferPtr(), Parameter()),
+          Load::make(ramp_a.type(), "buf", ramp_a, BufferPtr(), Parameter()),
+          Load::make(ramp_b.type(), "buf", ramp_b, BufferPtr(), Parameter()));
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

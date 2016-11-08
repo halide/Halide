@@ -2,7 +2,6 @@
 #define HALIDE_FAST_INTEGER_DIVIDE_H
 
 #include "IR.h"
-#include "Image.h"
 
 namespace Halide {
 
@@ -11,12 +10,12 @@ namespace Halide {
  * in your object file. They are declared here in case you want to do
  * something non-default with them. */
 namespace IntegerDivideTable {
-EXPORT Image<uint8_t> integer_divide_table_u8();
-EXPORT Image<uint8_t> integer_divide_table_s8();
-EXPORT Image<uint16_t> integer_divide_table_u16();
-EXPORT Image<uint16_t> integer_divide_table_s16();
-EXPORT Image<uint32_t> integer_divide_table_u32();
-EXPORT Image<uint32_t> integer_divide_table_s32();
+EXPORT Buffer<uint8_t> integer_divide_table_u8();
+EXPORT Buffer<uint8_t> integer_divide_table_s8();
+EXPORT Buffer<uint16_t> integer_divide_table_u16();
+EXPORT Buffer<uint16_t> integer_divide_table_s16();
+EXPORT Buffer<uint32_t> integer_divide_table_u32();
+EXPORT Buffer<uint32_t> integer_divide_table_s32();
 }
 
 
@@ -41,6 +40,11 @@ EXPORT Image<uint32_t> integer_divide_table_s32();
  * inclusive.
  */
 EXPORT Expr fast_integer_divide(Expr numerator, Expr denominator);
+
+/** Use the fast integer division tables to implement a modulo
+ * operation via the Euclidean identity: a%b = a - (a/b)*b
+ */
+EXPORT Expr fast_integer_modulo(Expr numerator, Expr denominator);
 
 }
 

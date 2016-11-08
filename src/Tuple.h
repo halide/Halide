@@ -12,8 +12,7 @@
 
 namespace Halide {
 
-class FuncRefVar;
-class FuncRefExpr;
+class FuncRef;
 
 /** Create a small array of Exprs for defining and calling functions
  * with multiple outputs. */
@@ -36,13 +35,16 @@ public:
         return exprs[x];
     }
 
+    /** Construct a Tuple of a single Expr */
+    explicit Tuple(Expr e) {
+        exprs.push_back(e);
+    }
+
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename ...Args>
-    Tuple(Expr a, Expr b, Args... args) {
-                exprs.push_back(a);
-                exprs.push_back(b);
-                Internal::collect_args(exprs, args...);
+    Tuple(Expr a, Expr b, Args&&... args) {
+        exprs = std::vector<Expr>{a, b, std::forward<Args>(args)...};
     }
     //@}
 
@@ -52,10 +54,7 @@ public:
     }
 
     /** Construct a Tuple from a function reference. */
-    // @{
-    EXPORT Tuple(const FuncRefVar &);
-    EXPORT Tuple(const FuncRefExpr &);
-    // @}
+    EXPORT Tuple(const FuncRef &);
 
     /** Treat the tuple as a vector of Exprs */
     const std::vector<Expr> &as_vector() const {
@@ -63,50 +62,99 @@ public:
     }
 };
 
-/** Funcs with Tuple values return multiple buffers when you realize
- * them. Tuples are to Exprs as Realizations are to Buffers. */
+/** Funcs with Tuple values return multiple images when you realize
+ * them. Tuples are to Exprs as Realizations are to Images. */
 class Realization {
 private:
-    std::vector<Buffer> buffers;
+    std::vector<Internal::BufferPtr> images;
 public:
-    /** The number of buffers in the Realization. */
-    size_t size() const { return buffers.size(); }
+    /** The number of images in the Realization. */
+    size_t size() const { return images.size(); }
 
-    /** Get a reference to one of the buffers. */
-    Buffer &operator[](size_t x) {
-        user_assert(x < buffers.size()) << "Realization access out of bounds\n";
-        return buffers[x];
+    /** Get a reference to one of the images. */
+    Buffer<> &operator[](size_t x) {
+        user_assert(x < images.size()) << "Realization access out of bounds\n";
+        return images[x].get();
     }
 
-    /** Get one of the buffers. */
-    Buffer operator[](size_t x) const {
-        user_assert(x < buffers.size()) << "Realization access out of bounds\n";
-        return buffers[x];
+    /** Get one of the images. */
+    const Buffer<> &operator[](size_t x) const {
+        user_assert(x < images.size()) << "Realization access out of bounds\n";
+        return images[x].get();
     }
 
-    /** Single-element realizations are implicitly castable to Buffers. */
-    operator Buffer() const {
-        user_assert(buffers.size() == 1) << "Can only cast single-element realizations to buffers or images\n";
-        return buffers[0];
+    /** Single-element realizations are implicitly castable to Images. */
+    template<typename T, int D>
+    operator Buffer<T, D>() const {
+        return images[0];
     }
 
-    /** Construct a Realization from some Buffers. */
+    /** Construct a Realization from some Images. */
     //@{
-    template<typename ...Args>
-    Realization(Buffer a, Buffer b, Args... args) : buffers({a, b}) {
-        Internal::collect_args(buffers, args...);
+    template<typename T,
+             int D,
+             typename ...Args,
+             typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
+    Realization(Buffer<T, D> a, Args&&... args) {
+        images = std::vector<Internal::BufferPtr>{a, std::forward<Args>(args)...};
     }
     //@}
 
-    /** Construct a Realization from a vector of Buffers */
-    explicit Realization(const std::vector<Buffer> &e) : buffers(e) {
+    /** Construct a Realization from a vector of Buffer<> */
+    explicit Realization(const std::vector<Buffer<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
+        for (const Buffer<> &im : e) {
+            images.push_back(Internal::BufferPtr(im));
+        }
     }
 
-    /** Treat the Realization as a vector of Buffers */
-    const std::vector<Buffer> &as_vector() const {
-        return buffers;
+    /** Support for iterating over a the Images in a Realization */
+    struct iterator {
+        std::vector<Internal::BufferPtr>::iterator iter;
+
+        Buffer<> &operator*() {
+            return iter->get();
+        };
+        iterator &operator++() {
+            iter++;
+            return *this;
+        }
+        bool operator!=(const iterator &other) const {
+            return iter != other.iter;
+        }
+    };
+
+    iterator begin() {
+        return {images.begin()};
     }
+
+    iterator end() {
+        return {images.end()};
+    }
+
+    struct const_iterator {
+        std::vector<Internal::BufferPtr>::const_iterator iter;
+
+        const Buffer<> &operator*() {
+            return iter->get();
+        };
+        const_iterator &operator++() {
+            iter++;
+            return *this;
+        }
+        bool operator!=(const const_iterator &other) const {
+            return iter != other.iter;
+        }
+    };
+
+    const_iterator begin() const {
+        return {images.begin()};
+    }
+
+    const_iterator end() const{
+        return {images.end()};
+    }
+
 };
 
 /** Equivalents of some standard operators for tuples. */

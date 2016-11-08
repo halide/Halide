@@ -10,13 +10,14 @@ int main(int argc, char **argv) {
 
 #include <math.h>
 #include "HalideRuntime.h"
+#include "HalideBuffer.h"
 #include <assert.h>
 #include <string.h>
 
 #include "acquire_release.h"
-#include "halide_image.h"
 
-using namespace Halide::Tools;
+
+using namespace Halide;
 
 const int W = 256, H = 256;
 
@@ -206,16 +207,16 @@ int main(int argc, char **argv) {
     // Everything else is a normal Halide program. The GPU runtime will call
     // the above acquire/release functions to get the context instead of using
     // its own internal context.
-    Image<float> input(W, H);
+    Buffer<float> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = (float)(x * y);
         }
     }
 
-    input.set_host_dirty();
+    input.set_host_dirty(true);
 
-    Image<float> output(W, H);
+    Buffer<float> output(W, H);
 
     acquire_release(input, output);
 
@@ -232,8 +233,8 @@ int main(int argc, char **argv) {
     }
 
     // We need to free our GPU buffers before destroying the context.
-    input.dev_free();
-    output.dev_free();
+    input.device_free();
+    output.device_free();
 
     // Free the context we created.
     destroy_context();

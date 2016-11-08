@@ -6,8 +6,8 @@ CXX-hexagon-32-qurt-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 
 CXXFLAGS-arm-64-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm64 -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= --sysroot $(ANDROID_NDK_HOME)/platforms/android-21/arch-arm -llog -fPIE -pie
-CXXFLAGS-hexagon-32-qurt-hvx_64 ?= -m$* -G0 -mG0lib
-CXXFLAGS-hexagon-32-qurt-hvx_128 ?= -m$* -G0 -mG0lib
+CXXFLAGS-hexagon-32-qurt-hvx_64 ?= -mhvx -G0
+CXXFLAGS-hexagon-32-qurt-hvx_128 ?= -mhvx-double -G0
 
 LDFLAGS-host ?= -lpthread
 LDFLAGS-hexagon-32-qurt-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt

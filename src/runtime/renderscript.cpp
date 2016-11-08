@@ -1,4 +1,5 @@
 #include "HalideRuntimeRenderscript.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
 
@@ -782,19 +783,6 @@ WEAK int halide_renderscript_device_release(void *user_context) {
     return RS_SUCCESS;
 }
 
-WEAK size_t buf_size(void *user_context, buffer_t *buf) {
-    size_t size = buf->elem_size;
-    for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
-        size_t total_dim_size =
-            buf->elem_size * buf->extent[i] * buf->stride[i];
-        if (total_dim_size > size) {
-            size = total_dim_size;
-        }
-    }
-    halide_assert(user_context, size);
-    return size;
-}
-
 namespace {
 WEAK bool is_interleaved_rgba_buffer_t(buffer_t *buf) {
     return (buf->stride[2] == 1 && buf->extent[2] == 4);
@@ -810,7 +798,8 @@ WEAK int halide_renderscript_device_malloc(void *user_context, buffer_t *buf) {
         return ctx.error;
     }
 
-    size_t size = buf_size(user_context, buf);
+    size_t size = buf_size(buf);
+    halide_assert(user_context, size != 0);
 
     if (buf->dev) {
         // This buffer already has a device allocation
@@ -1155,6 +1144,14 @@ WEAK int halide_renderscript_run(void *user_context, void *state_ptr,
     return 0;
 }
 
+WEAK int halide_renderscript_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &renderscript_device_interface);
+}
+
+WEAK int halide_renderscript_device_and_host_free(void *user_context, struct buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &renderscript_device_interface);
+}
+
 WEAK const struct halide_device_interface *halide_renderscript_device_interface() {
     return &renderscript_device_interface;
 }
@@ -1188,12 +1185,18 @@ WEAK const char *get_error_name(RSError error) {
 }
 
 WEAK halide_device_interface renderscript_device_interface = {
-    halide_use_jit_module,  halide_release_jit_module,
+    halide_use_jit_module,
+    halide_release_jit_module,
     halide_renderscript_device_malloc,
-    halide_renderscript_device_free,  halide_renderscript_device_sync,
+    halide_renderscript_device_free,
+    halide_renderscript_device_sync,
     halide_renderscript_device_release,
-    halide_renderscript_copy_to_host, halide_renderscript_copy_to_device,
+    halide_renderscript_copy_to_host,
+    halide_renderscript_copy_to_device,
+    halide_renderscript_device_and_host_malloc,
+    halide_renderscript_device_and_host_free,
 };
+
 }
 }
 }

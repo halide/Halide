@@ -185,7 +185,6 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"osx", Target::OSX},
     {"android", Target::Android},
     {"ios", Target::IOS},
-    {"nacl", Target::NaCl},
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
 };
@@ -203,7 +202,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
@@ -245,17 +243,19 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
-    {"hvx_64", Target::HVX_64},
-    {"hvx_128", Target::HVX_128},
-    {"hvx_v62", Target::HVX_v62},
-    {"register_metadata", Target::RegisterMetadata},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
     {"mingw", Target::MinGW},
-    {"large_buffers", Target::LargeBuffers},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
+    {"large_buffers", Target::LargeBuffers},
+    {"hvx_64", Target::HVX_64},
+    {"hvx_128", Target::HVX_128},
+    {"hvx_v62", Target::HVX_v62},
+    {"fuzz_float_stores", Target::FuzzFloatStores},
+    {"soft_float_abi", Target::SoftFloatABI},
+    {"msan", Target::MSAN},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -307,7 +307,7 @@ bool merge_string(Target &t, const std::string &target) {
     }
     tokens.push_back(rest);
 
-    bool os_specified = false, arch_specified = false, bits_specified = false;
+    bool os_specified = false, arch_specified = false, bits_specified = false, features_specified = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
         const string &tok = tokens[i];
@@ -319,7 +319,7 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             t = get_host_target();
-        } else if (tok == "32" || tok == "64") {
+        } else if (tok == "32" || tok == "64" || tok == "0") {
             if (bits_specified) {
                 return false;
             }
@@ -337,6 +337,7 @@ bool merge_string(Target &t, const std::string &target) {
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
+            features_specified = true;
         } else {
             return false;
         }
@@ -346,12 +347,12 @@ bool merge_string(Target &t, const std::string &target) {
         return false;
     }
 
-    // If arch is PNaCl, require explicit setting of os and bits as well.
-    if (arch_specified && t.arch == Target::PNaCl) {
-        if (!os_specified || t.os != Target::NaCl) {
-            return false;
-        }
-        if (!bits_specified || t.bits != 32) {
+    if (bits_specified && t.bits == 0) {
+        // bits == 0 is allowed iff arch and os are "unknown" and no features are set,
+        // to allow for roundtripping the string for default Target() ctor.
+        if (!(arch_specified && t.arch == Target::ArchUnknown) ||
+            !(os_specified && t.os == Target::OSUnknown) ||
+            features_specified) {
             return false;
         }
     }
@@ -387,14 +388,19 @@ void bad_target_string(const std::string &target) {
         }
     }
     user_error << "Did not understand Halide target " << target << "\n"
-               << "Expected format is arch-os-feature1-feature2-...\n"
-               << "Where arch is " << architectures << " .\n"
-               << "Os is " << oses << " .\n"
-               << "If arch or os are omitted, they default to the host.\n"
-               << "Features are " << features << " .\n"
+               << "Expected format is arch-bits-os-feature1-feature2-...\n"
+               << "Where arch is: " << architectures << ".\n"
+               << "bits is either 32 or 64.\n"
+               << "os is: " << oses << ".\n"
+               << "\n"
+               << "If arch, bits, or os are omitted, they default to the host.\n"
+               << "\n"
+               << "Features are: " << features << ".\n"
+               << "\n"
                << "The target can also begin with \"host\", which sets the "
                << "host's architecture, os, and feature set, with the "
                << "exception of the GPU runtimes, which default to off.\n"
+               << "\n"
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
@@ -456,14 +462,10 @@ std::string Target::to_string() const {
 /** Was libHalide compiled with support for this target? */
 bool Target::supported() const {
     bool bad = false;
-#if !defined(WITH_NATIVE_CLIENT)
-    bad |= (arch == Target::PNaCl || os == Target::NaCl);
-#endif
 #if !defined(WITH_ARM)
     bad |= arch == Target::ARM && bits == 32;
 #endif
-#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
-    // In pnacl llvm, the aarch64 backend is crashy.
+#if !defined(WITH_AARCH64)
     bad |= arch == Target::ARM && bits == 64;
 #endif
 #if !defined(WITH_X86)
@@ -501,6 +503,8 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
+    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128) ||
+                                        has_feature(Target::HVX_v62);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }

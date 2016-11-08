@@ -32,9 +32,7 @@ def main():
     # Declare the arguments.
     offset = Param(UInt(8))
     input = ImageParam(UInt(8), 2)
-    args = ArgumentsVector()
-    args.append(input)
-    args.append(offset)
+    args = [input, offset]
 
     # Define the Func.
     brighter[x, y] = input[x, y] + offset
@@ -47,7 +45,7 @@ def main():
     # program on.  For example, if you compile and run this file on
     # 64-bit linux on an x86 cpu with sse4.1, then the generated code
     # will be suitable for 64-bit linux on x86 with sse4.1.
-    brighter.compile_to_file("lesson_11_host", args)
+    brighter.compile_to_file("lesson_11_host", args, "lesson_11_host")
 
     # We can also compile object files suitable for other cpus and
     # operating systems. You do this with an optional third argument
@@ -60,13 +58,13 @@ def main():
     if create_android:
         # Let's use this to compile a 32-bit arm android version of this code:
         target = Target()
-        target.os = TargetOS.Android # The operating system
-        target.arch = TargetArch.ARM   # The CPU architecture
-        target.bits = 32            # The bit-width of the architecture
-        arm_features = FeaturesVector()  # A list of features to set
+        target.os = TargetOS.Android  # The operating system
+        target.arch = TargetArch.ARM  # The CPU architecture
+        target.bits = 32              # The bit-width of the architecture
+        arm_features = []             # A list of features to set
         target.set_features(arm_features)
         # Pass the target as the last argument.
-        brighter.compile_to_file("lesson_11_arm_32_android", args, target)
+        brighter.compile_to_file("lesson_11_arm_32_android", args, "lesson_11_arm_32_android", target)
 
     if create_windows:
         # And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
@@ -74,11 +72,8 @@ def main():
         target.os = TargetOS.Windows
         target.arch = TargetArch.X86
         target.bits = 64
-        x86_features = FeaturesVector()
-        x86_features.append(TargetFeature.AVX)
-        x86_features.append(TargetFeature.SSE41)
-        target.set_features(x86_features)
-        brighter.compile_to_file("lesson_11_x86_64_windows", args, target)
+        target.set_features([TargetFeature.AVX, TargetFeature.SSE41])
+        brighter.compile_to_file("lesson_11_x86_64_windows", args, "lesson_11_x86_64_windows", target)
 
     if create_ios:
         # And finally an iOS mach-o object file for one of Apple's 32-bit
@@ -91,10 +86,8 @@ def main():
         target.os = TargetOS.IOS
         target.arch = TargetArch.ARM
         target.bits = 32
-        armv7s_features = FeaturesVector()
-        armv7s_features.append(TargetFeature.ARMv7s)
-        target.set_features(armv7s_features)
-        brighter.compile_to_file("lesson_11_arm_32_ios", args, target)
+        target.set_features([TargetFeature.ARMv7s])
+        brighter.compile_to_file("lesson_11_arm_32_ios", args, "lesson_11_arm_32_ios", target)
 
 
     # Now let's check these files are what they claim, by examining

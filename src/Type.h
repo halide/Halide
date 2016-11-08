@@ -88,21 +88,8 @@ struct halide_handle_cplusplus_type {
         Pointer = 1 << 3,  ///< Bitmask flag for a pointer "*"
     };
 
-    /// Qualifiers and indirections on type. Allows up to 8 levels. 0 is innermost.
-    struct CPPTypeModifiers {
-        uint8_t data[8];
-      CPPTypeModifiers(const std::vector<uint8_t> &vals) {
-            user_assert(vals.size() <= sizeof(data)) << "Too many levels of indirection in handle type " << vals.size() << " where " << sizeof(data) << " are allowed\n";
-            std::copy(vals.begin(), vals.end(), &data[0]);
-            std::fill(&data[vals.size()], &data[sizeof(data)], 0);
-        }
-        const uint8_t &operator[](size_t index) const { return data[index]; }
-        bool operator==(const CPPTypeModifiers &rhs) const {
-            return std::equal(&data[0], &data[sizeof(data)], &rhs.data[0]);
-        }
-        const uint8_t *begin() const { return &data[0]; }
-        const uint8_t *end() const { return &data[sizeof(data)]; }
-    } cpp_type_modifiers;
+    /// Qualifiers and indirections on type. 0 is innermost.
+    std::vector<uint8_t> cpp_type_modifiers;
 
     /// References are separate because they only occur at the outermost level.
     /// No modifiers are needed for references as they are not allowed to apply
@@ -142,20 +129,69 @@ template<> struct halide_c_type_to_name<float> { static const bool known_type = 
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
 
+// You can make arbitrary user-defined types be "Known" by adding your own specialization of 
+// halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators
+// type safe. e.g.,
+//
+//    struct MyFunStruct { ... };
+//
+//    ...
+//
+//    template<> 
+//    struct halide_c_type_to_name<struct MyFunStruct> { 
+//      static const bool known_type = true; 
+//      static halide_cplusplus_type_name name() { 
+//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"}; 
+//      } 
+//    };
+//
+//    ...
+//
+//    class MyGenerator : public Generator<MyGenerator> {
+//       Param<const MyFunStruct *> my_struct_ptr;
+//       ...
+//    };
+
+// Default case (should be only Unknown types, since we specialize for Known types below).
+// We require that all unknown types be pointers, and translate them all to void*
+// (preserving const-ness and volatile-ness).
 template<typename T, bool KnownType>
 struct halide_internal_handle_traits {
-    static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) { return nullptr; }
+    static const halide_handle_cplusplus_type *type_info(bool is_ptr, 
+            halide_handle_cplusplus_type::ReferenceType ref_type) { 
+        static_assert(!KnownType, "Only unknown types handled here");
+        internal_assert(is_ptr) << "Unknown types must be pointers";
+        internal_assert(ref_type == halide_handle_cplusplus_type::NotReference) << "Unknown types must not be references";
+        static const halide_handle_cplusplus_type the_info{
+            {halide_cplusplus_type_name::Simple, "void"},
+            {}, 
+            {},
+            { 
+                (uint8_t)(halide_handle_cplusplus_type::Pointer |
+                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
+            },
+            halide_handle_cplusplus_type::NotReference
+        };
+        return &the_info;
+    }
 };
 
+// Known types
 template<typename T>
 struct halide_internal_handle_traits<T, true> {
     static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) {
         static const halide_handle_cplusplus_type the_info{
-            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), {}, {},
-            { (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
-              (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
-              (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))},
-            ref_type};
+            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), 
+            {}, 
+            {},
+            { 
+                (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
+                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
+                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
+            },
+            ref_type
+        };
         return &the_info;
     }
 };
@@ -381,15 +417,12 @@ inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_typ
     return Type(Type::Handle, 64, lanes, handle_type);
 }
 
-namespace {
-
 /** Construct the halide equivalent of a C type */
-template<typename T> Type type_of() {
+template<typename T> 
+inline Type type_of() {
     return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }
 
-}
-
-}
+}  // namespace Halide
 
 #endif

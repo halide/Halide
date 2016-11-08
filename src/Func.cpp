@@ -16,7 +16,6 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "Image.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
 #include "Debug.h"
@@ -30,6 +29,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Associativity.h"
+#include "ApplySplits.h"
 
 namespace Halide {
 
@@ -131,7 +131,7 @@ vector<RVar> Func::rvars(int idx) const {
         << "Use Func::has_update_definition() to check for the existence of an update definition.\n";
     user_assert(idx < num_update_definitions())
         << "Update definition index out of bounds.\n";
-    const std::vector<ReductionVariable> rvars = func.schedule().rvars();
+    const std::vector<ReductionVariable> rvars = func.update(idx).schedule().rvars();
     std::vector<RVar> rvs(rvars.size());
     for (size_t i = 0; i < rvars.size(); i++) {
         rvs[i] = RVar(rvars[i].var);
@@ -188,18 +188,21 @@ int Func::dimensions() const {
     return func.dimensions();
 }
 
-FuncRefVar Func::operator()(vector<Var> args) const {
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefVar(func, args, placeholder_pos);
+FuncRef Func::operator()(vector<Var> args) const {
+    int placeholder_pos, count;
+    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    return FuncRef(func, args, placeholder_pos, count);
 }
 
-FuncRefExpr Func::operator()(vector<Expr> args) const {
-    int placeholder_pos = add_implicit_vars(args);
-    return FuncRefExpr(func, args, placeholder_pos);
+FuncRef Func::operator()(vector<Expr> args) const {
+    int placeholder_pos, count;
+    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    return FuncRef(func, args, placeholder_pos, count);
 }
 
-int Func::add_implicit_vars(vector<Var> &args) const {
+std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
     int placeholder_pos = -1;
+    int count = 0;
     std::vector<Var>::iterator iter = args.begin();
 
     while (iter != args.end() && !iter->same_as(_)) {
@@ -213,6 +216,7 @@ int Func::add_implicit_vars(vector<Var> &args) const {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
+            count++;
         }
     }
 
@@ -221,11 +225,12 @@ int Func::add_implicit_vars(vector<Var> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return placeholder_pos;
+    return std::make_pair(placeholder_pos, count);
 }
 
-int Func::add_implicit_vars(vector<Expr> &args) const {
+std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     int placeholder_pos = -1;
+    int count = 0;
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
@@ -241,6 +246,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
+            count++;
         }
     }
 
@@ -249,7 +255,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return placeholder_pos;
+    return std::make_pair(placeholder_pos, count);
 }
 
 namespace {
@@ -382,46 +388,125 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
-/** Apply split directives on the reduction variables. Remove the old RVar from
- * the list and add the split result (inner and outer RVars) to the list. */
-void apply_split(const Split &s, vector<ReductionVariable> &rvars) {
-    internal_assert(s.is_split());
-    const auto iter = std::find_if(rvars.begin(), rvars.end(),
-        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
-    if (iter != rvars.end()) {
-        debug(4) << "  Splitting " << iter->var << " into " << s.outer << " and " << s.inner << "\n";
-        Expr old_extent = iter->extent;
-        iter->var = s.inner;
-        iter->min = 0;
-        iter->extent = s.factor;
-
-        ReductionVariable outer = {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)};
-        rvars.insert(iter + 1, outer);
+// Substitute 'exprs' with the values defined by 'let_stmts' in ascending order.
+// If 'reverse' is true, perform the substitution in descending order.
+void substitute_lets_in_exprs(const vector<pair<string, Expr>> &let_stmts,
+                              vector<Expr> &exprs, bool reverse) {
+    if (reverse) {
+        for (int i = let_stmts.size() - 1; i >= 0; --i) {
+            for (auto &expr : exprs) {
+                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < let_stmts.size(); ++i) {
+            for (auto &expr : exprs) {
+                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
+            }
+        }
     }
 }
 
-/** Apply fuse directives on the reduction variables. Remove the fused RVars from
- * the list and add the fused RVar to the list. */
-void apply_fuse(const Split &s, vector<ReductionVariable> &rvars) {
+void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
+                        const ApplySplitResult &result, vector<Expr> &predicates,
+                        vector<Expr> &args, vector<Expr> &values) {
+
+    predicates.insert(predicates.end(), result.predicates.begin(), result.predicates.end());
+
+    // Apply substitutions to the list of predicates, args, and values
+    substitute_lets_in_exprs(result.substitutions, predicates, false);
+    substitute_lets_in_exprs(result.substitutions, args, false);
+    substitute_lets_in_exprs(result.substitutions, values, false);
+
+    // Make sure we substitute in all the let stmts from 'bounds_let_stmts' and
+    // ApplySplitResult since we are not going to add them to the exprs.
+    // The list of let stmts is ordered from innermost let to outermost let, so
+    // we need to apply the substitution in reverse order.
+    substitute_lets_in_exprs(result.let_stmts, predicates, true);
+    substitute_lets_in_exprs(result.let_stmts, args, true);
+    substitute_lets_in_exprs(result.let_stmts, values, true);
+
+    substitute_lets_in_exprs(bounds_let_stmts, predicates, true);
+    substitute_lets_in_exprs(bounds_let_stmts, args, true);
+    substitute_lets_in_exprs(bounds_let_stmts, values, true);
+}
+
+/** Apply split directives on the reduction variables. Remove the old RVar from
+ * the list and add the split result (inner and outer RVars) to the list. Add
+ * new predicates corresponding to the TailStrategy to the RDom predicate list. */
+bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
+                 vector<Expr> &predicates, vector<Expr> &args,
+                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
+    internal_assert(s.is_split());
+    const auto it = std::find_if(rvars.begin(), rvars.end(),
+        [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
+
+    Expr old_max, old_min, old_extent;
+
+    if (it != rvars.end()) {
+        debug(4) << "  Splitting " << it->var << " into " << s.outer << " and " << s.inner << "\n";
+
+        old_max = simplify(it->min + it->extent - 1);
+        old_min = it->min;
+        old_extent = it->extent;
+
+        it->var = s.inner;
+        it->min = 0;
+        it->extent = s.factor;
+
+        rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
+    }
+    return false;
+}
+
+/** Apply fuse directives on the reduction variables. Remove the
+ * fused RVars from the list and add the fused RVar to the list. */
+bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
+                vector<Expr> &predicates, vector<Expr> &args,
+                vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_fuse());
     const auto iter_outer = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.outer == rv.var); });
     const auto iter_inner = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.inner == rv.var); });
 
+    Expr inner_min, inner_extent, outer_min, outer_extent;
     if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
         debug(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
+
+        inner_min = iter_inner->min;
+        inner_extent = iter_inner->extent;
+        outer_min = iter_outer->min;
+        outer_extent = iter_outer->extent;
+
         Expr extent = iter_outer->extent * iter_inner->extent;
         iter_outer->var = s.old_var;
         iter_outer->min = 0;
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
     }
+    return false;
 }
 
-/** Apply purify directives on the reduction variables. Purify replace a RVar
- * with a Var, thus, the RVar needs to be removed from the list. */
-void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
+/** Apply purify directives on the reduction variables and predicates. Purify
+ * replace a RVar with a Var, thus, the RVar needs to be removed from the list.
+ * Any reference to the RVar in the predicates will be replaced with reference
+ * to a Var. */
+bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
+                  vector<Expr> &predicates, vector<Expr> &args,
+                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_purify());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
@@ -429,31 +514,70 @@ void apply_purify(const Split &s, vector<ReductionVariable> &rvars) {
         debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
     }
+    return false;
 }
 
 /** Apply rename directives on the reduction variables. */
-void apply_rename(const Split &s, vector<ReductionVariable> &rvars) {
+bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
+                  vector<Expr> &predicates, vector<Expr> &args,
+                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
     internal_assert(s.is_rename());
     const auto iter = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
+
+        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
+        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
+
+        return true;
     }
+    return false;
 }
 
-/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction variables. */
-void apply_split_directive(const Split &s, vector<ReductionVariable> &rvars) {
-    if (s.is_split()) {
-        apply_split(s, rvars);
-    } else if (s.is_fuse()) {
-        apply_fuse(s, rvars);
-    } else if (s.is_purify()) {
-        apply_purify(s, rvars);
-    } else {
-        apply_rename(s, rvars);
+/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction
+ * variables. */
+bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
+                           vector<Expr> &predicates, vector<Expr> &args,
+                           vector<Expr> &values) {
+    map<string, Expr> dim_extent_alignment;
+    for (const ReductionVariable &rv : rvars) {
+        dim_extent_alignment[rv.var] = rv.extent;
     }
+
+    vector<pair<string, Expr>> rvar_bounds;
+    for (const ReductionVariable &rv : rvars) {
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_min", rv.min));
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_max", simplify(rv.min + rv.extent - 1)));
+        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_extent", rv.extent));
+    }
+
+    bool found = false;
+    if (s.is_split()) {
+        found = apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else if (s.is_fuse()) {
+        found = apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else if (s.is_purify()) {
+        found = apply_purify(s, rvars, predicates, args, values, dim_extent_alignment);
+    } else {
+        found = apply_rename(s, rvars, predicates, args, values, dim_extent_alignment);
+    }
+
+    if (found) {
+        substitute_lets_in_exprs(rvar_bounds, predicates, true);
+        substitute_lets_in_exprs(rvar_bounds, args, true);
+        substitute_lets_in_exprs(rvar_bounds, values, true);
+    }
+    return found;
 }
 
 } // anonymous namespace
@@ -477,10 +601,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
-    bool is_assoc;
-    vector<AssociativeOp> ops;
-    std::tie(is_assoc, ops) = prove_associativity(func_name, args, values);
-    user_assert(is_assoc)
+    ProveAssociativityResult prover_result = prove_associativity(func_name, args, values);
+    vector<AssociativeOp> &ops = prover_result.ops;
+    user_assert(prover_result.is_associative)
         << "Failed to call rfactor() on " << stage_name
         << " since it can't prove associativity of the operator\n";
     internal_assert(ops.size() == values.size());
@@ -488,9 +611,12 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Split> &splits = definition.schedule().splits();
     vector<ReductionVariable> &rvars = definition.schedule().rvars();
     vector<Dim> &dims = definition.schedule().dims();
+    vector<Expr> predicates = definition.split_predicate();
+
     Scope<string> scope; // Contains list of RVars lifted to the intermediate Func
     vector<string> rvars_removed;
 
+    vector<bool> is_rfactored(dims.size(), false);
     for (const pair<RVar, Var> &i : preserved) {
         const RVar &rv = i.first;
         const Var &v = i.second;
@@ -503,6 +629,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
                 << ", can't perform rfactor() on " << rv.name()
                 << " since it is not in the reduction domain\n"
                 << dump_argument_list();
+            is_rfactored[iter - dims.begin()] = true;
         }
         {
             // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
@@ -514,6 +641,39 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
                 << ", since it is already used in this Func's schedule elsewhere.\n"
                 << dump_argument_list();
         }
+    }
+
+    // If the operator is associative but non-commutative, rfactor() on inner
+    // dimensions (excluding the outer dimensions) is not valid.
+    if (!prover_result.is_commutative) {
+        int last_rvar = -1;
+        for (int i = dims.size() - 1; i >= 0; --i) {
+            if ((last_rvar != -1) && is_rfactored[i]) {
+                user_assert(is_rfactored[last_rvar])
+                    << "In schedule for " << stage_name
+                    << ", can't rfactor an inner dimension " << dims[i].var
+                    << " without rfactoring the outer dimensions, since the "
+                    << "operator is non-commutative.\n"
+                    << dump_argument_list();
+            }
+            if (dims[i].is_rvar()) {
+                last_rvar = i;
+            }
+        }
+    }
+
+    // We need to apply the split directives on the reduction vars, so that we can
+    // correctly lift the RVars not in 'rvars_kept' and distribute the RVars to the
+    // intermediate and merge Funcs.
+    {
+        vector<Split> temp;
+        for (const Split &s : splits) {
+            // If it's already applied, we should remove it from the split list.
+            if (!apply_split_directive(s, rvars, predicates, args, values)) {
+                temp.push_back(s);
+            }
+        }
+        splits = temp;
     }
 
     // Reduction domain of the intermediate update definition
@@ -528,16 +688,10 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     RDom intm_rdom(intm_rvars);
 
-    // We need to apply the split directives on the reduction vars, so that we can
-    // correctly lift the RVars not in 'rvars_kept'
-    for (const Split &s : splits) {
-        apply_split_directive(s, rvars);
-    }
-
     // Sort the Rvars kept and their Vars replacement based on the RVars of
     // the reduction domain AFTER applying the split directives, so that we
     // can have a consistent args order for the update definition of the
-    // intermediate and new Func
+    // intermediate and new merge Funcs.
     std::sort(preserved.begin(), preserved.end(),
         [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs){
             const auto iter_lhs = std::find_if(rvars.begin(), rvars.end(),
@@ -573,7 +727,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         rvars.swap(temp);
     }
     RDom f_rdom(rvars);
-
 
     // Init definition of the intermediate Func
 
@@ -613,7 +766,11 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     for (size_t i = 0; i < vars_rename.size(); i++) {
         update_args[i + args.size()] = vars_rename[i];
-        substitution_map[rvars_kept[i].name()] = vars_rename[i];
+        RVar rvar_kept = rvars_kept[i];
+        // Find the full name of rvar_kept in rvars
+        const auto iter = std::find_if(rvars.begin(), rvars.end(),
+            [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
+        substitution_map[iter->var] = vars_rename[i];
     }
     for (size_t i = 0; i < args.size(); i++) {
         Expr arg = substitute(substitution_map, args[i]);
@@ -621,7 +778,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
 
     // Compute the predicates for the intermediate Func and the new update definition
-    const vector<Expr> predicates = definition.split_predicate();
     for (const Expr &pred : predicates) {
         Expr subs_pred = substitute(substitution_map, pred);
         intm_rdom.where(subs_pred);
@@ -1431,6 +1587,13 @@ Stage &Stage::hexagon(VarOrRVar x) {
     return *this;
 }
 
+Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
+    Prefetch prefetch = {var.name(), offset};
+    definition.schedule().prefetches().push_back(prefetch);
+
+    return *this;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -1616,6 +1779,15 @@ Func &Func::unroll(VarOrRVar var, int factor, TailStrategy tail) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
+    user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
+    user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
+    user_assert(Int(32).can_represent(extent.type())) << "Can't represent extent bound in int32\n";
+
+    if (min.defined()) {
+        min = cast<int32_t>(min);
+    }
+    extent = cast<int32_t>(extent);
+
     invalidate_cache();
     bool found = false;
     for (size_t i = 0; i < func.args().size(); i++) {
@@ -1629,13 +1801,44 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Bound b = {var.name(), min, extent};
+    Bound b = {var.name(), min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
     return *this;
 }
 
 Func &Func::bound_extent(Var var, Expr extent) {
     return bound(var, Expr(), extent);
+}
+
+Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
+    user_assert(modulus.defined()) << "modulus is undefined\n";
+    user_assert(remainder.defined()) << "remainder is undefined\n";
+    user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
+    user_assert(Int(32).can_represent(remainder.type())) << "Can't represent remainder as int32\n";
+
+    modulus = cast<int32_t>(modulus);
+    remainder = cast<int32_t>(remainder);
+
+    // Reduce the remainder
+    remainder = remainder % modulus;
+
+    invalidate_cache();
+
+    bool found = false;
+    for (size_t i = 0; i < func.args().size(); i++) {
+        if (var.name() == func.args()[i]) {
+            found = true;
+        }
+    }
+    user_assert(found)
+        << "Can't align bounds of variable " << var.name()
+        << " of function " << name()
+        << " because " << var.name()
+        << " is not one of the pure variables of " << name() << ".\n";
+
+    Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
+    func.schedule().bounds().push_back(b);
+    return *this;
 }
 
 Func &Func::tile(VarOrRVar x, VarOrRVar y,
@@ -1777,7 +1980,14 @@ Func &Func::glsl(Var x, Var y, Var c) {
 }
 
 Func &Func::hexagon(VarOrRVar x) {
+    invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).hexagon(x);
+    return *this;
+}
+
+Func &Func::prefetch(VarOrRVar var, Expr offset) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, offset);
     return *this;
 }
 
@@ -1851,13 +2061,8 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
     return *this;
 }
 
-Func &Func::compute_at(Func f, RVar var) {
-    return compute_at(f, Var(var.name()));
-}
-
-Func &Func::compute_at(Func f, Var var) {
+Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
-    LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level() = loop_level;
     if (func.schedule().store_level().is_inline()) {
         func.schedule().store_level() = loop_level;
@@ -1865,36 +2070,38 @@ Func &Func::compute_at(Func f, Var var) {
     return *this;
 }
 
+Func &Func::compute_at(Func f, RVar var) {
+    return compute_at(LoopLevel(f, var));
+}
+
+Func &Func::compute_at(Func f, Var var) {
+    return compute_at(LoopLevel(f, var));
+}
+
 Func &Func::compute_root() {
+    return compute_at(LoopLevel::root());
+}
+
+Func &Func::store_at(LoopLevel loop_level) {
     invalidate_cache();
-    func.schedule().compute_level() = LoopLevel::root();
-    if (func.schedule().store_level().is_inline()) {
-        func.schedule().store_level() = LoopLevel::root();
-    }
+    func.schedule().store_level() = loop_level;
     return *this;
 }
 
 Func &Func::store_at(Func f, RVar var) {
-    return store_at(f, Var(var.name()));
+    return store_at(LoopLevel(f, var));
 }
 
 Func &Func::store_at(Func f, Var var) {
-    invalidate_cache();
-    func.schedule().store_level() = LoopLevel(f.name(), var.name());
-    return *this;
+    return store_at(LoopLevel(f, var));
 }
 
 Func &Func::store_root() {
-    invalidate_cache();
-    func.schedule().store_level() = LoopLevel::root();
-    return *this;
+    return store_at(LoopLevel::root());
 }
 
 Func &Func::compute_inline() {
-    invalidate_cache();
-    func.schedule().compute_level() = LoopLevel();
-    func.schedule().store_level() = LoopLevel();
-    return *this;
+    return compute_at(LoopLevel());
 }
 
 Func &Func::trace_loads() {
@@ -1935,14 +2142,6 @@ Func::operator Stage() const {
     return Stage(func.definition(), name(), args(), func.schedule().storage_dims());
 }
 
-FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
-    implicit_placeholder_pos = placeholder_pos;
-    args.resize(a.size());
-    for (size_t i = 0; i < a.size(); i++) {
-        args[i] = a[i].name();
-    }
-}
-
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
@@ -1965,168 +2164,51 @@ public:
 };
 }
 
-vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
-    vector<string> a = args;
-
-    for (size_t i = 0; i < e.size(); i++) {
-        user_assert(e[i].defined())
-            << "Argument " << i << " in call to \"" << func.name() << "\" is undefined.\n";
-    }
-
-    CountImplicitVars count(e);
-
-    if (count.count > 0) {
-        if (implicit_placeholder_pos != -1) {
-            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
-                func.name() << " at position " << implicit_placeholder_pos << "\n";
-
-            vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
-            for (int i = 0; i < count.count; i++) {
-                iter = a.insert(iter, Var::implicit(i).name());
-                iter++;
-            }
-        }
-    }
-
-    // Check the implicit vars in the RHS also exist in the LHS
-    for (int i = 0; i < count.count; i++) {
-        Var v = Var::implicit(i);
-        bool found = false;
-        for (size_t j = 0; j < a.size(); j++) {
-            if (a[j] == v.name()) {
-                found = true;
-            }
-        }
-        user_assert(found)
-            << "Right-hand-side of pure definition of " << func.name()
-            << " uses implicit variables, but the left-hand-side does not"
-            << " contain the placeholder symbol '_'.\n";
-    }
-
-    return a;
-}
-
-Stage FuncRefVar::operator=(Expr e) {
-    return (*this) = Tuple({e});
-}
-
-Stage FuncRefVar::operator=(const Tuple &e) {
-    // If the function has already been defined, this must actually be an update
-    if (func.has_pure_definition()) {
-        return FuncRefExpr(func, args) = e;
-    }
-
-    // Find implicit args in the expr and add them to the args list before calling define
-    vector<string> a = args_with_implicit_vars(e.as_vector());
-    func.define(a, e.as_vector());
-
-    return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
-}
-
-Stage FuncRefVar::operator=(const FuncRefVar &e) {
-    if (e.size() == 1) {
-        return (*this) = Expr(e);
-    } else {
-        return (*this) = Tuple(e);
-    }
-}
-
-Stage FuncRefVar::operator=(const FuncRefExpr &e) {
-    if (e.size() == 1) {
-        return (*this) = Expr(e);
-    } else {
-        return (*this) = Tuple(e);
-    }
-}
-
-Stage FuncRefVar::operator+=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) += e;
-}
-
-Stage FuncRefVar::operator*=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) *= e;
-}
-
-Stage FuncRefVar::operator-=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) -= e;
-}
-
-Stage FuncRefVar::operator/=(Expr e) {
-    // This is actually an update
-    return FuncRefExpr(func, args) /= e;
-}
-
-FuncRefVar::operator Expr() const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
-    vector<Expr> expr_args(args.size());
-    for (size_t i = 0; i < expr_args.size(); i++) {
-        expr_args[i] = Var(args[i]);
-    }
-    user_assert(func.outputs() == 1)
-        << "Can't convert a reference Func \"" << func.name()
-        << "\" to an Expr, because \"" << func.name() << "\" returns a Tuple.\n";
-    return Call::make(func, expr_args);
-}
-
-Expr FuncRefVar::operator[](int i) const {
-    user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
-
-    user_assert(func.outputs() != 1)
-        << "Can't index into a reference to Func \"" << func.name()
-        << "\", because it does not return a Tuple.\n";
-    user_assert(i >= 0 && i < func.outputs())
-        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
-    vector<Expr> expr_args(args.size());
-    for (size_t j = 0; j < expr_args.size(); j++) {
-        expr_args[j] = Var(args[j]);
-    }
-    return Call::make(func, expr_args, i);
-}
-
-size_t FuncRefVar::size() const {
-    return func.outputs();
-}
-
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
+FuncRef::FuncRef(Internal::Function f, const vector<Expr> &a, int placeholder_pos,
+                 int count) : func(f), implicit_count(count), args(a){
     implicit_placeholder_pos = placeholder_pos;
     Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
-                         int placeholder_pos) : func(f) {
+FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos,
+                 int count) : func(f), implicit_count(count) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
-        args[i] = Var(a[i]);
+        args[i] = a[i];
     }
 }
 
-vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
+vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
 
+    for (size_t i = 0; i < a.size(); i++) {
+        user_assert(a[i].defined())
+            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
     for (size_t i = 0; i < e.size(); i++) {
         user_assert(e[i].defined())
-            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+            << "Value " << (i+1) << " in definition of \"" << func.name() << "\" is undefined.\n";
     }
 
     CountImplicitVars count(e);
-    // TODO: Check if there is a test case for this and add one if not.
-    // Implicit vars are also allowed in the lhs of an update. E.g.:
-    // f(x, y, z) = x+y
-    // g(x, y, z) = 0
-    // g(f(r.x, _), _) = 1   (this means g(f(r.x, _0, _1), _0, _1) = 1)
-
     for (size_t i = 0; i < a.size(); i++) {
         a[i].accept(&count);
     }
 
     if (count.count > 0) {
-        if (implicit_placeholder_pos != -1) {
+        if (func.has_pure_definition()) {
+            // If the func already has pure definition, the number of implicit
+            // vars in the RHS can only be at most the number of implicit vars
+            // in the LHS.
+            user_assert(implicit_count >= count.count)
+                << "The update definition of " << func.name() << " uses " << count.count
+                << " implicit variables, but the initial definition uses only "
+                << implicit_count << " implicit variables.\n";
+        } else if (implicit_placeholder_pos != -1) {
+            internal_assert(implicit_count == 0)
+                << "Pure definition can't possibly already have implicit variables defined\n";
+
             Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
             vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
@@ -2157,34 +2239,41 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     return a;
 }
 
-Stage FuncRefExpr::operator=(Expr e) {
-    return (*this) = Tuple({e});
+Stage FuncRef::operator=(Expr e) {
+    return (*this) = Tuple(e);
 }
 
-Stage FuncRefExpr::operator=(const Tuple &e) {
-    user_assert(func.has_pure_definition())
-        << "Can't add an update definition to Func \"" << func.name()
-        << "\" because it does not have a pure definition.\n";
+Stage FuncRef::operator=(const Tuple &e) {
+    if (!func.has_pure_definition()) {
+        for (size_t i = 0; i < args.size(); ++i) {
+            user_assert(args[i].as<Variable>())
+                << "Argument " << (i+1) << " in initial definition of \""
+                << func.name() << "\" is not a Var.\n";
+        }
 
-    vector<Expr> a = args_with_implicit_vars(e.as_vector());
-    func.define_update(args, e.as_vector());
+        // Find implicit args in the expr and add them to the args list before calling define
+        vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
+        vector<string> expanded_args_str(expanded_args.size());
+        for (size_t i = 0; i < expanded_args.size(); ++i) {
+            const Variable *v = expanded_args[i].as<Variable>();
+            internal_assert(v);
+            expanded_args_str[i] = v->name;
+        }
+        func.define(expanded_args_str, e.as_vector());
+        return Stage(func.definition(), func.name(), func.args(), func.schedule().storage_dims());
 
-    size_t update_stage = func.updates().size() - 1;
-    return Stage(func.update(update_stage),
-                 func.name() + ".update(" + std::to_string(update_stage) + ")",
-                 func.args(),
-                 func.schedule().storage_dims());
-}
-
-Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
-    if (e.size() == 1) {
-        return (*this) = Expr(e);
     } else {
-        return (*this) = Tuple(e);
+        func.define_update(args, e.as_vector());
+
+        size_t update_stage = func.updates().size() - 1;
+        return Stage(func.update(update_stage),
+                     func.name() + ".update(" + std::to_string(update_stage) + ")",
+                     func.args(),
+                     func.schedule().storage_dims());
     }
 }
 
-Stage FuncRefExpr::operator=(const FuncRefVar &e) {
+Stage FuncRef::operator=(const FuncRef &e) {
     if (e.size() == 1) {
         return (*this) = Expr(e);
     } else {
@@ -2193,9 +2282,11 @@ Stage FuncRefExpr::operator=(const FuncRefVar &e) {
 }
 
 // Inject a suitable base-case definition given an update
-// definition. This is a helper for FuncRefExpr::operator+= and co.
-void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
-    if (func.has_pure_definition()) return;
+// definition. This is a helper for FuncRef::operator+= and co.
+Func define_base_case(Internal::Function func, const vector<Expr> &a, const Tuple &e) {
+    Func f(func);
+
+    if (func.has_pure_definition()) return f;
     vector<Var> pure_args(a.size());
 
     // Reuse names of existing pure args
@@ -2209,34 +2300,120 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
         }
     }
 
-    FuncRefVar(func, pure_args) = e;
+    f(pure_args) = e;
+    return f;
 }
 
-Stage FuncRefExpr::operator+=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 0));
-    return (*this) = Expr(*this) + e;
+Func define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
+    return define_base_case(func, a, Tuple(e));
 }
 
-Stage FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 1));
-    return (*this) = Expr(*this) * e;
+template <typename BinaryOp>
+Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
+    internal_assert(e.size() > 1);
+
+    vector<Expr> init_values(e.size());
+    for (int i = 0; i < (int)init_values.size(); ++i) {
+        init_values[i] = cast(e[i].type(), init_val);
+    }
+    vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
+    FuncRef self_ref = define_base_case(func, expanded_args, Tuple(init_values))(expanded_args);
+
+    vector<Expr> values(e.size());
+    for (int i = 0; i < (int)values.size(); ++i) {
+        values[i] = BinaryOp()(self_ref[i], e[i]);
+    }
+    return self_ref = Tuple(values);
 }
 
-Stage FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 0));
-    return (*this) = Expr(*this) - e;
+template <typename BinaryOp>
+Stage FuncRef::func_ref_update(Expr e, int init_val) {
+    vector<Expr> expanded_args = args_with_implicit_vars({e});
+    FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
+    return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
-Stage FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args_with_implicit_vars({e});
-    define_base_case(func, a, cast(e.type(), 1));
-    return (*this) = Expr(*this) / e;
+Stage FuncRef::operator+=(Expr e) {
+    return func_ref_update<std::plus<Expr>>(e, 0);
 }
 
-FuncRefExpr::operator Expr() const {
+Stage FuncRef::operator+=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) += e[0];
+    } else {
+        return func_ref_update<std::plus<Expr>>(e, 0);
+    }
+}
+
+Stage FuncRef::operator+=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) += Expr(e);
+    } else {
+        return (*this) += Tuple(e);
+    }
+}
+
+Stage FuncRef::operator*=(Expr e) {
+    return func_ref_update<std::multiplies<Expr>>(e, 1);
+}
+
+Stage FuncRef::operator*=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) *= e[0];
+    } else {
+        return func_ref_update<std::multiplies<Expr>>(e, 1);
+    }
+}
+
+Stage FuncRef::operator*=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) *= Expr(e);
+    } else {
+        return (*this) *= Tuple(e);
+    }
+}
+
+Stage FuncRef::operator-=(Expr e) {
+    return func_ref_update<std::minus<Expr>>(e, 0);
+}
+
+Stage FuncRef::operator-=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) -= e[0];
+    } else {
+        return func_ref_update<std::minus<Expr>>(e, 0);
+    }
+}
+
+Stage FuncRef::operator-=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) -= Expr(e);
+    } else {
+        return (*this) -= Tuple(e);
+    }
+}
+
+Stage FuncRef::operator/=(Expr e) {
+    return func_ref_update<std::divides<Expr>>(e, 1);
+}
+
+Stage FuncRef::operator/=(const Tuple &e) {
+    if (e.size() == 1) {
+        return (*this) /= e[0];
+    } else {
+        return func_ref_update<std::divides<Expr>>(e, 1);
+    }
+}
+
+Stage FuncRef::operator/=(const FuncRef &e) {
+    if (e.size() == 1) {
+        return (*this) /= Expr(e);
+    } else {
+        return (*this) /= Tuple(e);
+    }
+}
+
+FuncRef::operator Expr() const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2247,7 +2424,7 @@ FuncRefExpr::operator Expr() const {
     return Call::make(func, args);
 }
 
-Expr FuncRefExpr::operator[](int i) const {
+FuncTupleElementRef FuncRef::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
@@ -2258,52 +2435,102 @@ Expr FuncRefExpr::operator[](int i) const {
     user_assert(i >= 0 && i < func.outputs())
         << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
 
-    return Call::make(func, args, i);
+    return FuncTupleElementRef(*this, args, i);
 }
 
-size_t FuncRefExpr::size() const {
+size_t FuncRef::size() const {
     return func.outputs();
+}
+
+FuncTupleElementRef::FuncTupleElementRef(
+        const FuncRef &ref, const std::vector<Expr>& args, int idx)
+        : func_ref(ref), args(args), idx(idx) {
+    internal_assert(func_ref.size() > 1)
+        << "Func " << ref.function().name() << " does not return a Tuple\n";
+    internal_assert(idx >= 0 && idx < (int)func_ref.size());
+}
+
+Tuple FuncTupleElementRef::values_with_undefs(Expr e) const {
+    vector<Expr> values(func_ref.size());
+    for (int i = 0; i < (int)values.size(); ++i) {
+        if (i == idx) {
+            values[i] = e;
+        } else {
+            Type t = func_ref.function().values()[i].type();
+            values[i] = undef(t);
+        }
+    }
+    return Tuple(values);
+}
+
+Stage FuncTupleElementRef::operator=(Expr e) {
+    return func_ref = values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator+=(Expr e) {
+    return func_ref += values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator*=(Expr e) {
+    return func_ref *= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator-=(Expr e) {
+    return func_ref -= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator/=(Expr e) {
+    return func_ref /= values_with_undefs(e);
+}
+
+Stage FuncTupleElementRef::operator=(const FuncRef &e) {
+    return func_ref = values_with_undefs(e);
+}
+
+FuncTupleElementRef::operator Expr() const {
+    return Internal::Call::make(func_ref.function(), args, idx);
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], sizes);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return pipeline().realize(sizes, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
-    user_assert(defined()) << "Can't realize undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
-    }
-    Realization r(outputs);
-    realize(r, target);
-    return r;
+    return realize({x_size, y_size, z_size, w_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize(x_size, y_size, z_size, 0, target);
+    return realize({x_size, y_size, z_size}, target);
 }
 
 Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize(x_size, y_size, 0, 0, target);
+    return realize({x_size, y_size}, target);
 }
 
 Realization Func::realize(int x_size, const Target &target) {
-    return realize(x_size, 0, 0, 0, target);
+    return realize(std::vector<int>{x_size}, target);
+}
+
+Realization Func::realize(const Target &target) {
+    return realize(std::vector<int>{}, target);
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
-    vector<Buffer> outputs(func.outputs());
+    vector<Buffer<>> outputs(func.outputs());
+    int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
+        // We're not actually going to read from these outputs, so
+        // make the allocation tiny, then expand them with unsafe
+        // cropping.
+        Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
+        for (int s : sizes) {
+            if (!s) break;
+            im.add_dimension();
+            im.crop(im.dimensions()-1, 0, s);
+        }
+        outputs[i] = std::move(im);
     }
     Realization r(outputs);
     infer_input_bounds(r);
@@ -2406,14 +2633,16 @@ void Func::print_loop_nest() {
 
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
+                           const std::string &fn_name,
                            const Target &target) {
-    pipeline().compile_to_file(filename_prefix, args, target);
+    pipeline().compile_to_file(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_static_library(const string &filename_prefix,
                                      const vector<Argument> &args,
+                                     const std::string &fn_name,
                                      const Target &target) {
-    pipeline().compile_to_static_library(filename_prefix, args, target);
+    pipeline().compile_to_static_library(filename_prefix, args, fn_name, target);
 }
 
 void Func::compile_to_multitarget_static_library(const std::string &filename_prefix,
@@ -2474,16 +2703,8 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Buffer b, const Target &target) {
-    pipeline().realize(b, target);
-}
-
 void Func::realize(Realization dst, const Target &target) {
     pipeline().realize(dst, target);
-}
-
-void Func::infer_input_bounds(Buffer dst) {
-    pipeline().infer_input_bounds(dst);
 }
 
 void Func::infer_input_bounds(Realization dst) {

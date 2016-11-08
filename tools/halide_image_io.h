@@ -1,5 +1,5 @@
-// This simple PNG IO library works with *both* the Halide::Image<T> type *and*
-// the simple halide_image.h version. Also now includes PPM support for faster load/save.
+// This simple PNG IO library works the Halide::Buffer<T> type or any
+// other image type with the same API.
 
 #ifndef HALIDE_IMAGE_IO_H
 #define HALIDE_IMAGE_IO_H
@@ -199,7 +199,7 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     // convert the data to ImageType::ElemType
 
-    int c_stride = (im->channels() == 1) ? 0 : im->stride(2);
+    int c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
     typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
     if (bit_depth == 8) {
         for (int y = 0; y < im->height(); y++) {
@@ -285,7 +285,7 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     // im.copyToHost(); // in case the image is on the gpu
 
-    int c_stride = (im.channels() == 1) ? 0 : im.stride(2);
+    int c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
     typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
 
     for (int y = 0; y < im.height(); y++) {

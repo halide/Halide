@@ -1,14 +1,16 @@
 #include "Halide.h"
 #include <iostream>
 
-#include "../common/gpu_object_lifetime.h"
+#include "test/common/gpu_object_lifetime_tracker.h"
 
 using namespace Halide;
+
+Internal::GpuObjectLifetimeTracker tracker;
 
 void halide_print(void *user_context, const char *str) {
     printf("%s", str);
 
-    record_gpu_debug(str);
+    tracker.record_gpu_debug(str);
 }
 
 int main(int argc, char *argv[]) {
@@ -55,7 +57,7 @@ int main(int argc, char *argv[]) {
 
     Internal::JITSharedRuntime::release_all();
 
-    int ret = validate_gpu_object_lifetime(true /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
+    int ret = tracker.validate_gpu_object_lifetime(true /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
     if (ret != 0) {
         return ret;
     }
