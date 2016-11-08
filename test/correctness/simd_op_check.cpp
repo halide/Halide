@@ -247,11 +247,11 @@ void check_sse_all() {
 
 
         check("pcmpeqb", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
-        check("pcmpgtb", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
+        check(use_avx512 ? "vpcmpnleub" : "pcmpgtb", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
         check("pcmpeqw", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
-        check("pcmpgtw", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
+        check(use_avx512 ? "vpcmpnleuw" : "pcmpgtw", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
         check("pcmpeqd", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
-        check("pcmpgtd", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+        check(use_avx512 ? "vpcmpnleud" : "pcmpgtd", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
 
         // SSE 1
         check("addps", 2*w, f32_1 + f32_2);
@@ -268,9 +268,9 @@ void check_sse_all() {
             //check("divps", 2*w, f32_1 / f32_2);
         }
 
-        check("rcpps", 2*w, fast_inverse(f32_2));
+        check(use_avx512 ? "vrsqrt14ps" : "rsqrtps", 2*w, fast_inverse_sqrt(f32_1));
+        check(use_avx512 ? "vrcp14ps" : "rcpps", 2*w, fast_inverse(f32_1));
         check("sqrtps", 2*w, sqrt(f32_2));
-        check("rsqrtps", 2*w, fast_inverse_sqrt(f32_2));
         check("maxps", 2*w, max(f32_1, f32_2));
         check("minps", 2*w, min(f32_1, f32_2));
         check("pavgb", 8*w, u8((u16(u8_1) + u16(u8_2) + 1)/2));
@@ -295,12 +295,16 @@ void check_sse_all() {
 
     }
 
-    // These guys get normalized to the integer versions for widths other than 128-bits
+    // These guys get normalized to the integer versions for widths
+    // other than 128-bits. Avx512 has mask-register versions.
     // check("andnps", 4, bool_1 & (~bool_2));
-    check("andps", 4, bool_1 & bool_2);
-    check("orps", 4, bool_1 | bool_2);
-    check("xorps", 4, bool_1 ^ bool_2);
-
+    check(use_avx512 ? "korw" : "orps", 4, bool_1 | bool_2);
+    check(use_avx512 ? "kxorw" : "xorps", 4, bool_1 ^ bool_2);
+    if (!use_avx512) {
+        // avx512 implicitly ands the predicates by masking the second
+        // comparison using the result of the first. Clever!
+        check("andps", 4, bool_1 & bool_2);
+    }
 
 
     // These ones are not necessary, because we just flip the args and cmpltps or cmpleps
@@ -338,7 +342,7 @@ void check_sse_all() {
 
         check("paddq", w, i64_1 + i64_2);
         check("psubq", w, i64_1 - i64_2);
-        check("pmuludq", w, u64_1 * u64_2);
+        check(use_avx512 ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
 
         check("packssdw", 4*w, i16_sat(i32_1));
         check("packsswb", 8*w, i8_sat(i16_1));
@@ -377,14 +381,16 @@ void check_sse_all() {
 
     if (use_sse41) {
         for (int w = 2; w <= 4; w++) {
-            check("pmuludq", 2*w, u64(u32_1) * u64(u32_2));
+            if (!use_avx512) {
+                check("pmuludq", 2*w, u64(u32_1) * u64(u32_2));
+            }
             check("pmulld", 2*w, i32_1 * i32_2);
 
-            check("blendvps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
-            check("blendvpd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-            check("pblendvb", 8*w, select(u8_1 > 7, u8_1, u8_2));
-            check("pblendvb", 8*w, select(u8_1 == 7, u8_1, u8_2));
-            check("pblendvb", 8*w, select(u8_1 <= 7, i8_1, i8_2));
+            check(use_avx512 ? (w == 2 ? "vblendmps" : "vinsertf32x8") : "blendvps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
+            check(use_avx512 ? (w == 2 ? "vblendmpd" : "vinsertf64x4") : "blendvpd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+            check(use_avx512 ? "vpblendmb" : "pblendvb", 8*w, select(u8_1 > 7, u8_1, u8_2));
+            check(use_avx512 ? "vpblendmb" : "pblendvb", 8*w, select(u8_1 == 7, u8_1, u8_2));
+            check(use_avx512 ? "vpblendmb" : "pblendvb", 8*w, select(u8_1 <= 7, i8_1, i8_2));
 
             check("pmaxsb", 8*w, max(i8_1, i8_2));
             check("pminsb", 8*w, min(i8_1, i8_2));
@@ -416,8 +422,8 @@ void check_sse_all() {
     if (use_avx) {
         check("vsqrtps", 8, sqrt(f32_1));
         check("vsqrtpd", 4, sqrt(f64_1));
-        check("vrsqrtps", 8, fast_inverse_sqrt(f32_1));
-        check("vrcpps", 8, fast_inverse(f32_1));
+        check(use_avx512 ? "vrsqrt14ps" : "vrsqrtps", 8, fast_inverse_sqrt(f32_1));
+        check(use_avx512 ? "vrcp14ps" : "vrcpps", 8, fast_inverse(f32_1));
 
         /* Not implemented yet in the front-end
            check("vandnps", 8, bool1 & (!bool2));
@@ -451,8 +457,9 @@ void check_sse_all() {
         //check("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
         check("vcmpltps", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 
-        check("vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
-        check("vblendvpd", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+        // avx512 can do predicated insert ops instead of blends
+        check(use_avx512 ? "vinsertf32x8" : "vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
+        check(use_avx512 ? "vinsertf64x4" : "vblendvpd", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
 
         check("vcvttps2dq", 8, i32(f32_1));
         check("vcvtdq2ps", 8, f32(i32_1));
@@ -487,11 +494,11 @@ void check_sse_all() {
         check("vpmullw", 16, i16_1 * i16_2);
 
         check("vpcmpeqb", 32, select(u8_1 == u8_2, u8(1), u8(2)));
-        check("vpcmpgtb", 32, select(u8_1 > u8_2, u8(1), u8(2)));
+        check(use_avx512 ? "vpcmpnleub" : "vpcmpgtb", 32, select(u8_1 > u8_2, u8(1), u8(2)));
         check("vpcmpeqw", 16, select(u16_1 == u16_2, u16(1), u16(2)));
-        check("vpcmpgtw", 16, select(u16_1 > u16_2, u16(1), u16(2)));
+        check(use_avx512 ? "vpcmpnleuw" : "vpcmpgtw", 16, select(u16_1 > u16_2, u16(1), u16(2)));
         check("vpcmpeqd", 8, select(u32_1 == u32_2, u32(1), u32(2)));
-        check("vpcmpgtd", 8, select(u32_1 > u32_2, u32(1), u32(2)));
+        check(use_avx512 ? "vpcmpnleud" : "vpcmpgtd", 8, select(u32_1 > u32_2, u32(1), u32(2)));
 
         check("vpavgb", 32, u8((u16(u8_1) + u16(u8_2) + 1)/2));
         check("vpavgw", 16, u16((u32(u16_1) + u32(u16_2) + 1)/2));
@@ -504,7 +511,7 @@ void check_sse_all() {
 
         check("vpaddq", 8, i64_1 + i64_2);
         check("vpsubq", 8, i64_1 - i64_2);
-        check("vpmuludq", 8, u64_1 * u64_2);
+        check(use_avx512 ? "vpmullq" : "vpmuludq", 8, u64_1 * u64_2);
 
         check("vpackssdw", 16, i16_sat(i32_1));
         check("vpacksswb", 32, i8_sat(i16_1));
@@ -516,10 +523,13 @@ void check_sse_all() {
 
         // llvm doesn't distinguish between signed and unsigned multiplies
         // check("vpmuldq", 8, i64(i32_1) * i64(i32_2));
-        check("vpmuludq", 8, u64(u32_1) * u64(u32_2));
+        if (!use_avx512) {
+            // AVX512 uses widening loads instead
+            check("vpmuludq", 8, u64(u32_1) * u64(u32_2));
+        }
         check("vpmulld", 8, i32_1 * i32_2);
 
-        check("vpblendvb", 32, select(u8_1 > 7, u8_1, u8_2));
+        check(use_avx512 ? "vpblendmb" : "vpblendvb", 32, select(u8_1 > 7, u8_1, u8_2));
 
         check("vpmaxsb", 32, max(i8_1, i8_2));
         check("vpminsb", 32, min(i8_1, i8_2));
@@ -536,6 +546,7 @@ void check_sse_all() {
     }
 
     if (use_avx512) {
+        /* Not yet implemented
         check("vrangeps", 16, clamp(f32_1, 3.0f, 9.0f));
         check("vrangepd", 8, clamp(f64_1, f64(3), f64(9)));
 
@@ -546,7 +557,8 @@ void check_sse_all() {
         check("vreducepd", 8, f64_1 - floor(f64_1));
         check("vreducepd", 8, f64_1 - floor(f64_1*8)/8);
         check("vreducepd", 8, f64_1 - trunc(f64_1));
-        check("vreducepd", 8, f64_1 - trunc(f64_1*8)/8);        
+        check("vreducepd", 8, f64_1 - trunc(f64_1*8)/8);
+        */
 
         check("vpabsq", 8, abs(i64_1));
         check("vpmaxuq", 8, max(u64_1, u64_2));
