@@ -747,25 +747,26 @@ typedef enum halide_target_feature_t {
     halide_target_feature_openglcompute = 23, ///< Enable OpenGL Compute runtime.
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_matlab = 25,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+    halide_target_feature_renderscript = 25, /// DELETE THIS
+    halide_target_feature_matlab = 26,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-    halide_target_feature_profile = 26, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime = 27, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_profile = 27, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime = 28, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_metal = 28, ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw = 29, ///< For Windows compile to MinGW toolset rather then Visual Studio
+    halide_target_feature_metal = 29, ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw = 30, ///< For Windows compile to MinGW toolset rather then Visual Studio
 
-    halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
 
-    halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
-    halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
-    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
-    halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
-    halide_target_feature_end = 38 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_64 = 33, ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128 = 34, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62 = 35, ///< Enable Hexagon v62 architecture.
+    halide_target_feature_fuzz_float_stores = 36, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_soft_float_abi = 37, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan = 38, ///< Enable hooks for MSAN support.
+    halide_target_feature_end = 39 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

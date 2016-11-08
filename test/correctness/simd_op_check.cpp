@@ -26,7 +26,7 @@ using std::string;
 bool failed = false;
 Var x("x"), y("y");
 
-bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2;
+bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2, use_avx512;
 bool use_vsx, use_power_arch_2_07;
 
 string filter = "*";
@@ -51,7 +51,8 @@ bool can_run_code() {
          target.os == host_target.os);
     // A bunch of feature flags also need to match between the
     // compiled code and the host in order to run the code.
-    for (Target::Feature f : {Target::SSE41, Target::AVX, Target::AVX2,
+    for (Target::Feature f : {Target::SSE41, Target::AVX,
+                Target::AVX2, Target::AVX512,
                 Target::FMA, Target::FMA4, Target::F16C,
                 Target::VSX, Target::POWER_ARCH_2_07,
                 Target::ARMv7s, Target::NoNEON, Target::MinGW}) {
@@ -532,6 +533,26 @@ void check_sse_all() {
         check("vpcmpeqq", 4, select(i64_1 == i64_2, i64(1), i64(2)));
         check("vpackusdw", 16, u16(clamp(i32_1, 0, max_u16)));
         check("vpcmpgtq", 4, select(i64_1 > i64_2, i64(1), i64(2)));
+    }
+
+    if (use_avx512) {
+        check("vrangeps", 16, clamp(f32_1, 3.0f, 9.0f));
+        check("vrangepd", 8, clamp(f64_1, f64(3), f64(9)));
+
+        check("vreduceps", 16, f32_1 - floor(f32_1));
+        check("vreduceps", 16, f32_1 - floor(f32_1*8)/8);
+        check("vreduceps", 16, f32_1 - trunc(f32_1));
+        check("vreduceps", 16, f32_1 - trunc(f32_1*8)/8);
+        check("vreducepd", 8, f64_1 - floor(f64_1));
+        check("vreducepd", 8, f64_1 - floor(f64_1*8)/8);
+        check("vreducepd", 8, f64_1 - trunc(f64_1));
+        check("vreducepd", 8, f64_1 - trunc(f64_1*8)/8);        
+
+        check("vpabsq", 8, abs(i64_1));
+        check("vpmaxuq", 8, max(u64_1, u64_2));
+        check("vpminuq", 8, min(u64_1, u64_2));
+        check("vpmaxsq", 8, max(i64_1, i64_2));
+        check("vpminsq", 8, min(i64_1, i64_2));
     }
 }
 
@@ -1840,7 +1861,8 @@ int main(int argc, char **argv) {
     target = get_target_from_environment();
     target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
-    use_avx2 = target.has_feature(Target::AVX2);
+    use_avx512 = target.has_feature(Target::AVX512);
+    use_avx2 = use_avx512 || target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
     use_sse41 = use_avx || target.has_feature(Target::SSE41);
 
