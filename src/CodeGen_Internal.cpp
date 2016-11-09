@@ -148,7 +148,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_run",
         "halide_opengl_run",
         "halide_openglcompute_run",
-        "halide_renderscript_run",
         "halide_metal_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
@@ -167,7 +166,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
-        "halide_renderscript_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
     };
