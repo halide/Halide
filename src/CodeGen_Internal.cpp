@@ -76,9 +76,11 @@ void unpack_closure(const Closure& closure,
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
+            llvm::MDBuilder md_builder(context);
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            llvm::Metadata *md_args[] = {MDString::get(context, nm[i])};
-            load->setMetadata("tbaa", MDNode::get(context, md_args));
+            llvm::MDNode *tbaa = md_builder.createTBAARoot(nm[i]);
+            tbaa = md_builder.createTBAAStructTagNode(tbaa, tbaa, 0);
+            load->setMetadata("tbaa", tbaa);
         }
         dst.push(nm[i], load);
         load->setName(nm[i]);
