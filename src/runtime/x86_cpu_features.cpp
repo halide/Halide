@@ -43,19 +43,35 @@ WEAK CpuFeatures halide_get_cpu_features() {
 
     const bool use_64_bits = (sizeof(size_t) == 8);
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
-        // So far, so good.  AVX2?
-        // Call cpuid with eax=7
-        int32_t info2[4];
+        int info2[4];
         cpuid(7, info2);
-        const bool have_avx2   = (info2[1] & (1 << 5)) != 0;
-        // For us, avx512 means Cannonlake. Check for those features.
-        const int all_avx512_features = 0xf0230000;
-        bool have_avx512 = (info2[1] & all_avx512_features) == all_avx512_features;
-        if (have_avx2) {
-            available |= (1ULL << halide_target_feature_avx2);
+        const uint32_t avx2 = 1U << 5;
+        const uint32_t avx512f = 1U << 16;
+        const uint32_t avx512dq = 1U << 17;
+        const uint32_t avx512pf = 1U << 26;
+        const uint32_t avx512er = 1U << 27;
+        const uint32_t avx512cd = 1U << 28;
+        const uint32_t avx512bw = 1U << 30;
+        const uint32_t avx512vl = 1U << 31;
+        const uint32_t avx512ifma = 1U << 21;
+        const uint32_t avx512 = avx512f | avx512cd;
+        const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
+        const uint32_t avx512_skl = avx512 | avx512vl | avx512bw | avx512dq;
+        const uint32_t avx512_cnl = avx512_skl | avx512ifma; // Assume ifma => vbmi
+        if ((info2[1] & avx2) == avx2) {
+            available |= 1ULL << halide_target_feature_avx2;
         }
-        if (have_avx512) {
-            available |= (1ULL << halide_target_feature_avx512);
+        if ((info2[1] & avx512) == avx512) {
+            available |= 1ULL << halide_target_feature_avx512;
+            if ((info2[1] & avx512_knl) == avx512_knl) {
+                available |= 1ULL << halide_target_feature_avx512_knl;
+            }
+            if ((info2[1] & avx512_skl) == avx512_skl) {
+                available |= 1ULL << halide_target_feature_avx512_skl;
+            }
+            if ((info2[1] & avx512_cnl) == avx512_cnl) {
+                available |= 1ULL << halide_target_feature_avx512_cnl;
+            }
         }
     }
     CpuFeatures features = {known, available};

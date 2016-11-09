@@ -119,19 +119,37 @@ Target calculate_host_target() {
     if (have_fma)   initial_features.push_back(Target::FMA);
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
-        // So far, so good.  AVX2?
+        // So far, so good.  AVX2/512?
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2   = info2[1] & (1 << 5);
-        // For us, avx512 means Cannonlake. Check for those features.
-        const int all_avx512_features = 0xf0230000;
-        bool have_avx512 = (info2[1] & all_avx512_features) == all_avx512_features;
-        if (have_avx2) {
-            initial_features.push_back(Target::AVX2);
+        const uint32_t avx2 = 1U << 5;
+        const uint32_t avx512f = 1U << 16;
+        const uint32_t avx512dq = 1U << 17;
+        const uint32_t avx512pf = 1U << 26;
+        const uint32_t avx512er = 1U << 27;
+        const uint32_t avx512cd = 1U << 28;
+        const uint32_t avx512bw = 1U << 30;
+        const uint32_t avx512vl = 1U << 31;
+        const uint32_t avx512ifma = 1U << 21;
+        const uint32_t avx512 = avx512f | avx512cd;
+        const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
+        const uint32_t avx512_skl = avx512 | avx512vl | avx512bw | avx512dq;
+        const uint32_t avx512_cnl = avx512_skl | avx512ifma; // Assume ifma => vbmi
+        if ((info2[1] & avx2) == avx2) {
+            initial_features.push_back(Target::AVX2);            
         }
-        if (have_avx512) {
+        if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
+            if ((info2[1] & avx512_knl) == avx512_knl) {
+                initial_features.push_back(Target::AVX512_KNL);
+            }
+            if ((info2[1] & avx512_skl) == avx512_skl) {
+                initial_features.push_back(Target::AVX512_SKL);
+            }
+            if ((info2[1] & avx512_cnl) == avx512_cnl) {
+                initial_features.push_back(Target::AVX512_CNL);
+            }
         }
     }
 #ifdef _WIN32
@@ -224,7 +242,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sse41", Target::SSE41},
     {"avx", Target::AVX},
     {"avx2", Target::AVX2},
-    {"avx512", Target::AVX512},
     {"fma", Target::FMA},
     {"fma4", Target::FMA4},
     {"f16c", Target::F16C},
@@ -255,6 +272,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
+    {"avx512", Target::AVX512},
+    {"avx512_knl", Target::AVX512_KNL},
+    {"avx512_skl", Target::AVX512_SKL},
+    {"avx512_cnl", Target::AVX512_CNL},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

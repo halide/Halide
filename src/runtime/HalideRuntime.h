@@ -723,28 +723,30 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.
     halide_target_feature_avx2 = 6,  ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_avx512 = 7,  ///< Use AVX 512 instructions (the subset supported by Cannonlake). Only relevant on x86.
-    halide_target_feature_fma = 8,  ///< Enable x86 FMA instruction
-    halide_target_feature_fma4 = 9,  ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c = 10,  ///< Enable x86 16-bit float support
+    halide_target_feature_fma = 7,  ///< Enable x86 FMA instruction
+    halide_target_feature_fma4 = 8,  ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c = 9,  ///< Enable x86 16-bit float support
 
-    halide_target_feature_armv7s = 11,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-    halide_target_feature_no_neon = 12,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
+    halide_target_feature_armv7s = 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+    halide_target_feature_no_neon = 11,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
 
-    halide_target_feature_vsx = 13,  ///< Use VSX instructions. Only relevant on POWERPC.
-    halide_target_feature_power_arch_2_07 = 14,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
+    halide_target_feature_vsx = 12,  ///< Use VSX instructions. Only relevant on POWERPC.
+    halide_target_feature_power_arch_2_07 = 13,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
-    halide_target_feature_cuda = 15,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-    halide_target_feature_cuda_capability30 = 16,  ///< Enable CUDA compute capability 3.0 (Kepler)
-    halide_target_feature_cuda_capability32 = 17,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
-    halide_target_feature_cuda_capability35 = 18,  ///< Enable CUDA compute capability 3.5 (Kepler)
-    halide_target_feature_cuda_capability50 = 19,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda = 14,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30 = 15,  ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32 = 16,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35 = 17,  ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50 = 18,  ///< Enable CUDA compute capability 5.0 (Maxwell)
 
-    halide_target_feature_opencl = 20,  ///< Enable the OpenCL runtime.
-    halide_target_feature_cl_doubles = 21,  ///< Enable double support on OpenCL targets
+    halide_target_feature_opencl = 19,  ///< Enable the OpenCL runtime.
+    halide_target_feature_cl_doubles = 20,  ///< Enable double support on OpenCL targets
 
-    halide_target_feature_opengl = 22,  ///< Enable the OpenGL runtime.
-    halide_target_feature_openglcompute = 23, ///< Enable OpenGL Compute runtime.
+    halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
+    halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
+
+    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
+
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
     halide_target_feature_matlab = 25,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
@@ -765,7 +767,11 @@ typedef enum halide_target_feature_t {
     halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
     halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
     halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
-    halide_target_feature_end = 38 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_avx512 = 38, ///< Enable the AVX512 subset supported by all AVX512 architectures (F, CD)
+    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing (F, CD, PF, ER)
+    halide_target_feature_avx512_skl = 40, ///< Enable the AVX512 features supported by Skylake EP (F, CD, VL, BW, DQ)
+    halide_target_feature_avx512_cnl = 41, ///< Enable the AVX512 features supported by Cannonlake (F, CD, VL, BW, DQ, IFMA, VBMI)
+    halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

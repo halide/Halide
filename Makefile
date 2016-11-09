@@ -1046,10 +1046,11 @@ valgrind_%: $(BIN_DIR)/correctness_%
 	cd $(TMP_DIR) ; valgrind --error-exitcode=-1 $(CURDIR)/$<
 	@-echo
 
-# Use Intel SDE to emulate an avx 512 processor
+# Use Intel SDE to emulate an avx 512 processor.
 avx512_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; sde -cnl -- $(CURDIR)/$<
+	cd $(TMP_DIR) ; sde -knl -- $(CURDIR)/$<
 	@-echo
 
 # This test is *supposed* to do an out-of-bounds read, so skip it when testing under valgrind

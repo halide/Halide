@@ -409,7 +409,9 @@ void CodeGen_X86::visit(const Call *op) {
 
 string CodeGen_X86::mcpu() const {
     #if LLVM_VERSION >= 40
-    if (target.has_feature(Target::AVX512)) return "cannonlake";
+    if (target.has_feature(Target::AVX512_CNL)) return "cannonlake";
+    if (target.has_feature(Target::AVX512_SKL)) return "skylake-avx512";
+    if (target.has_feature(Target::AVX512_KNL)) return "knl";        
     #endif
     if (target.has_feature(Target::AVX2)) return "haswell";
     if (target.has_feature(Target::AVX)) return "corei7-avx";
@@ -435,12 +437,22 @@ string CodeGen_X86::mattrs() const {
         separator = ",";
     }
     #if LLVM_VERSION >= 40
-    if (target.has_feature(Target::AVX512)) {
-        // For now we assume AVX512 means skylake or cannonlake,
-        // rather than knights landing.
-        features +=
-            separator + "+avx512f,+avx512cd,+avx512bw,+avx512dq,+avx512vl,+avx512er,+avx512ifma,+avx512pf,+avx512vbmi";
+    if (target.has_feature(Target::AVX512) ||
+        target.has_feature(Target::AVX512_KNL) ||
+        target.has_feature(Target::AVX512_SKL) ||
+        target.has_feature(Target::AVX512_CNL)) {
+        features += separator + "+avx512f,+avx512cd";
         separator = ",";
+        if (target.has_feature(Target::AVX512_KNL)) {
+            features += ",+avx512pf,+avx512er";
+        }
+        if (target.has_feature(Target::AVX512_SKL) ||
+            target.has_feature(Target::AVX512_CNL)) {
+            features += ",+avx512vl,+avx512bw,+avx512dq";
+        }
+        if (target.has_feature(Target::AVX512_CNL)) {
+            features += ",+avx512ifma,+avx512vbmi";
+        }
     }
     #endif
     return features;
