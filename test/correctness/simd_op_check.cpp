@@ -79,6 +79,16 @@ bool wildcard_match(const char* p, const char* str) {
                 return true;
             }
         } while(*str++);
+    } else if (*p == ' ') {     // ignore whitespace in pattern
+        p++;
+        if (wildcard_match(p, str)) {
+            return true;
+        }
+    } else if (*str == ' ') {   // ignore whitespace in string
+        str++;
+        if (wildcard_match(p, str)) {
+            return true;
+        }
     }
     return !*p;
 }
