@@ -408,7 +408,7 @@ void CodeGen_X86::visit(const Call *op) {
 }
 
 string CodeGen_X86::mcpu() const {
-    #if LLVM_VERSION >= 39
+    #if LLVM_VERSION >= 40
     if (target.has_feature(Target::AVX512)) return "cannonlake";
     #endif
     if (target.has_feature(Target::AVX2)) return "haswell";
