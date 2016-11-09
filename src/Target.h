@@ -76,8 +76,8 @@ struct Target {
         MSAN = halide_target_feature_msan,
         AVX512 = halide_target_feature_avx512,
         AVX512_KNL = halide_target_feature_avx512_knl,
-        AVX512_SKYLAKE = halide_target_feature_avx512_skylake,
-        AVX512_CANNONLAKE = halide_target_feature_avx512_cannonlake,        
+        AVX512_Skylake = halide_target_feature_avx512_skylake,
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,        
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -241,14 +241,14 @@ struct Target {
                 return 1;
             }
         } else if (arch == Target::X86) {
-            if (is_integer && (has_feature(Halide::Target::AVX512_SKYLAKE) ||
-                               has_feature(Halide::Target::AVX512_CANNONLAKE))) {
-                // AVX512BW exists on SKYLAKE and CANNONLAKE
+            if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
+                               has_feature(Halide::Target::AVX512_Cannonlake))) {
+                // AVX512BW exists on Skylake and Cannonlake
                 return 64 / data_size;
             } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
                                         has_feature(Halide::Target::AVX512_KNL) ||
-                                        has_feature(Halide::Target::AVX512_SKYLAKE) ||
-                                        has_feature(Halide::Target::AVX512_CANNONLAKE))) {
+                                        has_feature(Halide::Target::AVX512_Skylake) ||
+                                        has_feature(Halide::Target::AVX512_Cannonlake))) {
                 // AVX512F is on all AVX512 architectures
                 return 64 / data_size;
             } else if (has_feature(Halide::Target::AVX2)) {

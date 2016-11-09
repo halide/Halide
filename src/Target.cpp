@@ -145,10 +145,10 @@ Target calculate_host_target() {
                 initial_features.push_back(Target::AVX512_KNL);
             }
             if ((info2[1] & avx512_skylake) == avx512_skylake) {
-                initial_features.push_back(Target::AVX512_SKYLAKE);
+                initial_features.push_back(Target::AVX512_Skylake);
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
-                initial_features.push_back(Target::AVX512_CANNONLAKE);
+                initial_features.push_back(Target::AVX512_Cannonlake);
             }
         }
     }
@@ -274,8 +274,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"msan", Target::MSAN},
     {"avx512", Target::AVX512},
     {"avx512_knl", Target::AVX512_KNL},
-    {"avx512_skylake", Target::AVX512_SKYLAKE},
-    {"avx512_cannonlake", Target::AVX512_CANNONLAKE},
+    {"avx512_skylake", Target::AVX512_Skylake},
+    {"avx512_cannonlake", Target::AVX512_Cannonlake},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
