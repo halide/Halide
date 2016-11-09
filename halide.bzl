@@ -42,26 +42,36 @@ def halide_opengl_linkopts():
   })
 
 
-# (halide-target-base,  cpu,   android-cpu,   ios-cpu)
+# (halide-target-base, cpu, android-cpu, ios-cpu)
 _HALIDE_TARGET_CONFIG_INFO = [
     # Android
     ("arm-32-android", None, "armeabi-v7a", None),
     ("arm-64-android", None, "arm64-v8a", None),
     ("x86-32-android", None, "x86", None),
     ("x86-64-android", None, "x86_64", None),
-    # iOS    
+    # iOS
     ("arm-32-ios", None, None, "armv7"),
     ("arm-64-ios", None, None, "arm64"),
-    # OSX    
-    ("x86-32-osx", None, None, "x86_32"),
+    # OSX
+    ("x86-32-osx", None, None, "i386"),
     ("x86-64-osx", None, None, "x86_64"),
-    # Linux 
+    # Linux
     ("arm-64-linux", "arm", None, None),
     ("powerpc-64-linux", "ppc", None, None),
     ("x86-64-linux", "k8", None, None),
     ("x86-32-linux", "piii", None, None),
-    # TODO: add conditions appropriate for other targets/cpus: Windows, etc.
+    # Special case: Android-ARMEABI. Note that we are using an illegal Target
+    # string for Halide; this is intentional. It allows us to add another
+    # config_setting to match the armeabi-without-v7a required for certain build
+    # scenarios; we special-case this in _select_multitarget to translate it 
+    # back into a legal Halide target.
+    #
+    # Note that this won't produce a build that is useful (it will SIGILL on
+    # non-v7a hardware), but isn't intended to be useful for anything other
+    # than allowing certain builds to complete.
+    ("armeabi-32-android", "armeabi", "armeabi", None),
 ]
+# TODO: add conditions appropriate for other targets/cpus: Windows, etc.
 
 _HALIDE_TARGET_MAP_DEFAULT = {
     "x86-64-osx": [
@@ -305,6 +315,8 @@ def _has_dupes(some_list):
 
 
 def _select_multitarget(base_target, halide_target_features, halide_target_map):
+  if base_target == "armeabi-32-android":
+    base_target = "arm-32-android"
   wildcard_target = halide_target_map.get("*")
   if wildcard_target:
     expected_base = "*"
@@ -419,18 +431,18 @@ def halide_generator(name,
 
 
 def halide_library(name,
-                   generator=None,
-                   deps=[],
-                   visibility=None,
-                   namespace=None,
-                   function_name=None,
-                   generator_args="",
                    debug_codegen_level=0,
-                   trace_level=0,
+                   deps=[],
+                   extra_outputs=[],
+                   function_name=None,
+                   generator=None,
+                   generator_args="",
                    halide_target_features=[],
                    halide_target_map=_HALIDE_TARGET_MAP_DEFAULT,
-                   extra_outputs=[],
-                   includes=[]):
+                   includes=[],
+                   namespace=None,
+                   trace_level=0,
+                   visibility=None):
   if not function_name:
     function_name = name
 
