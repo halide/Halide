@@ -1887,8 +1887,8 @@ int main(int argc, char **argv) {
     target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
     use_avx512_knl = target.has_feature(Target::AVX512_KNL);
-    use_avx512_cannonlake = target.has_feature(Target::AVX512_CANNONLAKE);    
-    use_avx512_skylake = use_avx512_cannonlake || target.has_feature(Target::AVX512_SKYLAKE);
+    use_avx512_cannonlake = target.has_feature(Target::AVX512_Cannonlake);    
+    use_avx512_skylake = use_avx512_cannonlake || target.has_feature(Target::AVX512_Skylake);
     use_avx512 = use_avx512_knl || use_avx512_skylake || use_avx512_cannonlake || target.has_feature(Target::AVX512);
     use_avx2 = use_avx512 || target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
