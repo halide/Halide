@@ -44,7 +44,6 @@ struct Target {
         SSE41 = halide_target_feature_sse41,
         AVX = halide_target_feature_avx,
         AVX2 = halide_target_feature_avx2,
-        AVX512 = halide_target_feature_avx512,
         FMA = halide_target_feature_fma,
         FMA4 = halide_target_feature_fma4,
         F16C = halide_target_feature_f16c,
@@ -75,6 +74,10 @@ struct Target {
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
+        AVX512 = halide_target_feature_avx512,
+        AVX512_KNL = halide_target_feature_avx512_knl,
+        AVX512_SKL = halide_target_feature_avx512_skl,
+        AVX512_CNL = halide_target_feature_avx512_cnl,        
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -238,10 +241,15 @@ struct Target {
                 return 1;
             }
         } else if (arch == Target::X86) {
-            if (has_feature(Halide::Target::AVX512)) {
-                // For AVX512, we assume Cannonlake or server Skylake,
-                // which have 512-bit instructions for ints and floats
-                // (AVX512F+AVX512BW).
+            if (is_integer && (has_feature(Halide::Target::AVX512_SKL) ||
+                               has_feature(Halide::Target::AVX512_CNL))) {
+                // AVX512BW exists on SKL and CNL
+                return 64 / data_size;
+            } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
+                                        has_feature(Halide::Target::AVX512_KNL) ||
+                                        has_feature(Halide::Target::AVX512_SKL) ||
+                                        has_feature(Halide::Target::AVX512_CNL))) {
+                // AVX512F is on all AVX512 architectures
                 return 64 / data_size;
             } else if (has_feature(Halide::Target::AVX2)) {
                 // AVX2 uses 256-bit vectors for everything.
