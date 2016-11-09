@@ -8,7 +8,6 @@
 # TODO apps/linear_algebra
 # TODO apps/opengl_demo
 # TODO apps/openglcompute
-# TODO apps/renderscript
 # TODO apps/simd_op_check
 # TODO apps/templates
 
@@ -131,7 +130,6 @@ _RUNTIME_CPP_COMPONENTS = [
     "profiler_inlined",
     "qurt_allocator",
     "qurt_hvx",
-    "renderscript",
     "runtime_api",
     "ssp",
     "thread_pool",
@@ -158,7 +156,6 @@ _RUNTIME_LL_COMPONENTS = [
     "posix_math",
     "powerpc",
     "ptx_dev",
-    "renderscript_dev",
     "win32_math",
     "x86",
     "x86_avx",
@@ -209,7 +206,6 @@ cc_library(
         "WITH_METAL",
         "WITH_OPENCL",
         "WITH_OPENGL",
-        "WITH_RENDERSCRIPT",
     ],
     linkstatic = 1,
     deps = ["@llvm//:llvm"],
