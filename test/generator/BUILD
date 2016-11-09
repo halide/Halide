@@ -7,12 +7,6 @@ load(
     "halide_runtime_linkopts",
 )
 
-cc_library(
-    name = "extended_buffer_t_common",
-    srcs = ["extended_buffer_t_common.h"],
-    includes = ["."],
-)
-
 # ----------------- halide_generator
 
 # Simple cases
@@ -23,7 +17,6 @@ cc_library(
 ) for gen in glob(
     ["*_generator.cpp"],
     exclude = [
-        "extended_buffer_t*",
         "nested_externs*",
         "stubtest*",
         "stubuser*",
@@ -31,13 +24,6 @@ cc_library(
 )]
 
 # Cases with extra deps and/or irregular generator_name
-halide_generator(
-    name = "extended_buffer_t_generator",
-    srcs = ["extended_buffer_t_generator.cpp"],
-    includes = ["."],
-    deps = [":extended_buffer_t_common"],
-)
-
 [halide_generator(
     name = "nested_externs_%s_generator" % gen_name,
     srcs = ["nested_externs_generator.cpp"],
@@ -80,7 +66,6 @@ halide_generator(
     "embed_image",
     "error_codes",
     "example",
-    "extended_buffer_t",
     "float16_t",
     "gpu_object_lifetime",
     "gpu_only",
@@ -323,17 +308,6 @@ cc_test(
         "@halide//:language",
         ":metadata_tester",
         ":metadata_tester_ucon",
-    ],
-)
-
-cc_test(
-    name = "extended_buffer_t_aottest",
-    srcs = ["extended_buffer_t_aottest.cpp"],
-    linkopts = halide_runtime_linkopts(),
-    deps = [
-        "@halide//:language",
-        ":extended_buffer_t",
-        ":extended_buffer_t_common",
     ],
 )
 
