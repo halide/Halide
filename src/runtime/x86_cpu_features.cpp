@@ -18,8 +18,8 @@ WEAK CpuFeatures halide_get_cpu_features() {
                             (1ULL << halide_target_feature_avx2) |
                             (1ULL << halide_target_feature_avx512) |
                             (1ULL << halide_target_feature_avx512_knl) |
-                            (1ULL << halide_target_feature_avx512_skl) |
-                            (1ULL << halide_target_feature_avx512_cnl));                            
+                            (1ULL << halide_target_feature_avx512_skylake) |
+                            (1ULL << halide_target_feature_avx512_cannonlake));                            
 
     uint64_t available = 0;
 
@@ -59,8 +59,8 @@ WEAK CpuFeatures halide_get_cpu_features() {
         const uint32_t avx512ifma = 1U << 21;
         const uint32_t avx512 = avx512f | avx512cd;
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
-        const uint32_t avx512_skl = avx512 | avx512vl | avx512bw | avx512dq;
-        const uint32_t avx512_cnl = avx512_skl | avx512ifma; // Assume ifma => vbmi
+        const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             available |= 1ULL << halide_target_feature_avx2;
         }
@@ -69,11 +69,11 @@ WEAK CpuFeatures halide_get_cpu_features() {
             if ((info2[1] & avx512_knl) == avx512_knl) {
                 available |= 1ULL << halide_target_feature_avx512_knl;
             }
-            if ((info2[1] & avx512_skl) == avx512_skl) {
-                available |= 1ULL << halide_target_feature_avx512_skl;
+            if ((info2[1] & avx512_skylake) == avx512_skylake) {
+                available |= 1ULL << halide_target_feature_avx512_skylake;
             }
-            if ((info2[1] & avx512_cnl) == avx512_cnl) {
-                available |= 1ULL << halide_target_feature_avx512_cnl;
+            if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
+                available |= 1ULL << halide_target_feature_avx512_cannonlake;
             }
         }
     }

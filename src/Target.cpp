@@ -134,8 +134,8 @@ Target calculate_host_target() {
         const uint32_t avx512ifma = 1U << 21;
         const uint32_t avx512 = avx512f | avx512cd;
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
-        const uint32_t avx512_skl = avx512 | avx512vl | avx512bw | avx512dq;
-        const uint32_t avx512_cnl = avx512_skl | avx512ifma; // Assume ifma => vbmi
+        const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             initial_features.push_back(Target::AVX2);            
         }
@@ -144,11 +144,11 @@ Target calculate_host_target() {
             if ((info2[1] & avx512_knl) == avx512_knl) {
                 initial_features.push_back(Target::AVX512_KNL);
             }
-            if ((info2[1] & avx512_skl) == avx512_skl) {
-                initial_features.push_back(Target::AVX512_SKL);
+            if ((info2[1] & avx512_skylake) == avx512_skylake) {
+                initial_features.push_back(Target::AVX512_SKYLAKE);
             }
-            if ((info2[1] & avx512_cnl) == avx512_cnl) {
-                initial_features.push_back(Target::AVX512_CNL);
+            if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
+                initial_features.push_back(Target::AVX512_CANNONLAKE);
             }
         }
     }
@@ -274,8 +274,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"msan", Target::MSAN},
     {"avx512", Target::AVX512},
     {"avx512_knl", Target::AVX512_KNL},
-    {"avx512_skl", Target::AVX512_SKL},
-    {"avx512_cnl", Target::AVX512_CNL},
+    {"avx512_skylake", Target::AVX512_SKYLAKE},
+    {"avx512_cannonlake", Target::AVX512_CANNONLAKE},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
