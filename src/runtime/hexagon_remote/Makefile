@@ -110,7 +110,9 @@ bin/%/log.o: log.cpp
 # Build rules for the hexagon implementation.
 bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/c11_stubs.o bin/%/log.o
 	mkdir -p $(@D)
-	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@
+	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@ \
+	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
+	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
 	mkdir -p $(@D)
