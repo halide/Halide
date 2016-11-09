@@ -26,7 +26,7 @@ using std::string;
 bool failed = false;
 Var x("x"), y("y");
 
-bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2, use_avx512;
+bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2, use_avx512, use_avx512_knl, use_avx512_skylake, use_avx512_cannonlake;
 bool use_vsx, use_power_arch_2_07;
 
 string filter = "*";
@@ -256,12 +256,12 @@ void check_sse_all() {
         check("pmulhuw", 4*w, i16_1 / 15);
 
 
-        check("pcmpeqb", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
-        check(use_avx512 ? "vpcmpnleub" : "pcmpgtb", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
-        check("pcmpeqw", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
-        check(use_avx512 ? "vpcmpnleuw" : "pcmpgtw", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
-        check("pcmpeqd", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
-        check(use_avx512 ? "vpcmpnleud" : "pcmpgtd", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+        check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
+        check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
+        check("pcmp*w", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
+        check("pcmp*w", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
+        check("pcmp*d", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
+        check("pcmp*d", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
 
         // SSE 1
         check("addps", 2*w, f32_1 + f32_2);
@@ -278,8 +278,8 @@ void check_sse_all() {
             //check("divps", 2*w, f32_1 / f32_2);
         }
 
-        check(use_avx512 ? "vrsqrt14ps" : "rsqrtps", 2*w, fast_inverse_sqrt(f32_1));
-        check(use_avx512 ? "vrcp14ps" : "rcpps", 2*w, fast_inverse(f32_1));
+        check(use_avx512_skylake ? "vrsqrt14ps" : "rsqrtps", 2*w, fast_inverse_sqrt(f32_1));
+        check(use_avx512_skylake ? "vrcp14ps" : "rcpps", 2*w, fast_inverse(f32_1));
         check("sqrtps", 2*w, sqrt(f32_2));
         check("maxps", 2*w, max(f32_1, f32_2));
         check("minps", 2*w, min(f32_1, f32_2));
@@ -308,8 +308,8 @@ void check_sse_all() {
     // These guys get normalized to the integer versions for widths
     // other than 128-bits. Avx512 has mask-register versions.
     // check("andnps", 4, bool_1 & (~bool_2));
-    check(use_avx512 ? "korw" : "orps", 4, bool_1 | bool_2);
-    check(use_avx512 ? "kxorw" : "xorps", 4, bool_1 ^ bool_2);
+    check(use_avx512_skylake ? "korw" : "orps", 4, bool_1 | bool_2);
+    check(use_avx512_skylake ? "kxorw" : "xorps", 4, bool_1 ^ bool_2);
     if (!use_avx512) {
         // avx512 implicitly ands the predicates by masking the second
         // comparison using the result of the first. Clever!
@@ -352,7 +352,7 @@ void check_sse_all() {
 
         check("paddq", w, i64_1 + i64_2);
         check("psubq", w, i64_1 - i64_2);
-        check(use_avx512 ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
+        check(use_avx512_skylake ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
 
         check("packssdw", 4*w, i16_sat(i32_1));
         check("packsswb", 8*w, i8_sat(i16_1));
@@ -396,11 +396,11 @@ void check_sse_all() {
             }
             check("pmulld", 2*w, i32_1 * i32_2);
 
-            check(use_avx512 ? (w == 2 ? "vblendmps" : "vinsertf32x8") : "blendvps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
-            check(use_avx512 ? (w == 2 ? "vblendmpd" : "vinsertf64x4") : "blendvpd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-            check(use_avx512 ? "vpblendmb" : "pblendvb", 8*w, select(u8_1 > 7, u8_1, u8_2));
-            check(use_avx512 ? "vpblendmb" : "pblendvb", 8*w, select(u8_1 == 7, u8_1, u8_2));
-            check(use_avx512 ? "vpblendmb" : "pblendvb", 8*w, select(u8_1 <= 7, i8_1, i8_2));
+            check((use_avx512_skylake && w > 2) ? "vinsertf32x8" : "blend*ps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
+            check((use_avx512 && w > 2) ? "vinsertf64x4" : "blend*pd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+            check("pblend*b", 8*w, select(u8_1 > 7, u8_1, u8_2));
+            check("pblend*b", 8*w, select(u8_1 == 7, u8_1, u8_2));
+            check("pblend*b", 8*w, select(u8_1 <= 7, i8_1, i8_2));
 
             check("pmaxsb", 8*w, max(i8_1, i8_2));
             check("pminsb", 8*w, min(i8_1, i8_2));
@@ -432,8 +432,8 @@ void check_sse_all() {
     if (use_avx) {
         check("vsqrtps", 8, sqrt(f32_1));
         check("vsqrtpd", 4, sqrt(f64_1));
-        check(use_avx512 ? "vrsqrt14ps" : "vrsqrtps", 8, fast_inverse_sqrt(f32_1));
-        check(use_avx512 ? "vrcp14ps" : "vrcpps", 8, fast_inverse(f32_1));
+        check(use_avx512_skylake ? "vrsqrt14ps" : "vrsqrtps", 8, fast_inverse_sqrt(f32_1));
+        check(use_avx512_skylake ? "vrcp14ps" : "vrcpps", 8, fast_inverse(f32_1));
 
         /* Not implemented yet in the front-end
            check("vandnps", 8, bool1 & (!bool2));
@@ -468,8 +468,8 @@ void check_sse_all() {
         check("vcmpltps", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 
         // avx512 can do predicated insert ops instead of blends
-        check(use_avx512 ? "vinsertf32x8" : "vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
-        check(use_avx512 ? "vinsertf64x4" : "vblendvpd", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+        check(use_avx512_skylake ? "vinsertf32x8" : "vblend*ps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
+        check(use_avx512 ? "vinsertf64x4" : "vblend*pd", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
 
         check("vcvttps2dq", 8, i32(f32_1));
         check("vcvtdq2ps", 8, f32(i32_1));
@@ -503,12 +503,12 @@ void check_sse_all() {
         check("vpmulhw", 16, i16((i32(i16_1) * i32(i16_2)) >> 16));
         check("vpmullw", 16, i16_1 * i16_2);
 
-        check("vpcmpeqb", 32, select(u8_1 == u8_2, u8(1), u8(2)));
-        check(use_avx512 ? "vpcmpnleub" : "vpcmpgtb", 32, select(u8_1 > u8_2, u8(1), u8(2)));
-        check("vpcmpeqw", 16, select(u16_1 == u16_2, u16(1), u16(2)));
-        check(use_avx512 ? "vpcmpnleuw" : "vpcmpgtw", 16, select(u16_1 > u16_2, u16(1), u16(2)));
-        check("vpcmpeqd", 8, select(u32_1 == u32_2, u32(1), u32(2)));
-        check(use_avx512 ? "vpcmpnleud" : "vpcmpgtd", 8, select(u32_1 > u32_2, u32(1), u32(2)));
+        check("vpcmp*b", 32, select(u8_1 == u8_2, u8(1), u8(2)));
+        check("vpcmp*b", 32, select(u8_1 > u8_2, u8(1), u8(2)));
+        check("vpcmp*w", 16, select(u16_1 == u16_2, u16(1), u16(2)));
+        check("vpcmp*w", 16, select(u16_1 > u16_2, u16(1), u16(2)));
+        check("vpcmp*d", 8, select(u32_1 == u32_2, u32(1), u32(2)));
+        check("vpcmp*d", 8, select(u32_1 > u32_2, u32(1), u32(2)));
 
         check("vpavgb", 32, u8((u16(u8_1) + u16(u8_2) + 1)/2));
         check("vpavgw", 16, u16((u32(u16_1) + u32(u16_2) + 1)/2));
@@ -521,7 +521,7 @@ void check_sse_all() {
 
         check("vpaddq", 8, i64_1 + i64_2);
         check("vpsubq", 8, i64_1 - i64_2);
-        check(use_avx512 ? "vpmullq" : "vpmuludq", 8, u64_1 * u64_2);
+        check(use_avx512_skylake ? "vpmullq" : "vpmuludq", 8, u64_1 * u64_2);
 
         check("vpackssdw", 16, i16_sat(i32_1));
         check("vpacksswb", 32, i8_sat(i16_1));
@@ -539,7 +539,7 @@ void check_sse_all() {
         }
         check("vpmulld", 8, i32_1 * i32_2);
 
-        check(use_avx512 ? "vpblendmb" : "vpblendvb", 32, select(u8_1 > 7, u8_1, u8_2));
+        check("vpblend*b", 32, select(u8_1 > 7, u8_1, u8_2));
 
         check("vpmaxsb", 32, max(i8_1, i8_2));
         check("vpminsb", 32, min(i8_1, i8_2));
@@ -569,7 +569,8 @@ void check_sse_all() {
         check("vreducepd", 8, f64_1 - trunc(f64_1));
         check("vreducepd", 8, f64_1 - trunc(f64_1*8)/8);
         */
-
+    }
+    if (use_avx512_skylake) {
         check("vpabsq", 8, abs(i64_1));
         check("vpmaxuq", 8, max(u64_1, u64_2));
         check("vpminuq", 8, min(u64_1, u64_2));
@@ -1865,6 +1866,8 @@ int main(int argc, char **argv) {
         filter = argv[1];
     }
 
+    num_processes = 1;
+
     // If we're testing everything, fork into many processes
     vector<int> children;
     for (int i = 1; i < num_processes; i++) {
@@ -1883,7 +1886,10 @@ int main(int argc, char **argv) {
     target = get_target_from_environment();
     target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
-    use_avx512 = target.has_feature(Target::AVX512);
+    use_avx512_knl = target.has_feature(Target::AVX512_KNL);
+    use_avx512_cannonlake = target.has_feature(Target::AVX512_CANNONLAKE);    
+    use_avx512_skylake = use_avx512_cannonlake || target.has_feature(Target::AVX512_SKYLAKE);
+    use_avx512 = use_avx512_knl || use_avx512_skylake || use_avx512_cannonlake || target.has_feature(Target::AVX512);
     use_avx2 = use_avx512 || target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);
     use_sse41 = use_avx || target.has_feature(Target::SSE41);
