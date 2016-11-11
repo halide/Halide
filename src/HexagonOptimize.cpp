@@ -329,7 +329,7 @@ private:
 
     void visit(const Add *op) {
         static vector<Pattern> adds = {
-            // Widening adds. There are other instrucitons that add two vub and two vuh but do not widen.
+            // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
             { "halide.hexagon.add_vh.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.add_vw.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
@@ -399,7 +399,7 @@ private:
                 return;
             } else {
                 static vector<Pattern> subs = {
-                    // Widening subtracts. There are other instrucitons that subtact two vub and two vuh but do not widen.
+                    // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
                     { "halide.hexagon.sub_vh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
                     { "halide.hexagon.sub_vw.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
