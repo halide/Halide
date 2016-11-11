@@ -96,12 +96,12 @@ Target calculate_host_target() {
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41 = info[2] & (1 << 19);
-    bool have_sse2 = info[3] & (1 << 26);
-    bool have_avx = info[2] & (1 << 28);
-    bool have_f16c = info[2] & (1 << 29);
+    bool have_sse41  = info[2] & (1 << 19);
+    bool have_sse2   = info[3] & (1 << 26);
+    bool have_avx    = info[2] & (1 << 28);
+    bool have_f16c   = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
-    bool have_fma = info[2] & (1 << 12);
+    bool have_fma    = info[2] & (1 << 12);
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -119,13 +119,37 @@ Target calculate_host_target() {
     if (have_fma)   initial_features.push_back(Target::FMA);
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
-        // So far, so good.  AVX2?
+        // So far, so good.  AVX2/512?
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info2[1] & (1 << 5);
-        if (have_avx2) {
-            initial_features.push_back(Target::AVX2);
+        const uint32_t avx2 = 1U << 5;
+        const uint32_t avx512f = 1U << 16;
+        const uint32_t avx512dq = 1U << 17;
+        const uint32_t avx512pf = 1U << 26;
+        const uint32_t avx512er = 1U << 27;
+        const uint32_t avx512cd = 1U << 28;
+        const uint32_t avx512bw = 1U << 30;
+        const uint32_t avx512vl = 1U << 31;
+        const uint32_t avx512ifma = 1U << 21;
+        const uint32_t avx512 = avx512f | avx512cd;
+        const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
+        const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
+        if ((info2[1] & avx2) == avx2) {
+            initial_features.push_back(Target::AVX2);            
+        }
+        if ((info2[1] & avx512) == avx512) {
+            initial_features.push_back(Target::AVX512);
+            if ((info2[1] & avx512_knl) == avx512_knl) {
+                initial_features.push_back(Target::AVX512_KNL);
+            }
+            if ((info2[1] & avx512_skylake) == avx512_skylake) {
+                initial_features.push_back(Target::AVX512_Skylake);
+            }
+            if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
+                initial_features.push_back(Target::AVX512_Cannonlake);
+            }
         }
     }
 #ifdef _WIN32
@@ -248,6 +272,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
+    {"avx512", Target::AVX512},
+    {"avx512_knl", Target::AVX512_KNL},
+    {"avx512_skylake", Target::AVX512_Skylake},
+    {"avx512_cannonlake", Target::AVX512_Cannonlake},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
