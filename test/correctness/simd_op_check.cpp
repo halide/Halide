@@ -1866,8 +1866,6 @@ int main(int argc, char **argv) {
         filter = argv[1];
     }
 
-    num_processes = 1;
-
     // If we're testing everything, fork into many processes
     vector<int> children;
     for (int i = 1; i < num_processes; i++) {
