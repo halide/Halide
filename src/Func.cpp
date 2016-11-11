@@ -29,7 +29,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Associativity.h"
-#include "ApplySplits.h"
+#include "ApplySplit.h"
 
 namespace Halide {
 
@@ -388,47 +388,39 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
-// Substitute 'exprs' with the values defined by 'let_stmts' in ascending order.
-// If 'reverse' is true, perform the substitution in descending order.
-void substitute_lets_in_exprs(const vector<pair<string, Expr>> &let_stmts,
-                              vector<Expr> &exprs, bool reverse) {
-    if (reverse) {
-        for (int i = let_stmts.size() - 1; i >= 0; --i) {
-            for (auto &expr : exprs) {
-                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
-            }
-        }
-    } else {
-        for (size_t i = 0; i < let_stmts.size(); ++i) {
-            for (auto &expr : exprs) {
-                expr = substitute(let_stmts[i].first, let_stmts[i].second, expr);
-            }
-        }
+// Substitute the occurrence of 'name' in 'exprs' with 'value'.
+void substitute_var_in_exprs(const string &name, Expr value, vector<Expr> &exprs) {
+    for (auto &expr : exprs) {
+        expr = substitute(name, value, expr);
     }
 }
 
 void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
-                        const ApplySplitResult &result, vector<Expr> &predicates,
-                        vector<Expr> &args, vector<Expr> &values) {
+                        const vector<ApplySplitResult> &splits_result,
+                        vector<Expr> &predicates, vector<Expr> &args,
+                        vector<Expr> &values) {
 
-    predicates.insert(predicates.end(), result.predicates.begin(), result.predicates.end());
+    for (const auto &res : splits_result) {
+        if (res.is_substitution() || res.is_let()) {
+            // Apply substitutions to the list of predicates, args, and values.
+            // Make sure we substitute in all the let stmts as well since we are
+            // not going to add them to the exprs.
+            substitute_var_in_exprs(res.name, res.value, predicates);
+            substitute_var_in_exprs(res.name, res.value, args);
+            substitute_var_in_exprs(res.name, res.value, values);
+        } else {
+            internal_assert(res.is_predicate());
+            predicates.push_back(res.value);
+        }
+    }
 
-    // Apply substitutions to the list of predicates, args, and values
-    substitute_lets_in_exprs(result.substitutions, predicates, false);
-    substitute_lets_in_exprs(result.substitutions, args, false);
-    substitute_lets_in_exprs(result.substitutions, values, false);
-
-    // Make sure we substitute in all the let stmts from 'bounds_let_stmts' and
-    // ApplySplitResult since we are not going to add them to the exprs.
-    // The list of let stmts is ordered from innermost let to outermost let, so
-    // we need to apply the substitution in reverse order.
-    substitute_lets_in_exprs(result.let_stmts, predicates, true);
-    substitute_lets_in_exprs(result.let_stmts, args, true);
-    substitute_lets_in_exprs(result.let_stmts, values, true);
-
-    substitute_lets_in_exprs(bounds_let_stmts, predicates, true);
-    substitute_lets_in_exprs(bounds_let_stmts, args, true);
-    substitute_lets_in_exprs(bounds_let_stmts, values, true);
+    // Make sure we substitute in all the let stmts from 'bounds_let_stmts'
+    // since we are not going to add them to the exprs.
+    for (const auto &let: bounds_let_stmts) {
+        substitute_var_in_exprs(let.first, let.second, predicates);
+        substitute_var_in_exprs(let.first, let.second, args);
+        substitute_var_in_exprs(let.first, let.second, values);
+    }
 }
 
 /** Apply split directives on the reduction variables. Remove the old RVar from
@@ -456,7 +448,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
 
         rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor)/s.factor)});
 
-        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -491,7 +483,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
 
-        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -515,7 +507,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
 
-        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -535,7 +527,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
 
-        ApplySplitResult splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -573,9 +565,11 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
     }
 
     if (found) {
-        substitute_lets_in_exprs(rvar_bounds, predicates, true);
-        substitute_lets_in_exprs(rvar_bounds, args, true);
-        substitute_lets_in_exprs(rvar_bounds, values, true);
+        for (const auto &let: rvar_bounds) {
+            substitute_var_in_exprs(let.first, let.second, predicates);
+            substitute_var_in_exprs(let.first, let.second, args);
+            substitute_var_in_exprs(let.first, let.second, values);
+        }
     }
     return found;
 }
