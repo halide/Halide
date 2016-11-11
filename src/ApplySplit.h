@@ -1,5 +1,5 @@
-#ifndef APPLY_SPLITS_H
-#define APPLY_SPLITS_H
+#ifndef APPLY_SPLIT_H
+#define APPLY_SPLIT_H
 
 /** \file
  *
