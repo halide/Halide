@@ -1,4 +1,4 @@
-#include "ApplySplits.h"
+#include "ApplySplit.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
