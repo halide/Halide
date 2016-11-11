@@ -6,7 +6,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-	Func f("f"), input("input");
+    // ApplySplit should respect the order of the application of substitutions/
+    // predicates/lets; otherwise, this combination of tail strategies will
+    // cause an access out of bound error.
+    Func f("f"), input("input");
     Var x("x"), y("y"), c("c");
 
     f(x, y, c) = x + y + c;
