@@ -215,7 +215,7 @@ set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
   AllocationBoundsInference.h
-  ApplySplits.h
+  ApplySplit.h
   Argument.h
   Associativity.h
   BoundaryConditions.h
@@ -365,7 +365,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
-  ApplySplits.cpp
+  ApplySplit.cpp
   Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
