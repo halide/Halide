@@ -74,6 +74,10 @@ struct Target {
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
+        AVX512 = halide_target_feature_avx512,
+        AVX512_KNL = halide_target_feature_avx512_knl,
+        AVX512_Skylake = halide_target_feature_avx512_skylake,
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,        
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -218,31 +222,50 @@ struct Target {
         user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
             << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
-        const bool is_avx2 = has_feature(Halide::Target::AVX2);
-        const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
         const bool is_integer = t.is_int() || t.is_uint();
         const int data_size = t.bytes();
 
         if (arch == Target::Hexagon) {
             if (is_integer) {
-                // HVX is either 64 or 128 byte vector size.
+                // HVX is either 64 or 128 *byte* vector size.
                 if (has_feature(Halide::Target::HVX_128)) {
                     return 128 / data_size;
                 } else if (has_feature(Halide::Target::HVX_64)) {
                     return 64 / data_size;
+                } else {
+                    user_error << "Target uses hexagon arch without hvx_128 or hvx_64 set.\n";
+                    return 0;
                 }
             } else {
+                // HVX does not have vector float instructions.
                 return 1;
             }
+        } else if (arch == Target::X86) {
+            if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
+                               has_feature(Halide::Target::AVX512_Cannonlake))) {
+                // AVX512BW exists on Skylake and Cannonlake
+                return 64 / data_size;
+            } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
+                                        has_feature(Halide::Target::AVX512_KNL) ||
+                                        has_feature(Halide::Target::AVX512_Skylake) ||
+                                        has_feature(Halide::Target::AVX512_Cannonlake))) {
+                // AVX512F is on all AVX512 architectures
+                return 64 / data_size;
+            } else if (has_feature(Halide::Target::AVX2)) {
+                // AVX2 uses 256-bit vectors for everything.
+                return 32 / data_size;
+            } else if (!is_integer && has_feature(Halide::Target::AVX)) {
+                // AVX 1 has 256-bit vectors for float, but not for
+                // integer instructions.
+                return 32 / data_size;
+            } else {
+                // SSE was all 128-bit. We ignore MMX.
+                return 16 / data_size;
+            }
+        } else {
+            // Assume 128-bit vectors on other targets.
+            return 16 / data_size;
         }
-
-        // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
-        // However, AVX has a very limited complement of integer instructions;
-        // restricting us to SSE4.1 size for integer operations produces much
-        // better performance. (AVX2 does have good integer operations for 256-bit
-        // registers.)
-        const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        return vector_byte_size / data_size;
     }
 
     /** Given a data type, return an estimate of the "natural" vector size

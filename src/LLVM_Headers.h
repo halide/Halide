@@ -26,8 +26,12 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/Support/FileSystem.h>
-
+#if LLVM_VERSION >= 40
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#else
 #include <llvm/Bitcode/ReaderWriter.h>
+#endif
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/raw_ostream.h>
