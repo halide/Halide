@@ -5,15 +5,11 @@ using namespace Halide;
 
 int main() {
     // This test must be run with an OpenGL target.
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL)) {
-        fprintf(stderr, "ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     // Define the input
     const int width = 10, height = 10, channels = 4;
-    Image<float> input(width, height, channels);
+    Buffer<float> input(width, height, channels);
     for (int c = 0; c < input.channels(); c++) {
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -33,7 +29,7 @@ int main() {
     g.bound(c, 0, 4).glsl(x, y, c);
 
     // Generate the result.
-    Image<float> result = g.realize(width, height, channels);
+    Buffer<float> result = g.realize(width, height, channels, target);
     result.copy_to_host();
 
     // Check the result.
@@ -45,7 +41,7 @@ int main() {
                     temp += input(std::min(x+r, input.width()-1), y, c);
                 }
                 float correct = temp / 10.0f * 255.0f;
-                if (fabs(result(x, y, c) - correct) > 1e-6) {
+                if (fabs(result(x, y, c) - correct) > 1e-3) {
                     fprintf(stderr, "result(%d, %d, %d) = %f instead of %f\n",
                             x, y, c, result(x, y, c), correct);
                     return 1;

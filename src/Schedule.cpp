@@ -88,6 +88,7 @@ struct ScheduleContents {
     std::vector<Dim> dims;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
+    std::vector<Prefetch> prefetches;
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     bool memoized;
     bool touched;
@@ -124,6 +125,11 @@ struct ScheduleContents {
                 b.remainder = mutator->mutate(b.remainder);
             }
         }
+        for (Prefetch &p : prefetches) {
+            if (p.offset.defined()) {
+                p.offset = mutator->mutate(p.offset);
+            }
+        }
     }
 };
 
@@ -152,6 +158,7 @@ Schedule Schedule::deep_copy(
     copy.contents->dims = contents->dims;
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
+    copy.contents->prefetches = contents->prefetches;
     copy.contents->memoized = contents->memoized;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
@@ -218,6 +225,14 @@ std::vector<Bound> &Schedule::bounds() {
 
 const std::vector<Bound> &Schedule::bounds() const {
     return contents->bounds;
+}
+
+std::vector<Prefetch> &Schedule::prefetches() {
+    return contents->prefetches;
+}
+
+const std::vector<Prefetch> &Schedule::prefetches() const {
+    return contents->prefetches;
 }
 
 std::vector<ReductionVariable> &Schedule::rvars() {
@@ -299,6 +314,11 @@ void Schedule::accept(IRVisitor *visitor) const {
         }
         if (b.remainder.defined()) {
             b.remainder.accept(visitor);
+        }
+    }
+    for (const Prefetch &p : prefetches()) {
+        if (p.offset.defined()) {
+            p.offset.accept(visitor);
         }
     }
 }

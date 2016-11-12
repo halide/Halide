@@ -163,7 +163,7 @@ class KeyInfo {
         while (i < 4 && max_alignment > (1 << i)) {
             i = i + 1;
         }
-        return (size_t)(1 << i);
+        return size_t(1) << i;
     }
 
 // Using the full names in the key results in a (hopefully incredibly
@@ -366,7 +366,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const Realize *op) {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -391,9 +391,7 @@ private:
                            << "it has compute and storage scheduled at different loop levels.\n";
             }
 
-            Stmt produce = mutate(op->produce);
-            Stmt update = mutate(op->update);
-            Stmt consume = mutate(op->consume);
+            Stmt mutated_body = mutate(op->body);
 
             KeyInfo key_info(f, top_level_name);
 
@@ -402,21 +400,9 @@ private:
             std::string cache_miss_name = op->name + ".cache_miss";
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
-            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-
-            Stmt cache_store_back =
-                IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
-
-            Stmt mutated_produce = IfThenElse::make(cache_miss, produce);
-            Stmt mutated_update =
-                update.defined() ? IfThenElse::make(cache_miss, update) :
-                                       update;
-            Stmt mutated_consume = Block::make(cache_store_back, consume);
-
-            Stmt mutated_pipeline = ProducerConsumer::make(op->name, mutated_produce, mutated_update, mutated_consume);
             Stmt cache_miss_marker = LetStmt::make(cache_miss_name,
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
-                                                   mutated_pipeline);
+                                                   mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
                                                                    Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
                                                   cache_miss_marker);
@@ -449,7 +435,41 @@ private:
                 Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
                                const_true(), generate_key);
 
-            stmt = cache_key_alloc;
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, cache_key_alloc);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const ProducerConsumer *op) {
+        std::map<std::string, Function>::const_iterator iter = env.find(op->name);
+        if (iter != env.end() &&
+            iter->second.schedule().memoized()) {
+
+            // The error checking should have been done inside Realization node
+            // of this producer, so no need to do it here.
+
+            Stmt body = mutate(op->body);
+
+            std::string cache_miss_name = op->name + ".cache_miss";
+            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
+
+            if (op->is_producer) {
+                Stmt mutated_body = IfThenElse::make(cache_miss, body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+            } else {
+                const Function f(iter->second);
+                KeyInfo key_info(f, top_level_name);
+
+                std::string cache_key_name = op->name + ".cache_key";
+                std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
+
+                Stmt cache_store_back =
+                    IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
+
+                Stmt mutated_body = Block::make(cache_store_back, body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+            }
         } else {
             IRMutator::visit(op);
         }

@@ -8,8 +8,8 @@
 #include "timer.h"
 
 #include <HalideRuntimeOpenGL.h>
-#include "build/sample_filter_cpu.h"
-#include "build/sample_filter_opengl.h"
+#include "sample_filter_cpu.h"
+#include "sample_filter_opengl.h"
 
 
 /*

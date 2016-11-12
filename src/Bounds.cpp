@@ -887,6 +887,32 @@ Box box_union(const Box &a, const Box &b) {
     return result;
 }
 
+Box box_intersection(const Box &a, const Box &b) {
+    Box result;
+    if (a.empty() || b.empty()) {
+        return result;
+    }
+
+    internal_assert(a.size() == b.size());
+    result.resize(a.size());
+
+    for (size_t i = 0; i < a.size(); i++) {
+        result[i].min = simplify(max(a[i].min, b[i].min));
+        result[i].max = simplify(min(a[i].max, b[i].max));
+    }
+
+    // The intersection is only used if both a and b are used.
+    if (a.maybe_unused() && b.maybe_unused()) {
+        result.used = a.used && b.used;
+    } else if (a.maybe_unused()) {
+        result.used = a.used;
+    } else if (b.maybe_unused()) {
+        result.used = b.used;
+    }
+
+    return result;
+}
+
 bool boxes_overlap(const Box &a, const Box &b) {
     // If one box is scalar and the other is not, the boxes cannot
     // overlap.
@@ -1527,7 +1553,7 @@ void bounds_test() {
     vector<Expr> input_site_2 = {2*x+1};
     vector<Expr> output_site = {x+1};
 
-    Image<int32_t, 1> in(10);
+    Buffer<int32_t, 1> in(10);
     BufferPtr in_buf(in, "input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,

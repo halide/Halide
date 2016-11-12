@@ -18,7 +18,7 @@ extern const struct halide_device_interface *halide_openglcompute_device_interfa
 // @{
 
 /** This function sets up OpenGL context, loads relevant GL functions, then
- *  compiles \src OpenGL compute shader into OpenGL program and stores it for future use.
+ *  compiles src OpenGL compute shader into OpenGL program and stores it for future use.
  */
 extern int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
                                             const char *src, int size);

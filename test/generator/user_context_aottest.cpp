@@ -8,7 +8,7 @@
 
 using namespace Halide;
 
-static void *context_pointer = (void *)0xf00dd00d;
+static void *context_pointer = (void *)(intptr_t)0xf00dd00d;
 
 static bool called_error = false;
 static bool called_trace = false;
@@ -46,13 +46,13 @@ int main(int argc, char **argv) {
 
     int result;
 
-    Image<float> input(10, 10);
+    Buffer<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
             input(x, y) = 1;
         }
     }
-    Image<float> output(10, 10);
+    Buffer<float> output(10, 10);
 
     called_error = false;
     called_trace = false;
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
 
-    Image<float> big_output(11, 11);
+    Buffer<float> big_output(11, 11);
     called_error = false;
     called_trace = false;
     called_malloc = false;

@@ -17,9 +17,9 @@ using namespace Halide;
 double t;
 
 
-Image<uint16_t> blur(Image<uint16_t> in) {
-    Image<uint16_t> tmp(in.width()-8, in.height());
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur(Buffer<uint16_t> in) {
+    Buffer<uint16_t> tmp(in.width()-8, in.height());
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     t = benchmark(10, 1, [&]() {
         for (int y = 0; y < tmp.height(); y++)
@@ -35,8 +35,8 @@ Image<uint16_t> blur(Image<uint16_t> in) {
 }
 
 
-Image<uint16_t> blur_fast(Image<uint16_t> in) {
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     t = benchmark(10, 1, [&]() {
         __m128i one_third = _mm_set1_epi16(21846);
@@ -49,9 +49,9 @@ Image<uint16_t> blur_fast(Image<uint16_t> in) {
                 for (int y = 0; y < 32+2; y++) {
                     const uint16_t *inPtr = &(in(xTile, yTile+y));
                     for (int x = 0; x < 128; x += 8) {
-                        a = _mm_load_si128((__m128i*)(inPtr));
-                        b = _mm_loadu_si128((__m128i*)(inPtr+1));
-                        c = _mm_loadu_si128((__m128i*)(inPtr+2));
+                        a = _mm_load_si128((const __m128i*)(inPtr));
+                        b = _mm_loadu_si128((const __m128i*)(inPtr+1));
+                        c = _mm_loadu_si128((const __m128i*)(inPtr+2));
                         sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
                         avg = _mm_mulhi_epi16(sum, one_third);
                         _mm_store_si128(tmpPtr++, avg);
@@ -118,8 +118,8 @@ Image<uint16_t> blur_fast(Image<uint16_t> in) {
 */
 
 
-Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur_fast2(const Buffer<uint16_t> &in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     int vw = in.width()/8;
     if (vw > 1024) {
@@ -147,9 +147,9 @@ Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
                 __m128i *tmpPtr2 = tmp + ((y+2) & 3) * vw;
                 for (int x = 0; x < vw; x++) {
                     // blur horizontally to produce next scanline of tmp
-                    __m128i val = _mm_load_si128((__m128i *)(inPtr));
-                    val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
-                    val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+2)));
+                    __m128i val = _mm_load_si128((const __m128i *)(inPtr));
+                    val = _mm_add_epi16(val, _mm_loadu_si128((const __m128i *)(inPtr+1)));
+                    val = _mm_add_epi16(val, _mm_loadu_si128((const __m128i *)(inPtr+2)));
                     val = _mm_mulhi_epi16(val, one_third);
                     _mm_store_si128(tmpPtr0++, val);
 
@@ -175,8 +175,8 @@ extern "C" {
 #include "halide_blur.h"
 }
 
-Image<uint16_t> blur_halide(Image<uint16_t> in) {
-    Image<uint16_t> out(in.width()-8, in.height()-2);
+Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
@@ -192,7 +192,7 @@ Image<uint16_t> blur_halide(Image<uint16_t> in) {
 
 int main(int argc, char **argv) {
 
-    Image<uint16_t> input(6408, 4802);
+    Buffer<uint16_t> input(6408, 4802);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -200,16 +200,16 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image<uint16_t> blurry = blur(input);
+    Buffer<uint16_t> blurry = blur(input);
     double slow_time = t;
 
-    Image<uint16_t> speedy = blur_fast(input);
+    Buffer<uint16_t> speedy = blur_fast(input);
     double fast_time = t;
 
-    //Image<uint16_t> speedy2 = blur_fast2(input);
+    //Buffer<uint16_t> speedy2 = blur_fast2(input);
     //float fast_time2 = t;
 
-    Image<uint16_t> halide = blur_halide(input);
+    Buffer<uint16_t> halide = blur_halide(input);
     double halide_time = t;
 
     // fast_time2 is always slower than fast_time, so skip printing it

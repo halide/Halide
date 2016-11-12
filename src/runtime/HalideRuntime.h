@@ -271,6 +271,10 @@ struct halide_type_t {
                 lanes == other.lanes);
     }
 
+    bool operator!=(const halide_type_t &other) const {
+        return !(*this == other);
+    }
+
     /** Size in bytes for a single element, even if width is not 1, of this type. */
     size_t bytes() const { return (bits + 7) / 8; }
 #endif
@@ -281,11 +285,10 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_begin_realization = 2,
                               halide_trace_end_realization = 3,
                               halide_trace_produce = 4,
-                              halide_trace_update = 5,
-                              halide_trace_consume = 6,
-                              halide_trace_end_consume = 7,
-                              halide_trace_begin_pipeline = 8,
-                              halide_trace_end_pipeline = 9};
+                              halide_trace_consume = 5,
+                              halide_trace_end_consume = 6,
+                              halide_trace_begin_pipeline = 7,
+                              halide_trace_end_pipeline = 8};
 
 #pragma pack(push, 1)
 struct halide_trace_event {
@@ -386,7 +389,42 @@ extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 /** Allocate device memory to back a buffer_t. */
 extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
 
+/** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
+
+/** Get a pointer to halide_device_free if a Halide runtime has been
+ * linked in. Returns null if it has not. This requires a different
+ * mechanism on different platforms. */
+typedef int (*halide_device_free_t)(void *, struct buffer_t *);
+#ifdef _MSC_VER
+extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+// The following pragma tells the windows linker to make
+// halide_device_free_weak the same symbol as halide_dummy_device_free
+// if it can't resolve halide_weak_device_free normally
+#ifdef _WIN64
+#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
+#else
+#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
+#endif
+inline halide_device_free_t halide_get_device_free_fn() {
+    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
+        return nullptr;
+    } else {
+        return &halide_weak_device_free;
+    }
+};
+#elif __MINGW32__
+inline halide_device_free_t halide_get_device_free_fn() {
+    // There is no workable mechanism for doing this that we know of on mingw.
+    return &halide_device_free;
+}
+#else
+extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+inline halide_device_free_t halide_get_device_free_fn() {
+    return &halide_weak_device_free;
+}
+#endif
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -491,7 +529,7 @@ extern int halide_create_temp_file(void *user_context,
 extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
 /** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
- * using halide_msan_annotate_memory_is_initialized() for marking. 
+ * using halide_msan_annotate_memory_is_initialized() for marking.
  *
  * The default implementation takes pains to only mark the active memory ranges
  * (skipping padding), and sorting into ranges to always mark the smallest number of
@@ -707,7 +745,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_renderscript = 23, ///< Enable the Renderscript runtime.
+    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
 
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
@@ -729,7 +767,11 @@ typedef enum halide_target_feature_t {
     halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
     halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
     halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
-    halide_target_feature_end = 38 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
+    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER. 
+    halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
+    halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

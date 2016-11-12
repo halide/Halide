@@ -13,7 +13,7 @@ Expr u16(Expr a) {
 
 int main(int argc, char **argv) {
 
-    Image<uint8_t> input(128, 64);
+    Buffer<uint8_t> input(128, 64);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
             f.vectorize(x, 8);
         }
 
-        Image<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
             f.vectorize(x, 8);
         }
 
-        Image<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
             f.vectorize(x, 8);
         }
 
-        Image<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -155,8 +155,8 @@ int main(int argc, char **argv) {
             }
 
             Realization r = out.realize(input.width(), input.height(), target);
-            Image<uint32_t> cpu_output = r[0];
-            Image<uint32_t> gpu_output = r[1];
+            Buffer<uint32_t> cpu_output = r[0];
+            Buffer<uint32_t> gpu_output = r[1];
 
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {

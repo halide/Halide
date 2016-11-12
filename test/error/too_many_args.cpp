@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     bad_call(x, y) = one_arg(x, y); // Called with two
 
     // Should result in an error
-    Image<uint32_t> result = bad_call.realize(256, 256);
+    Buffer<uint32_t> result = bad_call.realize(256, 256);
 
     printf("Success!\n");
     return 0;

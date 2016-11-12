@@ -44,11 +44,11 @@ BOOST_PYTHON_MODULE(halide) {
     // we include all the pieces and bits from the Halide API
     defineArgument();
     defineBoundaryConditions();
+    defineBuffer();
     defineError();
     defineExpr();
     defineExternFuncArgument();
     defineFunc();
-    defineImage();
     defineInlineReductions();
     defineLambda();
     defineOperators();

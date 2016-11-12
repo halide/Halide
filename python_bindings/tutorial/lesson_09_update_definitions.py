@@ -44,14 +44,13 @@ def main():
     x, y = Var ("x"), Var ("y")
 
     # Load a grayscale image to use as an input.
-    #Image<uint8_t> input = load<uint8_t>("images/gray.png")
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
     input_data = imread(image_path)
     if True:
          # making the image smaller to go faster
         input_data = input_data[:160, :150]
     assert input_data.dtype == np.uint8
-    input = Image(input_data)
+    input = Buffer(input_data)
 
     # You can define a Func in multiple passes. Let's see a toy
     # example first.
@@ -666,7 +665,7 @@ def main():
         #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
         local_sum = np.empty((1), dtype=np.int32)
 
-        c_result = Image(UInt(8), input.width(), input.height())
+        c_result = Buffer(UInt(8), input.width(), input.height())
         for yy in range(input.height()):
             for xx in range(input.width()):
                 # FIXME this loop is quite slow
@@ -791,7 +790,7 @@ def main():
         #ifdef __SSE2__
 
         # Don't include the time required to allocate the output buffer.
-        c_result = Image(UInt(8), input.width(), input.height())
+        c_result = Buffer(UInt(8), input.width(), input.height())
 
         #ifdef _OPENMP
         t1 = datetime.now()

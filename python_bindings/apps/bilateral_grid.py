@@ -102,6 +102,7 @@ def generate_compiled_file(bilateral_grid):
     arguments.append(Argument('input', InputBuffer, UInt(16), 2))
     bilateral_grid.compile_to_file("bilateral_grid",
                                    arguments,
+                                   "bilateral_grid",
                                    target)
     print("Generated compiled file for bilateral_grid function.")
     return
@@ -129,11 +130,11 @@ def filter_test_image(bilateral_grid, input):
 
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
-    input_image = Image(input_data)
+    input_image = Buffer(input_data)
     input.set(input_image)
 
     output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
-    output_image = Image(output_data)
+    output_image = Buffer(output_data)
 
     if False:
         print("input_image", input_image)

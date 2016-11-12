@@ -110,6 +110,7 @@ public:
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions;
     Scope<int> in_stages;
+    const Target target;
 
     struct CondValue {
         Expr cond; // Condition on params only (can't depend on loop variable)
@@ -264,7 +265,8 @@ public:
                            string loop_level,
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
-                           const set<string> inner_productions) {
+                           const set<string> inner_productions,
+                           const Target &target) {
 
             // Merge all the relevant boxes.
             Box b;
@@ -331,7 +333,7 @@ public:
                 // Because we're wrapping a stmt, this happens in reverse order.
 
                 // 4)
-                s = do_bounds_query(s, in_pipeline);
+                s = do_bounds_query(s, in_pipeline, target);
 
 
                 if (!in_pipeline.empty()) {
@@ -363,7 +365,7 @@ public:
                     }
 
                     // 2)
-                    s = do_bounds_query(s, in_pipeline);
+                    s = do_bounds_query(s, in_pipeline, target);
 
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
@@ -389,7 +391,7 @@ public:
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
                     }
 
-                    s = do_bounds_query(s, in_pipeline);
+                    s = do_bounds_query(s, in_pipeline, target);
 
                 }
 
@@ -469,7 +471,7 @@ public:
             return s;
         }
 
-        Stmt do_bounds_query(Stmt s, const set<string> &in_pipeline) {
+        Stmt do_bounds_query(Stmt s, const set<string> &in_pipeline, const Target &target) {
 
             const string &extern_name = func.extern_function_name();
             const vector<ExternFuncArgument> &args = func.extern_arguments();
@@ -485,6 +487,7 @@ public:
 
             Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::PureIntrinsic);
 
+            vector<Expr> buffers_to_annotate;
             for (size_t j = 0; j < args.size(); j++) {
                 if (args[j].is_expr()) {
                     bounds_inference_args.push_back(args[j].expr);
@@ -497,6 +500,7 @@ public:
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
+                        buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
@@ -511,6 +515,9 @@ public:
                     lets.push_back(make_pair(query_name, query_buf));
                     Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
+                    // Although we expect ImageParams to be properly initialized and sanitized by the caller,
+                    // we create a copy with copy_buffer_t (not msan-aware), so we need to annotate it as initialized.
+                    buffers_to_annotate.push_back(bounds_inference_args.back());
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
                 }
@@ -536,8 +543,26 @@ public:
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
                 bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
-
+                // Since this is a temporary, internal-only buffer used for bounds inference,
+                // we need to mark it
+                buffers_to_annotate.push_back(bounds_inference_args.back());
                 lets.push_back(make_pair(buf_name, output_buffer_t));
+            }
+
+            Stmt annotate;
+            if (target.has_feature(Target::MSAN)) {
+                // Mark the buffers as initialized before calling out.
+                for (const auto &buffer: buffers_to_annotate) {
+                    // Return type is really 'void', but no way to represent that in our IR.
+                    // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+                    Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                    Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                    if (annotate.defined()) {
+                        annotate = Block::make(annotate, mark_buffer);
+                    } else {
+                        annotate = mark_buffer;
+                    }
+                }
             }
 
             // Make the extern call
@@ -551,6 +576,10 @@ public:
             Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
             check = LetStmt::make(result_name, e, check);
+
+            if (annotate.defined()) {
+                check = Block::make(annotate, check);
+            }
 
             // Now inner code is free to extract the fields from the buffer_t
             s = Block::make(check, s);
@@ -593,8 +622,9 @@ public:
 
     BoundsInference(const vector<Function> &f,
                     const vector<Function> &outputs,
-                    const FuncValueBounds &fb) :
-        funcs(f), func_bounds(fb) {
+                    const FuncValueBounds &fb,
+                    const Target &target) :
+        funcs(f), func_bounds(fb), target(target) {
         internal_assert(!f.empty());
 
         // Compute the intrinsic relationships between the stages of
@@ -864,7 +894,7 @@ public:
                     for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                         bounds_needed[stages[i].consumers[j]] = true;
                     }
-                    body = stages[i].define_bounds(body, stage_name, op->name, in_stages, in_pipeline, inner_productions);
+                    body = stages[i].define_bounds(body, stage_name, op->name, in_stages, in_pipeline, inner_productions, target);
                 }
             }
 
@@ -941,7 +971,6 @@ public:
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
     }
-
 };
 
 
@@ -950,7 +979,8 @@ Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,
                       const vector<string> &order,
                       const map<string, Function> &env,
-                      const FuncValueBounds &func_bounds) {
+                      const FuncValueBounds &func_bounds,
+                      const Target &target) {
 
     vector<Function> funcs(order.size());
     for (size_t i = 0; i < order.size(); i++) {
@@ -959,7 +989,7 @@ Stmt bounds_inference(Stmt s,
 
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, ForType::Serial, DeviceAPI::None, s);
-    s = BoundsInference(funcs, outputs, func_bounds).mutate(s);
+    s = BoundsInference(funcs, outputs, func_bounds, target).mutate(s);
     return s.as<For>()->body;
 }
 

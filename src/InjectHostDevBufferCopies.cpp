@@ -128,7 +128,7 @@ public:
 class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
-    // BufferInfo tracks the state of a givven buffer over an IR scope.
+    // BufferInfo tracks the state of a given buffer over an IR scope.
     // Generally the scope is a ProducerConsumer. The data herein is mutable.
     struct BufferInfo {
         bool host_touched,  // Is there definitely a host-side allocation?
@@ -183,9 +183,6 @@ class InjectBufferCopies : public IRMutator {
           case DeviceAPI::OpenGLCompute:
             interface_name = "halide_openglcompute_device_interface";
             break;
-          case DeviceAPI::Renderscript:
-            interface_name = "halide_renderscript_device_interface";
-            break;
           case DeviceAPI::Hexagon:
             interface_name = "halide_hexagon_device_interface";
             break;
@@ -232,6 +229,8 @@ class InjectBufferCopies : public IRMutator {
     // Prepend code to the statement that copies everything marked as
     // a dev read to host or dev.
     Stmt do_copies(Stmt s) {
+        internal_assert(s.defined());
+
         // Cannot do any sort of buffer copying in device code yet.
         if (device_api != DeviceAPI::Host) {
             return s;
@@ -297,8 +296,10 @@ class InjectBufferCopies : public IRMutator {
             }
 
             if ((host_read || host_wrote) && !buf.host_current && (!buf.internal || buf.dev_touched)) {
-                // Needs a copy to host.
-                internal_assert(!device_read && !device_wrote);
+                // Needs a copy to host. It's OK if the device is also
+                // reading it if it's not being written to on the
+                // host.
+                internal_assert(!device_wrote && !(host_wrote && device_read));
                 direction = ToHost;
                 buf.host_current = true;
                 buf.dev_current = buf.dev_current && !host_wrote;
@@ -308,11 +309,15 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(!device_read && !device_wrote);
                 buf.dev_current = false;
                 debug(4) << "Invalidating dev_current\n";
-            } else if ((device_read || device_wrote) &&
-                       ((!buf.dev_current || (buf.current_device != touching_device)) ||
-                        (!buf.internal || buf.host_touched))) {
-                // Needs a copy-to-dev.
-                internal_assert(!host_read && !host_wrote);
+            }
+
+            if ((device_read || device_wrote) &&
+                ((!buf.dev_current || (buf.current_device != touching_device)) ||
+                 (!buf.internal || buf.host_touched))) {
+                // Needs a copy-to-dev. It's OK if the host is also
+                // reading it if it's not being written to on the
+                // device.
+                internal_assert(!host_wrote && !(device_wrote && host_read));
                 direction = ToDevice;
                 // If the buffer will need to be moved from one device to another,
                 // a host allocation will be required.
@@ -349,6 +354,7 @@ class InjectBufferCopies : public IRMutator {
             buf.devices_writing.clear();
 
             if (direction != NoCopy && touching_device != DeviceAPI::Host) {
+                internal_assert(s.defined());
                 s = Block::make(make_buffer_copy(direction, i.first, touching_device), s);
             }
 
@@ -359,6 +365,7 @@ class InjectBufferCopies : public IRMutator {
                 debug(4) << "Injecting device malloc for " << i.first << " on " <<
                     static_cast<int>(buf.device_first_touched) << "\n";
                 Stmt dev_malloc = make_dev_malloc(i.first, buf.device_first_touched, false);
+                internal_assert(s.defined());
                 s = Block::make(dev_malloc, s);
                 buf.dev_allocated = true;
             }
@@ -410,7 +417,7 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
-            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
+            internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
@@ -420,7 +427,7 @@ class InjectBufferCopies : public IRMutator {
             IRMutator::visit(op);
         } else if (op->is_intrinsic(Call::image_store)) {
             // counts as a device store
-            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
+            internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
@@ -439,49 +446,39 @@ class InjectBufferCopies : public IRMutator {
             return;
         }
 
-        bool is_output = true;
-        // The buffers associated with this pipeline should get this loop level
-        for (pair<const string, BufferInfo> &i : state) {
-            const string &buf_name = i.first;
-            if (buf_name == op->name || starts_with(buf_name, op->name + ".")) {
-                i.second.loop_level = loop_level;
-                is_output = false;
-           }
-        }
-
-        Stmt produce = mutate(op->produce);
-        produce = do_copies(produce);
-
-        Stmt update;
-        if (op->update.defined()) {
-            update = mutate(op->update);
-            update = do_copies(update);
-        }
-
-        Stmt consume = mutate(op->consume);
-        consume = do_copies(consume);
-
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
+        Stmt body = mutate(op->body);
+        body = do_copies(body);
+        if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
 
-        // Need to make all output buffers touched on device valid
-        if (is_output) {
+        if (op->is_producer) {
+            bool is_output = true;
+            // The buffers associated with this pipeline should get this loop level
             for (pair<const string, BufferInfo> &i : state) {
                 const string &buf_name = i.first;
-                if ((buf_name == op->name || starts_with(buf_name, op->name + ".")) &&
-                    i.second.dev_touched && i.second.current_device != DeviceAPI::Host) {
-                    // Inject a device copy, which will make sure the device buffer is allocated
-                    // on the right device and that the host dirty bit is false so the device
-                    // can write. (Which will involve copying to the device if host was dirty
-                    // for the passed in buffer.)
-                    debug(4) << "Injecting device copy for output " << buf_name << " on " <<
-                        static_cast<int>(i.second.current_device) << "\n";
-                    stmt = Block::make(make_buffer_copy(ToDevice, buf_name, i.second.current_device), stmt);
+                if (buf_name == op->name || starts_with(buf_name, op->name + ".")) {
+                    i.second.loop_level = loop_level;
+                    is_output = false;
+               }
+            }
+
+            // Need to make all output buffers touched on device valid
+            if (is_output) {
+                for (pair<const string, BufferInfo> &i : state) {
+                    const string &buf_name = i.first;
+                    if ((buf_name == op->name || starts_with(buf_name, op->name + ".")) &&
+                        i.second.dev_touched && i.second.current_device != DeviceAPI::Host) {
+                        // Inject a device copy, which will make sure the device buffer is allocated
+                        // on the right device and that the host dirty bit is false so the device
+                        // can write. (Which will involve copying to the device if host was dirty
+                        // for the passed in buffer.)
+                        debug(4) << "Injecting device copy for output " << buf_name << " on " <<
+                            static_cast<int>(i.second.current_device) << "\n";
+                        stmt = Block::make(make_buffer_copy(ToDevice, buf_name, i.second.current_device), stmt);
+                    }
                 }
             }
         }
@@ -636,7 +633,9 @@ class InjectBufferCopies : public IRMutator {
 
         copy.swap(state);
         Stmt else_case = mutate(op->else_case);
-        else_case = do_copies(else_case);
+        if (else_case.defined()) {
+            else_case = do_copies(else_case);
+        }
 
         for (const pair<string, BufferInfo> &i : copy) {
             const string &buf_name = i.first;

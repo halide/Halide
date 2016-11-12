@@ -8,12 +8,12 @@
  * HL_TARGET/HL_JIT_TARGET flags to 'host-profile'.
  *
  * Output format:
- * <pipeline_name>
- *  <total time spent in this pipeline> <# of samples taken> <# of runs> <avg time/run>
- *  <# of heap allocations> <peak heap allocation>
- *   <func_name> <total time spent in this func> <percentage of time spent>
- *     (<peak heap alloc by this func> <num of allocs> <average alloc size> |
- *      <worst-case peak stack alloc by this func>)?
+ * \<pipeline_name\>
+ *  \<total time spent in this pipeline\> \<# of samples taken\> \<# of runs\> \<avg time/run\>
+ *  \<# of heap allocations\> \<peak heap allocation\>
+ *   \<func_name\> \<total time spent in this func\> \<percentage of time spent\>
+ *     (\<peak heap alloc by this func\> \<num of allocs\> \<average alloc size\> |
+ *      \<worst-case peak stack alloc by this func\>)?
  *
  * Sample output:
  * memory_profiler_mandelbrot
