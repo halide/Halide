@@ -287,3 +287,4 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vb.vb(<128 x i8> %a, <128 x i8> %
   %r = bitcast <32 x i32> %r_32 to <128 x i8>
   ret <128 x i8> %r
 }
+

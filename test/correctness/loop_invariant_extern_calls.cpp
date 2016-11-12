@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     // might have an extent of zero. It's possible wasted work.
     f.bound(x, 0, 32).bound(y, 0, 32);
 
-    Image<int> im = f.realize(32, 32);
+    Buffer<int> im = f.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

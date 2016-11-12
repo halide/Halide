@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
                            {best_x, best_y, best_so_far});
 
         Realization result = g.realize();
-        // int result_x = Image<int>(result[0])(0);
-        // int result_y = Image<int>(result[1])(0);
-        float result_val = Image<float>(result[2])(0);
+        // int result_x = Buffer<int>(result[0])(0);
+        // int result_y = Buffer<int>(result[1])(0);
+        float result_val = Buffer<float>(result[2])(0);
         if (result_val < 0.9999) {
             printf("Argmax of sin(x*y) is underwhelming: %f. We expected it to be closer to one.\n", result_val);
             return 1;
@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
         Var x;
         f(x) = 100*x;
         g(x) = x;
-        Image<int> f_im(100);
-        Image<int> g_im(10);
+        Buffer<int> f_im(100);
+        Buffer<int> g_im(10);
         Pipeline({f, g}).realize({f_im, g_im});
 
         for (int x = 0; x < f_im.width(); x++) {
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
         h(x) = {f(x) + 17, f(x) - 17};
         g(x, y) = {f(x + y) * 2, h(x)[0] * y, h(x)[1] - 2};
 
-        Image<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);
+        Buffer<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);
 
         Pipeline({h, g, f}).realize({h_im0, h_im1, g_im0, g_im1, g_im2, f_im});
 

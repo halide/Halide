@@ -19,13 +19,13 @@ int32_t my_halide_trace(void *context, const halide_trace_event *e) {
 }
 
 int launcher_task(void *user_context, int index, uint8_t *closure) {
-    Image<float> input(10, 10);
+    Buffer<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
             input(x, y) = x * y;
         }
     }
-    Image<float> output(10, 10);
+    Buffer<float> output(10, 10);
 
     user_context_insanity(&got_context[index], input, output);
 

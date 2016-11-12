@@ -579,6 +579,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
             stream << " " << get_memory_space(args[i].name) << " ";
             if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
+                   << "restrict "
                    << print_name(args[i].name);
             Allocation alloc;
             alloc.type = args[i].type;

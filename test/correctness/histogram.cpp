@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
         reference_hist[i] = 0;
     }
 
-    Image<float> in(W, H);
+    Buffer<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = float(rand() & 0x000000ff);
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     }
     */
 
-    Image<int32_t> histogram = g.realize(10); // buckets 10-20 only
+    Buffer<int32_t> histogram = g.realize(10); // buckets 10-20 only
 
     for (int i = 10; i < 20; i++) {
         if (histogram(i-10) != reference_hist[i]) {

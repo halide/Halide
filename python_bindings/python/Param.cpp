@@ -53,12 +53,12 @@ std::string imageparam_repr(h::ImageParam &param)  // non-const due to a Halide 
     return repr;
 }
 
-h::Image<> image_param_get(h::ImageParam &param) {
+h::Buffer<> image_param_get(h::ImageParam &param) {
     return param.get();
 }
 
 template <typename T>
-void image_param_set(h::ImageParam &param, const h::Image<T> &im) {
+void image_param_set(h::ImageParam &param, const h::Buffer<T> &im) {
     param.set(im);
 }
 

@@ -10,11 +10,12 @@
 
 #include <memory>
 
+#include "Closure.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
 #include "Scope.h"
-#include "Closure.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -65,6 +66,9 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 
 /** Given an llvm::Module, get or create an llvm:TargetMachine */
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
+
+/** Set the appropriate llvm Function attributes given a Target. */
+void set_function_attributes_for_target(llvm::Function *, Target);
 
 }}
 

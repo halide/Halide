@@ -42,7 +42,7 @@ class MyPipeline:
 
     def __init__(self, input):
 
-        assert type(input) == Image_uint8
+        assert type(input) == Buffer_uint8
 
         self.lut = Func("lut")
         self.padded = Func("padded")
@@ -218,7 +218,7 @@ class MyPipeline:
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        output = Image(UInt(8),
+        output = Buffer(UInt(8),
                        self.input.width(),
                        self.input.height(),
                        self.input.channels())
@@ -250,11 +250,11 @@ class MyPipeline:
 
     def test_correctness(self, reference_output):
 
-        assert type(reference_output) == Image_uint8
+        assert type(reference_output) == Buffer_uint8
         output = self.curved.realize(self.input.width(),
                                      self.input.height(),
                                      self.input.channels())
-        assert type(output) == Image_uint8
+        assert type(output) == Buffer_uint8
 
         # Check against the reference output.
         for c in range(self.input.channels()):
@@ -276,10 +276,10 @@ def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
     input_data = imread(image_path)
-    input = Image(input_data)
+    input = Buffer(input_data)
 
     # Allocated an image that will store the correct output
-    reference_output = Image(UInt(8), input.width(), input.height(), input.channels())
+    reference_output = Buffer(UInt(8), input.width(), input.height(), input.channels())
 
     print("Testing performance on CPU:")
     p1 = MyPipeline(input)

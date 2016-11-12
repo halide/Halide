@@ -83,7 +83,7 @@ void simple_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
-void *flakey_malloc(void */* user_context */, size_t x) {
+void *flakey_malloc(void * /* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
     } else {
@@ -109,8 +109,8 @@ int main(int argc, char **argv) {
         f() = f_memoized();
         f_memoized.compute_root().memoize();
 
-        Image<uint8_t> result1 = f.realize();
-        Image<uint8_t> result2 = f.realize();
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
 
         assert(result1(0) == 42);
         assert(result2(0) == 42);
@@ -132,8 +132,8 @@ int main(int argc, char **argv) {
         g(x, y) = f();
 
         coord.set(0);
-        Image<uint8_t> out1 = g.realize(256, 256);
-        Image<uint8_t> out2 = g.realize(256, 256);
+        Buffer<uint8_t> out1 = g.realize(256, 256);
+        Buffer<uint8_t> out2 = g.realize(256, 256);
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
         assert(call_count == 1);
 
         coord.set(1);
-        Image<uint8_t> out3 = g.realize(256, 256);
-        Image<uint8_t> out4 = g.realize(256, 256);
+        Buffer<uint8_t> out3 = g.realize(256, 256);
+        Buffer<uint8_t> out4 = g.realize(256, 256);
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -166,8 +166,8 @@ int main(int argc, char **argv) {
         f(x, y) = count_calls(x, y) + count_calls(x, y);
         count_calls.compute_root().memoize();
 
-        Image<uint8_t> out1 = f.realize(256, 256);
-        Image<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize(256, 256);
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -193,8 +193,8 @@ int main(int argc, char **argv) {
         count_calls_23.compute_root().memoize();
         count_calls_42.compute_root().memoize();
 
-        Image<uint8_t> out1 = f.realize(256, 256);
-        Image<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize(256, 256);
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -225,20 +225,20 @@ int main(int argc, char **argv) {
         val1.set(23);
         val2.set(42);
 
-        Image<uint8_t> out1 = f.realize(256, 256);
-        Image<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize(256, 256);
 
         val1.set(42);
-        Image<uint8_t> out3 = f.realize(256, 256);
+        Buffer<uint8_t> out3 = f.realize(256, 256);
 
         val1.set(23);
-        Image<uint8_t> out4 = f.realize(256, 256);
+        Buffer<uint8_t> out4 = f.realize(256, 256);
 
         val1.set(42);
-        Image<uint8_t> out5 = f.realize(256, 256);
+        Buffer<uint8_t> out5 = f.realize(256, 256);
 
         val2.set(57);
-        Image<uint8_t> out6 = f.realize(256, 256);
+        Buffer<uint8_t> out6 = f.realize(256, 256);
 
 
         for (int32_t i = 0; i < 256; i++) {
@@ -267,9 +267,9 @@ int main(int argc, char **argv) {
         count_calls.compute_root().memoize();
 
         val.set(23.0f);
-        Image<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize(256, 256);
         val.set(23.4f);
-        Image<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize(256, 256);
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -293,9 +293,9 @@ int main(int argc, char **argv) {
         count_calls.compute_root().memoize();
 
         val.set(23.0f);
-        Image<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize(256, 256);
         val.set(23.4f);
-        Image<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize(256, 256);
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -326,7 +326,7 @@ int main(int argc, char **argv) {
 
         val.set(23.0f);
         index.set(2);
-        Image<uint8_t> out1 = h.realize(1);
+        Buffer<uint8_t> out1 = h.realize(1);
 
         assert(out1(0) == (uint8_t)(2 * 23 + 4 + 2));
         assert(call_count_with_arg == 3);
@@ -357,8 +357,8 @@ int main(int argc, char **argv) {
 
         val.set(23.0f);
         Realization out = g.realize(128, 128);
-        Image<uint8_t> out0 = out[0];
-        Image<int32_t> out1 = out[1];
+        Buffer<uint8_t> out0 = out[0];
+        Buffer<int32_t> out1 = out[1];
 
 
         for (int32_t i = 0; i < 100; i++) {
@@ -401,7 +401,7 @@ int main(int argc, char **argv) {
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);
-            Image<uint8_t> out1 = g.realize(128, 128);
+            Buffer<uint8_t> out1 = g.realize(128, 128);
 
             for (int32_t i = 0; i < 100; i++) {
                 for (int32_t j = 0; j < 100; j++) {
@@ -436,7 +436,7 @@ int main(int argc, char **argv) {
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);
-            Image<uint8_t> out1 = g.realize(128, 128);
+            Buffer<uint8_t> out1 = g.realize(128, 128);
 
             for (int32_t i = 0; i < 100; i++) {
                 for (int32_t j = 0; j < 100; j++) {
@@ -449,8 +449,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Call count before oversize realize is %d.\n", call_count_with_arg);
         call_count_with_arg = 0;
 
-        Image<uint8_t> big = g.realize(1024, 1024);
-        Image<uint8_t> big2 = g.realize(1024, 1024);
+        Buffer<uint8_t> big = g.realize(1024, 1024);
+        Buffer<uint8_t> big2 = g.realize(1024, 1024);
 
         // TODO work out an assertion on call count here.
         fprintf(stderr, "Call count after oversize realize is %d.\n", call_count_with_arg);
@@ -459,7 +459,7 @@ int main(int argc, char **argv) {
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);
-            Image<uint8_t> out1 = g.realize(128, 128);
+            Buffer<uint8_t> out1 = g.realize(128, 128);
 
             for (int32_t i = 0; i < 100; i++) {
                 for (int32_t j = 0; j < 100; j++) {
@@ -495,7 +495,7 @@ int main(int argc, char **argv) {
 
         val.set(23.0f);
         Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
-        Image<uint8_t> out = g.realize(128, 128);
+        Buffer<uint8_t> out = g.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -541,7 +541,7 @@ int main(int argc, char **argv) {
         Func output;
         output(_) = stage[3](_);
         val.set(23.0f);
-        Image<uint8_t> result = output.realize(128, 128);
+        Buffer<uint8_t> result = output.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -597,8 +597,8 @@ int main(int argc, char **argv) {
             if (error_occured) {
                 total_errors++;
             } else {
-                Image<uint8_t> out0 = out[0];
-                Image<int32_t> out1 = out[1];
+                Buffer<uint8_t> out0 = out[0];
+                Buffer<int32_t> out1 = out[1];
 
                 for (int32_t i = 0; i < 16; i++) {
                     for (int32_t j = 0; j < 16; j++) {

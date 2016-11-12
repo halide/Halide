@@ -14,9 +14,9 @@
 // a linker flag. Because the pragma is in a macro, we use __pragma
 // instead of #pragma
 #ifdef _WIN64
-#define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:" #n))  
+#define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:" #n))
 #else
-#define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:_" #n)) 
+#define EXPORT_SYM(n) __pragma(comment(linker, "/EXPORT:_" #n))
 #endif
 #else
 #define EXPORT_SYM(n)
@@ -140,6 +140,11 @@ int halide_device_free(void *user_context, struct buffer_t *buf) {
 }
 EXPORT_SYM(halide_device_free)
 
+int halide_weak_device_free(void *user_context, struct buffer_t *buf) {
+    return halide_device_free(user_context, buf);
+}
+EXPORT_SYM(halide_weak_device_free)
+
 const struct halide_device_interface *halide_cuda_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::CUDA);
@@ -205,17 +210,6 @@ const struct halide_device_interface *halide_openglcompute_device_interface() {
     return nullptr;
 }
 EXPORT_SYM(halide_openglcompute_device_interface)
-
-const struct halide_device_interface *halide_renderscript_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::Renderscript);
-    struct halide_device_interface *(*fn)();
-    if (lookup_runtime_routine("halide_renderscript_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
-}
-EXPORT_SYM(halide_renderscript_device_interface)
 
 const struct halide_device_interface *halide_metal_device_interface() {
     Target target(get_host_target());

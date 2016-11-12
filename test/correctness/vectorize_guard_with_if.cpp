@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     f.set_custom_trace(&my_trace);
     f.trace_stores();
 
-    Image<int> result = f.realize(w);
+    Buffer<int> result = f.realize(w);
 
     if (num_vector_stores != expected_vector_stores) {
         printf("There were %d vector stores instead of %d\n",

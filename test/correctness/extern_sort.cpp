@@ -36,10 +36,10 @@ int main(int argc, char **argv) {
     std::vector<ExternFuncArgument> args;
     args.push_back(data);
     sorted.define_extern("sort_buffer", args, Float(32), 1);
-    Image<float> output = sorted.realize(100);
+    Buffer<float> output = sorted.realize(100);
 
     // Check the output
-    Image<float> reference = lambda(x, sin(x)).realize(100);
+    Buffer<float> reference = lambda(x, sin(x)).realize(100);
     std::sort(&reference(0), &reference(100));
 
     RDom r(reference);

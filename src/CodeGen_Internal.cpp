@@ -70,16 +70,10 @@ void unpack_closure(const Closure& closure,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    LLVMContext &context = builder->getContext();
     vector<string> nm = closure.names();
     for (size_t i = 0; i < nm.size(); i++) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
-        if (load->getType()->isPointerTy()) {
-            // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            llvm::Metadata *md_args[] = {MDString::get(context, nm[i])};
-            load->setMetadata("tbaa", MDNode::get(context, md_args));
-        }
         dst.push(nm[i], load);
         load->setName(nm[i]);
     }
@@ -148,7 +142,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_run",
         "halide_opengl_run",
         "halide_openglcompute_run",
-        "halide_renderscript_run",
         "halide_metal_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
@@ -167,7 +160,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
-        "halide_renderscript_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
     };
@@ -279,9 +271,10 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
-    #ifndef WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 40
     // Turn off approximate reciprocals for division. It's too
-    // inaccurate even for us.
+    // inaccurate even for us. In LLVM 4.0+ this moved to be a
+    // function attribute.
     options.Reciprocals.setDefaults("all", false, 0);
     #endif
 
@@ -292,11 +285,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
     options.FunctionSections = true;
-    #ifdef WITH_NATIVE_CLIENT
-    options.UseInitArray = true;
-    #else
     options.UseInitArray = false;
-    #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     #if LLVM_VERSION >= 39
@@ -347,6 +336,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 llvm::Reloc::PIC_,
                                                 llvm::CodeModel::Default,
                                                 llvm::CodeGenOpt::Aggressive));
+}
+
+void set_function_attributes_for_target(llvm::Function *fn, Target t) {
+    #if LLVM_VERSION >= 40
+    // Turn off approximate reciprocals for division. It's too
+    // inaccurate even for us.
+    fn->addFnAttr("reciprocal-estimates", "none");
+    #endif
 }
 
 }

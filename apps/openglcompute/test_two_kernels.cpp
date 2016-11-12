@@ -34,6 +34,6 @@ int main(int argc, char** argv) {
     }
     g.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
 
-    std::string filename("two_kernels_filter");
-    g.compile_to_file(filename + (argc > 1? argv[1]: ""), {input});
+    std::string fn_name = std::string("two_kernels_filter") + (argc > 1 ? argv[1] : "");
+    g.compile_to_file(fn_name, {input}, fn_name);
 }

@@ -10,11 +10,14 @@ using namespace Halide;
 
 int test_lut1d() {
 
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
     Var x("x");
     Var y("y");
     Var c("c");
 
-    Image<uint8_t> input(8, 8, 3);
+    Buffer<uint8_t> input(8, 8, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             float v = (1.0f / 16.0f) + (float)x / 8.0f;
@@ -37,8 +40,8 @@ int test_lut1d() {
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
 
-    Image<float> out0(8, 8, 3);
-    f0.realize(out0);
+    Buffer<float> out0(8, 8, 3);
+    f0.realize(out0, target);
 
     out0.copy_to_host();
 
@@ -71,13 +74,6 @@ int test_lut1d() {
 }
 
 int main() {
-
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL)) {
-        fprintf(stderr, "ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
 
     if (test_lut1d() == 0) {
         printf("PASSED\n");

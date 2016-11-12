@@ -257,6 +257,10 @@ WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
     return 0;
 }
 
+WEAK int halide_weak_device_free(void *user_context, struct buffer_t *buf) {
+    return halide_device_free(user_context, buf);
+}
+
 /** Free any device memory associated with a buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj) {
