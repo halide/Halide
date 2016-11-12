@@ -184,10 +184,7 @@ cc_library(
     srcs = glob(
         [
             "src/*.cpp",
-            "src/BitWriter_3_2/*.cpp",
             "src/*.h",
-            "src/BitWriter_3_2/*.h",
-            "src/runtime/Halide*.h",
         ],
     ) + [
         ":runtime_headers",
@@ -231,6 +228,7 @@ genrule(
     ]),
     tools = [
         "//tools:static_link.sh",
+        "//tools/defaults:crosstool"  # TODO: should not be necessary, see https://github.com/bazelbuild/bazel/issues/2058
     ],
 )
 
