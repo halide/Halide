@@ -14,14 +14,11 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 
     auto ret_val = llvm::parseBitcodeFile(bitcode_buffer, *context);
 #if LLVM_VERSION >= 40
-    if (llvm::Error Err = ret_val.takeError()) {
-        std::string Message;
-        handleAllErrors(std::move(Err), [&](llvm::ErrorInfoBase &EIB) {
-            Message = EIB.message();
-        });
+    llvm::Error Err = ret_val.takeError();
+    handleAllErrors(std::move(Err), [&](llvm::ErrorInfoBase &EIB) {
         internal_error << "Could not parse built-in bitcode file " << id
-                       << " llvm error is " << Message << "\n";
-    }
+                       << " llvm error is " <<  EIB.message() << "\n";
+    });
 #else
     if (!ret_val) {
         internal_error << "Could not parse built-in bitcode file " << id
