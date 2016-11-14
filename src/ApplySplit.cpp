@@ -1,4 +1,4 @@
-#include "ApplySplits.h"
+#include "ApplySplit.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
@@ -9,9 +9,9 @@ using std::map;
 using std::string;
 using std::vector;
 
-ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
-                             map<string, Expr> &dim_extent_alignment) {
-    ApplySplitResult result;
+vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string prefix,
+                                     map<string, Expr> &dim_extent_alignment) {
+    vector<ApplySplitResult> result;
 
     Expr outer = Variable::make(Int(32), prefix + split.outer);
     Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
@@ -81,14 +81,15 @@ ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
             Expr rebased = outer * split.factor + inner;
             string rebased_var_name = prefix + split.old_var + ".rebased";
             Expr rebased_var = Variable::make(Int(32), rebased_var_name);
-            result.substitutions.push_back(
-                std::make_pair(prefix + split.old_var, rebased_var + old_min));
+
+            result.push_back(ApplySplitResult(
+                prefix + split.old_var, rebased_var + old_min, ApplySplitResult::Substitution));
 
             // Tell Halide to optimize for the case in which this
             // condition is true by partitioning some outer loop.
             Expr cond = likely(rebased_var < old_extent);
-            result.predicates.push_back(cond);
-            result.let_stmts.push_back(std::make_pair(rebased_var_name, rebased));
+            result.push_back(ApplySplitResult(cond));
+            result.push_back(ApplySplitResult(rebased_var_name, rebased, ApplySplitResult::LetStmt));
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the
@@ -105,10 +106,10 @@ ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
         }
 
         // Substitute in the new expression for the split variable ...
-        result.substitutions.push_back(std::make_pair(old_var_name, base_var + inner));
+        result.push_back(ApplySplitResult(old_var_name, base_var + inner, ApplySplitResult::Substitution));
         // ... but also define it as a let for the benefit of bounds inference.
-        result.let_stmts.push_back(std::make_pair(old_var_name, base_var + inner));
-        result.let_stmts.push_back(std::make_pair(base_name, base));
+        result.push_back(ApplySplitResult(old_var_name, base_var + inner, ApplySplitResult::LetStmt));
+        result.push_back(ApplySplitResult(base_name, base, ApplySplitResult::LetStmt));
 
     } else if (split.is_fuse()) {
         // Define the inner and outer in terms of the fused var
@@ -126,10 +127,10 @@ ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
         Expr inner = fused % factor + inner_min;
         Expr outer = fused / factor + outer_min;
 
-        result.substitutions.push_back(std::make_pair(prefix + split.inner, inner));
-        result.substitutions.push_back(std::make_pair(prefix + split.outer, outer));
-        result.let_stmts.push_back(std::make_pair(prefix + split.inner, inner));
-        result.let_stmts.push_back(std::make_pair(prefix + split.outer, outer));
+        result.push_back(ApplySplitResult(prefix + split.inner, inner, ApplySplitResult::Substitution));
+        result.push_back(ApplySplitResult(prefix + split.outer, outer, ApplySplitResult::Substitution));
+        result.push_back(ApplySplitResult(prefix + split.inner, inner, ApplySplitResult::LetStmt));
+        result.push_back(ApplySplitResult(prefix + split.outer, outer, ApplySplitResult::LetStmt));
 
         // Maintain the known size of the fused dim if
         // possible. This is important for possible later splits.
@@ -141,29 +142,8 @@ ApplySplitResult apply_split(const Split &split, bool is_update, string prefix,
         }
     } else {
         // rename or purify
-        result.substitutions.push_back(std::make_pair(prefix + split.old_var, outer));
-        result.let_stmts.push_back(std::make_pair(prefix + split.old_var, outer));
-    }
-
-    return result;
-}
-
-ApplySplitResult apply_splits(const vector<Split> &splits, bool is_update, string prefix,
-                              map<string, Expr> &dim_extent_alignment) {
-    ApplySplitResult result;
-
-    for (const Split &split : splits) {
-        ApplySplitResult split_result = apply_split(split, is_update, prefix,
-                                                    dim_extent_alignment);
-        result.let_stmts.insert(result.let_stmts.end(),
-                                split_result.let_stmts.begin(),
-                                split_result.let_stmts.end());
-        result.substitutions.insert(result.substitutions.end(),
-                                    split_result.substitutions.begin(),
-                                    split_result.substitutions.end());
-        result.predicates.insert(result.predicates.end(),
-                                 split_result.predicates.begin(),
-                                 split_result.predicates.end());
+        result.push_back(ApplySplitResult(prefix + split.old_var, outer, ApplySplitResult::Substitution));
+        result.push_back(ApplySplitResult(prefix + split.old_var, outer, ApplySplitResult::LetStmt));
     }
 
     return result;
