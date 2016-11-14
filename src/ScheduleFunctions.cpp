@@ -11,7 +11,7 @@
 #include "CodeGen_GPU_Dev.h"
 #include "IRPrinter.h"
 #include "Func.h"
-#include "ApplySplits.h"
+#include "ApplySplit.h"
 
 namespace Halide {
 namespace Internal {
@@ -98,9 +98,19 @@ Stmt build_provide_loop_nest_helper(string func_name,
     vector<Split> splits = s.splits();
 
     // Define the function args in terms of the loop variables using the splits
-    ApplySplitResult splits_result = apply_splits(splits, is_update, prefix, dim_extent_alignment);
-    for (const auto &sub : splits_result.substitutions) {
-        stmt = substitute(sub.first, sub.second, stmt);
+    for (const Split &split : splits) {
+        vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
+
+        for (const auto &res : splits_result) {
+            if (res.is_substitution()) {
+                stmt = substitute(res.name, res.value, stmt);
+            } else if (res.is_let()) {
+                stmt = LetStmt::make(res.name, res.value, stmt);
+            } else {
+                internal_assert(res.is_predicate());
+                stmt = IfThenElse::make(res.value, stmt, Stmt());
+            }
+        }
     }
 
     // All containing lets and fors. Outermost first.
@@ -113,13 +123,6 @@ Stmt build_provide_loop_nest_helper(string func_name,
         nest.push_back(c);
     }
 
-    // Put the lets generated from the splits.
-    for (int i = splits_result.let_stmts.size() - 1; i >= 0; i--) {
-        Container c = {Container::Let, 0, splits_result.let_stmts[i].first,
-                       splits_result.let_stmts[i].second};
-        nest.push_back(c);
-    }
-
     // Strip off the lets into the containers vector.
     while (const LetStmt *let = stmt.as<LetStmt>()) {
         Container c = {Container::Let, 0, let->name, let->value};
@@ -127,13 +130,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
         stmt = let->body;
     }
 
-    // Put all the split predicates and the reduction domain predicates into
-    // the containers vector.
-    int n_predicates = splits_result.predicates.size() + predicates.size();
-    for (const auto &pred : splits_result.predicates) {
-        Container c = {Container::If, 0, "", pred};
-        nest.push_back(c);
-    }
+    // Put all the reduction domain predicates into the containers vector.
+    int n_predicates = predicates.size();
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
         Container c = {Container::If, 0, "", likely(pred)};
