@@ -248,7 +248,7 @@ SOURCE_FILES = \
   AddParameterChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
-  ApplySplits.cpp \
+  ApplySplit.cpp \
   Associativity.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -369,7 +369,7 @@ HEADER_FILES = \
   AddParameterChecks.h \
   AlignLoads.h \
   AllocationBoundsInference.h \
-  ApplySplits.h \
+  ApplySplit.h \
   Argument.h \
   Associativity.h \
   BoundaryConditions.h \

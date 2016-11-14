@@ -116,14 +116,15 @@ int multi_split_rfactor_test(bool compile_module) {
     g(r.x, r.y) += f(r.x, r.y);
     g.update(0).reorder({r.y, r.x});
 
-    RVar rxi("rxi"), rxo("rxo"), ryi("ryi"), ryo("ryo");
-    Var u("u"), v("v");
+    RVar rxi("rxi"), rxo("rxo"), ryi("ryi"), ryo("ryo"), ryoo("ryoo"), ryoi("ryoi");
+    Var u("u"), v("v"), w("w");
 
     g.update(0).split(r.x, rxo, rxi, 2);
     Func intm1 = g.update(0).rfactor({{rxo, u}, {r.y, v}});
 
-    g.update(0).split(r.y, ryo, ryi, 2);
-    Func intm2 = g.update(0).rfactor({{rxo, u}, {ryo, v}});
+    g.update(0).split(r.y, ryo, ryi, 2, TailStrategy::GuardWithIf);
+    g.update(0).split(ryo, ryoo, ryoi, 4, TailStrategy::GuardWithIf);
+    Func intm2 = g.update(0).rfactor({{rxo, u}, {ryoo, v}, {ryoi, w}});
     intm2.compute_root();
     intm1.compute_root();
 
