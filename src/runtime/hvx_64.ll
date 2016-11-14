@@ -35,6 +35,10 @@ define weak_odr <128 x i8> @halide.hexagon.interleave.vb(<128 x i8> %arg) nounwi
 
 declare <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32>, <16 x i32>)
 
+define weak_odr <32 x i32> @halide.hexagon.concat_vectors(<16 x i32> %low, <16 x i32> %high) nounwind uwtable readnone alwaysinline {
+  %r = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %high, <16 x i32> %low)
+  ret <32 x i32> %r
+}
 define weak_odr <32 x i32> @halide.hexagon.deinterleave.vw(<32 x i32> %arg) nounwind uwtable readnone alwaysinline {
   %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg)
   %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg)
@@ -80,6 +84,23 @@ define weak_odr i32 @halide.hexagon.dup4.b(i8 %arg) nounwind uwtable readnone al
   %dup2 = call i16 @halide.hexagon.dup2.b(i8 %arg)
   %dup4 = call i32 @halide.hexagon.dup2.h(i16 %dup2)
   ret i32 %dup4
+}
+
+define weak_odr i32 @halide.hexagon.interleave.b.dup2.h(i8 %low, i8 %high) nounwind uwtable readnone alwaysinline {
+  %high_i16 = zext i8 %high to i16
+  %high_i16_s = shl i16 %high_i16, 8
+  %low_i16 = zext i8 %low to i16
+  %i16_const = or i16 %high_i16_s, %low_i16
+  %r = call i32 @halide.hexagon.dup2.h(i16 %i16_const)
+  ret i32 %r
+}
+
+define weak_odr i32 @halide.hexagon.concat.h(i16 %low, i16 %high) nounwind uwtable readnone alwaysinline {
+  %high_i32 = zext i16 %high to i32
+  %high_i32_s = shl i32 %high_i32, 16
+  %low_i32 = zext i16 %low to i32
+  %r = or i32 %high_i32_s, %low_i32
+  ret i32 %r
 }
 
 define weak_odr <64 x i8> @halide.hexagon.splat.b(i8 %arg) nounwind uwtable readnone alwaysinline {

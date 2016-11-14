@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
-
+#include <algorithm>
 namespace Halide {
 namespace Internal {
 
@@ -112,10 +112,16 @@ struct Pattern {
         ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
         ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
 
+        FirstExactLog2Op = 1,   // FirstExactLog2Op and NumExactLog2Op ensure that we check only op1 and op2
+        NumExactLog2Op = 2,     // for ExactLog2Op
+
         DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
         DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
+
+        FirstDeinterleaveOp = 0, // FirstDeinterleaveOp and NumDeinterleaveOp ensure that we check only three
+        NumDeinterleaveOp = 3,   // bits of the flag from DeinterleaveOp0 onwards and apply that only to the first three operands.
 
         // Many patterns are instructions that widen only
         // operand 0, which need to both deinterleave operand 0, and then
@@ -125,22 +131,24 @@ struct Pattern {
         NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
         NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 12,
-        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
+        NarrowOp3 = 1 << 13,
+        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3,
 
-        NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
-        NarrowUnsignedOp1 = 1 << 16,
-        NarrowUnsignedOp2 = 1 << 17,
-        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
+        NarrowUnsignedOp0 = 1 << 14,  // Similar to the above, but narrow to an unsigned half width type.
+        NarrowUnsignedOp1 = 1 << 15,
+        NarrowUnsignedOp2 = 1 << 16,
+        NarrowUnsignedOp3 = 1 << 17,
+        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2 | NarrowUnsignedOp3,
 
    };
-
+    typedef bool (*predicate_fn)(vector<Expr> &);
     string intrin;        // Name of the intrinsic
     Expr pattern;         // The pattern to match against
     int flags;
-
+    vector<predicate_fn> predicate_fns;
     Pattern() {}
-    Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(p), flags(flags) {}
+    Pattern(const string &intrin, Expr p, int flags = 0, vector<predicate_fn> predicate_fns = {})
+        : intrin(intrin), pattern(p), flags(flags), predicate_fns(predicate_fns) {}
 };
 
 Expr wild_u8 = Variable::make(UInt(8), "*");
@@ -185,12 +193,12 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 if (!matches[i].defined()) is_match = false;
             }
             if (!is_match) continue;
-
-            for (size_t i = 1; i < matches.size() && is_match; i++) {
+            for (size_t i = Pattern::FirstExactLog2Op;
+                 i < (Pattern::FirstExactLog2Op + Pattern::NumExactLog2Op) && is_match; i++) {
                 // This flag is mainly to capture shifts. When the
                 // operand of a div or mul is a power of 2, we can use
                 // a shift instead.
-                if (p.flags & (Pattern::ExactLog2Op1 << (i - 1))) {
+                if (p.flags & (Pattern::ExactLog2Op1 << (i - Pattern::FirstExactLog2Op))) {
                     int pow;
                     if (is_const_power_of_two_integer(matches[i], &pow)) {
                         matches[i] = cast(matches[i].type().with_lanes(1), pow);
@@ -200,9 +208,10 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 }
             }
             if (!is_match) continue;
-
-            for (size_t i = 0; i < matches.size(); i++) {
-                if (p.flags & (Pattern::DeinterleaveOp0 << i)) {
+            for (size_t i = Pattern::FirstDeinterleaveOp;
+                 i < (Pattern::FirstDeinterleaveOp + Pattern::NumDeinterleaveOp); i++) {
+                if (p.flags &
+                    (Pattern::DeinterleaveOp0 << (i - Pattern::FirstDeinterleaveOp))) {
                     internal_assert(matches[i].type().is_vector());
                     matches[i] = native_deinterleave(matches[i]);
                 }
@@ -262,12 +271,64 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 
     return op;
 }
+bool not_lossesless_narrow_op0(vector<Expr> matches) {
+    internal_assert(!matches.empty());
+    Expr op0 = matches[0];
+    Type narrow_type = op0.type().with_bits(op0.type().bits()/2);
+    Expr narrow = lossless_cast(narrow_type, op0);
+    if(narrow.defined()) {
+        return false;
+    } else {
+        return true;
+    }
+}
 
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
+
+    string get_suffix(vector<Expr> exprs) {
+        string type_suffix;
+        for (Expr e : exprs) {
+            Type t = e.type();
+            type_suffix = type_suffix + (t.is_vector() ? ".v" : ".");
+            if (t.is_int()) {
+                switch(t.bits()) {
+                case 8:
+                    type_suffix = type_suffix + "b";
+                    break;
+                case 16:
+                    type_suffix = type_suffix + "h";
+                    break;
+                case 32:
+                    type_suffix = type_suffix + "w";
+                    break;
+                }
+            } else {
+                switch(t.bits()) {
+                case 8:
+                    type_suffix = type_suffix + "ub";
+                    break;
+                case 16:
+                    type_suffix = type_suffix + "uh";
+                    break;
+                case 32:
+                    type_suffix = type_suffix + "uw";
+                    break;
+                }
+            }
+        }
+        return type_suffix;
+    }
+
+    Expr halide_hexagon_add_mpy_mpy(Expr v0, Expr v1, Expr c0, Expr c1) {
+        Type t = v0.type();
+        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
+        Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + get_suffix({ v0, v1, c0, c1 }), {v0, v1, c0, c1}, Call::PureExtern);
+        return native_interleave(call);
+    }
 
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
@@ -329,6 +390,17 @@ private:
 
     void visit(const Add *op) {
         static vector<Pattern> adds = {
+            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::InterleaveResult },
+            // Widening adds. There are other instrucitons that add two vub and two vuh but do not widen.
+            // To differentiate those from the widening ones, we encode the return type in the name here.
+            { "halide.hexagon.vh.add.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.vw.add.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.vw.add.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+
+            // Simplify always puts the constant in a mul to the right. So, we match only wild_i16x*bc(wild_i16) and don't have to match its commutatative version.
+            // Generate vmpa(Vx.ub, Rx.b). Todo: Generate vmpa(Vx.h, Rx.b)
+            { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp2 | Pattern::NarrowOp1 | Pattern::NarrowOp3 | Pattern::SwapOps12 },
+
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
             { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + wild_i16x*bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
@@ -382,6 +454,22 @@ private:
             if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
+        if (op->type.is_vector() && !expr.same_as(op)) {
+            // We may have created a vmpa out of op->a or op->b.
+            // Be greedy and see we if can create a vmpa_acc
+            Expr old_expr = expr;
+            const Add *add = old_expr.as<Add>();
+            if (add) {
+                static vector<Pattern> post_process_adds = {
+                    { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            };
+                Expr res = apply_commutative_patterns(add, post_process_adds, this);
+                if (!res.same_as(add)) {
+                    debug(4) << "Converted " << old_expr << "\n\t to \t\n" << res << "\n";
+                    expr = res;
+                }
+            }
+        }
     }
 
     void visit(const Sub *op) {
@@ -391,6 +479,17 @@ private:
             if (neg_b.defined()) {
                 expr = mutate(op->a + neg_b);
                 return;
+            } else {
+                static vector<Pattern> subs = {
+                    // Widening subtracts. There are other instrucitons that subtact two vub and two vuh but do not widen.
+                    // To differentiate those from the widening ones, we encode the return type in the name here.
+                    { "halide.hexagon.vh.sub.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+                    { "halide.hexagon.vw.sub.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+                    { "halide.hexagon.vw.sub.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                };
+
+                expr = apply_patterns(op, subs, this);
+                if (!expr.same_as(op)) return;
             }
         }
         IRMutator::visit(op);
@@ -1094,6 +1193,503 @@ class OptimizeShuffles : public IRMutator {
 public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
+
+typedef std::pair<Expr, int> RootWeightPair;
+typedef std::map<Expr, int, IRDeepCompare> WeightedRoots;
+class ExprHeights : public IRVisitor {
+    std::map<Expr, int, IRDeepCompare> m;
+    Scope<int> var_heights;
+public:
+    // ExprHeights(Scope<int> var_heights) : var_heights(var_heights) {}
+    void clear() { m.clear(); }
+    void push(const std::string &name, int ht) {
+        var_heights.push(name, ht);
+    }
+    void pop(const std::string &name) {
+        var_heights.pop(name);
+    }
+    void push(Expr e) {
+        internal_assert(e.type().is_vector()) << "We are interested in the heights of only vector types\n";
+        auto it = m.find(e);
+        internal_assert(it == m.end())
+            << "Trying to push an expr that already exists in ExprHeights. Use the update method to update\n";
+
+        e.accept(this);
+        return;
+    }
+    void push(Expr e, int h) {
+        internal_assert(e.type().is_vector()) << "We are interested in the heights of only vector types\n";
+        m[e] = h;
+        return;
+    }
+    void update_height(Expr e, int h) {
+        push(e, h);
+        return;
+    }
+    void erase(Expr e) {
+        auto it = m.find(e);
+        if (it != m.end()) {
+            m.erase(it);
+        }
+    }
+    int height(Expr e) {
+        const Variable *var = e.as<Variable>();
+        if (var) {
+            internal_assert(var_heights.contains(var->name)) << "Height of variable " << var->name << " not found in scope\n";
+            return var_heights.get(var->name);
+        }
+        auto it = m.find(e);
+        if (it != m.end()) {
+            return it->second;
+        } else {
+            e.accept(this);
+            return m[e];
+        }
+    }
+    vector<int> height(const vector<Expr> &exprs) {
+        vector<int> heights;
+        for (Expr e: exprs) {
+            if (e.type().is_vector()) {
+                heights.push_back(height(e));
+            }
+        }
+        return heights;
+    }
+    void set_containing_scope(const Scope<int> *s) {
+        var_heights.set_containing_scope(s);
+    }
+    Scope<int> *get_var_heights() {
+        return &var_heights;
+    }
+    template<typename T>
+    void visit_binary(const T *op) {
+        if (op->type.is_vector()) {
+            IRVisitor::visit(op);
+            m[op] = std::max(height(op->a), height(op->b)) + 1;
+        }
+    }
+    template<typename T>
+    void visit_leaf(const T *op) {
+        if (op->type.is_vector()) {
+            m[op] = 0;
+        }
+    }
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Sub *op) { visit_binary<Sub>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+    void visit(const Div *op) { visit_binary<Div>(op); }
+    void visit(const Mod *op) { visit_binary<Mod>(op); }
+    void visit(const Min *op) { visit_binary<Min>(op); }
+    void visit(const Max *op) { visit_binary<Max>(op); }
+    void visit(const EQ *op) { visit_binary<EQ>(op); }
+    void visit(const NE *op) { visit_binary<NE>(op); }
+    void visit(const LT *op) { visit_binary<LT>(op); }
+    void visit(const LE *op) { visit_binary<LE>(op); }
+    void visit(const GT *op) { visit_binary<GT>(op); }
+    void visit(const GE *op) { visit_binary<GE>(op); }
+    void visit(const And *op) { visit_binary<And>(op); }
+    void visit(const Or *op) { visit_binary<Or>(op); }
+
+    void visit(const Load *op) { visit_leaf<Load>(op); }
+    void visit(const IntImm *op) { visit_leaf<IntImm>(op); }
+    void visit(const UIntImm *op) { visit_leaf<UIntImm>(op); }
+    void visit(const FloatImm *op) { visit_leaf<FloatImm>(op); }
+    void visit(const Ramp *op) { visit_leaf<Ramp>(op); }
+    void visit(const Broadcast *op) { visit_leaf<Broadcast>(op); }
+
+    template <typename T>
+    void visit_let(const T *op) {
+        if (op->value.type().is_vector()) {
+            Expr value = op->value;
+            // First calculate the height of value.
+            value.accept(this);
+            int ht = height(value);
+            m[value] = ht;
+            var_heights.push(op->name, ht);
+            op->body.accept(this);
+            var_heights.pop(op->name);
+        }
+    }
+
+    void visit(const Let *op) { visit_let<Let>(op); }
+    void visit(const LetStmt *op) { visit_let<LetStmt>(op); }
+
+    void visit(const Cast *op) {
+        if (op->type.is_vector()) {
+            IRVisitor::visit(op);
+            // A number of HVX operations fold widening and narrowing
+            // into themselves. e.g. widening adds. So count the cast
+            // as adding no height.
+            m[op] = height(op->value);
+        }
+    }
+
+    void visit(const Call *op) {
+        if (op->type.is_vector()) {
+            // ht(slice_vector(concat_vectors(x, ..)) = ht(concat_vectors(x, ...))
+            if (op->is_intrinsic(Call::slice_vector)) {
+                const Call *concat_v = op->args[0].as<Call>();
+                if (concat_v && concat_v->is_intrinsic(Call::concat_vectors)) {
+                    int ht = height(op->args[0]);
+                    m[op] = ht;
+                }
+            }
+            IRVisitor::visit(op);
+            vector<int> heights = height(op->args);
+            m[op] = *std::max_element(heights.begin(), heights.end());
+        }
+    }
+
+};
+
+class FindRoots : public IRVisitor {
+    using IRVisitor::visit;
+
+    bool is_associative_or_cummutative(Expr a) {
+        const Add *add = a.as<Add>();
+        const Mul *mul = a.as<Mul>();
+        const And *and_ = a.as<And>();
+        const Or *or_ = a.as<Or>();
+        const Min *min = a.as<Min>();
+        const Max *max = a.as<Max>();
+        if (add || mul || and_ || or_ || min || max) {
+            return true;
+        }
+
+        const Sub *sub = a.as<Sub>();
+        if (sub) {
+            return true;
+        }
+        return false;
+    }
+
+    // Each operand of op is a root, if it is a different
+    // operation than op.
+    //        +   <---- op
+    //       / \
+    //      /   \
+    //     *     * <--- root
+    //    / \   / \
+    //   4  v0 6   v1       
+    template<typename T>
+    void visit_binary(const T *op) {
+        if (op->type.is_vector()) {
+            const T *a = op->a.template as<T>();
+            const T *b = op->b.template as<T>();
+
+            if (!a && is_associative_or_cummutative(op->a)) {
+                weighted_roots[op->a] = -1;
+            }
+            if (!b && is_associative_or_cummutative(op->b)) {
+                weighted_roots[op->b] = -1;
+            }
+            if (is_associative_or_cummutative((Expr) op)) {
+                IRVisitor::visit(op);
+            }
+        }
+    }
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+public:
+    WeightedRoots weighted_roots;
+};
+
+inline WeightedRoots find_roots(const Add *op) {
+    if (op->type.is_vector()) {
+        FindRoots f;
+        op->accept(&f);
+        f.weighted_roots[(Expr) op] = -1;
+        return f.weighted_roots;
+    } else {
+        return {};
+    }
+}
+
+void dump_roots(WeightedRoots &w) {
+    if (!w.empty()) {
+        debug(4) << "Roots are: \n";
+        for (const RootWeightPair &r : w) {
+            debug(4) << "Root:::->\n\t\t" << r.first << "\nWeight:::-> "<< r.second << "\n";
+        }
+    } else {
+        debug(4) << "*** No Roots *** \n";
+    }
+
+}
+struct WeightedLeaf {
+    Expr e;
+    int weight;
+    WeightedLeaf(Expr e, int weight) : e(e), weight(weight) {}
+    static bool Compare(const WeightedLeaf &lhs, const WeightedLeaf &rhs) {
+        return lhs.weight > rhs.weight;
+    }
+};
+
+class LeafPriorityQueue {
+    vector<WeightedLeaf> q;
+public:
+    void push(Expr e, int wt) {
+        if (!q.empty()) {
+            q.push_back(WeightedLeaf(e, wt));
+            std::push_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        } else {
+            q.push_back(WeightedLeaf(e, wt));
+            std::make_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        }
+    }
+    WeightedLeaf pop() {
+        std::pop_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        WeightedLeaf least_wt_leaf =  q.back();
+        q.pop_back();
+        return least_wt_leaf;
+    }
+    bool empty() {
+        return q.empty();
+    }
+    size_t size() {
+        return q.size();
+    }
+    void clear() {
+        q.clear();
+    }
+};
+
+struct GetTreeWeight : public IRVisitor {
+    int weight;
+
+    bool is_simple_const(Expr e) {
+        if (e.as<IntImm>()) return true;
+        if (e.as<UIntImm>()) return true;
+        return false;
+    }
+
+    template <typename T>
+    void visit_leaf(const T *op) {
+        if (op->type.is_vector()) {
+            weight += 1;
+        }
+    }
+
+    void visit(const Cast *op) {
+        if (op->type.is_vector()) {
+            // If the value to be cast is a simple
+            // constant (immediate integer value) then
+            // the cost is 0, else, the cost is 1 plus
+            // the cost of the tree rooted at op->value
+            if (!is_simple_const(op->value)) {
+                IRVisitor::visit(op);
+                weight += 1;
+            }
+        }
+    }
+
+    template<typename T>
+    void visit_binary(const T *op) {
+        if (op->type.is_vector()) {
+            IRVisitor::visit(op);
+            weight += 1;
+        }
+    }
+    // Constants have 0 weight.
+    // So, no visitors for IntImm, UIntImm, FloatImm, StringImm
+    // Although, we shouldn't be seeing some of these.
+    void visit(const Load *op) { visit_leaf<Load>(op); }
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Sub *op) { visit_binary<Sub>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+    void visit(const Div *op) { visit_binary<Div>(op); }
+    void visit(const Mod *op) { visit_binary<Mod>(op); }
+    void visit(const Min *op) { visit_binary<Min>(op); }
+    void visit(const Max *op) { visit_binary<Max>(op); }
+    void visit(const EQ *op) { visit_binary<EQ>(op); }
+    void visit(const NE *op) { visit_binary<NE>(op); }
+    void visit(const LT *op) { visit_binary<LT>(op); }
+    void visit(const LE *op) { visit_binary<LE>(op); }
+    void visit(const GT *op) { visit_binary<GT>(op); }
+    void visit(const GE *op) { visit_binary<GE>(op); }
+    void visit(const And *op) { visit_binary<And>(op); }
+    void visit(const Or *op) { visit_binary<Or>(op); }
+
+    void visit(const Broadcast *op) {
+        if (op->type.is_vector()) {
+            if (!is_simple_const(op->value)) {
+                IRVisitor::visit(op);
+                weight += 1;
+            }
+        }
+    }
+
+    GetTreeWeight() : weight(0) {}
+};
+class BalanceTree : public IRMutator {
+    using IRMutator::visit;
+    typedef std::vector<Expr> ExprWorkList;
+
+    int get_weight(Expr e, bool is_root) {
+        if (is_root) {
+            auto it = weighted_roots.find(e);
+            internal_assert(it != weighted_roots.end()) << "Root" << e << " not found in weighted_roots";
+            if (it->second != -1) {
+                debug(4) << "Found " << e << " in weights cache. Wt is " << it->second << "\n";
+                return it->second;
+            }
+        }
+
+        GetTreeWeight g;
+        e.accept(&g);
+        int wt = g.weight;
+
+        if (is_root) {
+            debug(4) << "Calculated wt for " << e << " : " << wt << "\n";
+            weighted_roots[e] = wt;
+        }
+
+        return wt;
+    }
+
+    template<typename T>
+    void visit_binary(const T *op) {
+
+        debug(4) << "BalanceTree: << " << (Expr) op << "\n";
+
+        auto it = weighted_roots.find((Expr) op);
+        internal_assert(it != weighted_roots.end()) << "BalanceTree called on a non-root node\n";
+
+        int a_ht = heights.height(op->a);
+        int b_ht = heights.height(op->b);
+        if (std::abs(a_ht - b_ht) <= 1) {
+            // The sub-tree rooted at op is balanced.
+            // Do nothing.
+            debug(4) <<  ".. is balanced. Returning early from BalanceTree\n";
+            expr = op;
+            return;
+        } else {
+            debug(4) << ".. is imbalanced, left tree ht = " << a_ht << ", right tree ht = " << b_ht << "... balancing now\n";
+        }
+
+        worklist.push_back(op->a);
+        worklist.push_back(op->b);
+
+        while(!worklist.empty()) {
+            Expr e = worklist.back();
+            worklist.pop_back();
+
+            debug(4) << "Removing from the worklist... " << e << "\n";
+
+            it = weighted_roots.find(e);
+            if (it != weighted_roots.end()) {
+                debug(4) <<  ".. is a root..balancing\n";
+                // Check if already visited before calling balance tree.
+                Expr leaf = BalanceTree(weighted_roots, heights.get_var_heights()).mutate(e);
+                debug(4) << ".. balanced to produce ->" << leaf << "\n";
+                if (!leaf.same_as(e)) {
+                    // This means that BalanceTree changed our root. Once
+                    // a root always a root, except now it looks different.
+                    // So make this change in weighted_roots
+                    weighted_roots.erase(it);
+                    weighted_roots[leaf] = -1;
+                    heights.erase(e);
+                    // The tree rooted at e changed into leaf. Pushing
+                    // without an int value makes heights compute the
+                    // height again.
+                    heights.push(leaf);
+                }
+                leaves.push(leaf, get_weight(leaf, true /*is_root*/));
+            } else {
+                const T *o = e.as<T>();
+                if (o) {
+                    debug(4) << ".. is the same op, adding children\n";
+                    worklist.push_back(o->a);
+                    worklist.push_back(o->b);
+                } else {
+                    debug(4) << ".. is a leaf\n";
+                    leaves.push(e, get_weight(e, false /*is_root*/));
+                }
+            }
+        }
+
+        while(leaves.size() > 1) {
+            WeightedLeaf l1 = leaves.pop();
+            WeightedLeaf l2 = leaves.pop();
+            int combined_weight = l1.weight + l2.weight + 1;
+            Expr e = T::make(l1.e, l2.e);
+            leaves.push(e, combined_weight);
+              // return balanced tree.
+        }
+
+        internal_assert(leaves.size() == 1)
+            << "After balancing, a tree should have exactly one leaf, we have " << leaves.size() << "\n";
+        expr = leaves.pop().e;
+        leaves.clear();
+    }
+
+    void visit(const Add *op) { visit_binary<Add>(op); }
+    void visit(const Mul *op) { visit_binary<Mul>(op); }
+
+    ExprWorkList worklist;
+    LeafPriorityQueue leaves;
+    // Conv to reference?
+    WeightedRoots weighted_roots;
+    ExprHeights heights;
+public:
+    BalanceTree(WeightedRoots weighted_roots, const Scope<int> *var_heights) : weighted_roots(weighted_roots) { 
+        heights.clear();
+        heights.set_containing_scope(var_heights);
+    }
+
+};
+class BalanceExpressionTrees : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Add *op) {
+        // We traverse the tree top to bottom and stop at the first vector add
+        // and start looking for roots from there.
+        if (op->type.is_vector()) {
+            debug(4) << "Highest Add is << " << (Expr) op << "\n";
+
+            // 1. Find Roots.
+            weighted_roots = find_roots(op);
+            if (weighted_roots.empty()) {
+                expr = op;
+                return;
+            }
+
+            debug(4) << "Found " << weighted_roots.size() << " roots\n";
+
+            // 2. Balance the tree
+            Expr e = BalanceTree(weighted_roots, h.get_var_heights()).mutate((Expr) op);
+
+            if (e.same_as(op)) {
+                expr = op;
+            } else {
+                debug(4) << "Balanced tree ->\n\t" << e << "\n";
+                expr = e;
+            }
+        } else {
+            expr = op;
+        }
+    }
+    template<typename NodeType, typename LetType>
+    void visit_let(NodeType &result, const LetType *op) {
+        NodeType body = op->body;
+        if (op->value.type().is_vector()) {
+            op->value.accept(&h);
+            int ht = h.height(op->value);
+            h.push(op->name, ht);
+            body = mutate(op->body);
+            h.pop(op->name);
+        }
+        result = LetType::make(op->name, op->value, body);
+    }
+    void visit(const Let *op) { visit_let(expr, op); }
+    void visit(const LetStmt *op) { visit_let(stmt, op); }
+    WeightedRoots weighted_roots;
+    // We need to calculate the heights
+    // of any variables defined in the containing
+    // scope of the tree that we'll balance.
+    // So we need to compute that information.
+    ExprHeights h;
+};
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -1101,8 +1697,15 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // dynamic_shuffle (vlut) calls.
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
-
+Stmt balance_expression_trees(Stmt s) {
+    s = BalanceExpressionTrees().mutate(s);
+    return s;
+}
 Stmt optimize_hexagon_instructions(Stmt s) {
+    // Convert a series of widening multiply accumulates into
+    // a good series of vmpaacc or vmpyacc sequences.
+    s = balance_expression_trees(s);
+
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);

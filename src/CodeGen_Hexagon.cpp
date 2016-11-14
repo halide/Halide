@@ -206,20 +206,6 @@ void CodeGen_Hexagon::init_module() {
     Type u16v2 = u16v1.with_lanes(u16v1.lanes() * 2);
     Type u32v2 = u32v1.with_lanes(u32v1.lanes() * 2);
 
-    // LLVM's HVX vector intrinsics don't include the type of the
-    // operands, they all operate on vectors of 32 bit integers. To make
-    // it easier to generate code, we define wrapper intrinsics with
-    // the correct type (plus the necessary bitcasts).
-    struct HvxIntrinsic {
-        enum {
-            BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments broadcasted up to 32 bits.
-        };
-        Intrinsic::ID id;
-        Type ret_type;
-        const char *name;
-        vector<Type> arg_types;
-        int flags;
-    };
     HvxIntrinsic intrinsic_wrappers[] = {
         // Zero/sign extension:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vzb), u16v2,  "zxt.vub", {u8v1} },
@@ -271,12 +257,21 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh_dv),  i16v2, "add.vh.vh.dv",  {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw_dv),  i32v2, "add.vw.vw.dv",  {i32v2, i32v2} },
 
+        // Widening adds
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubh), i16v2, "vh.add.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhw), i32v2, "vw.add.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhw), i32v2, "vw.add.vuh.vuh", {u16v1, u16v1} },
+
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb),     i8v1,  "sub.vb.vb",     {i8v1,  i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh),     i16v1, "sub.vh.vh",     {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw),     i32v1, "sub.vw.vw",     {i32v1, i32v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb_dv),  i8v2,  "sub.vb.vb.dv",  {i8v2,  i8v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh_dv),  i16v2, "sub.vh.vh.dv",  {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw_dv),  i32v2, "sub.vw.vw.dv",  {i32v2, i32v2} },
+
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), i16v2, "vh.add.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "vw.add.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), i32v2, "vw.add.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.
@@ -344,6 +339,11 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuhv_acc), u32v2, "add_mpy.vuw.vuh.vuh", {u32v2, u16v1, u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybv_acc),  i16v2, "add_mpy.vh.vb.vb",    {i16v2, i8v1, i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhv_acc),  i32v2, "add_mpy.vw.vh.vh",    {i32v2, i16v1, i16v1} },
+
+        // vmpa patterns
+
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpabus), i16v2, "add_mpy_mpy.vub.vub.b.b", {u8v1, u8v1, i8, i8}, HvxIntrinsic::InterleaveByteAndBroadcastToWord | HvxIntrinsic::ConcatVectorOps01 },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpabus_acc), i16v2, "acc_add_mpy_mpy.vh.vub.vub.b.b", {i16v2, u8v1, u8v1, i8, i8}, HvxIntrinsic::InterleaveByteAndBroadcastToWord | HvxIntrinsic::ConcatVectorOps12 },
 
         // Inconsistencies: both are vector instructions despite the
         // missing 'v', and the signedness is indeed swapped.
@@ -454,20 +454,20 @@ void CodeGen_Hexagon::init_module() {
     // fall-through to CodeGen_LLVM.
     for (HvxIntrinsic &i : intrinsic_wrappers) {
         define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types,
-                             i.flags & HvxIntrinsic::BroadcastScalarsToWords);
+                             i.flags);
     }
 }
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(int id, Type ret_ty, const string &name,
-                                                      const vector<Type> &arg_types, bool broadcast_scalar_word) {
+                                                      const vector<Type> &arg_types, int flags) {
     internal_assert(id != Intrinsic::not_intrinsic);
     // Get the real intrinsic.
     llvm::Function *intrin = Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
-    return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, broadcast_scalar_word);
+    return define_hvx_intrinsic(intrin, ret_ty, name, arg_types, flags);
 }
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty, const string &name,
-                                                      vector<Type> arg_types, bool broadcast_scalar_word) {
+                                                      vector<Type> arg_types, int flags) {
     internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
 
@@ -508,6 +508,58 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
         arg_types.insert(arg_types.begin() + 1, split_type);
     }
 
+    if (flags & HvxIntrinsic::InterleaveByteAndBroadcastToWord) {
+        internal_assert(args.size() >= 2);
+        vector<Value *> bytes(args.end()-2, args.end());
+        llvm::Function *fn = module->getFunction("halide.hexagon.interleave.b.dup2.h");
+        args[args.size()-2] =  builder->CreateCall(fn, { bytes[0], bytes[1] });
+        args.pop_back();
+    } else if (flags & HvxIntrinsic::ConcatHalves) {
+        internal_assert(args.size() >= 2);
+        vector<Value *> halves(args.end()-2, args.end());
+        llvm::Function *fn = module->getFunction("halide.hexagon.concat.h");
+        args[args.size()-2] =  builder->CreateCall(fn, { halves[0], halves[1] });
+        args.pop_back();
+    }
+    if (flags & HvxIntrinsic::ConcatVectorOps01) {
+        internal_assert(args.size() >= 2);
+        internal_assert(args[0]->getType()->isVectorTy());
+        internal_assert(args[1]->getType()->isVectorTy());
+
+        bool is_128B = target.has_feature(Halide::Target::HVX_128);
+        llvm::Type *vector_type = llvm_type_of(Int(32, is_128B ? 32 : 16));
+        if (args[0]->getType() != vector_type) {
+            args[0] = builder->CreateBitCast(args[0], vector_type);
+        }
+        if (args[1]->getType() != vector_type) {
+            args[1] = builder->CreateBitCast(args[1], vector_type);
+        }
+
+        llvm::Function *fn = module->getFunction("halide.hexagon.concat_vectors");
+        args[0] = builder->CreateCall(fn, { args[0], args[1] });
+
+        args.erase(args.begin()+1);
+    }
+    if (flags & HvxIntrinsic::ConcatVectorOps12) {
+        internal_assert(args.size() >= 3);
+        internal_assert(args[1]->getType()->isVectorTy());
+        internal_assert(args[2]->getType()->isVectorTy());
+
+        bool is_128B = target.has_feature(Halide::Target::HVX_128);
+        llvm::Type *vector_type = llvm_type_of(Int(32, is_128B ? 32 : 16));
+        if (args[1]->getType() != vector_type) {
+            args[1] = builder->CreateBitCast(args[1], vector_type);
+        }
+        if (args[2]->getType() != vector_type) {
+            args[2] = builder->CreateBitCast(args[2], vector_type);
+        }
+
+        llvm::Function *fn = module->getFunction("halide.hexagon.concat_vectors");
+        args[1] = builder->CreateCall(fn, { args[1], args[2] });
+
+        args.erase(args.begin()+2);
+    }
+
     // Replace args with bitcasts if necessary.
     internal_assert(args.size() == intrin_ty->getNumParams());
     for (size_t i = 0; i < args.size(); i++) {
@@ -516,7 +568,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
             if (arg_ty->isVectorTy()) {
                 args[i] = builder->CreateBitCast(args[i], arg_ty);
             } else {
-                if (broadcast_scalar_word) {
+                // It is a scalar
+                if (flags & HvxIntrinsic::BroadcastScalarsToWords) {
                     llvm::Function *fn = nullptr;
                     // We know it is a scalar type. We can have 8 bit, 16 bit or 32 bit types only.
                     unsigned bits = arg_types[i].bits();
@@ -531,7 +584,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
                         internal_error << "unhandled broadcast_scalar_word in define_hvx_intrinsic";
                     }
                     args[i] = builder->CreateCall(fn, { args[i] });
-                } else {
+                } else if (!(flags & HvxIntrinsic::InterleaveByteAndBroadcastToWord) &&
+                           !(flags & HvxIntrinsic::ConcatHalves)) {
                     args[i] = builder->CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
                 }
             }
