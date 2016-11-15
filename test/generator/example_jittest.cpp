@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         // default values specified in the Generator, so we can just omit
         // any we don't want to change
         example::GeneratorParams gp;
-        gp.compiletime_factor = 2.392f;
+        gp.compiletime_factor = 2.5f;
         gp.enummy = Enum_enummy::foo;
         // gp.channels = 3;  -- this is the default; no need to set
 
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         gen.schedule();
 
         Halide::Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
-        verify(img, 2.392f, 1, 3);
+        verify(img, 2.5f, 1, 3);
     }
 
     {
