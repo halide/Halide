@@ -1153,6 +1153,9 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s) {
+
+    s = balance_expression_trees(s);
+
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);

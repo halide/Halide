@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "BalanceExpressionTrees.h"
 
 namespace Halide {
 namespace Internal {

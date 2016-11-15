@@ -1350,7 +1350,7 @@ void check_hvx_all() {
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
-    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32), u8_4 = in_u8(x+48), u8_5 = in_u8(x+64);
     Expr u8_even = in_u8(2*x), u8_odd = in_u8(2*x+1);
     Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
     Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
@@ -1689,6 +1689,11 @@ void check_hvx_all() {
     check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + 3*i16(u8_2));
     check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2));
     check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2) + i16_1);
+
+    // It takes balance_expression_trees to work to be able to generate an accumulating
+    // vmpa instruction.
+    check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1,
+          i16(u8_1) + 2*i16(u8_2) + 3*i16(u8_3) + 4*i16(u8_4) + i16(u8_5));
 
     check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_2));
     check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));
