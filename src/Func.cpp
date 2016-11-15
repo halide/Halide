@@ -2240,7 +2240,8 @@ Stage FuncRef::operator=(Expr e) {
 Stage FuncRef::operator=(const Tuple &e) {
     if (!func.has_pure_definition()) {
         for (size_t i = 0; i < args.size(); ++i) {
-            user_assert(args[i].as<Variable>())
+            const Variable *var = args[i].as<Variable>();
+            user_assert((var != nullptr) && (!var->reduction_domain.defined()))
                 << "Argument " << (i+1) << " in initial definition of \""
                 << func.name() << "\" is not a Var.\n";
         }
