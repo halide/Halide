@@ -13,6 +13,7 @@ namespace {
 typedef std::pair<Expr, int> RootWeightPair;
 typedef std::map<Expr, int, IRDeepCompare> WeightedRoots;
 class ExprHeights : public IRVisitor {
+    using IRVisitor::visit;
     std::map<Expr, int, IRDeepCompare> m;
     Scope<int> var_heights;
 public:
@@ -271,6 +272,7 @@ public:
 };
 
 struct GetTreeWeight : public IRVisitor {
+    using IRVisitor::visit;
     int weight;
 
     bool is_simple_const(Expr e) {

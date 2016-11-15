@@ -35,10 +35,9 @@ namespace Internal {
            /           \
          +               +
        /   \           /   \
-     *      *         *      \
-   /   \   / \      /   \      +
-  b     4 c   6    d     4    / \
-                             a   e
+     *      *         *      +
+   /   \   / \      /   \   /  \
+  b     4 c   6    d     4 a    e
 
   On targets such as HVX, the balanced tree above leads to very good code generation by the use
   of multiply-accumulate instructions.
