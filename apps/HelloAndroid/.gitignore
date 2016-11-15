@@ -12,3 +12,8 @@
 .project
 project.properties
 /.settings
+
+# AndroidStudio
+build/**
+obj/**
+HelloAndroid.iml
