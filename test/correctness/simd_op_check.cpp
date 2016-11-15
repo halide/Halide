@@ -1688,6 +1688,7 @@ void check_hvx_all() {
     check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + i16(u8_2)*3);
     check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + 3*i16(u8_2));
     check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2));
+    check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2) + i16(u8_3));
 
     check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_2));
     check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));

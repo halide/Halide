@@ -112,11 +112,16 @@ struct Pattern {
         ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
         ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
 
+        FirstExactLog2Op = 1,   // FirstExactLog2Op and NumExactLog2Op ensure that we check only op1 and op2
+        NumExactLog2Op = 2,     // for ExactLog2Op
+
         DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
         DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
+        FirstDeinterleaveOp = 0, // FirstDeinterleaveOp and NumDeinterleaveOp ensure that we check only three
+        NumDeinterleaveOp = 3,   // bits of the flag from DeinterleaveOp0 onwards and apply that only to the first three operands.
         // Many patterns are instructions that widen only
         // operand 0, which need to both deinterleave operand 0, and then
         // re-interleave the result.
@@ -187,11 +192,12 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             }
             if (!is_match) continue;
 
-            for (size_t i = 1; i < matches.size() && is_match; i++) {
+            for (size_t i = Pattern::FirstExactLog2Op;
+                 i < (Pattern::FirstExactLog2Op + Pattern::NumExactLog2Op) && is_match; i++) {
                 // This flag is mainly to capture shifts. When the
                 // operand of a div or mul is a power of 2, we can use
                 // a shift instead.
-                if (p.flags & (Pattern::ExactLog2Op1 << (i - 1))) {
+                if (p.flags & (Pattern::ExactLog2Op1 << (i - Pattern::FirstExactLog2Op))) {
                     int pow;
                     if (is_const_power_of_two_integer(matches[i], &pow)) {
                         matches[i] = cast(matches[i].type().with_lanes(1), pow);
@@ -202,8 +208,10 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             }
             if (!is_match) continue;
 
-            for (size_t i = 0; i < matches.size(); i++) {
-                if (p.flags & (Pattern::DeinterleaveOp0 << i)) {
+            for (size_t i = Pattern::FirstDeinterleaveOp;
+                 i < (Pattern::FirstDeinterleaveOp + Pattern::NumDeinterleaveOp); i++) {
+                if (p.flags &
+                    (Pattern::DeinterleaveOp0 << (i - Pattern::FirstDeinterleaveOp))) {
                     internal_assert(matches[i].type().is_vector());
                     matches[i] = native_deinterleave(matches[i]);
                 }
@@ -269,6 +277,47 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
+
+    string get_suffix(vector<Expr> exprs) {
+        string type_suffix;
+        for (Expr e : exprs) {
+            Type t = e.type();
+            type_suffix = type_suffix + (t.is_vector() ? ".v" : ".");
+            if (t.is_int()) {
+                switch(t.bits()) {
+                case 8:
+                    type_suffix = type_suffix + "b";
+                    break;
+                case 16:
+                    type_suffix = type_suffix + "h";
+                    break;
+                case 32:
+                    type_suffix = type_suffix + "w";
+                    break;
+                }
+            } else {
+                switch(t.bits()) {
+                case 8:
+                    type_suffix = type_suffix + "ub";
+                    break;
+                case 16:
+                    type_suffix = type_suffix + "uh";
+                    break;
+                case 32:
+                    type_suffix = type_suffix + "uw";
+                    break;
+                }
+            }
+        }
+        return type_suffix;
+    }
+
+    Expr halide_hexagon_add_mpy_mpy(Expr v0, Expr v1, Expr c0, Expr c1) {
+        Type t = v0.type();
+        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
+        Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + get_suffix({ v0, v1, c0, c1 }), {v0, v1, c0, c1}, Call::PureExtern);
+        return native_interleave(call);
+    }
 
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
@@ -392,6 +441,22 @@ private:
             if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
+        if (op->type.is_vector() && !expr.same_as(op)) {
+            // We may have created a vmpa out of op->a or op->b.
+            // Be greedy and see we if can create a vmpa_acc
+            Expr old_expr = expr;
+            const Add *add = old_expr.as<Add>();
+            if (add) {
+                static vector<Pattern> post_process_adds = {
+                    { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            };
+                Expr res = apply_commutative_patterns(add, post_process_adds, this);
+                if (!res.same_as(add)) {
+                    debug(4) << "Converted " << old_expr << "\n\t to \t\n" << res << "\n";
+                    expr = res;
+                }
+            }
+        }
     }
 
     void visit(const Sub *op) {
