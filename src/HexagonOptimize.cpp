@@ -275,7 +275,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
-    static Expr halide_hexagon_add_mpy_mpy(Expr v0, Expr v1, Expr c0, Expr c1, string suffix) {
+    static Expr halide_hexagon_add_mpy_mpy(string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
         Type t = v0.type();
         Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
         Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
@@ -356,7 +356,7 @@ private:
             Expr c1 = lossless_cast(Int(8), matches[3]);
 
             if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
-                expr = halide_hexagon_add_mpy_mpy(v0, v1, c0, c1, ".vub.vub.b.b");
+                expr = halide_hexagon_add_mpy_mpy(".vub.vub.b.b", v0, v1, c0, c1);
                 return;
             }
         } else if (expr_match(vmpa_h_pattern, op, matches)) {
@@ -367,7 +367,7 @@ private:
             Expr c1 = lossless_cast(Int(8), matches[3]);
 
             if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
-                expr = halide_hexagon_add_mpy_mpy(v0, v1, c0, c1, ".vh.vh.b.b");
+                expr = halide_hexagon_add_mpy_mpy(".vh.vh.b.b", v0, v1, c0, c1);
                 return;
             }
         }
@@ -436,8 +436,8 @@ private:
         // After recursively substituting patterns for the operands, we might be able to change vmpa to an accumulating vmpa.
         static vector<Pattern> post_process_adds = {
             // Accumulating vmpa, we generated non-accumulating vmpa above.
-            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8,".vub.vub.b.b"), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_mpy_mpy(wild_i16x, wild_i16x, wild_i8, wild_i8,".vh.vh.b.b"), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_mpy_mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
         };
 
         if (!expr.same_as(op) && expr.as<Add>()) {
