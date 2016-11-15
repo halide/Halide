@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
-android update project -p . --target android-17
-cd jni
-c++ halide.cpp -g -Wall -std=c++11 -L ../../../bin -L ../../../build/lib -lHalide -I ../../../include -I ../../../build/include -ldl -lpthread -lz
+mkdir -p bin
+# android update project -p . --target android-17
+c++ jni/halide.cpp -g -Wall -std=c++11 -L ../../bin -lHalide -I ../../include -I ../../build/include -ldl -lpthread -lz -o bin/a.out
 
 # 64-bit MIPS (mips-64-android,mips64) currently does not build since
 # llvm will not compile for the R6 version of the ISA without Nan2008
@@ -13,16 +13,15 @@ for archs in arm-32-android,armeabi arm-32-android-armv7s,armeabi-v7a arm-64-and
     set $archs
     hl_target=$1
     android_abi=$2
-    mkdir -p halide_generated_$android_abi
-    cd halide_generated_$android_abi
+    mkdir -p bin/halide_generated_$android_abi
+    cd bin/halide_generated_$android_abi
     HL_TARGET=$hl_target DYLD_LIBRARY_PATH=../../../../bin LD_LIBRARY_PATH=../../../../bin ../a.out
-    cd ..
+    cd ../..
     unset IFS
 done
 
-cd ..
 pwd
-ndk-build # NDK_LOG=1
+ndk-build NDK_GEN_OUT=./bin/gen NDK_LIBS_OUT=./bin/lib NDK_OUT=./bin/obj
 ant debug
 adb install -r bin/HelloAndroid-debug.apk
 adb logcat

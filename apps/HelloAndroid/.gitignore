@@ -3,9 +3,7 @@
 /.idea/workspace.xml
 /.idea/libraries
 .DS_Store
-/build
 /captures
-/jni/halide_generated**
 
 # Eclipse
 .classpath
