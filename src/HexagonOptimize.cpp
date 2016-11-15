@@ -125,7 +125,8 @@ struct Pattern {
         NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
         NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 12,
-        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
+        NarrowOp3 = 1 << 13,
+        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3,
 
         NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
         NarrowUnsignedOp1 = 1 << 16,
@@ -334,6 +335,9 @@ private:
             { "halide.hexagon.add_vh.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.add_vw.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.add_vw.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+
+            // Generate vmpa(Vx.ub, Rx.b). Todo: Generate vmpa(Vx.h, Rx.b)
+            { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp2 | Pattern::NarrowOp1 | Pattern::NarrowOp3 | Pattern::SwapOps12 },
 
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
