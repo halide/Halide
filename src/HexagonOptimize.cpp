@@ -275,7 +275,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
-    Expr halide_hexagon_add_mpy_mpy(Expr v0, Expr v1, Expr c0, Expr c1, string suffix) {
+    static Expr halide_hexagon_add_mpy_mpy(Expr v0, Expr v1, Expr c0, Expr c1, string suffix) {
         Type t = v0.type();
         Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
         Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
@@ -341,15 +341,43 @@ private:
     }
 
     void visit(const Add *op) {
+        // vmpa instructions have a lot of quirky conditions and
+        // matching operations, and would require flags used only by
+        // these instructions (a double narrowing). Instead, just
+        // handle them manually here.
+        Expr vmpa_ub_pattern = wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16);
+        Expr vmpa_h_pattern = wild_i32x*bc(wild_i32) + wild_i32x*bc(wild_i32);
+        vector<Expr> matches;
+        if (expr_match(vmpa_ub_pattern, op, matches)) {
+            // Narrow the operands.
+            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
+            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
+            Expr c0 = lossless_cast(Int(8), matches[1]);
+            Expr c1 = lossless_cast(Int(8), matches[3]);
+
+            if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
+                expr = halide_hexagon_add_mpy_mpy(v0, v1, c0, c1, ".vub.vub.b.b");
+                return;
+            }
+        } else if (expr_match(vmpa_h_pattern, op, matches)) {
+            // Narrow the operands.
+            Expr v0 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[0]);
+            Expr v1 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[2]);
+            Expr c0 = lossless_cast(Int(8), matches[1]);
+            Expr c1 = lossless_cast(Int(8), matches[3]);
+
+            if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
+                expr = halide_hexagon_add_mpy_mpy(v0, v1, c0, c1, ".vh.vh.b.b");
+                return;
+            }
+        }
+
         static vector<Pattern> adds = {
             // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
-            { "halide.hexagon.add_vh.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
-            { "halide.hexagon.add_vw.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.add_vuh.vub.vub", wild_i16x + wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.add_vuw.vuh.vuh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
             { "halide.hexagon.add_vw.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
-
-            // Generate vmpa(Vx.ub, Rx.b). Todo: Generate vmpa(Vx.h, Rx.b)
-            { "halide.hexagon.add_mpy_mpy.vub.vub.b.b", wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp2 | Pattern::NarrowOp1 | Pattern::NarrowOp3 | Pattern::SwapOps12 },
 
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
@@ -404,22 +432,16 @@ private:
             if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
-        if (op->type.is_vector() && !expr.same_as(op)) {
-            // We may have created a vmpa out of op->a or op->b.
-            // Be greedy and see we if can create a vmpa_acc
-            Expr old_expr = expr;
-            const Add *add = old_expr.as<Add>();
-            if (add) {
-                static vector<Pattern> post_process_adds = {
-                    { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b",
-                      wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8,".vub.vub.b.b"), Pattern::ReinterleaveOp0 },
-                };
-                Expr res = apply_commutative_patterns(add, post_process_adds, this);
-                if (!res.same_as(add)) {
-                    debug(4) << "Converted " << old_expr << "\n\t to \t\n" << res << "\n";
-                    expr = res;
-                }
-            }
+
+        // After recursively substituting patterns for the operands, we might be able to change vmpa to an accumulating vmpa.
+        static vector<Pattern> post_process_adds = {
+            // Accumulating vmpa, we generated non-accumulating vmpa above.
+            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(wild_u8x, wild_u8x, wild_i8, wild_i8,".vub.vub.b.b"), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_mpy_mpy(wild_i16x, wild_i16x, wild_i8, wild_i8,".vh.vh.b.b"), Pattern::ReinterleaveOp0 },
+        };
+
+        if (!expr.same_as(op) && expr.as<Add>()) {
+            expr = apply_commutative_patterns(expr.as<Add>(), post_process_adds, this);
         }
     }
 
@@ -434,8 +456,8 @@ private:
                 static vector<Pattern> subs = {
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
-                    { "halide.hexagon.sub_vh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
-                    { "halide.hexagon.sub_vw.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+                    { "halide.hexagon.sub_vuh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
+                    { "halide.hexagon.sub_vuw.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowUnsignedOp1 },
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
 
