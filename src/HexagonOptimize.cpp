@@ -356,6 +356,10 @@ private:
             Expr c1 = lossless_cast(Int(8), matches[3]);
 
             if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
+                v0 = mutate(v0);
+                v1 = mutate(v1);
+                c0 = mutate(c0);
+                c1 = mutate(c1);
                 expr = halide_hexagon_add_mpy_mpy(".vub.vub.b.b", v0, v1, c0, c1);
                 return;
             }
@@ -367,6 +371,10 @@ private:
             Expr c1 = lossless_cast(Int(8), matches[3]);
 
             if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
+                v0 = mutate(v0);
+                v1 = mutate(v1);
+                c0 = mutate(c0);
+                c1 = mutate(c1);
                 expr = halide_hexagon_add_mpy_mpy(".vh.vh.b.b", v0, v1, c0, c1);
                 return;
             }
