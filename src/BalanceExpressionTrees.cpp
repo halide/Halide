@@ -180,14 +180,15 @@ class FindRoots : public IRVisitor {
         return false;
     }
 
-    // Each operand of op is a root, if it is a different
-    // operation than op.
-    //        +   <---- op
-    //       / \
-    //      /   \
-    //     *     * <--- root
-    //    / \   / \
-    //   4  v0 6   v1       
+    /** Each operand of op is a root, if it is a different
+     * operation than op.
+     *        +   <---- op
+     *       /  \
+     *      /    \
+     *     *     * <--- root
+     *    / \   / \
+     *   4  v0 6   v1
+     */
     template<typename T>
     void visit_binary(const T *op) {
         if (op->type.is_vector()) {
