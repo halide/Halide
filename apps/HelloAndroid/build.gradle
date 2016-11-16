@@ -49,12 +49,13 @@ executables {
     halide_generator {
         binaries.all {
             cppCompiler.args "-std=c++11", "-g", "-Wall", "-fno-rtti", "-I", "${projectDir}/../../include", "-I", "${projectDir}/../../build/include"
-            linker.args "-lHalide", "-ldl", "-lpthread", "-lz", "-L", "${projectDir}/../../bin", "-L", "${projectDir}/../../build/lib"
+            linker.args "-lHalide", "-ldl", "-lpthread", "-lz", "-L", "${projectDir}/../../bin"
         }
     }
 }
 
 binaries.withType(NativeExecutableBinary) { binary ->
+    def bin = "${projectDir}/bin"
     def jnis = "${projectDir}/jni"
     def halideRoot = "${projectDir}/../../"
     def linkTask = binary.tasks.link
@@ -73,7 +74,7 @@ binaries.withType(NativeExecutableBinary) { binary ->
         def android_abi = arch.key
         def hl_target = arch.value
         def task_name = "generate_halide_binary_${binary.name.capitalize()}_${android_abi}"
-        def destDir = new File(jnis, "/halide_generated_${android_abi}")
+        def destDir = new File(bin, "/halide_generated_${android_abi}")
         def generateHalideTask = task(task_name) {
             dependsOn linkTask
             doFirst {
