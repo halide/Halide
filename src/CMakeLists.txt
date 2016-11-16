@@ -218,6 +218,7 @@ set(HEADER_FILES
   ApplySplit.h
   Argument.h
   Associativity.h
+  BalanceExpressionTrees.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -367,6 +368,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AllocationBoundsInference.cpp
   ApplySplit.cpp
   Associativity.cpp
+  BalanceExpressionTrees.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
