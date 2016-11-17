@@ -1,5 +1,8 @@
 import org.apache.tools.ant.taskdefs.condition.Os
 
+// Avoid conflicts with Bazel on case-insensitive filesystems
+buildDir = 'gradle_build' 
+
 repositories {
     jcenter()
 }
@@ -60,8 +63,7 @@ executables {
 }
 
 binaries.withType(NativeExecutableBinary) { binary ->
-    def jnis = "${projectDir}/jni"
-    def halideRoot = "${projectDir}/../../"
+    def bin = "${projectDir}/bin"
     def linkTask = binary.tasks.link
     println "linktask output file is " + linkTask.outputFile
     Map<String, String> archs = [
@@ -79,7 +81,7 @@ binaries.withType(NativeExecutableBinary) { binary ->
         def android_abi = arch.key
         def hl_target = arch.value
         def task_name = "generate_halide_binary_${binary.name.capitalize()}_${android_abi}"
-        def destDir = new File(jnis, "/halide_generated_${android_abi}")
+        def destDir = new File(bin, "${android_abi}")
         def generateHalideTask = task(task_name) {
             dependsOn linkTask
             doFirst {
