@@ -22,7 +22,7 @@ public class CameraPreview extends SurfaceView
 
     // Link to native Halide code
     static {
-        System.loadLibrary("native");
+        System.loadLibrary("HelloAndroid");
     }
     private static native void processFrame(byte[] src, int w, int h, int orientation, Surface dst);
 
