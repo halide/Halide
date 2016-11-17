@@ -25,6 +25,13 @@ bool CodeGen_GPU_Dev::is_gpu_thread_var(const std::string &name) {
             ends_with(name, ".__thread_id_w"));
 }
 
+bool CodeGen_GPU_Dev::is_gpu_loop(DeviceAPI device_api) {
+    return ((device_api == DeviceAPI::Default_GPU) ||
+            (device_api == DeviceAPI::CUDA) ||
+            (device_api == DeviceAPI::OpenCL) ||
+            (device_api == DeviceAPI::Metal));
+}
+
 namespace {
 // Check to see if an expression is uniform within a block.
 // This is done by checking to see if the expression depends on any GPU

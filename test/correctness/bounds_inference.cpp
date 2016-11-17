@@ -4,7 +4,8 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    Func f, g, h; Var x, y;
+    Func f, g, h;
+    Var x, y;
 
     h(x) = x;
     g(x) = h(x-1) + h(x+1);
@@ -15,9 +16,10 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, y, 16, 16);
-        g.gpu_tile(x, 128);
-        h.gpu_tile(x, 128);
+        Var bx, by, tx, ty;
+        f.gpu_tile(x, y, bx, by, tx, ty, 16, 16);
+        g.gpu_tile(x, bx, tx, 128);
+        h.gpu_tile(x, bx, tx, 128);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 32);
         g.hexagon().vectorize(x, 32);

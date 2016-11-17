@@ -16,9 +16,9 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        Var xi, yi;
-        g.gpu_tile(x, y, 8, 8);
-        f.compute_at(g, Var::gpu_blocks()).gpu_threads(x, y);
+        Var bx, by, tx, ty;
+        g.gpu_tile(x, y, bx, by, tx, ty, 8, 8);
+        f.compute_at(g, bx).gpu_threads(x, y);
     }
 
     printf("Realizing function...\n");

@@ -331,7 +331,9 @@ enum class ForType {
     Serial,
     Parallel,
     Vectorized,
-    Unrolled
+    Unrolled,
+    GPUBlock,
+    GPUThread
 };
 
 

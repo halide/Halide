@@ -10,7 +10,8 @@ int main(int argc, char **argv) {
     Func f;
     Var x;
     f(x) = x;
-    f.gpu_tile(x, 16).reorder(Var::gpu_blocks(), Var::gpu_threads());
+    Var bx, tx;
+    f.gpu_tile(x, bx, tx, 16).reorder(bx, tx);
 
     f.compile_jit(t);
     Buffer<int> result = f.realize(16);
