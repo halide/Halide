@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    Var x, y;
+    Var x, y, tx, ty;
     {
         Func f;
         f(x, y) = select(((input(x, y) > 10) && (input(x, y) < 20)) ||
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16).vectorize(Var::gpu_threads(), 4);
+            f.gpu_tile(x, y, tx, ty, 16, 16).vectorize(tx, 4);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16).vectorize(Var::gpu_threads(), 4);
+            f.gpu_tile(x, y, tx, ty, 16, 16).vectorize(tx, 4);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16).vectorize(Var::gpu_threads(), 4);
+            f.gpu_tile(x, y, tx, ty, 16, 16).vectorize(tx, 4);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
 
             Target target = get_jit_target_from_environment();
             if (target.has_gpu_feature()) {
-                gpu.gpu_tile(x, y, 16, 16).vectorize(Var::gpu_threads(), 4);
+                gpu.gpu_tile(x, y, tx, ty, 16, 16).vectorize(tx, 4);
             } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                 gpu.hexagon().vectorize(x, 128);
             } else {

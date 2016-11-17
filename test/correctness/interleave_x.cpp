@@ -12,7 +12,8 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        interleaved.gpu_tile(x, y, 16, 16);
+        Var tx("tx"), ty("ty");
+        interleaved.gpu_tile(x, y, tx, ty, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         interleaved.hexagon().vectorize(x, 32);
     } else {

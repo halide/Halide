@@ -203,7 +203,7 @@ public:
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Stage &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_single_thread(VarOrRVar block, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -216,14 +216,31 @@ public:
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                       VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar bx, VarOrRVar by,
+                           VarOrRVar tx, VarOrRVar ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar tx, VarOrRVar ty,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1357,7 +1374,7 @@ public:
      * block. This is not an efficient use of your GPU, but it can be
      * useful to avoid copy-back for intermediate update stages that
      * touch a very small part of your Func. */
-    EXPORT Func &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_single_thread(VarOrRVar block, DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     /** \deprecated Old name for #gpu_threads. */
     // @{
@@ -1428,13 +1445,31 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, int x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar bx, VarOrRVar by,
+                          VarOrRVar tx, VarOrRVar ty,
+                          int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar tx, VarOrRVar ty,
+                          int x_size, int y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          int x_size, int y_size, int z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
                           int x_size, int y_size, int z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1906,7 +1941,8 @@ namespace Internal {
 inline void schedule_scalar(Func f) {
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
-        f.gpu_single_thread();
+        Var var; // Dummy GPU block var
+        f.gpu_single_thread(var);
     }
     if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
         f.hexagon();

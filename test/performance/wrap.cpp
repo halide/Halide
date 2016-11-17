@@ -52,7 +52,8 @@ Func build(bool use_shared) {
 
     Func final = f[stages-1];
 
-    final.compute_root().gpu_tile(x, y, 8, 8);
+    Var bx, by, tx, ty;
+    final.compute_root().gpu_tile(x, y, bx, by, tx, ty, 8, 8);
     for (int i = 0; i < stages-1; i++) {
         f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
     }
@@ -95,7 +96,8 @@ Func build_wrap() {
 
     Func final = f[stages-1];
 
-    final.compute_root().gpu_tile(x, y, 8, 8);
+    Var bx, by, tx, ty;
+    final.compute_root().gpu_tile(x, y, bx, by, tx, ty, 8, 8);
     for (int i = 0; i < stages-1; i++) {
         f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
     }

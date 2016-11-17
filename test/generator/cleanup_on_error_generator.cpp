@@ -15,7 +15,8 @@ public:
 
         Target target = get_target();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, 16);
+            Var bx, tx;
+            f.gpu_tile(x, bx, tx, 16);
         }
 
         // This one is going to fail (because we'll override

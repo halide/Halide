@@ -152,6 +152,8 @@ ostream &operator<<(ostream &out, const ForType &type) {
     case ForType::Vectorized:
         out << "vectorized";
         break;
+    default:
+        break;
     }
     return out;
 }

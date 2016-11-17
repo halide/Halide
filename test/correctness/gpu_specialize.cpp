@@ -23,16 +23,15 @@ int main(int argc, char **argv) {
     // must have a matching var name in either case.
 
     // Compute h in tiles either on the cpu or gpu
-    Var xo, yo, xi, yi, t;
-    h.compute_root().specialize(use_gpu).gpu_tile(x, y, 4, 4);
+    Var xo, yo, xi, yi, t, tx, ty;
+    h.compute_root().specialize(use_gpu).gpu_tile(x, y, tx, ty, 4, 4);
     h.tile(x, y, xo, yo, xi, yi, 8, 8).fuse(xo, yo, t).parallel(t);
 
     // Peel off a size-1 loop from blockidx to make a scheduling point
     // that matches the cpu case. We need to mark it as serial,
     // because by default when you split up a parallel loop both the
     // inside and outside are parallel.
-    Var bx = Var::gpu_blocks(), tx = Var::gpu_threads();
-    h.specialize(use_gpu).split(bx, bx, t, 1).serial(t);
+    h.specialize(use_gpu).split(x, x, t, 1).serial(t);
 
     // Because t exists in both version of h, we can compute g at it.
     g.compute_at(h, t);
@@ -41,7 +40,7 @@ int main(int argc, char **argv) {
     g.specialize(use_gpu).gpu_threads(x, y);
 
     // We want f compute_at g, x, so do the same trick to g;
-    g.specialize(use_gpu).split(tx, tx, x, 1).serial(x);
+    g.specialize(use_gpu).split(x, tx, x, 1).serial(x);
 
     f.compute_at(g, x);
 

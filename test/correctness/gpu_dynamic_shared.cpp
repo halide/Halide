@@ -15,8 +15,9 @@ int main(int argc, char **argv) {
     f(x) = x;
     g(x) = f(x) + f(2*x);
 
-    g.gpu_tile(x, 16);
-    f.compute_at(g, Var::gpu_blocks()).gpu_threads(x);
+    Var tx;
+    g.gpu_tile(x, tx, 16);
+    f.compute_at(g, x).gpu_threads(x);
 
     // The amount of shared memory required varies with x
 
