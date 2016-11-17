@@ -1685,6 +1685,16 @@ void check_hvx_all() {
     check("vabs(v*.h)", hvx_width/2, abs(i16_1));
     check("vabs(v*.w)", hvx_width/4, abs(i32_1));
 
+    check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + i16(u8_2)*3);
+    check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + 3*i16(u8_2));
+    check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2));
+    check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2) + i16_1);
+
+    check("vmpa(v*.h,r*.b)", hvx_width/1, i32(i16_1)*2 + i32(i16_2)*3);
+    check("vmpa(v*.h,r*.b)", hvx_width/1, i32(i16_1)*2 + 3*i32(i16_2));
+    check("vmpa(v*.h,r*.b)", hvx_width/1, 2*i32(i16_1) + 3*i32(i16_2));
+    check("v*.w += vmpa(v*.h,r*.b)", hvx_width/1, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
+
     check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_2));
     check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));
     check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) * u32(u16_2));
@@ -1891,7 +1901,7 @@ int main(int argc, char **argv) {
     target.set_features({Target::NoBoundsQuery, Target::NoAsserts, Target::NoRuntime});
 
     use_avx512_knl = target.has_feature(Target::AVX512_KNL);
-    use_avx512_cannonlake = target.has_feature(Target::AVX512_Cannonlake);    
+    use_avx512_cannonlake = target.has_feature(Target::AVX512_Cannonlake);
     use_avx512_skylake = use_avx512_cannonlake || target.has_feature(Target::AVX512_Skylake);
     use_avx512 = use_avx512_knl || use_avx512_skylake || use_avx512_cannonlake || target.has_feature(Target::AVX512);
     use_avx2 = use_avx512 || target.has_feature(Target::AVX2);
