@@ -5,8 +5,11 @@ This application builds for multiple native ABIs. (At present armeabi,
 armeabi-v7a, arm64-v8a, mips, x86_64, and x86 are supported. mips64 is
 not presently working.) Halide code is generated for each architecture.
 
-This build is meant to use Android command line tools. (An IDE is not
-required.) In order to build, the following will be required:
+This app is built using Bazel 0.4.0 or later; Android Studio (v2.2 or later) is 
+also supported via the "Android Studio with Bazel" plugin 
+(https://plugins.jetbrains.com/plugin/9185).
+
+To build, you'll need to ensure that you have the Android SDK and NDK installed.
 
 *Android NDK -- This can be downloaded here:
     https://developer.android.com/tools/sdk/ndk/index.html
@@ -15,24 +18,11 @@ in the PATH. (It should contain an executable ndk-build file.)
 
 *Android SDK -- This can be downloaded here:
     http://developer.android.com/sdk/index.html
-The standalone SDK is desired. Once downloaded, the "android" program
-in the tools directory of the install will need to be run. It should
-bring up a UI allowing one to choose components to
-install. HelloAndroid currently depends on the android-17 release. (It
-can easily be made to run on others, but that is what the scripts are
-setup to build against.) Make sure the tools directory is on one's
-PATH.
+The standalone SDK is desired. 
 
-*Apache Ant -- which can be downloaded here:
-    http://ant.apache.org/bindownload.cgi
-make sure the bin directory is on one's PATH.
+Alternately, if you have Android Studio installed, you can use the SDK/NDK 
+provided as part of its install.
 
-If everything is setup correctly, running the build.sh script in this
-directory, with the current directory set to here, whould build the
-HelloAndroid apk and install it on a connected Android device.
-
-Gradle
-===
 To use Gradle create local.properties file in this folder with sdk.dir and
 ndk.dir variables defined like so:
 ```
@@ -66,11 +56,32 @@ Execution failed for task ':compileDebugNdkClassic'.
 
 ```
 
+Bazel
+===
+`bazel build apps/HelloAndroid` will build for armeabi-v7a (32-bit) by default.
+
+To build for other architectures, use the --fat_apk_cpu flag to specify the 
+cpu(s) for which you want Halide code included:
+
+    bazel build apps/HelloAndroid --fat_apk_cpu=armeabi-v7a,arm64-v8a,x86,x86_64
+
 Android Studio
 ===
-To load project into Android Studio use "File/Import Project..." in
-Android Studio and point to apps/HelloAndroid/build.gradle file.
+After installing "Android Studio with Bazel", launch Android Stufio and select "Import Bazel Project". 
 
-You will have to edit automatically-generated local.properties file to add
-ndk.dir property so it points to your Android NDK installation as described
-in Gradle section above.
+For workspace, select the path to your toplevel Halide install.
+
+For project view, select "Generate from BUILD file" with the path apps/HelloAndroid/BUILD.
+
+In the next screen enter
+
+        directories:
+          apps/HelloAndroid
+
+        targets:
+          //apps/HelloAndroid:HelloAndroid
+          
+        android_sdk_platform: android-17  # Or whatever API level you like
+
+If you want to build for other than armeabi-v7a, select 
+`Run > Edit Configurations`,  and specify --fat_apk_cpu as described earlier.
