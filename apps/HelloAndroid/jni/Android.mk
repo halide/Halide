@@ -2,7 +2,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE    := native
+LOCAL_MODULE    := HelloAndroid
 LOCAL_ARM_MODE  := arm
 LOCAL_SRC_FILES := hello_wrapper.cpp
 LOCAL_LDFLAGS   := -L$(LOCAL_PATH)/../jni
