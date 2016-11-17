@@ -140,7 +140,7 @@ android {
             // which would use parameters defined in build.gradle. Use our own
             // task (ndkBuild) below.
             jni.srcDirs = []
-            jniLibs.srcDirs = ["libs/"] // default is src/main/jniLibs
+            jniLibs.srcDirs = ["bin/lib/"] // default is src/main/jniLibs
             manifest.srcFile "AndroidManifest.xml"
             res.srcDirs = ["res/"] // default is src/main/res
         }
@@ -156,7 +156,7 @@ android {
         } else {
             ndkBuildCmd = "ndk-build"
         }
-        commandLine "$ndkDir/$ndkBuildCmd", '-C', file('jni').absolutePath
+        commandLine "$ndkDir/$ndkBuildCmd", "NDK_GEN_OUT=./bin/gen", "NDK_LIBS_OUT=./bin/lib", "NDK_OUT=./bin/obj"
     }
 
     tasks.withType(JavaCompile) {
