@@ -25,3 +25,23 @@ def halide_workspace():
   )
 
   llvm_repository()
+
+  # TODO
+  ANDROID_SDK_PATH = "/Users/srj/Library/Android/sdk"
+  ANDROID_NDK_PATH = "/Users/srj/Library/Android/sdk/ndk-bundle"
+  ANDROID_API_LEVEL = 17
+  ANDROID_BUILD_TOOLS_VERSION = "25.0.0"
+  
+  if ANDROID_SDK_PATH and ANDROID_NDK_PATH:
+    native.android_sdk_repository(
+      name = "androidsdk",
+      path = ANDROID_SDK_PATH,
+      api_level = ANDROID_API_LEVEL,
+      build_tools_version=ANDROID_BUILD_TOOLS_VERSION
+    )
+
+    native.android_ndk_repository(
+        name = "androidndk",
+        path = ANDROID_NDK_PATH,
+        api_level = ANDROID_API_LEVEL
+    )
