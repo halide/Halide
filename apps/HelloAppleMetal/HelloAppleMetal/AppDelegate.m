@@ -54,6 +54,7 @@
         [ self.window addSubview: output_log ];
         max_lines = (int)(box.size.height / font.lineHeight) - 2;
     }
+    output_image.outputLog = output_log;
     
     // Override point for customization after application launch.
     self.window.backgroundColor = [UIColor whiteColor];

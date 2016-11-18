@@ -13,4 +13,8 @@
 @property CGPoint touch_position;
 @property bool touch_active;
 
+@property UITextView *outputLog;
+
+- (void)initiateRender;
+
 @end
