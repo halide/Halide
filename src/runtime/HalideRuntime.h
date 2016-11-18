@@ -295,7 +295,7 @@ struct halide_trace_event {
     const char *func;
     enum halide_trace_event_code event;
     int32_t parent_id;
-    halide_type_t type;
+    struct halide_type_t type;
     int32_t value_index;
     void *value;
     int32_t dimensions;
@@ -920,7 +920,7 @@ struct halide_filter_argument_t {
     const char *name;       // name of the argument; will never be null or empty.
     int32_t kind;           // actually halide_argument_kind_t
     int32_t dimensions;     // always zero for scalar arguments
-    halide_type_t type;
+    struct halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)
