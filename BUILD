@@ -228,7 +228,7 @@ genrule(
     ]),
     tools = [
         "//tools:static_link.sh",
-        "//tools/defaults:crosstool"  # TODO: should not be necessary, see https://github.com/bazelbuild/bazel/issues/2058
+        "//tools/defaults:crosstool",  # TODO: should not be necessary, see https://github.com/bazelbuild/bazel/issues/2058
     ],
 )
 
