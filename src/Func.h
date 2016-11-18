@@ -217,9 +217,15 @@ public:
                       VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
+    // TODO(psuriana): For now we need to expand "tx" into Var and RVar versions
+    // due to conflict with the deprecated interfaces.
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -229,11 +235,18 @@ public:
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
-                           VarOrRVar tx, VarOrRVar ty,
+                           VarOrRVar tx, Var ty,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar tx, RVar ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                            VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
@@ -242,6 +255,21 @@ public:
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // Will be deprecated.
+    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // Will be deprecated.
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // Will be deprecated.
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1446,9 +1474,13 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, int x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, int x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1458,11 +1490,18 @@ public:
                           int x_size, int y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
-                          VarOrRVar tx, VarOrRVar ty,
+                          VarOrRVar tx, Var ty,
                           int x_size, int y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar tx, RVar ty,
+                          int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
@@ -1471,6 +1510,18 @@ public:
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          int x_size, int y_size, int z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // Will be deprecated.
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           int x_size, int y_size, int z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
