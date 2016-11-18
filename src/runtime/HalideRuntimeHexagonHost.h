@@ -49,8 +49,28 @@ extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer
  * pipelines. To avoid this cost, HVX can be powered on prior to
  * running several pipelines, and powered off afterwards. If HVX is
  * powered on, subsequent calls to power HVX on will be cheap. */
+
+typedef enum halide_hvx_power_mode_t {
+    halide_hvx_power_svs    = 0,
+    halide_hvx_power_normal = 1,
+    halide_hvx_power_turbo  = 2
+} halide_hvx_power_mode_t;
+
+typedef struct {
+    bool set_mips;
+    unsigned int mipsPerThread;
+    unsigned int mipsTotal;
+    bool set_bus_bw;
+    uint64_t bwBytePerSec;
+    unsigned short busbwUsagePercentage;
+    bool set_latency;
+    int latency;
+} halide_hvx_power_perf_t;
+
 // @{
 extern int halide_hexagon_power_hvx_on(void *user_context);
+extern int halide_hexagon_power_hvx_on_mode(void *user_context, halide_hvx_power_mode_t mode);
+extern int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_perf_t *perf);
 extern int halide_hexagon_power_hvx_off(void *user_context);
 extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
 // @}
