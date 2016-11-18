@@ -123,8 +123,8 @@ class CanonicalizeGPUVars : public IRMutator {
             return find_replacement(".loop_max", name);
         } else if (ends_with(name, ".loop_min")) {
             return find_replacement(".loop_min", name);
-        } else if (ends_with(name, ".loop_min")) {
-            return find_replacement(".loop_min", name);
+        } else if (ends_with(name, ".loop_extent")) {
+            return find_replacement(".loop_extent", name);
         } else {
             return name;
         }
