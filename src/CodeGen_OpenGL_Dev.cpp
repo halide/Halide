@@ -360,6 +360,9 @@ void CodeGen_GLSL::visit(const Let *op) {
 void CodeGen_GLSL::visit(const For *loop) {
     if (ends_with(loop->name, ".__block_id_x") ||
         ends_with(loop->name, ".__block_id_y")) {
+        internal_assert(loop->for_type == ForType::GPUBlock)
+            << "kernel loop must be gpu block\n";
+
         debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
 
         string idx;

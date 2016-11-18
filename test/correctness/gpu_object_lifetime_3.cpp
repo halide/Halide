@@ -14,7 +14,7 @@ void halide_print(void *user_context, const char *str) {
 }
 
 int main(int argc, char *argv[]) {
-    Var x;
+    Var x, tx;
 
     Internal::JITHandlers handlers;
     handlers.custom_print = halide_print;
@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
 
             if (i % 3 != 0) {
                 if (target.has_gpu_feature()) {
-                    f[i].gpu_tile(x, 32);
+                    f[i].gpu_tile(x, tx, 32);
                 } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                     f[i].hexagon();
                 }
