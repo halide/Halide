@@ -77,7 +77,7 @@ struct halide_metal_command_queue;
  * - halide_device_release has been called on the interface returned from
  *     halide_metal_device_interface(). (This releases the programs on the context.)
  */
-extern int halide_metal_acquire_context(void *user_context, halide_metal_device *&device_ret,
+extern int halide_metal_acquire_context(void *user_context, struct halide_metal_device *&device_ret,
                                         halide_metal_command_queue *&queue_ret, bool create = true);
 
 /** This call balances each successfull halide_metal_acquire_context call.
